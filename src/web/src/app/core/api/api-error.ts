@@ -95,10 +95,33 @@ function knownCodeMessage(code: string, error: HttpErrorResponse): string | null
   }
 }
 
+/**
+ * The app's one sentence for a request that never reached the server (audit UIQ-2). Angular's fetch
+ * backend puts the browser's TypeError in the error body, so its "Failed to fetch" used to be shown.
+ */
+export function connectionFailureMessage(): string {
+  return $localize`The app couldn’t connect. Check your connection and try again.`;
+}
+
+/** Whether a failure was the connection or the server rather than something about the request. */
+export function failureKind(error: unknown): 'connection' | 'server' | null {
+  if (!(error instanceof HttpErrorResponse)) return null;
+  if (error.status === 0) return 'connection';
+  return error.status >= 500 && !(error.error as ApiErrorBody | undefined)?.code ? 'server' : null;
+}
+
 export function apiErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof HttpErrorResponse)) {
     return fallback;
   }
+
+  // Never the browser's or the framework's words (audit UIQ-2): a lost connection reads the same on
+  // every screen, and a server fault reads the screen's own sentence of what failed, never a 500's
+  // title ("An error occurred while processing your request."). A 5xx the API wrote itself carries a
+  // code and keeps its words.
+  const kind = failureKind(error);
+  if (kind === 'connection') return connectionFailureMessage();
+  if (kind === 'server') return fallback;
 
   const body = error.error as ApiErrorBody | undefined;
   if (body?.code) {

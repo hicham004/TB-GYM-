@@ -663,13 +663,70 @@ describe('TodayTraining interactions', () => {
 
   it('reports a failed load instead of rendering a day with no workouts', async () => {
     const { host } = await render({
-      getMyTrainingToday: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
+      getMyTrainingToday: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 400 }))),
     });
 
     expect(query(host, '[role="alert"]').textContent).toContain(
       "Today's training could not be loaded.",
     );
     expect(host.textContent).not.toContain('Rest day');
+  });
+
+  it('says a lost connection in the app’s words and loads the workout again on Try again', async () => {
+    const load = vi
+      .fn()
+      // Angular's fetch backend: status 0 with the browser's TypeError (audit UIQ-2).
+      .mockReturnValueOnce(
+        throwError(
+          () => new HttpErrorResponse({ status: 0, error: new TypeError('Failed to fetch') }),
+        ),
+      )
+      .mockReturnValue(of(day()));
+    const { fixture, host } = await render({ getMyTrainingToday: load });
+
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'The app couldn’t connect. Check your connection and try again.',
+    );
+    expect(host.textContent).toContain('Your workout couldn’t be loaded');
+    expect(host.textContent).not.toContain('Failed to fetch');
+
+    press(host, 'Try again');
+    await settle(fixture);
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(host.textContent).not.toContain('Your workout couldn’t be loaded');
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe('');
+    expect(host.querySelectorAll('.set-card').length).toBeGreaterThan(0);
+  });
+
+  it('says a lost connection once, and a server fault without its title, when a set cannot be saved', async () => {
+    const record = vi
+      .fn()
+      .mockReturnValueOnce(
+        throwError(
+          () => new HttpErrorResponse({ status: 0, error: new TypeError('Failed to fetch') }),
+        ),
+      )
+      .mockReturnValueOnce(
+        throwError(() => new HttpErrorResponse({ status: 500, error: { title: 'boom' } })),
+      );
+    const { fixture, host } = await render({ recordMyTrainingSet: record });
+
+    fill(host, 'Actual repetitions', '8');
+    await settle(fixture);
+    press(host, 'Log set');
+    await settle(fixture);
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'Couldn’t save this set: the app couldn’t connect. Your entries are still on this page. Check your connection and retry.',
+    );
+
+    press(host, 'Log set');
+    await settle(fixture);
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'Couldn’t save this set. Your entries are still on this page. Retry.',
+    );
+    expect(host.textContent).not.toContain('boom');
+    expect(host.textContent).not.toContain('Failed to fetch');
   });
 
   it('preserves both drafts when one set fails, and retries without changing the other set', async () => {

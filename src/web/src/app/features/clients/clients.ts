@@ -9,6 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
@@ -89,6 +90,8 @@ export class Clients {
   protected readonly former = signal<FormerClientRow[] | null>(null);
   /** Why the list could not be read: the server's own words where it gave any. */
   protected readonly failed = signal<string | null>(null);
+  /** A coach who opened Former clients by its address: no Try again, a way back instead. */
+  protected readonly formerRefused = signal(false);
   protected readonly loadingLabel = $localize`Loading clients…`;
   /** The chip is kept in the address (`?show=attention`), so Back returns to the same list. */
   protected readonly filter = signal<ClientFilter>(initialFilter(this.route));
@@ -171,6 +174,7 @@ export class Clients {
   protected async load(): Promise<void> {
     return this.scope.run('load', async (owner) => {
       this.failed.set(null);
+      this.formerRefused.set(false);
       try {
         if (this.showingFormer) {
           const former = await owner.wait(firstValueFrom(this.formerApi.getFormerClients()));
@@ -187,12 +191,14 @@ export class Clients {
         }
       } catch (error) {
         if (!owner.current) return;
-        this.failed.set(
-          apiErrorMessage(
-            error,
-            $localize`Clients could not be loaded. Check your connection and try again.`,
-          ),
-        );
+        // The list is the owner's (ADR 0027): a coach is told so, not to check a connection that is
+        // fine (audit UIQ-2).
+        if (this.showingFormer && error instanceof HttpErrorResponse && error.status === 403) {
+          this.formerRefused.set(true);
+          this.failed.set($localize`Only the owner sees former clients.`);
+          return;
+        }
+        this.failed.set(apiErrorMessage(error, $localize`Clients could not be loaded. Try again.`));
       }
     });
   }

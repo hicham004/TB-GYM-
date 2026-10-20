@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Training;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
@@ -208,7 +209,7 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            return Invalid("maxes", exception.Message);
+            return Invalid("maxes", exception.PersonMessage());
         }
 
         try
@@ -262,15 +263,15 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            return Invalid("maxes", exception.Message);
+            return Invalid("maxes", exception.PersonMessage());
         }
         catch (TrainingMaxSuggestionChangedException exception)
         {
-            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.Message);
+            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("training_maxes_conflict", exception.Message);
+            return Conflict("training_maxes_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

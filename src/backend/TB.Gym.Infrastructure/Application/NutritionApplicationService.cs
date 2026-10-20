@@ -106,7 +106,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("settings", exception.Message);
+            return Invalid("settings", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -119,8 +119,8 @@ internal sealed partial class NutritionApplicationService(
         var source = dbContext.FoodItems.AsNoTracking().Where(item => (item.ArchivedAtUtc != null) == archived);
         if (!string.IsNullOrWhiteSpace(query))
         {
-            var pattern = $"%{query.Trim()}%";
-            source = source.Where(item => EF.Functions.ILike(item.Name, pattern));
+            var pattern = LikePattern.Containing(query);
+            source = source.Where(item => EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter));
         }
 
         var total = await source.CountAsync(cancellationToken);
@@ -144,7 +144,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("food", exception.Message);
+            return Invalid("food", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -186,7 +186,7 @@ internal sealed partial class NutritionApplicationService(
             }
             catch (ArgumentException exception)
             {
-                return Invalid("version", exception.Message);
+                return Invalid("version", exception.PersonMessage());
             }
             catch (DbUpdateException exception) when (exception is DbUpdateConcurrencyException || IsFoodRevisionRace(exception))
             {
@@ -273,7 +273,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (NutritionProviderUnavailableException exception)
         {
-            return new ProviderFoodSearchPage(skip, take, [], exception.Code, exception.Message);
+            return new ProviderFoodSearchPage(skip, take, [], exception.Code, exception.PersonMessage());
         }
     }
 
@@ -346,11 +346,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (NutritionProviderUnavailableException exception)
         {
-            return new NutritionCommandResult(NutritionCommandStatus.ProviderUnavailable, Code: exception.Code, Message: exception.Message);
+            return new NutritionCommandResult(NutritionCommandStatus.ProviderUnavailable, Code: exception.Code, Message: exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
-            return Invalid("providerFood", exception.Message);
+            return Invalid("providerFood", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -389,7 +389,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("cookingFactor", exception.Message);
+            return Invalid("cookingFactor", exception.PersonMessage());
         }
     }
 
@@ -398,8 +398,8 @@ internal sealed partial class NutritionApplicationService(
         var source = dbContext.Recipes.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(query))
         {
-            var pattern = $"%{query.Trim()}%";
-            source = source.Where(item => EF.Functions.ILike(item.Name, pattern));
+            var pattern = LikePattern.Containing(query);
+            source = source.Where(item => EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter));
         }
 
         if (publishedOnly)
@@ -437,11 +437,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (NutritionInputException exception)
         {
-            return Invalid(exception.Field, exception.Message);
+            return Invalid(exception.Field, exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
-            return Invalid("recipe", exception.Message);
+            return Invalid("recipe", exception.PersonMessage());
         }
     }
 
@@ -488,11 +488,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (NutritionInputException exception)
         {
-            return Invalid(exception.Field, exception.Message);
+            return Invalid(exception.Field, exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
-            return Invalid("recipe", exception.Message);
+            return Invalid("recipe", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -521,7 +521,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("recipe_publication_conflict", exception.Message);
+            return Conflict("recipe_publication_conflict", exception.PersonMessage());
         }
     }
 
@@ -551,11 +551,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (NutritionInputException exception)
         {
-            return Invalid(exception.Field, exception.Message);
+            return Invalid(exception.Field, exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
-            return Invalid("mealPlan", exception.Message);
+            return Invalid("mealPlan", exception.PersonMessage());
         }
     }
 
@@ -577,11 +577,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (NutritionInputException exception)
         {
-            return Invalid(exception.Field, exception.Message);
+            return Invalid(exception.Field, exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
-            return Invalid("mealPlan", exception.Message);
+            return Invalid("mealPlan", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -606,7 +606,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("meal_plan_publication_conflict", exception.Message);
+            return Conflict("meal_plan_publication_conflict", exception.PersonMessage());
         }
     }
 
@@ -656,7 +656,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("calculation", exception.Message);
+            return Invalid("calculation", exception.PersonMessage());
         }
     }
 
@@ -692,7 +692,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("macroOverride", exception.Message);
+            return Invalid("macroOverride", exception.PersonMessage());
         }
     }
 
@@ -903,7 +903,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("plan", exception.Message);
+            return Invalid("plan", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -958,11 +958,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("reason", exception.Message);
+            return Invalid("reason", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("nutrition_plan_already_cancelled", exception.Message);
+            return Conflict("nutrition_plan_already_cancelled", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -1083,7 +1083,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("nutrition_log_completed", exception.Message);
+            return Conflict("nutrition_log_completed", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -1140,11 +1140,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("food", exception.Message);
+            return Invalid("food", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("nutrition_log_completed", exception.Message);
+            return Conflict("nutrition_log_completed", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -1183,7 +1183,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("nutrition_food_reversal_conflict", exception.Message);
+            return Conflict("nutrition_food_reversal_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -1220,7 +1220,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("nutrition_log_completion_conflict", exception.Message);
+            return Conflict("nutrition_log_completion_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -1275,7 +1275,7 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("aiDraft", exception.Message);
+            return Invalid("aiDraft", exception.PersonMessage());
         }
 
         if (refusal is not null)
@@ -1376,7 +1376,7 @@ internal sealed partial class NutritionApplicationService(
             }
             catch (InvalidOperationException exception)
             {
-                return Conflict("ai_review_conflict", exception.Message);
+                return Conflict("ai_review_conflict", exception.PersonMessage());
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -1416,11 +1416,11 @@ internal sealed partial class NutritionApplicationService(
         }
         catch (NutritionInputException exception)
         {
-            return Invalid(exception.Field, exception.Message);
+            return Invalid(exception.Field, exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
-            return Invalid("review", exception.Message);
+            return Invalid("review", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

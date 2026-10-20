@@ -122,7 +122,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (ArgumentException exception)
         {
-            return Invalid("program", exception.Message);
+            return Invalid("program", exception.PersonMessage());
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
@@ -166,11 +166,11 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (ArgumentException exception)
         {
-            return Invalid("program", exception.Message);
+            return Invalid("program", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Invalid("program", exception.Message);
+            return Invalid("program", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -243,7 +243,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (ArgumentException exception)
         {
-            return Invalid("savedSession", exception.Message);
+            return Invalid("savedSession", exception.PersonMessage());
         }
     }
 
@@ -409,16 +409,16 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (ArgumentException exception)
         {
-            return Invalid("assignment", exception.Message);
+            return Invalid("assignment", exception.PersonMessage());
         }
         catch (TrainingMaxSuggestionChangedException exception)
         {
             // A newer best set was logged in the latest program after the coach opened Assign program (STR-014).
-            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.Message);
+            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Invalid("assignment", exception.Message);
+            return Invalid("assignment", exception.PersonMessage());
         }
         catch (DbUpdateException exception) when (IsExclusionViolation(exception))
         {
@@ -504,7 +504,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         {
             // A workout started (the screen stops offering it then, so a race or an API caller), or the
             // program is finished or cancelled (TRN-004, TRN-013).
-            return Conflict("lifecycle_conflict", exception.Message);
+            return Conflict("lifecycle_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -546,11 +546,11 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (ArgumentException exception)
         {
-            return Invalid("reason", exception.Message);
+            return Invalid("reason", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("lifecycle_conflict", exception.Message);
+            return Conflict("lifecycle_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -589,7 +589,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("lifecycle_conflict", exception.Message);
+            return Conflict("lifecycle_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -636,11 +636,11 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (ArgumentException exception)
         {
-            return Invalid("session", exception.Message);
+            return Invalid("session", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Invalid("session", exception.Message);
+            return Invalid("session", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -671,11 +671,11 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
         catch (ArgumentException exception)
         {
-            return Invalid("mesocycle", exception.Message);
+            return Invalid("mesocycle", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Invalid("mesocycle", exception.Message);
+            return Invalid("mesocycle", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.RateLimiting;
 using TB.Gym.SharedKernel;
@@ -67,6 +68,10 @@ public static class WebsiteEndpoints
         })
             .AllowAnonymous()
             .RequireRateLimiting(RateLimitPolicies.PublicContact)
+            // Refused at the socket past this (audit BEB-3), before antiforgery or the field rules read a
+            // byte: Kestrel's default let an anonymous caller hand over 30 MB. The longest form a person
+            // can send, every field at its limit in four-byte characters, is under 6 KB.
+            .WithMetadata(new RequestSizeLimitAttribute(ContactRequestRules.MaximumRequestBytes))
             .WithName("SubmitContactRequest")
             .Accepts<ContactRequestSubmission>("application/json")
             .Produces(StatusCodes.Status202Accepted)

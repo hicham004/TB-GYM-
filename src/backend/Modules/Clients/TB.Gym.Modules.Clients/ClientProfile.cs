@@ -130,6 +130,15 @@ public sealed class ClientProfile : TenantEntity
     {
         ArgumentNullException.ThrowIfNull(input);
         EnsureNotReleased();
+        // What completing asked for stays (audit SEC-3): only the database's check said so before, as a
+        // 500 for an update that left a field out. Refused before anything changes.
+        if (OnboardingStatus == ClientOnboardingStatus.Completed &&
+            (input.BirthDate is null || input.HeightValue is null || string.IsNullOrWhiteSpace(input.Goals)))
+        {
+            throw new ArgumentException(
+                "Birth date, height and at least one goal stay required once the profile is set up.");
+        }
+
         var changed = new List<string>();
         var names = ValidateNames(input.FirstName, input.LastName);
 

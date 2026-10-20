@@ -211,6 +211,14 @@ export class Messages {
    * (audit VER3A-NEW-1).
    */
   private errorFromList = false;
+  /**
+   * The read the error line reports, so it offers Try again (audit UIQ-2). A refused send, edit or
+   * removal has none: the composer or the message keeps what was typed and the person acts again.
+   */
+  private readonly failedRead = signal<(() => Promise<void>) | null>(null);
+  protected readonly canRetryRead = computed(
+    () => this.error() !== null && this.failedRead() !== null,
+  );
   protected readonly deniedReason = signal<FeatureAccessReason | null>(null);
 
   /** The message whose options (edit, remove) are open. One at a time. */
@@ -750,6 +758,7 @@ export class Messages {
             apiErrorMessage(error, $localize`More conversations could not be loaded.`),
           );
           this.errorFromList = true;
+          this.failedRead.set(() => this.loadMoreConversations());
         }
       } finally {
         if (owner.current) {
@@ -838,6 +847,7 @@ export class Messages {
         if (this.ownsThread(generation, thread, request)) {
           this.error.set(apiErrorMessage(error, $localize`Older messages could not be loaded.`));
           this.errorFromList = false;
+          this.failedRead.set(() => this.loadOlder());
         }
       } finally {
         if (owner.current) {
@@ -1372,6 +1382,7 @@ export class Messages {
           this.conversationsHasMore.set(false);
           this.error.set(apiErrorMessage(error, $localize`Conversations could not be loaded.`));
           this.errorFromList = true;
+          this.failedRead.set(() => this.refresh());
         }
       } finally {
         if (owner.current) {
@@ -1424,6 +1435,7 @@ export class Messages {
         if (this.ownsThread(generation, thread, request)) {
           this.messages.set([]);
           this.reportFailure(error, $localize`This conversation could not be loaded.`);
+          if (this.error() !== null) this.failedRead.set(() => this.refresh());
         }
       } finally {
         if (owner.current) {
@@ -1641,6 +1653,14 @@ export class Messages {
   private showError(message: string): void {
     this.error.set(message);
     this.errorFromList = false;
+    this.failedRead.set(null);
+  }
+
+  /** Reads again what failed to load: the list and the open thread, or the next page that failed. */
+  protected retryRead(): void {
+    const read = this.failedRead();
+    this.failedRead.set(null);
+    if (read) void read();
   }
 
   private ownsList(generation: number, request: number): boolean {

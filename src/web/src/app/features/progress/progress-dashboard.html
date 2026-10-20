@@ -8,7 +8,11 @@
     </header>
   }
   @if (error(); as message) {
-    <p role="alert" class="error">{{ message }}</p>
+    <div class="error">
+      <p role="alert">{{ message }}</p>
+      <!-- A failed read can be asked again without leaving the page (audit UIQ-2). -->
+      <button appButton type="button" size="touch" (click)="retry()" i18n>Try again</button>
+    </div>
   }
   <!-- Range switch and the one action share a row, so the action keeps its full label on a phone. -->
   <div class="toolbar">

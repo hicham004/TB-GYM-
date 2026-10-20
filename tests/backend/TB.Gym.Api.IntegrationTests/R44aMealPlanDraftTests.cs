@@ -281,7 +281,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         // What a version could never hold is refused, by field.
         await R44aAssertInvalidAsync(owner, content with { Days = [.. Enumerable.Repeat(day, 366)] }, "days");
         await R44aAssertInvalidAsync(owner, content with { Days = [new MealPlanDraftDay([.. Enumerable.Repeat(day.Meals![0], 31)])] }, "meals");
-        await R44aAssertInvalidAsync(owner, content with { Name = "Bad\0name" }, "name");
+        // A NUL is refused where the request is read, under its path in the body (audit SEC-2).
+        await R44aAssertInvalidAsync(owner, content with { Name = "Bad\0name" }, "content.name");
         await R44aAssertInvalidAsync(owner, content with { Days = [new MealPlanDraftDay([new MealPlanDraftMeal("Lunch", [new MealPlanChoiceRequest(Guid.Empty, 1m)])])] }, "choices");
 
         // At most twenty new plans per coach, even when two starts race for the last place.

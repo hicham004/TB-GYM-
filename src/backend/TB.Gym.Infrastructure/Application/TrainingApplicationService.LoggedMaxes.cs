@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Training;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
@@ -86,11 +87,11 @@ internal sealed partial class TrainingApplicationService
             }
             catch (TrainingMaxSuggestionChangedException exception)
             {
-                return Conflict(TrainingMaxSuggestionChangedException.Code, exception.Message);
+                return Conflict(TrainingMaxSuggestionChangedException.Code, exception.PersonMessage());
             }
             catch (ArgumentException exception)
             {
-                return Invalid("maxes", exception.Message);
+                return Invalid("maxes", exception.PersonMessage());
             }
             catch (DbUpdateException exception) when (exception.InnerException is Npgsql.PostgresException
                        {

@@ -60,10 +60,15 @@ public static class StrengthEndpoints
         .ProducesValidationProblem()
         .Produces(StatusCodes.Status404NotFound);
 
-        group.MapPost("/estimate-one-rep-max", (
+        // The two calculators change nothing, but they are POSTs like every other and check the token too
+        // (audit SEC-4), so no state-changing route is ever the one exception a reader has to remember.
+        group.MapPost("/estimate-one-rep-max", async (
             EstimateOneRepMaxRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
             IStrengthApplicationService service) =>
         {
+            await antiforgery.ValidateRequestAsync(context);
             try
             {
                 return Results.Ok(service.Estimate(request));
@@ -72,7 +77,7 @@ public static class StrengthEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["estimate"] = [exception.Message],
+                    ["estimate"] = [exception.PersonMessage()],
                 });
             }
         })
@@ -81,10 +86,13 @@ public static class StrengthEndpoints
             .Produces<OneRepMaxEstimateView>()
             .ProducesValidationProblem();
 
-        group.MapPost("/estimate-max-from-rpe", (
+        group.MapPost("/estimate-max-from-rpe", async (
             EstimateRpeChartMaxRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
             IStrengthApplicationService service) =>
         {
+            await antiforgery.ValidateRequestAsync(context);
             try
             {
                 return Results.Ok(service.EstimateFromRpeChart(request));
@@ -93,7 +101,7 @@ public static class StrengthEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["estimate"] = [exception.Message],
+                    ["estimate"] = [exception.PersonMessage()],
                 });
             }
         })

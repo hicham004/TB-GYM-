@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Nutrition;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
@@ -282,11 +283,11 @@ internal sealed partial class NutritionApplicationService
         }
         catch (NutritionInputException exception)
         {
-            return Invalid(exception.Field, exception.Message);
+            return Invalid(exception.Field, exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
-            return Invalid("mealPlan", exception.Message);
+            return Invalid("mealPlan", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException exception)
         {

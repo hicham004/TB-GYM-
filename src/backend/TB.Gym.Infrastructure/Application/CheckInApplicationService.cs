@@ -111,7 +111,7 @@ internal sealed class CheckInApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidForm("form", exception.Message);
+            return InvalidForm("form", exception.PersonMessage());
         }
     }
 
@@ -140,11 +140,11 @@ internal sealed class CheckInApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidForm("title", exception.Message);
+            return InvalidForm("title", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return ConflictForm("CheckInFormArchived", exception.Message);
+            return ConflictForm("CheckInFormArchived", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -252,11 +252,11 @@ internal sealed class CheckInApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidVersion("questions", exception.Message);
+            return InvalidVersion("questions", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return ConflictVersion("CheckInVersionPublished", exception.Message);
+            return ConflictVersion("CheckInVersionPublished", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -304,11 +304,11 @@ internal sealed class CheckInApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidVersion("version", exception.Message);
+            return InvalidVersion("version", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return ConflictVersion("CheckInFormArchived", exception.Message);
+            return ConflictVersion("CheckInFormArchived", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -370,11 +370,11 @@ internal sealed class CheckInApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidVersion("version", exception.Message);
+            return InvalidVersion("version", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return ConflictVersion("CheckInVersionPublished", exception.Message);
+            return ConflictVersion("CheckInVersionPublished", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -445,20 +445,20 @@ internal sealed class CheckInApplicationService(
         {
             return new CheckInAssignmentCommandResult(
                 CheckInCommandStatus.Invalid,
-                Errors: new Dictionary<string, string[]> { ["dueDate"] = [exception.Message] });
+                Errors: new Dictionary<string, string[]> { ["dueDate"] = [exception.PersonMessage()] });
         }
         catch (ArgumentException exception)
         {
             return new CheckInAssignmentCommandResult(
                 CheckInCommandStatus.Invalid,
-                Errors: new Dictionary<string, string[]> { ["assignment"] = [exception.Message] });
+                Errors: new Dictionary<string, string[]> { ["assignment"] = [exception.PersonMessage()] });
         }
         catch (InvalidOperationException exception)
         {
             return new CheckInAssignmentCommandResult(
                 CheckInCommandStatus.Conflict,
                 Code: "CheckInVersionNotPublished",
-                Message: exception.Message);
+                Message: exception.PersonMessage());
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
@@ -551,7 +551,7 @@ internal sealed class CheckInApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return ConflictForm("CheckInFormArchiveState", exception.Message);
+            return ConflictForm("CheckInFormArchiveState", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

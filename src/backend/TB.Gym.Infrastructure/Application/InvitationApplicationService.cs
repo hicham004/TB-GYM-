@@ -113,7 +113,7 @@ internal sealed class InvitationApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("invitation", exception.Message);
+            return Invalid("invitation", exception.PersonMessage());
         }
 
         var idempotencyKey = request.IdempotencyKey ?? Guid.CreateVersion7();
@@ -160,7 +160,7 @@ internal sealed class InvitationApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("invitation", exception.Message);
+            return Invalid("invitation", exception.PersonMessage());
         }
 
         var idempotencyKey = request.IdempotencyKey ?? Guid.CreateVersion7();
@@ -186,32 +186,9 @@ internal sealed class InvitationApplicationService(
             return replayed;
         }
 
-        // A person already in this workspace in any role cannot be invited into it again. The
-        // exceptions are a removed coach, whom a coach invitation brings back, and a former client,
-        // whom a client invitation brings back as a new relationship (ADR 0027). A former client's old
-        // profile is ended and never counts as a current one.
-        var existingRelationship = await dbContext.ClientProfiles.AnyAsync(
-            client => client.NormalizedEmail == invitation.NormalizedEmail && client.ReleasedAtUtc == null,
-            cancellationToken);
-        var existingUser = await userManager.FindByEmailAsync(invitation.Email);
-        if (existingUser is not null)
+        if (await ExistingPersonRefusalAsync(tenant, invitation, cancellationToken) is { } taken)
         {
-            existingRelationship |= await dbContext.TenantMemberships.AnyAsync(
-                membership =>
-                    membership.TenantId == tenant.Id &&
-                    membership.UserId == existingUser.Id &&
-                    !(invitation.Kind == InvitationKind.Coach &&
-                      membership.Role == TenantRole.Coach &&
-                      membership.Status == MembershipStatus.Removed) &&
-                    !(invitation.Kind == InvitationKind.Client &&
-                      membership.Role == TenantRole.Client &&
-                      membership.Status == MembershipStatus.Removed),
-                cancellationToken);
-        }
-
-        if (existingRelationship)
-        {
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return taken;
         }
 
         var pending = await dbContext.ClientInvitations.SingleOrDefaultAsync(
@@ -221,7 +198,7 @@ internal sealed class InvitationApplicationService(
         {
             if (!pending.MarkExpired(now))
             {
-                return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+                return await PendingRefusalAsync(tenant, pending, invitation.Kind, cancellationToken);
             }
 
             await RevokeOutstandingTokensAsync(
@@ -251,15 +228,179 @@ internal sealed class InvitationApplicationService(
         }
         catch (DbUpdateException)
         {
+            // A second invitation to the same email committed first: say what it is now.
             dbContext.ChangeTracker.Clear();
             return await ReplayAsync(idempotencyKey, fingerprint, cancellationToken)
-                ?? new InvitationCommandResult(InvitationCommandStatus.Conflict);
+                ?? await ExistingPersonRefusalAsync(tenant, invitation, cancellationToken)
+                ?? await WaitingInvitationRefusalAsync(tenant, invitation, cancellationToken)
+                ?? ChangedMeanwhile();
         }
 
         return new InvitationCommandResult(
             InvitationCommandStatus.Success,
             ToSummary(invitation, await MaterializeInlineAsync(tenant.Id, invitation.Id, cancellationToken)));
     }
+
+    /// <summary>
+    /// Why this email cannot be invited because of who it already is here, in words for the person
+    /// inviting (audit COACH-8), or null when it can.
+    /// </summary>
+    /// <remarks>
+    /// A person already in this workspace in any role cannot be invited into it again. The exceptions
+    /// are a removed coach, whom a coach invitation brings back, and a former client, whom a client
+    /// invitation brings back as a new relationship (ADR 0027); a former client's old profile is ended
+    /// and never counts as a current one. The owner sees every client and the whole team (CLI-013), so
+    /// they are told who it is and why. A coach is told about their own clients only (ADR 0026): for
+    /// anybody else the answer is one sentence that says the email is taken, never by whom or as what.
+    /// </remarks>
+    private async Task<InvitationCommandResult?> ExistingPersonRefusalAsync(
+        Tenant tenant,
+        ClientInvitation invitation,
+        CancellationToken cancellationToken)
+    {
+        var restrictedCoach = await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken);
+        var client = await dbContext.ClientProfiles.AsNoTracking()
+            .Where(item => item.NormalizedEmail == invitation.NormalizedEmail && item.ReleasedAtUtc == null)
+            .Select(item => new { item.FirstName, item.LastName, item.AssignedCoachUserId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (client is not null)
+        {
+            if (restrictedCoach is { } coachUserId && client.AssignedCoachUserId != coachUserId)
+            {
+                return EmailInUse(tenant);
+            }
+
+            var name = $"{client.FirstName} {client.LastName}".Trim();
+            return InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyClient,
+                invitation.Kind == InvitationKind.Coach ? $"{name} is a client here, so they can't join the team."
+                : restrictedCoach is null ? $"{name} is already a client here."
+                : $"{name} is already your client.");
+        }
+
+        var user = await userManager.FindByEmailAsync(invitation.Email);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var membership = await dbContext.TenantMemberships.AsNoTracking()
+            .Where(item => item.TenantId == tenant.Id && item.UserId == user.Id)
+            .Select(item => new { item.Role, item.Status })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (membership is null ||
+            (membership.Status == MembershipStatus.Removed &&
+             ((invitation.Kind == InvitationKind.Coach && membership.Role == TenantRole.Coach) ||
+              (invitation.Kind == InvitationKind.Client && membership.Role == TenantRole.Client))))
+        {
+            return null;
+        }
+
+        if (restrictedCoach is not null)
+        {
+            return EmailInUse(tenant);
+        }
+
+        var who = string.IsNullOrWhiteSpace(user.DisplayName) ? "This person" : user.DisplayName.Trim();
+        return (membership.Role, membership.Status, invitation.Kind) switch
+        {
+            (TenantRole.Client, MembershipStatus.Removed, _) => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.FormerClient,
+                "This email belongs to a former client. A former client can be invited back as a client, never as a coach."),
+            (TenantRole.Client, _, InvitationKind.Coach) => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyClient,
+                $"{who} is a client here, so they can't join the team."),
+            (TenantRole.Client, _, _) => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyClient,
+                $"{who} is already a client here."),
+            (_, MembershipStatus.Removed, _) => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyTeam,
+                $"{who} used to coach on your team, so they can't be invited as a client."),
+            (_, _, InvitationKind.Coach) => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyTeam,
+                $"{who} is already on your team."),
+            _ => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyTeam,
+                $"{who} is on your team, so they can't also be a client here."),
+        };
+    }
+
+    /// <summary>
+    /// An invitation to this email is still waiting. The owner is told where to find it; a coach only
+    /// when it is their own, and otherwise gets the same answer as for an email taken by somebody else.
+    /// </summary>
+    private async Task<InvitationCommandResult> PendingRefusalAsync(
+        Tenant tenant,
+        ClientInvitation pending,
+        InvitationKind kind,
+        CancellationToken cancellationToken)
+    {
+        if (await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId)
+        {
+            return pending.Kind == InvitationKind.Client && pending.AssignedCoachUserId == coachUserId
+                ? InvitationCommandResult.Conflict(
+                    InvitationConflictCodes.Pending,
+                    "You already invited this email, and that invitation is still waiting. Send it again from Invitations instead.")
+                : EmailInUse(tenant);
+        }
+
+        return InvitationCommandResult.Conflict(
+            InvitationConflictCodes.Pending,
+            (pending.Kind, kind) switch
+            {
+                (InvitationKind.Coach, InvitationKind.Coach) =>
+                    "An invitation to this email is still waiting. Send it again from Team instead.",
+                (InvitationKind.Coach, _) =>
+                    "This email has an invitation waiting to join the team. Cancel it on Team first.",
+                (_, InvitationKind.Coach) =>
+                    "This email has an invitation waiting to join as a client. Cancel it on Invitations first.",
+                _ => "An invitation to this email is still waiting. Send it again from Invitations instead.",
+            });
+    }
+
+    /// <summary>The waiting invitation another request just created for this email, if one did.</summary>
+    private async Task<InvitationCommandResult?> WaitingInvitationRefusalAsync(
+        Tenant tenant,
+        ClientInvitation invitation,
+        CancellationToken cancellationToken)
+    {
+        var now = clock.UtcNow;
+        var waiting = await dbContext.ClientInvitations.AsNoTracking().FirstOrDefaultAsync(
+            item => item.NormalizedEmail == invitation.NormalizedEmail &&
+                    item.Status == InvitationStatus.Pending &&
+                    item.ExpiresAtUtc > now,
+            cancellationToken);
+        return waiting is null ? null : await PendingRefusalAsync(tenant, waiting, invitation.Kind, cancellationToken);
+    }
+
+    private static InvitationCommandResult EmailInUse(Tenant tenant) =>
+        InvitationCommandResult.Conflict(
+            InvitationConflictCodes.EmailInUse,
+            $"This email already belongs to someone in {tenant.Name}, so it can't be invited. Ask the owner about it.");
+
+    private static InvitationCommandResult ChangedMeanwhile() =>
+        InvitationCommandResult.Conflict(
+            InvitationConflictCodes.Changed,
+            "Someone changed this invitation after you opened it. The list now shows it as it is.");
+
+    /// <summary>Why an invitation that is no longer waiting cannot be sent again or cancelled.</summary>
+    private static InvitationCommandResult Closed(ClientInvitation invitation, bool resending) =>
+        invitation.Status switch
+        {
+            InvitationStatus.Accepted => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyAccepted,
+                resending
+                    ? "This invitation was already accepted, so there is nothing to send again."
+                    : "This invitation was already accepted, so it can't be cancelled."),
+            InvitationStatus.Revoked => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.AlreadyCancelled,
+                "This invitation was cancelled. Invite them again instead."),
+            _ => InvitationCommandResult.Conflict(
+                InvitationConflictCodes.Expired,
+                resending
+                    ? "This invitation has expired, so it can't be sent again. Invite them again instead."
+                    : "This invitation has already expired."),
+        };
 
     public async Task<InvitationCommandResult> ResendAsync(
         InvitationKind kind,
@@ -295,14 +436,14 @@ internal sealed class InvitationApplicationService(
 
         if (invitation.Version != request.Version)
         {
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return ChangedMeanwhile();
         }
 
         var now = clock.UtcNow;
         if (invitation.MarkExpired(now))
         {
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return Closed(invitation, resending: true);
         }
 
         int generation;
@@ -312,7 +453,7 @@ internal sealed class InvitationApplicationService(
         }
         catch (InvalidOperationException)
         {
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return Closed(invitation, resending: true);
         }
 
         // A deliberate resend is decisive: every link of every earlier generation stops working now,
@@ -349,7 +490,7 @@ internal sealed class InvitationApplicationService(
             // DbUpdateConcurrencyException derives from DbUpdateException, so one catch covers both.
             dbContext.ChangeTracker.Clear();
             return await ReplayAsync(request.IdempotencyKey, fingerprint, cancellationToken)
-                ?? new InvitationCommandResult(InvitationCommandStatus.Conflict);
+                ?? ChangedMeanwhile();
         }
 
         return new InvitationCommandResult(
@@ -375,7 +516,7 @@ internal sealed class InvitationApplicationService(
 
         if (invitation.Version != request.Version)
         {
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return ChangedMeanwhile();
         }
 
         try
@@ -392,12 +533,12 @@ internal sealed class InvitationApplicationService(
         }
         catch (InvalidOperationException)
         {
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return Closed(invitation, resending: false);
         }
         catch (DbUpdateConcurrencyException)
         {
             dbContext.ChangeTracker.Clear();
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return ChangedMeanwhile();
         }
     }
 
@@ -533,9 +674,11 @@ internal sealed class InvitationApplicationService(
             }
 
             var now = clock.UtcNow;
+            // A cancelled invitation's link answers like an unknown one (audit SEC-12), as reading it does:
+            // telling them apart told whoever held an old mail that the invitation had existed.
             if (invitation.Status == InvitationStatus.Revoked)
             {
-                return AcceptanceOutcome.From(InvitationAcceptanceStatus.Revoked);
+                return AcceptanceOutcome.From(InvitationAcceptanceStatus.InvalidOrExpired);
             }
 
             if (invitation.Status == InvitationStatus.Accepted)
@@ -891,14 +1034,16 @@ internal sealed class InvitationApplicationService(
 
         if (!string.Equals(spent.PayloadFingerprint, payloadFingerprint, StringComparison.Ordinal))
         {
-            return new InvitationCommandResult(InvitationCommandStatus.Conflict);
+            return InvitationCommandResult.Conflict(
+                InvitationConflictCodes.IdempotencyKeyReused,
+                "This invitation request's key was already used for a different request.");
         }
 
         var invitation = await dbContext.ClientInvitations
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == spent.InvitationId, cancellationToken);
         return invitation is null
-            ? new InvitationCommandResult(InvitationCommandStatus.Conflict)
+            ? ChangedMeanwhile()
             : new InvitationCommandResult(InvitationCommandStatus.Success, ToSummary(invitation));
     }
 

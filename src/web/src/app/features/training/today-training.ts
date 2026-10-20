@@ -19,7 +19,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import { apiErrorMessage } from '../../core/api/api-error';
+import { apiErrorMessage, failureKind } from '../../core/api/api-error';
 import type {
   ClientExerciseView,
   ClientSetView,
@@ -36,7 +36,7 @@ import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { workoutStatusLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { ButtonLink } from '../../ui/button';
+import { Button, ButtonLink } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
 import { EmptyState } from '../../ui/empty-state';
@@ -95,6 +95,7 @@ function isConflict(error: unknown): error is HttpErrorResponse {
 @Component({
   selector: 'app-today-training',
   imports: [
+    Button,
     ButtonLink,
     FormsModule,
     DatePipe,
@@ -467,6 +468,10 @@ export class TodayTraining implements HoldsUnsavedWork {
         (error.error as { code?: string } | null)?.code === 'workout_immutable'
         ? $localize`This workout was finished on another phone or tab, so this set wasn’t saved.`
         : $localize`This workout changed on another phone or tab, so this set wasn’t saved. Your entries are still on this page. Log the set again.`;
+    }
+    // A lost connection said once, in the app's words (audit UIQ-2); a server fault adds nothing to it.
+    if (failureKind(error) === 'connection') {
+      return $localize`Couldn’t save this set: the app couldn’t connect. Your entries are still on this page. Check your connection and retry.`;
     }
     const explanation = apiErrorMessage(error, '');
     return (

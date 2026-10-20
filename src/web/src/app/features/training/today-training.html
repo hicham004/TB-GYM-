@@ -594,6 +594,26 @@
         </button>
       }
     }
+  } @else if (error()) {
+    <!-- The reason is in the alert above; this says what failed and offers the way out (audit UIQ-2). -->
+    <app-empty-state
+      heading="Your workout couldn’t be loaded"
+      i18n-heading
+      description="Nothing you logged is lost."
+      i18n-description
+    >
+      <button
+        appButton
+        type="button"
+        size="touch"
+        empty-state-action
+        data-retry-load
+        (click)="load()"
+        i18n
+      >
+        Try again
+      </button>
+    </app-empty-state>
   }
   <app-rest-timer />
 </section>

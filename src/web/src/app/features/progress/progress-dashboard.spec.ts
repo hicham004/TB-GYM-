@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { type Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -7,7 +8,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { settle } from '../../../testing/dom';
+import { press, query, settle } from '../../../testing/dom';
 import { ProgressDashboardView } from './progress-dashboard';
 import { UiSheet } from '../../ui/sheet';
 import {
@@ -415,6 +416,33 @@ describe('ProgressDashboardView states', () => {
 
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).not.toContain('Your weight chart');
+  });
+
+  it('says a lost connection in the app’s words and reads the dashboard again on Try again', async () => {
+    const read = vi
+      .fn()
+      // Angular's fetch backend: status 0 with the browser's TypeError (audit UIQ-2).
+      .mockReturnValueOnce(
+        throwError(
+          () => new HttpErrorResponse({ status: 0, error: new TypeError('Failed to fetch') }),
+        ),
+      )
+      .mockReturnValue(of(twoPreviewDashboard()));
+    const { fixture, host } = await renderWith(of(twoPreviewDashboard()), {
+      getMyProgressDashboard: read as never,
+    });
+
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'The app couldn’t connect. Check your connection and try again.',
+    );
+    expect(host.textContent).not.toContain('Failed to fetch');
+
+    press(host, 'Try again');
+    await settle(fixture);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector('.toolbar .range')).not.toBeNull();
   });
 
   it('loads older weight windows for All and leaves empty days out of the entry list', async () => {

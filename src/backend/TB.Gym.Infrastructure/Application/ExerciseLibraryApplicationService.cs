@@ -36,10 +36,10 @@ internal sealed class ExerciseLibraryApplicationService(
 
         if (!string.IsNullOrWhiteSpace(request.Query))
         {
-            var pattern = $"%{request.Query.Trim()}%";
+            var pattern = LikePattern.Containing(request.Query);
             query = query.Where(item =>
-                EF.Functions.ILike(item.Name, pattern) ||
-                item.Tags.Any(tag => EF.Functions.ILike(tag.Value, pattern)));
+                EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter) ||
+                item.Tags.Any(tag => EF.Functions.ILike(tag.Value, pattern, LikePattern.EscapeCharacter)));
         }
 
         if (request.Equipment is { } equipment)
@@ -98,7 +98,7 @@ internal sealed class ExerciseLibraryApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("exercise", exception.Message);
+            return Invalid("exercise", exception.PersonMessage());
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
@@ -135,11 +135,11 @@ internal sealed class ExerciseLibraryApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("exercise", exception.Message);
+            return Invalid("exercise", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Invalid("exercise", exception.Message);
+            return Invalid("exercise", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException exception)
         {

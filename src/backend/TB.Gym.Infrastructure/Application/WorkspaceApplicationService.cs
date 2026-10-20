@@ -54,7 +54,7 @@ internal sealed class WorkspaceApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidRegistration(normalizedEmail, exception.Message);
+            return InvalidRegistration(normalizedEmail, exception.PersonMessage());
         }
 
         var now = clock.UtcNow;
@@ -174,7 +174,7 @@ internal sealed class WorkspaceApplicationService(
         {
             return new WorkspaceUpdateResult(
                 WorkspaceUpdateStatus.Invalid,
-                Errors: new Dictionary<string, string[]> { ["workspace"] = [exception.Message] });
+                Errors: new Dictionary<string, string[]> { ["workspace"] = [exception.PersonMessage()] });
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -240,7 +240,7 @@ internal sealed class WorkspaceApplicationService(
         {
             return new WorkspaceUpdateResult(
                 WorkspaceUpdateStatus.Invalid,
-                Errors: new Dictionary<string, string[]> { ["brand"] = [exception.Message] });
+                Errors: new Dictionary<string, string[]> { ["brand"] = [exception.PersonMessage()] });
         }
         catch (DbUpdateConcurrencyException)
         {

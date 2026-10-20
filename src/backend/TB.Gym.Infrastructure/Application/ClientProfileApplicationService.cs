@@ -129,7 +129,7 @@ internal sealed class ClientProfileApplicationService(
         catch (ArgumentException exception)
         {
             dbContext.ChangeTracker.Clear();
-            return Invalid("coachUserId", exception.Message);
+            return Invalid("coachUserId", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -328,7 +328,7 @@ internal sealed class ClientProfileApplicationService(
         catch (ArgumentException exception)
         {
             dbContext.ChangeTracker.Clear();
-            return Invalid("reason", exception.Message);
+            return Invalid("reason", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -558,7 +558,7 @@ internal sealed class ClientProfileApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("coachNotes", exception.Message);
+            return Invalid("coachNotes", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -613,7 +613,7 @@ internal sealed class ClientProfileApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("reason", exception.Message);
+            return Invalid("reason", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -655,7 +655,7 @@ internal sealed class ClientProfileApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("intake", exception.Message);
+            return Invalid("intake", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -749,11 +749,11 @@ internal sealed class ClientProfileApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("onboarding", exception.Message);
+            return Invalid("onboarding", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Invalid("onboarding", exception.Message);
+            return Invalid("onboarding", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

@@ -869,6 +869,8 @@ export class ProgramAssign {
     }
     return this.scope.run(`estimate:${row.exerciseId}`, async (owner) => {
       try {
+        // The calculator is a POST like every other and checks the token (audit SEC-4).
+        await owner.wait(this.csrf.refresh());
         const worked = await owner.wait(
           firstValueFrom(
             this.programApi.estimateMaxFromRpeChart({

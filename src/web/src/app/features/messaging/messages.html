@@ -52,6 +52,17 @@
     <!-- Present from first render so the live region is registered before anything lands in it, and
          populated only when the server actually refused something. -->
     <p class="error" [class.shown]="error() !== null" role="alert">{{ error() }}</p>
+    @if (canRetryRead()) {
+      <button
+        type="button"
+        class="link retry"
+        [disabled]="listLoading() || threadLoading()"
+        (click)="retryRead()"
+        i18n
+      >
+        Try again
+      </button>
+    }
   </div>
 
   @if (!singleThread()) {

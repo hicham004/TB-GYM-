@@ -108,8 +108,7 @@ public static class InvitationEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToCommandResult(
                 await service.CreateCoachAsync(request, cancellationToken),
-                created: true,
-                conflictMessage: CoachConflictMessage);
+                created: true);
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("CreateCoachInvitation")
@@ -127,8 +126,7 @@ public static class InvitationEndpoints
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToCommandResult(
-                await service.ResendAsync(InvitationKind.Coach, invitationId, request, cancellationToken),
-                conflictMessage: CoachConflictMessage);
+                await service.ResendAsync(InvitationKind.Coach, invitationId, request, cancellationToken));
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("ResendCoachInvitation")
@@ -146,8 +144,7 @@ public static class InvitationEndpoints
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToCommandResult(
-                await service.RevokeAsync(InvitationKind.Coach, invitationId, request, cancellationToken),
-                conflictMessage: CoachConflictMessage);
+                await service.RevokeAsync(InvitationKind.Coach, invitationId, request, cancellationToken));
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("RevokeCoachInvitation")
@@ -199,9 +196,6 @@ public static class InvitationEndpoints
                         message = "This invitation belongs to a different account.",
                     },
                     statusCode: StatusCodes.Status403Forbidden),
-                InvitationAcceptanceStatus.Revoked => Results.Json(
-                    new { code = "invitation_revoked", message = "This invitation was revoked." },
-                    statusCode: StatusCodes.Status410Gone),
                 InvitationAcceptanceStatus.InvalidOrExpired => Results.Json(
                     new { code = "invitation_invalid_or_expired", message = "This invitation is invalid or expired." },
                     statusCode: StatusCodes.Status410Gone),
@@ -226,16 +220,9 @@ public static class InvitationEndpoints
         return endpoints;
     }
 
-    private const string ClientConflictMessage =
-        "An active invitation or client relationship already exists for this email.";
-
-    private const string CoachConflictMessage =
-        "An active invitation or workspace membership already exists for this email.";
-
     private static IResult ToCommandResult(
         InvitationCommandResult result,
-        bool created = false,
-        string conflictMessage = ClientConflictMessage) =>
+        bool created = false) =>
         result.Status switch
         {
             InvitationCommandStatus.Success when created => Results.Created(
@@ -245,10 +232,12 @@ public static class InvitationEndpoints
             InvitationCommandStatus.NotFound => Results.NotFound(),
             InvitationCommandStatus.Invalid => Results.ValidationProblem(
                 result.Errors ?? new Dictionary<string, string[]>()),
+            // Each conflict names its own reason (audit COACH-8); one sentence used to answer them all.
             _ => Results.Conflict(new
             {
-                code = "invitation_conflict",
-                message = conflictMessage,
+                code = result.ConflictCode ?? InvitationConflictCodes.Changed,
+                message = result.ConflictMessage
+                    ?? "Something changed at the same moment, so the invitation was not changed. Try again.",
             }),
         };
 }

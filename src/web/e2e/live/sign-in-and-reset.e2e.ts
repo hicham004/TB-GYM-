@@ -106,7 +106,10 @@ test('a bad reset token fails safely and clears the password fields', async ({ p
   );
   await page.getByRole('button', { name: 'Update password' }).click();
   expect((await reset).status()).toBe(400);
-  await expect(page.locator('#reset-summary')).toHaveText('The link is invalid or expired.');
+  // The link's own fault, in the app's words (audit AUTH-6).
+  await expect(page.locator('#reset-summary')).toHaveText(
+    'This reset link has expired or was already used. Ask for a new one.',
+  );
   await expect(page.locator('#reset-password')).toHaveValue('');
   await expect(page.locator('#reset-confirm-password')).toHaveValue('');
   // The spent token leaves the address bar by history replacement.

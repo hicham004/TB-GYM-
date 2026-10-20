@@ -258,7 +258,30 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   (`tb-gym-antiforgery`) is HTTP-only; `/api/auth/csrf` publishes the paired request token
   in the readable `XSRF-TOKEN` cookie, which Angular sends as `X-XSRF-TOKEN`. A missing or invalid
   token is answered 400 `antiforgery_token_invalid`, never a 500, so a stale tab or a forged request
-  does not count as a server fault.
+  does not count as a server fault. Every POST checks the token, the two strength calculators included
+  (audit SEC-4).
+- A request the API cannot read is answered alike in every environment (audit SEC-1):
+  `RouteHandlerOptions.ThrowOnBadRequest` is on everywhere and `UnreadableRequestExceptionHandler`
+  answers 400 `request_invalid` with the `field` the reader stopped at (`sets[0].reps`, never its
+  value; the sentence also under `errors` keyed by that field, like every validation refusal), "This
+  request needs its fields as a JSON body." for an empty or `null` body, 413
+  `request_too_large` past a route's `RequestSizeLimit` (the contact form's is 16 KB, BEB-3) and 415
+  `request_unsupported_media_type`. `StorableTextMiddleware` (after authorization) refuses a NUL in a
+  query value or a JSON string as 400 `text_invalid_character` naming the field (SEC-2), because
+  PostgreSQL cannot store it; a middleware, not a JSON converter, because a custom `string` converter
+  made the OpenAPI document describe every string as "anything". A refusal's sentence comes from
+  `exception.PersonMessage()`, which drops .NET's "(Parameter 'x')" and "Actual value was …"
+  (CLIENT-5, NCM-10, AUTH-5), and Identity speaks through `PersonIdentityErrorDescriber` (AUTH-6). The
+  Angular `apiErrorMessage` never shows the browser's or the framework's words (UIQ-2): a connection
+  failure (status 0; Angular's fetch backend puts the browser's "Failed to fetch" in the error) reads one
+  app sentence on every screen, and a 5xx without an API code reads the screen's own sentence of what
+  failed, never a 500's title. Messages, the player and Progress offer Try again after a failed read.
+- Inside a workspace, somebody else's row answers as a missing one (ADR 0026, audit SEC-7): media access
+  (`POST /api/media/{id}/access`, authorized before its readiness is said) answers one 404 for any asset
+  the person may not open now, and another client's workout (the set, substitution, finish and note
+  routes) answers 404, as a row that does not exist does. A client's own workout while their training is
+  closed is still 403 with its reason.
+  Search boxes match their words literally: `LikePattern` escapes `%`, `_` and `\` for `ILIKE` (SEC-10).
 - Failed API authorization returns 401 or 403, never an HTML redirect. The SPA reads a 401 from
   any route but sign-in and the session check as a session that ended under the open app (audit
   WEB-1, `sessionInterceptor` and `SessionExpiry`): it goes to sign-in with the page to return to,

@@ -85,25 +85,18 @@ internal sealed class NotificationApplicationService(
         }
 
         var now = clock.UtcNow;
-        int marked;
-        // A notice marked read on its own at the same moment makes the save conflict; reading again and
-        // marking what is still unread settles it, since read is one-way and its first instant is kept.
-        for (var attempt = 1; ; attempt++)
-        {
-            var unread = await dbContext.Notifications
-                .Where(item => item.RecipientUserId == recipientUserId && item.ReadAtUtc == null)
-                .ToListAsync(cancellationToken);
-            marked = unread.Count(item => item.MarkRead(now));
-            try
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-                break;
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < 3)
-            {
-                dbContext.ChangeTracker.Clear();
-            }
-        }
+        // One statement over what is still unread, so a notice marked read on its own at the same moment
+        // is skipped rather than conflicting: the loop it replaces answered 500 after its third conflict
+        // (audit BEB-6). Read stays one-way and keeps its first instant, as Notification.MarkRead does and
+        // the table's trigger enforces.
+        var marked = await dbContext.Notifications
+            .Where(item => item.RecipientUserId == recipientUserId && item.ReadAtUtc == null)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(item => item.ReadAtUtc, (DateTimeOffset?)now)
+                    .SetProperty(item => item.UpdatedAtUtc, now)
+                    .SetProperty(item => item.UpdatedByUserId, (Guid?)recipientUserId),
+                cancellationToken);
 
         var left = await dbContext.Notifications
             .AsNoTracking()

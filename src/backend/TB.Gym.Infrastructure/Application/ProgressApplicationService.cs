@@ -339,7 +339,7 @@ internal sealed partial class ProgressApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("bodyweight", exception.Message);
+            return Invalid("bodyweight", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -392,7 +392,7 @@ internal sealed partial class ProgressApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("bodyweight", exception.Message);
+            return Invalid("bodyweight", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -484,11 +484,11 @@ internal sealed partial class ProgressApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("reason", exception.Message);
+            return Invalid("reason", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("BodyweightObservationVoided", exception.Message);
+            return Conflict("BodyweightObservationVoided", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -751,7 +751,7 @@ internal sealed partial class ProgressApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidMeasurement("measurement", exception.Message);
+            return InvalidMeasurement("measurement", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -802,7 +802,7 @@ internal sealed partial class ProgressApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return InvalidMeasurement("measurement", exception.Message);
+            return InvalidMeasurement("measurement", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -1164,11 +1164,11 @@ internal sealed partial class ProgressApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return PhotoInvalid("reason", exception.Message);
+            return PhotoInvalid("reason", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return PhotoConflict("ProgressPhotoAlreadyRemoved", exception.Message);
+            return PhotoConflict("ProgressPhotoAlreadyRemoved", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

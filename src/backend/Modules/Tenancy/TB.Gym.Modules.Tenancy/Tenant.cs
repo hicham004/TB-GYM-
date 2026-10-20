@@ -195,11 +195,11 @@ public sealed record WorkspaceSettings(
         }
         catch (TimeZoneNotFoundException exception)
         {
-            throw new ArgumentException("A valid IANA time zone is required.", nameof(timeZoneId), exception);
+            throw new ArgumentException("Enter a time zone such as Asia/Beirut.", nameof(timeZoneId), exception);
         }
         catch (InvalidTimeZoneException exception)
         {
-            throw new ArgumentException("A valid IANA time zone is required.", nameof(timeZoneId), exception);
+            throw new ArgumentException("Enter a time zone such as Asia/Beirut.", nameof(timeZoneId), exception);
         }
 
         string normalizedCulture;

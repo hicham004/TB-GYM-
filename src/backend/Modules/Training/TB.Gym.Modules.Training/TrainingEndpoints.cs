@@ -261,7 +261,7 @@ public static class TrainingEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["progression"] = [exception.Message],
+                    ["progression"] = [exception.PersonMessage()],
                 });
             }
         })
@@ -289,7 +289,7 @@ public static class TrainingEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["progression"] = [exception.Message],
+                    ["progression"] = [exception.PersonMessage()],
                 });
             }
             catch (InvalidOperationException exception)
@@ -297,7 +297,7 @@ public static class TrainingEndpoints
                 return Results.Conflict(new
                 {
                     code = "progression_conflict",
-                    message = exception.Message,
+                    message = exception.PersonMessage(),
                 });
             }
         })
@@ -343,7 +343,7 @@ public static class TrainingEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["edit"] = [exception.Message],
+                    ["edit"] = [exception.PersonMessage()],
                 });
             }
             catch (InvalidOperationException exception)
@@ -351,7 +351,7 @@ public static class TrainingEndpoints
                 return Results.Conflict(new
                 {
                     code = "program_edit_conflict",
-                    message = exception.Message,
+                    message = exception.PersonMessage(),
                 });
             }
         })
@@ -411,7 +411,7 @@ public static class TrainingEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["maxes"] = [exception.Message],
+                    ["maxes"] = [exception.PersonMessage()],
                 });
             }
             catch (InvalidOperationException exception)
@@ -421,7 +421,7 @@ public static class TrainingEndpoints
                     code = exception is TrainingMaxSuggestionChangedException
                         ? TrainingMaxSuggestionChangedException.Code
                         : "training_maxes_conflict",
-                    message = exception.Message,
+                    message = exception.PersonMessage(),
                 });
             }
         })

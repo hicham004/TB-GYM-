@@ -195,6 +195,10 @@ export class ProgressDashboardView {
     }
   }
 
+  protected retry(): void {
+    void this.load();
+  }
+
   private async load(): Promise<void> {
     return this.scope.run('load', async (owner) => {
       const key = this.loadedKey;

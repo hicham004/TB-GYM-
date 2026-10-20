@@ -117,13 +117,14 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
         }
         catch (ArgumentException exception)
         {
-            return Invalid("max", exception.Message);
+            return Invalid("max", exception.PersonMessage());
         }
     }
 
     public OneRepMaxEstimateView Estimate(EstimateOneRepMaxRequest request)
     {
-        IOneRepMaxEstimator estimator = request.MethodKey.Trim().ToUpperInvariant() switch
+        // An empty body leaves the method out; it is refused like an unknown one (audit SEC-4).
+        IOneRepMaxEstimator estimator = request.MethodKey?.Trim().ToUpperInvariant() switch
         {
             "EPLEY" => new EpleyOneRepMaxEstimator(),
             "BRZYCKI" => new BrzyckiOneRepMaxEstimator(),

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Training;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
@@ -212,7 +213,7 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            return Invalid("program", exception.Message);
+            return Invalid("program", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException exception)
         {

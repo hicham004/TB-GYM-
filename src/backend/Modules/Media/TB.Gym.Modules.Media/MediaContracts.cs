@@ -273,8 +273,9 @@ public static class MediaQuotaCodes
 public enum MediaAccessStatus
 {
     Success = 1,
+
+    /// <summary>Missing, gone, or somebody else's: one answer, so existence is never confirmed (ADR 0026).</summary>
     NotFound = 2,
-    Forbidden = 3,
     NotReady = 4,
 }
 

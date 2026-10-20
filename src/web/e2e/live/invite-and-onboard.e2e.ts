@@ -153,7 +153,7 @@ test('Lea invites a client, sends the link again, cancels another and is refused
   await closeAsk.getByRole('button', { name: 'Discard', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  // An email already in the coaching space: the server's refusal, kept on screen.
+  // Another coach's client's email: taken, and nothing more said to a coach (audit COACH-8, ADR 0026).
   await page.getByRole('button', { name: 'Invite a client' }).first().click();
   const existing = page.getByRole('dialog');
   await existing.getByLabel('First name').fill('Karl');
@@ -161,7 +161,7 @@ test('Lea invites a client, sends the link again, cancels another and is refused
   await existing.getByLabel('Email').fill(ACCOUNTS.karl);
   await existing.getByRole('button', { name: 'Send invitation' }).click();
   await expect(existing.getByRole('alert')).toHaveText(
-    'An active invitation or client relationship already exists for this email.',
+    "This email already belongs to someone in Atlas Performance, so it can't be invited. Ask the owner about it.",
   );
   await existing.getByRole('button', { name: 'Not now' }).click();
   await page

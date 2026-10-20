@@ -287,7 +287,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         // What a version could never hold is refused, by field.
         await R42aAssertInvalidAsync(owner, content with { Weeks = [.. Enumerable.Repeat(week, 53)] }, "weeks");
         await R42aAssertInvalidAsync(owner, content with { Weeks = [week with { Sessions = [session with { DayOffset = 7 }] }] }, "sessions");
-        await R42aAssertInvalidAsync(owner, content with { Name = "Bad\0name" }, "name");
+        // A NUL is refused where the request is read, under its path in the body (audit SEC-2).
+        await R42aAssertInvalidAsync(owner, content with { Name = "Bad\0name" }, "content.name");
         var note = new string('x', 1_000);
         var exercise = session.Exercises.Single();
         var heavy = session with

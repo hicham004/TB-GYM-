@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Training;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
@@ -126,11 +127,11 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            return Invalid("progression", exception.Message);
+            return Invalid("progression", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("progression_conflict", exception.Message);
+            return Conflict("progression_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -282,9 +283,7 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            var message = exception.Message;
-            var suffix = message.IndexOf(" (Parameter '", StringComparison.Ordinal);
-            throw new ArgumentException($"{where}: {(suffix < 0 ? message : message[..suffix])}", exception);
+            throw new ArgumentException($"{where}: {exception.PersonMessage()}", exception);
         }
     }
 

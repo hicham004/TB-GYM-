@@ -267,8 +267,9 @@ describe('Clients', () => {
         fail ? throwError(() => new HttpErrorResponse({ status: 500 })) : of(clientListView()),
     });
 
+    // A server fault reads the screen's own sentence, never its title (audit UIQ-2).
     expect(squash(query(host, '[role="alert"]').textContent)).toBe(
-      'Clients could not be loaded. Check your connection and try again.',
+      'Clients could not be loaded. Try again.',
     );
     expect(host.textContent).not.toContain('No clients yet');
 
@@ -337,21 +338,18 @@ describe('Clients', () => {
     expect(host.querySelector('.chips')).toBeNull();
   });
 
-  it("shows the server's reason when the former list is refused", async () => {
+  it('tells a coach who opens Former clients whose list it is, with a way back', async () => {
     const { host } = await render({
       url: '/clients/former',
-      getFormerClients: () =>
-        throwError(
-          () =>
-            new HttpErrorResponse({
-              status: 403,
-              error: { message: 'Only the owner can see former clients.' },
-            }),
-        ),
+      getFormerClients: () => throwError(() => new HttpErrorResponse({ status: 403, error: null })),
     });
 
+    // It was "Clients could not be loaded. Check your connection and try again." (audit UIQ-2).
     expect(squash(query(host, '[role="alert"]').textContent)).toBe(
-      'Only the owner can see former clients.',
+      'Only the owner sees former clients.',
     );
+    expect(query<HTMLAnchorElement>(host, '.load-failed a').getAttribute('href')).toBe('/clients');
+    expect(query(host, '.load-failed a').textContent?.trim()).toBe('See your clients');
+    expect(host.querySelector('.load-failed button')).toBeNull();
   });
 });

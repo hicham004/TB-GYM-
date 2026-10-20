@@ -215,7 +215,7 @@ internal sealed class NotificationPreferenceService(
         }
         catch (ArgumentException exception)
         {
-            return NotificationPreferenceCommandResult.Invalid("quietHours", exception.Message);
+            return NotificationPreferenceCommandResult.Invalid("quietHours", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

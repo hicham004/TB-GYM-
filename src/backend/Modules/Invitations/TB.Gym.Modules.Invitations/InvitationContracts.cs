@@ -195,10 +195,53 @@ public sealed record PublicInvitationDetails(
     string TimeZoneId,
     InvitationKind Kind = InvitationKind.Client);
 
+/// <summary>
+/// An invitation command's outcome. A conflict carries its own reason and sentence (audit COACH-8):
+/// six situations used to share one sentence that fitted none of them.
+/// </summary>
 public sealed record InvitationCommandResult(
     InvitationCommandStatus Status,
     InvitationSummary? Invitation = null,
-    IReadOnlyDictionary<string, string[]>? Errors = null);
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    string? ConflictCode = null,
+    string? ConflictMessage = null)
+{
+    public static InvitationCommandResult Conflict(string code, string message) =>
+        new(InvitationCommandStatus.Conflict, ConflictCode: code, ConflictMessage: message);
+}
+
+/// <summary>The reasons an invitation command is refused as a conflict.</summary>
+public static class InvitationConflictCodes
+{
+    /// <summary>The email is a current client's, one the inviter coaches or, for the owner, anyone's.</summary>
+    public const string AlreadyClient = "invitation_already_client";
+
+    /// <summary>The email is a member of the team, or a former coach, which the owner is told.</summary>
+    public const string AlreadyTeam = "invitation_already_team";
+
+    /// <summary>A former client invited as a coach (CLI-016).</summary>
+    public const string FormerClient = "invitation_former_client";
+
+    /// <summary>An invitation to the email is still waiting.</summary>
+    public const string Pending = "invitation_pending";
+
+    /// <summary>
+    /// A coach's answer for an email that belongs to somebody they cannot see: it says the email is taken,
+    /// never by whom or as what.
+    /// </summary>
+    public const string EmailInUse = "invitation_email_in_use";
+
+    /// <summary>The invitation changed after the caller read it: a stale version or a concurrent write.</summary>
+    public const string Changed = "invitation_changed";
+
+    public const string Expired = "invitation_expired";
+
+    public const string AlreadyAccepted = "invitation_already_accepted";
+
+    public const string AlreadyCancelled = "invitation_already_cancelled";
+
+    public const string IdempotencyKeyReused = "idempotency_key_reused";
+}
 
 public enum InvitationCommandStatus
 {
@@ -231,8 +274,8 @@ public enum InvitationAcceptanceStatus
     Accepted = 1,
     ExistingAccountSignInRequired = 2,
     WrongSignedInAccount = 3,
+    /// <summary>Unknown, spent, expired or cancelled: one answer, so a link says nothing about what it was.</summary>
     InvalidOrExpired = 4,
-    Revoked = 5,
     Invalid = 6,
     Conflict = 7,
 }

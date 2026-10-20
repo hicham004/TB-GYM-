@@ -41,7 +41,18 @@ public sealed class ChatHub(IMessagingRealtimeAuthorizer authorizer, ICurrentUse
 
     public override async Task OnConnectedAsync()
     {
-        var binding = await EstablishBindingAsync();
+        MessagingHubConnectionBinding? binding;
+        try
+        {
+            binding = await EstablishBindingAsync();
+        }
+        catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
+        {
+            // The browser left while its membership was being read (audit AUTH-13). Nothing is bound
+            // and nothing failed, so it is not reported as a hub error with a stack trace.
+            return;
+        }
+
         if (binding is null)
         {
             // Fail closed and say nothing. An unauthenticated caller, a missing, malformed,
@@ -86,13 +97,21 @@ public sealed class ChatHub(IMessagingRealtimeAuthorizer authorizer, ICurrentUse
             return false;
         }
 
-        if (!await authorizer.BindVerifiedTenantAsync(binding.TenantId, binding.UserId, Context.ConnectionAborted) ||
-            !await authorizer.CanAccessConversationAsync(
-                binding.TenantId,
-                binding.UserId,
-                conversationId,
-                Context.ConnectionAborted))
+        try
         {
+            if (!await authorizer.BindVerifiedTenantAsync(binding.TenantId, binding.UserId, Context.ConnectionAborted) ||
+                !await authorizer.CanAccessConversationAsync(
+                    binding.TenantId,
+                    binding.UserId,
+                    conversationId,
+                    Context.ConnectionAborted))
+            {
+                return false;
+            }
+        }
+        catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
+        {
+            // Left while being authorized, like a connect cut short: nobody is waiting for the answer.
             return false;
         }
 

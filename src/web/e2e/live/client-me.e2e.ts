@@ -143,7 +143,8 @@ test('a password change works and Sign out everywhere ends the other session', a
     await page.getByLabel('New password', { exact: true }).fill(TEMP_PASSWORD);
     await page.getByLabel('New password again').fill(TEMP_PASSWORD);
     await page.getByRole('button', { name: 'Change password' }).click();
-    await expect(page.getByText('Incorrect password.')).toBeVisible();
+    // Identity's refusal in the app's words (audit AUTH-6); it was "Incorrect password.".
+    await expect(page.getByText("Your current password isn't right.")).toBeVisible();
 
     await page.getByLabel('Current password').fill(DEMO_PASSWORD);
     await page.getByRole('button', { name: 'Change password' }).click();

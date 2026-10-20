@@ -149,7 +149,6 @@ public static class MediaEndpoints
             return result.Status switch
             {
                 MediaAccessStatus.Success => Results.Ok(result.Access),
-                MediaAccessStatus.Forbidden => Results.Forbid(),
                 MediaAccessStatus.NotReady => Results.Conflict(new { code = "media_not_ready" }),
                 _ => Results.NotFound(),
             };
@@ -460,7 +459,7 @@ public static class MediaEndpoints
         }
         catch (InvalidDataException exception)
         {
-            return InvalidFile(exception.Message);
+            return InvalidFile(exception.PersonMessage());
         }
 
         return InvalidFile("A media file is required.");

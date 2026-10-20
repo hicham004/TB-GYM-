@@ -203,7 +203,11 @@
   @if (failed(); as message) {
     <div class="panel load-failed">
       <p role="alert">{{ message }}</p>
-      <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      @if (formerRefused()) {
+        <a appButton variant="outlined" routerLink="/clients" i18n>See your clients</a>
+      } @else {
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      }
     </div>
   } @else if (showingFormer ? former() === null : list() === null) {
     <div class="panel loading">

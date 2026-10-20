@@ -341,7 +341,7 @@ internal sealed class MediaApplicationService(
         catch (ArgumentException exception)
         {
             await CleanupIngestObjectsAsync(ingestObjects);
-            return Invalid("file", exception.Message);
+            return Invalid("file", exception.PersonMessage());
         }
         catch (Exception exception) when (IsStorageOperationalFailure(exception))
         {
@@ -397,7 +397,7 @@ internal sealed class MediaApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("media", exception.Message);
+            return Invalid("media", exception.PersonMessage());
         }
     }
 
@@ -471,14 +471,16 @@ internal sealed class MediaApplicationService(
             return new MediaAccessResult(MediaAccessStatus.NotFound);
         }
 
+        // Somebody else's asset answers as a missing one (audit SEC-7, ADR 0026): a 403, or "not ready
+        // yet" before the check, told the caller the asset exists. So authorization comes first.
+        if (!await IsAuthorizedAsync(assetId, cancellationToken))
+        {
+            return new MediaAccessResult(MediaAccessStatus.NotFound);
+        }
+
         if (asset.Status is not (MediaAssetStatus.Ready or MediaAssetStatus.Tombstoned))
         {
             return new MediaAccessResult(MediaAccessStatus.NotReady);
-        }
-
-        if (!await IsAuthorizedAsync(assetId, cancellationToken))
-        {
-            return new MediaAccessResult(MediaAccessStatus.Forbidden);
         }
 
         var expires = clock.UtcNow.Add(accessLifetime);

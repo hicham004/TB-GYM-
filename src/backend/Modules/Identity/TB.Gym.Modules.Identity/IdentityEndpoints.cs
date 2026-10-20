@@ -232,19 +232,19 @@ public static class IdentityEndpoints
         var user = await userManager.FindByIdAsync(request.UserId.ToString());
         if (user is null)
         {
-            return InvalidToken();
+            return InvalidConfirmationLink();
         }
 
         var token = DecodeToken(request.Code);
         if (token is null)
         {
-            return InvalidToken();
+            return InvalidConfirmationLink();
         }
 
         var result = await userManager.ConfirmEmailAsync(user, token);
         return result.Succeeded || user.EmailConfirmed
             ? Results.NoContent()
-            : InvalidToken();
+            : InvalidConfirmationLink();
     }
 
     /// <summary>
@@ -307,13 +307,22 @@ public static class IdentityEndpoints
         UserManager<ApplicationUser> userManager)
     {
         await antiforgery.ValidateRequestAsync(context);
+        // Asked of every request alike, before the account is looked up, so it says nothing about one.
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["newPassword"] = ["Enter a new password."],
+            });
+        }
+
         var user = request.UserId == Guid.Empty
             ? null
             : await userManager.FindByIdAsync(request.UserId.ToString());
         var token = DecodeToken(request.Code);
-        if (user is null || token is null || string.IsNullOrWhiteSpace(request.NewPassword))
+        if (user is null || token is null)
         {
-            return InvalidToken();
+            return InvalidResetLink();
         }
 
         var result = await userManager.ResetPasswordAsync(user, token, request.NewPassword);
@@ -323,7 +332,11 @@ public static class IdentityEndpoints
             return Results.NoContent();
         }
 
-        return IdentityValidationProblem(result);
+        // A spent or replaced link is the link's fault, not the password's: Identity's "Invalid token."
+        // read as if the new password were wrong (audit AUTH-6).
+        return result.Errors.Any(error => error.Code == nameof(IdentityErrorDescriber.InvalidToken))
+            ? InvalidResetLink()
+            : IdentityValidationProblem(result);
     }
 
     private static async Task<IResult> ChangePasswordAsync(
@@ -431,9 +444,16 @@ public static class IdentityEndpoints
             statusCode: StatusCodes.Status429TooManyRequests);
     }
 
-    private static IResult InvalidToken() =>
+    private const string InvalidLinkCode = "invalid_or_expired_token";
+
+    private static IResult InvalidConfirmationLink() =>
         Results.Json(
-            new { code = "invalid_or_expired_token", message = "The link is invalid or expired." },
+            new { code = InvalidLinkCode, message = "This confirmation link has expired or was already used." },
+            statusCode: StatusCodes.Status400BadRequest);
+
+    private static IResult InvalidResetLink() =>
+        Results.Json(
+            new { code = InvalidLinkCode, message = "This reset link has expired or was already used. Ask for a new one." },
             statusCode: StatusCodes.Status400BadRequest);
 
     private static IResult IdentityValidationProblem(IdentityResult result) =>

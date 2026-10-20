@@ -1277,6 +1277,69 @@ describe('Messages', () => {
     expect(host.querySelectorAll('.conversation-list li')).toHaveLength(0);
   });
 
+  it('says a lost connection in the app’s words and reads the list again on Try again', async () => {
+    const harness = await render(({ listConversations }) => {
+      // Angular's fetch backend: status 0 and the browser's TypeError (audit UIQ-2).
+      listConversations.mockReturnValue(
+        throwError(
+          () => new HttpErrorResponse({ status: 0, error: new TypeError('Failed to fetch') }),
+        ),
+      );
+    });
+
+    const line = query(harness.host, 'p.error[role="alert"]');
+    expect(line.textContent?.trim()).toBe(
+      'The app couldn’t connect. Check your connection and try again.',
+    );
+    expect(harness.host.textContent).not.toContain('Failed to fetch');
+
+    harness.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+    press(harness.host, 'Try again');
+    await settle(harness.fixture);
+
+    expect(harness.host.querySelectorAll('.conversation')).toHaveLength(1);
+    expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe('');
+    expect(() => button(harness.host, 'Try again')).toThrow();
+  });
+
+  it('offers Try again for a thread that failed to load, and not for a refused send', async () => {
+    const harness = await render(({ listConversations, listConversationMessages }) => {
+      listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      listConversationMessages.mockReturnValue(
+        throwError(() => new HttpErrorResponse({ status: 500, error: { title: 'boom' } })),
+      );
+    });
+    await open(harness);
+
+    // The screen's own sentence, never the title "boom" (audit UIQ-2).
+    expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe(
+      'This conversation could not be loaded.',
+    );
+    harness.listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+    press(harness.host, 'Try again');
+    await settle(harness.fixture);
+    expect(harness.host.querySelectorAll('.feed li').length).toBeGreaterThan(0);
+    expect(() => button(harness.host, 'Try again')).toThrow();
+
+    harness.sendConversationMessage.mockReturnValue(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 400,
+            error: { message: 'A message can only contain ordinary text.' },
+          }),
+      ),
+    );
+    const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
+    composer.value = 'Hello';
+    composer.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    press(harness.host, 'Send message');
+    await settle(harness.fixture);
+    expect(query(harness.host, 'p.error[role="alert"]').textContent).toContain('ordinary text');
+    expect(() => button(harness.host, 'Try again')).toThrow();
+  });
+
   // ---------- context ownership ----------
 
   it('clears the list, the thread and the draft when the workspace changes', async () => {

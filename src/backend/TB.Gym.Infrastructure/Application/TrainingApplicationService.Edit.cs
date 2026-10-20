@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Training;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
@@ -141,11 +142,11 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            return Invalid("edit", ReadableMessage(exception));
+            return Invalid("edit", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("program_edit_conflict", exception.Message);
+            return Conflict("program_edit_conflict", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -387,14 +388,6 @@ internal sealed partial class TrainingApplicationService
                 }),
             },
             ProgramEditJsonOptions);
-
-    /// <summary>An exception's sentence without the "(Parameter 'x')" the framework appends.</summary>
-    private static string ReadableMessage(ArgumentException exception)
-    {
-        var message = exception.Message;
-        var suffix = message.IndexOf(" (Parameter '", StringComparison.Ordinal);
-        return suffix < 0 ? message : message[..suffix];
-    }
 
     private sealed record ProgramEditBuild(
         ProgramEditPlan Plan,

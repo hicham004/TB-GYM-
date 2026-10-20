@@ -349,8 +349,9 @@ public sealed partial class Phase3TrainingWorkflowTests
             "media-unassigned@example.test",
             newAccount: true);
         await RefreshCsrfAsync(unassignedClient);
+        // Somebody else's asset answers as a missing one (audit SEC-7, ADR 0026): a 403 confirmed it existed.
         Assert.AreEqual(
-            HttpStatusCode.Forbidden,
+            HttpStatusCode.NotFound,
             (await unassignedClient.PostAsync($"/api/media/{resources.Media.Id}/access", null)).StatusCode);
 
         using var foreignCoach = CreateClient();

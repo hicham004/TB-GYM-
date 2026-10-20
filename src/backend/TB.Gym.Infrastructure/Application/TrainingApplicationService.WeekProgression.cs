@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TB.Gym.Modules.Training;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
@@ -73,7 +74,7 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            throw new ArgumentException(prefix + exception.Message, exception);
+            throw new ArgumentException(prefix + exception.PersonMessage(), exception);
         }
     }
 }

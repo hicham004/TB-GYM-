@@ -47,6 +47,9 @@ public static class ContactRequestRules
 
     public const int MessageMaxLength = 1000;
 
+    /// <summary>The largest body the form's route reads (audit BEB-3): far above any form a person can send.</summary>
+    public const long MaximumRequestBytes = 16 * 1024;
+
     /// <summary>The least time between the form's stamp and its submission that counts as a person.</summary>
     public static readonly TimeSpan MinimumFormTime = TimeSpan.FromSeconds(3);
 

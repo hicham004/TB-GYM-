@@ -321,7 +321,7 @@ internal sealed partial class TrainingApplicationService
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("workout_start_conflict", exception.Message);
+            return Conflict("workout_start_conflict", exception.PersonMessage());
         }
         catch (DbUpdateException)
         {
@@ -346,9 +346,9 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
-        if (!await CanCurrentClientUseExecutionAsync(execution, cancellationToken))
+        if (await ClientExecutionRefusalAsync(execution, cancellationToken) is { } refusal)
         {
-            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
+            return refusal;
         }
 
         try
@@ -371,11 +371,11 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            return Invalid("set", exception.Message);
+            return Invalid("set", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("workout_immutable", exception.Message);
+            return Conflict("workout_immutable", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -395,9 +395,9 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
-        if (!await CanCurrentClientUseExecutionAsync(execution, cancellationToken))
+        if (await ClientExecutionRefusalAsync(execution, cancellationToken) is { } refusal)
         {
-            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
+            return refusal;
         }
 
         var exerciseName = await dbContext.Exercises.AsNoTracking()
@@ -421,11 +421,11 @@ internal sealed partial class TrainingApplicationService
         }
         catch (WorkoutExerciseSwapLockedException exception)
         {
-            return Conflict(WorkoutExerciseSwapLockedException.Code, exception.Message);
+            return Conflict(WorkoutExerciseSwapLockedException.Code, exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("substitution_not_allowed", exception.Message);
+            return Conflict("substitution_not_allowed", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -444,9 +444,9 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
-        if (!await CanCurrentClientUseExecutionAsync(execution, cancellationToken))
+        if (await ClientExecutionRefusalAsync(execution, cancellationToken) is { } refusal)
         {
-            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
+            return refusal;
         }
 
         var mesocycle = await LoadMesocycleBySessionAsync(execution.TrainingSessionId, cancellationToken);
@@ -490,7 +490,7 @@ internal sealed partial class TrainingApplicationService
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("workout_immutable", exception.Message);
+            return Conflict("workout_immutable", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -527,11 +527,18 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
+        // Before anything about the workout's client is read, so another client's workout says nothing.
+        if (role == TenantRole.Client &&
+            await ClientExecutionRefusalAsync(execution, cancellationToken) is { } refusal)
+        {
+            return refusal;
+        }
+
         await coachClientScope.EnsureNotReleasedAsync(execution.ClientProfileId, cancellationToken);
         var authorRole = role switch
         {
             TenantRole.Owner or TenantRole.Coach => WorkoutNoteAuthorRole.Coach,
-            TenantRole.Client when await CanCurrentClientUseExecutionAsync(execution, cancellationToken) => WorkoutNoteAuthorRole.Client,
+            TenantRole.Client => WorkoutNoteAuthorRole.Client,
             _ => (WorkoutNoteAuthorRole?)null,
         };
         if (authorRole is null)
@@ -561,7 +568,7 @@ internal sealed partial class TrainingApplicationService
         }
         catch (ArgumentException exception)
         {
-            return Invalid("note", exception.Message);
+            return Invalid("note", exception.PersonMessage());
         }
     }
 
@@ -712,13 +719,24 @@ internal sealed partial class TrainingApplicationService
             : access;
     }
 
-    private async Task<bool> CanCurrentClientUseExecutionAsync(
+    /// <summary>
+    /// Why the signed-in client may not use this workout, or null when they may. Another client's
+    /// workout answers as a missing one (audit SEC-7, ADR 0026); their own is refused only while their
+    /// training is closed.
+    /// </summary>
+    private async Task<TrainingCommandResult?> ClientExecutionRefusalAsync(
         WorkoutExecution execution,
         CancellationToken cancellationToken)
     {
         var client = await FindSelfClientAsync(cancellationToken);
-        return client?.Id == execution.ClientProfileId &&
-            (await GetTrainingAccessAsync(client.Id, cancellationToken)).IsAllowed;
+        if (client is null || client.Id != execution.ClientProfileId)
+        {
+            return NotFound();
+        }
+
+        return (await GetTrainingAccessAsync(client.Id, cancellationToken)).IsAllowed
+            ? null
+            : new TrainingCommandResult(TrainingCommandStatus.Forbidden);
     }
 
     private async Task<TrainingMesocycle?> LoadMesocycleBySessionAsync(

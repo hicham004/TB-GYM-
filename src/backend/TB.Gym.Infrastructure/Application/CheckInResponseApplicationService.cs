@@ -115,11 +115,11 @@ internal sealed class CheckInResponseApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("answers", exception.Message);
+            return Invalid("answers", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("CheckInResponseSubmitted", exception.Message);
+            return Conflict("CheckInResponseSubmitted", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -201,7 +201,7 @@ internal sealed class CheckInResponseApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("CheckInAlreadySubmitted", exception.Message);
+            return Conflict("CheckInAlreadySubmitted", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -261,7 +261,7 @@ internal sealed class CheckInResponseApplicationService(
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict("CheckInAlreadyReviewed", exception.Message);
+            return Conflict("CheckInAlreadyReviewed", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {

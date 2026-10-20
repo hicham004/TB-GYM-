@@ -97,6 +97,9 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseTbGymPlatformAccess();
 app.UseAuthorization();
+// After authorization, so no body is read before the request is let in: text PostgreSQL cannot store
+// (a NUL in a query value or a JSON string) is refused as a 400 naming the field (audit SEC-2).
+app.UseTbGymStorableText();
 
 if (app.Environment.IsDevelopment())
 {

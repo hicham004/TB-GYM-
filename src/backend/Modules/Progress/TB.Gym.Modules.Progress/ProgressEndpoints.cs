@@ -50,7 +50,7 @@ public static class ProgressEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["range"] = [exception.Message],
+                    ["range"] = [exception.PersonMessage()],
                 });
             }
         }).WithName("GetOwnProgress").Produces<ProgressView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound);
@@ -119,7 +119,7 @@ public static class ProgressEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["range"] = [exception.Message],
+                    ["range"] = [exception.PersonMessage()],
                 });
             }
         }).WithName("GetOwnBodyMeasurements").Produces<BodyMeasurementsView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound);
@@ -200,7 +200,7 @@ public static class ProgressEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["range"] = [exception.Message],
+                    ["range"] = [exception.PersonMessage()],
                 });
             }
         }).WithName("GetOwnProgressPhotos").Produces<ProgressPhotosView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound);
@@ -287,7 +287,7 @@ public static class ProgressEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["range"] = [exception.Message],
+                    ["range"] = [exception.PersonMessage()],
                 });
             }
         }).WithName("GetClientProgress").Produces<ProgressView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound);
@@ -366,7 +366,7 @@ public static class ProgressEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["range"] = [exception.Message],
+                    ["range"] = [exception.PersonMessage()],
                 });
             }
         }).WithName("GetClientBodyMeasurements").Produces<BodyMeasurementsView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound);
@@ -460,7 +460,7 @@ public static class ProgressEndpoints
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["range"] = [exception.Message],
+                    ["range"] = [exception.PersonMessage()],
                 });
             }
         }).WithName("GetClientProgressPhotos").Produces<ProgressPhotosView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status404NotFound);
@@ -519,7 +519,7 @@ public static class ProgressEndpoints
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
-                ["range"] = [exception.Message],
+                ["range"] = [exception.PersonMessage()],
             });
         }
     }
@@ -614,7 +614,7 @@ public static class ProgressEndpoints
         }
         catch (InvalidDataException exception)
         {
-            return InvalidPhoto("file", exception.Message);
+            return InvalidPhoto("file", exception.PersonMessage());
         }
 
         return InvalidPhoto("file", "An image file is required.");

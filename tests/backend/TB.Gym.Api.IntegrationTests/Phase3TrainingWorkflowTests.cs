@@ -502,8 +502,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.IsFalse(deniedToday.IsAllowed);
         Assert.AreEqual("Paused", deniedToday.AccessReason);
         await RefreshCsrfAsync(client);
+        // Refused as a missing asset, the one answer for media a person may not open (audit SEC-7, ADR 0026).
         Assert.AreEqual(
-            HttpStatusCode.Forbidden,
+            HttpStatusCode.NotFound,
             (await client.PostAsync($"/api/media/{media.Id}/access", null)).StatusCode);
     }
 

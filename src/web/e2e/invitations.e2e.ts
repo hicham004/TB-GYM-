@@ -49,8 +49,10 @@ async function openInvitations(
         };
         writes.created.push(body);
         if (options.refuse) {
+          // Each conflict names its own reason (audit COACH-8).
           return json(route, 409, {
-            title: 'An active invitation or client relationship already exists for this email.',
+            code: 'invitation_already_client',
+            message: 'Rana Haddad is already a client here.',
           });
         }
         const created = invitation({
@@ -213,9 +215,7 @@ test.describe('when the server refuses an invitation', () => {
     await sheet.getByRole('button', { name: 'Send invitation' }).click();
 
     const refusal = sheet.getByRole('alert');
-    await expect(refusal).toHaveText(
-      'An active invitation or client relationship already exists for this email.',
-    );
+    await expect(refusal).toHaveText('Rana Haddad is already a client here.');
     await expect(async () => {
       const message = (await refusal.boundingBox())!;
       const bar = (await sheet.locator('.actions').boundingBox())!;

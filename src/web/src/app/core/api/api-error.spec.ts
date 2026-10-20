@@ -1,6 +1,6 @@
 import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { describe, expect, it } from 'vitest';
-import { apiErrorMessage, retryAfterSeconds } from './api-error';
+import { apiErrorMessage, failureKind, retryAfterSeconds } from './api-error';
 
 function conflict(body: unknown): HttpErrorResponse {
   return new HttpErrorResponse({ status: 409, statusText: 'Conflict', error: body });
@@ -81,9 +81,53 @@ describe('apiErrorMessage', () => {
       ),
     ).toBe('The file is not an image.');
     expect(apiErrorMessage(new Error('offline'), fallback)).toBe(fallback);
-    expect(apiErrorMessage(new HttpErrorResponse({ status: 500, error: null }), fallback)).toBe(
-      fallback,
+  });
+});
+
+/** The connection and the server fail in the app's words on every screen (audit UIQ-2). */
+describe('apiErrorMessage for a failure that says nothing about the request', () => {
+  const fallback = 'Conversations could not be loaded.';
+
+  it('never shows the browser’s "Failed to fetch"', () => {
+    // Angular's fetch backend puts the browser's TypeError in the error body, with status 0.
+    const offline = new HttpErrorResponse({ status: 0, error: new TypeError('Failed to fetch') });
+
+    expect(apiErrorMessage(offline, fallback)).toBe(
+      'The app couldn’t connect. Check your connection and try again.',
     );
+    expect(failureKind(offline)).toBe('connection');
+  });
+
+  it('says what failed in the screen’s words, never a server fault’s own title', () => {
+    for (const body of [
+      { title: 'An error occurred while processing your request.' },
+      { title: 'Service unavailable', status: 503 },
+      { message: 'boom' },
+      null,
+      '<html>502 Bad Gateway</html>',
+    ]) {
+      const failed = new HttpErrorResponse({ status: 503, error: body });
+      expect(apiErrorMessage(failed, fallback)).toBe(fallback);
+      expect(failureKind(failed)).toBe('server');
+    }
+  });
+
+  it('keeps what the API itself wrote with a code, even on a 5xx', () => {
+    const paused = new HttpErrorResponse({
+      status: 503,
+      error: { code: 'uploads_paused', title: 'Progress photo uploads are unavailable.' },
+    });
+
+    expect(apiErrorMessage(paused, fallback)).toBe('Progress photo uploads are unavailable.');
+    expect(failureKind(paused)).toBeNull();
+  });
+
+  it('leaves a refusal of the request to its own words', () => {
+    const refused = new HttpErrorResponse({ status: 403, error: null });
+
+    expect(apiErrorMessage(refused, fallback)).toBe(fallback);
+    expect(failureKind(refused)).toBeNull();
+    expect(failureKind(new Error('not http'))).toBeNull();
   });
 });
 

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -74,7 +75,9 @@ public static class DependencyInjection
             .AddIdentity<ApplicationUser, IdentityRole<Guid>>(
                 WorkerDependencyInjection.ConfigureIdentityOptions)
             .AddEntityFrameworkStores<GymDbContext>()
-            .AddDefaultTokenProviders();
+            .AddDefaultTokenProviders()
+            // Identity's refusals in the app's words (audit AUTH-6); the codes stay Identity's.
+            .AddErrorDescriber<PersonIdentityErrorDescriber>();
 
         services.Configure<SecurityStampValidatorOptions>(options =>
             options.ValidationInterval = TimeSpan.Zero);
@@ -160,6 +163,10 @@ public static class DependencyInjection
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, TenantAuthorizationResultHandler>();
         services.AddExceptionHandler<ClientReleasedExceptionHandler>();
         services.AddExceptionHandler<AntiforgeryRejectedExceptionHandler>();
+        // A request the API cannot read is answered alike in every environment (audit SEC-1): the
+        // framework throws in each, and the handler names the field. Off, Production answered a bare 400.
+        services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+        services.AddExceptionHandler<UnreadableRequestExceptionHandler>();
         services.AddScoped<CoachClientScope>();
         services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
         services.AddScoped<IWorkspaceApplicationService, WorkspaceApplicationService>();

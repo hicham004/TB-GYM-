@@ -58,11 +58,11 @@ internal sealed class CommercialApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("product", exception.Message);
+            return Invalid("product", exception.PersonMessage());
         }
         catch (ProductNameTakenException exception)
         {
-            return Conflict(ProductNameTakenCode, exception.Message);
+            return Conflict(ProductNameTakenCode, exception.PersonMessage());
         }
         catch (DbUpdateException exception) when (IsProductNameViolation(exception))
         {
@@ -103,11 +103,11 @@ internal sealed class CommercialApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("product", exception.Message);
+            return Invalid("product", exception.PersonMessage());
         }
         catch (ProductNameTakenException exception)
         {
-            return Conflict(ProductNameTakenCode, exception.Message);
+            return Conflict(ProductNameTakenCode, exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -163,7 +163,7 @@ internal sealed class CommercialApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("offer", exception.Message);
+            return Invalid("offer", exception.PersonMessage());
         }
         catch (ActiveOfferSlotConflictException)
         {
@@ -281,7 +281,7 @@ internal sealed class CommercialApplicationService(
             }
             catch (ArgumentException exception)
             {
-                return Invalid("priceAmount", exception.Message);
+                return Invalid("priceAmount", exception.PersonMessage());
             }
             catch (ActiveOfferSlotConflictException)
             {
@@ -289,7 +289,7 @@ internal sealed class CommercialApplicationService(
             }
             catch (InvalidOperationException exception)
             {
-                return Invalid("offer", exception.Message);
+                return Invalid("offer", exception.PersonMessage());
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -505,11 +505,11 @@ internal sealed class CommercialApplicationService(
             }
             catch (ArgumentException exception)
             {
-                return Invalid("payment", exception.Message);
+                return Invalid("payment", exception.PersonMessage());
             }
             catch (InvalidOperationException exception)
             {
-                return Invalid("enrollment", exception.Message);
+                return Invalid("enrollment", exception.PersonMessage());
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -713,7 +713,7 @@ internal sealed class CommercialApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("assignment", exception.Message);
+            return Invalid("assignment", exception.PersonMessage());
         }
         catch (OverflowException)
         {
@@ -821,11 +821,11 @@ internal sealed class CommercialApplicationService(
         }
         catch (ArgumentException exception)
         {
-            return Invalid("reason", exception.Message);
+            return Invalid("reason", exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
-            return Invalid("status", exception.Message);
+            return Invalid("status", exception.PersonMessage());
         }
         catch (DbUpdateConcurrencyException)
         {
