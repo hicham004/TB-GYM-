@@ -22,7 +22,7 @@ or Blocked.
 | A2 | Batch 2 · The session | "Keep me signed in" ticked keeps the sign-in for 30 days, renewed while it is used; unticked stays a browser session with today's 8 hours; "Sign out everywhere" and a password change still end it at once (AUTH-3). | Done · 2026-10-20 · 768bf36 |
 | A3 | Batch 3 · Training rules that protect the record | Nothing to decide. | Done · 2026-10-20 · 93dbb09 |
 | A4 | Batch 4 · The workout player | Nothing to decide; the UI plan's big-target rule (its section 2, rule 6) sets the steppers' size. | Done · 2026-10-20 · 6629f12 |
-| A5 | Batch 5 · Messaging | Nothing to decide. | Open |
+| A5 | Batch 5 · Messaging | Nothing to decide. | Done · 2026-10-20 · 349bf60 (nothing left out; the lead's call, from COACH-13: the owner messages only the clients assigned to them, and their screens say who messages a team member's client) |
 | A6 | Batch 6 · Nutrition coach tools | EU-style labels (NCM-3) follow the concerns brief's C6 decision of 2026-10-14. Left out: the allergen sentence (NCM-8); the owner decides later. | Open |
 | A7 | Batch 7 · Money and plans | Only a paid renewal counts as coverage: "Ending soon" and the plan's end on Coach Today ignore a renewal still waiting for payment (BEB-7; CLI-018 says so). A new or renamed plan cannot take the name of another active plan in the workspace; existing duplicates stay until renamed (BILL-7). | Open |
 | A8 | Batch 8 · Coach screens and sheets | Coach Today shows a "Joined, start a plan" row for a new client with no plan, and the client list a "Not set up yet" chip for a client who never finished their profile (COACH-9, LOST-12; CLI-018 changes). | Open |
