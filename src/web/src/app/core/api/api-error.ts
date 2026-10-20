@@ -31,12 +31,50 @@ export function featureAccessReason(error: unknown): FeatureAccessReason | null 
 }
 
 /**
+ * How long the server asked the caller to wait, in whole seconds: Retry-After's delay-seconds or its
+ * HTTP date. Null when it said nothing usable.
+ */
+export function retryAfterSeconds(error: HttpErrorResponse): number | null {
+  const value = error.headers?.get('Retry-After')?.trim();
+  if (!value) return null;
+  if (/^\d+$/.test(value)) return Number(value);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : Math.max(0, Math.ceil((at - Date.now()) / 1000));
+}
+
+/**
+ * A refused sign-in or registration says what happened and when to try again (audit AUTH-2,
+ * AUTH-15), instead of calling a locked account or a busy network a wrong password.
+ */
+function waitMessage(
+  code: 'account_locked' | 'too_many_attempts',
+  error: HttpErrorResponse,
+): string {
+  const seconds = retryAfterSeconds(error);
+  const minutes = seconds === null ? null : Math.max(1, Math.ceil(seconds / 60));
+  if (code === 'too_many_attempts') {
+    return minutes === null || minutes === 1
+      ? $localize`Too many attempts from this network. Try again in a minute.`
+      : $localize`Too many attempts from this network. Try again in ${minutes}:minutes: minutes.`;
+  }
+  if (minutes === null) {
+    return $localize`This account is locked after too many wrong passwords. Try again later.`;
+  }
+  return minutes === 1
+    ? $localize`This account is locked after too many wrong passwords. Try again in a minute.`
+    : $localize`This account is locked after too many wrong passwords. Try again in ${minutes}:minutes: minutes.`;
+}
+
+/**
  * Stable server codes mapped to something a coach or client can act on. Each of these leads to a
  * different next step, so they must not collapse into one generic failure: a full allowance is not
  * a broken file, and a date that is already taken is not a stale version.
  */
-function knownCodeMessage(code: string): string | null {
+function knownCodeMessage(code: string, error: HttpErrorResponse): string | null {
   switch (code) {
+    case 'account_locked':
+    case 'too_many_attempts':
+      return waitMessage(code, error);
     case 'MediaWorkspaceStorageExceeded':
       return $localize`Your coaching space has used all of its media storage. Delete some media to free space, then try again.`;
     case 'ClientProgressPhotoStorageExceeded':
@@ -59,7 +97,7 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
 
   const body = error.error as ApiErrorBody | undefined;
   if (body?.code) {
-    const known = knownCodeMessage(body.code);
+    const known = knownCodeMessage(body.code, error);
     if (known) {
       return known;
     }

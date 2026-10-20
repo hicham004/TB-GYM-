@@ -239,9 +239,10 @@ describe('App', () => {
 
   /**
    * The installed app starts on a launch screen, not on a bar saying "Checking session". Only the
-   * first wait is a launch: signing in later waits again, and that keeps the bar over the form.
+   * first wait is a launch. Signing in waits again, and that draws nothing over the sign-in form
+   * and leaves its margins alone (audit WEB-9): the button already says it is signing in.
    */
-  it('draws the launch screen for the first wait only, never for one while signing in', async () => {
+  it('draws the launch screen for the first wait only, and nothing over the form while signing in', async () => {
     const { fixture, host, auth } = await render({ loading: true });
 
     expect(host.querySelector('.launch')?.getAttribute('role')).toBe('status');
@@ -255,7 +256,14 @@ describe('App', () => {
     auth.loading.set(true);
     await settle(fixture);
     expect(host.querySelector('.launch')).toBeNull();
-    expect(host.textContent).toContain('Checking session');
+    expect(host.querySelector('.topbar')).toBeNull();
+    expect(host.textContent).not.toContain('Checking session');
+
+    // Signed in, memberships still on their way: the form keeps its place until the app moves on.
+    auth.user.set(OWNER);
+    await settle(fixture);
+    expect(host.querySelector('.topbar')).toBeNull();
+    expect(host.querySelector('main')?.classList.contains('app-main')).toBe(false);
   });
 
   it('hands over from the launch screen to the shell when the session answers', async () => {

@@ -4,6 +4,12 @@
   <p class="auth-lead" i18n>Sign in to your coaching space.</p>
 
   <form class="auth-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (sessionEnded) {
+      <p class="auth-message auth-message--notice" i18n>
+        You were signed out. Sign in again to carry on where you left off.
+      </p>
+    }
+
     @let emailMessages = emailReasons();
     <app-field
       label="Email"

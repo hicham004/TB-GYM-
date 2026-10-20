@@ -1,9 +1,11 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { PLATFORM_ID, TransferState } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, Subject, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../api/api-client';
 import type { CurrentUser } from '../api/api.models';
+import { TenantStore } from '../tenancy/tenant.store';
 import { PersonalModeStore } from '../theme/personal-mode.store';
 import { AuthStore, RENDERED_SIGNED_OUT } from './auth.store';
 
@@ -293,5 +295,115 @@ describe('AuthStore and the pre-rendered homepage', () => {
     const auth = TestBed.inject(AuthStore);
 
     expect(auth.loading()).toBe(true);
+  });
+});
+
+/**
+ * A session that ends by itself (WEB-1) keeps the chosen workspace, so signing in again lands where
+ * the person was (WEB-8); signing out forgets it, as before.
+ */
+describe('AuthStore when a session ends', () => {
+  const workspaces = [
+    { tenantId: 'workspace-a', tenantName: 'Atlas', tenantSlug: 'atlas', role: 'Owner' },
+    { tenantId: 'workspace-b', tenantName: 'Cedar', tenantSlug: 'cedar', role: 'Coach' },
+  ] as const;
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => {
+    localStorage.clear();
+    TestBed.resetTestingModule();
+  });
+
+  function configureWithWorkspaces() {
+    const api = {
+      getCsrfToken: vi.fn(() => of({ token: 'csrf' })),
+      getCurrentUser: vi.fn((): Observable<CurrentUser> => of({ ...maya })),
+      getTenants: vi.fn(() => of([...workspaces])),
+      login: vi.fn(() => of({ ...maya })),
+      logout: vi.fn(() => of(undefined)),
+    };
+    TestBed.configureTestingModule({ providers: [{ provide: ApiClient, useValue: api }] });
+    return { api, login: api.login };
+  }
+
+  it('keeps the chosen workspace through an ended session and lands there on signing in again', async () => {
+    const { login } = configureWithWorkspaces();
+    localStorage.setItem('tb-gym.active-tenant', 'workspace-b');
+    const auth = TestBed.inject(AuthStore);
+    const tenants = TestBed.inject(TenantStore);
+    await auth.initialize();
+    expect(tenants.selectedTenantId()).toBe('workspace-b');
+
+    auth.markEnded();
+    expect(auth.ended()).toBe(true);
+    auth.expire();
+
+    expect(auth.user()).toBeNull();
+    expect(auth.ended()).toBe(false);
+    expect(tenants.selectedTenantId()).toBeNull();
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBe('workspace-b');
+
+    await auth.login('maya@example.test', 'correct-horse-battery', false);
+
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(tenants.selectedTenantId()).toBe('workspace-b');
+  });
+
+  it('keeps it when a cold start finds the session gone', async () => {
+    const { api } = configureWithWorkspaces();
+    api.getCurrentUser.mockImplementation(() =>
+      throwError(() => new HttpErrorResponse({ status: 401 })),
+    );
+    localStorage.setItem('tb-gym.active-tenant', 'workspace-b');
+    const auth = TestBed.inject(AuthStore);
+
+    await auth.initialize();
+
+    expect(auth.user()).toBeNull();
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBe('workspace-b');
+  });
+
+  it('forgets it when the person signs out', async () => {
+    configureWithWorkspaces();
+    localStorage.setItem('tb-gym.active-tenant', 'workspace-b');
+    const auth = TestBed.inject(AuthStore);
+    await auth.initialize();
+
+    await auth.logout();
+
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBeNull();
+  });
+
+  it('marks only a session that is shown as signed in', () => {
+    configure();
+    const auth = TestBed.inject(AuthStore);
+
+    auth.markEnded();
+
+    expect(auth.ended()).toBe(false);
+  });
+
+  it('asks quietly whether the browser is still signed in as the person on screen', async () => {
+    const { api } = configure();
+    const auth = TestBed.inject(AuthStore);
+    await auth.initialize();
+
+    expect(await auth.stillSignedIn()).toBe(true);
+    expect(auth.loading()).toBe(false);
+
+    api.getCurrentUser.mockImplementation(() => of({ ...maya, id: 'user-someone-else' }));
+    expect(await auth.stillSignedIn()).toBe(false);
+
+    api.getCurrentUser.mockImplementation(() =>
+      throwError(() => new HttpErrorResponse({ status: 401 })),
+    );
+    expect(await auth.stillSignedIn()).toBe(false);
+
+    // No answer is not an ended session: offline, or a server fault.
+    api.getCurrentUser.mockImplementation(() =>
+      throwError(() => new HttpErrorResponse({ status: 0 })),
+    );
+    expect(await auth.stillSignedIn()).toBeNull();
+    expect(auth.user()?.id).toBe('user-maya');
   });
 });

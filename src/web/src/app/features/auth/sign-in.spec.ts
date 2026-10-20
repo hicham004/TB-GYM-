@@ -1,4 +1,4 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,11 +6,11 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
 import { SignIn } from './sign-in';
 
-async function render(auth: Partial<AuthStore> = {}) {
+async function render(auth: Partial<AuthStore> = {}, url?: string) {
   await TestBed.configureTestingModule({
     imports: [SignIn],
     providers: [
-      provideRouter([]),
+      provideRouter([{ path: '**', children: [] }]),
       {
         provide: AuthStore,
         useValue: { login: vi.fn(() => Promise.resolve()), ...auth },
@@ -18,6 +18,8 @@ async function render(auth: Partial<AuthStore> = {}) {
     ],
   }).compileComponents();
 
+  // The page reads its query from the route it was opened on.
+  if (url) await TestBed.inject(Router).navigateByUrl(url);
   const fixture = TestBed.createComponent(SignIn);
   await settle(fixture);
   return {
@@ -144,5 +146,77 @@ describe('SignIn', () => {
     expect(navigate).not.toHaveBeenCalled();
     // The button is released, so a second attempt is possible.
     expect(button(host, 'Sign in').disabled).toBe(false);
+  });
+  /** Sent here because the session ended under the open app (WEB-1): one sentence says so. */
+  it('says why the person is here after their session ended, and goes back where they were', async () => {
+    const { fixture, host, router } = await render(
+      {},
+      '/auth/sign-in?returnUrl=%2Fclients%2F42&reason=session-ended',
+    );
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    expect(host.textContent).toContain(
+      'You were signed out. Sign in again to carry on where you left off.',
+    );
+
+    fill(host, 'Email', 'coach@example.test');
+    fill(host, 'Password', 'correct-horse-battery');
+    press(host, 'Sign in');
+    await settle(fixture);
+
+    expect(navigate).toHaveBeenCalledWith('/clients/42');
+  });
+
+  it('says nothing about an ended session to someone who simply came to sign in', async () => {
+    const { host } = await render();
+
+    expect(host.textContent).not.toContain('You were signed out.');
+  });
+
+  async function refusedWith(error: HttpErrorResponse): Promise<HTMLElement> {
+    const { fixture, host } = await render({ login: vi.fn(() => Promise.reject(error)) });
+    fill(host, 'Email', 'coach@example.test');
+    fill(host, 'Password', 'correct-horse-battery');
+    press(host, 'Sign in');
+    await settle(fixture);
+    return host;
+  }
+
+  /** A locked account was told its password was wrong, even when it was right (AUTH-2). */
+  it('says a locked account is locked, and when to try again', async () => {
+    const host = await refusedWith(
+      new HttpErrorResponse({
+        status: 429,
+        error: { code: 'account_locked' },
+        headers: new HttpHeaders({ 'Retry-After': '840' }),
+      }),
+    );
+
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'This account is locked after too many wrong passwords. Try again in 14 minutes.',
+    );
+  });
+
+  /** A gym's phones share one address behind its Wi-Fi; a busy one is not a wrong password (AUTH-15). */
+  it('says too many attempts came from this network, and when to try again', async () => {
+    const host = await refusedWith(
+      new HttpErrorResponse({
+        status: 429,
+        error: { code: 'too_many_attempts' },
+        headers: new HttpHeaders({ 'Retry-After': '37' }),
+      }),
+    );
+
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'Too many attempts from this network. Try again in a minute.',
+    );
+  });
+
+  it('does not blame the password for a failure that never reached the password check', async () => {
+    const host = await refusedWith(new HttpErrorResponse({ status: 0 }));
+
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'You couldn’t be signed in. Check your connection and try again.',
+    );
   });
 });

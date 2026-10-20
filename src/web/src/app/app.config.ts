@@ -14,6 +14,8 @@ import {
 import { provideRouter, withInMemoryScrolling, withNavigationErrorHandler } from '@angular/router';
 
 import { routes } from './app.routes';
+import { SessionExpiry } from './core/auth/session-expiry';
+import { sessionInterceptor } from './core/auth/session.interceptor';
 import { InstallPrompt } from './core/pwa/install-prompt';
 import { NavigationFailure, reportNavigationFailure } from './core/routing/navigation-failure';
 import { tenantInterceptor } from './core/tenancy/tenant.interceptor';
@@ -36,10 +38,12 @@ export const appConfig: ApplicationConfig = {
     ),
     // Chrome announces an installable page once, soon after load, and only to a listener that is
     // already there; the screens that offer the install load later. The navigation failure toast is
-    // fetched ahead once someone signs in, so it can still be shown when the connection is gone.
+    // fetched ahead once someone signs in, so it can still be shown when the connection is gone. The
+    // session watch must see the tab hide to know, on its return, that it was away long (WEB-1).
     provideAppInitializer(() => {
       inject(InstallPrompt);
       inject(NavigationFailure);
+      inject(SessionExpiry);
     }),
     // A new page starts at its top and Back returns to where the reader was (A11Y-02). Anchor
     // scrolling keeps in-page links such as the homepage's #tour working: the browser reports them
@@ -52,7 +56,7 @@ export const appConfig: ApplicationConfig = {
     ),
     provideHttpClient(
       withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' }),
-      withInterceptors([tenantInterceptor]),
+      withInterceptors([tenantInterceptor, sessionInterceptor]),
     ),
     ...devProviders,
   ],

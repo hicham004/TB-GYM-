@@ -109,13 +109,18 @@ describe('active workspace persistence across a cold load', () => {
     expect(localStorage.getItem(storageKey)).toBe('workspace-b');
   });
 
-  it('clears the stored workspace when the session fails to load', async () => {
+  /**
+   * No session on a cold load is most often yesterday's sign-in that ran out. The choice stays for
+   * the next sign-in (audit WEB-8), which keeps it only if that account is a member there; signing
+   * out is what forgets it.
+   */
+  it('keeps the stored workspace for the next sign-in when the session fails to load', async () => {
     localStorage.setItem(storageKey, 'workspace-a');
     configure('unauthenticated');
 
     await TestBed.inject(AuthStore).initialize();
 
     expect(TestBed.inject(TenantStore).selectedTenantId()).toBeNull();
-    expect(localStorage.getItem(storageKey)).toBeNull();
+    expect(localStorage.getItem(storageKey)).toBe('workspace-a');
   });
 });

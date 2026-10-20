@@ -46,7 +46,11 @@ export class TenantStore {
     if (request !== this.loadRequest || epoch !== this.context.epoch()) return;
     this.membershipsState.set(memberships);
 
-    const candidate = preferredTenantId ?? this.selectedTenantIdState();
+    const candidate =
+      preferredTenantId ??
+      this.selectedTenantIdState() ??
+      this.storage?.getItem(tenantStorageKey) ??
+      null;
     const selected = memberships.some((membership) => membership.tenantId === candidate)
       ? candidate
       : (memberships[0]?.tenantId ?? null);
@@ -71,11 +75,21 @@ export class TenantStore {
     }
   }
 
+  /** Signing out, or another account: the chosen workspace is forgotten with the session. */
   clear(): void {
+    this.storage?.removeItem(tenantStorageKey);
+    this.unload();
+  }
+
+  /**
+   * Empties the memberships and the selection but remembers the chosen workspace, for a session that
+   * ended by itself or is being replaced by signing in (audit WEB-8). The next `load` offers it again,
+   * and keeps it only if the account that signs in is still a member there.
+   */
+  unload(): void {
     ++this.loadRequest;
     this.membershipsState.set([]);
     this.selectedTenantIdState.set(null);
-    this.storage?.removeItem(tenantStorageKey);
     this.context.invalidate();
   }
 }

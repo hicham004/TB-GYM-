@@ -13,47 +13,44 @@
   <div class="launch" role="status">
     <span class="tb-visually-hidden" i18n>Loading <span translate="no">TB Gym</span>…</span>
   </div>
-} @else if (shell() !== 'public') {
+} @else if (shell() === 'member') {
   <!-- An account with no workspace keeps the existing top bar, light like the pages it serves.
        Signed-out pages (the homepage, sign-in and the rest of /auth, invitations) draw their own
-       header. -->
+       header. A later wait, such as signing in, draws nothing over the page: the sign-in button
+       already says it is signing in (audit WEB-9). -->
   <header class="topbar" data-mode="light">
     <a class="brand" routerLink="/" aria-label="TB Gym home" i18n-aria-label>
       <span class="brand-mark" aria-hidden="true">TB</span>
       <span>TB Gym</span>
     </a>
 
-    @if (shell() === 'member') {
-      <button
-        appButton
-        class="menu-button"
-        type="button"
-        variant="text"
-        [attr.aria-expanded]="menuOpen()"
-        aria-controls="primary-navigation"
-        aria-label="Toggle navigation"
-        i18n-aria-label
-        (click)="menuOpen.set(!menuOpen())"
-      >
-        <span aria-hidden="true">&#9776;</span>
-      </button>
+    <button
+      appButton
+      class="menu-button"
+      type="button"
+      variant="text"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="primary-navigation"
+      aria-label="Toggle navigation"
+      i18n-aria-label
+      (click)="menuOpen.set(!menuOpen())"
+    >
+      <span aria-hidden="true">&#9776;</span>
+    </button>
 
-      <div id="primary-navigation" class="authenticated-nav" [class.open]="menuOpen()">
-        <div class="session-controls">
-          @if (auth.user()?.roles?.includes('PlatformAdmin')) {
-            <a class="account-link" routerLink="/admin/billing" routerLinkActive="active" i18n
-              >Platform billing</a
-            >
-          }
-          <a class="account-link" routerLink="/account/security" routerLinkActive="active">
-            {{ auth.user()?.displayName }}
-          </a>
-          <button appButton type="button" variant="text" (click)="logout()" i18n>Sign out</button>
-        </div>
+    <div id="primary-navigation" class="authenticated-nav" [class.open]="menuOpen()">
+      <div class="session-controls">
+        @if (auth.user()?.roles?.includes('PlatformAdmin')) {
+          <a class="account-link" routerLink="/admin/billing" routerLinkActive="active" i18n
+            >Platform billing</a
+          >
+        }
+        <a class="account-link" routerLink="/account/security" routerLinkActive="active">
+          {{ auth.user()?.displayName }}
+        </a>
+        <button appButton type="button" variant="text" (click)="logout()" i18n>Sign out</button>
       </div>
-    } @else {
-      <span class="session-loading" i18n>Checking session...</span>
-    }
+    </div>
   </header>
 }
 <main
@@ -61,7 +58,7 @@
   id="main-content"
   [attr.data-mode]="contentMode()"
   [attr.tabindex]="shell() === 'client' ? -1 : null"
-  [class.app-main]="shell() !== 'coach' && auth.user()"
+  [class.app-main]="shell() === 'member' || shell() === 'client'"
   [class.client-main]="shell() === 'client'"
   [class.full-screen]="shell() === 'client' && fullScreen()"
   [class.coach-main]="shell() === 'coach'"

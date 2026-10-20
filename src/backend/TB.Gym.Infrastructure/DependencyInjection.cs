@@ -91,6 +91,20 @@ public static class DependencyInjection
                 : CookieSecurePolicy.Always;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);
             options.SlidingExpiration = true;
+            // "Keep me signed in" lasts 30 days instead of the browser session's 8 hours (audit AUTH-3,
+            // the owner's decision of 2026-10-19). Renewal keeps a ticket's span, and every request
+            // renews it because the security stamp is checked on each one, so either sign-in ends
+            // after its span without use. The same check still ends both at once after Sign out
+            // everywhere, a password change or a reset.
+            options.Events.OnSigningIn = context =>
+            {
+                if (context.Properties.IsPersistent && context.Properties.IssuedUtc is { } issuedUtc)
+                {
+                    context.Properties.ExpiresUtc = issuedUtc.AddDays(30);
+                }
+
+                return Task.CompletedTask;
+            };
             options.Events.OnRedirectToLogin = context =>
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -306,6 +320,26 @@ public static class DependencyInjection
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            // A refusal says what happened and when to try again (audit AUTH-15): a bare 429 read as a
+            // wrong password on sign-in and as a failed registration. The person retrying is the one
+            // refused on the public authentication routes; anywhere else it is their requests.
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                var response = context.HttpContext.Response;
+                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                {
+                    response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))
+                        .ToString(CultureInfo.InvariantCulture);
+                }
+
+                var policy = context.HttpContext.GetEndpoint()?.Metadata
+                    .GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+                await response.WriteAsJsonAsync(
+                    policy == RateLimitPolicies.PublicAuthentication
+                        ? new { code = "too_many_attempts", message = "Too many attempts from this network. Try again in a minute." }
+                        : new { code = "too_many_requests", message = "Too many requests. Try again later." },
+                    cancellationToken);
+            };
             options.AddPolicy(RateLimitPolicies.PublicAuthentication, context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",

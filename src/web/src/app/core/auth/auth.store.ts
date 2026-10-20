@@ -1,4 +1,5 @@
 import { isPlatformServer } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   computed,
   inject,
@@ -40,6 +41,7 @@ export class AuthStore {
   private readonly startedSignedOut = startedSignedOut(this.server, inject(TransferState));
   private readonly userState = signal<CurrentUser | null>(null);
   private readonly loadingState = signal(!this.startedSignedOut);
+  private readonly endedState = signal(false);
   /** The first session check of a page that began as the pre-rendered homepage shows no launch screen. */
   private quietFirstLoad = this.startedSignedOut && !this.server;
   private initialization: Promise<void> | null = null;
@@ -49,6 +51,12 @@ export class AuthStore {
 
   readonly user = this.userState.asReadonly();
   readonly loading = this.loadingState.asReadonly();
+  /**
+   * The API no longer knows the session on screen (audit WEB-1): the sign-in ran out, or Sign out
+   * everywhere or a password change on another device ended it. The screen stays as it is until the
+   * person has left their page, where a leave guard may still hold typed work; then `expire` clears it.
+   */
+  readonly ended = this.endedState.asReadonly();
   /** The unit the person's own weigh-ins and progress start in (R2.5c); kilograms until saved. */
   readonly weightUnit = computed<BodyweightUnit>(
     () => this.userState()?.preferredWeightUnit ?? 'Kilogram',
@@ -65,7 +73,10 @@ export class AuthStore {
 
   async login(email: string, password: string, rememberMe: boolean): Promise<void> {
     const request = ++this.sessionRequest;
-    this.tenants.clear();
+    // The chosen workspace is kept: signing in again after a session ended lands where the person
+    // was (WEB-8). `TenantStore.load` keeps it only if this account is a member there.
+    this.tenants.unload();
+    this.endedState.set(false);
     this.userState.set(null);
     this.theme.setMode('system');
     this.loadingState.set(true);
@@ -84,6 +95,7 @@ export class AuthStore {
 
   async logout(): Promise<void> {
     const request = ++this.sessionRequest;
+    this.endedState.set(false);
     this.userState.set(null);
     this.theme.setMode('system');
     this.tenants.clear();
@@ -92,6 +104,44 @@ export class AuthStore {
     await this.csrf.refresh();
     if (request !== this.sessionRequest) return;
     await firstValueFrom(this.api.logout());
+  }
+
+  /** Records that the API no longer knows this session. Nothing on screen changes yet. */
+  markEnded(): void {
+    if (this.userState() !== null) this.endedState.set(true);
+  }
+
+  /**
+   * Clears a session that ended by itself, once the person has left the page they were on. It sends
+   * nothing, since the server has no session left to end, and unlike signing out it keeps the chosen
+   * workspace, so signing in again lands where they were (WEB-8).
+   */
+  expire(): void {
+    ++this.sessionRequest;
+    this.endedState.set(false);
+    this.userState.set(null);
+    this.theme.setMode('system');
+    this.tenants.unload();
+    this.loadingState.set(false);
+    this.initialization = Promise.resolve();
+  }
+
+  /**
+   * Asks the API, without the launch screen, whether the browser is still signed in as the person on
+   * screen: false when it is not (a 401, or another account signed in from another tab), null when
+   * there is no answer (offline, a server fault) or the session changed meanwhile.
+   */
+  async stillSignedIn(): Promise<boolean | null> {
+    const shown = this.userState();
+    if (shown === null) return null;
+    const request = this.sessionRequest;
+    try {
+      const user = await firstValueFrom(this.api.getCurrentUser());
+      return request === this.sessionRequest ? user.id === shown.id : null;
+    } catch (error) {
+      if (request !== this.sessionRequest) return null;
+      return error instanceof HttpErrorResponse && error.status === 401 ? false : null;
+    }
   }
 
   updateThemeMode(mode: ThemeMode): Promise<void> {
@@ -140,14 +190,17 @@ export class AuthStore {
       // survive the refresh; `TenantStore.load` still discards an id they no longer belong to.
       const previous = this.userState();
       if (previous !== null && previous.id !== user.id) this.tenants.clear();
+      this.endedState.set(false);
       this.userState.set(user);
       this.theme.setMode(isThemeMode(user.preferredThemeMode) ? user.preferredThemeMode : 'system');
       await this.tenants.load();
     } catch {
       if (request !== this.sessionRequest) return;
+      this.endedState.set(false);
       this.userState.set(null);
       this.theme.setMode('system');
-      this.tenants.clear();
+      // No session: most often yesterday's ran out. The workspace stays chosen for the next sign-in.
+      this.tenants.unload();
     } finally {
       if (request === this.sessionRequest) this.loadingState.set(false);
     }

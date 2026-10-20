@@ -1,4 +1,4 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
@@ -194,5 +194,28 @@ describe('RegisterCoach', () => {
     // The form is still there to correct, rather than replaced by a false success.
     expect(host.querySelector('button[type="submit"]')).not.toBeNull();
     expect(host.textContent).not.toContain('Check your email');
+  });
+  /**
+   * The public sign-up allowance is shared by every phone behind a gym's Wi-Fi. A refusal used to
+   * read "Your coach account could not be created." with nothing to do about it (audit AUTH-15).
+   */
+  it('says too many attempts came from this network, and when to try again', async () => {
+    const limited = new HttpErrorResponse({
+      status: 429,
+      error: { code: 'too_many_attempts', message: 'Server wording' },
+      headers: new HttpHeaders({ 'Retry-After': '45' }),
+    });
+    const { fixture, host } = await render({
+      registerCoach: vi.fn(() => throwError(() => limited)),
+    });
+
+    fillRegistration(host);
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+
+    expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
+      'Too many attempts from this network. Try again in a minute.',
+    );
   });
 });

@@ -4393,6 +4393,10 @@ export type LoginErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Too Many Requests
+   */
+  429: unknown;
 };
 
 export type LoginResponses = {

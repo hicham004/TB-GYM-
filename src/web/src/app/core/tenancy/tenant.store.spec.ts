@@ -61,6 +61,39 @@ describe('TenantStore', () => {
     expect(store.selectedTenantId()).toBe('workspace-a');
   });
 
+  /**
+   * An ended session empties the memberships and keeps the choice, so the next sign-in lands in the
+   * same workspace (audit WEB-8); signing out forgets it.
+   */
+  it('offers the remembered workspace again after unloading, and forgets it when cleared', async () => {
+    const store = TestBed.inject(TenantStore);
+    await store.load('workspace-b');
+
+    store.unload();
+    expect(store.memberships()).toEqual([]);
+    expect(store.selectedTenantId()).toBeNull();
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBe('workspace-b');
+
+    await store.load();
+    expect(store.selectedTenantId()).toBe('workspace-b');
+
+    store.clear();
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBeNull();
+    await store.load();
+    expect(store.selectedTenantId()).toBe('workspace-a');
+  });
+
+  it('drops a remembered workspace the account that signs in does not belong to', async () => {
+    localStorage.setItem('tb-gym.active-tenant', 'workspace-of-someone-else');
+    const store = TestBed.inject(TenantStore);
+    store.unload();
+
+    await store.load();
+
+    expect(store.selectedTenantId()).toBe('workspace-a');
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBe('workspace-a');
+  });
+
   // The homepage is rendered at build time (R6.2a), where there is no browser and no storage.
   it('remembers no workspace during the build-time render and touches no storage', async () => {
     localStorage.setItem('tb-gym.active-tenant', 'workspace-b');

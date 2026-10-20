@@ -1,6 +1,6 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { describe, expect, it } from 'vitest';
-import { apiErrorMessage } from './api-error';
+import { apiErrorMessage, retryAfterSeconds } from './api-error';
 
 function conflict(body: unknown): HttpErrorResponse {
   return new HttpErrorResponse({ status: 409, statusText: 'Conflict', error: body });
@@ -75,5 +75,54 @@ describe('apiErrorMessage', () => {
     expect(apiErrorMessage(new HttpErrorResponse({ status: 500, error: null }), fallback)).toBe(
       fallback,
     );
+  });
+});
+
+/** A refused sign-in or registration says what happened and when to try again (AUTH-2, AUTH-15). */
+describe('apiErrorMessage for a refusal that says when to try again', () => {
+  function refused(code: string, retryAfter?: string): HttpErrorResponse {
+    return new HttpErrorResponse({
+      status: 429,
+      error: { code, message: 'Server wording' },
+      headers:
+        retryAfter === undefined ? undefined : new HttpHeaders({ 'Retry-After': retryAfter }),
+    });
+  }
+
+  it('counts a lock in whole minutes, rounding up', () => {
+    expect(apiErrorMessage(refused('account_locked', '900'), 'fallback')).toBe(
+      'This account is locked after too many wrong passwords. Try again in 15 minutes.',
+    );
+    expect(apiErrorMessage(refused('account_locked', '61'), 'fallback')).toBe(
+      'This account is locked after too many wrong passwords. Try again in 2 minutes.',
+    );
+    expect(apiErrorMessage(refused('account_locked', '20'), 'fallback')).toBe(
+      'This account is locked after too many wrong passwords. Try again in a minute.',
+    );
+    expect(apiErrorMessage(refused('account_locked'), 'fallback')).toBe(
+      'This account is locked after too many wrong passwords. Try again later.',
+    );
+  });
+
+  it('says too many attempts came from this network', () => {
+    expect(apiErrorMessage(refused('too_many_attempts', '60'), 'fallback')).toBe(
+      'Too many attempts from this network. Try again in a minute.',
+    );
+    expect(apiErrorMessage(refused('too_many_attempts'), 'fallback')).toBe(
+      'Too many attempts from this network. Try again in a minute.',
+    );
+    expect(apiErrorMessage(refused('too_many_attempts', '180'), 'fallback')).toBe(
+      'Too many attempts from this network. Try again in 3 minutes.',
+    );
+  });
+
+  it('reads Retry-After as seconds or as a date, and ignores anything else', () => {
+    expect(retryAfterSeconds(refused('x', ' 42 '))).toBe(42);
+    const inTwoMinutes = new Date(Date.now() + 120_000).toUTCString();
+    const fromDate = retryAfterSeconds(refused('x', inTwoMinutes));
+    expect(fromDate).toBeGreaterThan(100);
+    expect(fromDate).toBeLessThanOrEqual(120);
+    expect(retryAfterSeconds(refused('x', 'soon'))).toBeNull();
+    expect(retryAfterSeconds(refused('x'))).toBeNull();
   });
 });

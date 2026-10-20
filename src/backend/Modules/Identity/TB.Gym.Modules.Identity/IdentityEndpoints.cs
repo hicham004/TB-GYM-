@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Antiforgery;
@@ -45,7 +46,8 @@ public static class IdentityEndpoints
             .WithName("Login")
             .Produces<CurrentUserResponse>()
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status429TooManyRequests);
         group.MapPost("/logout", LogoutAsync)
             .RequireAuthorization()
             .WithName("Logout")
@@ -131,6 +133,11 @@ public static class IdentityEndpoints
             return Results.Json(
                 new { code = "email_not_confirmed", message = "Confirm your email before signing in." },
                 statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (result.IsLockedOut)
+        {
+            return AccountLocked(context, await userManager.GetLockoutEndDateAsync(user));
         }
 
         if (!result.Succeeded)
@@ -399,6 +406,30 @@ public static class IdentityEndpoints
         Results.Json(
             new { code = "invalid_credentials", message = "Email or password is incorrect." },
             statusCode: StatusCodes.Status401Unauthorized);
+
+    /// <summary>
+    /// A locked account says so, whichever password was typed (audit AUTH-2), with the time left in
+    /// Retry-After. Answered as wrong credentials, a person who knew their password reset it and was
+    /// still refused until the lock ran out. Identity stamps the lock's end from the system clock, so
+    /// the time left is counted on that clock too.
+    /// </summary>
+    private static IResult AccountLocked(HttpContext context, DateTimeOffset? lockoutEnd)
+    {
+        var seconds = lockoutEnd is { } end
+            ? Math.Max(1, (int)Math.Ceiling((end - DateTimeOffset.UtcNow).TotalSeconds))
+            : 60;
+        var minutes = (int)Math.Ceiling(seconds / 60d);
+        context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
+        return Results.Json(
+            new
+            {
+                code = "account_locked",
+                message = minutes == 1
+                    ? "This account is locked after too many wrong passwords. Try again in a minute."
+                    : $"This account is locked after too many wrong passwords. Try again in {minutes} minutes.",
+            },
+            statusCode: StatusCodes.Status429TooManyRequests);
+    }
 
     private static IResult InvalidToken() =>
         Results.Json(

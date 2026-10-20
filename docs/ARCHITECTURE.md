@@ -245,15 +245,27 @@ See the official EF Core guidance on
 The SPA uses ASP.NET Core Identity with a same-origin server cookie:
 
 - The authentication cookie is HTTP-only, secure in production, SameSite Lax, and never
-  stored in browser storage.
+  stored in browser storage. It is a browser-session cookie with an 8-hour ticket, or a 30-day
+  cookie and ticket when "Keep me signed in" is ticked (CLI-019, set in `OnSigningIn`). The security
+  stamp is checked on every request and each check renews the ticket for its own span, so both
+  slide with use.
 - State-changing requests validate ASP.NET Core antiforgery tokens. The framework cookie
   (`tb-gym-antiforgery`) is HTTP-only; `/api/auth/csrf` publishes the paired request token
   in the readable `XSRF-TOKEN` cookie, which Angular sends as `X-XSRF-TOKEN`. A missing or invalid
   token is answered 400 `antiforgery_token_invalid`, never a 500, so a stale tab or a forged request
   does not count as a server fault.
-- Failed API authorization returns 401 or 403, never an HTML redirect.
-- Password lockout and unique email are enabled; production requires confirmed email.
-- Public authentication is rate-limited by source address. Sensitive authenticated writes (60 a
+- Failed API authorization returns 401 or 403, never an HTML redirect. The SPA reads a 401 from
+  any route but sign-in and the session check as a session that ended under the open app (audit
+  WEB-1, `sessionInterceptor` and `SessionExpiry`): it goes to sign-in with the page to return to,
+  through the leave guards, and clears its own state only once the person has left (`signedOutGuard`),
+  keeping the chosen workspace. Whoever keeps typed work stays with it, under a notice that offers
+  Sign in. A tab back from five minutes or more hidden asks `/api/auth/me` again.
+- Password lockout (five wrong passwords, fifteen minutes) and unique email are enabled; production
+  requires confirmed email. A locked account answers 429 `account_locked` with the time left in
+  `Retry-After`, whichever password is typed.
+- Public authentication is rate-limited by source address. A limiter refusal answers 429 with
+  `Retry-After` and a code: `too_many_attempts` on the public authentication routes,
+  `too_many_requests` elsewhere. Sensitive authenticated writes (60 a
   minute; `RateLimiting:SensitiveWriteWindowSeconds` may lengthen the window, never shorten it, which
   is how tests stay independent of machine speed) and media
   uploads are rate-limited by the **signed-in user id alone**, and authenticated API responses use

@@ -146,6 +146,14 @@ and the workspace calendar week's sessions counted as Today counts them (null wh
 the plan). It answers 404 for a former client, another coach's client or an unknown one, so the page
 can never say "nothing needs you" about a client the list flags.
 
+**CLI-019** A sign-in lasts 8 hours as a browser session, or 30 days when "Keep me signed in" is ticked
+(audit A2, the owner's decision of 2026-10-19); either is renewed while it is used and ends after that
+long without use. Sign out everywhere and a password reset end every session of the account at once,
+and a password change every session but the one that made it. Five wrong passwords lock the account
+for 15 minutes, and a locked account is told so with the time left, whichever password is typed. A
+session that ends while the app is open takes the person to sign-in, says why in one sentence, and
+brings them back to the page and the workspace they were in.
+
 ## 3. Products, enrollments, payments, programs, and access
 
 **SUB-001** Product/catalog identity, offer/price, client enrollment, payment operation,

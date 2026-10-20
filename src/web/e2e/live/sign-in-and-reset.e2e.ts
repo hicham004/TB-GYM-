@@ -1,11 +1,59 @@
-import { ACCOUNTS, api, expect, requireLive, test, uniqueEmail } from './support';
+import type { Page } from '@playwright/test';
+import { ACCOUNTS, api, expect, requireLive, signIn, test, uniqueEmail } from './support';
 
 /**
  * Sign-in and password recovery against the real API: a wrong password is answered in plain
- * words, forgot-password answers a known and an unknown address identically (NOT-029), and a bad
- * reset token fails safely and clears the password fields.
+ * words, forgot-password answers a known and an unknown address identically (NOT-029), a bad
+ * reset token fails safely and clears the password fields, a locked account is told so even with
+ * the right password (AUTH-2), and a session ended from another device takes the open app to
+ * sign-in and back (WEB-1). The last two use a new account, so no demo account is locked or
+ * signed out.
  */
 requireLive();
+
+const NEW_PASSWORD = 'Live-Session-2026!';
+
+/** Registers a coach and confirms the address through the development link. */
+async function confirmedCoach(page: Page, prefix: string): Promise<string> {
+  const email = uniqueEmail(prefix);
+  await page.goto('/auth/sign-in');
+  const registered = await api<{ developmentConfirmationUrl: string | null }>(
+    page,
+    'POST',
+    '/api/auth/register/coach',
+    {
+      body: {
+        displayName: 'Live Session Coach',
+        email,
+        password: NEW_PASSWORD,
+        workspaceName: 'Live Session Coaching',
+        timeZoneId: 'Asia/Beirut',
+        defaultCulture: 'en-LB',
+        defaultCurrencyCode: 'USD',
+        weekStartsOn: 'Monday',
+      },
+    },
+  );
+  expect(registered.status).toBe(202);
+  test.skip(
+    !registered.body.developmentConfirmationUrl,
+    'The API returned no development confirmation link (a production mail provider sends it).',
+  );
+  await page.goto(registered.body.developmentConfirmationUrl as string);
+  await expect(page.getByText('Email confirmed')).toBeVisible();
+  return email;
+}
+
+/** Submits the sign-in form as it is and returns the login answer's status. */
+async function submitSignIn(page: Page, email: string, password: string): Promise<number> {
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  const [login] = await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith('/api/auth/login')),
+    page.getByRole('button', { name: 'Sign in' }).click(),
+  ]);
+  return login.status();
+}
 
 test('a wrong password is answered in plain words', async ({ page }) => {
   await page.goto('/auth/sign-in');
@@ -63,4 +111,57 @@ test('a bad reset token fails safely and clears the password fields', async ({ p
   await expect(page.locator('#reset-confirm-password')).toHaveValue('');
   // The spent token leaves the address bar by history replacement.
   expect(page.url()).not.toContain('code=');
+});
+
+test('a locked account is told it is locked, even when the password is right', async ({ page }) => {
+  const email = await confirmedCoach(page, 'locked');
+  await page.goto('/auth/sign-in');
+
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    expect(await submitSignIn(page, email, 'Not-The-Password-2026!')).toBe(401);
+    await expect(page.locator('#sign-in-summary')).toHaveText('Email or password is incorrect.');
+  }
+
+  // The fifth wrong password locks the account for fifteen minutes, and the screen says so.
+  expect(await submitSignIn(page, email, 'Not-The-Password-2026!')).toBe(429);
+  await expect(page.locator('#sign-in-summary')).toHaveText(
+    'This account is locked after too many wrong passwords. Try again in 15 minutes.',
+  );
+
+  // The right password is not called wrong while the lock lasts.
+  expect(await submitSignIn(page, email, NEW_PASSWORD)).toBe(429);
+  await expect(page.locator('#sign-in-summary')).toHaveText(
+    /^This account is locked after too many wrong passwords\. Try again in 1[45] minutes\.$/,
+  );
+  expect(page.url()).toContain('/auth/sign-in');
+});
+
+test('a session ended from another device takes the open app to sign-in and back', async ({
+  page,
+  browser,
+}) => {
+  const email = await confirmedCoach(page, 'ended');
+  await signIn(page, email, NEW_PASSWORD);
+
+  // The same person signs out everywhere from a second device.
+  const elsewhere = await browser.newContext();
+  const phone = await elsewhere.newPage();
+  await signIn(phone, email, NEW_PASSWORD);
+  expect((await api(phone, 'POST', '/api/auth/sessions/revoke-all')).status).toBe(204);
+  await elsewhere.close();
+
+  // The open app's next request is refused, and it goes to sign-in instead of failing in place.
+  await page.getByRole('link', { name: 'Clients' }).first().click();
+  await page.waitForURL((url) => url.pathname === '/auth/sign-in');
+  const ended = new URL(page.url());
+  expect(ended.searchParams.get('returnUrl')).toBe('/clients');
+  expect(ended.searchParams.get('reason')).toBe('session-ended');
+  await expect(
+    page.getByText('You were signed out. Sign in again to carry on where you left off.'),
+  ).toBeVisible();
+
+  // Signing in again goes back to the page the person was on.
+  expect(await submitSignIn(page, email, NEW_PASSWORD)).toBe(200);
+  await page.waitForURL((url) => url.pathname === '/clients');
+  await expect(page.locator('h1').first()).toBeVisible();
 });

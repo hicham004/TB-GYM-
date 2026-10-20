@@ -38,6 +38,11 @@ relationship.
   memberships, or profiles.
 - Password reset and explicit session revocation update the Identity security stamp so old
   cookies stop authorizing requests.
+- **Since audit A2 (2026-10-20, the owner's decision of 2026-10-19).** A sign-in is an 8-hour
+  browser session, or lasts 30 days when "Keep me signed in" is ticked; both renew while they are
+  used. The security stamp still ends either at once after Sign out everywhere, a password change
+  or a reset. A locked account and a rate-limited attempt each answer 429 with their own code and
+  `Retry-After` (CLI-019).
 
 ## Consequences
 
