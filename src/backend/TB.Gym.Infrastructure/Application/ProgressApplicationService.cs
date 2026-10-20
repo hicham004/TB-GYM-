@@ -645,9 +645,48 @@ internal sealed partial class ProgressApplicationService(
                     item.ReplacementObservationId))
                 .SingleOrDefaultAsync(cancellationToken);
 
+        // A replacement carries the trail of what it replaced (PRG-011, audit CLIENT-14): walk back through
+        // the voids that point at it, so each move and the corrections made before it stay visible.
+        var moves = new List<BodyweightMoveView>();
+        var trail = new List<Guid> { observationId };
+        var arrivedOn = observation.MeasurementDate;
+        var cursor = observationId;
+        for (var step = 0; step < MaximumMoveTrail; step++)
+        {
+            var replaced = cursor;
+            var move = await dbContext.BodyweightObservationVoids
+                .AsNoTracking()
+                .Where(item => item.ReplacementObservationId == replaced && item.ClientProfileId == clientProfileId)
+                .OrderByDescending(item => item.VoidedAtUtc)
+                .Select(item => new
+                {
+                    item.ObservationId,
+                    item.MeasurementDate,
+                    item.Reason,
+                    item.VoidedByUserId,
+                    item.VoidedAtUtc,
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (move is null || trail.Contains(move.ObservationId))
+            {
+                break;
+            }
+
+            moves.Add(new BodyweightMoveView(
+                move.ObservationId,
+                move.MeasurementDate,
+                arrivedOn,
+                move.Reason,
+                move.VoidedByUserId,
+                move.VoidedAtUtc));
+            trail.Add(move.ObservationId);
+            arrivedOn = move.MeasurementDate;
+            cursor = move.ObservationId;
+        }
+
         var previous = await dbContext.BodyweightCorrections
             .AsNoTracking()
-            .Where(item => item.ObservationId == observationId && item.ClientProfileId == clientProfileId)
+            .Where(item => trail.Contains(item.ObservationId) && item.ClientProfileId == clientProfileId)
             .OrderByDescending(item => item.SupersededAtUtc)
             .Select(item => new BodyweightHistoryItemView(
                 item.Id,
@@ -661,8 +700,11 @@ internal sealed partial class ProgressApplicationService(
                 item.SupersededByUserId,
                 item.SupersededAtUtc))
             .ToArrayAsync(cancellationToken);
-        return new BodyweightHistoryView(ToObservationView(observation), previous, voided);
+        return new BodyweightHistoryView(ToObservationView(observation), previous, voided, moves);
     }
+
+    /// <summary>How many moves a weigh-in's history walks back: far more than anyone makes by hand.</summary>
+    private const int MaximumMoveTrail = 20;
 
     private async Task<BodyMeasurementCommandResult> RecordMeasurementAsync(
         Guid clientProfileId,

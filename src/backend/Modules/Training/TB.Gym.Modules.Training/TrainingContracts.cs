@@ -1063,6 +1063,8 @@ public sealed record ClientProgramWeekView(
     bool IsShared,
     IReadOnlyList<ClientProgramSessionView> Sessions);
 
+/// <param name="StartedOn">The day the session's workout was started, in the program's time zone; null before.</param>
+/// <param name="IsLate">The workout was started on a day after the session's own (TRN-020 v2, "Do it now").</param>
 public sealed record ClientProgramSessionView(
     Guid SessionId,
     string Name,
@@ -1070,7 +1072,9 @@ public sealed record ClientProgramSessionView(
     ClientSessionState State,
     Guid? WorkoutExecutionId,
     int ExerciseCount,
-    int SetCount);
+    int SetCount,
+    DateOnly? StartedOn = null,
+    bool IsLate = false);
 
 /// <summary>
 /// A client's programs as their coach reads them (R3.4a, TRN-022): the newest blocks first, each with
@@ -1126,7 +1130,9 @@ public sealed record CoachProgramWeekView(
 
 /// <summary>
 /// <c>State</c> is null for a session never started in a week that is not shared, or in a cancelled
-/// block: the client could not train it, so it is neither missed nor still to come.
+/// block: the client could not train it, so it is neither missed nor still to come. <c>StartedOn</c> and
+/// <c>IsLate</c> say when its workout was started and whether that was after the session's day, so a
+/// coach sees a session done late (TRN-020 v2).
 /// </summary>
 public sealed record CoachProgramSessionView(
     Guid SessionId,
@@ -1135,7 +1141,9 @@ public sealed record CoachProgramSessionView(
     ClientSessionState? State,
     Guid? WorkoutExecutionId,
     int ExerciseCount,
-    int SetCount);
+    int SetCount,
+    DateOnly? StartedOn = null,
+    bool IsLate = false);
 
 /// <summary>Finished workouts, newest first, each with the records it set (TRN-019).</summary>
 public sealed record ClientWorkoutHistoryPage(

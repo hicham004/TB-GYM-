@@ -63,7 +63,8 @@
 .today-card--hero .today-action:hover {
   background: var(--tb-accent-bright, var(--tb-accent));
 }
-.today-card--hero .text-link {
+// Above the plain card's link colour below, which drew "Also scheduled today" dark on the dark hero.
+.today-card.today-card--hero .text-link {
   color: var(--tb-on-brand);
 }
 

@@ -17,9 +17,11 @@ import type { BodyweightUnit, ClientIntakeProfile } from '../../core/api/api.mod
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { Button } from '../../ui/button';
 import type { IsoDate } from '../../ui/calendar';
+import { Icon } from '../../ui/icon';
 import { IntakeFields } from './intake-fields';
 import {
   hasChanges,
+  healthPrivacy,
   mergeSteps,
   stepErrors,
   toCompleteRequest,
@@ -38,7 +40,7 @@ import {
  */
 @Component({
   selector: 'app-intake-edit',
-  imports: [Button, IntakeFields],
+  imports: [Button, Icon, IntakeFields],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -46,6 +48,12 @@ import {
         <p class="muted" i18n>
           This is the weight their progress is measured from. It is recorded once; later weigh-ins
           are added from Progress.
+        </p>
+      }
+      @if (privacy(); as sentence) {
+        <p class="privacy">
+          <app-icon name="lock" />
+          <span>{{ sentence }}</span>
         </p>
       }
       <app-intake-fields
@@ -100,6 +108,20 @@ import {
       font-size: 0.875rem;
     }
 
+    .privacy {
+      align-items: flex-start;
+      background: var(--tb-surface-2);
+      border-radius: var(--tb-radius-control);
+      display: flex;
+      font-size: 0.9375rem;
+      gap: 0.5rem;
+      padding: 0.75rem 0.875rem;
+    }
+
+    .privacy app-icon {
+      flex: none;
+    }
+
     .problem-text {
       background: var(--tb-danger-soft);
       border-radius: var(--tb-radius-control);
@@ -137,6 +159,8 @@ export class IntakeEdit {
   readonly today = input.required<IsoDate>();
   readonly firstDay = input<number | null>(null);
   readonly weightUnit = input<BodyweightUnit>('Kilogram');
+  /** The coaching space's name, for who sees the client's own health answers. */
+  readonly spaceName = input('');
   /** Whether it was saved: the sheet closes either way. */
   readonly closed = output<boolean>();
   /** Whether something has been typed that closing would lose. */
@@ -145,6 +169,12 @@ export class IntakeEdit {
   protected readonly attempt = new FormAttempt();
   protected readonly busy = signal(false);
   protected readonly refusal = signal<string | null>(null);
+  /** The client editing their own health answers is told who sees them, as on the first run (CLIENT-18). */
+  protected readonly privacy = computed(() =>
+    this.step() === 'health' && this.subject().kind === 'self'
+      ? healthPrivacy(this.spaceName())
+      : null,
+  );
 
   private readonly saved = computed(() =>
     valuesFromProfile(this.profile(), { today: this.today(), weightUnit: this.weightUnit() }),

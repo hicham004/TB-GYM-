@@ -120,8 +120,11 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
 
   await test.step('Today leads with the workout and opens the player', async () => {
     await page.goto('/');
+    // The hero names the program's week when one covers today (UIQ-16).
     await expect(
-      page.getByText(alreadyStarted ? /In progress|Started/ : 'Scheduled today'),
+      page.getByText(
+        alreadyStarted ? /In progress|Started/ : /Week \d+ of \d+ · Today|Scheduled today/,
+      ),
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: workout.name })).toBeVisible();
     await page

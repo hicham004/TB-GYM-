@@ -454,6 +454,39 @@ describe('Changes to a weight', () => {
     expect(host.querySelector('.changes')).toBeNull();
   });
 
+  it('carries a moved weigh-in’s trail: the move and the correction made before it (CLIENT-14)', async () => {
+    const { host } = await render(
+      WeighInChanges,
+      { row: row() },
+      {
+        weightHistory: vi.fn(() =>
+          of(
+            weightHistory({
+              moves: [
+                {
+                  fromObservationId: 'weight-2026-10-08',
+                  fromDate: '2026-10-08',
+                  toDate: '2026-10-09',
+                  reason: 'Logged on the wrong day',
+                  movedByUserId: 'user-maya',
+                  movedAtUtc: '2026-10-09T09:00:00Z',
+                },
+              ],
+            }),
+          ),
+        ),
+      },
+    );
+
+    const items = [...host.querySelectorAll('.changes li')];
+    expect(items.map((item) => item.getAttribute('data-change'))).toEqual(['move', 'correction']);
+    expect(textOf(items[0].querySelector('strong'))).toBe('Moved from Thu 8 Oct');
+    expect(textOf(items[0])).toContain('Logged on the wrong day');
+    expect(textOf(items[0].querySelector('small'))).toMatch(/^Moved Fri 9 Oct, /);
+    expect(textOf(items[1].querySelector('strong'))).toBe('82.2 kg');
+    expect(textOf(host)).not.toContain('has not been corrected');
+  });
+
   it('says where an entry went when it was replaced', async () => {
     const { host } = await render(
       WeighInChanges,

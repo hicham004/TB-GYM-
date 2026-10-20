@@ -70,9 +70,10 @@
             }
           </h2>
         </div>
+        <!-- Both ends are days the chart covers: the window's exclusive end is the day after today. -->
         <span class="date-span"
-          >{{ progress()?.from ?? view.from | date: 'd MMM y' }} –
-          {{ view.toExclusive | date: 'd MMM y' }}</span
+          >{{ (progress()?.from ?? view.from) + 'T12:00:00' | date: 'd MMM y' }} –
+          {{ today() + 'T12:00:00' | date: 'd MMM y' }}</span
         >
       </div>
       @if (entries().length) {
@@ -118,7 +119,8 @@
         <div class="section-top">
           <div>
             <p class="eyebrow" i18n>THE DETAILS</p>
-            <h2 id="measurements-heading" i18n>Measurements</h2>
+            <!-- A soft hyphen: at 200% text on a phone the word breaks there, with a hyphen (UIQ-3). -->
+            <h2 id="measurements-heading" i18n>Measure&shy;ments</h2>
           </div>
           @if (!coachMode()) {
             <a routerLink="/progress" [queryParams]="{ tab: 'measurements' }" i18n>Manage</a>

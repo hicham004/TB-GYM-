@@ -2,7 +2,7 @@
 @switch (message.kind) {
   @case ('ready') {
     @let conversation = message.value;
-    @let last = conversation.lastMessage!;
+    @let latest = conversation.latestFromCounterpart!;
     <section class="coach tb-theme" aria-labelledby="coach-heading">
       <h2 id="coach-heading" #heading tabindex="-1" class="tb-visually-hidden" i18n>
         Latest from your coach
@@ -31,25 +31,19 @@
               }
               ·
               <bdi>{{
-                sentToday(conversation)
-                  ? (last.sentAtUtc | date: 'shortTime')
-                  : (last.sentAtUtc | date: 'EEE d MMM')
+                sentToday(latest) ? (latest.sentAtUtc | date: 'shortTime') : sentDay(latest)
               }}</bdi>
             </span>
           </span>
-          @if (conversation.unreadCount > 0 && !last.isFromCaller) {
+          @if (conversation.unreadCount > 0) {
             <app-status-label id="coach-unread" label="Unread" i18n-label />
           }
         </span>
         <span id="coach-preview" class="coach-preview" dir="auto">
           @if (!conversation.isAvailable) {
             {{ accessLabel(conversation.accessReason) }}
-          } @else if (last.isDeleted) {
-            <ng-container i18n>Message removed</ng-container>
-          } @else if (last.isFromCaller) {
-            <ng-container i18n>You:</ng-container> {{ last.body }}
           } @else {
-            {{ last.body }}
+            {{ latest.body }}
           }
         </span>
       </a>

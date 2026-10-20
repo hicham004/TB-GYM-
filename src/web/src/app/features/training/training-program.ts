@@ -1,4 +1,4 @@
-import { DatePipe, DecimalPipe, NgTemplateOutlet } from '@angular/common';
+import { DatePipe, DecimalPipe, formatDate, NgTemplateOutlet } from '@angular/common';
 import {
   afterNextRender,
   Component,
@@ -7,19 +7,23 @@ import {
   ElementRef,
   inject,
   Injector,
+  LOCALE_ID,
   signal,
   TemplateRef,
   untracked,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
+import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { UiSheet } from '../../ui/sheet';
@@ -35,6 +39,7 @@ import {
   unitLabel,
   weekFill,
   type HistoryWorkout,
+  type ProgramSession,
   type ProgramWeek,
   type TrainingProgramRead,
 } from './training-program.models';
@@ -46,7 +51,9 @@ const HISTORY_PREVIEW = 4;
  * The client's Training tab (M3): the program with "week x of y", this week's sessions done,
  * missed and still to come, every week behind a disclosure, and finished workouts with their
  * records. Session states and records come from the server (TRN-019, TRN-020); the workout
- * itself still happens in `TodayTraining`.
+ * itself still happens in `TodayTraining`. A missed session of the program running now offers
+ * "Do it now" (TRN-020 v2, the owner's decision of 2026-10-19): asked once, the workout starts and
+ * the player opens on it, and it then counts as done late rather than missed.
  */
 @Component({
   selector: 'app-training-program',
@@ -61,6 +68,7 @@ const HISTORY_PREVIEW = 4;
     Icon,
     ShareSheet,
     Skeleton,
+    UiConfirm,
   ],
   templateUrl: './training-program.html',
   styleUrls: ['./training-program.scss', './training-program-lists.scss'],
@@ -73,6 +81,11 @@ export class TrainingProgram {
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly sheets = inject(UiSheet);
   private readonly shareSheet = viewChild.required<TemplateRef<unknown>>('shareSheet');
+  private readonly dialogs = inject(UiDialog);
+  private readonly doItNowDialog = viewChild.required<TemplateRef<unknown>>('doItNowDialog');
+  private readonly csrf = inject(CsrfService);
+  private readonly router = inject(Router);
+  private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute, { optional: true });
   private loadedTenantId: string | null = null;
@@ -127,6 +140,12 @@ export class TrainingProgram {
   protected readonly sharing = signal(false);
   protected readonly shareProblem = signal<string | null>(null);
   protected readonly shareFacts = signal<readonly ShareFact[]>([]);
+  /** The missed session being started late, and why the last attempt was refused. */
+  protected readonly starting = signal<string | null>(null);
+  protected readonly startProblem = signal<{ sessionId: string; message: string } | null>(null);
+  protected readonly doItNowMessage = signal('');
+  protected readonly doItNowConfirm = $localize`Start workout`;
+  protected readonly doItNowCancel = $localize`Not now`;
   protected readonly canShowMoreHistory = computed(
     () =>
       (!this.showAllHistory() && this.history().length > HISTORY_PREVIEW) ||
@@ -198,6 +217,44 @@ export class TrainingProgram {
         }
       } finally {
         if (owner.current) this.sharing.set(false);
+      }
+    });
+  }
+
+  /**
+   * "Do it now": asks once, starts the missed session's workout and opens the player on it. The
+   * server decides whether it still may (TRN-020 v2) and says why not, under the session.
+   */
+  protected async doItNow(session: ProgramSession): Promise<void> {
+    if (this.starting() !== null) return;
+    const planned = formatDate(session.date + 'T12:00:00', 'EEE d MMM', this.locale);
+    this.doItNowMessage.set(
+      $localize`It was planned for ${planned}:day:. Done now, it counts as done late, and your coach sees that.`,
+    );
+    const dialog = this.dialogs.open<boolean>(this.doItNowDialog(), {
+      title: $localize`Do ${session.name}:session: now?`,
+      closeLabel: $localize`Close`,
+    });
+    if ((await firstValueFrom(dialog.closed)) !== true) return;
+
+    return this.scope.run('do-it-now', async (owner) => {
+      this.starting.set(session.sessionId);
+      this.startProblem.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        await owner.wait(firstValueFrom(this.api.startMyWorkout(session.sessionId)));
+        await this.router.navigate(['/training/today'], {
+          queryParams: { sessionId: session.sessionId },
+        });
+      } catch (error) {
+        if (owner.current) {
+          this.startProblem.set({
+            sessionId: session.sessionId,
+            message: apiErrorMessage(error, $localize`The workout couldn’t be started. Try again.`),
+          });
+        }
+      } finally {
+        if (owner.current) this.starting.set(null);
       }
     });
   }
@@ -326,5 +383,7 @@ export class TrainingProgram {
     this.openWeeks.set(new Set());
     this.sharing.set(false);
     this.shareProblem.set(null);
+    this.starting.set(null);
+    this.startProblem.set(null);
   }
 }

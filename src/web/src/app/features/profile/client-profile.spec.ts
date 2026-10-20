@@ -319,6 +319,22 @@ describe('ClientProfilePage', () => {
     expect(toast()).toContain('Your details were saved.');
   });
 
+  it('says who sees the health answers in the health sheet too, not only on the first run (CLIENT-18)', async () => {
+    const { fixture, host } = await render(finishedProfile());
+
+    (host.querySelector('[data-edit="health"]') as HTMLButtonElement).click();
+    await settle(fixture);
+    expect(textOf(dialog()!.querySelector('.privacy'))).toBe(
+      'Only you, your coach and the owner of Atlas Performance can see these answers.',
+    );
+    press(dialog()!, 'Not now');
+    await settle(fixture);
+
+    (host.querySelector('[data-edit="about"]') as HTMLButtonElement).click();
+    await settle(fixture);
+    expect(dialog()!.querySelector('.privacy')).toBeNull();
+  });
+
   it('reports a failed load and tries again', async () => {
     let failing = true;
     const { fixture, host } = await render(finishedProfile(), {

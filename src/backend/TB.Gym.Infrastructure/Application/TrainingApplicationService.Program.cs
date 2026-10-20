@@ -108,7 +108,7 @@ internal sealed partial class TrainingApplicationService
         var sessionIds = sessions.Select(item => item.Id).ToArray();
         var workouts = await dbContext.WorkoutExecutions.AsNoTracking()
             .Where(item => sessionIds.Contains(item.TrainingSessionId))
-            .Select(item => new { item.TrainingSessionId, item.Id, item.Status })
+            .Select(item => new { item.TrainingSessionId, item.Id, item.Status, item.StartedAtUtc })
             .ToDictionaryAsync(item => item.TrainingSessionId, cancellationToken);
         // Each block's history in one read, so a cancel reason is seen again on the Training tab (LOST-6).
         var lifecycle = (await dbContext.MesocycleLifecycleEvents.AsNoTracking()
@@ -141,6 +141,9 @@ internal sealed partial class TrainingApplicationService
                 var sessionViews = sessionsByWeek[week.Id].Select(session =>
                 {
                     workouts.TryGetValue(session.Id, out var workout);
+                    DateOnly? startedOn = workout is null
+                        ? null
+                        : ClientSessionStatePolicy.StartedOn(workout.StartedAtUtc, block.TimeZoneId);
                     return new CoachProgramSessionView(
                         session.Id,
                         session.Name,
@@ -149,7 +152,9 @@ internal sealed partial class TrainingApplicationService
                             week.IsPublished, status == MesocycleStatus.Cancelled),
                         workout?.Id,
                         session.ExerciseCount,
-                        session.SetCount);
+                        session.SetCount,
+                        startedOn,
+                        ClientSessionStatePolicy.IsLate(session.ScheduledDate, startedOn));
                 }).ToArray();
                 return new CoachProgramWeekView(week.Id, week.WeekNumber, week.Label, week.StartsOn,
                     week.IsPublished, availability.IsVisible, availability.UnlockDate, sessionViews);
@@ -280,11 +285,14 @@ internal sealed partial class TrainingApplicationService
         var sessionIds = sessions.Select(item => item.Id).ToArray();
         var workouts = await dbContext.WorkoutExecutions.AsNoTracking()
             .Where(item => sessionIds.Contains(item.TrainingSessionId))
-            .Select(item => new { item.TrainingSessionId, item.Id, item.Status })
+            .Select(item => new { item.TrainingSessionId, item.Id, item.Status, item.StartedAtUtc })
             .ToDictionaryAsync(item => item.TrainingSessionId, cancellationToken);
         var views = sessions.Select(item =>
         {
             workouts.TryGetValue(item.Id, out var workout);
+            DateOnly? startedOn = workout is null
+                ? null
+                : ClientSessionStatePolicy.StartedOn(workout.StartedAtUtc, block.TimeZoneId);
             return (item.MesocycleWeekId, View: new ClientProgramSessionView(
                 item.Id,
                 item.Name,
@@ -292,7 +300,9 @@ internal sealed partial class TrainingApplicationService
                 ClientSessionStatePolicy.Evaluate(item.ScheduledDate, today, workout?.Status),
                 workout?.Id,
                 item.ExerciseCount,
-                item.SetCount));
+                item.SetCount,
+                startedOn,
+                ClientSessionStatePolicy.IsLate(item.ScheduledDate, startedOn)));
         }).ToArray();
 
         var weekCount = weeks.Count;

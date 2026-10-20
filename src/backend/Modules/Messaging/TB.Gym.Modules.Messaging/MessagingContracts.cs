@@ -38,6 +38,11 @@ public sealed record ConversationMessagePreview(
 /// The newest message still present was written by the other participant (MSG-022). False for a
 /// conversation the caller cannot currently open or can no longer write in.
 /// </param>
+/// <param name="LatestFromCounterpart">
+/// The newest message still present that the other participant wrote, whoever spoke last, so the
+/// client's Today shows their coach's latest words rather than their own reply (audit CLIENT-13). Null
+/// when they have written nothing still present, or the caller cannot currently open the conversation.
+/// </param>
 public sealed record ConversationSummary(
     Guid Id,
     Guid ClientProfileId,
@@ -54,7 +59,8 @@ public sealed record ConversationSummary(
     FeatureAccessReason AccessReason,
     ConversationMessagePreview? LastMessage,
     bool IsReadOnly = false,
-    bool IsAwaitingReply = false);
+    bool IsAwaitingReply = false,
+    ConversationMessagePreview? LatestFromCounterpart = null);
 
 /// <summary>Which of the caller's conversations a list shows (MSG-022).</summary>
 public enum ConversationListFilter

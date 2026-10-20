@@ -1567,6 +1567,16 @@ export class Messages {
         return conversation;
       }
 
+      const latest = {
+        messageId: message.id,
+        sequence: message.sequence,
+        senderUserId: message.senderUserId,
+        isFromCaller: message.isFromCaller,
+        sentAtUtc: message.sentAtUtc,
+        body: message.body,
+        isDeleted: message.isDeleted,
+        deletionKind: message.deletionKind,
+      };
       return {
         ...conversation,
         // Who spoke last decides who waits (MSG-022). A removal is left to the next read of the
@@ -1579,16 +1589,9 @@ export class Messages {
           message.sentAtUtc > conversation.lastActivityAtUtc
             ? message.sentAtUtc
             : conversation.lastActivityAtUtc,
-        lastMessage: {
-          messageId: message.id,
-          sequence: message.sequence,
-          senderUserId: message.senderUserId,
-          isFromCaller: message.isFromCaller,
-          sentAtUtc: message.sentAtUtc,
-          body: message.body,
-          isDeleted: message.isDeleted,
-          deletionKind: message.deletionKind,
-        },
+        lastMessage: latest,
+        latestFromCounterpart:
+          message.isFromCaller || message.isDeleted ? conversation.latestFromCounterpart : latest,
       };
     };
 

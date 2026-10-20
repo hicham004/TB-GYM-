@@ -108,11 +108,24 @@ export interface BodyweightHistoryItem {
   supersededAtUtc: string;
 }
 
+/** One move of a weigh-in to the day it was really taken: from that day, to this one, why and when. */
+export interface BodyweightMove {
+  fromObservationId: string;
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  movedByUserId: string;
+  movedAtUtc: string;
+}
+
 export interface BodyweightHistory {
   current: BodyweightObservation;
+  /** Every correction of this weigh-in, and of the ones it was moved from, newest first. */
   previousValues: BodyweightHistoryItem[];
   /** Present only for a voided entry; history keeps showing it so the correction stays visible. */
   void: BodyweightVoid | null;
+  /** Each move that brought this weigh-in to its day, newest first (audit CLIENT-14). */
+  moves: BodyweightMove[];
 }
 
 export interface ProgressViewModel {
@@ -198,6 +211,7 @@ export function mapHistory(value: ContractHistory): BodyweightHistory {
       enteredValue: Number(item.enteredValue),
     })),
     void: value.void ?? null,
+    moves: (value.moves ?? []).map((move) => ({ ...move })),
   };
 }
 

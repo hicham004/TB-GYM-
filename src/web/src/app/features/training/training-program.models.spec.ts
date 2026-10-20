@@ -44,6 +44,50 @@ describe('mapTrainingProgram', () => {
     expect(plan.weeks[3].visible).toBe(false);
   });
 
+  it('gives each week its last day, seven days from its first (CLIENT-4)', () => {
+    expect(program().weeks.map((week) => [week.startDate, week.lastDate])).toEqual([
+      ['2026-09-14', '2026-09-20'],
+      ['2026-09-21', '2026-09-27'],
+      ['2026-09-28', '2026-10-04'],
+      ['2026-10-05', '2026-10-11'],
+    ]);
+  });
+
+  it('offers "Do it now" only for a missed session of the program running now (CLIENT-12)', () => {
+    const running = program().weeks.flatMap((week) => week.sessions);
+    expect(
+      running.filter((session) => session.canDoNow).map((session) => session.sessionId),
+    ).toEqual(['s4']);
+    const finished = programView();
+    finished.program = { ...finished.program!, phase: 'Finished', currentWeekNumber: null };
+    expect(
+      program(finished)
+        .weeks.flatMap((week) => week.sessions)
+        .some((session) => session.canDoNow),
+    ).toBe(false);
+  });
+
+  it('carries the day a workout was started and whether that was late (TRN-020 v2)', () => {
+    const sessions = withWeek3(
+      {
+        ...programSession('late', 'Upper A', '2026-09-28', 'Completed'),
+        startedOn: '2026-09-30',
+        isLate: true,
+      },
+      {
+        ...programSession('kept', 'Lower A', '2026-09-29', 'Completed'),
+        startedOn: '2026-09-29',
+        isLate: false,
+      },
+      programSession('older', 'Upper B', '2026-09-30', 'Today'),
+    ).weeks[2].sessions;
+    expect(sessions.map((session) => [session.startedOn, session.isLate])).toEqual([
+      ['2026-09-30', true],
+      ['2026-09-29', false],
+      [null, false],
+    ]);
+  });
+
   it('opens the player only for today’s sessions and unfinished ones', () => {
     const sessions = withWeek3(
       programSession('a', 'Earlier', '2026-09-28', 'Completed'),

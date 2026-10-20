@@ -131,6 +131,7 @@ export function weightHistory(
       },
     ],
     void: null,
+    moves: [],
     ...overrides,
   };
 }

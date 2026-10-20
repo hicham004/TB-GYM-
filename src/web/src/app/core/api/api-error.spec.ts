@@ -35,6 +35,15 @@ describe('apiErrorMessage', () => {
     );
   });
 
+  it('words why a session cannot be started now (TRN-020 v2)', () => {
+    expect(
+      apiErrorMessage(conflict({ code: 'program_ended', message: 'Server wording' }), fallback),
+    ).toBe('This program has ended, so its sessions can no longer be done.');
+    expect(
+      apiErrorMessage(conflict({ code: 'session_not_due', message: 'Server wording' }), fallback),
+    ).toBe('This session isn’t due yet. It opens on its day.');
+  });
+
   it('distinguishes a full client allowance from a full workspace allowance', () => {
     const message = apiErrorMessage(
       conflict({

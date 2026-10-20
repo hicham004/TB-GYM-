@@ -1371,6 +1371,7 @@ internal sealed class MessagingApplicationService(
             userId,
             cancellationToken);
         var previews = await PreviewsAsync(available, userId, cancellationToken);
+        var fromCounterpart = await LatestFromCounterpartAsync(available, userId, cancellationToken);
         var readOnly = new HashSet<Guid>();
         foreach (var conversation in ordered)
         {
@@ -1416,7 +1417,8 @@ internal sealed class MessagingApplicationService(
                 decision.Reason,
                 decision.IsAllowed ? previews.GetValueOrDefault(conversation.Id) : null,
                 isReadOnly,
-                awaiting.Contains(conversation.Id)));
+                awaiting.Contains(conversation.Id),
+                decision.IsAllowed ? fromCounterpart.GetValueOrDefault(conversation.Id) : null));
         }
 
         return summaries;
@@ -1662,6 +1664,50 @@ internal sealed class MessagingApplicationService(
                     : MessageContentPolicy.Preview(body),
                 message.IsDeleted,
                 message.DeletionKind));
+    }
+
+    /// <summary>
+    /// The newest message still present that the other participant wrote, per conversation, whoever
+    /// spoke last: what the client's Today shows as their coach's latest (audit CLIENT-13). Only
+    /// conversations the caller may open are passed in, so no body is read for a refused one.
+    /// </summary>
+    private async Task<Dictionary<Guid, ConversationMessagePreview>> LatestFromCounterpartAsync(
+        Conversation[] conversations,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var conversationIds = conversations.Select(conversation => conversation.Id).ToArray();
+        if (conversationIds.Length == 0)
+        {
+            return [];
+        }
+
+        var messages = await (
+            from message in dbContext.Messages.AsNoTracking()
+            where conversationIds.Contains(message.ConversationId) &&
+                  message.SenderUserId != userId &&
+                  message.DeletedAtUtc == null &&
+                  message.Sequence == dbContext.Messages
+                      .Where(other => other.TenantId == message.TenantId &&
+                                      other.ConversationId == message.ConversationId &&
+                                      other.SenderUserId != userId &&
+                                      other.DeletedAtUtc == null)
+                      .Max(other => other.Sequence)
+            select message)
+            .ToListAsync(cancellationToken);
+        var bodies = await CurrentBodiesAsync(messages, cancellationToken);
+
+        return messages.ToDictionary(
+            message => message.ConversationId,
+            message => new ConversationMessagePreview(
+                message.Id,
+                message.Sequence,
+                message.SenderUserId,
+                false,
+                message.SentAtUtc,
+                bodies.TryGetValue(message.Id, out var body) ? MessageContentPolicy.Preview(body) : null,
+                false,
+                null));
     }
 
     /// <summary>

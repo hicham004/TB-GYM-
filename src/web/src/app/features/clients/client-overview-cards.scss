@@ -22,6 +22,7 @@
 // Seven days, each a bar: tall when something is scheduled, a thin line when nothing is.
 .strip {
   align-items: end;
+  container-type: inline-size;
   display: grid;
   gap: 0.5rem;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -83,6 +84,27 @@
 .day.today .day-label {
   background: var(--tb-accent);
   color: var(--tb-on-accent);
+}
+
+// Too narrow for "Mon" under each bar (a phone at 200% text, UIQ-3): one letter each, with less
+// padding. The query is in rem, so it follows the text size as well as the width; a phone at the
+// usual size keeps "Mon".
+.day-narrow {
+  display: none;
+}
+
+@container (max-width: 18rem) {
+  .day-short {
+    display: none;
+  }
+
+  .day-narrow {
+    display: inline;
+  }
+
+  .day-label {
+    padding-inline: 0.25rem;
+  }
 }
 
 .facts {

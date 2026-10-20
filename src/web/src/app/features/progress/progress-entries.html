@@ -70,6 +70,7 @@
                     <strong class="value">{{ row.value }}</strong>
                     <app-menu
                       [label]="moreFor(row.date)"
+                      size="touch"
                       icon="more"
                       [items]="weighInMenu"
                       (chosen)="weighInAction($event, row, sheets)"
@@ -183,6 +184,7 @@
                       <strong class="value">{{ row.value }}</strong>
                       <app-menu
                         [label]="moreForMeasurement(row)"
+                        size="touch"
                         icon="more"
                         [items]="measurementMenu"
                         (chosen)="measurementAction($event, row, sheets)"

@@ -35,16 +35,18 @@ export interface StatTrend {
     app-card {
       block-size: 100%;
     }
+    /* An accessory that does not fit beside the words (faces at 200% text) wraps under them. */
     .layout {
       align-items: end;
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-12);
       justify-content: space-between;
       min-inline-size: 0;
     }
     .copy {
       display: flex;
-      flex: 1;
+      flex: 1 1 8rem;
       flex-direction: column;
       min-inline-size: 0;
     }

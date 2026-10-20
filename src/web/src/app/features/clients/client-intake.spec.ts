@@ -170,6 +170,15 @@ describe('ClientIntake (the coach’s view)', () => {
     );
   });
 
+  it('keeps the client’s own privacy line out of the coach’s health sheet', async () => {
+    const { fixture, host } = await render();
+
+    edit(host, 'health');
+    await settle(fixture);
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('.privacy')).toBeNull();
+  });
+
   it('asks before closing a sheet that holds typing, and not otherwise', async () => {
     const { fixture, host } = await render();
 

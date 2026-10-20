@@ -8,6 +8,7 @@ import {
   photo,
   progressView,
   TODAY,
+  weightHistory,
 } from '../../../testing/progress-fixtures';
 import {
   addedBy,
@@ -28,6 +29,7 @@ import {
   reasonPicks,
   reasonValue,
   trendFacts,
+  weighInChanges,
   weighInRows,
   weightErrors,
   type Audience,
@@ -107,6 +109,42 @@ describe('dates in words', () => {
   it('leaves the year out for this year and puts it in for another', () => {
     expect(dayWords('2026-10-09', TODAY, 'en')).toBe('Fri 9 Oct');
     expect(dayWords('2025-12-31', TODAY, 'en')).toBe('Wed 31 Dec 2025');
+  });
+});
+
+describe('a weigh-in’s changes', () => {
+  it('puts the moves and the corrections carried with them in one list, newest first (CLIENT-14)', () => {
+    const history = weightHistory({
+      previousValues: [
+        { ...weightHistory().previousValues[0], id: 'c2', supersededAtUtc: '2026-10-09T10:00:00Z' },
+        { ...weightHistory().previousValues[0], id: 'c1', supersededAtUtc: '2026-10-08T07:00:00Z' },
+      ],
+      moves: [
+        {
+          fromObservationId: 'o2',
+          fromDate: '2026-10-08',
+          toDate: '2026-10-09',
+          reason: 'Weighed on the 9th',
+          movedByUserId: 'coach',
+          movedAtUtc: '2026-10-09T12:00:00Z',
+        },
+        {
+          fromObservationId: 'o1',
+          fromDate: '2026-10-07',
+          toDate: '2026-10-08',
+          reason: 'Logged on the wrong day',
+          movedByUserId: 'maya',
+          movedAtUtc: '2026-10-08T09:00:00Z',
+        },
+      ],
+    });
+    expect(weighInChanges(history).map((change) => `${change.kind}:${change.id}`)).toEqual([
+      'move:o2',
+      'correction:c2',
+      'move:o1',
+      'correction:c1',
+    ]);
+    expect(weighInChanges(weightHistory({ previousValues: [] }))).toEqual([]);
   });
 });
 

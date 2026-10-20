@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import { historyPage, programView } from '../src/testing/training-program-fixtures';
+import { personFacing } from './axe-target-size';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -47,8 +48,9 @@ async function axe(page: Page) {
   const result = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
     .analyze();
+  // A target the sticky tab bar covers at the first scroll is judged where a person reaches it (CLIENT-7).
   expect(
-    result.violations.map(
+    (await personFacing(page, result.violations)).map(
       (violation) =>
         `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
     ),

@@ -17,11 +17,20 @@
   max-inline-size: none;
   padding: 0;
 }
+// The heading and its link wrap rather than push "Measurements" past the card at 200% text (UIQ-3).
 .section-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0 1rem;
+}
+.section-top > div {
+  min-inline-size: 0;
+}
+.section-top h2 {
+  hyphens: auto;
+  overflow-wrap: break-word;
 }
 .page-head {
   margin-block: 1rem 1.2rem;
@@ -173,12 +182,20 @@ app-trend-chart {
 .panel {
   min-block-size: 13rem;
 }
+// Each link is a 44 px touch target on a phone (plan §2 rule 6, CLIENT-7); in a heading row the
+// negative block margin keeps the text where it was.
 .section-top a,
 .all-entries a {
+  align-items: center;
   color: var(--tb-accent-ink, #153d33);
+  display: inline-flex;
   font-size: 0.85rem;
   font-weight: 700;
+  min-block-size: 2.75rem;
   text-underline-offset: 0.2rem;
+}
+.section-top a {
+  margin-block: -0.75rem;
 }
 .measurement-list,
 .record-list {

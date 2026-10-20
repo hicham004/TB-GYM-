@@ -18,6 +18,7 @@ import { addDays, isIsoDate } from '../../ui/calendar';
 import type {
   BodyMeasurement,
   BodyMeasurements,
+  BodyweightHistory,
   BodyweightObservation,
   ProgressPhoto,
   ProgressViewModel,
@@ -142,6 +143,49 @@ export function weighInRows(
 export function dayWords(date: string, today: string, locale: string): string {
   const sameYear = date.slice(0, 4) === today.slice(0, 4);
   return formatDate(date, sameYear ? 'EEE d MMM' : 'EEE d MMM y', locale);
+}
+
+/** One line of a weigh-in's See changes: a number it was corrected from, or a day it was moved from. */
+export type WeighInChange =
+  | {
+      readonly kind: 'correction';
+      readonly id: string;
+      readonly at: string;
+      readonly value: number;
+      readonly unit: MassUnit;
+      readonly reason: string;
+    }
+  | {
+      readonly kind: 'move';
+      readonly id: string;
+      readonly at: string;
+      readonly fromDate: string;
+      readonly reason: string;
+    };
+
+/**
+ * A weigh-in's changes, newest first: its corrections and, for one moved to its real day, each move
+ * and the corrections made before it, so nothing the client or coach did is hidden (PRG-011, CLIENT-14).
+ */
+export function weighInChanges(history: BodyweightHistory): readonly WeighInChange[] {
+  const changes: WeighInChange[] = [
+    ...history.previousValues.map((item) => ({
+      kind: 'correction' as const,
+      id: item.id,
+      at: item.supersededAtUtc,
+      value: item.enteredValue,
+      unit: item.enteredUnit,
+      reason: item.reason,
+    })),
+    ...history.moves.map((move) => ({
+      kind: 'move' as const,
+      id: move.fromObservationId,
+      at: move.movedAtUtc,
+      fromDate: move.fromDate,
+      reason: move.reason,
+    })),
+  ];
+  return changes.sort((left, right) => Date.parse(right.at) - Date.parse(left.at));
 }
 
 export function weightErrors(value: number | null, unit: MassUnit): string[] {

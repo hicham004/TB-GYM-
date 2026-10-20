@@ -273,11 +273,7 @@ internal sealed partial class TrainingApplicationService
             return Conflict("mesocycle_not_active", "Only an active mesocycle can start a workout.");
         }
 
-        if (session.ScheduledDate > today)
-        {
-            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
-        }
-
+        // Visibility first, so a week the client cannot see says nothing about its sessions' days.
         var availability = TrainingCalendarPolicy.GetWeekAvailability(
             mesocycle.StartDate,
             week.WeekNumber,
@@ -290,12 +286,24 @@ internal sealed partial class TrainingApplicationService
             return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
         }
 
+        if (session.ScheduledDate > today)
+        {
+            return Conflict("session_not_due", "This session is not due yet. It opens on its day.");
+        }
+
         var existing = await dbContext.WorkoutExecutions.AsNoTracking().SingleOrDefaultAsync(
             item => item.TrainingSessionId == sessionId,
             cancellationToken);
         if (existing is not null)
         {
             return SuccessWorkout(existing);
+        }
+
+        // A missed session is done late only while its program runs (TRN-020 v2): after the last day
+        // the coach closes the program, and what was not done stays missed (TRN-013).
+        if (mesocycle.HasEnded(clock.UtcNow))
+        {
+            return Conflict("program_ended", "This program has ended, so its sessions can no longer be started.");
         }
 
         try

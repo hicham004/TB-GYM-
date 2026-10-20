@@ -436,12 +436,19 @@ same rule, for their own clients only (CLI-013) and while the client's plan incl
 (TRN-023): a lapsed or paused plan, a block or a former client closes it for the coach too, answering
 with the reason and no records, never an empty list.
 
-**TRN-020** Session state v1 (`WorkoutThenScheduledDate`, R2.5b) is what the client's Training page
-shows for each session of a visible week. The workout decides first: a completed workout is
-Completed and a started one In progress, on any day. A session never started is Missed before the
+**TRN-020** Session state v2 (`WorkoutThenScheduledDate`, R2.5b; v2 audit A9) is what the client's
+Training page shows for each session of a visible week. The workout decides first: a completed workout
+is Completed and a started one In progress, on any day. A session never started is Missed before the
 workspace's today, Today on it and Upcoming after it. A week the client cannot see (TRN-006) sends
-no sessions, so it counts neither done nor missed. The API still lets a client start a missed
-session while its block is active; no screen offers that yet.
+no sessions, so it counts neither done nor missed. Since v2 (the owner's decision of 2026-10-19,
+CLIENT-12) a client may start a missed session late while its program runs: Training offers "Do it now"
+on it, asks once and opens the player. Its workout then decides like any other, so it is no longer
+missed for the client, on Coach Today or in the coach's timeline (TRN-021, TRN-022); both reads carry
+the day the workout was started in the program's time zone (`StartedOn`) and whether that was after the
+session's own day (`IsLate`), so each says it was done late. A workout started on its day and finished
+after midnight is not late. The start refuses a session whose day has not come with 409
+`session_not_due`, and a missed one once the program's last day has passed with 409 `program_ended`
+(the coach closes it, TRN-013); a week the client cannot see stays a bare 403.
 
 **TRN-021** Training signals v1 (`MissedSinceLastWorkoutAndUnsharedWeek`, R3.1) tell a coach about a
 client's training. Missed sessions are those TRN-020 calls Missed, scheduled after the day the
@@ -1168,7 +1175,10 @@ caller's whole list (their 2,000 most recently active conversations), page by th
 and decide Messaging access before any message row is read: a conversation the caller cannot open
 now is neither unread nor waiting, though its name can still be found. A thread kept only to read
 (a client's former coach, ADR 0026) waits for nobody. The first page carries how many conversations
-each filter holds, over the whole list whatever the search.
+each filter holds, over the whole list whatever the search. Each row also carries the newest message
+still present that the other participant wrote, whoever spoke last (`LatestFromCounterpart`, under the
+same access decision as the row's last message): the client's Today shows it as their coach's latest
+and reads the list again when the live channel says a conversation changed (audit A9, CLIENT-13).
 
 **MSG-023** A saved reply (R3.5c) belongs to one Owner or Coach in one workspace and nobody else reads
 or changes it, the workspace owner included: it is a coach's own wording. Its title is one line of at
@@ -1798,7 +1808,10 @@ active observation the whole operation is refused and the original stays active,
 voided. Every current-truth read — duplicate-date check, value correction, day/week/trend
 projection, dashboard bodyweight section, and the onboarding earliest-observation lookup — excludes
 voided rows, while the audit read still resolves them with the void attached so the correction stays
-visible rather than erased.
+visible rather than erased. A replacement's audit read carries the trail of what it replaced (audit A9,
+CLIENT-14): it walks back through the voids that point at it and lists each move (from which day, to
+which, why, who and when) with the corrections made before each move among its previous values, so
+See changes on a moved weigh-in shows "Moved from Mon 19 Oct" and the number it was corrected from.
 
 **PRG-012** A removed progress photo frees its date and pose (R5.3c, decided 2026-10-10). The unique
 index that allows one photo per client, date and pose covers active photos only, so a wrong shot can be

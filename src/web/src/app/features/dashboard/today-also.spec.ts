@@ -72,7 +72,7 @@ describe('TodayAlso', () => {
     expect(host.querySelector('h2')?.textContent?.trim()).toBe('Also today');
     expect(row('/nutrition/today')).toBe('Nutrition, 800 of 1,950 kcal, 2 of 4 meals logged');
     expect(host.querySelector('.nutrition-ring')).not.toBeNull();
-    expect(row('/checkins/me')).toBe('Weekly check-in, Submitted today · awaiting coach review');
+    expect(row('/checkins/me')).toBe('Weekly check-in, Sent today · Waiting for your coach');
     const links = [...host.querySelectorAll('li a')].map((link) => link.getAttribute('href'));
     expect(links).toEqual(['/nutrition/today', '/checkins/me']);
   });
@@ -130,7 +130,7 @@ describe('TodayAlso', () => {
           } as CheckInAssignmentListItem['response']),
         ],
         '/checkins/me',
-        'Weekly check-in, Reviewed by your coach',
+        'Weekly check-in, Sent today · Reviewed by your coach',
       ],
       [[], '/checkins/me', 'Check-ins, Nothing due'],
     ];
@@ -159,7 +159,7 @@ describe('TodayAlso', () => {
     expect(host.querySelector('[role="status"]')?.textContent).toContain(
       'Couldn’t load nutrition.',
     );
-    expect(row('/checkins/me')).toContain('Submitted today');
+    expect(row('/checkins/me')).toContain('Sent today');
 
     press(host, 'Retry nutrition');
     await settle(fixture);

@@ -225,7 +225,12 @@ describe('Your entries', () => {
       const { fixture, host } = await render();
 
       const first = host.querySelector('[data-weighin]')!;
-      first.querySelector<HTMLButtonElement>('button[aria-label="More for Fri 9 Oct"]')!.click();
+      const more = first.querySelector<HTMLButtonElement>(
+        'button[aria-label="More for Fri 9 Oct"]',
+      )!;
+      // A 44 px button for a thumb, not the 36 px of a coach's dense rows (CLIENT-7).
+      expect(more.classList).toContain('trigger-touch');
+      more.click();
       await settle(fixture);
       expect(all(first, '[role="menuitem"], .item').map(textOf).join('|')).toContain(
         'Correct the weight',

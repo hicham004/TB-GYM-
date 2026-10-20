@@ -189,7 +189,9 @@ describe('ClientOverview', () => {
     expect(
       Array.from(host.querySelectorAll('.strip .day')).map((day) => day.getAttribute('data-mark')),
     ).toEqual(['done', 'rest', 'partial', 'due', 'due', 'rest', 'rest']);
-    expect(host.querySelector('.strip .day.today .day-label')?.textContent?.trim()).toBe('Thu');
+    // "Thu", and "T" for a strip too narrow for it, as at 200% text on a phone (UIQ-3).
+    expect(host.querySelector('.strip .day.today .day-short')?.textContent?.trim()).toBe('Thu');
+    expect(host.querySelector('.strip .day.today .day-narrow')?.textContent?.trim()).toBe('T');
     expect(text).toContain('Last activity Trained 2 hours ago');
     expect(text).toContain('Nutrition 4 of 4 days logged so far');
 

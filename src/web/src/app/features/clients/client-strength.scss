@@ -83,14 +83,18 @@
   padding: 0.875rem 1rem;
 }
 
+// The lift's name and number take their room first; the sparkline moves under them when larger text
+// leaves too little beside it, instead of the name breaking mid-word ("Deadlif / t", UIQ-3).
 .lift-top {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   justify-content: space-between;
 }
 
 .lift-text {
+  flex: 1 1 10rem;
   min-inline-size: 0;
 }
 

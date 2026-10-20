@@ -60,33 +60,7 @@ test.describe('messaging live', () => {
     await expect(lea.locator('.feed')).toContainText(fromCoach);
     await expect(maya.locator('.feed')).toContainText(fromCoach, { timeout: 15_000 });
 
-    // Read state (MSG-009, NCM-4): it landed in front of Maya, in her open thread at its newest message,
-    // so it is read where she reads it, and the badge, the count and the thread all say so.
-    await expect
-      .poll(
-        async () =>
-          (await api<{ unread: number }>(maya, 'GET', '/api/messaging/unread-count', { tenantId }))
-            .body.unread,
-        { timeout: 15_000 },
-      )
-      .toBe(0);
-    await expect(maya.locator('.thread-unread')).toContainText('Nothing unread');
-    // Coming back draws no "New messages" line over what she has already read.
-    await maya.goto('/');
-    await expect(maya.locator('h1').first()).toBeVisible();
-    await maya.goto('/messages');
-    await expect(maya.locator('.feed')).toContainText(fromCoach);
-    await expect(maya.locator('.new-divider')).toHaveCount(0);
-
-    // Client to coach, live, with the phone's send button.
-    const fromClient = `Live check ${stamp}: client to coach`;
-    await maya.locator('#draft').fill(fromClient);
-    await maya.locator('button.send').click();
-    await expect(maya.locator('.feed')).toContainText(fromClient);
-    await expect(lea.locator('.feed')).toContainText(fromClient, { timeout: 15_000 });
-
-    // Both apps have acknowledged both messages, which once rewrote each message's version so every
-    // edit and removal after it answered 409 (NCM-12). Wait until the server says so, then act.
+    // What the server says about each message's delivery, read as the coach.
     const [{ tenantId: leaTenant }] = await memberships(lea);
     const threads = await api<{ items: { id: string; counterpart: { displayName: string } }[] }>(
       lea,
@@ -106,6 +80,39 @@ test.describe('messaging live', () => {
           { tenantId: leaTenant },
         )
       ).body.items.find((item) => item.body === body)?.deliveryState;
+
+    // Read state (MSG-009, NCM-4): it landed in front of Maya, in her open thread at its newest message,
+    // so it is read where she reads it, and the badge, the count and the thread all say so.
+    await expect
+      .poll(
+        async () =>
+          (await api<{ unread: number }>(maya, 'GET', '/api/messaging/unread-count', { tenantId }))
+            .body.unread,
+        { timeout: 15_000 },
+      )
+      .toBe(0);
+    await expect(maya.locator('.thread-unread')).toContainText('Nothing unread');
+    // Her app acknowledges what it received a quarter second after it lands; a reload before then drops
+    // that acknowledgement, so the server must have it before she leaves the thread.
+    await expect
+      .poll(() => deliveryOf(fromCoach), { timeout: 15_000 })
+      .toBe('RealtimeAcknowledged');
+    // Coming back draws no "New messages" line over what she has already read.
+    await maya.goto('/');
+    await expect(maya.locator('h1').first()).toBeVisible();
+    await maya.goto('/messages');
+    await expect(maya.locator('.feed')).toContainText(fromCoach);
+    await expect(maya.locator('.new-divider')).toHaveCount(0);
+
+    // Client to coach, live, with the phone's send button.
+    const fromClient = `Live check ${stamp}: client to coach`;
+    await maya.locator('#draft').fill(fromClient);
+    await maya.locator('button.send').click();
+    await expect(maya.locator('.feed')).toContainText(fromClient);
+    await expect(lea.locator('.feed')).toContainText(fromClient, { timeout: 15_000 });
+
+    // Both apps have acknowledged both messages, which once rewrote each message's version so every
+    // edit and removal after it answered 409 (NCM-12). Wait until the server says so, then act.
     await expect
       .poll(() => deliveryOf(fromCoach), { timeout: 15_000 })
       .toBe('RealtimeAcknowledged');

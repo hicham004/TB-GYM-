@@ -28,6 +28,7 @@ import {
   reasonErrors,
   reasonPicks,
   reasonValue,
+  weighInChanges,
   weightErrors,
   type ReasonPick,
   type WeighInRow,
@@ -472,17 +473,24 @@ export class MoveWeighIn extends EntrySheet {
             @if (read.void; as voided) {
               <p class="muted">{{ voidedLine(voided.reason, voided.voidedAtUtc) }}</p>
             }
-            @if (read.previousValues.length === 0) {
+            @let changes = changesOf(read);
+            @if (changes.length === 0) {
               <p class="muted" i18n>
                 This is the number that was first entered. It has not been corrected.
               </p>
             } @else {
               <ol class="changes">
-                @for (item of read.previousValues; track item.id) {
-                  <li>
-                    <strong>{{ was(item.enteredValue) }} {{ unitOf(item.enteredUnit) }}</strong>
-                    <span>{{ item.reason }}</span>
-                    <small class="muted">{{ replaced(item.supersededAtUtc) }}</small>
+                @for (item of changes; track item.kind + item.id) {
+                  <li [attr.data-change]="item.kind">
+                    @if (item.kind === 'move') {
+                      <strong>{{ movedFrom(item.fromDate) }}</strong>
+                      <span>{{ item.reason }}</span>
+                      <small class="muted">{{ moved(item.at) }}</small>
+                    } @else {
+                      <strong>{{ was(item.value) }} {{ unitOf(item.unit) }}</strong>
+                      <span>{{ item.reason }}</span>
+                      <small class="muted">{{ replaced(item.at) }}</small>
+                    }
                   </li>
                 }
               </ol>
@@ -573,6 +581,18 @@ export class WeighInChanges extends EntrySheet implements OnInit {
   protected replaced(at: string): string {
     const when = formatDate(at, 'EEE d MMM, HH:mm', this.audience().locale);
     return $localize`Replaced ${when}:when:`;
+  }
+
+  protected readonly changesOf = weighInChanges;
+
+  /** "Moved from Mon 19 Oct": the day it was first logged on, before it was moved to this one. */
+  protected movedFrom(date: string): string {
+    return $localize`Moved from ${dayWords(date, this.today(), this.audience().locale)}:day:`;
+  }
+
+  protected moved(at: string): string {
+    const when = formatDate(at, 'EEE d MMM, HH:mm', this.audience().locale);
+    return $localize`Moved ${when}:when:`;
   }
 
   protected voidedLine(reason: string, at: string): string {

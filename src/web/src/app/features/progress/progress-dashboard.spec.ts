@@ -328,6 +328,13 @@ describe('ProgressDashboardView states', () => {
     expect(text).toContain('One does not explain another');
   });
 
+  it('ends the chart’s span on its last day, not on the window’s exclusive end (WEA-8)', async () => {
+    const host = await render(of(mapProgressDashboard(contract())));
+    expect(host.querySelector('.date-span')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      '1 Jun 2026 – 22 Aug 2026',
+    );
+  });
+
   it('reads a client’s own weight in the unit they saved in Me, and offers it for a new weigh-in', async () => {
     const getMyProgressDashboard = vi.fn(() =>
       of(mapProgressDashboard(contract({ displayUnit: 'Pound' }))),

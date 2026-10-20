@@ -116,14 +116,25 @@ function sessionCard(
   context: ProgramContext,
 ): SessionCard {
   const { mark, label } = sessionMark(session.state, blockStatus);
+  const detail = exerciseSetDetail(count(session.exerciseCount), count(session.setCount));
+  // Done after its day, from the client's "Do it now" (TRN-020 v2): the coach sees it done late.
+  const lateOn =
+    session.isLate && session.startedOn
+      ? formatDate(session.startedOn, 'EEE d MMM', context.locale)
+      : null;
   return {
     id: session.sessionId,
     name: session.name,
     date: session.scheduledDate,
     day: formatDate(session.scheduledDate, 'EEE d MMM', context.locale),
     mark,
-    markLabel: label,
-    detail: exerciseSetDetail(count(session.exerciseCount), count(session.setCount)),
+    markLabel: lateOn !== null && mark === 'done' ? $localize`Done late` : label,
+    detail:
+      lateOn === null
+        ? detail
+        : mark === 'done'
+          ? $localize`${detail}:detail: · done ${lateOn}:day:`
+          : $localize`${detail}:detail: · started ${lateOn}:day:`,
     workoutId: session.workoutExecutionId,
   };
 }

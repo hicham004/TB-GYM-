@@ -561,6 +561,14 @@ with its `ClientSessionStatePolicy` state (TRN-020). `GET /api/training/me/histo
 workouts ten at a time, newest first. Its records come from the same `RecordSetIds` helper as the
 finish summary, compared with the client's workouts finished before each one started.
 
+Audit A9 adds fields and no schema: both program reads give each started session its start day in the
+block's time zone and whether that was late (`StartedOn`, `IsLate`, TRN-020 v2), from the workout's
+`StartedAtUtc`; the conversation list gives each row the other participant's newest message still
+present (`LatestFromCounterpart`, one correlated query beside the existing previews, MSG-022); and a
+weigh-in's history walks back through the voids that name it as their replacement (at most 20 hops,
+PRG-011). The client's Today reads its coach card again on `MessagingRealtimeService.listRefreshRequests`,
+the same coalesced signal the unread badge follows, so no new channel or poll is added.
+
 R2.5c adds one column and one endpoint: `identity."Users"."PreferredWeightUnit"` (`Kilogram` or
 `Pound`, default `Kilogram`, a database check) and `PUT /api/auth/me/weight-unit`, beside the personal
 light/dark mode and answering with the same account shape (CLI-017). `AuthStore` saves personal

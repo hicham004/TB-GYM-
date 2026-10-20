@@ -16,14 +16,22 @@ export interface ProgramSession {
   readonly setCount: number;
   /**
    * The workout player opens today's sessions and unfinished ones. A finished workout from an
-   * earlier day and a missed session have no page of their own yet.
+   * earlier day has no page of its own yet; a missed one is started from here (`canDoNow`).
    */
   readonly opensPlayer: boolean;
+  /** The day its workout was started, on the program's calendar; null before. */
+  readonly startedOn: string | null;
+  /** Its workout was started on a day after the session's own (TRN-020 v2). */
+  readonly isLate: boolean;
+  /** A missed session of the program running now, which the client may still do ("Do it now"). */
+  readonly canDoNow: boolean;
 }
 
 export interface ProgramWeek {
   readonly number: number;
   readonly startDate: string;
+  /** The week's last day: weeks run seven days from the program's start (TRN-007). */
+  readonly lastDate: string;
   /** False for a week not shared yet or still locked: the server sent none of its sessions. */
   readonly visible: boolean;
   readonly shared: boolean;
@@ -133,10 +141,14 @@ export function mapTrainingProgram(value: ClientTrainingProgramView): TrainingPr
                   session.state === 'Today' ||
                   session.state === 'InProgress' ||
                   (session.state === 'Completed' && session.scheduledDate === today),
+                startedOn: session.startedOn ?? null,
+                isLate: session.isLate ?? false,
+                canDoNow: session.state === 'Missed' && program.phase === 'Current',
               }));
               return {
                 number: Number(week.weekNumber),
                 startDate: week.startDate,
+                lastDate: addDays(week.startDate, 6),
                 visible: week.isVisible,
                 shared: week.isShared,
                 isCurrent:

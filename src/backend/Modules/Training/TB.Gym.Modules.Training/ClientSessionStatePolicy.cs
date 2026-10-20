@@ -11,14 +11,17 @@ public enum ClientSessionState
 }
 
 /// <summary>
-/// Session state v1 (TRN-020): the workout decides first, so a completed or started session keeps
+/// Session state v2 (TRN-020): the workout decides first, so a completed or started session keeps
 /// that state on any day. Only a session never started is judged by its date against the
-/// workspace's today: before it is missed, on it is today, after it is still to come.
+/// workspace's today: before it is missed, on it is today, after it is still to come. Since v2 (audit
+/// A9, CLIENT-12) a client may start a missed session while its program runs ("Do it now"): it is then
+/// in progress and completed like any other, never missed, and done late when its workout was started
+/// on a workspace day after the session's own.
 /// </summary>
 public static class ClientSessionStatePolicy
 {
     public const string Key = "WorkoutThenScheduledDate";
-    public const int Version = 1;
+    public const int Version = 2;
 
     public static ClientSessionState Evaluate(
         DateOnly scheduledDate,
@@ -48,4 +51,16 @@ public static class ClientSessionStatePolicy
         workout is null && (!weekIsShared || blockIsCancelled)
             ? null
             : Evaluate(scheduledDate, today, workout);
+
+    /// <summary>The day a workout was started, in the program's own (snapshotted) time zone.</summary>
+    public static DateOnly StartedOn(DateTimeOffset startedAtUtc, string timeZoneId) =>
+        DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(startedAtUtc, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)).DateTime);
+
+    /// <summary>
+    /// Done late (v2): the session's workout was started on a day after the session's own. A workout
+    /// started on its day and finished after midnight is not late.
+    /// </summary>
+    public static bool IsLate(DateOnly scheduledDate, DateOnly? startedOn) =>
+        startedOn is { } started && started > scheduledDate;
 }

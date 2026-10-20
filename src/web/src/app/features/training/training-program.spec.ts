@@ -6,8 +6,9 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
+import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, settle } from '../../../testing/dom';
+import { button, press, settle } from '../../../testing/dom';
 import { programSummary } from '../../../testing/share-card-fixtures';
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
@@ -34,6 +35,7 @@ async function render(
       { provide: TenantStore, useValue: { selectedTenantId } },
       { provide: ClientAccessStore, useValue: access },
       { provide: ShareCardMaker, useValue: fakeShareCardMaker() },
+      { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
     ],
   }).compileComponents();
   // A notice's link arrives in the address (`?week=2`), read when the page is created.
@@ -62,6 +64,12 @@ async function render(
 
 // jsdom has no scrolling; the link tests stub it and put back what was there.
 const originalScrollIntoView = Element.prototype.scrollIntoView;
+
+/** The newest open dialog, which the kit renders outside the component. */
+const dialog = () => {
+  const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return open.length ? open[open.length - 1] : null;
+};
 
 describe('TrainingProgram', () => {
   afterEach(() => {
@@ -117,6 +125,108 @@ describe('TrainingProgram', () => {
     ]);
     expect(sessions.map((session) => session.tagName)).toEqual(['DIV', 'A']);
     expect(sessions[1].getAttribute('href')).toBe('/training/today?sessionId=s6');
+  });
+
+  it('labels the program’s week with its number and days, apart from Today’s calendar week', async () => {
+    const { host, textOf } = await render();
+
+    const week = host.querySelector('section[aria-labelledby="focus-heading"]')!;
+    expect(textOf(week.querySelector('.block-dates'))).toBe('Week 3 · Mon 28 Sep – Sun 4 Oct');
+  });
+
+  it('starts a missed session late after asking, and opens the player on it', async () => {
+    const startMyWorkout = vi.fn(() => of({ id: 'w-s4' }));
+    const { host, settle, textOf } = await render({ startMyWorkout });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+    // Week 2 holds the missed Upper B of Thu 24 Sep.
+    host.querySelector<HTMLButtonElement>('#week-row-2 .week-row')!.click();
+    await settle();
+    const missed = host.querySelector('#week-2 .session.is-Missed')!;
+    const doNow = missed.querySelector<HTMLButtonElement>('button.do-now')!;
+    expect(textOf(doNow)).toBe('Do it now: Upper B, Thu 24 Sep');
+    expect(host.querySelectorAll('button.do-now')).toHaveLength(1);
+
+    doNow.click();
+    await settle();
+    expect(textOf(dialog())).toContain('Do Upper B now?');
+    expect(textOf(dialog())).toContain(
+      'It was planned for Thu 24 Sep. Done now, it counts as done late, and your coach sees that.',
+    );
+    press(dialog()!.querySelector('app-confirm')!, 'Start workout');
+    await settle();
+    await settle();
+
+    expect(startMyWorkout).toHaveBeenCalledWith('s4');
+    expect(navigate).toHaveBeenCalledWith(['/training/today'], {
+      queryParams: { sessionId: 's4' },
+    });
+  });
+
+  it('starts nothing when the client answers Not now', async () => {
+    const startMyWorkout = vi.fn(() => of({ id: 'w-s4' }));
+    const { host, settle } = await render({ startMyWorkout });
+
+    host.querySelector<HTMLButtonElement>('#week-row-2 .week-row')!.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('button.do-now')!.click();
+    await settle();
+    press(dialog()!.querySelector('app-confirm')!, 'Not now');
+    await settle();
+    await settle();
+
+    expect(startMyWorkout).not.toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+  });
+
+  it('says under the session why it can no longer be done', async () => {
+    const refused = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'program_ended', message: 'This program has ended.' },
+    });
+    const { host, settle, textOf } = await render({
+      startMyWorkout: vi.fn(() => throwError(() => refused)),
+    });
+
+    host.querySelector<HTMLButtonElement>('#week-row-2 .week-row')!.click();
+    await settle();
+    host.querySelector<HTMLButtonElement>('button.do-now')!.click();
+    await settle();
+    press(dialog()!.querySelector('app-confirm')!, 'Start workout');
+    await settle();
+    await settle();
+
+    const problem = host.querySelector('#week-2 .do-now-problem');
+    expect(problem?.getAttribute('role')).toBe('alert');
+    expect(textOf(problem)).toBe('This program has ended, so its sessions can no longer be done.');
+  });
+
+  it('shows a session done late with the day it was done (TRN-020 v2)', async () => {
+    const view = programView();
+    view.program!.weeks[1] = {
+      ...view.program!.weeks[1],
+      sessions: [
+        view.program!.weeks[1].sessions[0],
+        {
+          ...view.program!.weeks[1].sessions[1],
+          state: 'Completed',
+          workoutExecutionId: 'w-s4',
+          startedOn: '2026-09-26',
+          isLate: true,
+        },
+      ],
+    };
+    const { host, settle, spoken } = await render({
+      getMyTrainingProgram: vi.fn(() => of(view)),
+    });
+
+    host.querySelector<HTMLButtonElement>('#week-row-2 .week-row')!.click();
+    await settle();
+    const late = host.querySelectorAll('#week-2 .session')[1];
+    expect(spoken(late)).toBe(
+      'Thu 24 Sep, Upper B, 4 exercises · 12 sets, Done Sat 26 Sep, Done late',
+    );
+    expect(host.querySelector('button.do-now')).toBeNull();
   });
 
   it('keeps other weeks closed until asked, and says when a hidden week opens', async () => {

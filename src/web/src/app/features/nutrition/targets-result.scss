@@ -176,16 +176,21 @@
   overflow-wrap: anywhere;
 }
 
+// A phone lists one macro a row: its name, then its grams and share, which wrap under the name when
+// larger text leaves no room beside it rather than drawing over it (UIQ-3).
 @media (max-width: 26rem) {
   .macros {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .macro {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.125rem 0.5rem;
   }
 
   .macro dt {
-    grid-column: auto;
+    flex: 1 1 auto;
   }
 }

@@ -1,4 +1,5 @@
 import type { FeatureAccessDecision, FeatureAccessReason } from '../../core/api/api.models';
+import { dayInZone } from '../../core/i18n/house-dates';
 import type {
   CheckInAssignmentListItem,
   CheckInAssignmentListView,
@@ -41,21 +42,41 @@ export interface WorkoutSummary {
   setsLogged: number;
 }
 
+/** "Week 4 of 6": the week of the program running today, the hero card's kicker (M1, audit UIQ-16). */
+export interface ProgramWeekKicker {
+  number: number;
+  count: number;
+}
+
 export type TrainingCard =
   | { kind: 'hidden' }
   | { kind: 'access-closed'; reason: string }
-  | { kind: 'scheduled'; workout: ClientWorkoutView; summary: WorkoutSummary; moreToday: number }
+  | {
+      kind: 'scheduled';
+      workout: ClientWorkoutView;
+      summary: WorkoutSummary;
+      moreToday: number;
+      week: ProgramWeekKicker | null;
+    }
   | {
       kind: 'in-progress';
       workout: ClientWorkoutView;
       summary: WorkoutSummary;
-      /** Set when the workout was started on an earlier day and is still open. */
-      startedOn: string | null;
+      /**
+       * Set for a session of an earlier day still open: the day it was planned for, and the day it
+       * was started on the workspace's calendar, which is later for a session done late (TRN-020 v2).
+       */
+      earlier: { plannedOn: string; startedOn: string } | null;
       /** An earlier workout outranks today's session, which is then offered as a link. */
       alsoToday: ClientWorkoutView | null;
       moreToday: number;
     }
-  | { kind: 'completed'; workout: ClientWorkoutView; summary: WorkoutSummary }
+  | {
+      kind: 'completed';
+      workout: ClientWorkoutView;
+      summary: WorkoutSummary;
+      week: ProgramWeekKicker | null;
+    }
   | { kind: 'rest-day'; next: { date: string; name: string } | null }
   | { kind: 'week-not-shared' }
   | { kind: 'between-programs'; startsOn: string }
@@ -91,16 +112,24 @@ export function trainingCard(
   const openToday = day.workouts.filter((workout) => workout.status !== 'Completed');
   const earlier = upcoming.unfinishedWorkouts[0];
   if (earlier) {
+    const started = earlier.workout.startedAtUtc;
     return {
       kind: 'in-progress',
       workout: earlier.workout,
       summary: workoutSummary(earlier.workout),
-      startedOn: earlier.date,
+      earlier: {
+        plannedOn: earlier.date,
+        startedOn: started
+          ? dayInZone(started, earlier.timeZoneId ?? upcoming.timeZoneId ?? null)
+          : earlier.date,
+      },
       alsoToday: openToday[0] ?? null,
       moreToday: Math.max(0, openToday.length - 1),
     };
   }
 
+  const active = upcoming.todayCoverage?.activeBlock;
+  const week = active ? { number: active.weekNumber, count: active.weekCount } : null;
   const primary = openToday[0];
   if (primary) {
     const moreToday = openToday.length - 1;
@@ -109,11 +138,11 @@ export function trainingCard(
           kind: 'in-progress',
           workout: primary,
           summary: workoutSummary(primary),
-          startedOn: null,
+          earlier: null,
           alsoToday: null,
           moreToday,
         }
-      : { kind: 'scheduled', workout: primary, summary: workoutSummary(primary), moreToday };
+      : { kind: 'scheduled', workout: primary, summary: workoutSummary(primary), moreToday, week };
   }
 
   if (day.workouts.length > 0) {
@@ -121,6 +150,7 @@ export function trainingCard(
       kind: 'completed',
       workout: day.workouts[0],
       summary: workoutSummary(day.workouts[0]),
+      week,
     };
   }
 
@@ -259,6 +289,11 @@ export function checkInRow(
       },
     };
   }
+  // Whether one was sent today needs the workspace's date: until Today has it, the row waits rather
+  // than saying "Nothing due" for a moment before "Sent today" (audit A9, CLIENT-17).
+  if (today === null && items.some((item) => item.response?.submittedDate)) {
+    return { kind: 'loading' };
+  }
   const sentToday =
     today === null ? undefined : items.find((item) => item.response?.submittedDate === today);
   if (sentToday?.response?.status === 'Submitted') {
@@ -277,8 +312,9 @@ export function checkInRow(
 }
 
 /**
- * The coach's latest message. Shown only when a conversation has a message; a closed conversation
- * shows its reason instead of the text, and messaging outside the plan shows nothing at all.
+ * The coach's latest message (M1): the newest one the coach wrote, even after the client replied
+ * (audit CLIENT-13). Shown only when the coach has written something still there; a closed
+ * conversation shows its reason instead of the text, and messaging outside the plan shows nothing.
  */
 export function coachMessage(
   decision: FeatureAccessDecision | null,
@@ -288,7 +324,9 @@ export function coachMessage(
   if (read.kind === 'loading') return { kind: 'loading' };
   if (read.kind !== 'ok') return read.kind === 'failed' ? { kind: 'failed' } : { kind: 'hidden' };
   const conversation = read.value;
-  return conversation?.lastMessage ? { kind: 'ready', value: conversation } : { kind: 'hidden' };
+  return conversation?.latestFromCounterpart
+    ? { kind: 'ready', value: conversation }
+    : { kind: 'hidden' };
 }
 
 /** Why a feature is closed, short enough for a row's status line. */
@@ -315,12 +353,4 @@ export function rowAccessLabel(reason: FeatureAccessReason): string {
     default:
       return $localize`Not available right now`;
   }
-}
-
-/** Date-only strings compare as calendar dates; an instant is compared by its device-local date. */
-export function localDateOf(instant: string): string {
-  const value = new Date(instant);
-  const month = `${value.getMonth() + 1}`.padStart(2, '0');
-  const day = `${value.getDate()}`.padStart(2, '0');
-  return `${value.getFullYear()}-${month}-${day}`;
 }

@@ -148,7 +148,10 @@
                         @for (day of story.days; track day.date) {
                           <li class="day" [attr.data-mark]="day.mark" [class.today]="day.isToday">
                             <span class="bar" aria-hidden="true"></span>
-                            <span class="day-label" aria-hidden="true">{{ day.label }}</span>
+                            <span class="day-label" aria-hidden="true"
+                              ><span class="day-short">{{ day.label }}</span
+                              ><span class="day-narrow">{{ day.narrowLabel }}</span></span
+                            >
                             <span class="tb-visually-hidden"
                               >{{ day.longLabel }}: {{ day.state }}</span
                             >

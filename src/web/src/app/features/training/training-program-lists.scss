@@ -14,10 +14,19 @@
   font-size: 1.0625rem;
   font-weight: 600;
 }
+.block-title {
+  display: grid;
+  gap: 2px;
+}
 .block-meta,
+.block-dates,
 .empty-line {
   color: var(--tb-muted);
   font-size: 0.875rem;
+}
+.block-dates {
+  font-variant-numeric: tabular-nums;
+  margin: 0;
 }
 
 .sessions,
@@ -91,10 +100,22 @@ button.week-row:hover {
   overflow-wrap: anywhere;
 }
 .session-day,
-.session-meta {
+.session-meta,
+.session-late {
   color: var(--tb-muted);
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
+}
+// "Do it now" and why it was refused sit under the session's words, the tag staying where it is.
+.do-now,
+.do-now-problem {
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+.do-now-problem {
+  color: var(--tb-danger);
+  font-size: 0.875rem;
+  margin: 0;
 }
 .session-tag {
   border-radius: 999px;

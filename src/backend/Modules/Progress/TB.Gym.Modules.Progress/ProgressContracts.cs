@@ -220,13 +220,28 @@ public sealed record BodyweightHistoryItemView(
     DateTimeOffset SupersededAtUtc);
 
 /// <summary>
+/// One move of a weigh-in to the day it was really taken (void-and-replace, PRG-011): the day it left,
+/// the day it arrived, why, who moved it and when.
+/// </summary>
+public sealed record BodyweightMoveView(
+    Guid FromObservationId,
+    DateOnly FromDate,
+    DateOnly ToDate,
+    string Reason,
+    Guid MovedByUserId,
+    DateTimeOffset MovedAtUtc);
+
+/// <summary>
 /// The audit view of one observation. It deliberately still resolves a voided observation, with the
-/// void record attached, because a correction has to be visible to be auditable.
+/// void record attached, because a correction has to be visible to be auditable. A replacement carries
+/// the trail of what it replaced (audit CLIENT-14): <c>Moves</c> lists each move that brought it to its
+/// day, newest first, and <c>PreviousValues</c> holds the corrections made before those moves too.
 /// </summary>
 public sealed record BodyweightHistoryView(
     BodyweightObservationView Current,
     IReadOnlyList<BodyweightHistoryItemView> PreviousValues,
-    BodyweightVoidView? Void = null);
+    BodyweightVoidView? Void,
+    IReadOnlyList<BodyweightMoveView> Moves);
 
 public sealed record RecordBodyMeasurementRequest(
     MeasurementType MeasurementType,

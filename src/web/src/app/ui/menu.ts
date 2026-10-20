@@ -44,6 +44,7 @@ let nextId = 0;
         <button
           #trigger
           class="tb-icon-button trigger-icon"
+          [class.trigger-touch]="size() === 'touch'"
           type="button"
           [disabled]="disabled()"
           [attr.aria-label]="label()"
@@ -104,6 +105,11 @@ let nextId = 0;
     .trigger-icon {
       block-size: 2.25rem;
       inline-size: 2.25rem;
+    }
+
+    .trigger-icon.trigger-touch {
+      block-size: 2.75rem;
+      inline-size: 2.75rem;
     }
 
     .chip {
@@ -243,6 +249,8 @@ export class UiMenu {
   readonly align = input<'start' | 'end'>('end');
   /** `chip` draws the button as a filter pill (the exercise library's filters), filled when `selected`. */
   readonly variant = input<'button' | 'chip'>('button');
+  /** `touch` makes an icon button the 44 px a client's thumb needs (plan §2 rule 6, CLIENT-7). */
+  readonly size = input<'default' | 'touch'>('default');
   readonly selected = input(false);
   /** The button cannot open the menu, as while the change it offers is still being saved. */
   readonly disabled = input(false);

@@ -75,6 +75,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     lastMessage: null,
     isReadOnly: false,
     isAwaitingReply: false,
+    latestFromCounterpart: null,
     ...overrides,
   };
 }

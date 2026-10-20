@@ -85,6 +85,11 @@ function knownCodeMessage(code: string, error: HttpErrorResponse): string | null
       return $localize`That entry was already replaced by a correction. Work from the replacement instead.`;
     case 'workspace_read_only':
       return $localize`Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.`;
+    // Starting a session (TRN-020 v2): a missed one only while its program runs, a later one on its day.
+    case 'program_ended':
+      return $localize`This program has ended, so its sessions can no longer be done.`;
+    case 'session_not_due':
+      return $localize`This session isn’t due yet. It opens on its day.`;
     default:
       return null;
   }

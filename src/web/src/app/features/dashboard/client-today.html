@@ -121,7 +121,13 @@
       } @else if (current) {
         @switch (current.kind) {
           @case ('scheduled') {
-            <p class="today-state today-state-accent" i18n>Scheduled today</p>
+            @if (current.week; as week) {
+              <p class="today-state today-state-accent" i18n>
+                Week {{ week.number }} of {{ week.count }} · Today
+              </p>
+            } @else {
+              <p class="today-state today-state-accent" i18n>Scheduled today</p>
+            }
             <h2 id="today-training-heading" #trainingHeading tabindex="-1" dir="auto">
               {{ current.workout.name }}
             </h2>
@@ -160,8 +166,23 @@
             }
           }
           @case ('in-progress') {
-            @if (current.startedOn) {
-              <p class="today-state" i18n>Started {{ current.startedOn | date: 'EEE d MMM' }}</p>
+            @if (current.earlier; as earlier) {
+              @if (earlier.startedOn === earlier.plannedOn) {
+                <p class="today-state" i18n>
+                  Started {{ earlier.startedOn + 'T12:00:00' | date: 'EEE d MMM' }}
+                </p>
+              } @else if (earlier.startedOn === localDate()) {
+                <!-- A missed session done late (TRN-020 v2): the day it was planned for, then today. -->
+                <p class="today-state" i18n>
+                  Planned for {{ earlier.plannedOn + 'T12:00:00' | date: 'EEE d MMM' }} · started
+                  today
+                </p>
+              } @else {
+                <p class="today-state" i18n>
+                  Planned for {{ earlier.plannedOn + 'T12:00:00' | date: 'EEE d MMM' }} · started
+                  {{ earlier.startedOn + 'T12:00:00' | date: 'EEE d MMM' }}
+                </p>
+              }
             } @else {
               <p class="today-state" i18n>
                 In progress ·
@@ -219,7 +240,13 @@
           }
           @case ('completed') {
             <div class="today-state-row">
-              <p class="today-state" i18n>Completed today</p>
+              @if (current.week; as week) {
+                <p class="today-state" i18n>
+                  Week {{ week.number }} of {{ week.count }} · Completed today
+                </p>
+              } @else {
+                <p class="today-state" i18n>Completed today</p>
+              }
               <app-status-label label="Completed" i18n-label tone="success" marker="check" />
             </div>
             <h2 id="today-training-heading" #trainingHeading tabindex="-1" dir="auto">
@@ -297,7 +324,7 @@
   }
 
   <app-today-also [today]="localDate()" />
-  <app-today-coach-message [today]="localDate()" />
+  <app-today-coach-message [today]="localDate()" [timeZone]="timeZone()" />
   <!-- Only where the browser can install the app, never in the app itself, and gone for a month once dismissed. -->
   <app-install-card variant="banner" />
 </div>

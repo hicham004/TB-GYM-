@@ -321,7 +321,17 @@ export type BodyweightHistorySpanView = {
 export type BodyweightHistoryView = {
   current: BodyweightObservationView;
   previousValues: Array<BodyweightHistoryItemView>;
-  void?: null | BodyweightVoidView;
+  void: null | BodyweightVoidView;
+  moves: Array<BodyweightMoveView>;
+};
+
+export type BodyweightMoveView = {
+  fromObservationId: string;
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  movedByUserId: string;
+  movedAtUtc: string;
 };
 
 export type BodyweightObservationStatus = 'Active' | 'Voided';
@@ -855,6 +865,8 @@ export type ClientProgramSessionView = {
   workoutExecutionId: null | string;
   exerciseCount: number | string;
   setCount: number | string;
+  startedOn?: null | string;
+  isLate?: boolean;
 };
 
 export type ClientProgramSummaryResult = {
@@ -1188,6 +1200,8 @@ export type CoachProgramSessionView = {
   workoutExecutionId: null | string;
   exerciseCount: number | string;
   setCount: number | string;
+  startedOn?: null | string;
+  isLate?: boolean;
 };
 
 export type CoachProgramWeekView = {
@@ -1378,6 +1392,7 @@ export type ConversationSummary = {
   lastMessage: null | ConversationMessagePreview;
   isReadOnly?: boolean;
   isAwaitingReply?: boolean;
+  latestFromCounterpart?: null | ConversationMessagePreview;
 };
 
 export type CookingFactorKind = 'Yield' | 'Retention';

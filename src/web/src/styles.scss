@@ -75,6 +75,9 @@ app-coach-workout {
 html {
   background: var(--tb-bg);
   color: var(--tb-ink);
+  // The client's tab bar sticks to the bottom: a control reached by keyboard or scrolled into view stops
+  // clear of it, not under it (audit CLIENT-7). The bar publishes its height; without it there is none.
+  scroll-padding-block-end: var(--tb-client-tabs-block-size, 0px);
 }
 
 body {

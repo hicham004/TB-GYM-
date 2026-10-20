@@ -8,6 +8,7 @@ import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import type { ClientTrainingDayResult } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
+import { MessagingRealtimeService } from '../../core/messaging/messaging-realtime.service';
 import { NotificationStore } from '../../core/notifications/notification.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -102,6 +103,7 @@ async function render(
         provide: NotificationStore,
         useValue: { unread: signal(options.unread ?? 0), isAvailable: signal(true) },
       },
+      { provide: MessagingRealtimeService, useValue: { listRefreshRequests: signal(0) } },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(ClientToday);
@@ -147,7 +149,7 @@ describe('ClientToday', () => {
   it('shows the scheduled session with one dominant action that records nothing', async () => {
     const { host, read } = await render();
 
-    expect(read()).toContain('Scheduled today');
+    expect(read()).toContain('Week 4 of 8 · Today');
     expect(host.querySelector('#today-training-heading')?.textContent?.trim()).toBe(
       'Upper Body — Strength B',
     );
@@ -192,6 +194,33 @@ describe('ClientToday', () => {
     );
   });
 
+  it('says a missed session started late was planned for its day and started today', async () => {
+    const late = workout({
+      sessionId: 'session-a',
+      name: 'Lower A',
+      status: 'InProgress',
+      workoutExecutionId: 'x',
+      // 09:00 in Beirut on the workspace's today, Sun 20 Sep.
+      startedAtUtc: '2026-09-20T06:00:00.000Z',
+    });
+    const { read } = await render({
+      day: day([]),
+      upcoming: upcoming({
+        timeZoneId: 'Asia/Beirut',
+        unfinishedWorkouts: [{ date: '2026-09-17', workout: late, hasMoreNotes: false }],
+      }),
+    });
+
+    expect(read()).toContain('Planned for Thu 17 Sep · started today');
+    expect(read()).not.toContain('Started Thu 17 Sep');
+  });
+
+  it('says Scheduled today when no program week covers today', async () => {
+    const { read } = await render({ upcoming: upcoming({ todayCoverage: null }) });
+    expect(read()).toContain('Scheduled today');
+    expect(read()).not.toContain('Week 4 of 8');
+  });
+
   it('counts the logged sets of a session in progress today', async () => {
     const started = workout({
       status: 'InProgress',
@@ -209,7 +238,7 @@ describe('ClientToday', () => {
       day: day([workout({ status: 'Completed', workoutExecutionId: 'execution-1' })]),
     });
 
-    expect(read()).toContain('Completed today');
+    expect(read()).toContain('Week 4 of 8 · Completed today');
     const view = host.querySelector('a.today-action');
     expect(view?.textContent?.trim()).toBe('View workout');
     expect(view?.classList).toContain('tb-button--outlined');
@@ -340,7 +369,7 @@ describe('ClientToday', () => {
     press(host, 'Retry');
     await settle(fixture);
     expect(api.getMyTrainingToday).toHaveBeenCalledTimes(2);
-    expect(read()).toContain('Scheduled today');
+    expect(read()).toContain('Week 4 of 8 · Today');
     expect(read()).toContain('Sunday 20 September');
   });
 

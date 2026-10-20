@@ -20,11 +20,13 @@ export interface AvatarStackPerson {
     }
   `,
   styles: `
+    /* Sized in rem with the initials inside, so larger text grows the faces instead of crowding letters
+       into each other (UIQ-3); a row that cannot hold them wraps rather than squeezing them. */
     :host {
       align-items: center;
       display: inline-flex;
+      flex: none;
       isolation: isolate;
-      min-inline-size: 0;
       vertical-align: middle;
     }
 
@@ -33,7 +35,7 @@ export interface AvatarStackPerson {
       border: 2px solid var(--tb-surface);
       box-sizing: border-box;
       flex: none;
-      margin-inline-start: -8px;
+      margin-inline-start: -0.5rem;
     }
 
     app-avatar:first-child {
@@ -42,20 +44,20 @@ export interface AvatarStackPerson {
 
     /* Existing Avatar presets are 40px; stacking should not enlarge the row. */
     app-avatar {
-      --avatar-size: 32px;
+      --avatar-size: 2rem;
     }
 
     .overflow {
       align-items: center;
       background: var(--tb-surface-2);
-      block-size: 32px;
+      block-size: 2rem;
       border-radius: 50%;
       color: var(--tb-ink);
       display: inline-flex;
       font-size: var(--text-metadata-size);
       font-variant-numeric: tabular-nums;
       font-weight: 600;
-      inline-size: 32px;
+      inline-size: 2rem;
       justify-content: center;
     }
   `,

@@ -139,7 +139,10 @@ of the implemented R1.3 screens before production rollout.
   licensed images, never AI-made people), and no former client. Add each when its screen is built.
 - **Planned workout duration (from R2.1).** Training sessions do not store one, so the Today hero
   shows exercise and set counts. Add a real planned duration to the training contract before showing
-  an estimate; do not infer minutes from set count.
+  an estimate; do not infer minutes from set count. Still open after audit A9 (2026-10-20), which built
+  the hero's "Week 4 of 6" kicker and left the duration for the owner: it means a new field coaches fill
+  in for every session (recommended: an optional "Planned time" in the builder, copied to the client's
+  program and shown as a chip only when set).
 - **Demo freshness.** Dates are relative to the day the command runs, so the data ages. Rebuild it
   before every screenshot review or demo. Since 2026-10-04 (owner's decision for R3.6) the demo has its
   own database, `tbgym_demo` in the Docker PostgreSQL, because the development database `tbgym` holds
@@ -344,7 +347,9 @@ of the implemented R1.3 screens before production rollout.
     comparison.
 - **Doing a missed session later (from R2.5b).** The API lets a client start a past session while
   its block is active, but no screen offers it: the Training page marks it missed. Offering it is an
-  owner decision (TRN-020).
+  owner decision (TRN-020). Built in audit A9 (2026-10-20, the owner's decision of 2026-10-19): "Do it
+  now" on a missed session of the program running now; it then reads "Done late" for the client and the
+  coach (TRN-020 v2).
 - **A finished workout from an earlier day (from R2.5b).** History rows show sets, volume, time and
   records but open nothing; the player opens only today's and unfinished workouts.
 - **Weight unit in the workout player (from R2.5c).** Me's saved unit reaches weigh-ins and
@@ -1894,6 +1899,10 @@ limited to the coach's assigned clients.
   button.
 - A **week strip** with completion rings.
 - A nutrition macro ring, a check-in-due card and the coach's latest message.
+- Audit A9 (2026-10-20): the hero's kicker names the program's week ("Week 4 of 6 · Today"; the duration
+  waits for a planned time, see Follow-ups); the coach card shows the coach's newest message even after
+  the client replied, read again when the live channel says a conversation changed, its day judged on
+  the workspace's calendar; a sent check-in reads "Sent today · Waiting for your coach", as on Check-ins.
 
 **M2. Workout player (full rebuild of the logger)**
 - One exercise at a time, with a swipe or Next.
@@ -1915,6 +1924,10 @@ limited to the coach's assigned clients.
   follow with Done, Missed, Today or In progress; other weeks sit behind disclosures, and a week the
   client cannot see yet says when it opens. Finished workouts list sets, volume, time and their PRs,
   four at first. States and records come from the server (TRN-019, TRN-020).
+- Audit A9 (2026-10-20): the week in focus says its number and days ("Week 3 · Sun 18 Oct – Sat 24 Oct"),
+  since a program's week can start on any weekday while Today's strip is the calendar week; a missed
+  session of the running program offers "Do it now" (asked once, then the player), and a session done
+  late reads "Done late" with the day it was done, as the coach's timeline does (TRN-020 v2).
 
 **M4. Nutrition day**
 - A **day strip** instead of a date input.
@@ -1958,6 +1971,10 @@ limited to the coach's assigned clients.
   longer see it. A coach sees the same tabs inside the client's Progress, with the client named, and a short
   "How the trend is worked out" in words (method, version, settings and the days it covers) that a client
   never sees.
+- Audit A9 (2026-10-20): See changes on a moved weigh-in lists "Moved from Mon 19 Oct" with its reason and the
+  corrections made before the move (PRG-011); the dashboard's span ends on its last day; Manage, View all and
+  the entries link, and the entries' row menus, are 44 px targets; and the client's pages keep scroll padding
+  the height of the tab bar, so a control reached by keyboard stops above it.
 
 **M6. Check-in**
 - A step-by-step form (one question per screen, a progress bar), photo capture, and a

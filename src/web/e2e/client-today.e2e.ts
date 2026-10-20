@@ -215,6 +215,16 @@ const checkIns = {
     },
   ],
 };
+const coachMessage = {
+  messageId: 'message',
+  sequence: 12,
+  senderUserId: 'hicham',
+  isFromCaller: false,
+  sentAtUtc: '2026-09-20T11:20:00Z',
+  body: 'Thanks for the detail, Maya, especially about the shoulder. I’m looking at today’s session now and will come back to you within the hour.',
+  isDeleted: false,
+  deletionKind: null,
+};
 const conversations = {
   items: [
     {
@@ -232,16 +242,9 @@ const conversations = {
       isAvailable: true,
       accessReason: 'Granted',
       isReadOnly: false,
-      lastMessage: {
-        messageId: 'message',
-        sequence: 12,
-        senderUserId: 'hicham',
-        isFromCaller: false,
-        sentAtUtc: '2026-09-20T11:20:00Z',
-        body: 'Thanks for the detail, Maya, especially about the shoulder. I’m looking at today’s session now and will come back to you within the hour.',
-        isDeleted: false,
-        deletionKind: null,
-      },
+      lastMessage: coachMessage,
+      // The coach's newest message, which Today shows whoever spoke last (CLIENT-13).
+      latestFromCounterpart: coachMessage,
     },
   ],
   hasMore: false,

@@ -26,6 +26,7 @@ import {
   followSaved,
   groupTitle,
   hasChanges,
+  healthPrivacy,
   INTAKE_STEPS,
   isStepDone,
   mergeSteps,
@@ -102,12 +103,7 @@ export class IntakeSteps {
   protected readonly kicker = computed(
     () => $localize`Step ${this.index() + 1}:step: of ${INTAKE_STEPS.length}:total:`,
   );
-  protected readonly privacy = computed(() => {
-    const space = this.spaceName();
-    return space
-      ? $localize`Only you, your coach and the owner of ${space}:space: can see these answers.`
-      : $localize`Only you, your coach and the owner of your coaching space can see these answers.`;
-  });
+  protected readonly privacy = computed(() => healthPrivacy(this.spaceName()));
 
   protected readonly progress = computed(() =>
     INTAKE_STEPS.map((id, position) => ({

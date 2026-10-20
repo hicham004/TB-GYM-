@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import { contrast } from '../src/app/core/theme/color';
+import { personFacing } from './axe-target-size';
 import {
   answers,
   earlierDetail,
@@ -373,8 +374,9 @@ async function expectDarkPage(page: Page): Promise<void> {
     .include('main')
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
+  // A target the sticky tab bar covers at the first scroll is judged where a person reaches it (CLIENT-7).
   expect(
-    scan.violations.map(
+    (await personFacing(page, scan.violations)).map(
       (violation) =>
         `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
     ),

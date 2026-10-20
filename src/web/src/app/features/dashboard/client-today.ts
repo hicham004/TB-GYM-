@@ -84,12 +84,15 @@ export class ClientToday {
   protected readonly planEnded = computed(() => this.renewal()?.planEnded === true);
   /** The workspace's date from `GET /api/workspace`, read only when the training read fails. */
   private readonly workspaceDate = signal<string | null>(null);
+  private readonly workspaceZone = signal<string | null>(null);
   protected readonly accessLabel = trainingReadAccessLabel;
 
   /** Today in the workspace, or null (no date at all) when neither read could say. */
   protected readonly localDate = computed(
     () => this.day()?.localDate ?? this.upcoming()?.localDate ?? this.workspaceDate(),
   );
+  /** The workspace's time zone, the calendar a message's day is read on (audit WEA-10). */
+  protected readonly timeZone = computed(() => this.upcoming()?.timeZoneId ?? this.workspaceZone());
 
   protected readonly card = computed(() => {
     const day = this.day();
@@ -154,6 +157,7 @@ export class ClientToday {
       this.weekFailed.set(false);
       this.upcoming.set(null);
       this.workspaceDate.set(null);
+      this.workspaceZone.set(null);
       this.renewal.set(null);
       if (tenant) {
         void this.load();
@@ -243,7 +247,10 @@ export class ClientToday {
     return this.scope.run('date', async (owner) => {
       try {
         const workspace = await owner.wait(firstValueFrom(this.api.getWorkspace()));
-        if (generation === this.generation) this.workspaceDate.set(workspace.currentDate);
+        if (generation === this.generation) {
+          this.workspaceDate.set(workspace.currentDate);
+          this.workspaceZone.set(workspace.timeZoneId);
+        }
       } catch {
         // No browser-clock fallback: a wrong date is worse than none.
       }
@@ -258,6 +265,7 @@ export class ClientToday {
     this.weekFailed.set(false);
     this.upcoming.set(null);
     this.workspaceDate.set(null);
+    this.workspaceZone.set(null);
     this.renewal.set(null);
     this.renewalLoading.set(false);
     this.loading.set(false);

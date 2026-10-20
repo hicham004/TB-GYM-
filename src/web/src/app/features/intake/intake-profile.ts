@@ -56,6 +56,8 @@ export class IntakeProfile extends GuardedSheets {
   readonly weightUnit = input<BodyweightUnit>('Kilogram');
   /** False for a former client, whose record is read and not changed (ADR 0027). */
   readonly editable = input(true);
+  /** The coaching space's name, for the health sheet's line on who sees the answers (CLIENT-18). */
+  readonly spaceName = input('');
 
   protected readonly groups = INTAKE_GROUPS;
   protected readonly notAdded = $localize`Not added`;

@@ -153,13 +153,31 @@
       @if (focus(); as week) {
         <section class="block" aria-labelledby="focus-heading">
           <div class="block-head">
-            <h2 id="focus-heading">
-              @if (week.isCurrent) {
-                <ng-container i18n>This week</ng-container>
-              } @else {
-                <ng-container i18n>Week {{ week.number }}</ng-container>
-              }
-            </h2>
+            <!-- The program's own week, which can start on any weekday (TRN-007), so it says its days
+                 (audit CLIENT-4): Today's strip counts the calendar week instead. -->
+            <div class="block-title">
+              <h2 id="focus-heading">
+                @if (week.isCurrent) {
+                  <ng-container i18n>This week</ng-container>
+                } @else {
+                  <ng-container i18n>Week {{ week.number }}</ng-container>
+                }
+              </h2>
+              <p class="block-dates">
+                @if (week.isCurrent) {
+                  <ng-container i18n
+                    >Week {{ week.number }} ·
+                    {{ week.startDate + 'T12:00:00' | date: 'EEE d MMM' }} –
+                    {{ week.lastDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+                  >
+                } @else {
+                  <ng-container i18n
+                    >{{ week.startDate + 'T12:00:00' | date: 'EEE d MMM' }} –
+                    {{ week.lastDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+                  >
+                }
+              </p>
+            </div>
             @if (week.visible && week.sessions.length > 0) {
               <span class="block-meta" i18n
                 >{{ week.done }} of {{ week.sessions.length }} done</span
@@ -358,6 +376,15 @@
   <app-share-sheet [facts]="shareFacts()" />
 </ng-template>
 
+<ng-template #doItNowDialog let-dialog>
+  <app-confirm
+    [message]="doItNowMessage()"
+    [confirmLabel]="doItNowConfirm"
+    [cancelLabel]="doItNowCancel"
+    (answer)="dialog.close($event)"
+  />
+</ng-template>
+
 <ng-template #weekBody let-week>
   @if (!week.visible) {
     <p class="empty-line">
@@ -389,6 +416,30 @@
                 [ngTemplateOutlet]="sessionBody"
                 [ngTemplateOutletContext]="{ $implicit: session }"
               />
+              <!-- A missed session of the program running now can still be done (TRN-020 v2). -->
+              @if (session.canDoNow) {
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  size="touch"
+                  class="do-now"
+                  [loading]="starting() === session.sessionId"
+                  [disabled]="starting() !== null"
+                  (click)="doItNow(session)"
+                >
+                  <ng-container i18n>Do it now</ng-container
+                  ><span class="tb-visually-hidden"
+                    >: <bdi>{{ session.name }}</bdi
+                    >, {{ session.date + 'T12:00:00' | date: 'EEE d MMM' }}</span
+                  >
+                </button>
+              }
+              @if (startProblem(); as problem) {
+                @if (problem.sessionId === session.sessionId) {
+                  <p class="do-now-problem" role="alert">{{ problem.message }}</p>
+                }
+              }
             </div>
           }
         </li>
@@ -422,13 +473,31 @@
       }
       · {session.setCount, plural, =1 {1 set} other {{{ session.setCount }} sets}}</span
     >
+    @if (session.isLate && session.startedOn) {
+      <span class="tb-visually-hidden">, </span>
+      <span class="session-late">
+        @if (session.state === 'Completed') {
+          <ng-container i18n
+            >Done {{ session.startedOn + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+          >
+        } @else {
+          <ng-container i18n
+            >Started {{ session.startedOn + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+          >
+        }
+      </span>
+    }
   </span>
   @if (session.state !== 'Upcoming') {
     <span class="tb-visually-hidden">, </span>
   }
   @switch (session.state) {
     @case ('Completed') {
-      <span class="session-tag tag-done" i18n>Done</span>
+      @if (session.isLate) {
+        <span class="session-tag tag-done" i18n>Done late</span>
+      } @else {
+        <span class="session-tag tag-done" i18n>Done</span>
+      }
     }
     @case ('Missed') {
       <span class="session-tag tag-missed" i18n>Missed</span>

@@ -141,6 +141,30 @@ describe('the running program in coach words', () => {
     );
   });
 
+  it('shows a session the client did late, with the day, and one started late (TRN-020 v2)', () => {
+    const week = programWeek('late', '2026-09-14', 1, ['Completed', 'InProgress', 'Completed']);
+    const late = programBlock(
+      [
+        {
+          ...week,
+          sessions: [
+            { ...week.sessions[0], startedOn: '2026-09-16', isLate: true },
+            { ...week.sessions[1], startedOn: '2026-09-17', isLate: true },
+            { ...week.sessions[2], startedOn: '2026-09-17', isLate: false },
+          ],
+        },
+      ],
+      { id: 'late', currentWeekNumber: 1 },
+    );
+
+    const sessions = blockCard(late, context).weeks[0].sessions;
+    expect(sessions.map((session) => [session.mark, session.markLabel, session.detail])).toEqual([
+      ['done', 'Done late', '4 exercises · 12 sets · done Wed 16 Sep'],
+      ['progress', 'In progress', '4 exercises · 12 sets · started Thu 17 Sep'],
+      ['done', 'Done', '4 exercises · 12 sets'],
+    ]);
+  });
+
   it('notices a workout that is open right now', () => {
     const open = programBlock(
       [programWeek('b', '2026-09-14', 1, ['Completed', 'InProgress', 'Upcoming', 'Upcoming'])],

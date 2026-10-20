@@ -149,6 +149,13 @@ test('log, correct, move and re-log a weigh-in; the history and the stored kilog
     await expect(row(dayB)).toContainText('70.4 kg');
     // The sheet fades out after the move; its backdrop would swallow the next tap.
     await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+    // The moved weigh-in carries its trail: the move and the number corrected before it (CLIENT-14).
+    await chooseRowAction(dayB, 'See changes');
+    await expect(sheet(page)).toContainText('Moved from');
+    await expect(sheet(page)).toContainText('Logged on the wrong day');
+    await expect(sheet(page)).toContainText('70.2');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
     await page.locator('[data-log-weight]').click();
     await sheet(page).locator('input[name=value]').fill('70');
     await pickDay(page, dayA);

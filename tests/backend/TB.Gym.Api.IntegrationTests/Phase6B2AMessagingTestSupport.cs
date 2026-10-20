@@ -859,7 +859,8 @@ public sealed partial class Phase6B2AMessagingTests
         DateTimeOffset? LastReadAtUtc,
         bool IsAvailable,
         string AccessReason,
-        PreviewResponse? LastMessage);
+        PreviewResponse? LastMessage,
+        PreviewResponse? LatestFromCounterpart = null);
 
     private sealed record ConversationPageResponse(
         ConversationSummaryResponse[] Items,

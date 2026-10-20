@@ -16,6 +16,23 @@ describe('Today training card', () => {
     });
   });
 
+  it('names the program’s week for today’s session and today’s finished one (UIQ-16)', () => {
+    expect(trainingCard(day([workout()]), upcoming(), false)).toMatchObject({
+      kind: 'scheduled',
+      week: { number: 4, count: 8 },
+    });
+    const done = workout({ status: 'Completed', workoutExecutionId: 'execution-1' });
+    expect(trainingCard(day([done]), upcoming(), false)).toMatchObject({
+      kind: 'completed',
+      week: { number: 4, count: 8 },
+    });
+    const uncovered = upcoming({ todayCoverage: null });
+    expect(trainingCard(day([workout()]), uncovered, false)).toMatchObject({
+      kind: 'scheduled',
+      week: null,
+    });
+  });
+
   it('continues a session started today and counts the logged sets', () => {
     const started = workout({
       workoutExecutionId: 'execution-1',
@@ -25,7 +42,7 @@ describe('Today training card', () => {
       ] as ClientWorkoutView['exercises'],
     });
     const card = trainingCard(day([started]), upcoming(), false);
-    expect(card).toMatchObject({ kind: 'in-progress', startedOn: null, alsoToday: null });
+    expect(card).toMatchObject({ kind: 'in-progress', earlier: null, alsoToday: null });
     expect(card.kind === 'in-progress' && card.summary).toEqual({
       exercises: 1,
       sets: 3,
@@ -47,9 +64,35 @@ describe('Today training card', () => {
       }),
       false,
     );
-    expect(card).toMatchObject({ kind: 'in-progress', startedOn: '2026-09-19', moreToday: 0 });
+    expect(card).toMatchObject({
+      kind: 'in-progress',
+      earlier: { plannedOn: '2026-09-19', startedOn: '2026-09-19' },
+      moreToday: 0,
+    });
     expect(card.kind === 'in-progress' && card.workout.name).toBe('Lower A');
     expect(card.kind === 'in-progress' && card.alsoToday?.name).toBe('Upper Body — Strength B');
+  });
+
+  it('tells a missed session started late by the day it was started on the workspace’s calendar', () => {
+    // Planned for Thu 17 Sep, started at 22:30 UTC on the 19th: Sun 20 Sep, 01:30, in Beirut.
+    const late = workout({
+      sessionId: 'session-a',
+      status: 'InProgress',
+      workoutExecutionId: 'x',
+      startedAtUtc: '2026-09-19T22:30:00.000Z',
+    });
+    const card = trainingCard(
+      day(),
+      upcoming({
+        timeZoneId: 'Asia/Beirut',
+        unfinishedWorkouts: [{ date: '2026-09-17', workout: late, hasMoreNotes: false }],
+      }),
+      false,
+    );
+    expect(card).toMatchObject({
+      kind: 'in-progress',
+      earlier: { plannedOn: '2026-09-17', startedOn: '2026-09-20' },
+    });
   });
 
   it('says the day is done once every session today is completed', () => {
@@ -232,6 +275,19 @@ describe('Today check-in row', () => {
     });
   });
 
+  it('waits for the workspace’s date before saying whether one was sent today', () => {
+    const sent = item('2026-09-20', {
+      status: 'Submitted',
+      submittedDate: TODAY,
+    } as CheckInAssignmentListItem['response']);
+    // Not "Nothing due" for a moment while Today is still reading its date (CLIENT-17).
+    expect(checkInRow(allowed, list(sent), null)).toEqual({ kind: 'loading' });
+    expect(checkInRow(allowed, list(), null)).toEqual({
+      kind: 'ready',
+      value: { kind: 'nothing-due' },
+    });
+  });
+
   it('says nothing is due otherwise, and the reason when closed', () => {
     expect(checkInRow(allowed, list(), TODAY)).toEqual({
       kind: 'ready',
@@ -248,10 +304,10 @@ describe('Today check-in row', () => {
 });
 
 describe('Today coach message', () => {
-  const conversation = (lastMessage: Conversation['lastMessage']) =>
-    ({ lastMessage }) as Conversation;
+  const conversation = (latestFromCounterpart: Conversation['latestFromCounterpart']) =>
+    ({ latestFromCounterpart, lastMessage: latestFromCounterpart }) as Conversation;
 
-  it('shows the latest conversation only when it has a message', () => {
+  it('shows the latest conversation only when the coach has written in it', () => {
     const message = { body: 'Hi' } as NonNullable<Conversation['lastMessage']>;
     expect(
       coachMessage(decision('Messaging'), { kind: 'ok', value: conversation(message) }),
@@ -260,6 +316,14 @@ describe('Today coach message', () => {
       kind: 'hidden',
     });
     expect(coachMessage(decision('Messaging'), { kind: 'ok', value: null })).toEqual({
+      kind: 'hidden',
+    });
+    // Only the client has written: there is nothing from the coach to show (CLIENT-13).
+    const onlyTheClient = {
+      lastMessage: { body: 'Hello?', isFromCaller: true },
+      latestFromCounterpart: null,
+    } as Conversation;
+    expect(coachMessage(decision('Messaging'), { kind: 'ok', value: onlyTheClient })).toEqual({
       kind: 'hidden',
     });
   });

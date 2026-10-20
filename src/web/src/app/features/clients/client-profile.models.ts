@@ -306,6 +306,8 @@ export interface WeekDayView {
   date: string;
   /** "Mon", and in full for assistive technology. */
   label: string;
+  /** "M": shown instead of "Mon" when the strip is too narrow for it, as at 200% text (UIQ-3). */
+  narrowLabel: string;
   longLabel: string;
   mark: DayMark;
   isToday: boolean;
@@ -333,6 +335,7 @@ export function weekStory(week: CoachWeekView, today: string, locale: string): W
     return {
       date: day.date,
       label: formatDate(day.date, 'EEE', locale),
+      narrowLabel: formatDate(day.date, 'EEEEE', locale),
       longLabel: formatDate(day.date, 'EEEE d MMMM', locale),
       mark,
       isToday: day.date === today,

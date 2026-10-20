@@ -137,6 +137,7 @@ export type {
   BodyweightHistoryItemView,
   BodyweightHistorySpanView,
   BodyweightHistoryView,
+  BodyweightMoveView,
   BodyweightObservationStatus,
   BodyweightObservationView,
   BodyweightSource,

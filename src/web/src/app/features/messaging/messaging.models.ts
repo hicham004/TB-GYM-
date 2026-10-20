@@ -66,6 +66,11 @@ export interface Conversation {
   readonly isReadOnly: boolean;
   /** The other person spoke last and the caller can still answer (MSG-022). */
   readonly isAwaitingReply: boolean;
+  /**
+   * The newest message still present that the other person wrote, whoever spoke last: what the
+   * client's Today shows as their coach's latest (audit CLIENT-13).
+   */
+  readonly latestFromCounterpart: MessagePreview | null;
 }
 
 /** The coach's inbox filters (C6, MSG-022), as the address keeps them (`?show=waiting`). */
@@ -225,6 +230,9 @@ export function mapConversation(value: ContractConversationSummary): Conversatio
     lastMessage: value.lastMessage ? mapPreview(value.lastMessage) : null,
     isReadOnly: value.isReadOnly ?? false,
     isAwaitingReply: value.isAwaitingReply ?? false,
+    latestFromCounterpart: value.latestFromCounterpart
+      ? mapPreview(value.latestFromCounterpart)
+      : null,
   };
 }
 

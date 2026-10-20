@@ -1,12 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
+import { personFacing } from '../axe-target-size';
 import { ACCOUNTS, api, expect, memberships, requireLive, signIn, test } from './support';
 
 /**
  * Accessibility sweep (full audit, October 2026): axe on the main coach and client routes of the
  * live app, at phone and desktop width, asserting zero WCAG 2.0 to 2.2 A/AA violations. The routes
  * that need an id (a client's record, a program, a meal plan) are read from the API, so the sweep
- * follows a rebuilt demo. A violation found here is a real defect: it stays failing.
+ * follows a rebuilt demo. A violation found here is a real defect: it stays failing. A target the
+ * client's sticky tab bar covers at the first scroll is judged where a person reaches it (CLIENT-7).
  */
 requireLive();
 
@@ -64,7 +66,7 @@ async function settled(page: Page): Promise<void> {
 /** Every violation on the page, one line each, so a failure names the rule and its first targets. */
 async function violations(page: Page): Promise<string[]> {
   const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  return result.violations.map(
+  return (await personFacing(page, result.violations)).map(
     (violation) =>
       `${violation.id} (${violation.nodes.length}): ${violation.nodes
         .slice(0, 3)

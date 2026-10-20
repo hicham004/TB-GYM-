@@ -48,7 +48,7 @@ export function programView(
     localDate: PROGRAM_TODAY,
     nextProgramStartDate: null,
     sessionStateRuleKey: 'WorkoutThenScheduledDate',
-    sessionStateRuleVersion: 1,
+    sessionStateRuleVersion: 2,
     program: {
       id: 'block-1',
       name: 'Strength Foundations',

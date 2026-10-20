@@ -368,6 +368,8 @@ describe('this week', () => {
       'Sat',
       'Sun',
     ]);
+    // One letter each where the strip is too narrow for "Mon", as at 200% text on a phone (UIQ-3).
+    expect(story.days.map((day) => day.narrowLabel).join('')).toBe('MTWTFSS');
     expect(story.days.map((day) => day.mark)).toEqual([
       'done',
       'rest',
