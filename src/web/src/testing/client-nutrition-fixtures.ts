@@ -15,7 +15,8 @@ export { NOW, TODAY, workspace } from './intake-fixtures';
  * The coach's Nutrition tab for Rana Haddad (R5.3d), read on Sat 10 Oct 2026 in Asia/Beirut: a
  * 70 kg, 168 cm woman of 30 (born 2 April 1996) with a desk job, steps from her intake, and targets
  * worked out the day before. The numbers are the server's: BMR 1,444, PAL 1.7, TDEE 2,454.8, then 300
- * below that, 140 g of protein and 25 % of calories from fat.
+ * below that, 140 g of protein and 25 % of calories from fat. A6 adds the coach's own macros over them
+ * and a plan the coach stopped.
  */
 
 export const CLIENT_ID = 'client-1';
@@ -108,6 +109,37 @@ export function earlierRecord(): NutritionCalculationRecord {
   });
 }
 
+/**
+ * The coach's own macros over the latest calculation, set on Sat 10 Oct (INV-2): 150 g protein,
+ * 230 g carbs and 60 g fat make 2,060 calories, 394.8 under the same TDEE.
+ */
+export function adjustedRecord(
+  overrides: Partial<NutritionCalculationRecord> = {},
+): NutritionCalculationRecord {
+  return calculationRecord({
+    result: calculationView({
+      id: 'calc-3',
+      coachGoalAdjustment: -394.8,
+      calorieTarget: 2060,
+      proteinGrams: 150,
+      carbohydrateGrams: 230,
+      fatGrams: 60,
+    }),
+    calculatedAtUtc: '2026-10-10T07:15:00Z',
+    adjustment: {
+      overrideId: 'override-1',
+      reason: 'More protein while she cuts',
+      adjustedAtUtc: '2026-10-10T07:15:00Z',
+      adjustedFromCalculationId: 'calc-2',
+      fromCalorieTarget: 2154.8,
+      fromProteinGrams: 140,
+      fromCarbohydrateGrams: 264.025,
+      fromFatGrams: 59.855556,
+    },
+    ...overrides,
+  });
+}
+
 /** Spring cut, 14 days from Mon 5 Oct, assigned with the calculation above. */
 export function clientPlan(
   overrides: Partial<ClientNutritionPlanSummary> = {},
@@ -128,6 +160,23 @@ export function clientPlan(
     calculationSnapshotId: 'calc-2',
     ...overrides,
   };
+}
+
+/** A plan the coach stopped on Sun 4 Oct, the day after it began, and why (NCM-1). */
+export function stoppedPlan(
+  overrides: Partial<ClientNutritionPlanSummary> = {},
+): ClientNutritionPlanSummary {
+  return clientPlan({
+    id: 'cplan-0',
+    startDate: '2026-10-03',
+    endDateExclusive: '2026-10-10',
+    status: 'Cancelled',
+    version: 2,
+    mealPlanName: 'Lean bulk',
+    stoppedAtUtc: '2026-10-04T06:00:00Z',
+    stopReason: 'Assigned to the wrong client',
+    ...overrides,
+  });
 }
 
 export function allergens(...codes: ClientAllergensView['codes']): ClientAllergensView {

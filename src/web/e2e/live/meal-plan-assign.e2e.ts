@@ -5,9 +5,9 @@ import { ACCOUNTS, api, expect, memberships, requireLive, LIVE_URL, signIn, test
  * A meal plan from the library to a client's phone: Lea publishes a 7-day plan made of a published demo
  * recipe (API, unique name), picks one of her clients whose Nutrition still has a free week, works the
  * client's targets out in the Nutrition tab's sheet, assigns the plan from the first free day through
- * the calendar, and checks the record and the client's own copy through the API. The plan is cancelled
- * at the end (an audited coach operation, NUT-011), so the dates are free again and the spec can run
- * again on the same database.
+ * the calendar, and checks the record and the client's own copy through the API. Then she stops it from
+ * the plan card or the coming plan's row with a reason (NCM-1, NUT-011): the plan list shows it stopped
+ * with that reason and the dates take the plan again, so the spec can run again on the same database.
  */
 requireLive();
 
@@ -32,6 +32,8 @@ interface ClientPlan {
   endDateExclusive: string;
   version: number | string;
   mealPlanName: string;
+  stoppedAtUtc?: string | null;
+  stopReason?: string | null;
 }
 
 interface Recipe {
@@ -110,7 +112,7 @@ const contextOptions = { baseURL: LIVE_URL, locale: 'en-US', timezoneId: 'Asia/B
 test.describe('meal plan assignment live', () => {
   test.setTimeout(240_000);
 
-  test('publish a plan, work out targets, assign it on free dates, then cancel it', async ({
+  test('publish a plan, work out targets, assign it on free dates, then stop it from the screen', async ({
     browser,
   }) => {
     const coachContext = await browser.newContext({
@@ -294,6 +296,62 @@ test.describe('meal plan assignment live', () => {
         },
       });
       expect(overlap.status).toBe(409);
+
+      // Stop it from the screen (NCM-1): the plan card when it is the one running or next, otherwise
+      // its row among the other meal plans. Stopping asks why and is one way.
+      const reason = `Live spec ${stamp}: assigned on the wrong dates.`;
+      await lea.reload();
+      const planCard = lea.locator('[data-card="plan"]');
+      await expect(planCard).toContainText(planName, { timeout: 20_000 });
+      const current = planCard.locator('[data-current-plan]');
+      if ((await current.count()) > 0 && (await current.innerText()).includes(planName)) {
+        await current.getByRole('button', { name: 'Stop this meal plan' }).click();
+      } else {
+        await planCard.locator('[data-earlier-plans] summary').click();
+        await planCard.getByRole('button', { name: `Stop ${planName}` }).click();
+      }
+      const stopSheet = lea.getByRole('dialog').first();
+      await expect(stopSheet).toContainText(`Stop ${client.firstName}’s meal plan`);
+      await expect(stopSheet).toContainText('You can’t undo this.');
+      // No reason, nothing sent.
+      await stopSheet.getByRole('button', { name: 'Stop meal plan' }).click();
+      await expect(stopSheet).toContainText('Say why, so it is on record.');
+      await stopSheet.getByLabel('Why are you stopping it?').fill(reason);
+      await stopSheet.getByRole('button', { name: 'Stop meal plan' }).click();
+      await expect(lea.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
+      await expect(lea.locator('app-toast-host, .tb-toast-host')).toContainText(
+        `${planName} stopped. Its days are free for another meal plan.`,
+      );
+
+      // The page and the record agree: stopped, with the reason, and the dates free again.
+      const others = planCard.locator('details[data-earlier-plans]');
+      if (!(await others.evaluate((node) => (node as HTMLDetailsElement).open))) {
+        await others.locator('summary').click();
+      }
+      const stoppedRow = planCard.locator('li', { hasText: planName });
+      await expect(stoppedRow.locator('[data-stop-reason]')).toHaveText(`Stopped today: ${reason}`);
+      const afterStop = await api<ClientPlan[]>(
+        lea,
+        'GET',
+        `/api/nutrition/clients/${clientId}/plans`,
+        { tenantId },
+      );
+      const stopped = afterStop.body.find((plan) => plan.id === assignedPlanId)!;
+      expect(stopped.status).toBe('Cancelled');
+      expect(stopped.stopReason).toBe(reason);
+      expect(stopped.stoppedAtUtc).toBeTruthy();
+      const again = await api<ClientPlan>(lea, 'POST', `/api/nutrition/clients/${clientId}/plans`, {
+        tenantId,
+        body: {
+          mealPlanTemplateVersionId: publishedPlan.body.versionId,
+          enrollmentId: cover.id,
+          calculationSnapshotId: calculations.body[0].result.id,
+          startDate: start,
+          acknowledgeAllergenWarnings: true,
+        },
+      });
+      expect(again.status, JSON.stringify(again.body)).toBe(200);
+      assignedPlanId = again.body.id;
     } finally {
       // Free the dates again: cancel is one way and needs a reason and the row version.
       if (assignedPlanId) {
@@ -304,17 +362,19 @@ test.describe('meal plan assignment live', () => {
           { tenantId },
         );
         const plan = current.body.find((item) => item.id === assignedPlanId)!;
-        const cancelled = await api<ClientPlan>(
-          lea,
-          'POST',
-          `/api/nutrition/clients/${clientId}/plans/${assignedPlanId}/cancel`,
-          {
-            tenantId,
-            body: { reason: 'Live spec: freeing the dates again.', version: plan.version },
-          },
-        );
-        expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
-        expect(cancelled.body.status).toBe('Cancelled');
+        if (plan.status === 'Active') {
+          const cancelled = await api<ClientPlan>(
+            lea,
+            'POST',
+            `/api/nutrition/clients/${clientId}/plans/${assignedPlanId}/cancel`,
+            {
+              tenantId,
+              body: { reason: 'Live spec: freeing the dates again.', version: plan.version },
+            },
+          );
+          expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
+          expect(cancelled.body.status).toBe('Cancelled');
+        }
       }
     }
 

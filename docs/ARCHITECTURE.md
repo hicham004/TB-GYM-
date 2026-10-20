@@ -154,6 +154,11 @@ own active plan (one grant at a time or the day's photos in one batch, the same 
 photos no version names 48 hours after upload (`RetireUnusedRecipePhotosAsync`), and a save stops taking
 such an upload at 47 hours, so the sweep never races a save (MED-014). Recipe versions gain optional prep
 and cook minutes.
+A6 (2026-10-20): a coach's own macros are a `MacroOverrideAudit` plus a new calculation snapshot that
+names it (`MacroOverrideAuditId`), so a plan's targets stay one snapshot reference and a plan assigned
+before keeps its own; the plan list reads a stop's time and reason from `PlanLifecycleEvents`; the USDA
+adapter turns a transport failure, a timeout or an answer that is not its JSON into its `usda_*` failure
+codes; and every nutrition route that names a client answers 404 for one not in the workspace (SEC-8).
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

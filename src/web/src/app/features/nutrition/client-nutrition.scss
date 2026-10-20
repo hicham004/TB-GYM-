@@ -55,6 +55,22 @@
   margin: 0;
 }
 
+.head-actions,
+.plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.plan-actions {
+  margin-block-start: 0.5rem;
+}
+
+// A stopped plan's why, from the coach who stopped it (NCM-1).
+.stop-reason {
+  white-space: pre-line;
+}
+
 .panel-body {
   display: flex;
   flex-direction: column;

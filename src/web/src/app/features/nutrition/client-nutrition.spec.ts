@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  adjustedRecord,
   allergens,
   calculationRecord,
   calculationView,
@@ -13,11 +14,12 @@ import {
   earlierRecord,
   profile,
   publishedPlans,
+  stoppedPlan,
   TODAY,
   workspace,
 } from '../../../testing/client-nutrition-fixtures';
 import { enrollment, plansOverview } from '../../../testing/client-service-fixtures';
-import { press, settle, tick } from '../../../testing/dom';
+import { fill, press, settle, tick } from '../../../testing/dom';
 import { mayaWeighIns, progressView } from '../../../testing/progress-fixtures';
 import type { ClientCommercialOverview, CoachClientDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -520,6 +522,168 @@ describe('A client’s Nutrition tab', () => {
       await settle(fixture);
       await settle(fixture);
       expect(dialog()).toBeNull();
+    });
+  });
+
+  describe('the coach’s own macros (INV-2)', () => {
+    it('offers Adjust macros once targets exist, never before', async () => {
+      const { host } = await render();
+      expect(textOf(card(host, 'targets').querySelector('.head-actions'))).toBe(
+        'Adjust macros Work out again',
+      );
+
+      TestBed.resetTestingModule();
+      const empty = await render({ api: { calculations: vi.fn(() => of([])) } });
+      expect(empty.host.querySelector('[data-adjust]')).toBeNull();
+    });
+
+    it('says when the latest targets are the coach’s own, and why', async () => {
+      const { host } = await render({
+        api: {
+          calculations: vi.fn(() => of([adjustedRecord(), calculationRecord(), earlierRecord()])),
+        },
+      });
+
+      const targets = card(host, 'targets');
+      expect(textOf(targets.querySelector('[data-worked-on]'))).toBe('Your macros, set today');
+      expect(textOf(targets.querySelector('.calories'))).toBe('2,060 calories a day');
+      expect(textOf(targets.querySelector('[data-why]'))).toBe(
+        'Why you changed them More protein while she cuts',
+      );
+      const step = (name: string) =>
+        [`[data-step="${name}"] dt`, `[data-step="${name}"] dd`].map((selector) =>
+          textOf(targets.querySelector(selector)),
+        );
+      expect(step('before')).toEqual(['The targets you changed', '2,155']);
+      expect(step('yours')).toEqual([
+        'Your macros: 150 g protein, 230 g carbs and 60 g fat, at 4, 4 and 9 calories a gram',
+        '= 2,060',
+      ]);
+    });
+
+    it('records them from the sheet, reads the targets again and shows them', async () => {
+      const calculations = vi
+        .fn()
+        .mockReturnValueOnce(of([calculationRecord(), earlierRecord()]))
+        .mockReturnValue(of([adjustedRecord(), calculationRecord(), earlierRecord()]));
+      const adjustMacros = vi.fn(() => of(adjustedRecord()));
+      const { fixture, host } = await render({ api: { calculations, adjustMacros } });
+
+      press(card(host, 'targets'), 'Adjust macros');
+      await settle(fixture);
+      const sheet = dialog()!;
+      expect(textOf(sheet.querySelector('.tb-modal__title'))).toContain('Adjust macros for Rana');
+      fill(sheet, 'Protein (g)', '150');
+      fill(sheet, 'Carbs (g)', '230');
+      fill(sheet, 'Why are you changing them?', 'More protein while she cuts');
+      await settle(fixture);
+      press(sheet, 'Save these macros');
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(adjustMacros).toHaveBeenCalledWith('client-1', 'calc-2', {
+        proteinGrams: 150,
+        carbohydrateGrams: 230,
+        fatGrams: 60,
+        reason: 'More protein while she cuts',
+      });
+      // The plan running keeps its own targets, and the sheet says so.
+      expect(textOf(dialog()!.querySelector('[data-keeps]'))).toContain(
+        'Spring cut keeps the targets it was assigned with.',
+      );
+      press(dialog()!, 'Done');
+      await settle(fixture);
+      expect(calculations).toHaveBeenCalledTimes(2);
+      expect(textOf(card(host, 'targets').querySelector('[data-worked-on]'))).toBe(
+        'Your macros, set today',
+      );
+    });
+  });
+
+  describe('stopping a meal plan (NCM-1)', () => {
+    const plans = () =>
+      of([
+        clientPlan(),
+        clientPlan({
+          id: 'cplan-2',
+          mealPlanName: 'Lean bulk',
+          startDate: '2026-10-19',
+          endDateExclusive: '2026-10-26',
+        }),
+        stoppedPlan(),
+      ]);
+
+    it('offers Stop on the plan running and on one coming, and says why one was stopped', async () => {
+      const { host } = await render({ api: { plans: vi.fn(plans) } });
+
+      expect(host.querySelector('[data-current-plan] [data-stop-current]')).not.toBeNull();
+      const others = Array.from(host.querySelectorAll('[data-earlier-plans] li'));
+      expect(others.map((item) => item.getAttribute('data-plan'))).toEqual(['coming', 'stopped']);
+      expect(others[0].querySelector('[data-stop-other]')?.getAttribute('aria-label')).toBe(
+        'Stop Lean bulk',
+      );
+      expect(others[1].querySelector('[data-stop-other]')).toBeNull();
+      expect(textOf(others[1].querySelector('[data-stop-reason]'))).toBe(
+        'Stopped Sun 4 Oct: Assigned to the wrong client',
+      );
+    });
+
+    it('stops the plan with a reason, says so and reads the plans again', async () => {
+      const read = vi
+        .fn()
+        .mockReturnValueOnce(of([clientPlan()]))
+        .mockReturnValue(
+          of([
+            clientPlan({
+              status: 'Cancelled',
+              version: 2,
+              stoppedAtUtc: '2026-10-10T08:00:00Z',
+              stopReason: 'Wrong dates',
+            }),
+          ]),
+        );
+      const stop = vi.fn(() =>
+        of(clientPlan({ status: 'Cancelled', version: 2, stopReason: 'Wrong dates' })),
+      );
+      const { fixture, host } = await render({ api: { plans: read, stop } });
+
+      press(card(host, 'plan'), 'Stop this meal plan');
+      await settle(fixture);
+      const sheet = dialog()!;
+      expect(textOf(sheet.querySelector('.tb-modal__title'))).toContain('Stop Rana’s meal plan');
+      fill(sheet, 'Why are you stopping it?', 'Wrong dates');
+      await settle(fixture);
+      press(sheet, 'Stop meal plan');
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(stop).toHaveBeenCalledWith('client-1', 'cplan-1', {
+        reason: 'Wrong dates',
+        version: 1,
+      });
+      expect(dialog()).toBeNull();
+      expect(toast()).toContain('Spring cut stopped. Its days are free for another meal plan.');
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(textOf(host.querySelector('[data-no-plan]'))).toContain(
+        'Rana has no meal plan running or coming.',
+      );
+      expect(textOf(host.querySelector('[data-stop-reason]'))).toBe('Stopped today: Wrong dates');
+    });
+
+    it('asks before closing a stop with a reason typed', async () => {
+      const { fixture, host, api } = await render({ api: { stop: vi.fn() } });
+
+      press(card(host, 'plan'), 'Stop this meal plan');
+      await settle(fixture);
+      fill(dialog()!, 'Why are you stopping it?', 'Wrong dates');
+      await settle(fixture);
+      press(dialog()!, 'Keep it');
+      await settle(fixture);
+      expect(textOf(dialog())).toContain('Close without saving? What you typed will be lost.');
+      press(dialog()!, 'Keep editing');
+      await settle(fixture);
+      expect(textOf(dialog())).toContain('Why are you stopping it?');
+      expect(api['stop']).not.toHaveBeenCalled();
     });
   });
 

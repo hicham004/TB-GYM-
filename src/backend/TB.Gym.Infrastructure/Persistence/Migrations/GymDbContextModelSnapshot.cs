@@ -6237,8 +6237,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("TenantId", "Id");
-
                     b.HasIndex("TenantId", "CalculationSnapshotId", "CreatedAtUtc");
 
                     b.ToTable("MacroOverrideAudits", "nutrition", t =>
@@ -6684,6 +6682,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<Guid?>("MacroOverrideAuditId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("ProteinGrams")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
@@ -6721,10 +6722,16 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "MacroOverrideAuditId")
+                        .IsUnique()
+                        .HasFilter("\"MacroOverrideAuditId\" IS NOT NULL");
+
                     b.HasIndex("TenantId", "ClientProfileId", "CreatedAtUtc");
 
                     b.ToTable("CalculationSnapshots", "nutrition", t =>
                         {
+                            t.HasCheckConstraint("CK_CalculationSnapshots_CoachMacroOverride", "(\"MacroMethodKey\" = 'CoachMacroOverride') = (\"MacroOverrideAuditId\" IS NOT NULL)");
+
                             t.HasCheckConstraint("CK_CalculationSnapshots_Valid", "\"BmrEstimate\" > 0 AND \"ActivityModelPal\" >= 1.4 AND \"ActivityModelPal\" <= 2.4 AND \"TdeeEstimate\" > 0 AND \"CalorieTarget\" > 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0");
                         });
                 });
@@ -12769,6 +12776,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Nutrition.MacroOverrideAudit", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MacroOverrideAuditId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.NutritionPlanLifecycleEvent", b =>

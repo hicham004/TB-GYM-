@@ -77,16 +77,85 @@ describe('the food sheet', () => {
   it('adds up the calories under the EU policy as the macros are typed', async () => {
     const { fixture, host } = await render('new', null, 'Eu1169');
     fill(host, 'Protein', '10');
-    fill(host, 'Carbs', '20');
+    fill(host, 'Carbs', '16');
     fill(host, 'Fat', '5');
-    host.querySelector<HTMLElement>('summary')!.click();
     await settle(fixture);
     fill(host, 'Fibre (g)', '4');
     await settle(fixture);
 
-    // 10 × 4 + (20 − 4) × 4 + 5 × 9 + 4 × 2
+    // Typed as an EU label prints them, the 16 g of carbs leave the fibre out: 10 × 4 + 16 × 4 + 5 × 9 + 4 × 2.
     expect(textOf(host.querySelector('.estimate'))).toBe(
       'About 157 kcal in 100 g, counted as on EU-style labels.',
+    );
+  });
+
+  it('takes an EU label’s carbs as printed and sends the fibre back with them (C6)', async () => {
+    const { fixture, host, api } = await render('new', null, 'Eu1169');
+    // EU labels print the fibre on a line of its own, so its box is open from the start.
+    expect(host.querySelector<HTMLDetailsElement>('details')!.open).toBe(true);
+    expect(textOf(host.querySelector('input[name="carbs"]')?.closest('app-field'))).toContain(
+      'As the label prints them, without the fibre',
+    );
+
+    // Porridge oats on a UK label: 11 g protein, 60 g carbs, 8 g fat, 9 g fibre, 374 kcal.
+    fill(host, 'Name', 'Porridge oats');
+    fill(host, 'Protein', '11');
+    fill(host, 'Carbs', '60');
+    fill(host, 'Fat', '8');
+    fill(host, 'Fibre (g)', '9');
+    fill(host, 'Calories on the label', '374');
+    await settle(fixture);
+    expect(textOf(host.querySelector('.estimate'))).toBe(
+      'About 374 kcal in 100 g, counted as on EU-style labels.',
+    );
+    expect(textOf(host.querySelector('[data-stored-carbs]'))).toBe(
+      'Saved as 69 g of carbs with the fibre, the way TB Gym counts carbs everywhere.',
+    );
+
+    button(host, 'Save food').click();
+    await settle(fixture);
+    expect(api.createFood).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: expect.objectContaining({
+          carbohydrateGrams: 60,
+          fibreGrams: 9,
+          providerCalories: 374,
+          carbohydrateDeclaration: 'WithoutFibre',
+        }),
+      }),
+    );
+  });
+
+  it('opens a saved food under the EU policy with its carbs as an EU label prints them', async () => {
+    const { fixture, host, api } = await render('edit', OATS_FOOD, 'Eu1169');
+    // The oats keep 68 g of carbs, their 10 g of fibre included.
+    expect(host.querySelector<HTMLInputElement>('input[name="carbs"]')!.value).toBe('58');
+
+    button(host, 'Save changes').click();
+    await settle(fixture);
+    expect(api.addVersion).toHaveBeenCalledWith(
+      'food-oats',
+      expect.objectContaining({
+        carbohydrateGrams: 58,
+        fibreGrams: 10,
+        carbohydrateDeclaration: 'WithoutFibre',
+      }),
+    );
+  });
+
+  it('keeps total carbs under the US policy and says so', async () => {
+    const { fixture, host, api } = await render('edit', OATS_FOOD);
+    expect(host.querySelector<HTMLInputElement>('input[name="carbs"]')!.value).toBe('68');
+    expect(textOf(host.querySelector('input[name="carbs"]')?.closest('app-field'))).toContain(
+      'Total, fibre included',
+    );
+    expect(host.querySelector('[data-stored-carbs]')).toBeNull();
+
+    button(host, 'Save changes').click();
+    await settle(fixture);
+    expect(api.addVersion).toHaveBeenCalledWith(
+      'food-oats',
+      expect.objectContaining({ carbohydrateGrams: 68, carbohydrateDeclaration: 'TotalWithFibre' }),
     );
   });
 
@@ -154,7 +223,7 @@ describe('the food sheet', () => {
     const { fixture, host, api } = await render('copy', CHICKEN_FOOD);
     expect(host.querySelector<HTMLDetailsElement>('details')!.open).toBe(false);
     expect(textOf(host.querySelector('details .note'))).toBe(
-      'USDA didn’t report fibre, sugar alcohols, alcohol, so it was saved as 0. Check the label if you have it.',
+      'USDA didn’t report fibre, sugar alcohols or alcohol, so they were saved as 0. Check the label if you have it.',
     );
     button(host, 'Save my copy').click();
     await settle(fixture);

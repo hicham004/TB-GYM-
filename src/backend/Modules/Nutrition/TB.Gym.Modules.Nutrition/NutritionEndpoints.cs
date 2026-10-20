@@ -161,41 +161,38 @@ public static class NutritionEndpoints
             return ToResult(await service.PublishMealPlanDraftAsync(draftId, request, token));
         }).WithName("PublishMealPlanDraft").Produces<MealPlanTemplateSummary>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
+        // A client that is not in the workspace is 404 on every route that names one (SEC-8), as in the
+        // other modules; a client whose Nutrition is closed is 403.
         coach.MapPost("/clients/{clientProfileId:guid}/calculations", async (Guid clientProfileId, CalculateNutritionTargetsRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.CalculateTargetsAsync(clientProfileId, request, token));
-        }).WithName("CalculateClientNutritionTargets").Produces<NutritionCalculationView>().ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden);
+        }).WithName("CalculateClientNutritionTargets").Produces<NutritionCalculationView>().ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
+        // The coach's own macros (NUT-008, INV-2): recorded with why, as new targets for the next plan.
         coach.MapPost("/clients/{clientProfileId:guid}/calculations/{calculationSnapshotId:guid}/macro-overrides", async (Guid clientProfileId, Guid calculationSnapshotId, CreateMacroOverrideRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.OverrideMacrosAsync(clientProfileId, calculationSnapshotId, request, token));
-        }).WithName("OverrideClientNutritionMacros").Produces<MacroOverrideView>().ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden);
+        }).WithName("OverrideClientNutritionMacros").Produces<NutritionCalculationRecord>().ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
         coach.MapPut("/clients/{clientProfileId:guid}/allergens", async (Guid clientProfileId, ReplaceClientAllergensRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.ReplaceClientAllergensAsync(clientProfileId, request, token));
-        }).WithName("ReplaceClientDeclaredAllergens").Produces(StatusCodes.Status200OK).ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden);
+        }).WithName("ReplaceClientDeclaredAllergens").Produces(StatusCodes.Status200OK).ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
         coach.MapGet("/clients/{clientProfileId:guid}/allergens", async (Guid clientProfileId, INutritionApplicationService service, CancellationToken token) =>
-        {
-            var allergens = await service.GetClientAllergensAsync(clientProfileId, token);
-            return allergens is null ? Results.Forbid() : Results.Ok(allergens);
-        }).WithName("GetClientDeclaredAllergens").Produces<ClientAllergensView>().Produces(StatusCodes.Status403Forbidden);
+            ToReadResult(await service.GetClientAllergensAsync(clientProfileId, token)))
+            .WithName("GetClientDeclaredAllergens").Produces<ClientAllergensView>().Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
         coach.MapGet("/clients/{clientProfileId:guid}/calculations", async (Guid clientProfileId, int? take, INutritionApplicationService service, CancellationToken token) =>
-        {
-            var calculations = await service.ListCalculationsAsync(clientProfileId, Math.Clamp(take ?? 5, 1, 20), token);
-            return calculations is null ? Results.Forbid() : Results.Ok(calculations);
-        }).WithName("ListClientNutritionCalculations").Produces<NutritionCalculationRecord[]>().Produces(StatusCodes.Status403Forbidden);
+            ToReadResult(await service.ListCalculationsAsync(clientProfileId, Math.Clamp(take ?? 5, 1, 20), token)))
+            .WithName("ListClientNutritionCalculations").Produces<NutritionCalculationRecord[]>().Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
         coach.MapGet("/clients/{clientProfileId:guid}/plans", async (Guid clientProfileId, INutritionApplicationService service, CancellationToken token) =>
-        {
-            var plans = await service.ListClientPlansAsync(clientProfileId, token);
-            return plans is null ? Results.Forbid() : Results.Ok(plans);
-        }).WithName("ListClientNutritionPlans").Produces<ClientNutritionPlanSummary[]>().Produces(StatusCodes.Status403Forbidden);
+            ToReadResult(await service.ListClientPlansAsync(clientProfileId, token)))
+            .WithName("ListClientNutritionPlans").Produces<ClientNutritionPlanSummary[]>().Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
         coach.MapPost("/clients/{clientProfileId:guid}/plans", async (Guid clientProfileId, AssignNutritionPlanRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.AssignPlanAsync(clientProfileId, request, token));
-        }).WithName("AssignClientNutritionPlan").Produces<ClientNutritionPlanSummary>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict).Produces(StatusCodes.Status403Forbidden);
+        }).WithName("AssignClientNutritionPlan").Produces<ClientNutritionPlanSummary>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict).Produces(StatusCodes.Status403Forbidden).Produces(StatusCodes.Status404NotFound);
 
         coach.MapPost("/clients/{clientProfileId:guid}/plans/{planId:guid}/cancel", async (Guid clientProfileId, Guid planId, CancelNutritionPlanRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
@@ -251,7 +248,7 @@ public static class NutritionEndpoints
 
     private static IResult ToResult(NutritionCommandResult result) => result.Status switch
     {
-        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingFactor ?? (object?)result.MacroOverride ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? result.MealPlanDraft),
+        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingFactor ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? result.MealPlanDraft),
         NutritionCommandStatus.NotFound => Results.NotFound(),
         NutritionCommandStatus.Forbidden => Results.Forbid(),
         NutritionCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
@@ -261,6 +258,13 @@ public static class NutritionEndpoints
             title: result.Code ?? "nutrition_provider_unavailable",
             extensions: new Dictionary<string, object?> { ["code"] = result.Code ?? "nutrition_provider_unavailable", ["message"] = result.Message }),
         _ => Results.Conflict(new { code = result.Code ?? "nutrition_conflict", message = result.Message ?? "Nutrition state changed or conflicts with another request." }),
+    };
+
+    private static IResult ToReadResult<T>(ClientNutritionRead<T> read) where T : class => read.Reach switch
+    {
+        ClientNutritionReach.Allowed => Results.Ok(read.Value),
+        ClientNutritionReach.NotFound => Results.NotFound(),
+        _ => Results.Forbid(),
     };
 
     private static (int Skip, int Take) Page(int? skip, int? take) => (Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 25, 1, 100));

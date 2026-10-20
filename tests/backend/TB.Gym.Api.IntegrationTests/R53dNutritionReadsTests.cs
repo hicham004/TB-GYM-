@@ -9,8 +9,9 @@ namespace TB.Gym.Api.IntegrationTests;
 /// R5.3d: what the coach's Nutrition tab reads for a client. The allergens declared now (a replace-only
 /// write had no read, so the tab could not show what a Save would replace), the targets already worked
 /// out with the numbers they came from, and a plan list that names its meal plan and carries the
-/// targets the client sees. Every read answers as the older plan list does: another coach's client and
-/// another workspace's are 404, a client whose plan has no Nutrition or who was released is refused.
+/// targets the client sees. Every read answers alike: another coach's client, another workspace's and an
+/// id that exists nowhere are 404 (SEC-8), a client whose plan has no Nutrition or who was released is
+/// refused.
 /// </summary>
 public sealed partial class Phase3TrainingWorkflowTests
 {
@@ -177,18 +178,18 @@ public sealed partial class Phase3TrainingWorkflowTests
             await AssertStatusAsync(await ownersClient.GetAsync(url), HttpStatusCode.Forbidden);
         }
 
-        // Another workspace's owner finds nothing of this one in their own: the same refusal as for an id
-        // that exists nowhere (an owner has no assignment scope to answer 404 from), and is refused this one.
+        // Another workspace's owner finds nothing of this one in their own: the same 404 as for an id that
+        // exists nowhere (SEC-8), and is refused this one.
         using var stranger = CreateClient();
         var strangerTenant = await RegisterCoachAsync(stranger, "r53d-scope-stranger@example.test", "Other Owner", "R53d Elsewhere");
         foreach (var url in urls)
         {
             var elsewhere = await stranger.GetAsync(url);
-            await AssertStatusAsync(elsewhere, HttpStatusCode.Forbidden);
+            await AssertStatusAsync(elsewhere, HttpStatusCode.NotFound);
             Assert.IsFalse((await elsewhere.Content.ReadAsStringAsync()).Contains("Sesame", StringComparison.OrdinalIgnoreCase));
         }
 
-        await AssertStatusAsync(await stranger.GetAsync(R53dAllergensUrl(Guid.NewGuid())), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(await stranger.GetAsync(R53dAllergensUrl(Guid.NewGuid())), HttpStatusCode.NotFound);
 
         SetTenant(stranger, tenant);
         foreach (var url in urls)

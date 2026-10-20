@@ -108,13 +108,20 @@ import { MealPlanApi } from './meal-plan-api';
         <legend i18n>Targets the client sees</legend>
         @if (picked(); as targets) {
           <p class="about" data-targets>
-            <strong i18n>{{ targets.calories | number: '1.0-0' }} calories a day</strong>&ngsp;<span
-              class="muted"
-              i18n
-              >{{ targets.protein | number: '1.0-0' }} g protein ·
-              {{ targets.carbohydrate | number: '1.0-0' }} g carbs ·
-              {{ targets.fat | number: '1.0-0' }} g fat, worked out {{ pickedOn() }}</span
-            >
+            <strong i18n>{{ targets.calories | number: '1.0-0' }} calories a day</strong>&ngsp;
+            @if (targets.adjustment) {
+              <span class="muted" i18n
+                >{{ targets.protein | number: '1.0-0' }} g protein ·
+                {{ targets.carbohydrate | number: '1.0-0' }} g carbs ·
+                {{ targets.fat | number: '1.0-0' }} g fat, your macros set {{ pickedOn() }}</span
+              >
+            } @else {
+              <span class="muted" i18n
+                >{{ targets.protein | number: '1.0-0' }} g protein ·
+                {{ targets.carbohydrate | number: '1.0-0' }} g carbs ·
+                {{ targets.fat | number: '1.0-0' }} g fat, worked out {{ pickedOn() }}</span
+              >
+            }
           </p>
           @if (calculations().length > 1) {
             <app-field [label]="targetsLabel">
@@ -463,7 +470,9 @@ export class AssignMealPlan extends SheetForm implements OnInit {
   protected workedWords(item: WorkedOut): string {
     const calories = Math.round(item.calories).toLocaleString('en');
     const when = workedOutOn(item.calculatedAtUtc, this.timeZone(), this.today(), this.locale());
-    return $localize`${when}:when:, ${calories}:calories: calories a day`;
+    return item.adjustment
+      ? $localize`${when}:when:, your macros, ${calories}:calories: calories a day`
+      : $localize`${when}:when:, ${calories}:calories: calories a day`;
   }
 
   protected coverWords(item: NutritionCover): string {

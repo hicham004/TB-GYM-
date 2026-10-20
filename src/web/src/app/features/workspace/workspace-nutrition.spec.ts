@@ -10,13 +10,25 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, fill, leave, settle } from '../../../testing/dom';
 import { nutritionSettings } from '../../../testing/food-fixtures';
 import { FoodApi } from '../nutrition/food-api';
+import { RecipeApi } from '../nutrition/recipe-api';
 import { nutritionFormIssues, WorkspaceNutrition } from './workspace-nutrition';
 
-async function render(settings: NutritionWorkspaceSettingsView = nutritionSettings()) {
+async function render(
+  settings: NutritionWorkspaceSettingsView = nutritionSettings(),
+  available: boolean | 'fails' = true,
+) {
   const api = {
     getSettings: vi.fn(() => of(settings)),
     updateSettings: vi.fn((request: { energyPolicyKey: string }) =>
       of({ ...settings, energyPolicyKey: request.energyPolicyKey, version: 8 }),
+    ),
+  };
+  // The same answer the recipe editor reads (LOST-4).
+  const recipes = {
+    aiAvailability: vi.fn(() =>
+      available === 'fails'
+        ? throwError(() => new HttpErrorResponse({ status: 503 }))
+        : of({ isConfigured: available }),
     ),
   };
   TestBed.configureTestingModule({
@@ -24,6 +36,7 @@ async function render(settings: NutritionWorkspaceSettingsView = nutritionSettin
     providers: [
       provideRouter([]),
       { provide: FoodApi, useValue: api },
+      { provide: RecipeApi, useValue: recipes },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       {
         provide: TenantStore,
@@ -107,7 +120,7 @@ describe('Settings › Nutrition', () => {
       'Carbs include fibre; protein and carbs count 4 kcal a gram, fat 9, alcohol 7. The usual way in the US and in most apps.',
     );
     expect(textOf(choices[1].querySelector('.choice-text'))).toBe(
-      'Fibre is listed apart from the carbs and counts 2 kcal a gram; sugar alcohols 2.4, alcohol 7. Used in the EU and the UK.',
+      'Fibre is listed apart from the carbs and counts 2 kcal a gram; sugar alcohols 2.4, alcohol 7. Carbs are typed as the label prints them. Used in the EU and the UK.',
     );
     const help = host.querySelector('#counting-help');
     expect(textOf(help)).toBe(
@@ -124,11 +137,32 @@ describe('Settings › Nutrition', () => {
   it('says AI is not on yet when TB Gym has not allowed any', async () => {
     const { host } = await render(
       nutritionSettings({ aiMaximumMonthlyRequests: 0, aiMaximumMonthlyCost: 0 }),
+      false,
     );
     expect(textOf(host.querySelector('#ai-heading')?.parentElement)).toContain(
       'TB Gym hasn’t turned on AI suggestions for coaching spaces yet.',
     );
     expect(host.querySelector('input[name="requests"]')).toBeNull();
+  });
+
+  it('says AI is not on when the recipe editor would say so, whatever the ceiling (LOST-4)', async () => {
+    // A ceiling above zero with no provider set up: the recipe editor offers no suggestion, so
+    // Settings does not promise one either.
+    for (const answer of [false, 'fails'] as const) {
+      const { host } = await render(nutritionSettings(), answer);
+      expect(textOf(host.querySelector('#ai-heading')?.parentElement)).toContain(
+        'TB Gym hasn’t turned on AI suggestions for coaching spaces yet.',
+      );
+      expect(textOf(host.querySelector('#ai-heading')?.parentElement)).not.toContain(
+        'Your coaches can start a recipe from a description.',
+      );
+      TestBed.resetTestingModule();
+    }
+
+    const { host } = await render(nutritionSettings(), true);
+    expect(textOf(host.querySelector('#ai-heading')?.parentElement)).toContain(
+      'Your coaches can start a recipe from a description.',
+    );
   });
 
   it('saves the defaults with the version it read', async () => {

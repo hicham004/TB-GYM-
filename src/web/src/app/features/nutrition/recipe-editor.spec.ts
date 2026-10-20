@@ -311,6 +311,32 @@ describe('the recipe editor', () => {
     expect(api.createRecipe).not.toHaveBeenCalled();
   });
 
+  it('previews a chosen photo as a data: URL, which the CSP lets an img show (NCM-2)', async () => {
+    const { harness, host, api } = await render();
+    // img-src is 'self' data: in the CSP, so a blob: preview would show as a broken image.
+    const original = URL.createObjectURL;
+    const createObjectURL = vi.fn(() => 'blob:refused-by-the-csp');
+    URL.createObjectURL = createObjectURL;
+    try {
+      const input = host.querySelector<HTMLInputElement>('.photo-actions input[type="file"]')!;
+      const file = new File([new Uint8Array([137, 80, 78, 71])], 'bowl.png', { type: 'image/png' });
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      input.dispatchEvent(new Event('change'));
+      await until(
+        harness.fixture,
+        () => host.querySelector('.photo img')?.getAttribute('src')?.startsWith('data:') === true,
+      );
+
+      expect(api.uploadPhoto).toHaveBeenCalledWith(file);
+      expect(host.querySelector('.photo img')!.getAttribute('src')).toBe(
+        'data:image/png;base64,iVBORw==',
+      );
+      expect(createObjectURL).not.toHaveBeenCalled();
+    } finally {
+      URL.createObjectURL = original;
+    }
+  });
+
   it('saves changes as a new version, renamed, from the revision it opened', async () => {
     const { harness, host, api } = await render();
 

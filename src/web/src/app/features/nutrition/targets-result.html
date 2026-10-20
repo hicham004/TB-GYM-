@@ -31,6 +31,14 @@
   <p class="flag" role="status" data-flag>{{ flag }}</p>
 }
 
+@if (record().adjustment; as adjusted) {
+  <p class="why" data-why>
+    <span class="why-label" i18n>Why you changed them</span>&ngsp;<span dir="auto">{{
+      adjusted.reason
+    }}</span>
+  </p>
+}
+
 <details class="how">
   <summary i18n>How this was worked out</summary>
   <dl class="chain">
@@ -42,10 +50,25 @@
       <dt i18n>Times {{ record().activity | number: '1.2-2' }} for how active they are</dt>
       <dd>= {{ record().maintenance | number: '1.0-0' }}</dd>
     </div>
-    <div class="step">
-      <dt i18n>{{ adjustment() }} for the goal</dt>
-      <dd>= {{ record().calories | number: '1.0-0' }}</dd>
-    </div>
+    @if (record().adjustment; as adjusted) {
+      <div class="step" data-step="before">
+        <dt i18n>The targets you changed</dt>
+        <dd>{{ adjusted.fromCalories | number: '1.0-0' }}</dd>
+      </div>
+      <div class="step" data-step="yours">
+        <dt i18n>
+          Your macros: {{ record().protein | number: '1.0-0' }} g protein,
+          {{ record().carbohydrate | number: '1.0-0' }} g carbs and
+          {{ record().fat | number: '1.0-0' }} g fat, at 4, 4 and 9 calories a gram
+        </dt>
+        <dd>= {{ record().calories | number: '1.0-0' }}</dd>
+      </div>
+    } @else {
+      <div class="step">
+        <dt i18n>{{ adjustment() }} for the goal</dt>
+        <dd>= {{ record().calories | number: '1.0-0' }}</dd>
+      </div>
+    }
   </dl>
   @if (from(); as line) {
     <p class="from" dir="auto"><span i18n>Worked out from</span>&ngsp;{{ line }}.</p>

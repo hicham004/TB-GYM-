@@ -26,28 +26,58 @@ internal sealed class UsdaFoodDataCentralProvider(
     private static readonly string[] BasicDataTypes = ["Foundation", "SR Legacy", "Survey (FNDDS)"];
     private static readonly string[] PackagedDataTypes = ["Branded"];
 
-    public async Task<IReadOnlyList<FoodSearchResult>> SearchAsync(string query, FoodSearchKind kind, int skip, int take, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<FoodSearchResult>> SearchAsync(string query, FoodSearchKind kind, int skip, int take, CancellationToken cancellationToken)
     {
         EnsureConfigured();
-        var pageNumber = skip / take + 1;
-        // The criteria go in a POST body: USDA's edge refused about half the GET searches whose
-        // address held "Survey (FNDDS)" (checked 2026-10-07), and none of the POSTs.
-        var criteria = new
+        return ReachAsync<IReadOnlyList<FoodSearchResult>>(async () =>
         {
-            query,
-            dataType = kind == FoodSearchKind.Packaged ? PackagedDataTypes : BasicDataTypes,
-            pageSize = take,
-            pageNumber,
-        };
-        using var response = await httpClient.PostAsJsonAsync($"foods/search?api_key={Uri.EscapeDataString(options.Value.ApiKey)}", criteria, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
-        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        if (!payload.TryGetProperty("foods", out var foods) || foods.ValueKind != JsonValueKind.Array)
-        {
-            throw new NutritionProviderUnavailableException("usda_schema_changed", "USDA FoodData Central returned an unexpected response. No data was imported.");
-        }
+            var pageNumber = skip / take + 1;
+            // The criteria go in a POST body: USDA's edge refused about half the GET searches whose
+            // address held "Survey (FNDDS)" (checked 2026-10-07), and none of the POSTs.
+            var criteria = new
+            {
+                query,
+                dataType = kind == FoodSearchKind.Packaged ? PackagedDataTypes : BasicDataTypes,
+                pageSize = take,
+                pageNumber,
+            };
+            using var response = await httpClient.PostAsJsonAsync($"foods/search?api_key={Uri.EscapeDataString(options.Value.ApiKey)}", criteria, cancellationToken);
+            await EnsureSuccessAsync(response, cancellationToken);
+            var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+            if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("foods", out var foods) || foods.ValueKind != JsonValueKind.Array)
+            {
+                throw new NutritionProviderUnavailableException("usda_schema_changed", UnexpectedAnswer);
+            }
 
-        return foods.EnumerateArray().Select(ToSearchResult).OfType<FoodSearchResult>().ToArray();
+            return foods.EnumerateArray().Select(ToSearchResult).OfType<FoodSearchResult>().ToArray();
+        }, cancellationToken);
+    }
+
+    private const string UnexpectedAnswer = "USDA FoodData Central returned an unexpected response. No data was imported.";
+
+    /// <summary>
+    /// A USDA outage, a timeout or an answer that is not the JSON USDA documents is one of the designed
+    /// failures (NUT-003, BEA-2), as the Anthropic adapter treats the same: the coach is told USDA is
+    /// unavailable and nothing is imported. A request its caller cancelled stays cancelled.
+    /// </summary>
+    private static async Task<T> ReachAsync<T>(Func<Task<T>> call, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await call();
+        }
+        catch (HttpRequestException)
+        {
+            throw new NutritionProviderUnavailableException("usda_unreachable", "USDA FoodData Central couldn’t be reached, so nothing was imported. Try again in a minute.");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new NutritionProviderUnavailableException("usda_timeout", "USDA FoodData Central took too long to answer, so nothing was imported. Try again in a minute.");
+        }
+        catch (Exception exception) when (exception is JsonException or NotSupportedException or InvalidOperationException or FormatException)
+        {
+            throw new NutritionProviderUnavailableException("usda_schema_changed", UnexpectedAnswer);
+        }
     }
 
     /// <summary>
@@ -80,39 +110,42 @@ internal sealed class UsdaFoodDataCentralProvider(
             fat);
     }
 
-    public async Task<ProviderFoodRecord?> GetFoodAsync(string externalId, CancellationToken cancellationToken)
+    public Task<ProviderFoodRecord?> GetFoodAsync(string externalId, CancellationToken cancellationToken)
     {
         EnsureConfigured();
-        using var response = await httpClient.GetAsync($"food/{Uri.EscapeDataString(externalId)}?api_key={Uri.EscapeDataString(options.Value.ApiKey)}", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        return ReachAsync<ProviderFoodRecord?>(async () =>
         {
-            return null;
-        }
+            using var response = await httpClient.GetAsync($"food/{Uri.EscapeDataString(externalId)}?api_key={Uri.EscapeDataString(options.Value.ApiKey)}", cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
 
-        await EnsureSuccessAsync(response, cancellationToken);
-        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        var nutrients = payload.TryGetProperty("foodNutrients", out var array) && array.ValueKind == JsonValueKind.Array
-            ? array.EnumerateArray().ToArray()
-            : throw new NutritionProviderUnavailableException("usda_schema_changed", "USDA FoodData Central returned no structured nutrient array. No data was imported.");
-        var unreported = new List<UnreportedNutrient>();
+            await EnsureSuccessAsync(response, cancellationToken);
+            var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+            var nutrients = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("foodNutrients", out var array) && array.ValueKind == JsonValueKind.Array
+                ? array.EnumerateArray().ToArray()
+                : throw new NutritionProviderUnavailableException("usda_schema_changed", "USDA FoodData Central returned no structured nutrient array. No data was imported.");
+            var unreported = new List<UnreportedNutrient>();
 
-        return new ProviderFoodRecord(
-            ReadNumberAsString(payload, "fdcId"),
-            ReadableName(ReadRequiredString(payload, "description")),
-            ReadOptionalString(payload, "dataType") ?? "Unknown",
-            100m,
-            PreparationBasis.AsSold,
-            StatedEnergy(nutrients),
-            RequireNutrient(nutrients, ["Protein"], "G"),
-            RequireNutrient(nutrients, ["Carbohydrate, by difference", "Carbohydrate, by summation"], "G"),
-            RequireNutrient(nutrients, ["Total lipid (fat)"], "G"),
-            OptionalNutrient(nutrients, ["Fiber, total dietary"], "G", UnreportedNutrient.Fibre, unreported),
-            OptionalNutrient(nutrients, ["Sugar alcohols", "Polyols, total"], "G", UnreportedNutrient.Polyols, unreported),
-            OptionalNutrient(nutrients, ["Alcohol, ethyl"], "G", UnreportedNutrient.Ethanol, unreported),
-            [],
-            ProviderKey,
-            clock.UtcNow,
-            unreported);
+            return new ProviderFoodRecord(
+                ReadNumberAsString(payload, "fdcId"),
+                ReadableName(ReadRequiredString(payload, "description")),
+                ReadOptionalString(payload, "dataType") ?? "Unknown",
+                100m,
+                PreparationBasis.AsSold,
+                StatedEnergy(nutrients),
+                RequireNutrient(nutrients, ["Protein"], "G"),
+                RequireNutrient(nutrients, ["Carbohydrate, by difference", "Carbohydrate, by summation"], "G"),
+                RequireNutrient(nutrients, ["Total lipid (fat)"], "G"),
+                OptionalNutrient(nutrients, ["Fiber, total dietary"], "G", UnreportedNutrient.Fibre, unreported),
+                OptionalNutrient(nutrients, ["Sugar alcohols", "Polyols, total"], "G", UnreportedNutrient.Polyols, unreported),
+                OptionalNutrient(nutrients, ["Alcohol, ethyl"], "G", UnreportedNutrient.Ethanol, unreported),
+                [],
+                ProviderKey,
+                clock.UtcNow,
+                unreported);
+        }, cancellationToken);
     }
 
     /// <summary>

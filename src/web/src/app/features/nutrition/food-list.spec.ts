@@ -213,7 +213,7 @@ describe('the Foods page', () => {
     ownRows(host)[1].querySelector<HTMLButtonElement>('button.stretched')!.click();
     await settle(fixture);
     expect(textOf(dialog()?.querySelector('.line.warn'))).toBe(
-      'USDA didn’t report fibre, sugar alcohols, alcohol, so it was saved as 0.',
+      'USDA didn’t report fibre, sugar alcohols or alcohol, so they were saved as 0.',
     );
     button(dialog()!, 'Edit a copy').click();
     await settle(fixture);

@@ -202,7 +202,15 @@ public sealed partial class GymDbContext
             entity.Property(item => item.CalorieTarget).HasPrecision(18, 6);
             entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.CreatedAtUtc });
             entity.HasOne<ClientProfile>().WithMany().HasForeignKey(item => new { item.TenantId, item.ClientProfileId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
-            entity.ToTable(table => table.HasCheckConstraint("CK_CalculationSnapshots_Valid", "\"BmrEstimate\" > 0 AND \"ActivityModelPal\" >= 1.4 AND \"ActivityModelPal\" <= 2.4 AND \"TdeeEstimate\" > 0 AND \"CalorieTarget\" > 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
+            // A coach's own macros name the override they came from (INV-2), one set of targets each,
+            // and only those targets name one.
+            entity.HasOne<MacroOverrideAudit>().WithMany().HasForeignKey(item => new { item.TenantId, item.MacroOverrideAuditId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => new { item.TenantId, item.MacroOverrideAuditId }).IsUnique().HasFilter("\"MacroOverrideAuditId\" IS NOT NULL");
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_CalculationSnapshots_Valid", "\"BmrEstimate\" > 0 AND \"ActivityModelPal\" >= 1.4 AND \"ActivityModelPal\" <= 2.4 AND \"TdeeEstimate\" > 0 AND \"CalorieTarget\" > 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0");
+                table.HasCheckConstraint("CK_CalculationSnapshots_CoachMacroOverride", $"(\"MacroMethodKey\" = '{CoachMacroOverride.Key}') = (\"MacroOverrideAuditId\" IS NOT NULL)");
+            });
             ConfigureTenantEntity(entity);
         });
 

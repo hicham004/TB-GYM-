@@ -43,6 +43,7 @@ function slot(overrides: Partial<NutritionSlot> = {}): NutritionSlot {
     ],
     selectedChoiceId: null,
     actualServings: null,
+    loggedCalories: null,
     ...overrides,
   };
 }
@@ -73,7 +74,7 @@ function day(overrides: Partial<NutritionDay> = {}): NutritionDay {
 /** The day as the server returns it after one meal has been recorded. */
 function afterSave(): NutritionDay {
   return day({
-    slots: [slot({ selectedChoiceId: 'choice-2', actualServings: 1.5 })],
+    slots: [slot({ selectedChoiceId: 'choice-2', actualServings: 1.5, loggedCalories: 720 })],
     selectedCalories: 780,
     selectedProtein: 57,
     selectedCarbohydrate: 93,
@@ -415,6 +416,26 @@ describe('TodayNutrition', () => {
     );
     expect(lines[0]).toBe('1 serving · 520 kcal planned');
     expect(lines[1]).toBe('1.5 servings · 520 kcal planned');
+  });
+
+  it('says the calories of the amount logged on a logged meal, never the planned serving’s (CLIENT-10)', async () => {
+    const { host } = await render(
+      {},
+      day({
+        slots: [
+          slot({ selectedChoiceId: 'choice-1', actualServings: 1.5, loggedCalories: 780 }),
+          slot({ id: 'later', order: 1 }),
+        ],
+        selectedCalories: 780,
+      }),
+    );
+
+    const lines = Array.from(host.querySelectorAll('.meal-body .meal-amount')).map((item) =>
+      item.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    expect(lines[0]).toBe('1.5 servings · 780 kcal logged');
+    expect(lines[1]).toBe('1 serving · 520 kcal planned');
+    expect(host.querySelectorAll('[data-logged-amount]')).toHaveLength(1);
   });
 
   it('lays out three meals, or five or more, in rows of three and two or four in twos', async () => {

@@ -52,12 +52,17 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> OverrideMacrosAsync(Guid clientProfileId, Guid calculationSnapshotId, CreateMacroOverrideRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ReplaceClientAllergensAsync(Guid clientProfileId, ReplaceClientAllergensRequest request, CancellationToken cancellationToken);
 
-    /// <summary>The allergens declared for the client now (R5.3d); null when the coach may not read them.</summary>
-    Task<ClientAllergensView?> GetClientAllergensAsync(Guid clientProfileId, CancellationToken cancellationToken);
+    /// <summary>The allergens declared for the client now (R5.3d).</summary>
+    Task<ClientNutritionRead<ClientAllergensView>> GetClientAllergensAsync(Guid clientProfileId, CancellationToken cancellationToken);
 
-    /// <summary>The targets worked out for the client, newest first, with what each was worked out from (R5.3d).</summary>
-    Task<NutritionCalculationRecord[]?> ListCalculationsAsync(Guid clientProfileId, int take, CancellationToken cancellationToken);
-    Task<ClientNutritionPlanSummary[]?> ListClientPlansAsync(Guid clientProfileId, CancellationToken cancellationToken);
+    /// <summary>
+    /// The targets worked out for the client, newest first, with what each was worked out from (R5.3d)
+    /// and, for a coach's own macros, what they changed (INV-2).
+    /// </summary>
+    Task<ClientNutritionRead<NutritionCalculationRecord[]>> ListCalculationsAsync(Guid clientProfileId, int take, CancellationToken cancellationToken);
+
+    /// <summary>Every meal plan assigned to the client, newest start first, a stopped one with why (NCM-1).</summary>
+    Task<ClientNutritionRead<ClientNutritionPlanSummary[]>> ListClientPlansAsync(Guid clientProfileId, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AssignPlanAsync(Guid clientProfileId, AssignNutritionPlanRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CancelPlanAsync(Guid clientProfileId, Guid planId, CancelNutritionPlanRequest request, CancellationToken cancellationToken);
     Task<ClientNutritionDayView?> GetOwnDayAsync(DateOnly? localDate, CancellationToken cancellationToken);
@@ -107,6 +112,9 @@ public sealed record CreateFoodItemRequest(
 /// there.</param>
 /// <param name="BaseRevision">The revision the editor opened; a version saved since then is a
 /// conflict (<c>food_changed</c>), not overwritten.</param>
+/// <param name="CarbohydrateDeclaration">How <paramref name="CarbohydrateGrams"/> was typed: total, as
+/// US labels print it (the default), or without fibre, as EU labels do, in which case the fibre is
+/// added back before it is saved (C6, <see cref="LabelCarbohydrateRule"/>).</param>
 public sealed record AddFoodVersionRequest(
     decimal BasisQuantity,
     FoodQuantityUnit BasisUnit,
@@ -122,7 +130,8 @@ public sealed record AddFoodVersionRequest(
     string SourceRecordVersion,
     IReadOnlyList<AllergenCode> DeclaredAllergens,
     string? Name = null,
-    int? BaseRevision = null);
+    int? BaseRevision = null,
+    CarbohydrateDeclaration? CarbohydrateDeclaration = null);
 
 /// <param name="ArchivedAtUtc">Set while the food is archived (R4.4c): out of Foods and the ingredient
 /// search, still in every recipe and plan that copied it.</param>
@@ -438,9 +447,11 @@ public sealed record NutritionCalculationView(
     string EnergyPolicyVersion,
     IReadOnlyList<string> Warnings);
 
+/// <summary>
+/// The coach's own grams a day for a client, and why (NUT-008, INV-2). The calorie target is what the
+/// grams make (<see cref="CoachMacroOverride"/>); the answer is the new targets it records.
+/// </summary>
 public sealed record CreateMacroOverrideRequest(decimal ProteinGrams, decimal FatGrams, decimal CarbohydrateGrams, string Reason);
-
-public sealed record MacroOverrideView(Guid Id, Guid CalculationSnapshotId, decimal ProteinGrams, decimal FatGrams, decimal CarbohydrateGrams, string Reason, Guid ActorUserId);
 
 public sealed record ReplaceClientAllergensRequest(IReadOnlyList<AllergenCode> Codes);
 
@@ -450,7 +461,33 @@ public sealed record ClientAllergensView(IReadOnlyList<AllergenCode> Codes);
 /// <param name="Inputs">
 /// What the result was worked out from, as it was sent; null when an older row's numbers cannot be read back.
 /// </param>
-public sealed record NutritionCalculationRecord(NutritionCalculationView Result, CalculateNutritionTargetsRequest? Inputs, DateTimeOffset CalculatedAtUtc);
+/// <param name="Adjustment">Set when these are a coach's own macros: why, when, and the targets they changed.</param>
+public sealed record NutritionCalculationRecord(NutritionCalculationView Result, CalculateNutritionTargetsRequest? Inputs, DateTimeOffset CalculatedAtUtc, MacroAdjustmentView? Adjustment = null);
+
+/// <summary>A coach's override of a calculation's macros (NUT-008), as the targets that came of it name it.</summary>
+/// <param name="AdjustedFromCalculationId">The targets the coach changed, with their own calories and grams.</param>
+public sealed record MacroAdjustmentView(
+    Guid OverrideId,
+    string Reason,
+    DateTimeOffset AdjustedAtUtc,
+    Guid AdjustedFromCalculationId,
+    decimal FromCalorieTarget,
+    decimal FromProteinGrams,
+    decimal FromCarbohydrateGrams,
+    decimal FromFatGrams);
+
+/// <summary>
+/// A coach's read about one client: answered, or refused as 404 when the client is not in the
+/// workspace (SEC-8) or 403 when their Nutrition is closed.
+/// </summary>
+public sealed record ClientNutritionRead<T>(ClientNutritionReach Reach, T? Value = null) where T : class;
+
+public enum ClientNutritionReach
+{
+    Allowed = 1,
+    NotFound = 2,
+    Forbidden = 3,
+}
 
 public sealed record AssignNutritionPlanRequest(Guid MealPlanTemplateVersionId, Guid EnrollmentId, Guid CalculationSnapshotId, DateOnly StartDate, bool AcknowledgeAllergenWarnings);
 
@@ -460,7 +497,9 @@ public sealed record CancelNutritionPlanRequest(string Reason, uint Version);
 /// <param name="ProteinGrams">With the carbohydrate and fat grams and the calorie target: the targets the client
 /// sees, from the calculation the plan was assigned with.</param>
 /// <param name="CalculationSnapshotId">That calculation (R5.3d).</param>
-public sealed record ClientNutritionPlanSummary(Guid Id, Guid SourceMealPlanTemplateVersionId, Guid EnrollmentId, DateOnly StartDate, DateOnly EndDateExclusive, decimal CalorieTarget, ClientNutritionPlanStatus Status, uint Version, string MealPlanName, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams, Guid CalculationSnapshotId);
+/// <param name="StoppedAtUtc">When a coach stopped the plan (NUT-011); null while it was never stopped.</param>
+/// <param name="StopReason">Why, as the coach wrote it (NCM-1).</param>
+public sealed record ClientNutritionPlanSummary(Guid Id, Guid SourceMealPlanTemplateVersionId, Guid EnrollmentId, DateOnly StartDate, DateOnly EndDateExclusive, decimal CalorieTarget, ClientNutritionPlanStatus Status, uint Version, string MealPlanName, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams, Guid CalculationSnapshotId, DateTimeOffset? StoppedAtUtc = null, string? StopReason = null);
 
 /// <param name="RecipeId">The client's copy of the recipe (R4.4d), which the client opens; null for none.</param>
 /// <param name="RecipePhotoMediaAssetId">
@@ -469,7 +508,9 @@ public sealed record ClientNutritionPlanSummary(Guid Id, Guid SourceMealPlanTemp
 /// </param>
 public sealed record NutritionChoiceView(Guid Id, string RecipeName, decimal Servings, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams, Guid? RecipeId = null, Guid? RecipePhotoMediaAssetId = null);
 
-public sealed record NutritionSlotView(Guid Id, string Name, int Order, IReadOnlyList<NutritionChoiceView> Choices, Guid? SelectedChoiceId, decimal? ActualServings);
+/// <param name="LoggedCalories">The calories of the amount the client logged (CLIENT-10), the same the
+/// day's totals count; null while the meal is not logged.</param>
+public sealed record NutritionSlotView(Guid Id, string Name, int Order, IReadOnlyList<NutritionChoiceView> Choices, Guid? SelectedChoiceId, decimal? ActualServings, decimal? LoggedCalories = null);
 
 public sealed record NutritionCustomFoodView(Guid Id, string Name, decimal Amount, FoodQuantityUnit Unit, decimal Calories, decimal ProteinGrams, decimal CarbohydrateGrams, decimal FatGrams);
 
@@ -518,6 +559,9 @@ public sealed record CompleteNutritionLogRequest(uint Version);
 
 public sealed record GenerateAiMealDraftRequest(string Prompt, string PromptVersion, string Culture);
 
+/// <param name="IsConfigured">Whether a coach can ask for a suggestion here: the provider is set up and
+/// TB Gym's ceiling (<c>Nutrition:AiAllowance</c>) is above zero. Settings and the recipe editor both
+/// read it (LOST-4).</param>
 public sealed record AiMealDraftAvailabilityView(bool IsConfigured);
 
 public sealed record AiIngredientMappingRequest(Guid FoodItemVersionId, decimal Quantity, FoodQuantityUnit Unit, PreparationBasis Basis, Guid? YieldFactorId = null, Guid? RetentionFactorId = null);
@@ -549,7 +593,7 @@ public sealed record NutritionCommandResult(
     MealPlanTemplateSummary? MealPlan = null,
     NutritionCalculationView? Calculation = null,
     CookingFactorView? CookingFactor = null,
-    MacroOverrideView? MacroOverride = null,
+    NutritionCalculationRecord? CalculationRecord = null,
     ClientNutritionPlanSummary? ClientPlan = null,
     ClientNutritionDayView? Day = null,
     AiMealDraftView? AiDraft = null,

@@ -43,6 +43,7 @@ export type AddFoodVersionRequest = {
   declaredAllergens: Array<AllergenCode>;
   name?: null | string;
   baseRevision?: null | number | string;
+  carbohydrateDeclaration?: null | CarbohydrateDeclaration;
 };
 
 export type AddMealPlanVersionRequest = {
@@ -401,6 +402,8 @@ export type CancelNutritionPlanRequest = {
   version: number | string;
 };
 
+export type CarbohydrateDeclaration = 'TotalWithFibre' | 'WithoutFibre';
+
 export type ChangeClientRelationshipRequest = {
   reason: string;
   version: number | string;
@@ -748,6 +751,8 @@ export type ClientNutritionPlanSummary = {
   carbohydrateGrams: number | string;
   fatGrams: number | string;
   calculationSnapshotId: string;
+  stoppedAtUtc?: null | string;
+  stopReason?: null | string;
 };
 
 export type ClientOnboardingStatus = 'NotStarted' | 'InProgress' | 'Completed';
@@ -2036,14 +2041,15 @@ export type LoginRequest = {
   rememberMe?: boolean;
 };
 
-export type MacroOverrideView = {
-  id: string;
-  calculationSnapshotId: string;
-  proteinGrams: number | string;
-  fatGrams: number | string;
-  carbohydrateGrams: number | string;
+export type MacroAdjustmentView = {
+  overrideId: string;
   reason: string;
-  actorUserId: string;
+  adjustedAtUtc: string;
+  adjustedFromCalculationId: string;
+  fromCalorieTarget: number | string;
+  fromProteinGrams: number | string;
+  fromCarbohydrateGrams: number | string;
+  fromFatGrams: number | string;
 };
 
 export type ManualPaymentMethod = 'Cash' | 'BankTransfer' | 'Card' | 'MobileWallet' | 'Other';
@@ -2415,6 +2421,7 @@ export type NutritionCalculationRecord = {
   result: NutritionCalculationView;
   inputs: null | CalculateNutritionTargetsRequest;
   calculatedAtUtc: string;
+  adjustment?: null | MacroAdjustmentView;
 };
 
 export type NutritionCalculationView = {
@@ -2468,6 +2475,7 @@ export type NutritionSlotView = {
   choices: Array<NutritionChoiceView>;
   selectedChoiceId: null | string;
   actualServings: null | number | string;
+  loggedCalories?: null | number | string;
 };
 
 export type NutritionWorkspaceSettingsView = {
@@ -8311,6 +8319,10 @@ export type ListClientNutritionCalculationsErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
 };
 
 export type ListClientNutritionCalculationsResponses = {
@@ -8341,6 +8353,10 @@ export type CalculateClientNutritionTargetsErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
 };
 
 export type CalculateClientNutritionTargetsError =
@@ -8375,6 +8391,10 @@ export type OverrideClientNutritionMacrosErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
 };
 
 export type OverrideClientNutritionMacrosError =
@@ -8384,7 +8404,7 @@ export type OverrideClientNutritionMacrosResponses = {
   /**
    * OK
    */
-  200: MacroOverrideView;
+  200: NutritionCalculationRecord;
 };
 
 export type OverrideClientNutritionMacrosResponse =
@@ -8404,6 +8424,10 @@ export type GetClientDeclaredAllergensErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
 };
 
 export type GetClientDeclaredAllergensResponses = {
@@ -8434,6 +8458,10 @@ export type ReplaceClientDeclaredAllergensErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
 };
 
 export type ReplaceClientDeclaredAllergensError =
@@ -8460,6 +8488,10 @@ export type ListClientNutritionPlansErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
 };
 
 export type ListClientNutritionPlansResponses = {
@@ -8490,6 +8522,10 @@ export type AssignClientNutritionPlanErrors = {
    * Forbidden
    */
   403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
   /**
    * Conflict
    */

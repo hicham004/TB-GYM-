@@ -12,23 +12,32 @@ import type { AllergenCode } from '../../core/api/generated';
 import { GuardedSheets, type Closable } from '../../core/forms/guarded-sheets';
 import { UiConfirm } from '../../ui/confirm';
 import { dayWords } from '../progress/progress-entries.models';
+import { AdjustMacros } from './adjust-macros-sheet';
 import { AssignMealPlan } from './assign-plan-sheet';
 import { EditAllergens } from './allergens-sheet';
-import type { NutritionCover, PlanRow, Starting, WorkedOut } from './client-nutrition.models';
+import {
+  splitPlans,
+  type NutritionCover,
+  type PlanRow,
+  type Starting,
+  type WorkedOut,
+} from './client-nutrition.models';
+import { StopMealPlan, type StopOutcome } from './stop-plan-sheet';
 import { WorkOutTargets } from './targets-sheet';
 
 /** What a sheet changed, so the page reads that part again. */
 export type NutritionChange = 'targets' | 'plans' | 'allergens';
 
 /**
- * The three sheets of a client's Nutrition tab, opened from one place (R5.3d). A sheet holding typed
- * work asks before it closes, however it is closed, and one that saved says so in a toast and tells the
- * page which part to read again. Working targets out can lead straight on to assigning a meal plan
- * with them, and an assignment that finds no targets can lead back.
+ * The sheets of a client's Nutrition tab, opened from one place (R5.3d; A6 added the coach's own macros
+ * and stopping a plan). A sheet holding typed work asks before it closes, however it is closed, and one
+ * that saved says so in a toast and tells the page which part to read again. Working targets out or
+ * adjusting them can lead straight on to assigning a meal plan with them, and an assignment that finds
+ * no targets can lead back.
  */
 @Component({
   selector: 'app-client-nutrition-sheets',
-  imports: [AssignMealPlan, EditAllergens, UiConfirm, WorkOutTargets],
+  imports: [AdjustMacros, AssignMealPlan, EditAllergens, StopMealPlan, UiConfirm, WorkOutTargets],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { style: 'display: none' },
   template: `
@@ -75,6 +84,39 @@ export type NutritionChange = 'targets' | 'plans' | 'allergens';
       />
     </ng-template>
 
+    <ng-template #adjustSheet let-sheet>
+      @if (allCalculations()[0]; as latest) {
+        <app-adjust-macros
+          [clientId]="clientId()"
+          [firstName]="firstName()"
+          [from]="latest"
+          [current]="currentPlan()"
+          [today]="today()"
+          [locale]="locale()"
+          [timeZone]="timeZone()"
+          (dirtyChange)="dirty = $event"
+          (recorded)="newest.set($event); changed.emit('targets')"
+          (assign)="assignWith($event, sheet)"
+          (closed)="adjustClosed($event, sheet)"
+        />
+      }
+    </ng-template>
+
+    <ng-template #stopSheet let-sheet>
+      @if (stopping(); as plan) {
+        <app-stop-meal-plan
+          [clientId]="clientId()"
+          [firstName]="firstName()"
+          [plan]="plan"
+          [today]="today()"
+          [locale]="locale()"
+          (dirtyChange)="dirty = $event"
+          (stale)="changed.emit('plans')"
+          (closed)="stopped($event, sheet)"
+        />
+      }
+    </ng-template>
+
     <ng-template #confirmTemplate let-dialog>
       @if (asking(); as question) {
         <app-confirm
@@ -108,6 +150,8 @@ export class ClientNutritionSheets extends GuardedSheets {
   private readonly targetsSheet = viewChild.required<TemplateRef<unknown>>('targetsSheet');
   private readonly assignSheet = viewChild.required<TemplateRef<unknown>>('assignSheet');
   private readonly allergensSheet = viewChild.required<TemplateRef<unknown>>('allergensSheet');
+  private readonly adjustSheet = viewChild.required<TemplateRef<unknown>>('adjustSheet');
+  private readonly stopSheet = viewChild.required<TemplateRef<unknown>>('stopSheet');
   private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmTemplate');
 
   /** The calculation just made, which the page may not have read yet. */
@@ -117,6 +161,12 @@ export class ClientNutritionSheets extends GuardedSheets {
     const read = this.calculations();
     return made && !read.some((item) => item.id === made.id) ? [made, ...read] : read;
   });
+  protected readonly currentPlan = computed(() => splitPlans(this.plans()).current);
+  /** The plan the stop sheet is about, as the page has it now: a re-read gives it its new version. */
+  private readonly stoppingId = signal<string | null>(null);
+  protected readonly stopping = computed(
+    () => this.plans().find((plan) => plan.id === this.stoppingId()) ?? null,
+  );
 
   protected confirmDialog(): TemplateRef<unknown> {
     return this.confirmTemplate();
@@ -134,6 +184,17 @@ export class ClientNutritionSheets extends GuardedSheets {
 
   editAllergens(): void {
     this.show(this.allergensSheet(), $localize`Allergens for ${this.firstName()}:name:`);
+  }
+
+  /** The coach's own grams over the latest targets (INV-2); there is nothing to adjust before them. */
+  adjustMacros(): void {
+    if (!this.allCalculations()[0]) return;
+    this.show(this.adjustSheet(), $localize`Adjust macros for ${this.firstName()}:name:`);
+  }
+
+  stopPlan(plan: PlanRow): void {
+    this.stoppingId.set(plan.id);
+    this.show(this.stopSheet(), $localize`Stop ${this.firstName()}:name:’s meal plan`);
   }
 
   // ---- what the sheets say back ----
@@ -164,6 +225,23 @@ export class ClientNutritionSheets extends GuardedSheets {
     if (row === null) return void this.closeAsking(sheet);
     const start = dayWords(row.start, this.today(), this.locale());
     this.done(sheet, $localize`${row.name}:plan: assigned from ${start}:day:.`);
+    this.changed.emit('plans');
+  }
+
+  protected adjustClosed(made: WorkedOut | null, sheet: Closable): void {
+    if (made === null) return void this.closeAsking(sheet);
+    this.dirty = false;
+    sheet.close(true);
+  }
+
+  protected stopped(outcome: StopOutcome | null, sheet: Closable): void {
+    if (outcome === null) return void this.closeAsking(sheet);
+    this.done(
+      sheet,
+      outcome.already
+        ? $localize`${outcome.row.name}:plan: was already stopped.`
+        : $localize`${outcome.row.name}:plan: stopped. Its days are free for another meal plan.`,
+    );
     this.changed.emit('plans');
   }
 

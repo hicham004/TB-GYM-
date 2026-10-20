@@ -698,7 +698,9 @@ no estimate; nothing is extrapolated. The sheet names the formula on each row.
 basis, provider/source, source record/version, protein, carbohydrate, fat, calories, and any
 manual override with actor/reason. Raw and cooked weights are not interchangeable.
 Since R4.4c a coach edits a food of the workspace's own as its next version, which may rename it; the
-save names the revision the sheet opened and a later save since is refused (`food_changed`). Recipe
+save names the revision the sheet opened and a later save since is refused (`food_changed`). Two saves
+at the same moment keep one and refuse the other the same way, never with a server error (BEA-6;
+`food_version_conflict` for a save that named no revision). Recipe
 lines keep the food version and name they copied. A USDA food is never changed in place: "Edit a
 copy" makes a coach-authored food from its values (Cronometer's model), so provenance stays true.
 A food is archived, never deleted, since recipe lines and client snapshots name its versions (Cronometer's
@@ -735,6 +737,10 @@ labels (0.5 g/100 g or less may be declared 0 g) and US labels (under 0.5 g a se
 101.9(c)(6)) use, and the version keeps USDA's figure (`ReportedCarbohydrateGrams`, a database check
 allows it only beside a counted zero). Below -0.5 g the record does not add up: the import is refused
 and the search leaves it out.
+USDA not answering is a designed failure, never a server error (BEA-2, A6): no connection is
+`usda_unreachable`, no answer within the client's 20 seconds `usda_timeout`, and an answer that is not
+the JSON USDA documents `usda_schema_changed`, as an error status is `usda_http_{status}`. A search
+answers with that code and no matches, an import with 503 and the code, and nothing is imported.
 
 **NUT-004** AI-generated meals are drafts, never trusted nutrition facts. Output must match a
 schema, identify uncertain ingredients/units, pass domain validation, and be approved by the
@@ -751,7 +757,11 @@ lower ceiling is not, and generation counts only up to the ceiling.
 Since R4.4b the suggestion starts the recipe editor: the coach chooses a food for each suggested
 ingredient, and may drop one or add others, as when matching any imported recipe. Approval saves
 the lines the coach chose (at least one), each a food version of the workspace; the operation keeps
-the suggestion beside the recipe version it became.
+the suggestion beside the recipe version it became. A suggestion is reviewed once: a second approval
+or rejection, at the same moment or later, is refused (`ai_review_conflict`) and makes no second recipe
+(BEA-7). Whether suggestions are on is one answer, the provider set up and TB Gym's ceiling above zero
+(`GET /api/nutrition/ai-drafts/availability`), which Settings › Nutrition and the recipe editor both
+read (LOST-4).
 
 **NUT-005** A meal plan contains ordered meal slots. Each slot may offer multiple recipe
 choices. The system distinguishes:
@@ -762,13 +772,22 @@ choices. The system distinguishes:
 - an optional statistical average across alternatives.
 
 "Average macros per meal" cannot be used as the client's actual consumed total unless a
-specific choice was recorded.
+specific choice was recorded. A recorded choice carries the calories of the amount recorded (the
+choice's own scaled by the servings eaten), which the client's day shows on that meal beside the plan's
+serving (CLIENT-10); the day's totals count the same numbers.
 
 **NUT-011** Stored carbohydrate is total carbohydrate including fibre and polyols, matching
 USDA "Carbohydrate, by difference" and printed labels. Energy policies derive available
 carbohydrate themselves, so fibre is never charged twice. Percentages use a 0-100 scale.
+An EU or UK label prints carbohydrate without the fibre (EU 1169/2011, Annex I), so under EU-style labels
+a coach types the carbs as printed and the request says so (`carbohydrateDeclaration: WithoutFibre`); the
+server adds the fibre back before saving (`LabelCarbohydrateRule` v1, C6, NCM-3), so storage stays total.
+Porridge oats typed as a UK label prints them (60 g carbs, 9 g fibre) are kept as 69 g and count the
+label's 374 kcal. A request that says nothing is total, as every food saved before.
 An assigned nutrition plan may be cancelled once, by an audited coach operation that keeps the
-snapshot and its logs as history and releases the date range for a corrected plan.
+snapshot and its logs as history and releases the date range for a corrected plan. The coach does it
+from the client's Nutrition tab ("Stop this meal plan", NCM-1) with a reason, on a plan running or coming;
+the client stops seeing it at once, and the plan list carries when it was stopped and why.
 
 **NUT-006** Assigning a diet from a library creates a client-specific versioned snapshot
 linked to the subscription, following the same template rule as training. Client logs and
@@ -810,6 +829,13 @@ or protein plus fat exceeds the target. Rounding happens only for display/prescr
 the unrounded values are retained. If fiber, alcohol, or label-specific energy is supported,
 the simple 4/4/9 policy must be extended explicitly. Food energy did so for alcohol in `Atwater v2`
 (C7, below); the macro split here stays protein, fat and carbohydrate.
+Manual coach overrides win (INV-2, A6): "Adjust macros" takes the coach's protein, carbohydrate and fat
+in grams (0 to 1,000 each) and a reason, records them as an append-only `MacroOverrideAudit`, and makes
+new targets, a calculation snapshot by `CoachMacroOverride` v1 that keeps the estimates and inputs of the
+targets it adjusts and names the override. Its calorie target is what the grams make at 4, 4 and 9
+kcal a gram, and its goal adjustment the distance from the same TDEE, so the target still equals TDEE
+plus adjustment. The next meal plan assigned with them carries them; a plan assigned before keeps its own
+(NUT-009). The protein range still only warns.
 
 **NUT-009** If the coach enters no calorie target, calculations use the current approved TDEE
 estimate. Entering a target creates a new calculation snapshot; old diet assignments retain
@@ -817,8 +843,9 @@ the snapshot they were based on. A coach reads a client's declared allergens
 (`GET /api/nutrition/clients/{clientProfileId}/allergens`) and their last work-outs with the inputs and
 warnings (`.../calculations?take=`, newest first, 1 to 20, default 5), and the plan list names each plan and
 carries its snapshot macros (R5.3d1). All three follow the nutrition feature gate and the coach's assigned
-clients (ADR 0026): a closed feature, a client of another workspace or a released client (ADR 0027) is 403,
-and another coach's client is 404.
+clients (ADR 0026): a closed feature or a released client (ADR 0027) is 403, and another coach's client and
+a client that is not in the workspace, another workspace's included, are 404 on every nutrition route that
+names one (SEC-8), as in the other modules.
 
 **NUT-010** Allergy and medication data may warn the coach but the app must not claim medical
 diagnosis or guarantee recipe safety. Ingredient/allergen completeness and clinical scope
@@ -1890,6 +1917,7 @@ At minimum, later migrations should enforce:
 | Positive bodyweight/height/load                                                                                      | Check constraints with approved limits                                                                |
 | One completion per assigned day                                                                                      | Unique `(TenantId, AssignmentDayId, ClientId)`                                                        |
 | Valid macro inputs                                                                                                   | Non-negative checks; aggregate validation in domain transaction                                       |
+| A coach's own macros name their override, once, and only theirs do (INV-2)                                           | Composite FK `(TenantId, MacroOverrideAuditId)`, filtered unique, check on `MacroMethodKey`            |
 | Tenant-safe child relationship                                                                                       | Composite FK including `TenantId` where practical                                                     |
 | One active owner per workspace                                                                                       | Partial unique `(TenantId)` where `Role = 'Owner' AND Status = 'Active'`                              |
 | A client's coach is active staff, and a coach change is recorded in the history                                      | Composite FK to memberships plus deferred constraint triggers on the client and the membership       |

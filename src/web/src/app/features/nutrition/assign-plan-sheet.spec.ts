@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  adjustedRecord,
   calculationRecord,
   clientPlan,
   earlierRecord,
@@ -152,6 +153,21 @@ describe('Assign a meal plan', () => {
     expect(textOf(host.querySelector('[data-cover]'))).toBe(
       'Online Coaching, Tue 21 Jul – Wed 28 Oct',
     );
+  });
+
+  it('names the coach’s own macros as theirs in the targets it carries (INV-2)', async () => {
+    const { host } = await render({
+      calculations: [mapWorkedOut(adjustedRecord()), mapWorkedOut(calculationRecord())],
+    });
+
+    expect(textOf(host.querySelector('[data-targets]'))).toBe(
+      '2,060 calories a day 150 g protein · 230 g carbs · 60 g fat, your macros set today',
+    );
+    expect(
+      Array.from(host.querySelectorAll('select[name="targets"] option')).map((option) =>
+        textOf(option),
+      ),
+    ).toEqual(['today, your macros, 2,060 calories a day', 'Fri 9 Oct, 2,155 calories a day']);
   });
 
   it('sends the meal plan, the targets, the plan it sits under and the day', async () => {

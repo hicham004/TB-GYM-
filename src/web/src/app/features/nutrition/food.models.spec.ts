@@ -46,12 +46,37 @@ describe('food rows', () => {
     expect(row.split).toEqual({ protein: 13, carbs: 70, fat: 16 });
   });
 
-  it('marks a USDA copy, and names what USDA left out', () => {
+  it('marks a USDA copy, and names what USDA left out that is worth a look', () => {
     const row = foodRow(CHICKEN_FOOD, 'en-US');
     expect(row.own).toBe(false);
     expect(row.meta).toBe('USDA · raw · per 100 g');
-    expect(row.flag).toBe('Check fibre, sugar alcohols, alcohol');
+    // USDA almost never reports sugar alcohols, and alcohol only for drinks, so only fibre is flagged (NCM-9).
+    expect(row.flag).toBe('Check fibre');
     expect(row.externalId).toBe('2646170');
+  });
+
+  it('flags nothing when USDA left out only what it never reports (NCM-9)', () => {
+    const usual = food({
+      provenance: 'UsdaFdc',
+      externalId: '171705',
+      versionOverrides: { unreportedNutrients: ['Polyols', 'Ethanol'] },
+    });
+    expect(foodRow(usual, 'en-US').flag).toBeNull();
+    // The details still say what USDA did not report, in a list with "or".
+    expect(foodFacts(usual, null, 'en-US').unreported).toBe(
+      'USDA didn’t report sugar alcohols or alcohol, so they were saved as 0.',
+    );
+    expect(
+      foodFacts(
+        food({
+          provenance: 'UsdaFdc',
+          externalId: '1',
+          versionOverrides: { unreportedNutrients: ['Ethanol'] },
+        }),
+        null,
+        'en-US',
+      ).unreported,
+    ).toBe('USDA didn’t report alcohol, so it was saved as 0.');
   });
 
   it('flags label calories that disagree with the macros before anything USDA left out', () => {
@@ -130,7 +155,7 @@ describe('the details sheet', () => {
     expect(facts.own).toBe(false);
     expect(facts.source).toBe('Copied from USDA · raw');
     expect(facts.unreported).toBe(
-      'USDA didn’t report fibre, sugar alcohols, alcohol, so it was saved as 0.',
+      'USDA didn’t report fibre, sugar alcohols or alcohol, so they were saved as 0.',
     );
     expect(facts.allergens).toBe('No allergens declared.');
     expect(facts.database).toBe('FoodData Central 2646170 · Foundation');
@@ -188,8 +213,12 @@ describe('the food sheet', () => {
     // Red wine, per 100 g as USDA lists it: about 85 kcal, not the 11 its protein and carbs give.
     const wine = filled({ amount: 100, protein: 0.1, carbs: 2.6, fat: 0, alcohol: 10.6 });
     expect(estimatedCalories(wine, 'Atwater')).toBeCloseTo(0.4 + 10.4 + 74.2, 6);
-    // EU: available carbs 14 g at 4, fibre at 2, sugar alcohols at 2.4, alcohol at 7.
-    expect(estimatedCalories(draft, 'Eu1169')).toBeCloseTo(40 + 56 + 45 + 4.8 + 7 + 8, 6);
+    // EU: the carbs are typed as an EU label prints them, without the 4 g of fibre (C6), so 16 g
+    // is the same food; available carbs 14 g at 4, fibre at 2, sugar alcohols at 2.4, alcohol at 7.
+    expect(estimatedCalories({ ...draft, carbs: 16 }, 'Eu1169')).toBeCloseTo(
+      40 + 56 + 45 + 4.8 + 7 + 8,
+      6,
+    );
     expect(estimatedCalories(filled({ fat: null }), 'Atwater')).toBeNull();
   });
 

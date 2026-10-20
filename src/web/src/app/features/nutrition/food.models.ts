@@ -49,6 +49,18 @@ const UNREPORTED_WORDS: Record<UnreportedNutrient, string> = {
   Ethanol: $localize`alcohol`,
 };
 
+/**
+ * What a missing value is worth checking in Foods (NCM-9). USDA almost never reports sugar alcohols,
+ * and reports alcohol only for drinks, so their absence is the usual case and flagging it marked every
+ * import; a missing fibre is worth a look. The food's details still name everything USDA left out.
+ */
+const WORTH_CHECKING: ReadonlySet<UnreportedNutrient> = new Set(['Fibre']);
+
+/** Whether carbs are typed as an EU label prints them, without the fibre (C6, NCM-3). */
+export function carbsWithoutFibre(policyKey: string | null): boolean {
+  return policyKey === 'Eu1169';
+}
+
 function macroLine(macros: Macros, locale: string): string {
   return $localize`P ${grams(macros.protein, locale)}:protein: · C ${grams(macros.carbs, locale)}:carbs: · F ${grams(macros.fat, locale)}:fat:`;
 }
@@ -101,8 +113,8 @@ export function foodRow(view: FoodItemView, locale: string): FoodRow {
     allergens: allergenText(version.declaredAllergens),
     flag: version.hasCalorieDiscrepancy
       ? $localize`Label calories differ`
-      : version.unreportedNutrients.length
-        ? $localize`Check ${unreportedText(version.unreportedNutrients)}:nutrients:`
+      : version.unreportedNutrients.some((nutrient) => WORTH_CHECKING.has(nutrient))
+        ? $localize`Check ${unreportedText(version.unreportedNutrients.filter((nutrient) => WORTH_CHECKING.has(nutrient)))}:nutrients:`
         : null,
     externalId: view.provenance === 'UsdaFdc' ? (view.externalId ?? null) : null,
   };
@@ -154,8 +166,22 @@ function signedGrams(value: number, locale: string): string {
   return $localize`${formatNumber(value, locale, '1.0-2').replace('-', '−')}:grams: g`;
 }
 
-export function unreportedText(nutrients: readonly UnreportedNutrient[]): string {
-  return nutrients.map((nutrient) => UNREPORTED_WORDS[nutrient]).join(', ');
+/** "fibre and alcohol", or with `or` for a sentence that says none was reported. */
+export function unreportedText(
+  nutrients: readonly UnreportedNutrient[],
+  type: 'conjunction' | 'disjunction' = 'conjunction',
+): string {
+  return new Intl.ListFormat('en-GB', { style: 'long', type }).format(
+    nutrients.map((nutrient) => UNREPORTED_WORDS[nutrient]),
+  );
+}
+
+/** "USDA didn’t report sugar alcohols or alcohol, so they were saved as 0." */
+export function unreportedSentence(nutrients: readonly UnreportedNutrient[]): string {
+  const list = unreportedText(nutrients, 'disjunction');
+  return nutrients.length === 1
+    ? $localize`USDA didn’t report ${list}:nutrients:, so it was saved as 0.`
+    : $localize`USDA didn’t report ${list}:nutrients:, so they were saved as 0.`;
 }
 
 // ---------- the details sheet ----------
@@ -229,7 +255,7 @@ export function foodFacts(view: FoodItemView, tolerance: number | null, locale: 
         : $localize`That is more than ${kcal(tolerance, locale)}:tolerance: from what the macros add up to, so check the numbers.`
       : null,
     unreported: version.unreportedNutrients.length
-      ? $localize`USDA didn’t report ${unreportedText(version.unreportedNutrients)}:nutrients:, so it was saved as 0.`
+      ? unreportedSentence(version.unreportedNutrients)
       : null,
     reportedCarbs:
       reported === null
@@ -254,6 +280,7 @@ export interface FoodDraft {
   unit: FoodQuantityUnit;
   basis: PreparationBasis;
   protein: number | null;
+  /** As the workspace's labels print it: total under US-style labels, without fibre under EU-style. */
   carbs: number | null;
   fat: number | null;
   fibre: number | null;
@@ -280,17 +307,25 @@ export function emptyFoodDraft(): FoodDraft {
   };
 }
 
-/** A saved food as the sheet opens it: to edit, or, for a USDA food, as a copy of the coach's own. */
-export function draftFromFood(view: FoodItemView): FoodDraft {
+/**
+ * A saved food as the sheet opens it: to edit, or, for a USDA food, as a copy of the coach's own. Under
+ * EU-style labels its total carbs are shown as an EU label prints them, without the fibre (C6).
+ */
+export function draftFromFood(view: FoodItemView, policyKey: string | null = null): FoodDraft {
   const version = view.currentVersion;
   const optional = (value: number | string) => numeric(value) || null;
+  const total = numeric(version.carbohydrateGrams);
+  // Rounded to the six places the database keeps, so a subtraction never shows a float's tail.
+  const carbs = carbsWithoutFibre(policyKey)
+    ? Math.max(Math.round((total - numeric(version.fibreGrams)) * 1e6) / 1e6, 0)
+    : total;
   return {
     name: view.name,
     amount: numeric(version.basisQuantity),
     unit: version.basisUnit,
     basis: version.preparationBasis,
     protein: numeric(version.proteinGrams),
-    carbs: numeric(version.carbohydrateGrams),
+    carbs,
     fat: numeric(version.fatGrams),
     fibre: optional(version.fibreGrams),
     polyols: optional(version.polyolGrams),
@@ -317,8 +352,14 @@ export interface FoodProblem {
 
 const filled = (value: number | null): value is number => value !== null && Number.isFinite(value);
 
+/** The total carbs a draft holds, the fibre included: what is saved (NUT-011). */
+export function totalCarbs(draft: FoodDraft, policyKey: string | null): number | null {
+  if (!filled(draft.carbs)) return null;
+  return carbsWithoutFibre(policyKey) ? draft.carbs + (draft.fibre ?? 0) : draft.carbs;
+}
+
 /** Every check that stops a save, by box, in the order the sheet reads top to bottom. */
-export function foodProblems(draft: FoodDraft): FoodProblem[] {
+export function foodProblems(draft: FoodDraft, policyKey: string | null = null): FoodProblem[] {
   const problems: FoodProblem[] = [];
   const name = draft.name.trim();
   if (!name) problems.push({ field: 'name', message: $localize`Give the food a name.` });
@@ -340,9 +381,20 @@ export function foodProblems(draft: FoodDraft): FoodProblem[] {
     if (!filled(value) || value < 0 || value > MAX_AMOUNT) problems.push({ field, message });
   }
   const extras = [draft.fibre, draft.polyols, draft.alcohol, draft.labelCalories];
+  const withoutFibre = carbsWithoutFibre(policyKey);
   if (extras.some((value) => filled(value) && (value < 0 || value > MAX_AMOUNT))) {
     problems.push({ field: 'more', message: $localize`Other nutrients can’t be below 0.` });
-  } else if (filled(draft.carbs) && (draft.fibre ?? 0) + (draft.polyols ?? 0) > draft.carbs) {
+  } else if (withoutFibre && filled(draft.carbs) && (draft.polyols ?? 0) > draft.carbs) {
+    // An EU label's carbs leave the fibre out but keep the sugar alcohols in (EU 1169/2011, Annex I).
+    problems.push({
+      field: 'more',
+      message: $localize`Sugar alcohols are part of the carbs on an EU label, so they can’t be more than the carbs.`,
+    });
+  } else if (
+    !withoutFibre &&
+    filled(draft.carbs) &&
+    (draft.fibre ?? 0) + (draft.polyols ?? 0) > draft.carbs
+  ) {
     problems.push({
       field: 'more',
       message: $localize`Fibre and sugar alcohols are part of the carbs, so together they can’t be more than the carbs.`,
@@ -352,7 +404,10 @@ export function foodProblems(draft: FoodDraft): FoodProblem[] {
     !problems.length &&
     draft.unit !== 'Serving' &&
     filled(draft.amount) &&
-    (draft.protein ?? 0) + (draft.carbs ?? 0) + (draft.fat ?? 0) + (draft.alcohol ?? 0) >
+    (draft.protein ?? 0) +
+      (totalCarbs(draft, policyKey) ?? 0) +
+      (draft.fat ?? 0) +
+      (draft.alcohol ?? 0) >
       draft.amount
   ) {
     problems.push({
@@ -366,20 +421,22 @@ export function foodProblems(draft: FoodDraft): FoodProblem[] {
 /**
  * The calories the server will work out, under the workspace's policy: Atwater v2, 4/4/9 on total
  * carbs plus alcohol at 7, or the EU's factors on available carbs, fibre, sugar alcohols and alcohol.
+ * Under EU-style labels the carbs are typed as printed, so the fibre is not in them to take off again.
  * Null until the macros are typed.
  */
 export function estimatedCalories(draft: FoodDraft, policyKey: string | null): number | null {
-  if (!filled(draft.protein) || !filled(draft.carbs) || !filled(draft.fat)) return null;
+  const total = totalCarbs(draft, policyKey);
+  if (!filled(draft.protein) || total === null || !filled(draft.fat)) return null;
   const fibre = draft.fibre ?? 0;
   const polyols = draft.polyols ?? 0;
   const alcohol = draft.alcohol ?? 0;
   if (policyKey === 'Eu1169') {
-    const available = Math.max(draft.carbs - fibre - polyols, 0);
+    const available = Math.max(total - fibre - polyols, 0);
     return (
       draft.protein * 4 + available * 4 + draft.fat * 9 + polyols * 2.4 + alcohol * 7 + fibre * 2
     );
   }
-  return draft.protein * 4 + draft.carbs * 4 + draft.fat * 9 + alcohol * 7;
+  return draft.protein * 4 + total * 4 + draft.fat * 9 + alcohol * 7;
 }
 
 /** How the workspace counts calories, in the words of Settings › Nutrition (C5). */
@@ -392,13 +449,15 @@ export function policyWords(policyKey: string | null): string {
 const COACH_SOURCE = 'Coach-authored food';
 const COACH_RECORD = 'coach-entry-v1';
 
-function versionRequest(draft: FoodDraft): AddFoodVersionRequest {
+// The carbs go as typed and say how; the server adds an EU label's fibre back (C6).
+function versionRequest(draft: FoodDraft, policyKey: string | null): AddFoodVersionRequest {
   return {
     basisQuantity: draft.amount ?? 0,
     basisUnit: draft.unit,
     preparationBasis: draft.basis,
     proteinGrams: draft.protein ?? 0,
     carbohydrateGrams: draft.carbs ?? 0,
+    carbohydrateDeclaration: carbsWithoutFibre(policyKey) ? 'WithoutFibre' : 'TotalWithFibre',
     fatGrams: draft.fat ?? 0,
     fibreGrams: draft.fibre ?? 0,
     polyolGrams: draft.polyols ?? 0,
@@ -415,18 +474,25 @@ function versionRequest(draft: FoodDraft): AddFoodVersionRequest {
 }
 
 /** A new food of the coach's own, which is also what a copy of a USDA food becomes. */
-export function createFoodRequest(draft: FoodDraft): CreateFoodItemRequest {
+export function createFoodRequest(
+  draft: FoodDraft,
+  policyKey: string | null = null,
+): CreateFoodItemRequest {
   return {
     name: draft.name.trim(),
     provenance: 'CoachAuthored',
     externalId: null,
     externalDataType: null,
     labelMediaAssetId: null,
-    version: versionRequest(draft),
+    version: versionRequest(draft, policyKey),
   };
 }
 
 /** The next version of the coach's own food, named afresh, from the revision the sheet opened. */
-export function editFoodRequest(draft: FoodDraft, baseRevision: number): AddFoodVersionRequest {
-  return { ...versionRequest(draft), name: draft.name.trim(), baseRevision };
+export function editFoodRequest(
+  draft: FoodDraft,
+  baseRevision: number,
+  policyKey: string | null = null,
+): AddFoodVersionRequest {
+  return { ...versionRequest(draft, policyKey), name: draft.name.trim(), baseRevision };
 }

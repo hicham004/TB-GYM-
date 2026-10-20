@@ -185,10 +185,17 @@
                   } @else {
                     <strong>{{ choice.recipeName }}</strong>
                   }
-                  <span class="meal-amount" i18n
-                    >{{ shownServings | number: '1.0-2' }} {{ servingUnit(shownServings) }} ·
-                    {{ choice.calories | number: '1.0-0' }} kcal planned</span
-                  >
+                  @if (slot.selectedChoiceId && slot.loggedCalories !== null) {
+                    <span class="meal-amount" data-logged-amount i18n
+                      >{{ shownServings | number: '1.0-2' }} {{ servingUnit(shownServings) }} ·
+                      {{ slot.loggedCalories | number: '1.0-0' }} kcal logged</span
+                    >
+                  } @else {
+                    <span class="meal-amount" i18n
+                      >{{ shownServings | number: '1.0-2' }} {{ servingUnit(shownServings) }} ·
+                      {{ choice.calories | number: '1.0-0' }} kcal planned</span
+                    >
+                  }
                 </div>
               } @else {
                 <p i18n>Your coach hasn't added an option for this meal yet.</p>

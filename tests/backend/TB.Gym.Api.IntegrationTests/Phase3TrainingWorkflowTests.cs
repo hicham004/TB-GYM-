@@ -139,20 +139,23 @@ public sealed partial class Phase3TrainingWorkflowTests
                             Phase5B5WorkspaceQuotaBytes().ToString(CultureInfo.InvariantCulture),
                         ["Media:MaxClientProgressPhotoBytes"] =
                             Phase5B5ClientQuotaBytes().ToString(CultureInfo.InvariantCulture),
-                        // TB Gym's AI ceiling is the development one, lowered for the test of it (R4.4c).
+                        // TB Gym's AI ceiling is the development one, lowered for the test of it (R4.4c)
+                        // and set to zero, which keeps AI off, for the test of availability (LOST-4).
                         ["Nutrition:AiAllowance:MaximumMonthlyRequests"] =
-                            TestContext.TestName?.StartsWith("R44cAi", StringComparison.Ordinal) == true ? "2" : "200",
+                            TestContext.TestName?.StartsWith("R44cAi", StringComparison.Ordinal) == true ? "2"
+                            : TestContext.TestName?.StartsWith("A6AiOff", StringComparison.Ordinal) == true ? "0"
+                            : "200",
                     })));
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IClock>();
                 services.RemoveAll<IAiMealDraftProvider>();
                 services.AddSingleton<IClock>(clock);
-                // The launch provider answers the AI tests (F2), the recipe editor's AI test (R4.4b) and
-                // the AI ceiling's (R4.4c).
+                // The launch provider answers the AI tests (F2), the recipe editor's AI test (R4.4b), the
+                // AI ceiling's (R4.4c) and the review race and availability (A6).
                 services.AddSingleton<IAiMealDraftProvider>(TestContext.TestName is { } testName &&
                     (testName.StartsWith("F2", StringComparison.Ordinal) || testName.StartsWith("R44bAnAi", StringComparison.Ordinal) ||
-                        testName.StartsWith("R44cAi", StringComparison.Ordinal))
+                        testName.StartsWith("R44cAi", StringComparison.Ordinal) || testName.StartsWith("A6Ai", StringComparison.Ordinal))
                     ? launchAiProvider
                     : new InvalidSchemaAiMealDraftProvider());
                 if (realUsdaProvider)

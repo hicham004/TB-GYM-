@@ -25,7 +25,11 @@ internal sealed partial class NutritionApplicationService(
     private const string AiSchemaVersion = "meal-draft-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public AiMealDraftAvailabilityView GetAiAvailability() => new(aiMealDraftProvider.IsConfigured);
+    // One answer for Settings and the recipe editor (LOST-4): a ceiling of zero keeps AI off (R4.4c).
+    public AiMealDraftAvailabilityView GetAiAvailability() => new(
+        aiMealDraftProvider.IsConfigured &&
+        aiAllowance.Value.MaximumMonthlyRequests > 0 &&
+        aiAllowance.Value.MaximumMonthlyCostUsd > 0m);
 
     private static bool IsDailyLogStartRace(DbUpdateException exception) =>
         exception.InnerException is PostgresException
@@ -184,11 +188,12 @@ internal sealed partial class NutritionApplicationService(
             {
                 return Invalid("version", exception.Message);
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DbUpdateException exception) when (exception is DbUpdateConcurrencyException || IsFoodRevisionRace(exception))
             {
                 dbContext.ChangeTracker.Clear();
                 // The save goes again: after an archive or a restore it lands, and after another
-                // version the base revision check says the food changed.
+                // version the base revision check says the food changed. Two saves at the same moment
+                // meet on the revision's unique index rather than the food's version (BEA-6).
                 var versioned = await CurrentRevisionAsync(foodItemId, cancellationToken) != firstRevision;
                 if (attempt >= 2 || (versioned && request.BaseRevision is null))
                 {
@@ -197,6 +202,13 @@ internal sealed partial class NutritionApplicationService(
             }
         }
     }
+
+    private static bool IsFoodRevisionRace(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "IX_FoodItemVersions_TenantId_FoodItemId_Revision",
+        };
 
     private Task<int> CurrentRevisionAsync(Guid foodItemId, CancellationToken cancellationToken) =>
         dbContext.FoodItems.AsNoTracking().Where(item => item.Id == foodItemId).Select(item => item.CurrentRevision).SingleAsync(cancellationToken);
@@ -600,9 +612,10 @@ internal sealed partial class NutritionApplicationService(
 
     public async Task<NutritionCommandResult> CalculateTargetsAsync(Guid clientProfileId, CalculateNutritionTargetsRequest request, CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        if (reach != ClientNutritionReach.Allowed)
         {
-            return new NutritionCommandResult(NutritionCommandStatus.Forbidden);
+            return Refused(reach);
         }
 
         try
@@ -647,26 +660,35 @@ internal sealed partial class NutritionApplicationService(
         }
     }
 
+    /// <summary>
+    /// The coach's own macros win (NUT-008, INV-2): the override is kept as its append-only audit, and the
+    /// targets it makes are a new calculation that names it, so the next meal plan assigned carries them
+    /// and every plan assigned before keeps the targets it had (NUT-009).
+    /// </summary>
     public async Task<NutritionCommandResult> OverrideMacrosAsync(Guid clientProfileId, Guid calculationSnapshotId, CreateMacroOverrideRequest request, CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        if (reach != ClientNutritionReach.Allowed)
         {
-            return new NutritionCommandResult(NutritionCommandStatus.Forbidden);
+            return Refused(reach);
         }
 
-        var calculationExists = await dbContext.NutritionCalculationSnapshots.AsNoTracking()
-            .AnyAsync(item => item.Id == calculationSnapshotId && item.ClientProfileId == clientProfileId, cancellationToken);
-        if (!calculationExists)
+        var source = await dbContext.NutritionCalculationSnapshots.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == calculationSnapshotId && item.ClientProfileId == clientProfileId, cancellationToken);
+        if (source is null)
         {
             return NotFound();
         }
 
         try
         {
-            var audit = MacroOverrideAudit.Create(tenantContext.TenantId, calculationSnapshotId, request.ProteinGrams, request.FatGrams, request.CarbohydrateGrams, request.Reason, RequireUserId());
+            var audit = MacroOverrideAudit.Create(tenantContext.TenantId, source.Id, request.ProteinGrams, request.FatGrams, request.CarbohydrateGrams, request.Reason, RequireUserId());
+            var adjusted = source.WithCoachMacros(audit);
             dbContext.MacroOverrideAudits.Add(audit);
+            dbContext.NutritionCalculationSnapshots.Add(adjusted);
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, MacroOverride: ToMacroOverrideView(audit));
+            var record = (await CalculationRecordsAsync(clientProfileId, [adjusted.Id], int.MaxValue, cancellationToken)).Single();
+            return new NutritionCommandResult(NutritionCommandStatus.Success, CalculationRecord: record);
         }
         catch (ArgumentException exception)
         {
@@ -676,9 +698,10 @@ internal sealed partial class NutritionApplicationService(
 
     public async Task<NutritionCommandResult> ReplaceClientAllergensAsync(Guid clientProfileId, ReplaceClientAllergensRequest request, CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        if (reach != ClientNutritionReach.Allowed)
         {
-            return new NutritionCommandResult(NutritionCommandStatus.Forbidden);
+            return Refused(reach);
         }
 
         if (request.Codes.Any(code => !Enum.IsDefined(code)))
@@ -704,61 +727,100 @@ internal sealed partial class NutritionApplicationService(
         return new NutritionCommandResult(NutritionCommandStatus.Success);
     }
 
-    public async Task<ClientAllergensView?> GetClientAllergensAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    public async Task<ClientNutritionRead<ClientAllergensView>> GetClientAllergensAsync(Guid clientProfileId, CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        if (reach != ClientNutritionReach.Allowed)
         {
-            return null;
+            return new(reach);
         }
 
         var codes = await dbContext.ClientDeclaredAllergens.AsNoTracking()
             .Where(item => item.ClientProfileId == clientProfileId && item.IsActive)
             .Select(item => item.Code)
             .ToArrayAsync(cancellationToken);
-        return new ClientAllergensView(codes.Order().ToArray());
+        return new(reach, new ClientAllergensView(codes.Order().ToArray()));
     }
 
-    public async Task<NutritionCalculationRecord[]?> ListCalculationsAsync(Guid clientProfileId, int take, CancellationToken cancellationToken)
+    public async Task<ClientNutritionRead<NutritionCalculationRecord[]>> ListCalculationsAsync(Guid clientProfileId, int take, CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        return reach != ClientNutritionReach.Allowed
+            ? new(reach)
+            : new(reach, await CalculationRecordsAsync(clientProfileId, null, Math.Clamp(take, 1, 20), cancellationToken));
+    }
+
+    /// <summary>The client's calculations, newest first, each a coach's override says what it changed.</summary>
+    private async Task<NutritionCalculationRecord[]> CalculationRecordsAsync(Guid clientProfileId, Guid[]? ids, int take, CancellationToken cancellationToken)
+    {
+        var source = dbContext.NutritionCalculationSnapshots.AsNoTracking().Where(item => item.ClientProfileId == clientProfileId);
+        if (ids is not null)
         {
-            return null;
+            source = source.Where(item => ids.Contains(item.Id));
         }
 
-        var rows = await dbContext.NutritionCalculationSnapshots.AsNoTracking()
-            .Where(item => item.ClientProfileId == clientProfileId)
+        var rows = await source
             .OrderByDescending(item => item.CreatedAtUtc)
             .ThenByDescending(item => item.Id)
-            .Take(Math.Clamp(take, 1, 20))
+            .Take(take)
             .ToListAsync(cancellationToken);
-        return rows.Select(ToCalculationRecord).ToArray();
+        var overrideIds = rows.Where(item => item.MacroOverrideAuditId is not null).Select(item => item.MacroOverrideAuditId!.Value).ToArray();
+        var adjustments = overrideIds.Length == 0
+            ? new Dictionary<Guid, MacroAdjustmentView>()
+            : await (from audit in dbContext.MacroOverrideAudits.AsNoTracking()
+                     join adjusted in dbContext.NutritionCalculationSnapshots.AsNoTracking()
+                         on new { audit.TenantId, Id = audit.CalculationSnapshotId } equals new { adjusted.TenantId, adjusted.Id }
+                     where overrideIds.Contains(audit.Id)
+                     select new MacroAdjustmentView(audit.Id, audit.Reason, audit.CreatedAtUtc, adjusted.Id, adjusted.CalorieTarget, adjusted.ProteinGrams, adjusted.CarbohydrateGrams, adjusted.FatGrams))
+                .ToDictionaryAsync(item => item.OverrideId, cancellationToken);
+        return rows.Select(item => ToCalculationRecord(item, item.MacroOverrideAuditId is { } overrideId ? adjustments.GetValueOrDefault(overrideId) : null)).ToArray();
     }
 
-    public async Task<ClientNutritionPlanSummary[]?> ListClientPlansAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    public async Task<ClientNutritionRead<ClientNutritionPlanSummary[]>> ListClientPlansAsync(Guid clientProfileId, CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        return reach != ClientNutritionReach.Allowed
+            ? new(reach)
+            : new(reach, await PlanSummariesAsync(clientProfileId, null, cancellationToken));
+    }
+
+    /// <summary>The client's plans, newest start first, each with the targets it carries and, once stopped, why.</summary>
+    private async Task<ClientNutritionPlanSummary[]> PlanSummariesAsync(Guid clientProfileId, Guid? planId, CancellationToken cancellationToken)
+    {
+        var plans = await (from plan in dbContext.ClientNutritionPlans.AsNoTracking()
+                           join calculation in dbContext.NutritionCalculationSnapshots.AsNoTracking()
+                               on new { plan.TenantId, Id = plan.NutritionCalculationSnapshotId } equals new { calculation.TenantId, calculation.Id }
+                           join version in dbContext.MealPlanTemplateVersions.AsNoTracking()
+                               on new { plan.TenantId, Id = plan.SourceMealPlanTemplateVersionId } equals new { version.TenantId, version.Id }
+                           join template in dbContext.MealPlanTemplates.AsNoTracking()
+                               on new { version.TenantId, Id = version.MealPlanTemplateId } equals new { template.TenantId, template.Id }
+                           where plan.ClientProfileId == clientProfileId && (planId == null || plan.Id == planId)
+                           orderby plan.StartDate descending
+                           select new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version, template.Name, calculation.ProteinGrams, calculation.CarbohydrateGrams, calculation.FatGrams, calculation.Id, null, null))
+            .ToArrayAsync(cancellationToken);
+        var stoppedIds = plans.Where(item => item.Status == ClientNutritionPlanStatus.Cancelled).Select(item => item.Id).ToArray();
+        if (stoppedIds.Length == 0)
         {
-            return null;
+            return plans;
         }
 
-        return await (from plan in dbContext.ClientNutritionPlans.AsNoTracking()
-                      join calculation in dbContext.NutritionCalculationSnapshots.AsNoTracking()
-                          on new { plan.TenantId, Id = plan.NutritionCalculationSnapshotId } equals new { calculation.TenantId, calculation.Id }
-                      join version in dbContext.MealPlanTemplateVersions.AsNoTracking()
-                          on new { plan.TenantId, Id = plan.SourceMealPlanTemplateVersionId } equals new { version.TenantId, version.Id }
-                      join template in dbContext.MealPlanTemplates.AsNoTracking()
-                          on new { version.TenantId, Id = version.MealPlanTemplateId } equals new { template.TenantId, template.Id }
-                      where plan.ClientProfileId == clientProfileId
-                      orderby plan.StartDate descending
-                      select new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version, template.Name, calculation.ProteinGrams, calculation.CarbohydrateGrams, calculation.FatGrams, calculation.Id))
-            .ToArrayAsync(cancellationToken);
+        // Stopping is one way (NUT-011), so a stopped plan has one such event; the newest is taken.
+        var stops = (await dbContext.NutritionPlanLifecycleEvents.AsNoTracking()
+                .Where(item => stoppedIds.Contains(item.ClientNutritionPlanId) && item.EventType == NutritionPlanLifecycleEventType.Cancelled)
+                .ToListAsync(cancellationToken))
+            .GroupBy(item => item.ClientNutritionPlanId)
+            .ToDictionary(group => group.Key, group => group.MaxBy(item => item.OccurredAtUtc)!);
+        return plans.Select(item => stops.TryGetValue(item.Id, out var stop)
+            ? item with { StoppedAtUtc = stop.OccurredAtUtc, StopReason = stop.Reason }
+            : item).ToArray();
     }
 
     public async Task<NutritionCommandResult> AssignPlanAsync(Guid clientProfileId, AssignNutritionPlanRequest request, CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        if (reach != ClientNutritionReach.Allowed)
         {
-            return new NutritionCommandResult(NutritionCommandStatus.Forbidden);
+            return Refused(reach);
         }
 
         var template = await dbContext.MealPlanTemplateVersions.AsNoTracking()
@@ -855,9 +917,10 @@ internal sealed partial class NutritionApplicationService(
         CancelNutritionPlanRequest request,
         CancellationToken cancellationToken)
     {
-        if (!await ClientExistsAndHasAccessAsync(clientProfileId, cancellationToken))
+        var reach = await ReachClientAsync(clientProfileId, cancellationToken);
+        if (reach != ClientNutritionReach.Allowed)
         {
-            return new NutritionCommandResult(NutritionCommandStatus.Forbidden);
+            return Refused(reach);
         }
 
         if (string.IsNullOrWhiteSpace(request.Reason))
@@ -873,11 +936,6 @@ internal sealed partial class NutritionApplicationService(
             return NotFound();
         }
 
-        var calculation = await dbContext.NutritionCalculationSnapshots.AsNoTracking()
-            .Where(item => item.Id == plan.NutritionCalculationSnapshotId)
-            .Select(item => new { item.Id, item.CalorieTarget, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams })
-            .SingleAsync(cancellationToken);
-        var mealPlanName = await MealPlanNameAsync(plan.SourceMealPlanTemplateVersionId, cancellationToken);
         var previousStatus = plan.Status;
         dbContext.Entry(plan).Property(item => item.Version).OriginalValue = request.Version;
         try
@@ -893,9 +951,10 @@ internal sealed partial class NutritionApplicationService(
                 RequireUserId(),
                 clock.UtcNow));
             await dbContext.SaveChangesAsync(cancellationToken);
+            // Read back as the plan list reads it, so the answer and the list say the same (NCM-1).
             return new NutritionCommandResult(
                 NutritionCommandStatus.Success,
-                ClientPlan: new ClientNutritionPlanSummary(plan.Id, plan.SourceMealPlanTemplateVersionId, plan.EnrollmentId, plan.StartDate, plan.EndDateExclusive, calculation.CalorieTarget, plan.Status, plan.Version, mealPlanName, calculation.ProteinGrams, calculation.CarbohydrateGrams, calculation.FatGrams, calculation.Id));
+                ClientPlan: (await PlanSummariesAsync(clientProfileId, plan.Id, cancellationToken)).Single());
         }
         catch (ArgumentException exception)
         {
@@ -1301,6 +1360,12 @@ internal sealed partial class NutritionApplicationService(
             return NotFound();
         }
 
+        // A second review answers as one made at the same moment does, whichever comes first (BEA-7).
+        if (operation.Status is AiDraftStatus.Approved or AiDraftStatus.Rejected)
+        {
+            return AiReviewedElsewhere();
+        }
+
         if (!request.Approved)
         {
             try
@@ -1312,6 +1377,10 @@ internal sealed partial class NutritionApplicationService(
             catch (InvalidOperationException exception)
             {
                 return Conflict("ai_review_conflict", exception.Message);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return AiReviewedElsewhere();
             }
         }
 
@@ -1353,7 +1422,16 @@ internal sealed partial class NutritionApplicationService(
         {
             return Invalid("review", exception.Message);
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another approval or rejection saved first; its whole save, recipe included, is the one
+            // kept, so no second recipe is made (BEA-7).
+            return AiReviewedElsewhere();
+        }
     }
+
+    private static NutritionCommandResult AiReviewedElsewhere() =>
+        Conflict("ai_review_conflict", "This suggestion was already reviewed in another tab or by another coach, so nothing was saved here.");
 
     private async Task<RecipeIngredientInput[]> BuildRecipeIngredientsAsync(IReadOnlyList<RecipeIngredientRequest> requests, CancellationToken cancellationToken)
     {
@@ -1439,15 +1517,24 @@ internal sealed partial class NutritionApplicationService(
         return settings;
     }
 
-    private async Task<bool> ClientExistsAndHasAccessAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    /// <summary>
+    /// A client that is not in this workspace is not found (SEC-8), exactly as another coach's client is
+    /// answered by the tenant handler; a client whose Nutrition is closed is refused.
+    /// </summary>
+    private async Task<ClientNutritionReach> ReachClientAsync(Guid clientProfileId, CancellationToken cancellationToken)
     {
         if (!await dbContext.ClientProfiles.AsNoTracking().AnyAsync(item => item.Id == clientProfileId, cancellationToken))
         {
-            return false;
+            return ClientNutritionReach.NotFound;
         }
 
-        return (await GetNutritionAccessAsync(clientProfileId, cancellationToken)).IsAllowed;
+        return (await GetNutritionAccessAsync(clientProfileId, cancellationToken)).IsAllowed
+            ? ClientNutritionReach.Allowed
+            : ClientNutritionReach.Forbidden;
     }
+
+    private static NutritionCommandResult Refused(ClientNutritionReach reach) =>
+        new(reach == ClientNutritionReach.NotFound ? NutritionCommandStatus.NotFound : NutritionCommandStatus.Forbidden);
 
     private Task<FeatureAccessDecision> GetNutritionAccessAsync(Guid clientProfileId, CancellationToken cancellationToken) =>
         featureAccessService.EvaluateAsync(tenantContext.TenantId, clientProfileId, CoachingFeature.Nutrition, cancellationToken);
@@ -1539,14 +1626,17 @@ internal sealed partial class NutritionApplicationService(
             slots.Select(slot =>
             {
                 entries.TryGetValue(slot.Id, out var entry);
-                return new NutritionSlotView(slot.Id, slot.Name, slot.Order, slot.Choices.Select(choice => new NutritionChoiceView(choice.Id, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.Id, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.PhotoMediaAssetId)).ToArray(), entry?.SelectedClientNutritionPlanChoiceId, entry?.Servings);
+                return new NutritionSlotView(slot.Id, slot.Name, slot.Order, slot.Choices.Select(choice => new NutritionChoiceView(choice.Id, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.Id, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.PhotoMediaAssetId)).ToArray(), entry?.SelectedClientNutritionPlanChoiceId, entry?.Servings, entry?.Calories);
             }).ToArray(),
             log?.CustomFoods.Where(item => log.CustomFoodReversals.All(reversal => reversal.CustomFoodId != item.Id)).OrderBy(item => item.CreatedAtUtc).Select(item => new NutritionCustomFoodView(item.Id, item.Name, item.Amount, item.Unit, item.Calories, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams)).ToArray() ?? [],
             "Allergen declarations may be incomplete. Absence of a declared conflict is not evidence of absence; TB Gym does not assert any meal is safe.");
     }
 
+    // Carbohydrate typed as an EU label prints it gets its fibre back, since total is what is kept (C6).
     private static FoodVersionInput ToFoodVersionInput(AddFoodVersionRequest request, NutritionWorkspaceSettings settings) =>
-        new(request.BasisQuantity, request.BasisUnit, request.PreparationBasis, request.ProteinGrams, request.CarbohydrateGrams, request.FatGrams, request.FibreGrams, request.PolyolGrams, request.EthanolGrams, request.ProviderCalories, settings.EnergyPolicyKey, settings.ProviderCalorieTolerance, request.SourceAttribution, request.SourceRecordVersion, request.DeclaredAllergens);
+        new(request.BasisQuantity, request.BasisUnit, request.PreparationBasis, request.ProteinGrams,
+            LabelCarbohydrateRule.TotalCarbohydrate(request.CarbohydrateGrams, request.FibreGrams, request.CarbohydrateDeclaration ?? CarbohydrateDeclaration.TotalWithFibre),
+            request.FatGrams, request.FibreGrams, request.PolyolGrams, request.EthanolGrams, request.ProviderCalories, settings.EnergyPolicyKey, settings.ProviderCalorieTolerance, request.SourceAttribution, request.SourceRecordVersion, request.DeclaredAllergens);
 
     private NutritionWorkspaceSettingsView ToSettingsView(NutritionWorkspaceSettings settings) =>
         new(settings.EnergyPolicyKey, settings.EnergyPolicyVersion, settings.ProviderCalorieTolerance, settings.AiMonthlyRequestLimit, settings.AiMonthlyCostLimit, settings.AiCostCurrency, settings.Version,
@@ -1563,9 +1653,6 @@ internal sealed partial class NutritionApplicationService(
 
     private static CookingFactorView ToCookingFactorView(CookingFactorRecord item) =>
         new(item.Id, Enum.Parse<CookingFactorKind>(item.Kind), item.SourceKey, item.SourceVersion, item.FromBasis, item.ToBasis, item.Factor);
-
-    private static MacroOverrideView ToMacroOverrideView(MacroOverrideAudit item) =>
-        new(item.Id, item.CalculationSnapshotId, item.ProteinGrams, item.FatGrams, item.CarbohydrateGrams, item.Reason, item.ActorUserId);
 
     private static RecipeSummary ToRecipeSummary(Recipe item, RecipeVersion version, Guid? publishedVersionId) =>
         new(item.Id, version.Id, version.Revision, item.Name, version.Status, version.Servings, version.Calories, version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, version.Allergens.Select(allergen => allergen.Code).Order().ToArray(), version.PhotoMediaAssetId, publishedVersionId);
@@ -1592,7 +1679,7 @@ internal sealed partial class NutritionApplicationService(
     private static NutritionCalculationView ToCalculationView(NutritionCalculationSnapshot item, IReadOnlyList<string> warnings) =>
         new(item.Id, item.BmrMethodKey, item.BmrMethodVersion, item.BmrEstimate, item.ActivityModelKey, item.ActivityModelVersion, item.ActivityModelPal, item.TdeeMethodKey, item.TdeeMethodVersion, item.TdeeEstimate, item.CoachGoalAdjustment, item.CalorieTarget, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, warnings);
 
-    private static NutritionCalculationRecord ToCalculationRecord(NutritionCalculationSnapshot item)
+    private static NutritionCalculationRecord ToCalculationRecord(NutritionCalculationSnapshot item, MacroAdjustmentView? adjustment)
     {
         CalculateNutritionTargetsRequest? inputs = null;
         try
@@ -1605,12 +1692,16 @@ internal sealed partial class NutritionApplicationService(
         }
 
         // The warning depends only on numbers that were stored, so it is worked out again, never kept.
+        // A coach's own macros are flagged on the same protein range, eating below what they burn when
+        // the target is under the TDEE estimate.
         IReadOnlyList<string> warnings = [];
         if (inputs is not null)
         {
             try
             {
-                warnings = MacroTargetCalculator.Calculate(new MacroTargetInput(item.CalorieTarget, item.ProteinGrams, inputs.FatPercentage, inputs.WeightKilograms, inputs.IsEnergyDeficit)).Warnings;
+                warnings = item.MacroOverrideAuditId is null
+                    ? MacroTargetCalculator.Calculate(new MacroTargetInput(item.CalorieTarget, item.ProteinGrams, inputs.FatPercentage, inputs.WeightKilograms, inputs.IsEnergyDeficit)).Warnings
+                    : MacroTargetCalculator.ProteinWarnings(item.ProteinGrams, inputs.WeightKilograms, item.CalorieTarget < item.TdeeEstimate);
             }
             catch (ArgumentException)
             {
@@ -1618,7 +1709,7 @@ internal sealed partial class NutritionApplicationService(
             }
         }
 
-        return new NutritionCalculationRecord(ToCalculationView(item, warnings), inputs, item.CreatedAtUtc);
+        return new NutritionCalculationRecord(ToCalculationView(item, warnings), inputs, item.CreatedAtUtc, adjustment);
     }
 
     private static AiMealDraftView ToAiDraftView(AiMealDraftOperation item, Guid? recipeVersionId = null, Guid? recipeId = null) =>

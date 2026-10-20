@@ -96,8 +96,7 @@
       label="Carbs"
       i18n-label
       density="compact"
-      help="Total, fibre included"
-      i18n-help
+      [help]="carbsHelp()"
       [errors]="shown('carbs')"
     >
       <input
@@ -132,9 +131,7 @@
   <details class="extras" [open]="extrasOpen()" (toggle)="extrasOpen.set($any($event.target).open)">
     <summary i18n>Fibre, sugar alcohols, alcohol and label calories</summary>
     @if (unreported(); as missing) {
-      <p class="note" i18n>
-        USDA didn’t report {{ missing }}, so it was saved as 0. Check the label if you have it.
-      </p>
+      <p class="note">{{ missing }}&ngsp;<span i18n>Check the label if you have it.</span></p>
     }
     <div class="extra-grid">
       <app-field label="Fibre (g)" i18n-label density="compact" [errors]="shown('more')">
@@ -224,6 +221,9 @@
         <span i18n>The calories add up here as you type the macros.</span>
       }
     </p>
+    @if (storedCarbs(); as stored) {
+      <p class="hint" data-stored-carbs>{{ stored }}</p>
+    }
     @if (mode() === 'edit') {
       <p class="hint" i18n>
         Recipes that already use this food keep the numbers they were saved with.

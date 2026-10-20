@@ -105,6 +105,24 @@
   padding: 0.625rem 0.875rem;
 }
 
+// The coach's own words for their macros (INV-2), set apart like a quote of them.
+.why {
+  background: var(--tb-surface-2);
+  border-inline-start: 3px solid var(--tb-accent-ink);
+  border-radius: var(--tb-radius-control);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 0.625rem 0.875rem;
+}
+
+.why-label {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+
 .how {
   color: var(--tb-muted);
   font-size: 0.875rem;

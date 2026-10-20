@@ -130,8 +130,6 @@ export class RecipeEditor implements HoldsUnsavedWork {
   });
   private loadedKey: string | null = null;
   private savedSignature = draftSignature(emptyDraft());
-  /** A photo chosen on this device is shown from memory until the page goes. */
-  private localPhotoUrl: string | null = null;
   private csrfReady: Promise<void> | null = null;
 
   protected readonly closeLabel = $localize`Close`;
@@ -236,10 +234,7 @@ export class RecipeEditor implements HoldsUnsavedWork {
 
   constructor() {
     const unregister = inject(UnsavedWork).register(this);
-    inject(DestroyRef).onDestroy(() => {
-      unregister();
-      this.forgetLocalPhoto();
-    });
+    inject(DestroyRef).onDestroy(() => unregister());
     this.scope.onReset(() => {
       this.loadedKey = null;
       this.state.set('loading');
@@ -519,9 +514,9 @@ export class RecipeEditor implements HoldsUnsavedWork {
       this.photoBusy.set(true);
       try {
         const uploaded = await this.write(owner, () => this.api.uploadPhoto(file));
-        this.forgetLocalPhoto();
-        this.localPhotoUrl = URL.createObjectURL(file);
-        this.photoUrl.set(this.localPhotoUrl);
+        // The CSP's img-src allows data: and not blob: (NCM-2), so the preview is the file itself.
+        const preview = await owner.wait(photoDataUrl(file).catch(() => null));
+        this.photoUrl.set(preview);
         this.change({ photoId: uploaded.id });
       } catch (error) {
         if (!owner.current) return;
@@ -533,14 +528,8 @@ export class RecipeEditor implements HoldsUnsavedWork {
   }
 
   protected removePhoto(): void {
-    this.forgetLocalPhoto();
     this.photoUrl.set(null);
     this.change({ photoId: null });
-  }
-
-  private forgetLocalPhoto(): void {
-    if (this.localPhotoUrl) URL.revokeObjectURL(this.localPhotoUrl);
-    this.localPhotoUrl = null;
   }
 
   // ---------- AI suggestion ----------
@@ -850,6 +839,19 @@ export class RecipeEditor implements HoldsUnsavedWork {
     });
     return this.csrfReady;
   }
+}
+
+/**
+ * A chosen photo as a `data:` URL, the one kind of local picture the CSP lets an img show (its img-src
+ * is 'self' data:, never blob:). Shown until the page goes; a saved recipe's photo comes from its grant.
+ */
+export function photoDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('The photo could not be read.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 /** Why a photo upload failed, in the coach's words. */

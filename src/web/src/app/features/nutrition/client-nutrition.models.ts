@@ -289,7 +289,7 @@ function isNumber(value: number | null): value is number {
   return value !== null && Number.isFinite(value);
 }
 
-export function problemCount(errors: Record<TargetsField, readonly string[]>): number {
+export function problemCount(errors: Readonly<Record<string, readonly string[]>>): number {
   return Object.values(errors).reduce((total, messages) => total + messages.length, 0);
 }
 
@@ -329,6 +329,17 @@ export interface CalculationInputs {
   readonly fatPercent: number;
 }
 
+/** The coach's own macros over a calculation (NUT-008, INV-2): why, and the targets they changed. */
+export interface Adjustment {
+  readonly reason: string;
+  readonly adjustedAtUtc: string;
+  readonly fromId: string;
+  readonly fromCalories: number;
+  readonly fromProtein: number;
+  readonly fromCarbohydrate: number;
+  readonly fromFat: number;
+}
+
 /** One worked-out set of targets, as the page shows it. */
 export interface WorkedOut {
   readonly id: string;
@@ -346,11 +357,14 @@ export interface WorkedOut {
   readonly warnings: readonly string[];
   /** Null when an older record's numbers could not be read back. */
   readonly inputs: CalculationInputs | null;
+  /** Set when these are the coach's own macros rather than the formula's. */
+  readonly adjustment: Adjustment | null;
 }
 
 export function mapWorkedOut(record: NutritionCalculationRecord): WorkedOut {
   const result = record.result;
   const given = record.inputs;
+  const adjusted = record.adjustment ?? null;
   return {
     id: result.id,
     calculatedAtUtc: record.calculatedAtUtc,
@@ -377,7 +391,81 @@ export function mapWorkedOut(record: NutritionCalculationRecord): WorkedOut {
           fatPercent: toNumber(given.fatPercentage),
         }
       : null,
+    adjustment: adjusted
+      ? {
+          reason: adjusted.reason,
+          adjustedAtUtc: adjusted.adjustedAtUtc,
+          fromId: adjusted.adjustedFromCalculationId,
+          fromCalories: toNumber(adjusted.fromCalorieTarget),
+          fromProtein: toNumber(adjusted.fromProteinGrams),
+          fromCarbohydrate: toNumber(adjusted.fromCarbohydrateGrams),
+          fromFat: toNumber(adjusted.fromFatGrams),
+        }
+      : null,
   };
+}
+
+// ------------------------------------------------------------------------------------------------
+// The coach's own macros (NUT-008: manual coach overrides win, INV-2)
+// ------------------------------------------------------------------------------------------------
+
+/** The server's bounds on one macro a day (CoachMacroOverride); a bound on typing, not a rule. */
+export const MACRO_GRAMS = { min: 0, max: 1_000 } as const;
+export const ADJUST_REASON_LIMIT = 500;
+
+export interface MacroValues {
+  protein: number | null;
+  carbohydrate: number | null;
+  fat: number | null;
+}
+
+export type MacroField = keyof MacroValues | 'reason';
+
+/** The calories a day that grams make at 4, 4 and 9 kcal a gram, the macro split's own factors. */
+export function macroCalories(values: MacroValues): number | null {
+  const { protein, carbohydrate, fat } = values;
+  if (!isNumber(protein) || !isNumber(carbohydrate) || !isNumber(fat)) return null;
+  return protein * 4 + carbohydrate * 4 + fat * 9;
+}
+
+/** Each box's messages, with the server's bounds; the macros must make more than 0 calories. */
+export function macroErrors(values: MacroValues, reason: string): Record<MacroField, string[]> {
+  const errors: Record<MacroField, string[]> = {
+    protein: [],
+    carbohydrate: [],
+    fat: [],
+    reason: [],
+  };
+  const names: Record<keyof MacroValues, string> = {
+    protein: $localize`protein`,
+    carbohydrate: $localize`carbs`,
+    fat: $localize`fat`,
+  };
+  for (const field of ['protein', 'carbohydrate', 'fat'] as const) {
+    const value = values[field];
+    if (!isNumber(value)) {
+      errors[field].push($localize`Enter the grams of ${names[field]}:macro: a day, or 0.`);
+    } else if (value < MACRO_GRAMS.min || value > MACRO_GRAMS.max) {
+      errors[field].push(
+        $localize`Between ${MACRO_GRAMS.min}:low: and ${MACRO_GRAMS.max.toLocaleString('en')}:high: grams a day.`,
+      );
+    }
+  }
+  const calories = macroCalories(values);
+  if (calories !== null && calories <= 0 && problemCount(errors) === 0) {
+    errors.protein.push(
+      $localize`The macros add up to 0 calories. Give at least one of them some grams.`,
+    );
+  }
+  const text = reason.trim();
+  if (!text) {
+    errors.reason.push($localize`Say why, so it is on record.`);
+  } else if (text.length > ADJUST_REASON_LIMIT) {
+    errors.reason.push(
+      $localize`Keep the reason to ${ADJUST_REASON_LIMIT}:limit: characters or fewer.`,
+    );
+  }
+  return errors;
 }
 
 export interface MacroShares {
@@ -475,6 +563,9 @@ export interface PlanRow {
   readonly carbohydrate: number;
   readonly fat: number;
   readonly calculationId: string;
+  /** When a coach stopped it, and why (NCM-1); null for a plan never stopped. */
+  readonly stoppedAtUtc: string | null;
+  readonly stopReason: string | null;
 }
 
 export function addDaysIso(date: string, days: number): string {
@@ -514,7 +605,40 @@ export function mapPlan(plan: ClientNutritionPlanSummary, today: string): PlanRo
     carbohydrate: toNumber(plan.carbohydrateGrams),
     fat: toNumber(plan.fatGrams),
     calculationId: plan.calculationSnapshotId,
+    stoppedAtUtc: plan.stoppedAtUtc ?? null,
+    stopReason: plan.stopReason ?? null,
   };
+}
+
+/** A plan the coach may still stop: one running or coming (NUT-011 cancels only an active plan). */
+export function canStop(plan: PlanRow): boolean {
+  return plan.state === 'running' || plan.state === 'coming';
+}
+
+export const STOP_REASON_LIMIT = 500;
+
+export function stopReasonErrors(reason: string): string[] {
+  const text = reason.trim();
+  if (!text) return [$localize`Say why, so it is on record.`];
+  if (text.length > STOP_REASON_LIMIT) {
+    return [$localize`Keep the reason to ${STOP_REASON_LIMIT}:limit: characters or fewer.`];
+  }
+  return [];
+}
+
+/** "Stopped Tue 20 Oct: Assigned the wrong dates." in the workspace's days. */
+export function stoppedWords(
+  plan: PlanRow,
+  timeZone: string,
+  today: string,
+  locale: string,
+): string | null {
+  if (plan.state !== 'stopped') return null;
+  const when = plan.stoppedAtUtc ? workedOutOn(plan.stoppedAtUtc, timeZone, today, locale) : null;
+  const reason = plan.stopReason?.trim() ?? '';
+  if (when && reason) return $localize`Stopped ${when}:day:: ${reason}:reason:`;
+  if (when) return $localize`Stopped ${when}:day:.`;
+  return reason ? $localize`Stopped: ${reason}:reason:` : null;
 }
 
 /**
@@ -681,6 +805,26 @@ export function calculationRefusal(message: string): string {
   }
   if (/calorie target must be positive/i.test(text)) {
     return $localize`The goal takes the target to zero or below. Choose a smaller difference from what they burn.`;
+  }
+  return text;
+}
+
+/** A stop the server refused, in the coach's words; a plan stopped elsewhere is not a refusal. */
+export function stopRefusal(code: string | null, message: string): string {
+  if (code === 'nutrition_plan_conflict') {
+    return $localize`This meal plan changed since the page read it. Close this and look at it again before you stop it.`;
+  }
+  return refusalText(message);
+}
+
+/** The coach's macros the server refused; the sheet checks the same bounds first. */
+export function adjustRefusal(message: string): string {
+  const text = refusalText(message);
+  if (/must be 0 to/i.test(text)) {
+    return $localize`Each macro is 0 to ${MACRO_GRAMS.max.toLocaleString('en')}:max: grams a day.`;
+  }
+  if (/more than 0 calories/i.test(text)) {
+    return $localize`The macros add up to 0 calories. Give at least one of them some grams.`;
   }
   return text;
 }

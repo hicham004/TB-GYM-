@@ -27,6 +27,7 @@ function day(selectedA: string | null = null, servingsA: number | null = null): 
         order: 0,
         selectedChoiceId: selectedA,
         actualServings: servingsA,
+        loggedCalories: null,
         choices: [
           {
             id: 'choice-a1',
@@ -58,6 +59,7 @@ function day(selectedA: string | null = null, servingsA: number | null = null): 
         order: 1,
         selectedChoiceId: null,
         actualServings: null,
+        loggedCalories: null,
         choices: [
           {
             id: 'choice-b1',

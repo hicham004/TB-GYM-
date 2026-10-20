@@ -115,6 +115,9 @@ async function open(
         return json(route, 200, { ...OATS_FOOD, id: 'food-labneh', name: request.name });
       },
       'GET /api/nutrition/settings': (route: Route) => json(route, 200, nutritionSettings()),
+      // Settings asks the recipe editor's question for its AI sentence (LOST-4).
+      'GET /api/nutrition/ai-drafts/availability': (route: Route) =>
+        json(route, 200, { isConfigured: true }),
       'PUT /api/nutrition/settings': (route: Route) => {
         const request = route.request().postDataJSON() as UpdateNutritionSettingsRequest;
         sent.settings.push(request);
@@ -223,7 +226,9 @@ test('a food of the coach’s own is saved from the sheet, and a USDA food opens
 
   await page.getByRole('button', { name: 'Chicken, breast, boneless, skinless, raw' }).click();
   const details = page.getByRole('dialog', { name: 'Chicken, breast, boneless, skinless, raw' });
-  await expect(details).toContainText('USDA didn’t report fibre, sugar alcohols, alcohol');
+  await expect(details).toContainText(
+    'USDA didn’t report fibre, sugar alcohols or alcohol, so they were saved as 0.',
+  );
   await page.waitForTimeout(300);
   await page.screenshot({ path: '../../docs/design/r44c-details-1440.png' });
   await details.getByRole('button', { name: 'Edit a copy' }).click();

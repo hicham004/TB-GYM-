@@ -5,17 +5,20 @@ import type {
   AllergenCode,
   AssignNutritionPlanRequest,
   CalculateNutritionTargetsRequest,
+  CancelNutritionPlanRequest,
   ClientAllergensView,
   ClientNutritionPlanSummary,
+  CreateMacroOverrideRequest,
   NutritionCalculationRecord,
   NutritionCalculationView,
 } from '../../core/api/generated';
 
 /**
  * What a coach's Nutrition tab for one client reads and writes (R5.3d): the targets already worked
- * out, the allergens declared, the meal plans assigned, and the three writes. Kept out of `ApiClient`
- * so none of it loads before the tab is opened. The server decides who may do what, and every answer
- * is refused with 403 when the client's plan does not include Nutrition.
+ * out, the allergens declared, the meal plans assigned, and the writes that change them (A6 added the
+ * coach's own macros and stopping a plan). Kept out of `ApiClient` so none of it loads before the tab is
+ * opened. The server decides who may do what: a client's plan without Nutrition is refused with 403, and
+ * a client who is not in the workspace is 404.
  */
 @Injectable({ providedIn: 'root' })
 export class ClientNutritionApi {
@@ -59,6 +62,30 @@ export class ClientNutritionApi {
   ): Observable<ClientNutritionPlanSummary> {
     return this.http.post<ClientNutritionPlanSummary>(
       `/api/nutrition/clients/${clientId}/plans`,
+      request,
+    );
+  }
+
+  /** Stops a meal plan for good (NUT-011): the reason is kept with it and its dates come free. */
+  stop(
+    clientId: string,
+    planId: string,
+    request: CancelNutritionPlanRequest,
+  ): Observable<ClientNutritionPlanSummary> {
+    return this.http.post<ClientNutritionPlanSummary>(
+      `/api/nutrition/clients/${clientId}/plans/${planId}/cancel`,
+      request,
+    );
+  }
+
+  /** The coach's own macros over a calculation, recorded as new targets with why (NUT-008). */
+  adjustMacros(
+    clientId: string,
+    calculationId: string,
+    request: CreateMacroOverrideRequest,
+  ): Observable<NutritionCalculationRecord> {
+    return this.http.post<NutritionCalculationRecord>(
+      `/api/nutrition/clients/${clientId}/calculations/${calculationId}/macro-overrides`,
       request,
     );
   }

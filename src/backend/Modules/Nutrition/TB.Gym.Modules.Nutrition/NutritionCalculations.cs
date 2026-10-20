@@ -310,7 +310,7 @@ public static class MacroTargetCalculator
             throw new InvalidOperationException("Calculated macro grams cannot be negative.");
         }
 
-        var warnings = BuildProteinWarnings(input);
+        var warnings = ProteinWarnings(input.ProteinGrams, input.BodyweightKilograms, input.IsEnergyDeficit);
         return new MacroTargetResult(
             input.CalorieTarget,
             input.ProteinGrams,
@@ -324,23 +324,57 @@ public static class MacroTargetCalculator
             warnings);
     }
 
-    private static IReadOnlyList<string> BuildProteinWarnings(MacroTargetInput input)
+    /// <summary>
+    /// The ISSN protein review range as a warning, never a refusal; a coach's own macros
+    /// (<see cref="CoachMacroOverride"/>) are flagged the same way.
+    /// </summary>
+    public static IReadOnlyList<string> ProteinWarnings(decimal proteinGrams, decimal? bodyweightKilograms, bool isEnergyDeficit)
     {
-        if (input.BodyweightKilograms is null)
+        if (bodyweightKilograms is null)
         {
             return [];
         }
 
-        if (input.BodyweightKilograms is <= 0m or > 500m)
+        if (bodyweightKilograms is <= 0m or > 500m)
         {
-            throw new ArgumentOutOfRangeException(nameof(input), "Bodyweight must be positive and no more than 500 kg.");
+            throw new ArgumentOutOfRangeException(nameof(bodyweightKilograms), "Bodyweight must be positive and no more than 500 kg.");
         }
 
-        var gramsPerKilogram = input.ProteinGrams / input.BodyweightKilograms.Value;
-        var upper = input.IsEnergyDeficit ? 3.1m : 2.0m;
+        var gramsPerKilogram = proteinGrams / bodyweightKilograms.Value;
+        var upper = isEnergyDeficit ? 3.1m : 2.0m;
         return gramsPerKilogram is < 1.4m || gramsPerKilogram > upper
             ? [$"Protein is {gramsPerKilogram:0.##} g/kg/day, outside the Phase 4 coaching review range of 1.4-{upper:0.#} g/kg/day. This is a warning, not a clinical determination."]
             : [];
+    }
+}
+
+/// <summary>
+/// A coach's own macros for a client (NUT-008: manual coach overrides win). The coach gives protein,
+/// carbohydrate and fat in grams, and the calorie target is what those grams make at the factors the
+/// macro split itself uses, 4, 4 and 9 kcal a gram. The result is a new calculation snapshot
+/// (<see cref="NutritionCalculationSnapshot.WithCoachMacros"/>), so a meal plan assigned with it carries
+/// the coach's numbers and a plan assigned before keeps its own (NUT-009).
+/// </summary>
+public static class CoachMacroOverride
+{
+    public const string Key = "CoachMacroOverride";
+    public const string CurrentVersion = "1.0";
+
+    /// <summary>The most grams of one macro a day an override takes: a bound on typing, not a coaching rule.</summary>
+    public const decimal MaximumGrams = 1_000m;
+
+    public static decimal CalorieTarget(decimal proteinGrams, decimal carbohydrateGrams, decimal fatGrams)
+    {
+        foreach (var (grams, name) in new[] { (proteinGrams, "Protein"), (carbohydrateGrams, "Carbohydrate"), (fatGrams, "Fat") })
+        {
+            if (grams is < 0m or > MaximumGrams)
+            {
+                throw new ArgumentOutOfRangeException(name, $"{name} must be 0 to {MaximumGrams:0} grams a day.");
+            }
+        }
+
+        var calories = proteinGrams * 4m + carbohydrateGrams * 4m + fatGrams * 9m;
+        return calories > 0m ? calories : throw new ArgumentException("The macros must add up to more than 0 calories a day.");
     }
 }
 
@@ -370,6 +404,44 @@ public sealed record EnergyNutrients(
     /// </summary>
     public decimal AvailableCarbohydrateGrams =>
         CarbohydrateGrams - FibreGrams - PolyolGrams - ErythritolGrams;
+}
+
+/// <summary>
+/// How a food's carbohydrate was typed (C6). A US label and USDA print total carbohydrate, fibre
+/// included; an EU or UK label prints the carbohydrate the body digests, sugar alcohols included, and
+/// declares fibre on its own line (EU Regulation 1169/2011, Annex I).
+/// </summary>
+public enum CarbohydrateDeclaration
+{
+    TotalWithFibre = 1,
+    WithoutFibre = 2,
+}
+
+/// <summary>
+/// Stored carbohydrate is always total (NUT-011), so carbohydrate typed as an EU label prints it gets
+/// its fibre added back before it is saved: porridge oats at 60 g of carbohydrate and 9 g of fibre
+/// are 69 g in total. Saved as typed, the EU policy took the fibre off a second time and counted the
+/// label's 374 kcal as 338. Version v1.
+/// </summary>
+public static class LabelCarbohydrateRule
+{
+    public const string Key = "LabelCarbohydrateAsPrinted";
+    public const string Version = "v1";
+
+    public static decimal TotalCarbohydrate(decimal typedGrams, decimal fibreGrams, CarbohydrateDeclaration declaration)
+    {
+        if (typedGrams < 0m || fibreGrams < 0m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(typedGrams), "Carbohydrate and fibre cannot be negative.");
+        }
+
+        return declaration switch
+        {
+            CarbohydrateDeclaration.TotalWithFibre => typedGrams,
+            CarbohydrateDeclaration.WithoutFibre => typedGrams + fibreGrams,
+            _ => throw new ArgumentException("Say whether the carbohydrate includes fibre.", nameof(declaration)),
+        };
+    }
 }
 
 public sealed record EnergyPolicyResult(decimal Kilocalories, string PolicyKey, string PolicyVersion);

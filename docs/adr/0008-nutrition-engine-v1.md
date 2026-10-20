@@ -72,6 +72,20 @@ a configurable tolerance flags discrepancies without silently preferring either 
 2026-10-15 (C7, the owner's decision): `Atwater v2` also charges alcohol at 7 kcal/g, Atwater's general
 factor (FAO 2003) and the EU's, since v1 counted red wine at about 11 kcal per 100 g instead of 85 and
 the label check then blamed a correct label. Each policy has its own version; saved foods keep theirs.
+Amended 2026-10-20 (C6, the owner's decision of 2026-10-14; audit A6): "a coach transcribes a label without
+converting" held for US labels only, since an EU or UK label prints carbohydrate without the fibre (EU
+1169/2011, Annex I). Under EU-style labels the coach types the carbs as printed, the request declares it
+(`CarbohydrateDeclaration.WithoutFibre`), and the server adds the fibre back (`LabelCarbohydrateRule` v1),
+so storage stays total carbohydrate and the policies are unchanged; porridge oats at 60 g carbs and 9 g
+fibre are kept as 69 g and count the label's 374 kcal. USDA imports are total already.
+
+Manual coach overrides win (NUT-008), amended 2026-10-20 (audit A6, INV-2): the override audit had no
+reader, so overriding changed nothing. A coach's grams are now recorded as the append-only
+`MacroOverrideAudit` together with new targets, a calculation snapshot by `CoachMacroOverride` v1 that
+keeps the adjusted targets' estimates and inputs, takes the calories the grams make at 4, 4 and 9 kcal a
+gram, and names the override (`MacroOverrideAuditId`: filtered unique, a check that only those targets
+name one). A plan keeps referring to one snapshot, so a plan assigned before keeps its targets (NUT-009)
+and the next one assigned with the coach's carries them.
 
 These choices resolve open decisions 2 and 3 for implementation. They do not constitute
 clinical approval. A qualified reviewer must approve validity ranges, sex/formula usage,
@@ -96,7 +110,9 @@ Cancelling is one-way; it retains days, slots, choices, and completed logs as hi
 the plan from the client's day view, and clears the reservation so a corrected plan can occupy
 the same dates. The PostgreSQL exclusion constraint is partial on `BlocksOverlap`, and a database
 trigger permits only that one transition while keeping every snapshot column immutable. Each
-transition appends a `PlanLifecycleEvent` row carrying actor, reason, and both statuses.
+transition appends a `PlanLifecycleEvent` row carrying actor, reason, and both statuses. Since the audit's
+batch A6 (2026-10-20, NCM-1) the coach stops a running or coming plan from the client's Nutrition tab with
+a reason, and the plan list carries when and why it was stopped.
 
 ### Allergens and health-adjacent data
 

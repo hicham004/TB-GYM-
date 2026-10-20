@@ -28,6 +28,7 @@ import {
   ageOn,
   allergenList,
   allergenName,
+  canStop,
   inListOrder,
   mapPlan,
   mapWorkedOut,
@@ -36,6 +37,7 @@ import {
   planDates,
   planStateWords,
   splitPlans,
+  stoppedWords,
   workedOutOn,
   type PlanRow,
   type PlanState,
@@ -52,6 +54,10 @@ interface PlanView {
   readonly dates: string;
   readonly state: string;
   readonly tone: StatusPillTone;
+  /** "Stopped Tue 20 Oct: why", for a plan a coach stopped (NCM-1). */
+  readonly stopped: string | null;
+  /** Running or coming, so the coach may still stop it. */
+  readonly stoppable: boolean;
 }
 
 const PLAN_TONES: Record<PlanState, StatusPillTone> = {
@@ -63,9 +69,10 @@ const PLAN_TONES: Record<PlanState, StatusPillTone> = {
 
 /**
  * A client's Nutrition tab for their coach (C3, C7; R5.3d): the targets worked out, the meal plan they
- * are on, the allergens declared, and what the client said about food. Each of the three changes is a
- * sheet. Every number is the server's; this page reads, shows and asks, and a plan that does not
- * include Nutrition says so instead of "could not be loaded".
+ * are on, the allergens declared, and what the client said about food. Each change is a sheet: working
+ * targets out or adjusting their macros, assigning or stopping a meal plan (A6), and the allergens.
+ * Every number is the server's; this page reads, shows and asks, and a plan that does not include
+ * Nutrition says so instead of "could not be loaded".
  */
 @Component({
   selector: 'app-client-nutrition',
@@ -192,8 +199,14 @@ export class ClientNutrition {
           dates: planDates(row, this.today(), this.locale),
           state: planStateWords(row, this.today(), this.locale),
           tone: PLAN_TONES[row.state],
+          stopped: stoppedWords(row, this.timeZone(), this.today(), this.locale),
+          stoppable: canStop(row),
         }
       : null;
+  }
+
+  protected stopLabel(row: PlanRow): string {
+    return $localize`Stop ${row.name}:plan:`;
   }
 
   protected async load(): Promise<void> {
@@ -298,6 +311,14 @@ export class ClientNutrition {
 
   protected assign(): void {
     this.sheets().assign();
+  }
+
+  protected adjustMacros(): void {
+    this.sheets().adjustMacros();
+  }
+
+  protected stop(row: PlanRow): void {
+    this.sheets().stopPlan(row);
   }
 
   protected editAllergens(): void {

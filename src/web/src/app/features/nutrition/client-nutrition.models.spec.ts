@@ -1,17 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
+  adjustedRecord,
   allergens,
   calculationRecord,
   clientPlan,
   earlierRecord,
+  stoppedPlan,
   TODAY,
 } from '../../../testing/client-nutrition-fixtures';
 import { enrollment } from '../../../testing/client-service-fixtures';
 import {
   addDaysIso,
+  adjustRefusal,
   ageOn,
   allergenList,
   assignRefusal,
+  canStop,
+  macroCalories,
+  macroErrors,
+  stoppedWords,
+  stopReasonErrors,
+  stopRefusal,
   calculationRefusal,
   calculationRequest,
   dayInZone,
@@ -487,5 +496,114 @@ describe('the allergens', () => {
     expect(allergenList(['Eggs'])).toBe('Eggs');
     expect(allergenList([])).toBe('');
     expect(allergenList(['Molluscs'])).toBe('Molluscs');
+  });
+});
+
+describe('stopping a meal plan (NCM-1)', () => {
+  it('lets the coach stop a plan running or coming, never one ended or stopped', () => {
+    const state = (start: string, end: string, status: 'Active' | 'Cancelled' = 'Active') =>
+      canStop(mapPlan(clientPlan({ startDate: start, endDateExclusive: end, status }), TODAY));
+    expect(state('2026-10-05', '2026-10-19')).toBe(true);
+    expect(state('2026-10-19', '2026-10-26')).toBe(true);
+    expect(state('2026-09-01', '2026-09-15')).toBe(false);
+    expect(state('2026-10-05', '2026-10-19', 'Cancelled')).toBe(false);
+  });
+
+  it('keeps when and why a plan was stopped, and says it in the workspace’s days', () => {
+    const row = mapPlan(stoppedPlan(), TODAY);
+    expect(row).toMatchObject({
+      state: 'stopped',
+      stoppedAtUtc: '2026-10-04T06:00:00Z',
+      stopReason: 'Assigned to the wrong client',
+    });
+    expect(stoppedWords(row, 'Asia/Beirut', TODAY, LOCALE)).toBe(
+      'Stopped Sun 4 Oct: Assigned to the wrong client',
+    );
+    // Stopped just after midnight in Beirut is that day there, not the UTC day before.
+    expect(
+      stoppedWords(
+        mapPlan(stoppedPlan({ stoppedAtUtc: '2026-10-08T22:30:00Z' }), TODAY),
+        'Asia/Beirut',
+        TODAY,
+        LOCALE,
+      ),
+    ).toBe('Stopped Fri 9 Oct: Assigned to the wrong client');
+    // An older stop the server holds no reason for still says when; a plan never stopped says nothing.
+    expect(
+      stoppedWords(mapPlan(stoppedPlan({ stopReason: null }), TODAY), 'Asia/Beirut', TODAY, LOCALE),
+    ).toBe('Stopped Sun 4 Oct.');
+    expect(stoppedWords(mapPlan(clientPlan(), TODAY), 'Asia/Beirut', TODAY, LOCALE)).toBeNull();
+    expect(mapPlan(clientPlan(), TODAY)).toMatchObject({ stoppedAtUtc: null, stopReason: null });
+  });
+
+  it('asks for a reason of at most 500 characters', () => {
+    expect(stopReasonErrors('  ')).toEqual(['Say why, so it is on record.']);
+    expect(stopReasonErrors('x'.repeat(501))).toEqual([
+      'Keep the reason to 500 characters or fewer.',
+    ]);
+    expect(stopReasonErrors(' Wrong dates ')).toEqual([]);
+  });
+
+  it('says a stop the server refused in the coach’s words', () => {
+    expect(
+      stopRefusal('nutrition_plan_conflict', 'The nutrition plan changed before it was cancelled.'),
+    ).toBe(
+      'This meal plan changed since the page read it. Close this and look at it again before you stop it.',
+    );
+    expect(stopRefusal(null, "A reason is required. (Parameter 'reason')")).toBe(
+      'A reason is required.',
+    );
+  });
+});
+
+describe('the coach’s own macros (INV-2)', () => {
+  it('keeps what the coach changed and why', () => {
+    const made = mapWorkedOut(adjustedRecord());
+    expect(made.adjustment).toEqual({
+      reason: 'More protein while she cuts',
+      adjustedAtUtc: '2026-10-10T07:15:00Z',
+      fromId: 'calc-2',
+      fromCalories: 2154.8,
+      fromProtein: 140,
+      fromCarbohydrate: 264.025,
+      fromFat: 59.855556,
+    });
+    expect(mapWorkedOut(calculationRecord()).adjustment).toBeNull();
+  });
+
+  it('adds grams up at 4, 4 and 9 calories a gram', () => {
+    expect(macroCalories({ protein: 150, carbohydrate: 230, fat: 60 })).toBe(2060);
+    expect(macroCalories({ protein: 150, carbohydrate: null, fat: 60 })).toBeNull();
+  });
+
+  it('checks each box with the server’s bounds, and the reason', () => {
+    const fine = { protein: 150, carbohydrate: 230, fat: 60 };
+    expect(problemCount(macroErrors(fine, 'More protein'))).toBe(0);
+    expect(macroErrors({ ...fine, protein: null }, 'x').protein).toEqual([
+      'Enter the grams of protein a day, or 0.',
+    ]);
+    expect(macroErrors({ ...fine, carbohydrate: 1_001 }, 'x').carbohydrate).toEqual([
+      'Between 0 and 1,000 grams a day.',
+    ]);
+    expect(macroErrors({ ...fine, fat: -1 }, 'x').fat).toEqual([
+      'Between 0 and 1,000 grams a day.',
+    ]);
+    expect(macroErrors({ protein: 0, carbohydrate: 0, fat: 0 }, 'x').protein).toEqual([
+      'The macros add up to 0 calories. Give at least one of them some grams.',
+    ]);
+    expect(macroErrors(fine, ' ').reason).toEqual(['Say why, so it is on record.']);
+    expect(macroErrors(fine, 'x'.repeat(501)).reason).toEqual([
+      'Keep the reason to 500 characters or fewer.',
+    ]);
+  });
+
+  it('says the server’s refusals in the coach’s words', () => {
+    expect(adjustRefusal("Fat must be 0 to 1000 grams a day. (Parameter 'Fat')")).toBe(
+      'Each macro is 0 to 1,000 grams a day.',
+    );
+    expect(adjustRefusal('The macros must add up to more than 0 calories a day.')).toBe(
+      'The macros add up to 0 calories. Give at least one of them some grams.',
+    );
+    expect(adjustRefusal('Something else.')).toBe('Something else.');
   });
 });

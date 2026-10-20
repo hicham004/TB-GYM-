@@ -13,7 +13,8 @@ import {
  * One set of worked-out targets, told the way a coach thinks about them (R5.3d): the calories, the
  * three macros as grams and as a share of the calories, and the steps between what the body burns and
  * the target, so the number can be defended to the client. The server worked every figure out; this
- * only shows them, rounded to whole numbers, and says what it was worked out from.
+ * only shows them, rounded to whole numbers, and says what it was worked out from. The coach's own
+ * macros (INV-2) say why, and which targets they changed.
  */
 @Component({
   selector: 'app-targets-result',

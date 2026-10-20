@@ -736,6 +736,34 @@ public sealed class NutritionCalculationSnapshot : TenantEntity
         InputJson = NutritionRules.RequiredText(inputJson, 20_000, nameof(inputJson));
     }
 
+    // The source's estimates and inputs stay; the target is what the coach's grams make, and the goal
+    // adjustment is its distance from the same TDEE, so the target still equals TDEE plus adjustment.
+    private NutritionCalculationSnapshot(NutritionCalculationSnapshot source, MacroOverrideAudit adjustment, decimal calorieTarget)
+        : base(source.TenantId)
+    {
+        ClientProfileId = source.ClientProfileId;
+        BmrMethodKey = source.BmrMethodKey;
+        BmrMethodVersion = source.BmrMethodVersion;
+        BmrEstimate = source.BmrEstimate;
+        ActivityModelKey = source.ActivityModelKey;
+        ActivityModelVersion = source.ActivityModelVersion;
+        ActivityModelPal = source.ActivityModelPal;
+        TdeeMethodKey = source.TdeeMethodKey;
+        TdeeMethodVersion = source.TdeeMethodVersion;
+        TdeeEstimate = source.TdeeEstimate;
+        CoachGoalAdjustment = calorieTarget - source.TdeeEstimate;
+        CalorieTarget = calorieTarget;
+        ProteinGrams = adjustment.ProteinGrams;
+        FatGrams = adjustment.FatGrams;
+        CarbohydrateGrams = adjustment.CarbohydrateGrams;
+        MacroMethodKey = CoachMacroOverride.Key;
+        MacroMethodVersion = CoachMacroOverride.CurrentVersion;
+        EnergyPolicyKey = source.EnergyPolicyKey;
+        EnergyPolicyVersion = source.EnergyPolicyVersion;
+        InputJson = source.InputJson;
+        MacroOverrideAuditId = adjustment.Id;
+    }
+
     public Guid ClientProfileId { get; private set; }
     public string BmrMethodKey { get; private set; } = string.Empty;
     public string BmrMethodVersion { get; private set; } = string.Empty;
@@ -757,6 +785,9 @@ public sealed class NutritionCalculationSnapshot : TenantEntity
     public string EnergyPolicyVersion { get; private set; } = string.Empty;
     public string InputJson { get; private set; } = string.Empty;
 
+    /// <summary>The coach's override these targets came from; null for a formula's own targets.</summary>
+    public Guid? MacroOverrideAuditId { get; private set; }
+
     public static NutritionCalculationSnapshot Create(
         Guid tenantId,
         Guid clientProfileId,
@@ -775,6 +806,22 @@ public sealed class NutritionCalculationSnapshot : TenantEntity
         }
 
         return new NutritionCalculationSnapshot(tenantId, clientProfileId, bmr, activity, tdee, coachGoalAdjustment, target, energyPolicyKey, energyPolicyVersion, inputJson);
+    }
+
+    /// <summary>
+    /// These targets with the coach's own macros (<see cref="CoachMacroOverride"/>): a new snapshot that
+    /// names the override it came from. This one never changes, so a plan assigned with it keeps it.
+    /// </summary>
+    public NutritionCalculationSnapshot WithCoachMacros(MacroOverrideAudit adjustment)
+    {
+        ArgumentNullException.ThrowIfNull(adjustment);
+        if (adjustment.TenantId != TenantId || adjustment.CalculationSnapshotId != Id)
+        {
+            throw new ArgumentException("The override must adjust this calculation.", nameof(adjustment));
+        }
+
+        var calorieTarget = CoachMacroOverride.CalorieTarget(adjustment.ProteinGrams, adjustment.CarbohydrateGrams, adjustment.FatGrams);
+        return new NutritionCalculationSnapshot(this, adjustment, calorieTarget);
     }
 }
 

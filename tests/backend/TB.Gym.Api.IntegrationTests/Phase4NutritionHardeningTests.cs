@@ -119,7 +119,8 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         using var foreignCoach = CreateClient();
         await RegisterCoachAsync(foreignCoach, "p4-auth-foreign@example.test", "Foreign Coach", "Foreign Nutrition");
-        Assert.AreEqual(HttpStatusCode.Forbidden, (await foreignCoach.GetAsync($"/api/nutrition/clients/{assignedClientId}/plans")).StatusCode);
+        // Another workspace's client is not in this one: 404, as an id that exists nowhere (SEC-8).
+        Assert.AreEqual(HttpStatusCode.NotFound, (await foreignCoach.GetAsync($"/api/nutrition/clients/{assignedClientId}/plans")).StatusCode);
         await RefreshCsrfAsync(foreignCoach);
         Assert.AreEqual(HttpStatusCode.NotFound, (await foreignCoach.PostAsJsonAsync($"/api/nutrition/foods/{scenario.FoodId}/versions", FoodVersion(30m, []))).StatusCode);
         await RefreshCsrfAsync(foreignCoach);
@@ -703,6 +704,18 @@ internal sealed class UsdaFoodDataCentralFake : HttpMessageHandler
 
     public const string ChobaniFdcId = "2038865";
 
+    // What a network gives instead of an answer (BEA-2, BEA-13): no connection, no answer before the
+    // client's timeout, a body that is not JSON, and JSON that is not the documented shape. A search
+    // meets the same through these words.
+    public const string UnreachableFdcId = "9999101";
+    public const string TimeoutFdcId = "9999102";
+    public const string NotJsonFdcId = "9999103";
+    public const string WrongShapeFdcId = "9999104";
+    public const string UnreachableQuery = "usda outage";
+    public const string TimeoutQuery = "usda timeout";
+    public const string NotJsonQuery = "usda not json";
+    public const string WrongShapeQuery = "usda wrong shape";
+
     private const string ChickenWithSkinJson = """
         {"fdcId":2727569,"description":"Chicken, breast, meat and skin, raw","dataType":"Foundation","foodNutrients":[
         {"type":"FoodNutrient","id":1,"nutrient":{"id":1051,"number":"255","name":"Water","rank":100,"unitName":"g"},"amount":73.2},
@@ -804,8 +817,27 @@ internal sealed class UsdaFoodDataCentralFake : HttpMessageHandler
             query = criteria.RootElement.GetProperty("query").GetString() ?? string.Empty;
         }
 
+        if (uri.AbsolutePath == "/fdc/v1/food/" + UnreachableFdcId || query == UnreachableQuery)
+        {
+            throw new HttpRequestException("No connection could be made (test).");
+        }
+
+        if (uri.AbsolutePath == "/fdc/v1/food/" + TimeoutFdcId || query == TimeoutQuery)
+        {
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout (test).");
+        }
+
         var body = (request.Method.Method, uri.AbsolutePath) switch
         {
+            ("GET", "/fdc/v1/food/" + NotJsonFdcId) => "<html>Service Unavailable</html>",
+            ("GET", "/fdc/v1/food/" + WrongShapeFdcId) => "[1, 2, 3]",
+            ("POST", "/fdc/v1/foods/search") when query == NotJsonQuery => "<html>Service Unavailable</html>",
+            ("POST", "/fdc/v1/foods/search") when query == WrongShapeQuery => """
+                {"foods":[{"fdcId":{"nested":true},"description":"Odd","dataType":"SR Legacy","foodNutrients":[
+                {"nutrientName":"Protein","unitName":"G","value":1},
+                {"nutrientName":"Total lipid (fat)","unitName":"G","value":1},
+                {"nutrientName":"Carbohydrate, by difference","unitName":"G","value":1}]}]}
+                """,
             ("GET", "/fdc/v1/food/" + ChickenFdcId) => ChickenJson,
             ("GET", "/fdc/v1/food/" + NoProteinFdcId) => NoProteinJson,
             ("GET", "/fdc/v1/food/" + ChickenWithSkinFdcId) => ChickenWithSkinJson,

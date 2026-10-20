@@ -25,24 +25,42 @@
           <section class="panel" aria-labelledby="targets-title" data-card="targets">
             <div class="panel-head">
               <h2 id="targets-title" i18n>Daily targets</h2>
-              <button
-                appButton
-                type="button"
-                [variant]="latest() ? 'outlined' : 'filled'"
-                [loading]="preparing()"
-                (click)="workOut()"
-                data-work-out
-              >
+              <div class="head-actions">
                 @if (latest()) {
-                  <span i18n>Work out again</span>
-                } @else {
-                  <span i18n>Work out targets</span>
+                  <button
+                    appButton
+                    type="button"
+                    variant="outlined"
+                    (click)="adjustMacros()"
+                    data-adjust
+                    i18n
+                  >
+                    Adjust macros
+                  </button>
                 }
-              </button>
+                <button
+                  appButton
+                  type="button"
+                  [variant]="latest() ? 'outlined' : 'filled'"
+                  [loading]="preparing()"
+                  (click)="workOut()"
+                  data-work-out
+                >
+                  @if (latest()) {
+                    <span i18n>Work out again</span>
+                  } @else {
+                    <span i18n>Work out targets</span>
+                  }
+                </button>
+              </div>
             </div>
             <div class="panel-body">
               @if (latest(); as made) {
-                <p class="when" data-worked-on i18n>Worked out {{ workedOn(made) }}</p>
+                @if (made.adjustment) {
+                  <p class="when" data-worked-on i18n>Your macros, set {{ workedOn(made) }}</p>
+                } @else {
+                  <p class="when" data-worked-on i18n>Worked out {{ workedOn(made) }}</p>
+                }
                 <app-targets-result [record]="made" />
                 @if (earlierWorkedOut().length > 0) {
                   <details class="earlier" data-earlier-targets>
@@ -50,7 +68,12 @@
                     <ul class="list">
                       @for (entry of earlierWorkedOut(); track entry.item.id) {
                         <li>
-                          <span class="what">{{ entry.on }}</span>
+                          <span class="what">
+                            {{ entry.on }}
+                            @if (entry.item.adjustment) {
+                              <span class="meta" i18n>Your macros</span>
+                            }
+                          </span>
                           <span class="numbers" i18n
                             >{{ entry.item.calories | number: '1.0-0' }} calories ·
                             {{ entry.item.protein | number: '1.0-0' }} g protein ·
@@ -103,6 +126,18 @@
                     {{ plan.row.carbohydrate | number: '1.0-0' }} g carbs ·
                     {{ plan.row.fat | number: '1.0-0' }} g fat
                   </p>
+                  <div class="plan-actions">
+                    <button
+                      appButton
+                      type="button"
+                      variant="outlined"
+                      (click)="stop(plan.row)"
+                      data-stop-current
+                      i18n
+                    >
+                      Stop this meal plan
+                    </button>
+                  </div>
                 </div>
               } @else {
                 <p class="empty" data-no-plan>
@@ -117,16 +152,34 @@
                   <summary i18n>Other meal plans ({{ otherPlans().length }})</summary>
                   <ul class="list">
                     @for (plan of otherPlans(); track plan.row.id) {
-                      <li>
+                      <li [attr.data-plan]="plan.row.state">
                         <span class="what">
                           <strong dir="auto">{{ plan.row.name }}</strong
                           >&ngsp;<span class="meta">{{ plan.dates }}</span>
+                          @if (plan.stopped; as words) {
+                            <span class="meta stop-reason" dir="auto" data-stop-reason>{{
+                              words
+                            }}</span>
+                          }
                         </span>
                         &ngsp;<app-status-pill [label]="plan.state" [tone]="plan.tone" />&ngsp;<span
                           class="numbers"
                           i18n
                           >{{ plan.row.calories | number: '1.0-0' }} calories</span
                         >
+                        @if (plan.stoppable) {
+                          <button
+                            appButton
+                            type="button"
+                            variant="text"
+                            [attr.aria-label]="stopLabel(plan.row)"
+                            (click)="stop(plan.row)"
+                            data-stop-other
+                            i18n
+                          >
+                            Stop
+                          </button>
+                        }
                       </li>
                     }
                   </ul>

@@ -14,6 +14,7 @@ import { Control, Field } from '../../ui/field';
 import { Skeleton } from '../../ui/skeleton';
 import { UiToast } from '../../ui/toast';
 import { FoodApi } from '../nutrition/food-api';
+import { RecipeApi } from '../nutrition/recipe-api';
 import { numeric } from '../training/training-builder.models';
 import { SettingsFrame } from '../settings/settings-frame';
 
@@ -60,6 +61,7 @@ export function nutritionFormIssues(
  * Settings › Nutrition (C7 and C9, R4.4c): how calories are counted for every food and recipe in the
  * workspace, when a food's label calories are flagged, and the AI recipe suggestions the workspace
  * allows itself within TB Gym's ceiling. The owner's alone, like every Settings page; the API agrees.
+ * Whether suggestions are on is the same answer the recipe editor reads (LOST-4).
  */
 @Component({
   selector: 'app-workspace-nutrition',
@@ -70,6 +72,7 @@ export function nutritionFormIssues(
 })
 export class WorkspaceNutrition {
   private readonly api = inject(FoodApi);
+  private readonly recipes = inject(RecipeApi);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly toast = inject(UiToast);
@@ -90,6 +93,8 @@ export class WorkspaceNutrition {
   protected readonly saveError = signal<string | null>(null);
   /** Someone saved these settings after this page loaded them. */
   protected readonly conflict = signal(false);
+  /** Whether a coach can ask for a suggestion: set up, with TB Gym's ceiling above zero. */
+  private readonly aiAvailable = signal(false);
 
   protected readonly ceiling = computed(() => {
     const saved = this.saved();
@@ -98,10 +103,7 @@ export class WorkspaceNutrition {
       cost: saved ? numeric(saved.aiMaximumMonthlyCost) : 0,
     };
   });
-  protected readonly aiOff = computed(() => {
-    const ceiling = this.ceiling();
-    return ceiling.requests === 0 || ceiling.cost === 0;
-  });
+  protected readonly aiOff = computed(() => !this.aiAvailable());
   protected readonly ceilingRequests = computed(
     () =>
       $localize`TB Gym allows up to ${this.ceiling().requests}:max: a month. 0 turns suggestions off.`,
@@ -128,6 +130,7 @@ export class WorkspaceNutrition {
       this.loadedTenantId = null;
       this.saved.set(null);
       this.loadFailed.set(false);
+      this.aiAvailable.set(false);
     });
     effect(() => {
       this.scope.epoch();
@@ -159,7 +162,15 @@ export class WorkspaceNutrition {
       this.loadFailed.set(false);
       this.conflict.set(false);
       try {
-        this.adopt(await owner.wait(firstValueFrom(this.api.getSettings())));
+        // A failed availability read leaves suggestions off, as the recipe editor does.
+        const [settings, availability] = await owner.wait(
+          Promise.all([
+            firstValueFrom(this.api.getSettings()),
+            firstValueFrom(this.recipes.aiAvailability()).catch(() => ({ isConfigured: false })),
+          ]),
+        );
+        this.aiAvailable.set(availability.isConfigured);
+        this.adopt(settings);
       } catch {
         if (owner.current) this.loadFailed.set(true);
       }

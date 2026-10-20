@@ -30,7 +30,9 @@ invalid output and other failures. Ambiguous transport failures/timeouts retain 
 there are no automatic SDK retries. Four-decimal cost recording rounds upward. Model/routing
 options are restricted to the documented rates; changing either requires updating reference tests.
 
-Availability is an authenticated coach read exposing only a configured boolean. Disabled AI
+Availability is an authenticated coach read exposing only a configured boolean; since the audit's batch
+A6 (2026-10-20, LOST-4) it is true only while TB Gym's ceiling (below) is also above zero, and Settings ›
+Nutrition reads it as the recipe editor does, so the two never disagree. Disabled AI
 explains setup beside the button; failures there are announced and focused. Configuration contains
 the server key only. The adapter is verified with HTTP fakes; a real-key generation remains an
 operational check before enabling it for coaches. The full nutrition redesign remains R4.4.

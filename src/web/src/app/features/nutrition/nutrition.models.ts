@@ -63,6 +63,8 @@ export interface NutritionSlot {
   choices: NutritionChoice[];
   selectedChoiceId: string | null;
   actualServings: number | null;
+  /** The server's calories for the amount logged (CLIENT-10); null while the meal is not logged. */
+  loggedCalories: number | null;
 }
 
 export interface NutritionDay {
@@ -145,6 +147,7 @@ export function mapNutritionDay(value: ContractClientNutritionDayView): Nutritio
       order: numeric(slot.order),
       selectedChoiceId: slot.selectedChoiceId,
       actualServings: nullableNumeric(slot.actualServings),
+      loggedCalories: nullableNumeric(slot.loggedCalories ?? null),
       choices: slot.choices.map((choice) => ({
         id: choice.id,
         recipeName: choice.recipeName,

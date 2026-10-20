@@ -958,7 +958,8 @@ of the implemented R1.3 screens before production rollout.
   Not built: (a) **nutrition reads open only once a plan has started** (the training reads open earlier,
   TRN-023), so a coach cannot work out targets for a client whose plan starts next week; (b) the calculator
   takes kilograms and centimetres only (a client's saved pounds are shown, not converted); (c) targets with
-  no meal plan, carb cycling, typing the macros over the calculation, and stopping a plan early; (d) the
+  no meal plan and carb cycling (typing the macros over the calculation, "Adjust macros", and stopping a
+  plan early with a reason were built in the audit's batch A6, 2026-10-20); (d) the
   server checking that an allergen save was made from what is stored now; (e) the Strength history lists the 1,000 newest maxes
   and the search the first 8 matches; (f) a chart of a lift's maxes across kinds.
 - **The leftovers, R5.3e (built 2026-10-10; screenshots `docs/design/r53e-*.png`). Decided by Claude for the

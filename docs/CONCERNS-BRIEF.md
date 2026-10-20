@@ -179,7 +179,11 @@ total carbs and stay as they are. A reference test with the oats example; ADR 00
 
 **Decided (owner, 2026-10-14):** fix it this way. Source: EU Regulation 1169/2011, Annex I (EU
 "carbohydrate" is the carbohydrate the body digests, sugar alcohols included; fibre is defined and declared
-on its own). **Status:** Decided, not built.
+on its own). **Status:** Built in the audit's fix batch A6 (2026-10-20, `docs/FULL-AUDIT-2026-10.md`,
+section 0; NCM-3): under EU-style labels the Carbs box says "As the label prints them, without the fibre",
+the fibre box is open from the start, the request says how the carbs were typed and the server adds the
+fibre back (`LabelCarbohydrateRule` v1); the oats come out at the label's 374 kcal, unflagged. Foods saved
+before keep their numbers.
 
 ## C7 The 4/4/9 option counts alcohol as 0 kcal
 
