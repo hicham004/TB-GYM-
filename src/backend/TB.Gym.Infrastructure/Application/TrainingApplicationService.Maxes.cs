@@ -593,19 +593,24 @@ internal sealed partial class TrainingApplicationService
                     continue;
                 }
 
+                var setNumber = 0;
                 foreach (var set in exercise.Sets.OrderBy(item => item.Position))
                 {
+                    setNumber++;
                     if (!calculated.Contains(set.LoadStrategy))
                     {
                         continue;
                     }
 
-                    var recalculated = CalculateSetBlueprint(
-                        exercise.ExerciseId,
-                        ToBlueprint(set),
-                        mesocycle.LoadUnit,
-                        policy,
-                        newMaxes);
+                    // A weight the new max makes impossible (one that would round to nothing) names its set (BEA-10).
+                    var recalculated = Located(
+                        $"Week {week.WeekNumber}, {session.Name}, {exercise.ExerciseNameSnapshot}, set {setNumber}",
+                        () => CalculateSetBlueprint(
+                            exercise.ExerciseId,
+                            ToBlueprint(set),
+                            mesocycle.LoadUnit,
+                            policy,
+                            newMaxes));
                     sets.Add(new PlannedSet(
                         set,
                         week.WeekNumber,

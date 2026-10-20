@@ -196,11 +196,11 @@ public sealed class Phase3TrainingDomainTests
     [TestMethod]
     public void PositiveSubIncrementLoadsRequireAnExplicitPracticalRoundingChoice()
     {
-        Assert.ThrowsExactly<InvalidOperationException>(() => new LoadRoundingPolicy(
+        Assert.ThrowsExactly<ArgumentException>(() => new LoadRoundingPolicy(
             StrengthLoadUnit.Kilogram,
             2.5m,
             LoadRoundingMode.Down).Round(1m));
-        Assert.ThrowsExactly<InvalidOperationException>(() => new LoadRoundingPolicy(
+        Assert.ThrowsExactly<ArgumentException>(() => new LoadRoundingPolicy(
             StrengthLoadUnit.Kilogram,
             2.5m,
             LoadRoundingMode.Nearest).Round(1m));

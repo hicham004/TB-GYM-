@@ -250,12 +250,31 @@ describe('how they have performed one exercise', () => {
       set: '60 kg × 5',
       effort: 'RPE 8',
       estimate: 70,
+      formula: 'Epley',
       volume: 300,
       note: 'Felt fast.',
       substituted: false,
     });
     expect(substituted.substituted).toBe(true);
-    expect(bodyweight).toMatchObject({ set: '8 reps', effort: 'RIR 2', estimate: null });
+    expect(bodyweight).toMatchObject({
+      set: '8 reps',
+      effort: 'RIR 2',
+      estimate: null,
+      formula: null,
+    });
+    // The chart's estimate says so; a formula the screen does not know is not named (TRAIN-4).
+    expect(
+      mapPerformance(
+        performance('2026-10-08', 62.5, 7, 80.749, { estimateMethodKey: 'RpeChart' }),
+        0,
+      ).formula,
+    ).toBe('RpeChart');
+    expect(
+      mapPerformance(
+        performance('2026-10-08', 62.5, 7, 80.749, { estimateMethodKey: 'Brzycki' }),
+        0,
+      ).formula,
+    ).toBeNull();
     expect(
       mapPerformance(performance('2026-10-01', null, null, null, { rpe: null }), 9),
     ).toMatchObject({

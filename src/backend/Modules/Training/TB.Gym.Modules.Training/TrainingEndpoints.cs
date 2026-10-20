@@ -193,6 +193,7 @@ public static class TrainingEndpoints
         })
         .WithName("RescheduleMesocycle")
         .Produces<TrainingMesocycleView>()
+        .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
         coach.MapPost("/mesocycles/{mesocycleId:guid}/cancel", async (

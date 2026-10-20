@@ -145,6 +145,16 @@ public static class RpeChartMaxEstimator
                 CultureInfo.InvariantCulture,
                 $"RTS RPE chart v1: {repetitions} reps at RPE {rpe:0.#} is {percent:0.#}% of the max, so {load:0.###} {unitName} / {percent:0.#}% = {value:0.###} {unitName}."));
     }
+
+    /// <summary>
+    /// The same estimate for a logged set, or null where the chart cannot read it: a repetition count or RPE
+    /// outside the chart, no weight, or a max past 2,000. Nothing is extrapolated.
+    /// </summary>
+    public static RpeChartMaxEstimate? TryEstimate(decimal load, int repetitions, decimal rpe, LoadUnit unit) =>
+        Enum.IsDefined(unit) && load is > 0m and <= 2_000m && RtsRpeChart.Covers(repetitions, rpe) &&
+        decimal.Round(load * 100m / RtsRpeChart.PercentOfOneRepMax(repetitions, rpe), 3, MidpointRounding.AwayFromZero) <= 2_000m
+            ? Estimate(load, repetitions, rpe, unit)
+            : null;
 }
 
 internal static class StrengthUnits

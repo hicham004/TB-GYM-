@@ -50,6 +50,33 @@ public static class WorkoutPersonalRecordRule
 
         return records;
     }
+
+    /// <summary>
+    /// Whether one set of a workout set a record: the finish summary's answer for that set, so a set save and
+    /// the summary never disagree about it (TRN-019).
+    /// </summary>
+    public static bool IsRecordSet(
+        Guid setId,
+        IEnumerable<PerformedSet> workoutSetsInOrder,
+        IEnumerable<PerformedSet> earlierWorkoutSets) =>
+        RecordSetIds(workoutSetsInOrder, earlierWorkoutSets).Contains(setId);
+
+    /// <summary>
+    /// A workout's completed sets in the order the rule reads them: its exercises by place, then each one's
+    /// sets by place. A lift the session prescribes twice is read across both, as the lift actually done.
+    /// </summary>
+    public static IReadOnlyList<PerformedSet> CompletedSetsInOrder(WorkoutExecution workout)
+    {
+        ArgumentNullException.ThrowIfNull(workout);
+        return workout.Exercises
+            .OrderBy(exercise => exercise.Position).ThenBy(exercise => exercise.Id)
+            .SelectMany(exercise => exercise.Sets
+                .Where(set => set.IsCompleted)
+                .OrderBy(set => set.Position).ThenBy(set => set.Id)
+                .Select(set => new PerformedSet(set.Id, exercise.ActualExerciseId, set.ActualRepetitions,
+                    set.ActualLoad, set.ActualLoadUnit, true)))
+            .ToArray();
+    }
 }
 
 /// <summary>One logged set as the record rule reads it: the exercise actually performed and its actuals.</summary>

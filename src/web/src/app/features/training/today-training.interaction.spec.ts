@@ -469,6 +469,102 @@ describe('TodayTraining interactions', () => {
     );
   });
 
+  /** A set logged as a lift stays that lift's set, so its record is never another lift's (CLIENT-2). */
+  it('keeps the lift a set was logged as and says why the others are closed', async () => {
+    const logged = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              modificationPolicy: 'CoachApprovedSwap',
+              alternatives: [
+                { exerciseId: 'exercise-2', name: 'Hack squat' },
+                { exerciseId: 'exercise-3', name: 'Leg press' },
+              ],
+              wasSubstituted: true,
+              actualExerciseId: 'exercise-2',
+              actualExerciseName: 'Hack squat',
+              sets: [
+                set({
+                  actualRepetitions: 8,
+                  actualLoad: 100,
+                  actualLoadUnit: 'Kilogram',
+                  isCompleted: true,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host, api } = await render({}, logged);
+
+    press(host, 'Swap exercise');
+    await settle(fixture);
+    const why = 'Not this workout: a set is logged as Hack squat';
+    expect(button(host, `Back squat${why}`).getAttribute('aria-disabled')).toBe('true');
+    expect(button(host, `Leg press${why}`).getAttribute('aria-disabled')).toBe('true');
+    expect(button(host, 'Hack squat').getAttribute('aria-current')).toBe('true');
+    press(host, `Back squat${why}`);
+    await settle(fixture);
+    expect(api.substituteMyTrainingExercise).not.toHaveBeenCalled();
+  });
+
+  it('shows the workout as it is now when a set was logged on another device first', async () => {
+    const swappable = exercise({
+      modificationPolicy: 'CoachApprovedSwap',
+      alternatives: [{ exerciseId: 'exercise-2', name: 'Hack squat' }],
+    });
+    const before = day({ workouts: [workout({ exercises: [swappable] })] });
+    const after = day({
+      workouts: [
+        workout({
+          executionVersion: 4,
+          exercises: [
+            {
+              ...swappable,
+              sets: [set({ actualRepetitions: 8, actualLoad: 60, isCompleted: true })],
+            },
+          ],
+        }),
+      ],
+    });
+    const getMyTrainingToday = vi.fn().mockReturnValueOnce(of(before)).mockReturnValue(of(after));
+    const { fixture, host } = await render({
+      getMyTrainingToday,
+      substituteMyTrainingExercise: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: {
+                code: 'substitution_after_logged_set',
+                message: 'You logged a set as Back squat, so this exercise stays Back squat.',
+              },
+            }),
+        ),
+      ),
+    });
+
+    press(host, 'Swap exercise');
+    await settle(fixture);
+    press(host, 'Hack squat');
+    await settle(fixture);
+
+    expect(getMyTrainingToday).toHaveBeenCalledTimes(2);
+    expect(query(host, '[role="alert"]').textContent).toContain(
+      'You logged a set as Back squat, so this exercise stays Back squat for this workout.',
+    );
+    // The day read again: the other choice is closed now, saying why.
+    press(host, 'Swap exercise');
+    await settle(fixture);
+    expect(
+      button(host, 'Hack squatNot this workout: a set is logged as Back squat').getAttribute(
+        'aria-disabled',
+      ),
+    ).toBe('true');
+  });
+
   it('keeps Swap closed while a set is still being saved', async () => {
     const pending = new Subject<WorkoutSetSaveView>();
     const swappable = day({

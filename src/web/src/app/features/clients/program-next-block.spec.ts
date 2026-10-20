@@ -31,6 +31,7 @@ function preview(overrides: Record<string, unknown> = {}) {
     resultingEndDateExclusive: '2026-11-16',
     isInsideTrainingCoverage: true,
     coverageMessage: null,
+    overlapMessage: null,
     generatedWeeks: [7, 8, 9].map((weekNumber) =>
       weekView(`new-${weekNumber}`, weekNumber, [
         sessionView(`new-s${weekNumber}`, 'Lower A', [
@@ -353,6 +354,45 @@ describe('Build next block', () => {
     );
     expect(add?.disabled).toBe(true);
     expect(api['applyTrainingProgression']).not.toHaveBeenCalled();
+  });
+
+  it('does not let weeks be added that run into the next program, and names it (BEA-1)', async () => {
+    const message =
+      'Maya already has Peak from Mon 9 Nov 2026 to Sun 15 Nov 2026, so 1 new week fits before it. Choose fewer copies, or move or cancel that program first.';
+    const { fixture, host, api } = await render({
+      previewTrainingProgression: vi.fn(() => of(preview({ overlapMessage: message }))),
+    });
+
+    press(host, 'Preview the new weeks');
+    await settle(fixture);
+
+    expect(textOf(host.querySelector('.preview [data-overlap]'))).toBe(message);
+    expect(host.querySelector('.preview [data-overlap]')?.getAttribute('role')).toBe('alert');
+    const add = Array.from(host.querySelectorAll('button')).find(
+      (b) => textOf(b) === 'Add these weeks',
+    );
+    expect(add?.disabled).toBe(true);
+    expect(api['applyTrainingProgression']).not.toHaveBeenCalled();
+  });
+
+  it('names the program in the way when it is assigned between the preview and adding', async () => {
+    const message =
+      'Maya already has Peak from Mon 9 Nov 2026 to Sun 15 Nov 2026, right after this program, so no new week fits. Move or cancel that program first.';
+    const refused = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'mesocycle_overlap', message },
+    });
+    const { fixture, host, closed } = await render({
+      applyTrainingProgression: vi.fn(() => throwError(() => refused)),
+    });
+    press(host, 'Preview the new weeks');
+    await settle(fixture);
+
+    press(host, 'Add these weeks');
+    await settle(fixture);
+
+    expect(textOf(host.querySelector('.body > .problem-text'))).toBe(message);
+    expect(closed).not.toHaveBeenCalled();
   });
 
   it('tells the coach which set a step pushes past its limits, in the server’s words', async () => {

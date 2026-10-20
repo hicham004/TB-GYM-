@@ -339,8 +339,7 @@ internal sealed partial class TrainingApplicationService
             .ToArray();
         var completed = ordered.Where(item => item.set.IsCompleted).ToArray();
         var recordIds = WorkoutPersonalRecordRule.RecordSetIds(
-            completed.Select(item => new PerformedSet(item.set.Id, item.exercise.ActualExerciseId,
-                item.set.ActualRepetitions, item.set.ActualLoad, item.set.ActualLoadUnit, true)),
+            WorkoutPersonalRecordRule.CompletedSetsInOrder(workout),
             earlier.Select(item => item.Set)).ToHashSet();
         var records = completed.Where(item => recordIds.Contains(item.set.Id))
             .Select(item => new WorkoutPersonalRecordView(

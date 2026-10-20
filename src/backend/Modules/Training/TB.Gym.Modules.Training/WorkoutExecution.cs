@@ -220,20 +220,37 @@ public sealed class WorkoutExercisePerformance : TenantEntity
         ExercisePrescription prescription) =>
         new(tenantId, workoutExecutionId, prescription);
 
+    /// <summary>
+    /// Records which lift is done (TRN-010). A completed set belongs to the lift it was done as (TRN-012), so
+    /// once one is logged the choice stays, and a set and its record are never credited to a lift not done.
+    /// Choosing the lift already chosen changes nothing.
+    /// </summary>
     internal void SelectActuallyPerformedExercise(Guid exerciseId, string exerciseName)
     {
-        if (exerciseId == PrescribedExerciseId)
+        if (exerciseId == ActualExerciseId)
+        {
+            return;
+        }
+
+        var backToPrescribed = exerciseId == PrescribedExerciseId;
+        if (!backToPrescribed &&
+            (ModificationPolicySnapshot != PrescriptionModificationPolicy.CoachApprovedSwap ||
+             approvedAlternatives.All(item => item.ExerciseId != exerciseId)))
+        {
+            throw new InvalidOperationException("This prescription does not authorize the selected substitution.");
+        }
+
+        if (sets.Any(set => set.IsCompleted))
+        {
+            throw new WorkoutExerciseSwapLockedException(ActualExerciseName);
+        }
+
+        if (backToPrescribed)
         {
             ActualExerciseId = PrescribedExerciseId;
             ActualExerciseName = PrescribedExerciseName;
             WasSubstituted = false;
             return;
-        }
-
-        if (ModificationPolicySnapshot != PrescriptionModificationPolicy.CoachApprovedSwap ||
-            approvedAlternatives.All(item => item.ExerciseId != exerciseId))
-        {
-            throw new InvalidOperationException("This prescription does not authorize the selected substitution.");
         }
 
         ActualExerciseId = exerciseId;
@@ -466,6 +483,17 @@ public sealed class WorkoutNote : TenantEntity
             authorUserId,
             authorRole,
             text);
+}
+
+/// <summary>
+/// A set is already logged under the lift being done, so the client cannot swap it for this workout (CLIENT-2):
+/// the set would otherwise become another lift's set, and its record with it.
+/// </summary>
+public sealed class WorkoutExerciseSwapLockedException(string exerciseName)
+    : InvalidOperationException(
+        $"You logged a set as {exerciseName}, so this exercise stays {exerciseName} for this workout.")
+{
+    public const string Code = "substitution_after_logged_set";
 }
 
 public enum WorkoutExecutionStatus

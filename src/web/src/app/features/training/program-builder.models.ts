@@ -89,8 +89,10 @@ export function columnsFor(used: ReadonlySet<number>, editingDay: number | null)
 }
 
 /**
- * One line for an exercise on the grid: "4 × 5 · 75% · RPE 7". Sets that disagree on reps read
- * "4 sets"; the load and effort come from the first working set that has one.
+ * One line for an exercise on the grid: "4 × 5 · 75% · RPE 7". The sets and reps are the working
+ * sets', as a coach writes them, so a warm-up is never counted as one (TRAIN-2); sets that disagree
+ * on reps read "4 sets". The load and effort come from the first working set that has one. An
+ * exercise of warm-ups only says so.
  */
 export function exerciseSummary(exercise: DraftExercise): string {
   const sets = exercise.sets;
@@ -98,12 +100,19 @@ export function exerciseSummary(exercise: DraftExercise): string {
     return $localize`No sets yet`;
   }
 
-  const parts: string[] = [];
-  const reps = sharedReps(sets);
-  parts.push(reps === null ? $localize`${sets.length}:count: sets` : `${sets.length} × ${reps}`);
-
   const working = sets.filter((set) => set.setType !== 'WarmUp');
   const pool = working.length > 0 ? working : sets;
+  const parts: string[] = [];
+  const reps = sharedReps(pool);
+  if (working.length > 0) {
+    parts.push(reps === null ? $localize`${pool.length}:count: sets` : `${pool.length} × ${reps}`);
+  } else {
+    parts.push(
+      reps === null
+        ? $localize`${pool.length}:count: warm-up sets`
+        : $localize`${pool.length}:count: × ${reps}:reps: warm-up`,
+    );
+  }
   const override = pool.find((set) => set.manualLoadOverride !== null);
   const loaded = pool.find(
     (set) =>

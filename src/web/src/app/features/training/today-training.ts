@@ -66,6 +66,15 @@ const UNIT_OPTIONS: readonly SegmentOption[] = [
   { value: 'Pound', label: 'lb' },
 ];
 
+/** The server kept the lift because a set is already logged under it (CLIENT-2). */
+function isSwapLocked(error: unknown): boolean {
+  return (
+    error instanceof HttpErrorResponse &&
+    error.status === 409 &&
+    (error.error as { code?: string } | null)?.code === 'substitution_after_logged_set'
+  );
+}
+
 @Component({
   selector: 'app-today-training',
   imports: [
@@ -496,17 +505,29 @@ export class TodayTraining {
       : $localize`Today · not started`;
   }
 
-  /** The exercise the coach prescribed, then the alternatives they approved at assignment. */
+  /**
+   * The exercise the coach prescribed, then the alternatives they approved at assignment. Once a set
+   * is logged, the lift it was done as stays for this workout (CLIENT-2): the others are still listed,
+   * closed, saying why.
+   */
   protected swapChoices(exercise: ClientExerciseView): UiMenuItem[] {
+    const logged = exercise.sets.some((set) => set.isCompleted);
+    const closed = (exerciseId: string) => logged && exerciseId !== exercise.actualExerciseId;
+    const why = $localize`Not this workout: a set is logged as ${exercise.actualExerciseName}:exercise:`;
     return [
       {
         label: exercise.prescribedExerciseName,
-        hint: $localize`The one your coach prescribed`,
+        hint: closed(exercise.prescribedExerciseId)
+          ? why
+          : $localize`The one your coach prescribed`,
         action: exercise.prescribedExerciseId,
+        disabled: closed(exercise.prescribedExerciseId),
       },
       ...exercise.alternatives.map((alternative) => ({
         label: alternative.name,
+        hint: closed(alternative.exerciseId) ? why : undefined,
         action: alternative.exerciseId,
+        disabled: closed(alternative.exerciseId),
       })),
     ];
   }
@@ -662,14 +683,31 @@ export class TodayTraining {
       }
       await owner.wait(
         this.runWrite(async (writeGeneration) => {
-          await owner.wait(
-            firstValueFrom(
-              this.api.substituteMyTrainingExercise(workoutId, exercise.performanceId!, {
-                exerciseId,
-                version: numeric(currentWorkout.executionVersion!),
-              }),
-            ),
-          );
+          try {
+            await owner.wait(
+              firstValueFrom(
+                this.api.substituteMyTrainingExercise(workoutId, exercise.performanceId!, {
+                  exerciseId,
+                  version: numeric(currentWorkout.executionVersion!),
+                }),
+              ),
+            );
+          } catch (error) {
+            if (!isSwapLocked(error)) throw error;
+            // A set was logged under this lift somewhere else (another tab or phone): show the
+            // workout as it is now, then say why the lift stays.
+            await owner.wait(this.load(false));
+            if (this.ownsContext(writeGeneration)) {
+              const now = this.day()
+                ?.workouts.flatMap((item) => item.exercises)
+                .find((item) => item.performanceId === exercise.performanceId);
+              const name = now?.actualExerciseName ?? exercise.actualExerciseName;
+              this.reportError(
+                $localize`You logged a set as ${name}:exercise:, so this exercise stays ${name}:exercise: for this workout.`,
+              );
+            }
+            return;
+          }
           if (!this.ownsContext(writeGeneration)) {
             return;
           }

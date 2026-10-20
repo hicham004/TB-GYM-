@@ -194,13 +194,11 @@ internal sealed partial class TrainingApplicationService
         var policy = CreateRoundingPolicy(request.LoadUnit, request.LoadIncrement, request.LoadRoundingMode);
         var calculated = source with
         {
-            Weeks = source.Weeks.Select(week => week with
+            Weeks = source.Weeks.Select((week, weekIndex) => week with
             {
-                Sessions = week.Sessions.Select(session => CalculateSessionBlueprint(
-                    session,
-                    request.LoadUnit,
-                    policy,
-                    workingMaxes)).ToArray(),
+                Sessions = week.Sessions.Select(session => Located(
+                    $"Week {weekIndex + 1}, {session.Name}",
+                    () => CalculateSessionBlueprint(session, request.LoadUnit, policy, workingMaxes))).ToArray(),
             }).ToArray(),
         };
         return await AttachCurrentMediaAsync(calculated, cancellationToken);
@@ -264,6 +262,7 @@ internal sealed partial class TrainingApplicationService
                 mesocycle.LoadRoundingMode),
             workingMaxes);
 
+    /// <summary>A session's sets with their weights worked out; a refusal names the exercise and the set.</summary>
     private TrainingSessionBlueprint CalculateSessionBlueprint(
         TrainingSessionBlueprint session,
         TrainingLoadUnit loadUnit,
@@ -273,12 +272,11 @@ internal sealed partial class TrainingApplicationService
         {
             Exercises = session.Exercises.Select(exercise => exercise with
             {
-                Sets = exercise.Sets.Select(set => CalculateSetBlueprint(
-                    exercise.ExerciseId,
-                    set,
-                    loadUnit,
-                    roundingPolicy,
-                    workingMaxes)).ToArray(),
+                // Numbered by place, as the coach reads them, whatever positions the sets were stored at.
+                Sets = exercise.Sets.Select(set => Located(
+                    $"{exercise.ExerciseNameSnapshot}, set {exercise.Sets.Count(other => other.Position < set.Position) + 1}",
+                    () => CalculateSetBlueprint(exercise.ExerciseId, set, loadUnit, roundingPolicy, workingMaxes)))
+                    .ToArray(),
             }).ToArray(),
         };
 
@@ -629,24 +627,64 @@ internal sealed partial class TrainingApplicationService
         Guid clientProfileId, DateOnly start, DateOnly endExclusive, Guid? excludedId,
         CancellationToken cancellationToken)
     {
-        var overlap = await dbContext.TrainingMesocycles.AsNoTracking()
-            .Where(item => item.ClientProfileId == clientProfileId && item.Kind == MesocycleKind.Primary &&
-                           item.BlocksPrimaryOverlap && item.Id != excludedId && item.StartDate < endExclusive &&
-                           start < item.EndDateExclusive)
-            .OrderBy(item => item.StartDate).ThenBy(item => item.Id)
-            .Select(item => new { item.Name, item.StartDate, item.EndDateExclusive })
-            .FirstOrDefaultAsync(cancellationToken);
+        var overlap = await FindPrimaryOverlapAsync(clientProfileId, start, endExclusive, excludedId, cancellationToken);
         if (overlap is null)
         {
             return Conflict("mesocycle_overlap", "Another program already covers some of these dates. Reload the client to check its dates.");
         }
 
-        var name = await dbContext.ClientProfiles.AsNoTracking()
-            .Where(item => item.Id == clientProfileId).Select(item => item.FirstName).SingleAsync(cancellationToken);
-        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var name = await ClientFirstNameAsync(clientProfileId, cancellationToken);
         return Conflict("mesocycle_overlap",
-            $"{name} already has {overlap.Name} from {overlap.StartDate.ToString("ddd d MMM yyyy", culture)} to {overlap.EndDateExclusive.AddDays(-1).ToString("ddd d MMM yyyy", culture)}. Start on {overlap.EndDateExclusive.ToString("ddd d MMM yyyy", culture)} or later, or cancel that program first.");
+            $"{name} already has {overlap.Name} from {LongDay(overlap.StartDate)} to {LongDay(overlap.EndDateExclusive.AddDays(-1))}. Start on {LongDay(overlap.EndDateExclusive)} or later, or cancel that program first.");
     }
+
+    /// <summary>
+    /// Why Build next block cannot add weeks that would run into the client's next program (TRN-011), naming
+    /// that program and how many new weeks still fit before it; null when nothing is in the way.
+    /// </summary>
+    private async Task<string?> NextBlockOverlapAsync(
+        TrainingMesocycle mesocycle,
+        DateOnly resultingEndExclusive,
+        CancellationToken cancellationToken)
+    {
+        var overlap = await FindPrimaryOverlapAsync(
+            mesocycle.ClientProfileId, mesocycle.StartDate, resultingEndExclusive, mesocycle.Id, cancellationToken);
+        if (overlap is null)
+        {
+            return null;
+        }
+
+        var name = await ClientFirstNameAsync(mesocycle.ClientProfileId, cancellationToken);
+        var said = $"{name} already has {overlap.Name} from {LongDay(overlap.StartDate)} to {LongDay(overlap.EndDateExclusive.AddDays(-1))}";
+        var room = Math.Max(0, (overlap.StartDate.DayNumber - mesocycle.EndDateExclusive.DayNumber) / 7);
+        return room switch
+        {
+            0 => $"{said}, right after this program, so no new week fits. Move or cancel that program first.",
+            1 => $"{said}, so 1 new week fits before it. Choose fewer copies, or move or cancel that program first.",
+            _ => $"{said}, so {room} new weeks fit before it. Choose fewer copies, or move or cancel that program first.",
+        };
+    }
+
+    /// <summary>The client's first program, by start, that blocks primary overlap on these dates (TRN-011).</summary>
+    private async Task<OverlappingProgram?> FindPrimaryOverlapAsync(
+        Guid clientProfileId, DateOnly start, DateOnly endExclusive, Guid? excludedId,
+        CancellationToken cancellationToken) =>
+        await dbContext.TrainingMesocycles.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId && item.Kind == MesocycleKind.Primary &&
+                           item.BlocksPrimaryOverlap && item.Id != excludedId && item.StartDate < endExclusive &&
+                           start < item.EndDateExclusive)
+            .OrderBy(item => item.StartDate).ThenBy(item => item.Id)
+            .Select(item => new OverlappingProgram(item.Name, item.StartDate, item.EndDateExclusive))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task<string> ClientFirstNameAsync(Guid clientProfileId, CancellationToken cancellationToken) =>
+        await dbContext.ClientProfiles.AsNoTracking()
+            .Where(item => item.Id == clientProfileId).Select(item => item.FirstName).SingleAsync(cancellationToken);
+
+    private static string LongDay(DateOnly date) =>
+        date.ToString("ddd d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+    private sealed record OverlappingProgram(string Name, DateOnly StartDate, DateOnly EndDateExclusive);
 
     private async Task<bool> IsSameAssignmentAsync(
         TrainingMesocycle existing,

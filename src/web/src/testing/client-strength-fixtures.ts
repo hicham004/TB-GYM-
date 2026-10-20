@@ -152,6 +152,8 @@ export function performance(
     rpe: 8,
     rir: null,
     estimatedOneRepMax: estimate,
+    // These numbers are Epley's; a set read on the RTS chart says so (TRAIN-4).
+    estimateMethodKey: estimate === null ? null : 'Epley',
     volume: load !== null && repetitions !== null ? load * repetitions : null,
     note: null,
     ...overrides,

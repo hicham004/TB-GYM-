@@ -307,6 +307,10 @@ and strength inputs. Completion data and client notes are never copied from anot
 and sets. An assigned mesocycle allows explicit future-session replacement and reviewed
 progression append. Started sessions cannot be replaced. Rescheduling changes only sessions
 that have not started, so historical dates and executions are never silently remapped.
+A replacement ("Swap this session") keeps the session's own day, whatever day the saved session sat
+on in its own program; moving a session is Edit weeks' (TRN-028). Once a workout of the block has
+started, or the block is finished or cancelled, rescheduling answers 409 `lifecycle_conflict`
+(audit A3, TRAIN-3, BEA-3).
 
 **TRN-005** A program supports an ordered week/session/exercise/set tree. Each set independently
 supports optional rep range, set type, load strategy/value, canonical RPE or RIR target, rest,
@@ -339,7 +343,11 @@ set's target, and the coach's view of the workout shows it too.
 
 **TRN-010** Prescription modification is explicit: `Locked` or `CoachApprovedSwap`. A main
 lift is always `Locked`. A permitted client swap must use an alternative captured at assignment,
-and records `Prescribed -> Actually Performed`; it never overwrites coach content.
+and records `Prescribed -> Actually Performed`; it never overwrites coach content. Once a set is
+completed under the lift being done, that choice stays for the workout: a swap to another lift, the
+prescribed one included, is refused with 409 `substitution_after_logged_set`, so a set and its
+record are never credited to a lift not done (TRN-012; audit A3, CLIENT-2). The player closes the
+other choices then, saying why. Choosing the lift already chosen changes nothing.
 
 **TRN-011** Enrollment and mesocycle are not the same aggregate. One training enrollment may
 authorize zero or multiple sequential mesocycles. A mesocycle must fit fully inside that
@@ -386,7 +394,10 @@ the coach.
 
 **TRN-019** Workout PR v1 is the highest positive load for one exercise, exact repetition count,
 and explicit unit among completed sets (ADR 0031). A tie is not a new PR. Set saves and workout
-completion evaluate the same named, versioned server rule; the UI does not convert units.
+completion evaluate the same named, versioned server rule; the UI does not convert units. Both read
+a workout's completed sets in one order, its exercises by place and then each one's sets by place,
+so a lift the session prescribes twice is read across both prescriptions, and a set save asks the
+finish summary's question for that one set (audit A3, BEA-4).
 The client's workout history (R2.5b) shows, for each finished workout, the records it set against
 the workouts finished before it started, through the same rule. A coach reads a client's records
 (R3.3b, `GET /api/training/clients/{clientProfileId}/personal-records`) as the same list by the
@@ -475,7 +486,12 @@ from the maxes in use, so it follows a max that was updated since its week was w
 outside a set's limits, or outside what its formula covers, refuses the whole preview and names the week,
 the copy, the session, the exercise and the set. It follows preview, hash and apply with the program's
 version (STR-009); apply checks the training coverage of the resulting dates (TRN-014) and leaves an
-append-only record of the rule, its steps and the weeks it read and made.
+append-only record of the rule, its steps and the weeks it read and made. Weeks that would run into
+another of the client's programs (TRN-011) are named in the preview (`overlapMessage`: that program,
+its dates and how many new weeks fit before it) and refused on apply with 409 `mesocycle_overlap`
+in the same words. A new week is named after its source week plus " - progression N", the source's
+name shortened with an ellipsis so the whole stays within a week name's 120 characters (audit A3,
+BEA-1, BEA-9).
 
 **TRN-028** Editing a client's weeks (`GridEdit` 1.0, P3b, ADR 0036). A coach edits an assigned program in
 the builder's grid and sends every week in order with its open sessions; a session is open while it has
@@ -565,7 +581,10 @@ applies it through the max update's preview (STR-011); it never changes a max on
 mesocycle with unit, positive increment, and Nearest/Down/Up mode. Phase 3 does not silently
 convert kg and lb; selected maxes must use the mesocycle unit. A positive recommendation that
 would round to zero is rejected as no practical external load; a coach must choose a smaller
-increment, round up deliberately, use a manual override, or explicitly prescribe no load.
+increment, round up deliberately, use a manual override, or explicitly prescribe no load. The
+refusal is of that set's numbers, a 400 naming the week, session, exercise and set wherever a weight
+is worked out (assignment, a swap, Build next block, Edit weeks, a max update), never a conflict
+(audit A3, BEA-10).
 
 **STR-009** Every progression strategy, not only RPE progression v1, follows
 `Preview -> hash/concurrency check -> Apply`. No bulk transform persists before the coach
@@ -647,6 +666,13 @@ copied into the recorded maxes, and its id is the program max's, which Assign pr
 saved max, so the plain list (and Assign program) stays the recorded maxes alone. The coach's Strength
 history (R5.3d2) groups that list by lift; a coach records a training max or a tested one, because the
 server refuses a typed estimate (STR-001: an estimate needs a calculation or a workout).
+
+**STR-016** How they have done (`GET /api/training/clients/{clientProfileId}/exercises/{exerciseId}/history`,
+audit A3, TRAIN-4) estimates each finished set's max by a named formula and says which
+(`estimateMethodKey`). A set with an RPE the RTS chart covers (STR-010) is read on the chart, load /
+chart %, to three decimals: the number the Training maxes panel gives the same set (STR-012). Any other
+set of 1 to 12 reps with a weight is read by Epley v1. A set with no weight or more than 12 reps has
+no estimate; nothing is extrapolated. The sheet names the formula on each row.
 
 ## 6. Nutrition, recipes, and calorie targets
 

@@ -240,12 +240,17 @@ public sealed class TrainingMesocycle : TenantEntity
         RegisterMutation();
     }
 
+    /// <summary>
+    /// Swaps what a session that has not started prescribes (TRN-004). It keeps its own day, whichever day the
+    /// replacement was written for: a swap changes the content, never the date (moving one is Edit weeks', TRN-028).
+    /// </summary>
     public void ReplaceFutureSession(Guid sessionId, TrainingSessionBlueprint blueprint)
     {
         EnsureNonTerminal();
+        ArgumentNullException.ThrowIfNull(blueprint);
         var session = weeks.SelectMany(item => item.Sessions).SingleOrDefault(item => item.Id == sessionId)
             ?? throw new ArgumentException("The session does not belong to this mesocycle.", nameof(sessionId));
-        session.ReplacePrescription(blueprint);
+        session.ReplacePrescription(blueprint with { DayOffset = session.DayOffset });
         RegisterMutation();
     }
 

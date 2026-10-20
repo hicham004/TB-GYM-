@@ -51,6 +51,7 @@ internal sealed partial class TrainingApplicationService
             resultingEndDate,
             coverage.Exists && coverage.Decision.IsAuthorized,
             coverage.Decision.Reason,
+            await NextBlockOverlapAsync(mesocycle, resultingEndDate, cancellationToken),
             preview.GeneratedWeeks.Select((week, index) =>
                 ToPreviewView(week, mesocycle.Weeks.Count + index + 1)).ToArray());
     }
@@ -97,6 +98,13 @@ internal sealed partial class TrainingApplicationService
                     coverage.Decision.Reason ?? "The progression is outside training coverage.");
             }
 
+            // The preview named it; the database refuses it too (the primary-overlap exclusion), but would not say
+            // which program is in the way (BEA-1).
+            if (await NextBlockOverlapAsync(mesocycle, resultingEndDate, cancellationToken) is { } overlap)
+            {
+                return Conflict("mesocycle_overlap", overlap);
+            }
+
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.MesocycleVersion;
             var visibleBefore = ClientVisibleWeeks(mesocycle);
             var existingWeekIds = mesocycle.Weeks.Select(item => item.Id).ToHashSet();
@@ -127,6 +135,13 @@ internal sealed partial class TrainingApplicationService
         catch (DbUpdateConcurrencyException)
         {
             return ConcurrencyConflict();
+        }
+        catch (DbUpdateException exception) when (IsExclusionViolation(exception))
+        {
+            // Another program was put on those dates while this one was being applied; a new preview names it.
+            return Conflict(
+                "mesocycle_overlap",
+                "Another program was just put on some of these dates. Preview the new weeks again to see which.");
         }
         catch (DbUpdateException)
         {
@@ -395,10 +410,34 @@ internal sealed partial class TrainingApplicationService
                     set.IsManualLoadOverride)).ToArray(),
                 exercise.MediaAssetIds)).ToArray());
 
-    private static string BuildProgressionLabel(MesocycleWeek source, int iteration) =>
-        string.IsNullOrWhiteSpace(source.Label)
-            ? $"Progression {iteration} from Week {source.WeekNumber}"
-            : $"{source.Label} - progression {iteration}";
+    /// <summary>
+    /// A new week's name: its source week's, then the copy. A long source name is shortened so the whole stays
+    /// within a week name's limit, which apply checks (BEA-9).
+    /// </summary>
+    private static string BuildProgressionLabel(MesocycleWeek source, int iteration)
+    {
+        if (string.IsNullOrWhiteSpace(source.Label))
+        {
+            return $"Progression {iteration} from Week {source.WeekNumber}";
+        }
+
+        var suffix = $" - progression {iteration}";
+        var room = ProgramEditRules.MaximumLabelLength - suffix.Length;
+        var label = source.Label.Trim();
+        if (label.Length > room)
+        {
+            // One place is kept for the ellipsis, and a character made of two halves is never cut in two.
+            var cut = room - 1;
+            if (char.IsHighSurrogate(label[cut - 1]))
+            {
+                cut--;
+            }
+
+            label = $"{label[..cut].TrimEnd()}…";
+        }
+
+        return label + suffix;
+    }
 
     private static bool HashesEqual(string expected, string actual)
     {

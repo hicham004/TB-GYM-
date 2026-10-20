@@ -788,6 +788,10 @@ public sealed record ApplyProgressionRequest(
     public WeekProgressionSteps ToSteps() => new(RpeIncrement, RepetitionsStep, PercentageStep, LoadStep);
 }
 
+/// <param name="OverlapMessage">
+/// Set when the new weeks would run into another of the client's programs (TRN-011): it names that program and
+/// how many new weeks fit before it. Apply refuses such weeks, as it refuses weeks outside the coverage.
+/// </param>
 public sealed record ProgressionPreviewView(
     string PreviewHash,
     string TransformKey,
@@ -796,6 +800,7 @@ public sealed record ProgressionPreviewView(
     DateOnly ResultingEndDateExclusive,
     bool IsInsideTrainingCoverage,
     string? CoverageMessage,
+    string? OverlapMessage,
     IReadOnlyList<TrainingWeekView> GeneratedWeeks);
 
 /// <summary>
@@ -1237,6 +1242,10 @@ public sealed record WorkoutNoteView(
     string Text,
     DateTimeOffset CreatedAtUtc);
 
+/// <param name="EstimateMethodKey">
+/// The formula behind <paramref name="EstimatedOneRepMax"/>: <c>RpeChart</c> for a set with an RPE the RTS chart
+/// covers, <c>Epley</c> for any other set of 1 to 12 reps with a weight; null with no estimate.
+/// </param>
 public sealed record ExerciseHistoryItem(
     Guid WorkoutExecutionId,
     DateOnly Date,
@@ -1249,6 +1258,7 @@ public sealed record ExerciseHistoryItem(
     decimal? Rpe,
     decimal? Rir,
     decimal? EstimatedOneRepMax,
+    string? EstimateMethodKey,
     decimal? Volume,
     string? Note);
 

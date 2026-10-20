@@ -73,11 +73,32 @@ describe('How a client has done on an exercise', () => {
       textOf(item),
     );
     expect(rows).toEqual([
-      'Thu 8 Oct 60 kg × 5 RPE 8 Estimated max 70 kg Volume 300 kg Felt fast.',
-      'Sun 4 Oct 57.5 kg × 5 RPE 8 Estimated max 67.1 kg Volume 287.5 kg',
-      'Tue 29 Sep 55 kg × 6 RPE 8 Estimated max 65.5 kg Volume 330 kg Substituted',
+      'Thu 8 Oct 60 kg × 5 RPE 8 Estimated max 70 kg by Epley Volume 300 kg Felt fast.',
+      'Sun 4 Oct 57.5 kg × 5 RPE 8 Estimated max 67.1 kg by Epley Volume 287.5 kg',
+      'Tue 29 Sep 55 kg × 6 RPE 8 Estimated max 65.5 kg by Epley Volume 330 kg Substituted',
       'Thu 24 Sep 8 reps RIR 2',
     ]);
+  });
+
+  /** The same set reads the same max here as on the Training maxes panel (TRAIN-4). */
+  it('names the formula behind each estimate, and says which sets each reads', async () => {
+    const history = {
+      total: 2,
+      skip: 0,
+      take: 50,
+      items: [
+        performance('2026-10-08', 62.5, 7, 80.749, { rpe: 8.5, estimateMethodKey: 'RpeChart' }),
+        performance('2026-10-04', 50, 5, 58.333, { rpe: null }),
+      ],
+    };
+    const { host } = await render({}, { getExerciseHistory: vi.fn(() => of(history)) });
+
+    expect(
+      Array.from(host.querySelectorAll('[data-estimate]')).map((item) => textOf(item)),
+    ).toEqual(['Estimated max 80.75 kg by the RTS chart', 'Estimated max 58.33 kg by Epley']);
+    expect(textOf(host.querySelector('[data-how]'))).toBe(
+      'A set with an RPE is read on the RTS chart, as the Training maxes panel reads it. A set without one is read by Epley.',
+    );
   });
 
   it('puts the rows newest first even when the server sent them oldest first', async () => {

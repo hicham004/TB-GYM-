@@ -844,6 +844,21 @@ describe('what the server answers', () => {
     );
   });
 
+  it('words a started program’s conflict and keeps a set’s rounding refusal as said (audit A3)', () => {
+    // A reschedule after a workout started is a conflict now, not a crash (BEA-3).
+    expect(
+      programWriteError(
+        conflict('lifecycle_conflict', 'A mesocycle cannot be rescheduled after a workout starts.'),
+        'Failed.',
+        'Maya',
+      ),
+    ).toBe('The dates can’t move once Maya has started a workout.');
+    // A weight that rounds to nothing names its set, and is shown as the server says it (BEA-10).
+    const zero =
+      "Week 3, Lower A: Back squat, set 2: The weight works out to 1 kg, which rounds to 0 kg at the program's 2.5 kg step. Type a weight for this set, or prescribe it without one.";
+    expect(programWriteError(invalid(zero), 'Failed.', 'Maya')).toBe(zero);
+  });
+
   it('rewrites the known refusals about the plan, the dates, a workout and closing', () => {
     const say = (text: string) => programWriteError(invalid(text), 'Failed.', 'Maya');
 

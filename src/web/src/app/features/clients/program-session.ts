@@ -108,8 +108,8 @@ import { ClientWorkspaceContext } from './client-workspace.context';
           <summary i18n>Swap this session</summary>
           <div class="swap-body">
             <p class="muted" i18n>
-              Replace it with one of your saved sessions. Only this session changes; the rest of the
-              program stays as it is.
+              Replace it with one of your saved sessions. It stays on {{ session().day }}: only this
+              session changes, and the rest of the program stays as it is.
             </p>
             <app-field [label]="savedLabel" [errors]="swapError() ? [swapError()!] : null">
               <select appControl (change)="chosenId.set($any($event.target).value)">
@@ -387,10 +387,14 @@ export class ProgramSession {
     this.error.set(null);
     this.busy.set(true);
     try {
+      // The swap keeps this session's own day (TRAIN-3): the saved session's day is only where it
+      // sat in its own program. The server keeps the day whatever is sent.
+      const request = toTrainingSessionRequest(sessionFromSaved(saved));
+      const dayOffset = this.detail()?.dayOffset ?? request.dayOffset;
       await this.csrf.refresh();
       await firstValueFrom(
         this.api.replaceFutureTrainingSession(block.id, this.session().id, {
-          session: toTrainingSessionRequest(sessionFromSaved(saved)),
+          session: { ...request, dayOffset },
           version: block.version,
         }),
       );

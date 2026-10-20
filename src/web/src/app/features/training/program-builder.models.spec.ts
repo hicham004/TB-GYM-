@@ -149,8 +149,9 @@ describe('program builder grid', () => {
       loadValue: 75,
       exertionTarget: 7,
     };
+    // A warm-up is not a working set, whatever its reps (TRAIN-2).
     exercise.sets = [warmUp, working, { ...working }, { ...working }];
-    expect(exerciseSummary(exercise)).toBe('4 sets · 75% · RPE 7');
+    expect(exerciseSummary(exercise)).toBe('3 × 5 · 75% · RPE 7');
 
     exercise.sets = [working, { ...working }, { ...working }];
     expect(exerciseSummary(exercise)).toBe('3 × 5 · 75% · RPE 7');
@@ -162,6 +163,20 @@ describe('program builder grid', () => {
     range.exertionTarget = 2;
     exercise.sets = [range, { ...range }];
     expect(exerciseSummary(exercise)).toBe('2 × 8–10 · 60 kg · RIR 2');
+
+    // The audit's case: a warm-up with the working set's reps once read "2 × 8–10".
+    exercise.sets = [{ ...range, setType: 'WarmUp' as const, loadValue: 40 }, range];
+    expect(exerciseSummary(exercise)).toBe('1 × 8–10 · 60 kg · RIR 2');
+
+    // Working sets that disagree on reps are counted alone too.
+    exercise.sets = [warmUp, working, { ...working, repetitionsMinimum: 3, repetitionsMaximum: 3 }];
+    expect(exerciseSummary(exercise)).toBe('2 sets · 75% · RPE 7');
+
+    // Warm-ups alone say what they are.
+    exercise.sets = [warmUp, { ...warmUp }];
+    expect(exerciseSummary(exercise)).toBe('2 × 3 warm-up · 40 kg');
+    exercise.sets = [warmUp, { ...warmUp, repetitionsMinimum: 5, repetitionsMaximum: 5 }];
+    expect(exerciseSummary(exercise)).toBe('2 warm-up sets · 40 kg');
   });
 });
 

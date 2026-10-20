@@ -1753,6 +1753,7 @@ export type ExerciseHistoryItem = {
   rpe: null | number | string;
   rir: null | number | string;
   estimatedOneRepMax: null | number | string;
+  estimateMethodKey: null | string;
   volume: null | number | string;
   note: null | string;
 };
@@ -2840,6 +2841,7 @@ export type ProgressionPreviewView = {
   resultingEndDateExclusive: string;
   isInsideTrainingCoverage: boolean;
   coverageMessage: null | string;
+  overlapMessage: null | string;
   generatedWeeks: Array<TrainingWeekView>;
 };
 
@@ -6668,6 +6670,10 @@ export type RescheduleMesocycleData = {
 };
 
 export type RescheduleMesocycleErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
   /**
    * Conflict
    */

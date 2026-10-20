@@ -889,6 +889,84 @@ describe('a client’s Training', () => {
       expect(textOf(sheet.querySelector('.swap summary'))).toBe('Swap this session');
     });
 
+    it('swaps a session for a saved one on the day it already has (TRAIN-3)', async () => {
+      const view = blockView();
+      (view.weeks[0].sessions[0] as unknown as { dayOffset: number }).dayOffset = 3;
+      const saved = {
+        id: 'saved-1',
+        name: 'Lower A (saved)',
+        sourceTemplateVersionId: 'version-1',
+        sourceTemplateSessionId: 'template-session-1',
+        session: {
+          id: 'template-session-1',
+          name: 'Lower A',
+          // Where it sat in its own program: the first day.
+          dayOffset: 0,
+          coachNotes: null,
+          exercises: [
+            {
+              exerciseId: 'exercise-1',
+              exerciseName: 'Back squat',
+              isMainLift: false,
+              modificationPolicy: 'CoachApprovedSwap',
+              coachNotes: null,
+              approvedAlternativeExerciseIds: [],
+              sets: [
+                {
+                  setType: 'Normal',
+                  repetitionsMinimum: 5,
+                  repetitionsMaximum: 5,
+                  loadStrategy: 'Direct',
+                  directLoad: 100,
+                  loadUnit: 'Kilogram',
+                  percentageWorkingMax: null,
+                  exertionDisplayPreference: 'Rpe',
+                  targetRpe: 8,
+                  targetRir: null,
+                  restSeconds: null,
+                  tempo: null,
+                  coachNotes: null,
+                  isManualLoadOverride: false,
+                  prescribedLoad: 100,
+                },
+              ],
+            },
+          ],
+        },
+      };
+      const replaceFutureTrainingSession = vi.fn(() => of({}));
+      const { harness, host } = await render({
+        api: {
+          getTrainingMesocycle: vi.fn(() => of(view)),
+          listSavedSessions: vi.fn(() => of([saved])),
+          replaceFutureTrainingSession,
+        },
+      });
+
+      all(host.querySelector('.week.current')!, 'button.session')[2].click();
+      await settle(harness.fixture);
+      const sheet = dialog()!;
+      const swap = sheet.querySelector<HTMLDetailsElement>('.swap')!;
+      swap.open = true;
+      swap.dispatchEvent(new Event('toggle'));
+      await settle(harness.fixture);
+      expect(textOf(swap)).toContain('It stays on Thu 1 Oct');
+      const select = swap.querySelector('select')!;
+      select.value = 'saved-1';
+      select.dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+      press(sheet, 'Swap session');
+      await settle(harness.fixture);
+
+      expect(replaceFutureTrainingSession).toHaveBeenCalledWith(
+        'block-lean',
+        'block-lean-s33',
+        expect.objectContaining({
+          session: expect.objectContaining({ name: 'Lower A', dayOffset: 3 }),
+        }),
+      );
+    });
+
     it('opens the session a client’s note is on when a notice links to it, once', async () => {
       const { harness, router } = await render({
         url: '/clients/client-1/training?session=block-lean-s33',

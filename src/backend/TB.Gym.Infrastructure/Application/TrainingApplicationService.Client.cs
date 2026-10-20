@@ -411,6 +411,10 @@ internal sealed partial class TrainingApplicationService
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessWorkout(execution);
         }
+        catch (WorkoutExerciseSwapLockedException exception)
+        {
+            return Conflict(WorkoutExerciseSwapLockedException.Code, exception.Message);
+        }
         catch (InvalidOperationException exception)
         {
             return Conflict("substitution_not_allowed", exception.Message);
@@ -622,15 +626,10 @@ internal sealed partial class TrainingApplicationService
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
-        var estimator = new EpleyOneRepMaxEstimator();
+        var epley = new EpleyOneRepMaxEstimator();
         var items = rows.Select(item =>
         {
-            decimal? estimate = null;
-            if (item.Set.ActualLoad is { } load && item.Set.ActualRepetitions is >= 1 and <= 12)
-            {
-                estimate = estimator.Estimate(load, item.Set.ActualRepetitions.Value);
-            }
-
+            var (estimate, method) = EstimateLoggedMax(item.Set, epley);
             return new ExerciseHistoryItem(
                 item.Execution.Id,
                 item.Execution.ScheduledDateSnapshot,
@@ -643,12 +642,37 @@ internal sealed partial class TrainingApplicationService
                 item.Set.ActualRpe,
                 item.Set.ActualRpe is null ? null : TrainingExertion.RirFromRpe(item.Set.ActualRpe.Value),
                 estimate,
+                method,
                 item.Set.ActualLoad is not null && item.Set.ActualRepetitions is not null
                     ? item.Set.ActualLoad * item.Set.ActualRepetitions
                     : null,
                 item.Set.ClientNote);
         }).ToArray();
         return new ExerciseHistoryPage(total, skip, take, items);
+    }
+
+    /// <summary>
+    /// The max one logged set suggests, and the formula that read it (TRAIN-4): a set with an RPE the RTS chart
+    /// covers is read on the chart, the number the Training maxes panel gives the same set (STR-012); any other
+    /// set of 1 to 12 reps with a weight by Epley. A set that neither covers has no estimate.
+    /// </summary>
+    private static (decimal? Value, string? Method) EstimateLoggedMax(
+        WorkoutSetPerformance set,
+        EpleyOneRepMaxEstimator epley)
+    {
+        if (set.ActualLoad is not ({ } load and > 0m and <= 2_000m) || set.ActualLoadUnit is not { } unit ||
+            set.ActualRepetitions is not ({ } repetitions and >= 1 and <= 12))
+        {
+            return (null, null);
+        }
+
+        if (set.ActualRpe is { } rpe &&
+            RpeChartMaxEstimator.TryEstimate(load, repetitions, rpe, ToStrengthUnit(unit)) is { } chart)
+        {
+            return (chart.Value, chart.StrategyKey);
+        }
+
+        return (epley.Estimate(load, repetitions), EpleyOneRepMaxEstimator.Key);
     }
 
     private async Task<ClientProfile?> FindSelfClientAsync(CancellationToken cancellationToken) =>
@@ -823,12 +847,10 @@ internal sealed partial class TrainingApplicationService
             return false;
         }
 
+        // The finish summary's question for this one set (TRN-019): the workout's sets in its order, whichever
+        // of its exercises they sit under, against the workouts finished before it started. Only the same lift,
+        // reps and unit can speak, so those workouts are read as their one best load.
         var exercise = execution.Exercises.Single(item => item.Sets.Any(set => set.Id == saved.Id));
-        var earlierInWorkout = exercise.Sets
-            .Where(set => set.Position < saved.Position && set.IsCompleted &&
-                          set.ActualRepetitions == saved.ActualRepetitions &&
-                          set.ActualLoadUnit == saved.ActualLoadUnit)
-            .Max(set => set.ActualLoad);
         var historical = await (
             from set in dbContext.WorkoutSetPerformances.AsNoTracking()
             join performance in dbContext.WorkoutExercisePerformances.AsNoTracking()
@@ -844,10 +866,12 @@ internal sealed partial class TrainingApplicationService
                   set.IsCompleted && set.ActualRepetitions == saved.ActualRepetitions &&
                   set.ActualLoadUnit == saved.ActualLoadUnit
             select set.ActualLoad).MaxAsync(cancellationToken);
-        var priorBest = earlierInWorkout is null ? historical
-            : historical is null ? earlierInWorkout : Math.Max(earlierInWorkout.Value, historical.Value);
-        return WorkoutPersonalRecordRule.IsRecord(saved.IsCompleted, saved.ActualRepetitions,
-            saved.ActualLoad, saved.ActualLoadUnit, priorBest);
+        PerformedSet[] earlier = historical is { } best
+            ? [new PerformedSet(Guid.Empty, exercise.ActualExerciseId, saved.ActualRepetitions, best,
+                saved.ActualLoadUnit, true)]
+            : [];
+        return WorkoutPersonalRecordRule.IsRecordSet(
+            saved.Id, WorkoutPersonalRecordRule.CompletedSetsInOrder(execution), earlier);
     }
 
     private static ClientWorkoutView ToClientWorkout(

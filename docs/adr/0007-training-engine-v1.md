@@ -53,7 +53,9 @@ remain historical facts.
 
 Each prescription has `Locked` or `CoachApprovedSwap`. Marking a prescription as a main lift
 forces `Locked`. A client substitution must be one of the alternatives captured in that
-prescription and creates actual-performance state; it never edits the prescription.
+prescription and creates actual-performance state; it never edits the prescription. Once a set is
+completed under it the substitution stays for that workout, so a logged set is never re-credited to
+another lift (audit A3, CLIENT-2, TRN-010).
 Completed workouts remain in the client's dated read model for their scheduled local day,
 even when that completion also makes the mesocycle terminal. Actual load entry requires a
 unit; an unweighted prescription does not create an implicit kg/lb choice.

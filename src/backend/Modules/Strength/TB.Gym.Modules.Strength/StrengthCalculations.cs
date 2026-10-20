@@ -231,8 +231,10 @@ public sealed record LoadRoundingPolicy(LoadUnit Unit, decimal Increment, LoadRo
         var rounded = decimal.Round(roundedSteps * Increment, 3, MidpointRounding.AwayFromZero);
         if (unrounded > 0m && rounded <= 0m)
         {
-            throw new InvalidOperationException(
-                "The positive target is below the practical external-load increment. Choose a smaller increment, use a manual override, or prescribe no external load explicitly.");
+            // A refusal of the set's numbers, not a conflict: the caller names the set (STR-008, BEA-10).
+            var unit = StrengthUnits.Short(Unit);
+            throw new ArgumentException(string.Create(CultureInfo.InvariantCulture,
+                $"The weight works out to {unrounded:0.###} {unit}, which rounds to 0 {unit} at the program's {Increment:0.###} {unit} step. Type a weight for this set, or prescribe it without one."));
         }
 
         return rounded;

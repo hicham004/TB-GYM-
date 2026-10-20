@@ -1,8 +1,9 @@
 import { ACCOUNTS, api, expect, memberships, requireLive, signIn, test } from './support';
 
 /**
- * The workout player against a live API: start, log a set as prescribed and one edited, finish with
- * sets left, read the summary and find the workout in Training's history (TRN-019, TRN-029).
+ * The workout player against a live API: start, log a set as prescribed and one edited, swap a lift
+ * and log under it (which keeps that lift, TRN-010), finish with sets left, read the summary and find
+ * the workout in Training's history (TRN-019, TRN-029).
  *
  * A session can be started once, so the file takes the first demo client who still has a workout
  * today that is not finished (Maya first, then Sara and Jad on a rebuilt demo), resumes one already
@@ -24,7 +25,12 @@ interface SetView {
   isCompleted: boolean;
 }
 interface ExerciseView {
+  performanceId: string | null;
+  prescribedExerciseId: string;
+  prescribedExerciseName: string;
   actualExerciseName: string;
+  modificationPolicy: 'Locked' | 'CoachApprovedSwap';
+  alternatives: { exerciseId: string; name: string }[];
   sets: SetView[];
 }
 interface WorkoutView {
@@ -32,6 +38,7 @@ interface WorkoutView {
   name: string;
   status: string | null;
   workoutExecutionId: string | null;
+  executionVersion: number | null;
   exercises: ExerciseView[];
 }
 interface TodayView {
@@ -180,6 +187,81 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
     expect(saved.actualLoad).toBe(edited);
     expect(saved.actualRepetitions).toBe(3);
     expect(saved.isCompleted).toBe(true);
+  });
+
+  await test.step('A set logged under a swapped lift keeps that lift (CLIENT-2)', async () => {
+    const current = await readWorkout(page, tenantId, workout.sessionId);
+    const swapIndex = current.exercises.findIndex(
+      (item, index) =>
+        index !== exerciseIndex &&
+        item.modificationPolicy === 'CoachApprovedSwap' &&
+        item.alternatives.length > 0 &&
+        item.sets.length > 0 &&
+        !item.sets.some((set) => set.isCompleted),
+    );
+    if (swapIndex < 0) {
+      test.info().annotations.push({
+        type: 'note',
+        description:
+          'No lift of this workout can be swapped any more, so the swap step was not run.',
+      });
+      return;
+    }
+    const swappable = current.exercises[swapIndex];
+    const alternative = swappable.alternatives[0];
+    const picker = page.locator('.workout-exercise .swap-picker');
+
+    await openPlayer();
+    for (let i = 0; i < swapIndex; i++) {
+      await page.getByRole('button', { name: /Next exercise/ }).click();
+    }
+    await expect(page.locator('.workout-exercise h2')).toHaveText(swappable.actualExerciseName);
+    await picker.getByRole('button', { name: 'Swap exercise' }).click();
+    await picker.getByRole('button', { name: alternative.name, exact: true }).click();
+    await expect(notice).toHaveText(`Swapped to ${alternative.name}.`);
+    await expect(page.locator('.workout-exercise h2')).toHaveText(alternative.name);
+
+    // A swapped lift keeps the prescribed reps but not the load (TRN-029): the client types one.
+    const card = setCard(0);
+    await card.getByRole('spinbutton', { name: 'Actual load', exact: true }).fill('10');
+    const reps = card.getByRole('spinbutton', { name: 'Actual repetitions', exact: true });
+    if (!(await reps.inputValue())) await reps.fill('8');
+    const kg = page.getByRole('radio', { name: 'kg' });
+    const lb = page.getByRole('radio', { name: 'lb' });
+    if (!(await kg.isChecked()) && !(await lb.isChecked())) await kg.click();
+    await card.getByRole('button', { name: 'Log set' }).click();
+    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    await page
+      .getByRole('timer')
+      .getByRole('button', { name: 'Skip' })
+      .click()
+      .catch(() => undefined);
+
+    // The way back is listed but closed, saying why.
+    await picker.getByRole('button', { name: 'Swap exercise' }).click();
+    const back = picker.getByRole('button', { name: swappable.prescribedExerciseName });
+    await expect(back).toHaveAttribute('aria-disabled', 'true');
+    await expect(back).toContainText(`Not this workout: a set is logged as ${alternative.name}`);
+    await page.keyboard.press('Escape');
+
+    // The server refuses it too, for a second tab or an old page.
+    const now = await readWorkout(page, tenantId, workout.sessionId);
+    const refused = await api<{ code: string }>(
+      page,
+      'PUT',
+      `/api/training/me/workouts/${now.workoutExecutionId}/exercises/${now.exercises[swapIndex].performanceId}/substitution`,
+      {
+        tenantId,
+        body: { exerciseId: swappable.prescribedExerciseId, version: now.executionVersion },
+      },
+    );
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('substitution_after_logged_set');
+    expect(now.exercises[swapIndex].actualExerciseName).toBe(alternative.name);
+
+    // Back to the lift the rest of this test logs on.
+    await openPlayer();
+    await goToExercise();
   });
 
   await test.step('A refused RPE keeps the set unlogged and the entries on the page', async () => {

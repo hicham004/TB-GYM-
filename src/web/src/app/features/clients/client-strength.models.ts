@@ -253,6 +253,11 @@ export interface Performance {
   /** "RPE 8" or "RIR 2" when the set had one. */
   readonly effort: string | null;
   readonly estimate: number | null;
+  /**
+   * What read the estimate (TRAIN-4): the RTS chart for a set with an RPE it covers, the number the
+   * Training maxes panel gives the same set, else Epley.
+   */
+  readonly formula: 'RpeChart' | 'Epley' | null;
   readonly unit: TrainingLoadUnit | null;
   readonly volume: number | null;
   readonly substituted: boolean;
@@ -280,6 +285,14 @@ export function mapPerformance(item: ExerciseHistoryItem, index: number): Perfor
     effort:
       rpe !== null ? $localize`RPE ${rpe}:rpe:` : rir !== null ? $localize`RIR ${rir}:rir:` : null,
     estimate: item.estimatedOneRepMax === null ? null : toNumber(item.estimatedOneRepMax),
+    formula:
+      item.estimatedOneRepMax === null
+        ? null
+        : item.estimateMethodKey === 'RpeChart'
+          ? 'RpeChart'
+          : item.estimateMethodKey === 'Epley'
+            ? 'Epley'
+            : null,
     unit,
     volume: item.volume === null ? null : toNumber(item.volume),
     substituted: item.wasSubstituted,

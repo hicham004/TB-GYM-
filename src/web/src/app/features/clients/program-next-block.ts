@@ -189,6 +189,11 @@ import { addDays } from './client-overview.models';
           @if (!result.isInsideTrainingCoverage) {
             <p class="problem-text" role="alert">{{ coverage() }}</p>
           }
+          @if (result.overlapMessage) {
+            <p class="problem-text" role="alert" dir="auto" data-overlap>
+              {{ result.overlapMessage }}
+            </p>
+          }
           @for (week of weeks(); track week.number) {
             <div class="preview-week">
               <p class="preview-title">{{ weekTitle(week) }}</p>
@@ -229,12 +234,12 @@ import { addDays } from './client-overview.models';
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Not now
         </button>
-        @if (preview(); as result) {
+        @if (preview()) {
           <button
             appButton
             type="button"
             [loading]="busy()"
-            [disabled]="!result.isInsideTrainingCoverage"
+            [disabled]="!canAdd()"
             (click)="apply()"
           >
             @if (busy()) {
@@ -551,6 +556,15 @@ export class ProgramNextBlock {
     return $localize`${said}:coverage: Choose fewer copies, or renew the plan and assign the next program.`;
   });
 
+  /**
+   * The weeks can be added only inside the plan and before the client's next program: the server
+   * names that program and how many weeks fit (BEA-1), and refuses the same on apply.
+   */
+  protected readonly canAdd = computed(() => {
+    const result = this.preview();
+    return result !== null && result.isInsideTrainingCoverage && !result.overlapMessage;
+  });
+
   constructor() {
     // The program as it stands: the unit its loads are in and the sets the steps would move. The
     // preview carries neither.
@@ -673,7 +687,7 @@ export class ProgramNextBlock {
 
   protected async apply(): Promise<void> {
     const result = this.preview();
-    if (this.busy() || !result || !result.isInsideTrainingCoverage) return;
+    if (this.busy() || !result || !this.canAdd()) return;
     const block = this.block();
     const request: ApplyProgressionRequest = {
       ...this.request(),

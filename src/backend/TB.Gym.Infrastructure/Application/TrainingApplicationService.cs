@@ -500,6 +500,12 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             await dbContext.SaveChangesAsync(cancellationToken);
             return SuccessMesocycle(await ToViewAsync(mesocycle, cancellationToken));
         }
+        catch (InvalidOperationException exception)
+        {
+            // A workout started (the screen stops offering it then, so a race or an API caller), or the
+            // program is finished or cancelled (TRN-004, TRN-013).
+            return Conflict("lifecycle_conflict", exception.Message);
+        }
         catch (DbUpdateConcurrencyException)
         {
             return ConcurrencyConflict();

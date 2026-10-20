@@ -74,6 +74,12 @@ const PAGE = 50;
           @if (summary().series; as series) {
             <app-sparkline [values]="series" [summary]="chartSummary()" class="chart" />
           }
+          @if (summary().best) {
+            <p class="how muted" data-how i18n>
+              A set with an RPE is read on the RTS chart, as the Training maxes panel reads it. A
+              set without one is read by Epley.
+            </p>
+          }
           <ul class="rows" data-rows>
             @for (row of rows(); track row.key) {
               <li class="row" data-performance>
@@ -88,7 +94,7 @@ const PAGE = 50;
                     >&ngsp;
                   }
                   @if (estimateWords(row); as estimate) {
-                    <span i18n>Estimated max {{ estimate }}</span
+                    <span data-estimate>{{ estimate }}</span
                     >&ngsp;
                   }
                   @if (volumeWords(row); as volume) {
@@ -148,6 +154,11 @@ const PAGE = 50;
       .chart {
         block-size: 3rem;
         inline-size: 100%;
+      }
+
+      .how {
+        font-size: 0.8125rem;
+        margin: 0;
       }
 
       .rows {
@@ -274,10 +285,18 @@ export class ExerciseHistory {
     return dayWords(row.date, this.today(), this.locale());
   }
 
+  /** "Estimated max 80.75 kg by the RTS chart": each estimate names the formula that read it (TRAIN-4). */
   protected estimateWords(row: Performance): string | null {
-    return row.estimate !== null && row.unit
-      ? valueWords(row.estimate, row.unit, this.locale())
-      : null;
+    if (row.estimate === null || !row.unit) return null;
+    const value = valueWords(row.estimate, row.unit, this.locale());
+    switch (row.formula) {
+      case 'RpeChart':
+        return $localize`Estimated max ${value}:estimate: by the RTS chart`;
+      case 'Epley':
+        return $localize`Estimated max ${value}:estimate: by Epley`;
+      default:
+        return $localize`Estimated max ${value}:estimate:`;
+    }
   }
 
   protected volumeWords(row: Performance): string | null {
