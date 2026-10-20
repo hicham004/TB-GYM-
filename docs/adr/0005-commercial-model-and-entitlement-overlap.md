@@ -66,3 +66,15 @@ conflict before the database when possible.
   receipt recording.
 - Recurring billing needs a later ADR covering invoice schedules, provider callbacks,
   retries, grace periods, and cancellation semantics.
+
+## Amended in the audit's batch A7 (2026-10-20)
+
+- Coverage rows (`EnrollmentEntitlement`) were the one part of the enrollment snapshot without a database
+  guard (SEC-5). A trigger now refuses deleting them and every change but the one cancellation makes,
+  `BlocksOverlap` true to false; the GiST constraint keeps protecting the dates they hold.
+- Money is kept to the cent: a price or a receipt with a smaller part is refused, never rounded (BILL-1).
+- A receipt is entered as the workspace day the money arrived and the server stamps its instant in the
+  workspace's time zone, so every reader sees one day (WEA-6).
+- Only a paid enrollment covers days on Coach Today: a renewal waiting for payment never quiets Ending
+  soon (BEB-7, the owner's decision of 2026-10-19).
+- No two plans for sale in a workspace share a name; plans that did before keep it until renamed (BILL-7).

@@ -241,6 +241,26 @@ describe('Settings › Billing', () => {
       'Total $30.80',
     ]);
     expect(textOf(sheet())).toContain('Aug 3, 2026, transfer WHISH-1');
+    expect(sheet()?.querySelector('[data-read-only-from]')).toBeNull();
+  });
+
+  it('tells the owner the read-only day of an invoice still merely waiting, and that days are UTC', async () => {
+    const { fixture, host } = await render(() => of(billing()));
+
+    // BILL-3: the day is said before the invoice is overdue, on the page and in the invoice's sheet.
+    expect(textOf(host.querySelector('[data-billing-status] .sentence'))).toBe(
+      'A new invoice is waiting. Pay it by its due date below. If it is still unpaid on Aug 15, 2026, your coaching space becomes read-only for you and your coaches until it is paid. Your clients keep full use.',
+    );
+    // BILL-6: every billing day is a UTC day, and the page says so.
+    expect(textOf(host.querySelector('[data-utc-note]'))).toBe(
+      'Dates here are UTC days, the one clock TB Gym bills every coaching space by, so a day here can start a few hours before or after your own midnight.',
+    );
+
+    host.querySelector<HTMLButtonElement>('[data-invoice="invoice-1"] button')!.click();
+    await settle(fixture);
+    expect(line(sheet()!.querySelector('[data-read-only-from]')!)).toBe(
+      'Read-only from Aug 15, 2026',
+    );
   });
 
   it('links a voided invoice to the one that replaced it', async () => {

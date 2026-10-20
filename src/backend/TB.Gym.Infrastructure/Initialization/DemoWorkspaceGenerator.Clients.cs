@@ -182,7 +182,7 @@ internal sealed partial class DemoWorkspaceGenerator
                 new RecordManualPaymentRequest(
                     enrollment.PriceAmount,
                     enrollment.PriceCurrency,
-                    clock.UtcNow,
+                    calendar.DateOf(clock.UtcNow),
                     plan.Method,
                     text,
                     note,

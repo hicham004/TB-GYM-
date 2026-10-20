@@ -507,7 +507,7 @@ public sealed partial class Phase6B2BRealtimeSignalRTests : IDisposable
                 {
                     amount = enrollment.PriceAmount,
                     currencyCode = "USD",
-                    receivedAtUtc = DateTimeOffset.UtcNow,
+                    receivedOn = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Beirut")).DateTime),
                     method = "Cash",
                     reference = "receipt-1",
                     idempotencyKey = Guid.NewGuid(),

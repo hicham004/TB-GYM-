@@ -693,6 +693,7 @@ export type ClientEnrollmentView = {
   storedStatus: EnrollmentStatus;
   effectiveStatus: EffectiveEnrollmentStatus;
   statusReason: null | string;
+  cancelledOn: null | string;
   features: Array<CoachingFeature>;
   payments: Array<PaymentRecordView>;
   createdAtUtc: string;
@@ -2531,6 +2532,7 @@ export type PaymentRecordView = {
   amount: number | string;
   currencyCode: string;
   receivedAtUtc: string;
+  receivedOn: string;
   method: ManualPaymentMethod;
   reference: null | string;
   note: null | string;
@@ -2685,6 +2687,7 @@ export type ProductOfferView = {
   createdAtUtc: string;
   version: number | string;
   clients: PlanClientCount;
+  replacedByOfferId: null | string;
 };
 
 export type ProgramDraftContent = {
@@ -3075,7 +3078,7 @@ export type RecordedMassUnit = 'Kilogram' | 'Pound';
 export type RecordManualPaymentRequest = {
   amount: number | string;
   currencyCode: string;
-  receivedAtUtc: string;
+  receivedOn: string;
   method: ManualPaymentMethod;
   reference: null | string;
   note: null | string;

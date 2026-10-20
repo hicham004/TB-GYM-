@@ -134,7 +134,9 @@ check-ins never appear; a weigh-in follows Progress and needs only an unblocked 
 most urgent first: a submitted check-in not reviewed; the caller's own unread messages (another
 coach's chat is never counted, not even for the Owner); a renewal request from the last 30 days
 while the whole plan is still ended (ADR 0029); a running plan whose last covered day is within 14
-days, counting renewals already in place; a week not shared (TRN-021); two or more missed sessions
+days, counting paid renewals already in place: a renewal still waiting for payment covers nothing
+(SUB-008), so the item names it to record its payment (audit BEB-7, the owner's decision of 2026-10-19);
+a week not shared (TRN-021); two or more missed sessions
 (TRN-021); training in the plan but no block running or coming, which names the client's latest
 program and what its logged sets suggest for the next one (STR-014); and, last, the lifts of a running or
 coming block whose logged sets suggest a new max (STR-012, after any keep, STR-013), named with the max
@@ -168,7 +170,11 @@ coaching features. Editing price, currency, or duration creates another offer. D
 offer prevents new assignments but never changes historical enrollments.
 Within one product, only one active offer may occupy a duration count/unit and currency (ADR 0034).
 Change price atomically retires that option and adds an immutable replacement, with payload-bound
-idempotency; existing enrollments and receipts keep their original snapshots.
+idempotency; existing enrollments and receipts keep their original snapshots. A renewal of a plan sold
+at a retired price starts on the option that replaced it (audit COACH-3). No two plans for sale in a
+workspace share a name, compared without case (audit BILL-7, the owner's decision of 2026-10-19): a new,
+renamed or restored plan that would answers 409 `product_name_taken`, and plans that shared a name
+before keep it until one is renamed.
 
 **SUB-003** An enrollment is a dated client-specific snapshot of one offer in one tenant.
 Periods use `[startDate, endDateExclusive)`, so a four-week period starting July 27 ends
@@ -189,17 +195,23 @@ enrollment periods; they are not independently copied inputs.
 `Expired`. Effective UI state may also be `Upcoming` or relationship `Blocked`. Transitions
 are explicit domain methods with optimistic concurrency. The calendar date is authoritative:
 an enrollment is effectively expired at `endDateExclusive` even before an asynchronous
-projection persists `Expired`.
+projection persists `Expired`. A cancelled enrollment carries the workspace day it was cancelled,
+which screens say instead of a last day that may still be to come (audit COACH-20).
 
 **SUB-007** Payment registration is append-only. Each receipt retains amount, currency,
 received instant, method, optional reference/note, source, idempotency key, registering user,
 and audit metadata. Database triggers reject update/delete. Future refunds, reversals, and
-corrections are new linked operations, never edits.
+corrections are new linked operations, never edits. The coach enters the workspace day the money
+arrived, today or earlier; the server stamps the instant from it in the workspace's time zone (now for
+today, midday otherwise) and gives every reader that day back, so no browser clock dates a receipt
+(audit WEA-6). The idempotency key binds the day, not the instant.
 
 **SUB-008** Phase 2 accepts partial same-currency receipts but grants access only when total
 receipts equal the immutable enrollment price. It rejects overpayment and cross-currency
 settlement because no credit balance or FX-rate contract exists. "Partially paid means
 proportionally paid weeks" remains rejected as ambiguous. Free offers activate immediately.
+Money is kept to the cent: a price, a new price or a receipt with a smaller part answers 400 "Use at
+most two decimals." and is never rounded (audit BILL-1).
 
 **SUB-009** The centralized feature-access order is:
 
@@ -247,7 +259,9 @@ product and each price option, the caller's clients (ADR 0026: a Coach their own
 still coached here, never a released one) with an enrollment that is neither cancelled nor expired and
 has not ended by the workspace's today: **now** when one of them runs today, else **starting** when one is
 booked to start later. A client counts once per option and once per product, however many enrollments
-they hold. It is a read for the coach; it decides no access.
+they hold. An option on sale also counts the clients of the options it replaced through Change price, who
+keep their old price (audit COACH-2); a retired option counts its own. It is a read for the coach; it
+decides no access.
 
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 
@@ -271,7 +285,9 @@ never voided. No partial payments, refunds or credit.
 
 **PBL-005** From the plan's grace days after the due date, an unpaid invoice makes the workspace
 read-only for the owner and coaches; clients keep full use and nothing is deleted. Recording the
-payment lifts it at once.
+payment lifts it at once. A plan gives at least one grace day (audit BILL-4; a version published with 0
+before still applies 1). The owner's Billing page names the read-only day while an invoice is merely
+open, and says its days are UTC (audit BILL-3, BILL-6).
 
 **PBL-006** Platform admin is a global role granted only by the `platform-admin` command, checked
 against the database on every request, and never implied by any workspace role.
@@ -1909,6 +1925,10 @@ At minimum, later migrations should enforce:
 | One client identity link per tenant                                                                                  | Filtered unique `(TenantId, UserId)`                                                                  |
 | One tenant client email                                                                                              | Unique normalized `(TenantId, Email)` per approved policy                                             |
 | No conflicting entitlement coverage                                                                                  | Partial GiST exclusion on tenant, client, feature, date range                                         |
+| Coverage rows never deleted or re-dated; only cancelling releases their overlap lock (SEC-5)                         | PostgreSQL trigger refusing delete and every change but `BlocksOverlap` true to false                 |
+| Append-only intake change history (SEC-6)                                                                            | Application guard plus PostgreSQL trigger refusing update and delete                                  |
+| A new, renamed or restored plan for sale never takes another's name; older duplicates keep theirs (BILL-7)           | PostgreSQL trigger with a per-name advisory lock, reported as `UX_CoachingProducts_ActiveName`        |
+| A published price plan gives at least one grace day (BILL-4)                                                         | Check `GraceDays >= 1`, `NOT VALID` so versions published before stay as they are                     |
 | Valid service period                                                                                                 | Check `EndExclusive > Start`                                                                          |
 | Immutable offer/enrollment money and dates                                                                           | Application guard plus PostgreSQL trigger                                                             |
 | Append-only payments/block events/consents                                                                           | Application guard plus PostgreSQL trigger                                                             |

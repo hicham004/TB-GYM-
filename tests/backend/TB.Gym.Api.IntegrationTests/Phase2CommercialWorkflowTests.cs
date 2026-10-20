@@ -476,7 +476,14 @@ public sealed class Phase2CommercialWorkflowTests
         var enrollment = await AssignAsync(coach, clientId, source.Id, TenantToday(), Guid.NewGuid());
         await RecordPaymentAsync(coach, enrollment.Id, 250m, "USD", Guid.NewGuid());
         var commandKey = Guid.NewGuid();
-        var change = new { priceAmount = 275.125m, source.Version, idempotencyKey = commandKey };
+
+        // A price with a part of a cent is refused, not rounded, and spends nothing (BILL-1).
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(await coach.PostAsJsonAsync($"/api/commercial/offers/{source.Id}/price-changes",
+            new { priceAmount = 275.125m, source.Version, idempotencyKey = commandKey }), HttpStatusCode.BadRequest);
+        Assert.AreEqual(0L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"OfferPriceChanges\""));
+
+        var change = new { priceAmount = 275.13m, source.Version, idempotencyKey = commandKey };
         await RefreshCsrfAsync(coach);
         var responses = await Task.WhenAll(
             coach.PostAsJsonAsync($"/api/commercial/offers/{source.Id}/price-changes", change),
@@ -641,10 +648,11 @@ public sealed class Phase2CommercialWorkflowTests
         Assert.Contains("Review duplicates and retire unwanted options", refused.MessageText);
         Assert.AreEqual(2L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"ProductOffers\" WHERE \"IsActive\""));
         Assert.IsFalse((await context.Database.GetAppliedMigrationsAsync()).Contains(migration));
-        // Remediation is a deliberate owner action; the migration itself never selects a winner.
-        await RefreshCsrfAsync(coach);
-        await AssertStatusAsync(await coach.PutAsJsonAsync($"/api/commercial/offers/{product.Offers.Single().Id}/availability",
-            new { isActive = false, product.Offers.Single().Version }), HttpStatusCode.OK);
+        // Remediation is a deliberate owner action; the migration itself never selects a winner. It is made
+        // here as the availability operation makes it, in SQL: today's API also reads the price-change history
+        // this older schema does not have yet (COACH-2).
+        await ExecuteCommercialSqlAsync(
+            $"UPDATE subscriptions.\"ProductOffers\" SET \"IsActive\" = false WHERE \"Id\" = '{product.Offers.Single().Id}'");
         await migrator.MigrateAsync(migration);
         Assert.AreEqual(1L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"ProductOffers\" WHERE \"IsActive\""));
         Assert.AreEqual(2L, await ScalarAsync("SELECT count(*) FROM subscriptions.\"ProductOffers\""));
@@ -843,7 +851,7 @@ public sealed class Phase2CommercialWorkflowTests
         new(
             amount,
             currency,
-            DateTimeOffset.UtcNow,
+            TenantToday(),
             "Cash",
             $"REF-{idempotencyKey:N}",
             "Integration test payment",
@@ -989,7 +997,7 @@ public sealed class Phase2CommercialWorkflowTests
     private sealed record ManualPaymentRequest(
         decimal Amount,
         string CurrencyCode,
-        DateTimeOffset ReceivedAtUtc,
+        DateOnly ReceivedOn,
         string Method,
         string Reference,
         string Note,

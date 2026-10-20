@@ -179,7 +179,20 @@
               <div class="setting">
                 <div class="setting-copy">
                   <h3 i18n>Access</h3>
-                  <p dir="auto">{{ accessLine() }}</p>
+                  @if (access(); as summary) {
+                    <p dir="auto" data-access-line>{{ summary.line }}</p>
+                    @if (summary.rows.length > 0) {
+                      <ul class="access-rows" data-access-rows>
+                        @for (row of summary.rows; track row.feature) {
+                          <li [class.open]="row.open">
+                            <span class="access-feature">{{ row.label }}</span
+                            >&ngsp;
+                            <span class="access-state">{{ row.state }}</span>
+                          </li>
+                        }
+                      </ul>
+                    }
+                  }
                 </div>
                 <button appButton type="button" variant="outlined" (click)="openAccess()">
                   @if (client.isCoachBlocked) {

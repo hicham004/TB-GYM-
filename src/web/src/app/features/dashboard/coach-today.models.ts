@@ -206,13 +206,21 @@ export function attentionRow(
         action: renew,
       };
     case 'PlanEndingSoon':
+      // Only a paid plan covers days (BEB-7): with a renewal still waiting for payment, the item is
+      // about that renewal, and the action records its payment.
       return {
         ...base,
         heading: endsHeading(name, daysBetween(today, item.date), date(item.date)),
-        detail: $localize`Last day ${date(item.date)}:date:`,
+        detail:
+          count > 0
+            ? $localize`Paid until ${date(item.date)}:date: · The renewal isn't paid yet`
+            : $localize`Last day ${date(item.date)}:date:`,
         tag: $localize`Ending soon`,
         tone: 'ending',
-        action: renew,
+        action:
+          count > 0 && item.subjectId
+            ? go($localize`Record payment`, `${clientPage}/service`, { pay: item.subjectId })
+            : renew,
       };
     case 'WeekNotShared': {
       const week = Number(item.weekNumber ?? 0);

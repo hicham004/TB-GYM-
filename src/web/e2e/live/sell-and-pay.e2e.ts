@@ -12,9 +12,10 @@ import {
 /**
  * Sell and get paid, live (full audit, October 2026), against PostgreSQL and the real antiforgery
  * and tenancy: Lea starts a plan for a client created here, a double tap makes one plan, a part
- * payment keeps access locked, retries and races make one receipt, overpayment and another currency
- * are refused, the last payment opens access at once, a clashing plan is refused with the plan's
- * dates, and a price change leaves the running plan's price alone (SUB-002, SUB-008, SUB-011).
+ * payment keeps access locked, retries and races make one receipt, overpayment, another currency and
+ * a part of a cent are refused (audit BILL-1), a receipt is the day it was entered (WEA-6), the last
+ * payment opens access at once, a clashing plan is refused with the plan's dates, and a price change
+ * leaves the running plan's price alone (SUB-002, SUB-007, SUB-008, SUB-011).
  */
 requireLive();
 
@@ -182,6 +183,10 @@ test('a plan is sold, part paid, fully paid and protected against double taps an
     });
   await expect(page.getByText('The payment is recorded.')).toBeVisible();
   await expect(page.locator('.payment-amount')).toHaveText(['USD 80']);
+  // The day the coach chose, as the server dated it in the workspace's zone (WEA-6).
+  await expect(page.locator('.payment-date')).toHaveText([
+    `${pretty(beirutDay())} ${beirutDay().slice(0, 4)}`,
+  ]);
   await expect(page.locator('.hero app-status-pill')).toHaveText('Waiting for payment');
   expect(await reasons()).toEqual(['PaymentRequired']);
 
@@ -190,7 +195,7 @@ test('a plan is sold, part paid, fully paid and protected against double taps an
   const receipt = (amount: number, key: string, reference: string) => ({
     amount,
     currencyCode: 'USD',
-    receivedAtUtc: new Date().toISOString(),
+    receivedOn: beirutDay(),
     method: 'Cash',
     reference,
     note: null,
@@ -273,20 +278,42 @@ test('a plan is sold, part paid, fully paid and protected against double taps an
   });
   expect(lbp.status).toBe(400);
   expect(Object.keys(lbp.body.errors)).toContain('currencyCode');
-  const future = await api(page, 'POST', paymentsPath, {
+  const future = await api<{ errors: Record<string, string[]> }>(page, 'POST', paymentsPath, {
     tenantId,
-    body: {
-      ...receipt(5, uuid(), 'FUTURE'),
-      receivedAtUtc: new Date(Date.now() + 3 * 86_400_000).toISOString(),
-    },
+    body: { ...receipt(5, uuid(), 'FUTURE'), receivedOn: beirutDay(3) },
   });
   expect(future.status).toBe(400);
+  expect(future.body.errors['receivedOn'][0]).toBe("A payment can't be received in the future.");
+
+  // A part of a cent is refused, never rounded into the ledger (BILL-1); nothing is recorded.
+  for (const amount of [1.005, 4.995]) {
+    const subCent = await api<{ errors: Record<string, string[]> }>(page, 'POST', paymentsPath, {
+      tenantId,
+      body: receipt(amount, uuid(), 'SUB-CENT'),
+    });
+    expect(subCent.status).toBe(400);
+    expect(subCent.body.errors['amount'][0]).toBe('Use at most two decimals.');
+  }
+  const priceCents = await api<{ errors: Record<string, string[]> }>(
+    page,
+    'POST',
+    `/api/commercial/offers/${fourWeeks.id}/price-changes`,
+    {
+      tenantId,
+      body: { priceAmount: price + 0.125, version: fourWeeks.version, idempotencyKey: uuid() },
+    },
+  );
+  expect(priceCents.status).toBe(400);
+  expect(priceCents.body.errors['priceAmount'][0]).toBe('Use at most two decimals.');
 
   // The rest from the sheet: access opens at once.
   await page.reload();
   await page.locator('.hero-actions > button', { hasText: 'Record payment' }).click();
   const rest = page.getByRole('dialog', { name: 'Record payment' });
   await expect(rest.getByLabel('Amount received')).toHaveValue('5');
+  await rest.getByLabel('Amount received').fill('4.995');
+  await rest.getByRole('button', { name: 'Record payment' }).click();
+  await expect(rest.getByText('Use at most two decimals.')).toBeVisible();
   await rest.getByLabel('Amount received').fill('105');
   await rest.getByRole('button', { name: 'Record payment' }).click();
   await expect(rest.getByText('That is more than is left to pay.')).toBeVisible();

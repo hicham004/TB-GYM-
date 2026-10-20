@@ -121,7 +121,7 @@ async function newClient(
     body: {
       amount: offer.priceAmount,
       currencyCode: offer.priceCurrency,
-      receivedAtUtc: new Date().toISOString(),
+      receivedOn: beirutToday(),
       method: 'Cash',
       reference: null,
       note: null,

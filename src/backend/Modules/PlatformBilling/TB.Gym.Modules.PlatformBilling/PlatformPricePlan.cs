@@ -41,7 +41,10 @@ public sealed record PricePlanTerms(
         CheckRange(errors, nameof(GymFeeMinimumSeats), GymFeeMinimumSeats, 1, 1_000);
         CheckRange(errors, nameof(TrialDays), TrialDays, 0, 365);
         CheckRange(errors, nameof(PaymentTermDays), PaymentTermDays, 0, 90);
-        CheckRange(errors, nameof(GraceDays), GraceDays, 0, 90);
+
+        // A workspace is never read-only on the day its invoice falls due (PBL-005), so the rule has
+        // always applied at least one grace day; a plan now says so instead of storing 0 (BILL-4).
+        CheckRange(errors, nameof(GraceDays), GraceDays, 1, 90);
         return errors;
     }
 

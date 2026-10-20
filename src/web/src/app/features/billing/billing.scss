@@ -395,3 +395,8 @@
     justify-self: start;
   }
 }
+
+// Under the last panel, as wide as the panels (BILL-6).
+.utc-note {
+  max-inline-size: 48rem;
+}

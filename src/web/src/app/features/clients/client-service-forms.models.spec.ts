@@ -15,7 +15,6 @@ import {
   planRunText,
   planStartErrors,
   reasonErrors,
-  receivedAtUtc,
   serviceWriteError,
 } from './client-service-forms.models';
 import { offerChoices } from './client-service.models';
@@ -85,19 +84,6 @@ describe('recording a payment', () => {
     expect(paymentErrors({ amount: 180, receivedOn: '2026-09-30' }, 180, SERVICE_TODAY)).toEqual(
       {},
     );
-  });
-
-  it('records now for today, and midday for an earlier day so the day itself is kept', () => {
-    const now = new Date('2026-10-01T12:34:56Z');
-
-    expect(receivedAtUtc(SERVICE_TODAY, SERVICE_TODAY, now)).toBe('2026-10-01T12:34:56.000Z');
-    const earlier = new Date(receivedAtUtc('2026-09-28', SERVICE_TODAY, now));
-    expect([
-      earlier.getFullYear(),
-      earlier.getMonth(),
-      earlier.getDate(),
-      earlier.getHours(),
-    ]).toEqual([2026, 8, 28, 12]);
   });
 
   it('says what the payment does: what is left, or when access opens', () => {

@@ -31,6 +31,39 @@ public sealed class CoachingProduct : TenantEntity
         Description = CommercialText.Optional(description, 2_000, nameof(description));
         IsActive = isActive;
     }
+
+    /// <summary>
+    /// Whether saving this plan as <paramref name="name"/> and <paramref name="isActive"/> puts a name on sale
+    /// it did not have (BILL-7): a new plan, a renamed one, or one sold again. Saving a plan unchanged never
+    /// does, so two plans that already share a name keep it until one is renamed.
+    /// </summary>
+    public bool ClaimsName(string? name, bool isActive) =>
+        isActive && (!IsActive || !string.Equals(Name, name?.Trim(), StringComparison.Ordinal));
+
+    /// <summary>
+    /// BILL-7: no two plans for sale in a workspace share a name, compared without case. A new, renamed or
+    /// restored plan that would is refused; the database trigger <c>TR_CoachingProducts_ActiveName</c>
+    /// holds the same rule against a race.
+    /// </summary>
+    public static void EnsureNameFree(Guid productId, string? name, IEnumerable<CoachingProduct> activeProducts)
+    {
+        var wanted = name?.Trim() ?? string.Empty;
+        if (wanted.Length > 0 && activeProducts.Any(product =>
+                product.Id != productId && product.IsActive && SameName(product.Name, wanted)))
+        {
+            throw new ProductNameTakenException(wanted);
+        }
+    }
+
+    /// <summary>Names compared as PostgreSQL's <c>lower()</c> does in the trigger.</summary>
+    public static bool SameName(string first, string second) =>
+        string.Equals(first.Trim().ToLowerInvariant(), second.Trim().ToLowerInvariant(), StringComparison.Ordinal);
+}
+
+public sealed class ProductNameTakenException(string name)
+    : InvalidOperationException($"You already sell a plan called \"{name}\". Choose another name, or rename that plan first.")
+{
+    public string Name { get; } = name;
 }
 
 public sealed class ProductOffer : TenantEntity
@@ -482,6 +515,10 @@ public sealed class EnrollmentEntitlement : TenantEntity
         bool blocksOverlap) =>
         new(tenantId, enrollmentId, clientProfileId, period, feature, blocksOverlap);
 
+    /// <summary>
+    /// The one change a coverage row ever takes (SEC-5): cancelling its plan frees its dates for another plan.
+    /// The <c>TR_EnrollmentEntitlements_Protect</c> trigger refuses every other update and any delete.
+    /// </summary>
     internal void ReleaseOverlapLock() => BlocksOverlap = false;
 }
 
@@ -583,6 +620,39 @@ public sealed class PaymentRecord : TenantEntity
             now);
 }
 
+/// <summary>
+/// WEA-6: a receipt is entered as the workspace day the money arrived, and the server stamps its instant: now
+/// when that day is today, otherwise midday of it in the workspace's time zone. The day is read back in the same
+/// zone, so the coach, the owner and the server name one day whatever their own clocks say.
+/// </summary>
+public static class PaymentDay
+{
+    public const string FutureMessage = "A payment can't be received in the future.";
+
+    public const string MissingMessage = "Choose the day it was received.";
+
+    public static DateOnly Of(DateTimeOffset instant, TimeZoneInfo workspaceZone) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, workspaceZone).DateTime);
+
+    /// <summary>The instant to record for money received on <paramref name="receivedOn"/>; null when that day is still to come.</summary>
+    public static DateTimeOffset? ReceivedAtUtc(DateOnly receivedOn, TimeZoneInfo workspaceZone, DateTimeOffset now)
+    {
+        var today = Of(now, workspaceZone);
+        if (receivedOn > today)
+        {
+            return null;
+        }
+
+        if (receivedOn == today)
+        {
+            return now.ToUniversalTime();
+        }
+
+        var midday = DateTime.SpecifyKind(receivedOn.ToDateTime(new TimeOnly(12, 0)), DateTimeKind.Unspecified);
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(midday, workspaceZone), TimeSpan.Zero);
+    }
+}
+
 public sealed record OfferFeatureDefinition(
     CoachingFeature Feature,
     bool AllowsConcurrentCoverage = false);
@@ -643,16 +713,28 @@ public enum PaymentSource
 
 public static class MoneyRules
 {
-    public static decimal NormalizeAmount(decimal amount, bool allowZero)
+    public const string TwoDecimalsMessage = "Use at most two decimals.";
+
+    public const string RangeMessage = "The money amount is outside the supported range.";
+
+    /// <summary>
+    /// What is wrong with a price or a receipt, or null when it is a valid amount (BILL-1). Money is kept to the
+    /// cent: an amount with a smaller part is refused, never rounded, so the ledger holds only what was typed.
+    /// </summary>
+    public static string? AmountProblem(decimal amount, bool allowZero)
     {
-        var normalized = decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
-        if (normalized < 0m || (!allowZero && normalized == 0m) || normalized > 999_999_999.99m)
+        if (decimal.Round(amount, 2) != amount)
         {
-            throw new ArgumentOutOfRangeException(nameof(amount), "The money amount is outside the supported range.");
+            return TwoDecimalsMessage;
         }
 
-        return normalized;
+        return amount < 0m || (!allowZero && amount == 0m) || amount > 999_999_999.99m ? RangeMessage : null;
     }
+
+    public static decimal NormalizeAmount(decimal amount, bool allowZero) =>
+        AmountProblem(amount, allowZero) is { } problem
+            ? throw new ArgumentOutOfRangeException(nameof(amount), problem)
+            : decimal.Round(amount, 2);
 
     public static string NormalizeCurrency(string currencyCode)
     {

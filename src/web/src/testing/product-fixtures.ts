@@ -25,6 +25,7 @@ export function offer(overrides: Partial<ProductOfferView> = {}): ProductOfferVi
     createdAtUtc: '2026-06-01T09:00:00Z',
     version: 1,
     clients: { now: 0, starting: 0 },
+    replacedByOfferId: null,
     ...overrides,
   };
 }
@@ -60,7 +61,13 @@ export function atlasCatalog(): ProductCatalog {
             priceAmount: 130,
             clients: { now: 2, starting: 0 },
           }),
-          offer({ id: 'o-12-old', priceAmount: 300, isActive: false, version: 2 }),
+          offer({
+            id: 'o-12-old',
+            priceAmount: 300,
+            isActive: false,
+            version: 2,
+            replacedByOfferId: 'o-12',
+          }),
         ],
         clients: { now: 6, starting: 1 },
       }),

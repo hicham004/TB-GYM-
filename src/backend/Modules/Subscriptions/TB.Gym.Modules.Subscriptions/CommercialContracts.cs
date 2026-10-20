@@ -82,6 +82,11 @@ public sealed record CoachingProductView(
     uint Version,
     PlanClientCount Clients);
 
+/// <param name="Clients">
+/// Who is on this option (SUB-015). A replacement from Change price also counts the clients of the options it
+/// replaced, who keep their old price (ADR 0034); a retired option counts only its own.
+/// </param>
+/// <param name="ReplacedByOfferId">The option Change price put in this one's place; null when it was not replaced.</param>
 public sealed record ProductOfferView(
     Guid Id,
     string Label,
@@ -94,7 +99,8 @@ public sealed record ProductOfferView(
     IReadOnlyList<OfferFeatureView> Features,
     DateTimeOffset CreatedAtUtc,
     uint Version,
-    PlanClientCount Clients);
+    PlanClientCount Clients,
+    Guid? ReplacedByOfferId);
 
 /// <summary>
 /// The caller's clients on a plan (SUB-015, ADR 0026: a Coach counts their own, the Owner every client still
@@ -112,6 +118,7 @@ public sealed record ClientCommercialOverview(
     IReadOnlyList<FeatureAccessDecision> FeatureAccess,
     IReadOnlyList<ClientEnrollmentView> Enrollments);
 
+/// <param name="CancelledOn">The workspace day the plan was cancelled (COACH-20); null unless it was.</param>
 public sealed record ClientEnrollmentView(
     Guid Id,
     Guid ProductId,
@@ -129,16 +136,19 @@ public sealed record ClientEnrollmentView(
     EnrollmentStatus StoredStatus,
     EffectiveEnrollmentStatus EffectiveStatus,
     string? StatusReason,
+    DateOnly? CancelledOn,
     IReadOnlyList<CoachingFeature> Features,
     IReadOnlyList<PaymentRecordView> Payments,
     DateTimeOffset CreatedAtUtc,
     uint Version);
 
+/// <param name="ReceivedOn">The workspace day the money arrived (WEA-6), the same for every reader.</param>
 public sealed record PaymentRecordView(
     Guid Id,
     decimal Amount,
     string CurrencyCode,
     DateTimeOffset ReceivedAtUtc,
+    DateOnly ReceivedOn,
     ManualPaymentMethod Method,
     string? Reference,
     string? Note,
@@ -179,10 +189,14 @@ public sealed record AssignProductRequest(
     DateOnly StartDate,
     Guid IdempotencyKey);
 
+/// <param name="ReceivedOn">
+/// The workspace day the money arrived, today or earlier (WEA-6). The server stamps the instant from it in the
+/// workspace's time zone; a browser's clock and zone never date a receipt.
+/// </param>
 public sealed record RecordManualPaymentRequest(
     decimal Amount,
     string CurrencyCode,
-    DateTimeOffset ReceivedAtUtc,
+    DateOnly ReceivedOn,
     ManualPaymentMethod Method,
     string? Reference,
     string? Note,

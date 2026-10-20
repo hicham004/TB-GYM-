@@ -490,7 +490,7 @@ public sealed partial class Phase6B3BProviderEmailTests
                 {
                     amount = enrollment.PriceAmount,
                     currencyCode = "USD",
-                    receivedAtUtc = Clock.UtcNow,
+                    receivedOn = TenantToday(),
                     method = "Cash",
                     reference = "receipt-1",
                     idempotencyKey = Guid.NewGuid(),

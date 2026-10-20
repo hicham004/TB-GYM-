@@ -63,10 +63,20 @@ export function duration(offer: Pick<ProductOfferView, 'durationCount' | 'durati
   return count === 1 ? $localize`1 week` : $localize`${count}:count: weeks`;
 }
 
-/** "3 clients · 1 starting", "1 starting", or "No clients yet": who is on it, in the caller's scope. */
-export function clientsLine(clients: PlanClientCount): string {
+/**
+ * "3 clients · 1 starting", "1 starting", or "No clients yet": who is on it, in the caller's scope. An option
+ * on sale counts the clients of the old prices it replaced too (COACH-2); an old price counts those still on it.
+ */
+export function clientsLine(clients: PlanClientCount, oldPrice = false): string {
   const now = num(clients.now);
   const starting = num(clients.starting);
+  if (oldPrice) {
+    const total = now + starting;
+    if (total === 0) return $localize`No one on this price`;
+    return total === 1
+      ? $localize`1 client still on this price`
+      : $localize`${total}:count: clients still on this price`;
+  }
   const onIt = now === 1 ? $localize`1 client` : $localize`${now}:count: clients`;
   if (now > 0 && starting > 0) return $localize`${onIt}:clients: · ${starting}:count: starting`;
   if (now > 0) return onIt;
@@ -115,7 +125,7 @@ export function optionRow(offer: ProductOfferView, locale: string): OptionRow {
     features: FEATURES.filter((feature) =>
       offer.features.some((item) => item.feature === feature),
     ).map(featureChip),
-    clients: clientsLine(offer.clients),
+    clients: clientsLine(offer.clients, !offer.isActive),
     hasClients: num(offer.clients.now) + num(offer.clients.starting) > 0,
     isActive: offer.isActive,
     menu: offer.isActive
@@ -285,6 +295,9 @@ export function productWriteError(error: unknown): string {
         return $localize`This plan already sells an option of that length in that currency. Change its price instead, or stop selling it first.`;
       case 'product_conflict':
         return $localize`You already sell a plan with this name. Choose another name.`;
+      // BILL-7: a new, renamed or restored plan cannot take the name of another plan for sale.
+      case 'product_name_taken':
+        return $localize`You already sell a plan with this name. Choose another name, or rename that plan first.`;
       case 'concurrency_conflict':
       case 'offer_conflict':
         return $localize`This plan changed since you opened it. It has been reloaded; try again.`;

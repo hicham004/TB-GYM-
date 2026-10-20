@@ -29,3 +29,12 @@ existing availability operation. Enrollments remain attached to their original o
 The migration rolls back the new index and table only. A production rollback after price
 changes have been recorded requires preserving or exporting that append-only command history;
 prefer a forward fix so retry identities and the newly created offers stay auditable.
+
+## Amended in the audit's batch A7 (2026-10-20)
+
+A replacement counted only its own clients, so after 130 became 150 the option on sale read "No clients
+yet" while the plan's clients stayed on 130 (COACH-2). The catalog now counts, for an option on sale, the
+clients of every option it replaced through Change price, read from `OfferPriceChange`; a retired option
+counts its own and names the option that replaced it (`ReplacedByOfferId`). Renew starts on that
+replacement when the plan's own price is no longer sold (COACH-3). A new price with a part of a cent is
+refused, never rounded (BILL-1).

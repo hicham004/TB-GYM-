@@ -210,6 +210,12 @@
             </ul>
           }
         </section>
+
+        <!-- Every billing date is a UTC day (ADR 0028); the page says so once (BILL-6). -->
+        <p class="quiet utc-note" data-utc-note i18n>
+          Dates here are UTC days, the one clock TB Gym bills every coaching space by, so a day here
+          can start a few hours before or after your own midnight.
+        </p>
       }
     }
   }
@@ -254,6 +260,12 @@
           <dt i18n>Due</dt>
           <dd>{{ day(invoice.dueOn) }}</dd>
         </div>
+        @if (isUnpaid(invoice)) {
+          <div data-read-only-from>
+            <dt i18n>Read-only from</dt>
+            <dd>{{ day(invoice.readOnlyFrom) }}</dd>
+          </div>
+        }
         @if (invoice.payment; as payment) {
           <div>
             <dt i18n>Paid</dt>

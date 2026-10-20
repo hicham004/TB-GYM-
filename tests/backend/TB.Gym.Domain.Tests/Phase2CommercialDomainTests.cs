@@ -81,7 +81,9 @@ public sealed class Phase2CommercialDomainTests
             new OfferFeatureDefinition(CoachingFeature.Nutrition));
         var enrollment = ClientEnrollment.Assign(TenantId, ClientId, product, source,
             new DateOnly(2026, 8, 24), Guid.NewGuid(), Now);
-        var replacement = source.CreatePriceReplacement(275.125m);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => source.CreatePriceReplacement(275.125m),
+            "A price with a part of a cent is refused, not rounded (BILL-1).");
+        var replacement = source.CreatePriceReplacement(275.13m);
         var command = OfferPriceChange.Record(source, replacement, 7, Guid.NewGuid());
         source.SetAvailability(false, []);
         replacement.EnsureActiveSlotAvailable([source]);
@@ -96,10 +98,10 @@ public sealed class Phase2CommercialDomainTests
         Assert.AreEqual(source.PriceCurrency, replacement.PriceCurrency);
         CollectionAssert.AreEqual(source.Entitlements.Select(item => (item.Feature, item.AllowsConcurrentCoverage)).ToArray(),
             replacement.Entitlements.Select(item => (item.Feature, item.AllowsConcurrentCoverage)).ToArray());
-        Assert.IsTrue(command.Matches(source.Id, 275.125m, 7));
+        Assert.IsTrue(command.Matches(source.Id, 275.13m, 7));
         Assert.IsFalse(command.Matches(source.Id, 275m, 7));
-        Assert.IsFalse(command.Matches(source.Id, 275.125m, 8));
-        Assert.IsFalse(command.Matches(Guid.NewGuid(), 275.125m, 7));
+        Assert.IsFalse(command.Matches(source.Id, 275.13m, 8));
+        Assert.IsFalse(command.Matches(Guid.NewGuid(), 275.13m, 7));
         Assert.ThrowsExactly<InvalidOperationException>(() => source.CreatePriceReplacement(300m));
         Assert.ThrowsExactly<ArgumentException>(() => replacement.CreatePriceReplacement(275.13m));
     }
@@ -145,10 +147,13 @@ public sealed class Phase2CommercialDomainTests
     public void PaymentRecordNormalizesAndPreservesHistoricalMoney()
     {
         var enrollment = CreateEnrollment(250m);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => PaymentRecord.RecordManualReceipt(
+            TenantId, enrollment.Id, 125.125m, "USD", Now, ManualPaymentMethod.Cash, null, null,
+            Guid.NewGuid(), Guid.NewGuid(), Now), "Money is kept to the cent: a sub-cent receipt is refused (BILL-1).");
         var payment = PaymentRecord.RecordManualReceipt(
             TenantId,
             enrollment.Id,
-            125.125m,
+            125.13m,
             "usd",
             Now,
             ManualPaymentMethod.Cash,

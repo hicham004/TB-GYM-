@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import type { FeatureAccessDecision } from '../../core/api/api.models';
 import {
   cancelledPlan,
   catalog,
   enrollment,
+  payment,
   SERVICE_TODAY,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import {
+  accessSummary,
   defaultPlanStart,
   focusPlanId,
   money,
@@ -17,6 +20,7 @@ import {
   primaryAction,
   renewalAskedFor,
   renewalAskedLine,
+  renewalOfferId,
   type ServiceContext,
 } from './client-service.models';
 
@@ -72,7 +76,9 @@ describe('the plan in front', () => {
   it('keeps the reason of a cancelled plan, and nothing about it can change', () => {
     const card = planCard(cancelledPlan(), context);
 
-    expect(card.eyebrow).toBe('Cancelled');
+    // The day it was cancelled, never its last day (COACH-20).
+    expect(card.eyebrow).toBe('Cancelled Sun 14 Jun');
+    expect(planCard(cancelledPlan({ cancelledOn: null }), context).eyebrow).toBe('Cancelled');
     expect(card.pill).toEqual({ label: 'Cancelled', tone: 'neutral' });
     expect(card.facts.map((fact) => fact.text)).toEqual([
       'Mon 1 Jun – Sun 28 Jun',
@@ -255,5 +261,136 @@ describe('price options', () => {
       'Maya asked to renew on Mon 28 Sep',
     );
     expect(renewalAskedLine(null, 'Maya', 'en-US')).toBeNull();
+  });
+
+  it('renews on the option that replaced a plan’s old price, however many times it changed (COACH-3)', () => {
+    const changed = catalog();
+    const online = changed.products[0];
+    online.offers = [
+      { ...online.offers[0], id: 'o-130', isActive: false, replacedByOfferId: 'o-150' },
+      { ...online.offers[0], id: 'o-150', isActive: false, replacedByOfferId: 'o-170' },
+      { ...online.offers[0], id: 'o-170', isActive: true, replacedByOfferId: null },
+    ];
+
+    expect(renewalOfferId(changed, 'p-online', 'o-130')).toBe('o-170');
+    expect(renewalOfferId(changed, 'p-online', 'o-170')).toBe('o-170');
+    // An option stopped without a replacement has nothing to renew on.
+    expect(renewalOfferId(catalog(), 'p-online', 'o-old')).toBeNull();
+    expect(renewalOfferId(null, 'p-online', 'o-12')).toBeNull();
+  });
+
+  it('dates each payment by the workspace day the server sends, whatever the reader’s zone (WEA-6)', () => {
+    const late = enrollment({
+      payments: [
+        payment({ id: 'pay-1', receivedAtUtc: '2026-07-19T22:30:00Z', receivedOn: '2026-07-20' }),
+      ],
+    });
+
+    expect(planCard(late, context).payments[0].date).toBe('Mon 20 Jul 2026');
+  });
+});
+
+describe('what the client can use (BILL-5, LOST-13)', () => {
+  const decision = (
+    feature: FeatureAccessDecision['feature'],
+    reason: FeatureAccessDecision['reason'],
+    from: string | null = null,
+    until: string | null = null,
+  ): FeatureAccessDecision => ({
+    feature,
+    isAllowed: reason === 'Granted',
+    reason,
+    enrollmentId: null,
+    accessibleFrom: from,
+    accessibleUntilExclusive: until,
+  });
+
+  it('says everything only when everything in the plans is open', () => {
+    const summary = accessSummary(
+      [
+        decision('Training', 'Granted', '2026-07-21', '2026-10-13'),
+        decision('Messaging', 'Granted', '2026-07-21', '2026-10-13'),
+        decision('Nutrition', 'NoEntitlement'),
+      ],
+      'Maya',
+      false,
+      'en-US',
+    );
+
+    expect(summary.line).toBe('Maya can use everything their plan includes.');
+    expect(summary.rows.map((row) => `${row.label}: ${row.state}`)).toEqual([
+      'Training: Open until Mon 12 Oct',
+      'Nutrition: Not in the plan',
+      'Messaging: Open until Mon 12 Oct',
+    ]);
+    expect(summary.rows.map((row) => row.open)).toEqual([true, false, true]);
+  });
+
+  it('names what is open while an add-on waits for its payment', () => {
+    const summary = accessSummary(
+      [
+        decision('Training', 'Granted', '2026-07-21', '2026-10-13'),
+        decision('CheckIns', 'Granted', '2026-07-21', '2026-10-13'),
+        decision('Nutrition', 'PaymentRequired', '2026-10-01', '2026-11-01'),
+      ],
+      'Maya',
+      false,
+      'en-US',
+    );
+
+    expect(summary.line).toBe(
+      'Maya can use Training and Check-ins now. The rest of their plans is closed for now; why is below.',
+    );
+    expect(summary.rows[1].state).toBe('Waiting for payment');
+  });
+
+  it('never says everything for an unpaid, ended, cancelled, paused, coming or absent plan', () => {
+    const line = (...decisions: FeatureAccessDecision[]) =>
+      accessSummary(decisions, 'Maya', false, 'en-US').line;
+
+    expect(line(decision('Training', 'PaymentRequired'))).toBe(
+      'Maya can’t use anything until their plan is paid.',
+    );
+    expect(line(decision('Training', 'Expired', '2026-07-01', '2026-09-30'))).toBe(
+      'Maya’s plan has ended, so they can’t use anything until it is renewed.',
+    );
+    expect(line(decision('Training', 'Cancelled'))).toBe(
+      'Maya’s plan was cancelled, so they can’t use anything until you start a new one.',
+    );
+    expect(line(decision('Training', 'Paused'))).toBe(
+      'Maya’s plan is paused, so they can’t use anything until you resume it.',
+    );
+    expect(line(decision('Training', 'NotStarted', '2026-10-13', '2027-01-05'))).toBe(
+      'Maya can use their plan from Tue 13 Oct.',
+    );
+    expect(
+      line(decision('Training', 'NoEntitlement'), decision('Nutrition', 'NoEntitlement')),
+    ).toBe('Maya has no plan yet, so they can’t use anything until you start one.');
+    // The reason the coach can act on first: a pause before a payment, a payment before an end.
+    expect(line(decision('Training', 'Expired'), decision('Nutrition', 'PaymentRequired'))).toBe(
+      'Maya can’t use anything until their plan is paid.',
+    );
+    expect(
+      accessSummary(
+        [decision('Training', 'Expired', '2026-07-01', '2026-09-30')],
+        'Maya',
+        false,
+        'en-US',
+      ).rows[0].state,
+    ).toBe('Plan ended Tue 29 Sep');
+  });
+
+  it('says a blocked client can use nothing, without the rows', () => {
+    const summary = accessSummary(
+      [decision('Training', 'RelationshipBlocked')],
+      'Maya',
+      true,
+      'en-US',
+    );
+
+    expect(summary.line).toBe(
+      'Maya is blocked in your coaching space. They can’t use anything their plans include until you unblock them.',
+    );
+    expect(summary.rows).toEqual([]);
   });
 });

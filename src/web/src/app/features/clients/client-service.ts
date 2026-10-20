@@ -7,6 +7,7 @@ import {
   LOCALE_ID,
   signal,
   TemplateRef,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -33,6 +34,7 @@ import { ClientCoach } from './client-coach';
 import { ClientRelease } from './client-release';
 import { serviceWriteError } from './client-service-forms.models';
 import {
+  accessSummary,
   focusPlanId,
   offerChoices,
   otherPlans,
@@ -196,12 +198,19 @@ export class ClientService extends GuardedSheets {
       $localize`Start a plan and ${this.firstName()}:name: can use what it includes once it is paid.`,
   );
 
-  protected readonly accessLine = computed(() => {
+  /**
+   * What the client can use now and, feature by feature, why something is closed (BILL-5, LOST-13): read
+   * from the decisions the shared access service made, which this page already holds.
+   */
+  protected readonly access = computed(() => {
     const client = this.context.profile();
-    if (!client) return '';
-    return client.isCoachBlocked
-      ? $localize`${client.firstName}:name: is blocked in your coaching space. They can’t use anything their plans include until you unblock them.`
-      : $localize`${client.firstName}:name: can use everything their current plan includes.`;
+    if (!client) return null;
+    return accessSummary(
+      this.context.plans()?.featureAccess ?? [],
+      client.firstName,
+      client.isCoachBlocked,
+      this.locale,
+    );
   });
 
   constructor() {
@@ -218,22 +227,29 @@ export class ClientService extends GuardedSheets {
       }
     });
 
-    // The Overview's and the header's "Renew plan" arrive as `?renew=<plan id>`: open that renewal
-    // once the page has loaded, then take it out of the address so Back and a reload do not reopen it.
+    // The Overview's and the header's "Renew plan" arrive as `?renew=<plan id>`, and Coach Today's "Record
+    // payment" for a renewal still unpaid (BEB-7) as `?pay=<plan id>`: open that sheet once the page has
+    // loaded, then take it out of the address so Back and a reload do not reopen it.
     effect(() => {
-      const requested = this.query().get('renew');
-      if (!requested || this.state() !== 'ready') return;
-      void this.router.navigate([], {
-        relativeTo: this.route,
-        queryParams: { renew: null },
-        queryParamsHandling: 'merge',
-        replaceUrl: true,
-      });
-      const plan = this.plans().find((item) => item.id === requested);
-      if (plan && !this.context.isFormer()) {
+      const renew = this.query().get('renew');
+      const pay = this.query().get('pay');
+      if ((!renew && !pay) || this.state() !== 'ready') return;
+      // Untracked: picking the plan changes what the page reads, which must not run this again.
+      untracked(() => {
+        void this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { renew: null, pay: null },
+          queryParamsHandling: 'merge',
+          replaceUrl: true,
+        });
+        const plan = this.plans().find((item) => item.id === (pay ?? renew));
+        if (!plan || this.context.isFormer()) return;
         this.picked.set(plan.id);
-        this.openRenew(plan);
-      }
+        if (!pay) return this.openRenew(plan);
+        // Shown either way; the sheet only while the plan still waits for the payment.
+        const card = this.card();
+        if (card?.canPay) this.openPayment(card);
+      });
     });
   }
 

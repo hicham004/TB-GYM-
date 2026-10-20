@@ -34,7 +34,6 @@ import {
   paymentOutcome,
   planRunText,
   planStartErrors,
-  receivedAtUtc,
   serviceWriteError,
 } from './client-service-forms.models';
 import {
@@ -42,6 +41,7 @@ import {
   money,
   offerChoices,
   paymentMethodLabel,
+  renewalOfferId,
   shortDate,
   type PlanCard,
 } from './client-service.models';
@@ -357,10 +357,15 @@ export class PlanStart {
   protected readonly choices = computed(() =>
     offerChoices(this.catalog(), this.locale, this.renewFrom()?.productId ?? null),
   );
-  /** A renewal starts on the plan's own price option when it is still offered. */
+  /**
+   * A renewal starts on the plan's own price option while it is offered, or on the option that replaced it
+   * when its price changed (COACH-3).
+   */
   protected readonly offerId = linkedSignal(() => {
     const choices = this.choices();
-    const same = choices.find((choice) => choice.offerId === this.renewFrom()?.offerId);
+    const from = this.renewFrom();
+    const renewal = from ? renewalOfferId(this.catalog(), from.productId, from.offerId) : null;
+    const same = choices.find((choice) => choice.offerId === renewal);
     return (same ?? (choices.length === 1 ? choices[0] : undefined))?.offerId ?? '';
   });
   protected readonly startDate = linkedSignal(() =>
@@ -594,7 +599,6 @@ export class PlanPayment {
   private readonly intent = new IntentIdempotencyKey();
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
-  private pending: { fingerprint: string; at: string } | null = null;
 
   readonly plan = input.required<PlanCard>();
   readonly firstName = input.required<string>();
@@ -669,16 +673,8 @@ export class PlanPayment {
         reference: this.reference().trim() || null,
         note: this.note().trim() || null,
       };
-      // The server binds the key to the whole payment, instant included, so a retry of the same entry
-      // sends the same instant and is answered with the payment already recorded (SUB-011).
-      const fingerprint = JSON.stringify(entered);
-      if (this.pending?.fingerprint !== fingerprint) {
-        this.pending = {
-          fingerprint,
-          at: receivedAtUtc(entered.receivedOn, this.today(), new Date()),
-        };
-      }
-      const at = this.pending.at;
+      // The day goes as typed: the server stamps the instant in the workspace's zone (WEA-6). The key
+      // is bound to the whole entry, so a retry of it is answered with the payment recorded (SUB-011).
       const key = this.intent.forPayload(entered);
       this.busy.set(true);
       this.error.set(null);
@@ -689,7 +685,7 @@ export class PlanPayment {
             this.api.recordManualPayment(plan.id, {
               amount: entered.amount,
               currencyCode: plan.currency,
-              receivedAtUtc: at,
+              receivedOn: entered.receivedOn,
               method: entered.method,
               reference: entered.reference,
               note: entered.note,
@@ -698,7 +694,6 @@ export class PlanPayment {
           ),
         );
         this.intent.complete();
-        this.pending = null;
         this.closed.emit(true);
       } catch (error) {
         if (!owner.current) return;

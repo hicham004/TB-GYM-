@@ -146,6 +146,30 @@ describe('what needs the coach on a client’s page', () => {
     });
   });
 
+  it('asks for the payment of a renewal still waiting for it, which covers nothing yet (BEB-7)', () => {
+    const [row] = needRows(
+      [
+        attentionItem('PlanEndingSoon', MAYA, {
+          date: '2026-10-06',
+          count: 1,
+          subjectId: 'renewal-4',
+        }),
+      ],
+      COACH_TODAY,
+      context,
+    );
+
+    expect(row).toMatchObject({
+      heading: 'Plan ends in 5 days',
+      detail: 'Paid until Tue 6 Oct · The renewal isn’t paid yet',
+      action: {
+        label: 'Record payment',
+        link: `${page}/service`,
+        queryParams: { pay: 'renewal-4' },
+      },
+    });
+  });
+
   it('asks about a renewal request, an unshared week and missed sessions in coach words', () => {
     const [renewal, share, missed, never] = needRows(
       [

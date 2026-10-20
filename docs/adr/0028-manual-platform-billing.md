@@ -86,3 +86,6 @@ Chosen by the implementer, to confirm:
 - The owner's Billing page (R5.2a, 2026-10-09) shows each invoice's reference, lines, total and payment and
   copies the reference for the transfer note. There is no printable or PDF invoice until TB Gym's legal name,
   address and tax number are decided: a formal invoice carries them, and TB Gym does not invent that wording.
+- Amended 2026-10-20 (audit A7): a plan gives at least one grace day, as the rule always applied (BILL-4;
+  the check is `NOT VALID` so a version published with 0 stays as it was). The owner's Billing page names
+  the read-only day while an invoice is merely open and says its days are UTC (BILL-3, BILL-6).

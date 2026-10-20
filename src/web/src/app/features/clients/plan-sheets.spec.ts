@@ -239,16 +239,33 @@ describe('Record payment', () => {
     press(host, 'Record payment');
     await settle(fixture);
 
+    // The day as typed: the server stamps the instant in the workspace's zone (WEA-6).
     expect(api.recordManualPayment).toHaveBeenCalledWith('e-2', {
       amount: 180,
       currencyCode: 'USD',
-      receivedAtUtc: expect.stringMatching(/^2026-|^20\d\d-/),
+      receivedOn: SERVICE_TODAY,
       method: 'MobileWallet',
       reference: 'WH-2290',
       note: null,
       idempotencyKey: expect.any(String),
     });
     expect(closed).toHaveBeenCalledWith(true);
+  });
+
+  it('sends an earlier day as the day, never an instant built from the browser’s clock', async () => {
+    const { fixture, host, api } = await renderPayment();
+
+    fill(host, 'Received on', '2026-09-28');
+    press(host, 'Record payment');
+    await settle(fixture);
+
+    expect(api.recordManualPayment).toHaveBeenCalledWith(
+      'e-2',
+      expect.objectContaining({ receivedOn: '2026-09-28' }),
+    );
+    expect(JSON.stringify(vi.mocked(api.recordManualPayment).mock.calls)).not.toContain(
+      'receivedAtUtc',
+    );
   });
 
   it('takes a part payment and says what will still be left', async () => {
@@ -297,9 +314,9 @@ describe('Record payment', () => {
     press(host, 'Record payment');
     await settle(fixture);
     const [first, second] = recordManualPayment.mock.calls.map((call) => call[1]);
-    // The same entry is the same payment: same key and same instant, as the server requires.
+    // The same entry is the same payment: same key and same day, as the server requires.
     expect(second.idempotencyKey).toBe(first.idempotencyKey);
-    expect(second.receivedAtUtc).toBe(first.receivedAtUtc);
+    expect(second.receivedOn).toBe(first.receivedOn);
     expect(closed).toHaveBeenCalledWith(true);
   });
 });

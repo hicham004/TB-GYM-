@@ -235,6 +235,8 @@ export interface ProductOffer {
   features: OfferFeature[];
   createdAtUtc: string;
   version: number;
+  /** The option Change price put in this one's place (ADR 0034); null when it was not replaced. */
+  replacedByOfferId: string | null;
 }
 
 export interface OfferFeature {
@@ -292,6 +294,8 @@ export interface ClientEnrollment {
   storedStatus: EnrollmentStatus;
   effectiveStatus: EffectiveEnrollmentStatus;
   statusReason: string | null;
+  /** The workspace day the plan was cancelled (COACH-20); null unless it was. */
+  cancelledOn: string | null;
   features: CoachingFeature[];
   payments: PaymentRecord[];
   createdAtUtc: string;
@@ -303,6 +307,8 @@ export interface PaymentRecord {
   amount: number;
   currencyCode: string;
   receivedAtUtc: string;
+  /** The workspace day the money arrived (WEA-6), the same for every reader. */
+  receivedOn: string;
   method: ManualPaymentMethod;
   reference: string | null;
   note: string | null;

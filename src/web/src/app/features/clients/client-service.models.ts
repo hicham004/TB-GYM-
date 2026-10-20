@@ -2,6 +2,8 @@ import { formatDate, formatNumber } from '@angular/common';
 import type {
   ClientEnrollment,
   CoachingFeature,
+  FeatureAccessDecision,
+  FeatureAccessReason,
   ManualPaymentMethod,
   PaymentRecord,
   ProductCatalog,
@@ -9,6 +11,7 @@ import type {
 import type { StatusPillTone } from '../../ui/status-pill';
 import type { ClientAction } from './client-actions';
 import {
+  addDays,
   currentEnrollment,
   daysBetween,
   RENEWAL_PROMPT_DAYS,
@@ -57,7 +60,7 @@ export interface PlanCard {
   readonly offerId: string;
   /** "Online Coaching" */
   readonly name: string;
-  /** "Current plan", "Starts Mon 12 Oct", "Ended Fri 23 Oct" or "Cancelled". */
+  /** "Current plan", "Starts Mon 12 Oct", "Ended Fri 23 Oct" or "Cancelled Sun 18 Oct". */
   readonly eyebrow: string;
   readonly pill: PlanPill;
   /** Dates, length and price, the payment state and any reason it was paused or cancelled. */
@@ -178,7 +181,10 @@ function planState(
   const starts = $localize`Starts ${shortDate(plan.startDate, locale)}:date:`;
   if (plan.storedStatus === 'Cancelled') {
     return {
-      eyebrow: $localize`Cancelled`,
+      // The day it was cancelled, never its last day, which may still be to come (COACH-20).
+      eyebrow: plan.cancelledOn
+        ? $localize`Cancelled ${shortDate(plan.cancelledOn, locale)}:date:`
+        : $localize`Cancelled`,
       pill: { label: $localize`Cancelled`, tone: 'neutral' },
     };
   }
@@ -209,7 +215,8 @@ function paymentLine(payment: PaymentRecord, locale: string): PaymentLine {
   if (payment.reference) parts.push($localize`ref ${payment.reference}:reference:`);
   return {
     id: payment.id,
-    date: formatDate(payment.receivedAtUtc, 'EEE d MMM y', locale),
+    // The workspace's day from the server, so every reader sees the same one (WEA-6).
+    date: formatDate(payment.receivedOn, 'EEE d MMM y', locale),
     amount: money(payment.amount, payment.currencyCode, locale),
     detail: parts.join(' · '),
     note: payment.note,
@@ -247,7 +254,10 @@ export function planCard(plan: ClientEnrollment, context: ServiceContext): PlanC
   }
   const payments = [...plan.payments]
     .filter((payment) => payment.operation === 'Receipt')
-    .sort((a, b) => b.receivedAtUtc.localeCompare(a.receivedAtUtc))
+    .sort(
+      (a, b) =>
+        b.receivedOn.localeCompare(a.receivedOn) || b.createdAtUtc.localeCompare(a.createdAtUtc),
+    )
     .map((payment) => paymentLine(payment, locale));
   return {
     id: plan.id,
@@ -386,6 +396,29 @@ export function offerChoices(
           };
         }),
     );
+}
+
+/**
+ * The option a renewal of a plan sold at `offerId` uses: that option while it is on sale, else the one
+ * Change price put in its place, however many times the price changed since (COACH-3, ADR 0034); null when
+ * neither is on sale.
+ */
+export function renewalOfferId(
+  catalog: ProductCatalog | null,
+  productId: string,
+  offerId: string,
+): string | null {
+  const product = catalog?.products.find((item) => item.id === productId);
+  if (!product?.isActive) return null;
+  const seen = new Set<string>();
+  let offer = product.offers.find((item) => item.id === offerId);
+  while (offer && !seen.has(offer.id)) {
+    if (offer.isActive) return offer.id;
+    seen.add(offer.id);
+    const next: string | null = offer.replacedByOfferId;
+    offer = product.offers.find((item) => item.id === next);
+  }
+  return null;
 }
 
 export type ServiceActionId = 'start' | 'renew' | 'pay' | 'pause' | 'resume' | 'cancel';
@@ -537,4 +570,145 @@ export function renewalAskedLine(
 /** Where a new plan or a renewal starts by default: after the plan it follows, never before today. */
 export function defaultPlanStart(today: string, follows: ClientEnrollment | null): string {
   return follows && follows.endDateExclusive > today ? follows.endDateExclusive : today;
+}
+
+// ------------------------------------------------------------------------------------------------
+// What the client can use (SUB-009), from the server's per-feature decisions
+// ------------------------------------------------------------------------------------------------
+
+export interface AccessRow {
+  readonly feature: CoachingFeature;
+  /** "Training" */
+  readonly label: string;
+  /** "Open until Sat 24 Oct", "Waiting for payment", "Not in the plan"… */
+  readonly state: string;
+  readonly open: boolean;
+}
+
+export interface AccessSummary {
+  /** One sentence on what the client can use now, true for every plan state (BILL-5). */
+  readonly line: string;
+  /** Each feature and why it is open or closed (LOST-13); empty for a blocked client. */
+  readonly rows: readonly AccessRow[];
+}
+
+/** When nothing is open, the reason the sentence names: the one the coach can act on first. */
+const CLOSED_ORDER: readonly FeatureAccessReason[] = [
+  'PlatformBlocked',
+  'MembershipInactive',
+  'Paused',
+  'PaymentRequired',
+  'NotStarted',
+  'Expired',
+  'Cancelled',
+];
+
+function lastDayOf(endExclusive: string | null, locale: string): string {
+  return endExclusive ? shortDate(addDays(endExclusive, -1), locale) : '';
+}
+
+function accessState(decision: FeatureAccessDecision, locale: string): string {
+  switch (decision.reason) {
+    case 'Granted':
+      return decision.accessibleUntilExclusive
+        ? $localize`Open until ${lastDayOf(decision.accessibleUntilExclusive, locale)}:date:`
+        : $localize`Open`;
+    case 'PaymentRequired':
+      return $localize`Waiting for payment`;
+    case 'NotStarted':
+      return decision.accessibleFrom
+        ? $localize`Opens ${shortDate(decision.accessibleFrom, locale)}:date:`
+        : $localize`Not started yet`;
+    case 'Paused':
+      return $localize`Paused`;
+    case 'Expired':
+      return decision.accessibleUntilExclusive
+        ? $localize`Plan ended ${lastDayOf(decision.accessibleUntilExclusive, locale)}:date:`
+        : $localize`Plan ended`;
+    case 'Cancelled':
+      return $localize`Plan cancelled`;
+    case 'NoEntitlement':
+      return $localize`Not in the plan`;
+    case 'RelationshipBlocked':
+      return $localize`Blocked`;
+    case 'MembershipInactive':
+      return $localize`No longer coached here`;
+    case 'PlatformBlocked':
+      return $localize`Blocked by TB Gym`;
+  }
+}
+
+function featureList(features: readonly CoachingFeature[], locale: string): string {
+  return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(
+    FEATURE_ORDER.filter((feature) => features.includes(feature)).map(featureLabel),
+  );
+}
+
+/**
+ * Service & access's Access line and its per-feature reasons, from the decisions the shared access
+ * service made (SUB-009): never "can use everything" while a plan is unpaid, ended, cancelled or absent.
+ */
+export function accessSummary(
+  decisions: readonly FeatureAccessDecision[],
+  firstName: string,
+  blocked: boolean,
+  locale: string,
+): AccessSummary {
+  if (blocked) {
+    return {
+      line: $localize`${firstName}:name: is blocked in your coaching space. They can’t use anything their plans include until you unblock them.`,
+      rows: [],
+    };
+  }
+  const ordered = FEATURE_ORDER.map((feature) =>
+    decisions.find((item) => item.feature === feature),
+  ).filter((item): item is FeatureAccessDecision => item !== undefined);
+  const rows = ordered.map((decision) => ({
+    feature: decision.feature,
+    label: featureLabel(decision.feature),
+    state: accessState(decision, locale),
+    open: decision.isAllowed,
+  }));
+  const open = ordered.filter((item) => item.isAllowed).map((item) => item.feature);
+  const closed = ordered.filter((item) => !item.isAllowed && item.reason !== 'NoEntitlement');
+  if (open.length > 0) {
+    return {
+      line:
+        closed.length === 0
+          ? $localize`${firstName}:name: can use everything their plan includes.`
+          : $localize`${firstName}:name: can use ${featureList(open, locale)}:features: now. The rest of their plans is closed for now; why is below.`,
+      rows,
+    };
+  }
+  const reason = CLOSED_ORDER.find((item) => closed.some((decision) => decision.reason === item));
+  const from = closed.find((item) => item.reason === 'NotStarted')?.accessibleFrom ?? null;
+  return { line: closedLine(reason ?? null, firstName, from, locale), rows };
+}
+
+function closedLine(
+  reason: FeatureAccessReason | null,
+  firstName: string,
+  from: string | null,
+  locale: string,
+): string {
+  switch (reason) {
+    case 'PlatformBlocked':
+      return $localize`${firstName}:name:’s account is blocked by TB Gym, so they can’t use anything here.`;
+    case 'MembershipInactive':
+      return $localize`${firstName}:name: is no longer coached here, so they can’t use anything.`;
+    case 'Paused':
+      return $localize`${firstName}:name:’s plan is paused, so they can’t use anything until you resume it.`;
+    case 'PaymentRequired':
+      return $localize`${firstName}:name: can’t use anything until their plan is paid.`;
+    case 'NotStarted':
+      return from
+        ? $localize`${firstName}:name: can use their plan from ${shortDate(from, locale)}:date:.`
+        : $localize`${firstName}:name:’s plan hasn’t started yet.`;
+    case 'Expired':
+      return $localize`${firstName}:name:’s plan has ended, so they can’t use anything until it is renewed.`;
+    case 'Cancelled':
+      return $localize`${firstName}:name:’s plan was cancelled, so they can’t use anything until you start a new one.`;
+    default:
+      return $localize`${firstName}:name: has no plan yet, so they can’t use anything until you start one.`;
+  }
 }

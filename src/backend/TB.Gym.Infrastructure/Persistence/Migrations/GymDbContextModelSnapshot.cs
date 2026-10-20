@@ -7538,6 +7538,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_PricePlans_Currency", "\"CurrencyCode\" = 'USD'");
 
+                            t.HasCheckConstraint("CK_PricePlans_GraceDays", "\"GraceDays\" >= 1");
+
                             t.HasCheckConstraint("CK_PricePlans_Prices", "\"SeatPrice\" >= 0 AND \"ExtraClientPrice\" >= 0 AND \"GymFee\" >= 0");
 
                             t.HasCheckConstraint("CK_PricePlans_Version", "\"VersionNumber\" >= 1");

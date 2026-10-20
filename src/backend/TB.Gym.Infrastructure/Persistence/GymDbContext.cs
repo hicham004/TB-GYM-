@@ -968,6 +968,8 @@ public sealed partial class GymDbContext(
         RejectContactRequestFactMutations();
         RejectAppendOnlyMutations<PaymentRecord>("Payment records are append-only.");
         RejectAppendOnlyMutations<OfferPriceChange>("Price changes are append-only.");
+        RejectCoverageMutations();
+        RejectAppendOnlyMutations<ClientProfileChange>("Client profile change history is append-only.");
         RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");
         RejectAppendOnlyMutations<ClientCoachAssignment>("Client coach assignment history is append-only.");
         RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");
@@ -1409,6 +1411,30 @@ public sealed partial class GymDbContext(
         if (ChangeTracker.Entries<TEntity>().Any(item => item.State is EntityState.Modified or EntityState.Deleted))
         {
             throw new InvalidOperationException(message);
+        }
+    }
+
+    /// <summary>
+    /// A client's paid coverage rows (SEC-5) are never deleted or re-dated; cancelling their plan releases the
+    /// overlap lock, true to false, and that is the one change. The trigger is the guarantee; this names the
+    /// mistake in the code path that made it.
+    /// </summary>
+    private void RejectCoverageMutations()
+    {
+        foreach (var entry in ChangeTracker.Entries<EnrollmentEntitlement>())
+        {
+            if (entry.State == EntityState.Deleted ||
+                (entry.State == EntityState.Modified &&
+                 (entry.Properties.Any(property =>
+                      property.IsModified &&
+                      property.Metadata.Name is not (nameof(EnrollmentEntitlement.BlocksOverlap)
+                          or nameof(EnrollmentEntitlement.UpdatedAtUtc)
+                          or nameof(EnrollmentEntitlement.UpdatedByUserId))) ||
+                  entry.Entity.BlocksOverlap)))
+            {
+                throw new InvalidOperationException(
+                    "Enrollment coverage is append-only; cancelling its plan only releases the overlap lock.");
+            }
         }
     }
 

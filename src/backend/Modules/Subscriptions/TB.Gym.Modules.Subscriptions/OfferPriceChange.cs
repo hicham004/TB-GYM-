@@ -44,5 +44,5 @@ public sealed class OfferPriceChange : TenantEntity
 
     public bool Matches(Guid sourceOfferId, decimal priceAmount, uint sourceVersion) =>
         SourceOfferId == sourceOfferId && SourceVersion == sourceVersion &&
-        PriceAmount == MoneyRules.NormalizeAmount(priceAmount, allowZero: true);
+        MoneyRules.AmountProblem(priceAmount, allowZero: true) is null && PriceAmount == priceAmount;
 }

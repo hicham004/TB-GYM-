@@ -66,6 +66,10 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_PricePlans_Counts",
                     "\"IncludedClientsPerSeat\" >= 0 AND \"GymFeeMinimumSeats\" >= 1 AND \"TrialDays\" >= 0 AND \"PaymentTermDays\" >= 0 AND \"GraceDays\" >= 0");
+
+                // BILL-4. Added NOT VALID by MoneyAndPlanGuards: published versions are immutable, so one
+                // published with 0 before stays as it was (PaymentSchedule still applies 1 for it).
+                table.HasCheckConstraint("CK_PricePlans_GraceDays", "\"GraceDays\" >= 1");
             });
         });
 

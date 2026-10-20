@@ -398,8 +398,12 @@ the exclusion predicate. PostgreSQL
 cross-row invariant after application pre-validation.
 
 Database triggers complement the domain model by rejecting updates/deletes to payment,
-relationship-event, offer-entitlement, and consent ledgers. Separate triggers protect offer
-terms and enrollment price/date snapshots while still allowing lifecycle status changes.
+relationship-event, offer-entitlement, intake-change and consent ledgers. Separate triggers protect offer
+terms and enrollment price/date snapshots while still allowing lifecycle status changes, and keep
+coverage rows from being deleted or re-dated, allowing only the overlap release a cancellation makes
+(audit A7, SEC-5, SEC-6). A plan's name is guarded the same way: a trigger with a per-name advisory
+lock refuses a new, renamed or restored plan for sale that takes another's name, and leaves older
+duplicates alone (BILL-7).
 
 Phase 3 extends database defense in depth to immutable template-version content, append-only
 strength max and working-max history (one first max per lift and one successor per max, plus an

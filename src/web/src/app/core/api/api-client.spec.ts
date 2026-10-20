@@ -79,6 +79,7 @@ describe('ApiClient contract mapping', () => {
       expect(enrollment.balanceAmount).toBe(150);
       expect(enrollment.version).toBe(9);
       expect(enrollment.payments[0].amount).toBe(100);
+      expect(enrollment.payments[0].receivedOn).toBe('2026-08-20');
       expect(overview.featureAccess[0].reason).toBe('PaymentRequired');
     });
 
@@ -113,6 +114,7 @@ describe('ApiClient contract mapping', () => {
           storedStatus: 'PendingPayment',
           effectiveStatus: 'PendingPayment',
           statusReason: null,
+          cancelledOn: null,
           features: ['Training'],
           payments: [
             {
@@ -120,6 +122,7 @@ describe('ApiClient contract mapping', () => {
               amount: '100.00',
               currencyCode: 'USD',
               receivedAtUtc: '2026-08-20T10:00:00Z',
+              receivedOn: '2026-08-20',
               method: 'Cash',
               reference: null,
               note: null,

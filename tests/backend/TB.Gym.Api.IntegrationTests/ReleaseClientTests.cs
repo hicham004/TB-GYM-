@@ -112,7 +112,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 {
                     amount = 5m,
                     currencyCode = "USD",
-                    receivedAtUtc = DateTimeOffset.UtcNow,
+                    receivedOn = TenantToday(),
                     method = "Cash",
                     reference = (string?)null,
                     note = (string?)null,
@@ -346,7 +346,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 {
                     amount = price,
                     currencyCode = "USD",
-                    receivedAtUtc = DateTimeOffset.UtcNow,
+                    receivedOn = TenantToday(),
                     method = "Cash",
                     reference = (string?)null,
                     note = (string?)null,

@@ -96,30 +96,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         string productName,
         params string[] features)
     {
-        await RefreshCsrfAsync(coach);
-        var productResponse = await coach.PostAsJsonAsync("/api/commercial/products", new
-        {
-            name = productName,
-            description = "Phase 6A-1",
-            initialOffer = new
-            {
-                label = "8 weeks",
-                durationCount = 8,
-                durationUnit = "Week",
-                priceAmount = 0m,
-                priceCurrency = "USD",
-                features = features.Select(feature => new { feature, allowsConcurrentCoverage = false }).ToArray(),
-            },
-        });
-        await AssertStatusAsync(productResponse, HttpStatusCode.OK);
-        var product = await RequiredJsonAsync<Product>(productResponse);
+        var offerId = await FreeOfferAsync(coach, productName, "Phase 6A-1", 8, features);
 
         await RefreshCsrfAsync(coach);
         var enrollmentResponse = await coach.PostAsJsonAsync(
             $"/api/commercial/clients/{clientId}/enrollments",
             new
             {
-                offerId = product.Offers[0].Id,
+                offerId,
                 startDate = Phase6WorkspaceToday(),
                 idempotencyKey = Guid.NewGuid(),
             });

@@ -87,6 +87,7 @@ const catalog: ProductCatalog = {
           features: [],
           createdAtUtc: '2026-09-01T09:00:00Z',
           version: 1,
+          replacedByOfferId: null,
         },
       ],
       version: 1,

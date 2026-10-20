@@ -121,16 +121,6 @@ export function paymentErrors(
   return errors;
 }
 
-/**
- * The instant to record for a payment received on `day`: now when it is today, otherwise midday on
- * that day in the coach's browser, which keeps the day itself whatever the time zone.
- */
-export function receivedAtUtc(day: string, today: string, now: Date): string {
-  if (day === today) return now.toISOString();
-  const [year, month, date] = day.split('-').map(Number);
-  return new Date(year, month - 1, date, 12).toISOString();
-}
-
 /** What the payment does, in a sentence under the amount. */
 export function paymentOutcome(
   amount: number | null,

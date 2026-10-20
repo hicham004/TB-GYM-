@@ -12,6 +12,13 @@ internal static class DatabaseConstraintNames
     public const string OneActiveOfferPerDurationAndCurrency =
         "IX_ProductOffers_ActiveDurationCurrency";
 
+    /// <summary>
+    /// The name the <c>TR_CoachingProducts_ActiveName</c> trigger reports when a new, renamed or restored plan
+    /// would share its name with another plan for sale (BILL-7). Plans that shared one before keep it.
+    /// </summary>
+    public const string OneActiveProductPerName =
+        "UX_CoachingProducts_ActiveName";
+
     public const string OneOfferPriceChangePerKey =
         "IX_OfferPriceChanges_TenantId_IdempotencyKey";
 

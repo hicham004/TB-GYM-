@@ -132,8 +132,19 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
             : left === 1
               ? $localize`Plan ends tomorrow`
               : $localize`Plan ends in ${left}:count: days`,
-        detail: $localize`Last day ${date(item.date)}:date:`,
-        action: renewAction(page, item.subjectId),
+        // Only a paid plan covers days (BEB-7): a renewal waiting for payment is what to act on.
+        detail:
+          count > 0
+            ? $localize`Paid until ${date(item.date)}:date: · The renewal isn’t paid yet`
+            : $localize`Last day ${date(item.date)}:date:`,
+        action:
+          count > 0 && item.subjectId
+            ? {
+                label: $localize`Record payment`,
+                link: `${page}/service`,
+                queryParams: { pay: item.subjectId },
+              }
+            : renewAction(page, item.subjectId),
       };
     }
     case 'WeekNotShared': {

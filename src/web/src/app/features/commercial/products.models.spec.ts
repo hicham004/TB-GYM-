@@ -124,5 +124,29 @@ describe('Plans you sell, in coach words', () => {
     expect(productWriteError(error)).toBe(
       'You already sell a plan with this name. Choose another name.',
     );
+    // BILL-7: a new, renamed or restored plan cannot take the name of another plan for sale.
+    const taken = new HttpErrorResponse({
+      status: 409,
+      error: {
+        code: 'product_name_taken',
+        message: 'You already sell a plan called "Form check".',
+      },
+    });
+    expect(productWriteError(taken)).toBe(
+      'You already sell a plan with this name. Choose another name, or rename that plan first.',
+    );
+  });
+
+  it('counts an old price’s own clients as still on it, and the price that replaced it all of them (COACH-2)', () => {
+    expect(clientsLine({ now: 2, starting: 1 }, true)).toBe('3 clients still on this price');
+    expect(clientsLine({ now: 1, starting: 0 }, true)).toBe('1 client still on this price');
+    expect(clientsLine({ now: 0, starting: 0 }, true)).toBe('No one on this price');
+    const old = optionRow(offer({ isActive: false, clients: { now: 3, starting: 0 } }), 'en-US');
+    expect(old.hasClients).toBe(true);
+    expect(old.clients).toBe('3 clients still on this price');
+    // The server counts the replacement with the options it replaced; it reads as the plan's clients.
+    expect(optionRow(offer({ clients: { now: 3, starting: 0 } }), 'en-US').clients).toBe(
+      '3 clients',
+    );
   });
 });

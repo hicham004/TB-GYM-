@@ -172,6 +172,35 @@ describe('Coach Today view model', () => {
     ]);
   });
 
+  it('asks for the payment of a renewal still waiting for it, not for another renewal (BEB-7)', () => {
+    const unpaid = attentionRow(
+      attentionItem('PlanEndingSoon', SARA, {
+        date: '2026-10-09',
+        count: 1,
+        subjectId: 'renewal-7',
+      }),
+      COACH_TODAY,
+      context,
+    );
+
+    expect(unpaid.heading).toBe("Sara Mansour's plan ends Fri 9 Oct");
+    expect(unpaid.detail).toBe("Paid until Fri 9 Oct · The renewal isn't paid yet");
+    expect(unpaid.action).toMatchObject({
+      label: 'Record payment',
+      link: `/clients/${SARA.clientProfileId}/service`,
+      queryParams: { pay: 'renewal-7' },
+    });
+    const paid = attentionRow(
+      attentionItem('PlanEndingSoon', SARA, { date: '2026-10-09', subjectId: 'enrollment-7' }),
+      COACH_TODAY,
+      context,
+    );
+    expect(paid.action).toMatchObject({
+      label: 'Renew plan',
+      queryParams: { renew: 'enrollment-7' },
+    });
+  });
+
   it('keeps one check-in, one message and a never-trained client in the singular', () => {
     const one = (kind: 'CheckInToReview' | 'UnreadMessages') =>
       attentionRow(attentionItem(kind, SARA, { count: 1, since: COACH_NOW }), COACH_TODAY, context);

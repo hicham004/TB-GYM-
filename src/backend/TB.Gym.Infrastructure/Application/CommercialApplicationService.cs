@@ -40,8 +40,14 @@ internal sealed class CommercialApplicationService(
         try
         {
             ArgumentNullException.ThrowIfNull(request.InitialOffer);
+            if (MoneyRules.AmountProblem(request.InitialOffer.PriceAmount, allowZero: true) is { } priceProblem)
+            {
+                return Invalid("priceAmount", priceProblem);
+            }
+
             var currency = await ResolveCurrencyAsync(request.InitialOffer.PriceCurrency, cancellationToken);
             var product = CoachingProduct.Create(tenantContext.TenantId, request.Name, request.Description);
+            CoachingProduct.EnsureNameFree(product.Id, product.Name, await ActiveProductsAsync(cancellationToken));
             var offer = CreateOffer(product, request.InitialOffer, currency);
             dbContext.CoachingProducts.Add(product);
             dbContext.ProductOffers.Add(offer);
@@ -53,6 +59,14 @@ internal sealed class CommercialApplicationService(
         catch (ArgumentException exception)
         {
             return Invalid("product", exception.Message);
+        }
+        catch (ProductNameTakenException exception)
+        {
+            return Conflict(ProductNameTakenCode, exception.Message);
+        }
+        catch (DbUpdateException exception) when (IsProductNameViolation(exception))
+        {
+            return Conflict(ProductNameTakenCode, new ProductNameTakenException(request.Name.Trim()).Message);
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
@@ -76,6 +90,11 @@ internal sealed class CommercialApplicationService(
         try
         {
             dbContext.Entry(product).Property(item => item.Version).OriginalValue = request.Version;
+            if (product.ClaimsName(request.Name, request.IsActive))
+            {
+                CoachingProduct.EnsureNameFree(product.Id, request.Name, await ActiveProductsAsync(cancellationToken));
+            }
+
             product.Update(request.Name, request.Description, request.IsActive);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new CommercialCommandResult(
@@ -86,11 +105,32 @@ internal sealed class CommercialApplicationService(
         {
             return Invalid("product", exception.Message);
         }
+        catch (ProductNameTakenException exception)
+        {
+            return Conflict(ProductNameTakenCode, exception.Message);
+        }
         catch (DbUpdateConcurrencyException)
         {
             return Conflict("concurrency_conflict", "The product was changed by another request.");
         }
+        catch (DbUpdateException exception) when (IsProductNameViolation(exception))
+        {
+            return Conflict(ProductNameTakenCode, new ProductNameTakenException(request.Name.Trim()).Message);
+        }
     }
+
+    /// <summary>The plans for sale in the workspace, read for the name rule (BILL-7).</summary>
+    private Task<List<CoachingProduct>> ActiveProductsAsync(CancellationToken cancellationToken) =>
+        dbContext.CoachingProducts.AsNoTracking().Where(item => item.IsActive).ToListAsync(cancellationToken);
+
+    private const string ProductNameTakenCode = "product_name_taken";
+
+    private static bool IsProductNameViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: DatabaseConstraintNames.OneActiveProductPerName,
+        };
 
     public async Task<CommercialCommandResult> AddOfferAsync(
         Guid productId,
@@ -103,6 +143,11 @@ internal sealed class CommercialApplicationService(
         if (product is null)
         {
             return NotFound();
+        }
+
+        if (MoneyRules.AmountProblem(request.PriceAmount, allowZero: true) is { } priceProblem)
+        {
+            return Invalid("priceAmount", priceProblem);
         }
 
         try
@@ -182,16 +227,12 @@ internal sealed class CommercialApplicationService(
             return Invalid("idempotencyKey", "A non-empty idempotency key is required.");
         }
 
-        decimal price;
-        try
+        if (MoneyRules.AmountProblem(request.PriceAmount, allowZero: true) is { } priceProblem)
         {
-            price = MoneyRules.NormalizeAmount(request.PriceAmount, allowZero: true);
-        }
-        catch (ArgumentException exception)
-        {
-            return Invalid("priceAmount", exception.Message);
+            return Invalid("priceAmount", priceProblem);
         }
 
+        var price = MoneyRules.NormalizeAmount(request.PriceAmount, allowZero: true);
         var strategy = dbContext.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -338,12 +379,29 @@ internal sealed class CommercialApplicationService(
             return NotFound();
         }
 
+        if (MoneyRules.AmountProblem(request.Amount, allowZero: false) is { } amountProblem)
+        {
+            return Invalid("amount", amountProblem);
+        }
+
+        // A body without the day binds to 0001-01-01; an older screen that still sends an instant lands here.
+        if (request.ReceivedOn == default)
+        {
+            return Invalid("receivedOn", PaymentDay.MissingMessage);
+        }
+
+        var (zone, _) = await GetWorkspaceDayAsync(cancellationToken);
+        if (PaymentDay.ReceivedAtUtc(request.ReceivedOn, zone, clock.UtcNow) is not { } receivedAtUtc)
+        {
+            return Invalid("receivedOn", PaymentDay.FutureMessage);
+        }
+
         var priorPayment = await dbContext.PaymentRecords
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.IdempotencyKey == request.IdempotencyKey, cancellationToken);
         if (priorPayment is not null)
         {
-            return PaymentMatchesRequest(priorPayment, enrollmentId, request)
+            return PaymentMatchesRequest(priorPayment, enrollmentId, request, zone)
                 ? await EnrollmentSuccessAsync(enrollmentId, cancellationToken)
                 : Conflict("idempotency_key_reused", "The payment idempotency key was already used for another operation.");
         }
@@ -365,7 +423,7 @@ internal sealed class CommercialApplicationService(
                         cancellationToken);
                 if (racedPayment is not null)
                 {
-                    return PaymentMatchesRequest(racedPayment, enrollmentId, request)
+                    return PaymentMatchesRequest(racedPayment, enrollmentId, request, zone)
                         ? await EnrollmentSuccessAsync(enrollmentId, cancellationToken)
                         : Conflict(
                             "idempotency_key_reused",
@@ -416,7 +474,7 @@ internal sealed class CommercialApplicationService(
                     enrollment.Id,
                     amount,
                     currency,
-                    request.ReceivedAtUtc,
+                    receivedAtUtc,
                     request.Method,
                     request.Reference,
                     request.Note,
@@ -827,14 +885,58 @@ internal sealed class CommercialApplicationService(
             .OrderByDescending(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
         var clients = await LoadPlanClientsAsync(null, cancellationToken);
+        var replacements = await LoadReplacementsAsync(null, cancellationToken);
 
         return products
             .Select(product => ToProductView(
                 product,
                 offers.Where(offer => offer.ProductId == product.Id).ToArray(),
-                clients))
+                clients,
+                replacements))
             .ToArray();
     }
+
+    /// <summary>Which option each Change price put in another's place (ADR 0034), the newest first.</summary>
+    private async Task<IReadOnlyList<OfferReplacement>> LoadReplacementsAsync(
+        Guid? productId,
+        CancellationToken cancellationToken)
+    {
+        var changes = dbContext.OfferPriceChanges.AsNoTracking();
+        if (productId is { } id)
+        {
+            changes = changes.Where(change => dbContext.ProductOffers.Any(offer =>
+                offer.Id == change.SourceOfferId && offer.ProductId == id));
+        }
+
+        return await changes
+            .OrderByDescending(change => change.CreatedAtUtc)
+            .Select(change => new OfferReplacement(change.SourceOfferId, change.ReplacementOfferId))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// An option and every option it replaced through Change price, however many times the price changed
+    /// (COACH-2). A replacement is always a new option, so the links never loop; the set guards anyway.
+    /// </summary>
+    private static HashSet<Guid> Lineage(Guid offerId, IReadOnlyList<OfferReplacement> replacements)
+    {
+        var lineage = new HashSet<Guid> { offerId };
+        var pending = new Stack<Guid>([offerId]);
+        while (pending.TryPop(out var current))
+        {
+            foreach (var change in replacements.Where(item => item.ReplacementOfferId == current))
+            {
+                if (lineage.Add(change.SourceOfferId))
+                {
+                    pending.Push(change.SourceOfferId);
+                }
+            }
+        }
+
+        return lineage;
+    }
+
+    private sealed record OfferReplacement(Guid SourceOfferId, Guid ReplacementOfferId);
 
     /// <summary>
     /// SUB-015: the caller's clients (ADR 0026; never a former client) with an enrollment that is neither
@@ -908,13 +1010,18 @@ internal sealed class CommercialApplicationService(
             .Where(item => item.ProductId == productId)
             .OrderByDescending(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
-        return ToProductView(product, offers, await LoadPlanClientsAsync(productId, cancellationToken));
+        return ToProductView(
+            product,
+            offers,
+            await LoadPlanClientsAsync(productId, cancellationToken),
+            await LoadReplacementsAsync(productId, cancellationToken));
     }
 
     private static CoachingProductView ToProductView(
         CoachingProduct product,
         IReadOnlyList<ProductOffer> offers,
-        IReadOnlyList<PlanClient> clients) =>
+        IReadOnlyList<PlanClient> clients,
+        IReadOnlyList<OfferReplacement> replacements) =>
         new(
             product.Id,
             product.Name,
@@ -935,9 +1042,28 @@ internal sealed class CommercialApplicationService(
                     .ToArray(),
                 offer.CreatedAtUtc,
                 offer.Version,
-                CountClients(clients.Where(item => item.OfferId == offer.Id)))).ToArray(),
+                CountOfferClients(offer, clients, replacements),
+                replacements.FirstOrDefault(item => item.SourceOfferId == offer.Id)?.ReplacementOfferId)).ToArray(),
             product.Version,
             CountClients(clients.Where(item => item.ProductId == product.Id)));
+
+    /// <summary>
+    /// SUB-015 per option. An option on sale counts the clients of the options it replaced too, who stay on
+    /// their old price (ADR 0034), so a new price never reads "No clients yet" over the plan's clients (COACH-2).
+    /// </summary>
+    private static PlanClientCount CountOfferClients(
+        ProductOffer offer,
+        IReadOnlyList<PlanClient> clients,
+        IReadOnlyList<OfferReplacement> replacements)
+    {
+        if (!offer.IsActive)
+        {
+            return CountClients(clients.Where(item => item.OfferId == offer.Id));
+        }
+
+        var lineage = Lineage(offer.Id, replacements);
+        return CountClients(clients.Where(item => lineage.Contains(item.OfferId)));
+    }
 
     private async Task<ClientCommercialOverview> BuildOverviewAsync(
         Guid clientProfileId,
@@ -965,7 +1091,7 @@ internal sealed class CommercialApplicationService(
             .Where(item => enrollmentIds.Contains(item.EnrollmentId))
             .OrderByDescending(item => item.ReceivedAtUtc)
             .ToListAsync(cancellationToken);
-        var tenantToday = await GetTenantTodayAsync(cancellationToken);
+        var (zone, tenantToday) = await GetWorkspaceDayAsync(cancellationToken);
 
         return new ClientCommercialOverview(
             clientProfileId,
@@ -976,6 +1102,7 @@ internal sealed class CommercialApplicationService(
                     enrollment,
                     payments.Where(payment => payment.EnrollmentId == enrollment.Id).ToArray(),
                     tenantToday,
+                    zone,
                     client.IsCoachBlocked))
                 .ToArray());
     }
@@ -997,16 +1124,17 @@ internal sealed class CommercialApplicationService(
             .Where(item => item.Id == enrollment.ClientProfileId)
             .Select(item => item.IsCoachBlocked)
             .SingleAsync(cancellationToken);
-        var tenantToday = await GetTenantTodayAsync(cancellationToken);
+        var (zone, tenantToday) = await GetWorkspaceDayAsync(cancellationToken);
         return new CommercialCommandResult(
             CommercialCommandStatus.Success,
-            Enrollment: ToEnrollmentView(enrollment, payments, tenantToday, blocked));
+            Enrollment: ToEnrollmentView(enrollment, payments, tenantToday, zone, blocked));
     }
 
     private static ClientEnrollmentView ToEnrollmentView(
         ClientEnrollment enrollment,
         IReadOnlyList<PaymentRecord> payments,
         DateOnly tenantToday,
+        TimeZoneInfo zone,
         bool relationshipBlocked)
     {
         var paidAmount = payments
@@ -1029,12 +1157,16 @@ internal sealed class CommercialApplicationService(
             enrollment.Status,
             enrollment.GetEffectiveStatus(tenantToday, relationshipBlocked),
             enrollment.StatusReason,
+            enrollment.Status == EnrollmentStatus.Cancelled && enrollment.CancelledAtUtc is { } cancelledAtUtc
+                ? WorkspaceDay(cancelledAtUtc, zone)
+                : null,
             enrollment.Entitlements.Select(item => item.Feature).Order().ToArray(),
             payments.Select(item => new PaymentRecordView(
                 item.Id,
                 item.Amount,
                 item.CurrencyCode,
                 item.ReceivedAtUtc,
+                PaymentDay.Of(item.ReceivedAtUtc, zone),
                 item.Method,
                 item.Reference,
                 item.Note,
@@ -1046,17 +1178,22 @@ internal sealed class CommercialApplicationService(
             enrollment.Version);
     }
 
-    private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken)
+    private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken) =>
+        (await GetWorkspaceDayAsync(cancellationToken)).Today;
+
+    /// <summary>The workspace's time zone and its today (SYS-008), never the server's clock.</summary>
+    private async Task<(TimeZoneInfo Zone, DateOnly Today)> GetWorkspaceDayAsync(CancellationToken cancellationToken)
     {
         var timeZoneId = await dbContext.Tenants
             .Where(tenant => tenant.Id == tenantContext.TenantId)
             .Select(tenant => tenant.TimeZoneId)
             .SingleAsync(cancellationToken);
-        var localNow = TimeZoneInfo.ConvertTime(
-            clock.UtcNow,
-            TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
-        return DateOnly.FromDateTime(localNow.DateTime);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        return (zone, WorkspaceDay(clock.UtcNow, zone));
     }
+
+    private static DateOnly WorkspaceDay(DateTimeOffset instant, TimeZoneInfo zone) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, zone).DateTime);
 
     private async Task<NotificationContext> GetNotificationContextAsync(
         Guid clientProfileId,
@@ -1262,17 +1399,22 @@ internal sealed class CommercialApplicationService(
         enrollment.StartDate == startDate &&
         enrollment.RenewedFromEnrollmentId == renewedFromEnrollmentId;
 
+    /// <summary>
+    /// The key is bound to the payment as entered (SUB-011). The day is compared, not the instant, because the
+    /// server stamps the instant itself (WEA-6): a retry of a payment received today is the same payment.
+    /// </summary>
     private static bool PaymentMatchesRequest(
         PaymentRecord payment,
         Guid enrollmentId,
-        RecordManualPaymentRequest request)
+        RecordManualPaymentRequest request,
+        TimeZoneInfo zone)
     {
         try
         {
             return payment.EnrollmentId == enrollmentId &&
                 payment.Amount == MoneyRules.NormalizeAmount(request.Amount, allowZero: false) &&
                 payment.CurrencyCode == MoneyRules.NormalizeCurrency(request.CurrencyCode) &&
-                payment.ReceivedAtUtc == ToPostgresPrecision(request.ReceivedAtUtc) &&
+                PaymentDay.Of(payment.ReceivedAtUtc, zone) == request.ReceivedOn &&
                 payment.Method == request.Method &&
                 payment.Reference == NormalizeOptional(request.Reference) &&
                 payment.Note == NormalizeOptional(request.Note);
@@ -1285,12 +1427,6 @@ internal sealed class CommercialApplicationService(
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static DateTimeOffset ToPostgresPrecision(DateTimeOffset value)
-    {
-        var utc = value.ToUniversalTime();
-        return new DateTimeOffset(utc.Ticks - (utc.Ticks % 10), TimeSpan.Zero);
-    }
 
     private static CommercialCommandResult Invalid(string field, string message) =>
         new(

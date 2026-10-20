@@ -269,7 +269,18 @@ internal sealed class CoachOverviewReader(
                 : renewals[client.Id]
                     .Where(item => item.RequestedOn > endedPlan.LastDay)
                     .MaxBy(item => item.RequestedAtUtc);
-            var runningPlan = plans[client.Id].MaxBy(item => item.EndDateExclusive);
+            // BEB-7 (the owner's decision of 2026-10-19): only a paid plan covers days, so a renewal still
+            // waiting for payment neither moves the plan's end nor quiets Ending soon; it is counted instead,
+            // for the item to ask for the payment. With nothing paid, the unpaid plan still names the plan.
+            var livePlans = plans[client.Id].ToArray();
+            var runningPlan = livePlans.Where(item => item.Paid).MaxBy(item => item.EndDateExclusive)
+                ?? livePlans.MaxBy(item => item.EndDateExclusive);
+            var unpaidRenewals = runningPlan is { Paid: true }
+                ? livePlans
+                    .Where(item => !item.Paid && item.EndDateExclusive > runningPlan.EndDateExclusive)
+                    .OrderBy(item => item.StartDate)
+                    .ToArray()
+                : [];
             var programs = maxes[client.Id].ToArray();
             var clientMaxes = Suggestions(programs.Where(item => item.IsOpen));
 
@@ -296,6 +307,8 @@ internal sealed class CoachOverviewReader(
                 runningPlan?.EndDateExclusive.AddDays(-1) ?? endedPlan?.LastDay,
                 runningPlan?.EnrollmentId,
                 runningPlan?.PlanName,
+                unpaidRenewals.Length,
+                unpaidRenewals.FirstOrDefault()?.EnrollmentId,
                 endedPlan,
                 CoachAttentionPolicy.Flags(signals, planState, today),
                 signals,
@@ -332,7 +345,8 @@ internal sealed class CoachOverviewReader(
             CoachAttentionKind.RenewalRequested => Item(kind, state, since: state.Renewal?.RequestedAtUtc,
                 date: state.EndedPlan?.LastDay, subjectId: state.EndedPlan?.EnrollmentId),
             CoachAttentionKind.PlanEndingSoon => Item(kind, state, date: state.PlanEndsOn,
-                subjectId: state.RunningEnrollmentId),
+                count: state.UnpaidRenewals > 0 ? state.UnpaidRenewals : null,
+                subjectId: state.FirstUnpaidRenewalId ?? state.RunningEnrollmentId),
             CoachAttentionKind.WeekNotShared => Item(kind, state, date: state.WeekToShare?.StartsOn,
                 weekNumber: state.WeekToShare?.WeekNumber, subjectId: state.WeekToShare?.MesocycleId),
             CoachAttentionKind.MissedSessions => Item(kind, state, date: state.LastWorkoutOn,
@@ -456,7 +470,10 @@ internal sealed class CoachOverviewReader(
             .ToLookup(item => item.ClientProfileId);
     }
 
-    /// <summary>Plans running now or still to come; the latest end is the plan's last covered day.</summary>
+    /// <summary>
+    /// Plans running now or still to come, each marked paid or not; the latest end of a paid one is the plan's
+    /// last covered day (BEB-7).
+    /// </summary>
     private async Task<ILookup<Guid, PlanEnd>> ReadPlanEndsAsync(
         Guid[] clientIds,
         DateOnly today,
@@ -469,7 +486,13 @@ internal sealed class CoachOverviewReader(
                                (item.Status == EnrollmentStatus.Active ||
                                 item.Status == EnrollmentStatus.PendingPayment ||
                                 item.Status == EnrollmentStatus.Paused))
-                .Select(item => new PlanEnd(item.ClientProfileId, item.Id, item.EndDateExclusive, item.ProductNameSnapshot))
+                .Select(item => new PlanEnd(
+                    item.ClientProfileId,
+                    item.Id,
+                    item.StartDate,
+                    item.EndDateExclusive,
+                    item.ProductNameSnapshot,
+                    item.Status != EnrollmentStatus.PendingPayment))
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.ClientProfileId);
 
@@ -985,6 +1008,8 @@ internal sealed class CoachOverviewReader(
         DateOnly? PlanEndsOn,
         Guid? RunningEnrollmentId,
         string? RunningPlanName,
+        int UnpaidRenewals,
+        Guid? FirstUnpaidRenewalId,
         EndedPlan? EndedPlan,
         IReadOnlyList<CoachAttentionKind> Flags,
         ClientAttentionSignals Signals,
@@ -1009,7 +1034,13 @@ internal sealed class CoachOverviewReader(
 
     private sealed record RenewalAsk(Guid ClientProfileId, DateOnly RequestedOn, DateTimeOffset RequestedAtUtc);
 
-    private sealed record PlanEnd(Guid ClientProfileId, Guid EnrollmentId, DateOnly EndDateExclusive, string PlanName);
+    private sealed record PlanEnd(
+        Guid ClientProfileId,
+        Guid EnrollmentId,
+        DateOnly StartDate,
+        DateOnly EndDateExclusive,
+        string PlanName,
+        bool Paid);
 
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);
 

@@ -588,30 +588,59 @@ public sealed partial class Phase3TrainingWorkflowTests
         Guid clientId,
         DateOnly startDate)
     {
-        await RefreshCsrfAsync(coach);
-        var productResponse = await coach.PostAsJsonAsync("/api/commercial/products", new
-        {
-            name = "Training Engine Test",
-            description = "Phase 3",
-            initialOffer = new
-            {
-                label = "8 weeks",
-                durationCount = 8,
-                durationUnit = "Week",
-                priceAmount = 0m,
-                priceCurrency = "USD",
-                features = new[] { new { feature = "Training", allowsConcurrentCoverage = false } },
-            },
-        });
-        await AssertStatusAsync(productResponse, HttpStatusCode.OK);
-        var product = await RequiredJsonAsync<Product>(productResponse);
+        var offerId = await FreeOfferAsync(coach, "Training Engine Test", "Phase 3", 8, "Training");
         await RefreshCsrfAsync(coach);
         var enrollmentResponse = await coach.PostAsJsonAsync(
             $"/api/commercial/clients/{clientId}/enrollments",
-            new { offerId = product.Offers[0].Id, startDate, idempotencyKey = Guid.NewGuid() });
+            new { offerId, startDate, idempotencyKey = Guid.NewGuid() });
         await AssertStatusAsync(enrollmentResponse, HttpStatusCode.OK);
         return await RequiredJsonAsync<Enrollment>(enrollmentResponse);
     }
+
+    /// <summary>
+    /// The first price option of the free plan for sale under <paramref name="name"/>, created on first use in
+    /// the workspace. A plan for sale cannot take another's name (BILL-7), and the helpers that call this always
+    /// give one name the same terms, so a second client in the workspace is enrolled on the same plan.
+    /// </summary>
+    private static async Task<Guid> FreeOfferAsync(
+        HttpClient coach,
+        string name,
+        string description,
+        int weeks,
+        params string[] features)
+    {
+        var catalog = await coach.GetFromJsonAsync<NamedCatalog>("/api/commercial/products")
+            ?? throw new AssertFailedException("The plan catalog was empty.");
+        var existing = catalog.Products.FirstOrDefault(item => item.IsActive && item.Name == name);
+        if (existing is not null)
+        {
+            return existing.Offers.First(offer => offer.IsActive).Id;
+        }
+
+        await RefreshCsrfAsync(coach);
+        var productResponse = await coach.PostAsJsonAsync("/api/commercial/products", new
+        {
+            name,
+            description,
+            initialOffer = new
+            {
+                label = $"{weeks} weeks",
+                durationCount = weeks,
+                durationUnit = "Week",
+                priceAmount = 0m,
+                priceCurrency = "USD",
+                features = features.Select(feature => new { feature, allowsConcurrentCoverage = false }).ToArray(),
+            },
+        });
+        await AssertStatusAsync(productResponse, HttpStatusCode.OK);
+        return (await RequiredJsonAsync<Product>(productResponse)).Offers[0].Id;
+    }
+
+    private sealed record NamedCatalog(NamedProduct[] Products);
+
+    private sealed record NamedProduct(string Name, bool IsActive, NamedOffer[] Offers);
+
+    private sealed record NamedOffer(Guid Id, bool IsActive);
 
     private static async Task<MediaAsset> UploadJpegAsync(HttpClient coach)
     {

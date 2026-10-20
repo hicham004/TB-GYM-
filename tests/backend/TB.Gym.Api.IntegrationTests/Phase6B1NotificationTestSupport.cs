@@ -448,7 +448,7 @@ public sealed partial class Phase6B1NotificationDispatchTests
             {
                 amount,
                 currencyCode = "USD",
-                receivedAtUtc = StartInstant,
+                receivedOn = DateOnly.FromDateTime(StartInstant.UtcDateTime),
                 method = "Cash",
                 reference = "receipt-1",
                 idempotencyKey = Guid.NewGuid(),

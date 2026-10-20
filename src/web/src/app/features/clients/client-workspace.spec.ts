@@ -215,6 +215,22 @@ describe('ClientWorkspace', () => {
     expect((await standing('Active'))[1]).toContain('success');
   });
 
+  it('says the day a plan was cancelled, never its last day still to come (COACH-20)', async () => {
+    const { host } = await render({
+      enrollments: [
+        plan({
+          effectiveStatus: 'Cancelled',
+          storedStatus: 'Cancelled',
+          cancelledOn: '2026-09-18',
+        }),
+      ],
+    });
+
+    expect(host.querySelector('.plan-line')?.textContent?.trim()).toBe(
+      'Online Coaching · 12 weeks · cancelled Fri 18 Sep',
+    );
+  });
+
   it('offers only the kept sections for a former client, and no message action', async () => {
     const { host, harness } = await render({
       profile: {

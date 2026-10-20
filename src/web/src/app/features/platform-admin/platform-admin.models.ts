@@ -474,10 +474,11 @@ export function planFields(): readonly PlanField[] {
       max: 90,
     },
     {
+      // At least 1: a workspace is never read-only on its invoice's due day (PBL-005, BILL-4).
       key: 'graceDays',
       label: $localize`Days after it is due before read-only`,
       kind: 'count',
-      min: 0,
+      min: 1,
       max: 90,
     },
   ];
@@ -556,7 +557,7 @@ export function toPublishRequest(entry: PlanEntry, current: PricePlan | null): P
     gymFeeMinimumSeats: entry.gymFeeMinimumSeats ?? 1,
     trialDays: entry.trialDays ?? 0,
     paymentTermDays: entry.paymentTermDays ?? 0,
-    graceDays: entry.graceDays ?? 0,
+    graceDays: entry.graceDays ?? 1,
     expectedCurrentVersion: current?.versionNumber ?? 0,
     note: entry.note.trim() || null,
   };

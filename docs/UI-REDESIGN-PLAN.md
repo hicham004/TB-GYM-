@@ -733,7 +733,9 @@ of the implemented R1.3 screens before production rollout.
   by plan; (c) a length in days (the server accepts it; the sheets offer weeks, as the old page did);
   (d) choosing per feature whether two plans may overlap (`allowsConcurrentCoverage`) stays off screen, as
   before; (e) a plan's cover photo, a public page or a checkout link would be a new way to sell, an owner
-  decision.
+  decision. Amended 2026-10-20 (audit A7): after Change price the option for sale also counts the clients
+  of the old prices it replaced (COACH-2), an old price says "2 clients still on this price", and a new or
+  renamed plan, or one sold again, cannot take the name of another plan for sale (BILL-7).
 
 - **Exercise library, R5.1b (built 2026-10-09; screenshots `docs/design/r51b-*.png`). Decided by Claude for
   the owner on 2026-10-09**, after looking at TrueCoach (Add New Exercise asks for a name and a video URL or

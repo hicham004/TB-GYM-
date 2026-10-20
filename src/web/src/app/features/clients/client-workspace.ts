@@ -146,18 +146,26 @@ export class ClientWorkspace {
     }
   });
 
-  /** "Online Coaching · 12 weeks · until Thu 22 Oct": the plan in a line. */
+  /**
+   * "Online Coaching · 12 weeks · until Thu 22 Oct": the plan in a line. A cancelled plan says the day it
+   * was cancelled, never its last day, which may still be to come (COACH-20).
+   */
   protected readonly planLine = computed(() => {
     const workspace = this.context.workspace();
     const plan = this.enrollment();
     if (this.context.isFormer() || !workspace || !plan) return '';
-    const last = plan.lastActiveDate;
-    const sameYear = last.slice(0, 4) === workspace.currentDate.slice(0, 4);
-    const date = formatDate(last, sameYear ? 'EEE d MMM' : 'd MMM y', this.locale);
+    const date = (day: string) =>
+      formatDate(
+        day,
+        day.slice(0, 4) === workspace.currentDate.slice(0, 4) ? 'EEE d MMM' : 'd MMM y',
+        this.locale,
+      );
     const when =
-      plan.effectiveStatus === 'Expired' || plan.effectiveStatus === 'Cancelled'
-        ? $localize`ended ${date}:date:`
-        : $localize`until ${date}:date:`;
+      plan.effectiveStatus === 'Cancelled' && plan.cancelledOn
+        ? $localize`cancelled ${date(plan.cancelledOn)}:date:`
+        : plan.effectiveStatus === 'Expired' || plan.effectiveStatus === 'Cancelled'
+          ? $localize`ended ${date(plan.lastActiveDate)}:date:`
+          : $localize`until ${date(plan.lastActiveDate)}:date:`;
     return [plan.productName, plan.offerLabel, when].filter(Boolean).join(' · ');
   });
 

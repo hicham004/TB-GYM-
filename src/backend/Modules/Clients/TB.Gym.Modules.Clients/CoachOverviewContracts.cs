@@ -96,7 +96,9 @@ public sealed record CoachClientRef(
 /// <item><c>CheckInToReview</c>: Count waiting, Since the oldest was sent, SubjectId its assignment.</item>
 /// <item><c>UnreadMessages</c>: Count unread, Since the oldest unread was sent, SubjectId the conversation.</item>
 /// <item><c>RenewalRequested</c>: Since the client asked, Date the ended plan's last day, SubjectId that enrollment.</item>
-/// <item><c>PlanEndingSoon</c>: Date the plan's last covered day, SubjectId the enrollment ending last.</item>
+/// <item><c>PlanEndingSoon</c>: Date the plan's last paid day (BEB-7). Count the renewals after it still waiting
+/// for payment (null when none), and then SubjectId the first of them, the plan to record a payment on;
+/// otherwise SubjectId the paid enrollment ending last, the plan to renew.</item>
 /// <item><c>WeekNotShared</c>: Date the week starts, WeekNumber, SubjectId the program block.</item>
 /// <item><c>MissedSessions</c>: Count missed since the last workout, Date that workout's day (null if none).</item>
 /// <item><c>NoProgram</c>: Date the client joined, SubjectId their latest program (null if they never had

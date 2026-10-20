@@ -272,6 +272,18 @@ describe('a client’s Service & access', () => {
     expect(router.url).toBe('/clients/client-1/service');
   });
 
+  it('opens the payment of the renewal Coach Today says is unpaid, once (BEB-7)', async () => {
+    const { harness, host, router } = await render({
+      plans: plansOverview([enrollment(), unpaidRenewal()]),
+      url: '/clients/client-1/service?pay=e-2',
+    });
+    await settle(harness.fixture);
+
+    expect(textOf(dialog()?.querySelector('h2'))).toBe('Record payment');
+    expect(textOf(host.querySelector('.eyebrow'))).toBe('Starts Tue 13 Oct');
+    expect(router.url).toBe('/clients/client-1/service');
+  });
+
   it('says the client asked to renew beside the plan that ended, until a plan follows it', async () => {
     // A client asks only once their whole plan has run out (SUB-014); the request names that plan.
     const ended = enrollment({
@@ -329,9 +341,15 @@ describe('a client’s Service & access', () => {
     const owner = await render();
     expect(owner.host.querySelector('app-client-coach')).not.toBeNull();
     expect(owner.host.querySelector('app-client-release')).not.toBeNull();
-    expect(textOf(owner.host.querySelector('.setting p'))).toBe(
-      'Maya can use everything their current plan includes.',
+    expect(textOf(owner.host.querySelector('[data-access-line]'))).toBe(
+      'Maya can use everything their plan includes.',
     );
+    expect(all(owner.host, '[data-access-rows] li').map(textOf)).toEqual([
+      'Training Open until Mon 12 Oct',
+      'Nutrition Open until Mon 12 Oct',
+      'Check-ins Open until Mon 12 Oct',
+      'Messaging Open until Mon 12 Oct',
+    ]);
 
     TestBed.resetTestingModule();
     const coach = await render({ isOwner: false });

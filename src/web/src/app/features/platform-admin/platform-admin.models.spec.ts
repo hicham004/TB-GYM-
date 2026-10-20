@@ -410,8 +410,10 @@ describe('platform billing: publishing a price plan', () => {
     expect(bad({ trialDays: 366 })['trialDays']).toHaveLength(1);
     expect(bad({ paymentTermDays: 91 })['paymentTermDays']).toHaveLength(1);
     expect(bad({ graceDays: -1 })['graceDays']).toHaveLength(1);
+    // A workspace is never read-only on the due day itself, so the form says 1, not 0 (BILL-4).
+    expect(bad({ graceDays: 0 })['graceDays']).toEqual(['Enter a whole number from 1 to 90.']);
     expect(bad({ note: 'n'.repeat(501) })['note']).toEqual(['Keep the note to 500 characters.']);
-    expect(bad({ seatPrice: 0, graceDays: 0, trialDays: 0 })).toEqual({});
+    expect(bad({ seatPrice: 0, graceDays: 1, trialDays: 0 })).toEqual({});
   });
 
   it('asks the API to publish against the version it was shown', () => {

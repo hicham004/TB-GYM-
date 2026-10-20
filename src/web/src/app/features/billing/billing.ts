@@ -99,6 +99,7 @@ export class Billing {
   protected readonly statusTone = billingStatusTone;
   protected readonly invoiceLabel = invoiceStatusLabel;
   protected readonly invoiceTone = invoiceStatusTone;
+  protected readonly isUnpaid = isUnpaid;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.openSheet?.close());
@@ -156,9 +157,12 @@ export class Billing {
       case 'ReadOnly':
         return $localize`Your coaching space is read-only for you and your coaches until the overdue invoice is paid. Your clients keep full use, and nothing is deleted.`;
       default:
-        return this.unpaid().length > 0
-          ? $localize`A new invoice is waiting. Pay it by its due date below.`
-          : $localize`You’re all paid up. An invoice comes on the 1st of each month for the month before.`;
+        // While an invoice is merely waiting, the owner still hears the day it would lock (BILL-3).
+        return this.unpaid().length === 0
+          ? $localize`You’re all paid up. An invoice comes on the 1st of each month for the month before.`
+          : billing.readOnlyFrom
+            ? $localize`A new invoice is waiting. Pay it by its due date below. If it is still unpaid on ${this.day(billing.readOnlyFrom)}:date:, your coaching space becomes read-only for you and your coaches until it is paid. Your clients keep full use.`
+            : $localize`A new invoice is waiting. Pay it by its due date below.`;
     }
   }
 
