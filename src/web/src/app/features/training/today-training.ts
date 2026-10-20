@@ -1,5 +1,5 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe, formatDate } from '@angular/common';
+import { DatePipe, DecimalPipe, formatDate } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
@@ -12,6 +12,7 @@ import {
   Injector,
   LOCALE_ID,
   signal,
+  TemplateRef,
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -25,13 +26,19 @@ import type {
   ClientTrainingDayResult,
   ClientWorkoutView,
   MediaAccessView,
+  PreviousSetPerformanceView,
   TrainingLoadUnit,
   WorkoutFinishSummaryView,
+  WorkoutSetSaveView,
 } from '../../core/api/generated';
+import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { workoutStatusLabel } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ButtonLink } from '../../ui/button';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
 import { EmptyState } from '../../ui/empty-state';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
@@ -49,6 +56,7 @@ import {
 import {
   applyWorkoutSetSave,
   applyWorkoutSetSaveToDay,
+  effortOutOfRange,
   hasLoadUnitForActualLoad,
   previousSetFor,
   reconcileWorkoutSetDrafts,
@@ -56,6 +64,7 @@ import {
   startingWorkoutUnit,
   toRecordSetRequest,
   updateWorkoutSetDraft,
+  withWorkoutUnit,
   type WorkoutSetDraft,
   type WorkoutSetDrafts,
 } from './workout-set-drafts';
@@ -66,6 +75,9 @@ const UNIT_OPTIONS: readonly SegmentOption[] = [
   { value: 'Pound', label: 'lb' },
 ];
 
+const unitWord = (unit: TrainingLoadUnit | null | undefined) =>
+  unit === 'Kilogram' ? 'kg' : unit === 'Pound' ? 'lb' : '';
+
 /** The server kept the lift because a set is already logged under it (CLIENT-2). */
 function isSwapLocked(error: unknown): boolean {
   return (
@@ -75,30 +87,39 @@ function isSwapLocked(error: unknown): boolean {
   );
 }
 
+/** Another tab or phone changed or finished this workout since this page read it. */
+function isConflict(error: unknown): error is HttpErrorResponse {
+  return error instanceof HttpErrorResponse && error.status === 409;
+}
+
 @Component({
   selector: 'app-today-training',
   imports: [
     ButtonLink,
     FormsModule,
     DatePipe,
+    DecimalPipe,
     EmptyState,
     RestTimer,
     RouterLink,
     SegmentedControl,
     ShareTeaser,
     StatusLabel,
+    UiConfirm,
     UiMenu,
   ],
   templateUrl: './today-training.html',
-  // The demo overlay's link panel has its own sheet: the main one sits near the 8 kB style budget.
-  styleUrls: ['./today-training.scss', './today-training-media.scss'],
+  // The set rows and the demo overlay's link panel have their own sheets: the main one sits near the
+  // 8 kB style budget.
+  styleUrls: ['./today-training.scss', './today-training-sets.scss', './today-training-media.scss'],
   // The player is always drawn on the night colour, so the kit pieces inside it read the dark tokens.
-  host: { 'data-mode': 'dark' },
+  host: { 'data-mode': 'dark', '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
-export class TodayTraining {
+export class TodayTraining implements HoldsUnsavedWork {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly dialogs = inject(UiDialog);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly route = inject(ActivatedRoute, { optional: true });
   private readonly locale = inject(LOCALE_ID);
@@ -115,6 +136,9 @@ export class TodayTraining {
   private wakeLock: WakeLockSentinel | null = null;
   private touchStartX: number | null = null;
   private unitSessionId: string | null = null;
+  /** The kg or lb the client chose, per workout, kept through every reload of the day (CLIENT-1). */
+  private readonly chosenUnits = new Map<string, TrainingLoadUnit>();
+  private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
 
   protected readonly day = signal<ClientTrainingDayResult | null>(null);
   protected readonly loading = signal(false);
@@ -182,8 +206,45 @@ export class TodayTraining {
   protected readonly accessReasonLabel = trainingReadAccessLabel;
   protected readonly workoutStatusLabel = workoutStatusLabel;
   protected readonly noteTime = workoutNoteTime;
+  protected readonly unitWord = unitWord;
+  protected readonly leaveMessage = signal('');
+  protected readonly leaveConfirm = $localize`Leave without saving`;
+  protected readonly leaveCancel = $localize`Stay`;
+  /** The unit sits far above the sets, so each load says which one it is in. */
+  protected readonly loadCaption = computed(() => {
+    const unit = this.workoutUnit();
+    return unit === 'Kilogram'
+      ? $localize`Load (kg)`
+      : unit === 'Pound'
+        ? $localize`Load (lb)`
+        : $localize`Load`;
+  });
+  /**
+   * Why loads are empty after choosing the other unit than the coach's: nothing is converted, so the
+   * client types what they lift (CLIENT-1).
+   */
+  protected readonly unitNote = computed(() => {
+    const workout = this.activeWorkout();
+    const chosen = this.workoutUnit();
+    if (!workout?.workoutExecutionId || workout.status === 'Completed' || !chosen) return null;
+    const coachUnit = workout.exercises
+      .filter((exercise) => !exercise.wasSubstituted)
+      .flatMap((exercise) => exercise.sets)
+      .find(
+        (set) =>
+          !set.isCompleted &&
+          set.prescribedLoad !== null &&
+          set.prescribedLoadUnit &&
+          set.prescribedLoadUnit !== chosen,
+      )?.prescribedLoadUnit;
+    return coachUnit
+      ? $localize`Your coach set these loads in ${unitWord(coachUnit)}:coachUnit:. Type what you lift in ${unitWord(chosen)}:chosenUnit:.`
+      : null;
+  });
 
   constructor() {
+    const unregister = inject(UnsavedWork).register(this);
+    this.destroyRef.onDestroy(unregister);
     this.timerHandle = setInterval(() => this.now.set(Date.now()), 1000);
     this.destroyRef.onDestroy(() => {
       if (this.timerHandle) clearInterval(this.timerHandle);
@@ -255,6 +316,18 @@ export class TodayTraining {
           this.reportSetError(setId, $localize`Select kg or lb before saving a load.`, true);
           return false;
         }
+        // The server's own refusal would cost a round trip and read like a system (CLIENT-5).
+        const effort = effortOutOfRange(snapshot);
+        if (effort) {
+          this.reportSetError(
+            setId,
+            effort === 'rpe'
+              ? $localize`RPE is a number from 5 to 10 in half steps, like 8 or 8.5.`
+              : $localize`Reps left is a number from 0 to 5 in half steps, like 2 or 1.5.`,
+            true,
+          );
+          return false;
+        }
 
         this.markSaving(setId, workoutId, true);
         const previous = this.workoutSaveQueues.get(workoutId) ?? Promise.resolve(true);
@@ -265,47 +338,70 @@ export class TodayTraining {
           this.clearMessages();
           this.setErrors.update((errors) => ({ ...errors, [setId]: '' }));
           try {
-            await owner.wait(this.csrf.refresh());
-            if (!this.ownsContext(generation)) {
-              return false;
-            }
-            const currentWorkout = this.day()?.workouts.find(
-              (item) => item.workoutExecutionId === workoutId,
-            );
-            if (
-              currentWorkout?.executionVersion === null ||
-              currentWorkout?.executionVersion === undefined
-            ) {
-              throw new Error('The workout version is no longer available.');
-            }
+            const send = async () => {
+              await owner.wait(this.csrf.refresh());
+              if (!this.ownsContext(generation)) {
+                return null;
+              }
+              const currentWorkout = this.day()?.workouts.find(
+                (item) => item.workoutExecutionId === workoutId,
+              );
+              if (
+                currentWorkout?.executionVersion === null ||
+                currentWorkout?.executionVersion === undefined
+              ) {
+                throw new Error('The workout version is no longer available.');
+              }
 
-            const response = await owner.wait(
-              firstValueFrom(
-                this.api.recordMyTrainingSet(
-                  workoutId,
-                  setId,
-                  toRecordSetRequest(
-                    snapshot,
-                    set.prescribedLoadUnit,
-                    numeric(currentWorkout.executionVersion),
+              return owner.wait(
+                firstValueFrom(
+                  this.api.recordMyTrainingSet(
+                    workoutId,
+                    setId,
+                    toRecordSetRequest(
+                      snapshot,
+                      set.prescribedLoadUnit,
+                      numeric(currentWorkout.executionVersion),
+                    ),
                   ),
                 ),
-              ),
-            );
-            if (!this.ownsContext(generation)) {
+              );
+            };
+
+            let response: WorkoutSetSaveView | null;
+            try {
+              response = await send();
+            } catch (error) {
+              if (!isConflict(error) || !this.ownsContext(generation)) {
+                throw error;
+              }
+              // Another tab or phone saved to this workout first (CLIENT-3): read it again, keeping
+              // what is typed here (TRN-017), and try once more on the version it has now, unless
+              // it was finished there.
+              await owner.wait(this.load(false));
+              if (!this.ownsContext(generation)) {
+                return false;
+              }
+              if (this.workoutFinished(workoutId)) {
+                throw error;
+              }
+              response = await send();
+            }
+            if (!response || !this.ownsContext(generation)) {
               return false;
             }
-            this.day.update((day) => (day ? applyWorkoutSetSaveToDay(day, response) : day));
+            const recorded = response;
+            this.day.update((day) => (day ? applyWorkoutSetSaveToDay(day, recorded) : day));
             this.setDrafts.update((drafts) =>
-              applyWorkoutSetSave(drafts, response, snapshot.revision),
+              applyWorkoutSetSave(drafts, recorded, snapshot.revision),
             );
             this.prSetIds.update((ids) => {
               const next = new Set(ids);
-              if (response.isPersonalRecord) next.add(setId);
+              if (recorded.isPersonalRecord) next.add(setId);
               else next.delete(setId);
               return next;
             });
-            if (response.isPersonalRecord) {
+            if (recorded.isPersonalRecord) {
               this.notice.set($localize`New personal record!`);
               if ('vibrate' in navigator) navigator.vibrate([80, 40, 80]);
             } else {
@@ -342,12 +438,7 @@ export class TodayTraining {
             if (!this.ownsContext(generation)) {
               return false;
             }
-            const explanation = apiErrorMessage(error, '');
-            this.reportSetError(
-              setId,
-              $localize`Couldn’t save this set. Your entries are still on this page. Retry.` +
-                (explanation ? ` ${explanation}` : ''),
-            );
+            this.reportSetError(setId, this.saveFailure(error, workoutId));
             return false;
           } finally {
             if (owner.current) {
@@ -369,12 +460,36 @@ export class TodayTraining {
     );
   }
 
+  /** Why a set was not saved, in words the client can act on. */
+  private saveFailure(error: unknown, workoutId: string): string {
+    if (isConflict(error)) {
+      return this.workoutFinished(workoutId) ||
+        (error.error as { code?: string } | null)?.code === 'workout_immutable'
+        ? $localize`This workout was finished on another phone or tab, so this set wasn’t saved.`
+        : $localize`This workout changed on another phone or tab, so this set wasn’t saved. Your entries are still on this page. Log the set again.`;
+    }
+    const explanation = apiErrorMessage(error, '');
+    return (
+      $localize`Couldn’t save this set. Your entries are still on this page. Retry.` +
+      (explanation ? ` ${explanation}` : '')
+    );
+  }
+
+  private workoutFinished(workoutId: string): boolean {
+    return (
+      this.day()?.workouts.find((item) => item.workoutExecutionId === workoutId)?.status ===
+      'Completed'
+    );
+  }
+
   protected async logSet(
     workout: ClientWorkoutView,
     set: ClientSetView,
     event: Event,
   ): Promise<void> {
-    return this.scope.run('logSet', async (owner) => {
+    // One lane per set: a second set ticked while the first saves must not cancel the first set's
+    // rest timer and focus return (WEA-11).
+    return this.scope.run(`logSet:${set.performanceId}`, async (owner) => {
       if (
         !this.day()?.isAllowed ||
         this.busy() ||
@@ -386,7 +501,7 @@ export class TodayTraining {
       const rest = Number(set.restSeconds ?? 0);
       // Still inside the tap: a phone plays the rest's closing tone only once a tap allowed sound.
       if (rest > 0) this.restTimer()?.prepareSound();
-      this.updateSetDraft(set, { isCompleted: true, actualRir: null });
+      this.updateSetDraft(set, { isCompleted: true });
       const saved = await owner.wait(this.saveSet(workout, set));
       if (saved && set.performanceId) {
         if (rest > 0) this.restTimer()?.start(rest);
@@ -448,6 +563,17 @@ export class TodayTraining {
       : 0;
   }
 
+  /**
+   * The header's time: counting from the start while the workout runs, and once it is finished the
+   * time it took, as its finish summary says, which stays put (UIQ-1). Null when there is none.
+   */
+  protected workoutSeconds(workout: ClientWorkoutView): number | null {
+    if (workout.status === 'Completed') {
+      return workout.durationSeconds == null ? null : numeric(workout.durationSeconds);
+    }
+    return workout.startedAtUtc ? this.elapsed(workout) : null;
+  }
+
   /** The rest after an exercise's last set is the rest before the next, so it keeps running. */
   protected showExercise(index: number): void {
     const workout = this.activeWorkout();
@@ -467,23 +593,16 @@ export class TodayTraining {
     this.showExercise(this.activeExerciseIndex() + (delta < 0 ? 1 : -1));
   }
 
+  /** Choosing kg or lb is not an edit: it relabels typed loads and restarts untouched sets (CLIENT-1). */
   protected chooseUnit(value: string): void {
     const unit = (value || null) as TrainingLoadUnit | null;
     this.workoutUnit.set(unit);
     const workout = this.activeWorkout();
     if (!workout) return;
     this.unitSessionId = workout.sessionId;
-    for (const set of workout.exercises.flatMap((exercise) => exercise.sets)) {
-      if (!set.performanceId || set.isCompleted) continue;
-      const draft = this.setDrafts()[set.performanceId];
-      if (!draft) continue;
-      // A load typed before any unit was chosen is in the unit chosen now; one in the other unit goes.
-      this.updateSetDraft(set, {
-        actualLoadUnit: unit,
-        actualLoad:
-          draft.actualLoadUnit === null || draft.actualLoadUnit === unit ? draft.actualLoad : null,
-      });
-    }
+    if (!unit) return;
+    this.chosenUnits.set(workout.sessionId, unit);
+    this.setDrafts.update((drafts) => withWorkoutUnit(drafts, workout, unit));
   }
 
   protected selectWorkout(sessionId: string): void {
@@ -491,8 +610,15 @@ export class TodayTraining {
     this.selectedSession.set(sessionId);
     this.activeExerciseIndex.set(0);
     const workout = this.day()?.workouts.find((item) => item.sessionId === sessionId);
-    this.workoutUnit.set(workout ? startingWorkoutUnit(workout, this.setDrafts()) : null);
+    this.workoutUnit.set(workout ? this.unitFor(workout) : null);
     this.unitSessionId = sessionId;
+  }
+
+  /** The unit a workout shows: the one the client chose for it, else where TRN-029 starts it. */
+  private unitFor(workout: ClientWorkoutView): TrainingLoadUnit | null {
+    return (
+      this.chosenUnits.get(workout.sessionId) ?? startingWorkoutUnit(workout, this.setDrafts())
+    );
   }
 
   private workoutHint(workout: ClientWorkoutView, startedFor: string | undefined): string {
@@ -535,6 +661,13 @@ export class TodayTraining {
   /** Last time's numbers on this set, by position, as the drafts read them (TRN-029). */
   protected previousSet(exercise: ClientExerciseView, set: ClientSetView) {
     return previousSetFor(exercise, set);
+  }
+
+  /** "57.5 kg × 7", in the unit it was lifted in, or a dash when this set has no last time. */
+  protected previousLabel(prior: PreviousSetPerformanceView | null): string {
+    if (!prior) return '—';
+    const unit = prior.load == null ? '' : unitWord(prior.loadUnit);
+    return `${prior.load ?? '—'}${unit ? ` ${unit}` : ''} × ${prior.repetitions ?? '—'}`;
   }
 
   private readonly onVisibilityChange = (): void => {
@@ -593,6 +726,55 @@ export class TodayTraining {
     this.finishConfirmation.set(workout.sessionId);
   }
 
+  /**
+   * Asks before the router, a workspace switch, a sign-out or an ended session takes the client away
+   * from sets they changed but did not log, or a note they did not send (WEA-1). Nothing is logged
+   * for them on the way out: a set is logged only by its ✓.
+   */
+  async canLeave(): Promise<boolean> {
+    const { sets, note } = this.unsavedWork();
+    if (!sets && !note) return true;
+    this.leaveMessage.set(
+      sets && note
+        ? $localize`Sets you changed aren’t logged and your note isn’t sent. If you leave now, they are lost.`
+        : sets
+          ? $localize`Sets you changed aren’t logged. If you leave now, the changes are lost.`
+          : $localize`Your note to your coach isn’t sent. If you leave now, it is lost.`,
+    );
+    const dialog = this.dialogs.open<boolean>(this.leaveDialog(), {
+      title: $localize`Leave without saving?`,
+      closeLabel: $localize`Close`,
+      closeOnNavigation: false,
+      mode: 'dark',
+    });
+    return (await firstValueFrom(dialog.closed)) === true;
+  }
+
+  /** A reload or a closed tab cannot be held for a question in the page, so the browser asks. */
+  protected onBeforeUnload(event: BeforeUnloadEvent): void {
+    const { sets, note } = this.unsavedWork();
+    if (sets || note) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  /** Work only this page holds, in workouts still open: a finished one can take neither. */
+  private unsavedWork(): { sets: boolean; note: boolean } {
+    const open = (this.day()?.workouts ?? []).filter(
+      (workout) => workout.workoutExecutionId && workout.status !== 'Completed',
+    );
+    const drafts = this.setDrafts();
+    return {
+      sets: open.some((workout) =>
+        workout.exercises.some((exercise) =>
+          exercise.sets.some((set) => set.performanceId && drafts[set.performanceId]?.dirty),
+        ),
+      ),
+      note: open.some((workout) => Boolean(this.workoutNotes[workout.sessionId]?.trim())),
+    };
+  }
+
   protected noteTimeZone(sessionId: string): string | undefined {
     return (
       this.upcoming()?.unfinishedWorkouts.find((item) => item.workout.sessionId === sessionId)
@@ -625,6 +807,11 @@ export class TodayTraining {
 
   protected setDraft(set: ClientSetView): WorkoutSetDraft | null {
     return set.performanceId ? (this.setDrafts()[set.performanceId] ?? null) : null;
+  }
+
+  /** The effort field whose number the server would refuse, so its hint says so at once. */
+  protected effortProblem(draft: WorkoutSetDraft | null): 'rpe' | 'rir' | null {
+    return draft ? effortOutOfRange(draft) : null;
   }
 
   protected updateSetDraft(
@@ -776,7 +963,12 @@ export class TodayTraining {
                   ...day,
                   workouts: day.workouts.map((item) =>
                     item.workoutExecutionId === workout.workoutExecutionId
-                      ? { ...item, status: response.status, executionVersion: response.version }
+                      ? {
+                          ...item,
+                          status: response.status,
+                          executionVersion: response.version,
+                          durationSeconds: response.finishSummary?.durationSeconds ?? null,
+                        }
                       : item,
                   ),
                 }
@@ -923,12 +1115,14 @@ export class TodayTraining {
             : (this.day()?.workouts ?? []),
         };
         this.day.set(combined);
-        this.setDrafts.update((drafts) => reconcileWorkoutSetDrafts(combined, drafts));
+        this.setDrafts.update((drafts) =>
+          reconcileWorkoutSetDrafts(combined, drafts, this.chosenUnits),
+        );
         const active =
           combined.workouts.find((item) => item.sessionId === this.selectedSession()) ??
           combined.workouts[0];
         if (active && this.unitSessionId !== active.sessionId) {
-          this.workoutUnit.set(startingWorkoutUnit(active, this.setDrafts()));
+          this.workoutUnit.set(this.unitFor(active));
           this.unitSessionId = active.sessionId;
         }
       } catch (error) {
@@ -989,6 +1183,7 @@ export class TodayTraining {
     this.activeExerciseIndex.set(0);
     this.workoutUnit.set(null);
     this.unitSessionId = null;
+    this.chosenUnits.clear();
     this.prSetIds.set(new Set());
     this.restTimer()?.stop();
     void this.wakeLock?.release();
@@ -1109,6 +1304,7 @@ export class TodayTraining {
     this.activeExerciseIndex.set(0);
     this.workoutUnit.set(null);
     this.unitSessionId = null;
+    this.chosenUnits.clear();
     this.prSetIds.set(new Set());
     this.restTimer()?.stop();
     void this.wakeLock?.release();

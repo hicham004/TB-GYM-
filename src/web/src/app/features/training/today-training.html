@@ -10,8 +10,18 @@
       <p class="eyebrow" i18n>YOUR WORKOUT</p>
       <h1 dir="auto">{{ activeWorkout()?.name ?? 'Your workout' }}</h1>
     </div>
-    @if (activeWorkout()?.startedAtUtc) {
-      <span class="clock">{{ clockLabel(elapsed(activeWorkout()!)) }}</span>
+    @if (activeWorkout(); as shown) {
+      @let seconds = workoutSeconds(shown);
+      @if (seconds !== null) {
+        <span class="clock">
+          @if (shown.status === 'Completed') {
+            <span class="tb-visually-hidden" i18n>Workout took</span>
+          } @else {
+            <span class="tb-visually-hidden" i18n>Workout time</span>
+          }
+          {{ clockLabel(seconds) }}
+        </span>
+      }
     }
   </header>
   <p
@@ -48,8 +58,8 @@
         </div>
         @for (volume of summary.volume; track volume.unit) {
           <div>
-            <strong>{{ volume.loadTimesRepetitions }}</strong
-            ><span>{{ volume.unit === 'Kilogram' ? 'kg' : 'lb' }} × reps</span>
+            <strong>{{ volume.loadTimesRepetitions | number: '1.0-1' }}</strong
+            ><span i18n>{{ unitWord(volume.unit) }} lifted</span>
           </div>
         }
       </div>
@@ -167,6 +177,9 @@
               [selected]="workoutUnit() ?? ''"
               (selectedChange)="chooseUnit($event)"
             />
+            <p class="unit-note" [class.unit-note-empty]="!unitNote()" aria-live="polite">
+              {{ unitNote() ?? '' }}
+            </p>
           }
           <div class="player-body">
             @for (
@@ -208,7 +221,7 @@
                     </p>
                   }
                   <div class="set-head" aria-hidden="true">
-                    <span i18n>Set</span><span i18n>Previous</span><span i18n>Load</span
+                    <span i18n>Set</span><span i18n>Last time</span><span i18n>Load</span
                     ><span i18n>Reps</span><span></span>
                   </div>
                   <div class="sets">
@@ -221,8 +234,11 @@
                         [attr.aria-label]="'Set ' + (setIndex + 1)"
                       >
                         <span class="set-number">{{ setIndex + 1 }}</span
-                        ><span class="set-previous"
-                          >{{ priorSet?.load ?? '—' }} × {{ priorSet?.repetitions ?? '—' }}</span
+                        ><!-- Last time's set stays beside it on a phone too (TRN-029, WEA-7). -->
+                        <span class="set-previous"
+                          ><span class="set-previous-label" i18n>Last time</span>&ngsp;{{
+                            previousLabel(priorSet)
+                          }}</span
                         >
                         @if (collapsed(set) || workout.status === 'Completed') {
                           <span class="logged-set"
@@ -255,82 +271,89 @@
                             <strong class="pr-badge" i18n>PR</strong>
                           }
                         } @else {
-                          <div class="set-step">
-                            <button
-                              type="button"
-                              aria-label="Less weight"
-                              i18n-aria-label
-                              [disabled]="readOnly"
-                              (click)="stepSet(set, 'load', -1)"
-                            >
-                              −
-                            </button>
-                            <label
-                              ><span i18n>Load</span
-                              ><input
-                                type="number"
-                                min="0"
-                                max="2000"
-                                step="0.25"
-                                inputmode="decimal"
-                                aria-label="Actual load"
+                          <!-- Big targets on the one screen a client uses mid-set (plan §2 rule 6, CLIENT-6). -->
+                          <div class="set-inputs">
+                            <div class="set-step">
+                              <button
+                                type="button"
+                                aria-label="Less weight"
                                 i18n-aria-label
-                                [ngModel]="draft ? draft.actualLoad : set.prescribedLoad"
-                                (ngModelChange)="
-                                  updateSetDraft(set, {
-                                    actualLoad: $event,
-                                    actualLoadUnit: workoutUnit(),
-                                  })
-                                "
                                 [disabled]="readOnly"
-                                data-set-focus="input"
-                                [attr.data-set-id]="set.performanceId"
-                            /></label>
-                            <button
-                              type="button"
-                              aria-label="More weight"
-                              i18n-aria-label
-                              [disabled]="readOnly"
-                              (click)="stepSet(set, 'load', 1)"
-                            >
-                              +
-                            </button>
-                          </div>
-                          <div class="set-step">
-                            <button
-                              type="button"
-                              aria-label="One rep less"
-                              i18n-aria-label
-                              [disabled]="readOnly"
-                              (click)="stepSet(set, 'reps', -1)"
-                            >
-                              −
-                            </button>
-                            <label
-                              ><span i18n>Reps</span
-                              ><input
-                                type="number"
-                                min="0"
-                                max="200"
-                                step="1"
-                                inputmode="numeric"
-                                aria-label="Actual repetitions"
+                                (click)="stepSet(set, 'load', -1)"
+                              >
+                                −
+                              </button>
+                              <label
+                                ><span>{{ loadCaption() }}</span
+                                ><input
+                                  type="number"
+                                  min="0"
+                                  max="2000"
+                                  step="0.25"
+                                  inputmode="decimal"
+                                  aria-label="Actual load"
+                                  i18n-aria-label
+                                  [ngModel]="draft ? draft.actualLoad : set.prescribedLoad"
+                                  (ngModelChange)="
+                                    updateSetDraft(set, {
+                                      actualLoad: $event,
+                                      actualLoadUnit: workoutUnit(),
+                                    })
+                                  "
+                                  [disabled]="readOnly"
+                                  data-set-focus="input"
+                                  [attr.data-set-id]="set.performanceId"
+                              /></label>
+                              <button
+                                type="button"
+                                aria-label="More weight"
                                 i18n-aria-label
-                                [ngModel]="
-                                  draft ? draft.actualRepetitions : set.prescribedRepetitionsMinimum
-                                "
-                                (ngModelChange)="updateSetDraft(set, { actualRepetitions: $event })"
                                 [disabled]="readOnly"
-                            /></label>
-                            <button
-                              type="button"
-                              aria-label="One rep more"
-                              i18n-aria-label
-                              [disabled]="readOnly"
-                              (click)="stepSet(set, 'reps', 1)"
-                            >
-                              +
-                            </button>
+                                (click)="stepSet(set, 'load', 1)"
+                              >
+                                +
+                              </button>
+                            </div>
+                            <div class="set-step">
+                              <button
+                                type="button"
+                                aria-label="One rep less"
+                                i18n-aria-label
+                                [disabled]="readOnly"
+                                (click)="stepSet(set, 'reps', -1)"
+                              >
+                                −
+                              </button>
+                              <label
+                                ><span i18n>Reps</span
+                                ><input
+                                  type="number"
+                                  min="0"
+                                  max="200"
+                                  step="1"
+                                  inputmode="numeric"
+                                  aria-label="Actual repetitions"
+                                  i18n-aria-label
+                                  [ngModel]="
+                                    draft
+                                      ? draft.actualRepetitions
+                                      : set.prescribedRepetitionsMinimum
+                                  "
+                                  (ngModelChange)="
+                                    updateSetDraft(set, { actualRepetitions: $event })
+                                  "
+                                  [disabled]="readOnly"
+                              /></label>
+                              <button
+                                type="button"
+                                aria-label="One rep more"
+                                i18n-aria-label
+                                [disabled]="readOnly"
+                                (click)="stepSet(set, 'reps', 1)"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -369,23 +392,61 @@
                           <p class="coach-note" dir="auto">{{ set.coachNotes }}</p>
                         }
                         @if (!readOnly && !collapsed(set)) {
+                          @let effort = effortProblem(draft);
                           <details class="set-note">
                             <summary i18n>More options</summary>
-                            <label
-                              ><span i18n>RPE (optional)</span
-                              ><input
-                                type="number"
-                                min="5"
-                                max="10"
-                                step="0.5"
-                                inputmode="decimal"
-                                aria-label="Actual RPE"
-                                i18n-aria-label
-                                [ngModel]="draft?.actualRpe"
-                                (ngModelChange)="
-                                  updateSetDraft(set, { actualRpe: $event, actualRir: null })
-                                "
-                            /></label>
+                            <!-- How hard it was, as RPE or as reps left (STR-003); one is sent, the
+                                 ranges are said before the save (CLIENT-5, CLIENT-9). -->
+                            <div class="effort">
+                              <label
+                                ><span i18n>RPE (optional)</span
+                                ><input
+                                  type="number"
+                                  min="5"
+                                  max="10"
+                                  step="0.5"
+                                  inputmode="decimal"
+                                  aria-label="Actual RPE"
+                                  i18n-aria-label
+                                  [attr.aria-describedby]="'rpe-hint-' + set.performanceId"
+                                  [attr.aria-invalid]="effort === 'rpe' || null"
+                                  [ngModel]="draft?.actualRpe"
+                                  (ngModelChange)="
+                                    updateSetDraft(set, { actualRpe: $event, actualRir: null })
+                                  "
+                                /><small
+                                  class="hint"
+                                  [class.hint-wrong]="effort === 'rpe'"
+                                  [id]="'rpe-hint-' + set.performanceId"
+                                  i18n
+                                  >5 to 10, in half steps</small
+                                ></label
+                              >
+                              <label
+                                ><span i18n>Reps left (optional)</span
+                                ><input
+                                  type="number"
+                                  min="0"
+                                  max="5"
+                                  step="0.5"
+                                  inputmode="decimal"
+                                  aria-label="Actual reps left"
+                                  i18n-aria-label
+                                  [attr.aria-describedby]="'rir-hint-' + set.performanceId"
+                                  [attr.aria-invalid]="effort === 'rir' || null"
+                                  [ngModel]="draft?.actualRir"
+                                  (ngModelChange)="
+                                    updateSetDraft(set, { actualRir: $event, actualRpe: null })
+                                  "
+                                /><small
+                                  class="hint"
+                                  [class.hint-wrong]="effort === 'rir'"
+                                  [id]="'rir-hint-' + set.performanceId"
+                                  i18n
+                                  >0 to 5, in half steps</small
+                                ></label
+                              >
+                            </div>
                             <label
                               ><span i18n>Note for your coach</span
                               ><input
@@ -466,7 +527,6 @@
                     Send note
                   </button>
                 </details>
-                <p class="muted" i18n>Unsaved edits stay on this page. Save before leaving.</p>
               }
               @for (note of workout.notes; track note.id) {
                 <p class="note-history">
@@ -585,3 +645,12 @@
     }
   </div>
 }
+
+<ng-template #leaveDialog let-dialog>
+  <app-confirm
+    [message]="leaveMessage()"
+    [confirmLabel]="leaveConfirm"
+    [cancelLabel]="leaveCancel"
+    (answer)="dialog.close($event)"
+  />
+</ng-template>

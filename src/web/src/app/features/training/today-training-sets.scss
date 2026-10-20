@@ -1,0 +1,276 @@
+// The set rows (audit CLIENT-6, WEA-7; plan §2 rule 6, "big targets"): 44 px steppers, values read at
+// arm's length, and last time's set beside each one. The layout follows the exercise's own width in
+// rem, so a phone, and text at 200%, get the two-line row.
+
+.workout-exercise {
+  container: set-rows / inline-size;
+}
+.set-head,
+.set-card {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1.25fr) 3rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.set-head {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #9bb0a1;
+}
+.sets {
+  display: grid;
+  gap: 0.55rem;
+}
+.set-card {
+  padding: 0.7rem;
+  border-radius: 1rem;
+  background: #ffffff0e;
+}
+// The set being entered is a light card; a logged one stays on the night colour. Its fields are drawn
+// light like the card, and the accent ring would vanish on it, so its controls ring in the brand.
+.set-card:has(.set-step) {
+  color: #14291e;
+  background: #f5f7ef;
+  box-shadow: 0 0 0 2px var(--tb-accent, #d9ed94);
+  color-scheme: light;
+}
+.set-card:has(.set-step) :focus-visible {
+  outline-color: var(--tb-brand, #153d33);
+}
+.set-number {
+  font-weight: 700;
+  color: #a5b8aa;
+  text-align: center;
+}
+.set-previous {
+  color: #a5b8aa;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+.set-card:has(.set-step) .set-number,
+.set-card:has(.set-step) .set-previous {
+  color: #42554a;
+}
+// The column head says it on a wide row; a phone's row says it itself.
+.set-previous-label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.set-inputs {
+  grid-column: 3 / 5;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.set-step {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 1.75rem;
+  background: #e8eee1;
+}
+.set-step button {
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: 50%;
+  padding: 0;
+  color: #153d33;
+  background: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+  box-shadow: 0 1px 2px #14291e33;
+}
+.set-step label {
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  color: #4f6057;
+  font-size: 0.75rem;
+  line-height: 1.15;
+  text-align: center;
+}
+.set-step input {
+  inline-size: 100%;
+  min-block-size: 1.9rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: #14291e;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  appearance: textfield;
+}
+// The field's own spin arrows would crowd the number; the steppers beside it do that job.
+.set-step input::-webkit-inner-spin-button,
+.set-step input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.log-set {
+  grid-column: 5;
+  justify-self: end;
+  inline-size: 3rem;
+  block-size: 3rem;
+  overflow: hidden;
+  padding: 0;
+  font-size: 0;
+  color: #fff;
+  background: var(--tb-brand, #153d33);
+}
+.log-set::before {
+  content: '✓';
+  font-size: 1.5rem;
+}
+.edit-set {
+  grid-column: 4;
+  padding: 0.3rem 0.75rem;
+  color: var(--tb-accent-bright, #d9ed94);
+  background: #ffffff1b;
+  font-size: 0.8rem;
+}
+.done-tick {
+  grid-column: 5;
+  justify-self: end;
+  display: grid;
+  place-items: center;
+  inline-size: 2.4rem;
+  block-size: 2.4rem;
+  border-radius: 0.7rem;
+  color: #11201b;
+  background: var(--tb-accent);
+}
+.pr-badge {
+  grid-column: 1 / -1;
+  color: var(--tb-accent-bright);
+}
+.logged-set {
+  grid-column: 3;
+  color: #fff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.prescription {
+  grid-column: 1 / -1;
+  margin: 0.15rem 0 0;
+  padding-inline-start: 0.25rem;
+  color: #a5b8aa;
+  font-size: 0.75rem;
+}
+.set-card:has(.set-step) .prescription {
+  color: #52645a;
+}
+.set-card .coach-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.set-note,
+.set-card .player-error {
+  grid-column: 1 / -1;
+}
+.set-note summary {
+  padding-block: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.set-note label {
+  display: grid;
+  gap: 0.25rem;
+  margin-block: 0.6rem;
+}
+.set-note input {
+  inline-size: 100%;
+  min-block-size: 2.75rem;
+  border: 1px solid #6b7f73;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  color: #14291e;
+  background: #fff;
+}
+// RPE or reps left side by side, each with its range said before the save (CLIENT-5, CLIENT-9). The
+// card is light inside the dark player, so the warning colour is set here, not from the dark tokens.
+.effort {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0 0.75rem;
+}
+.hint {
+  color: #52645a;
+  font-size: 0.78rem;
+}
+.hint-wrong {
+  color: #a3261b;
+  font-weight: 600;
+}
+.set-note input[aria-invalid='true'] {
+  border: 2px solid #a3261b;
+}
+
+@container set-rows (max-width: 34rem) {
+  .set-head {
+    display: none;
+  }
+  .set-card {
+    grid-template-columns: 1.75rem minmax(0, 1fr) auto auto;
+    gap: 0.5rem 0.4rem;
+    padding: 0.6rem;
+  }
+  // The set being entered: last time beside its number and ✓ at the end, then the steppers on a row
+  // of their own.
+  .set-number,
+  .set-previous,
+  .log-set,
+  .logged-set,
+  .edit-set,
+  .done-tick {
+    grid-row: 1;
+  }
+  .set-previous {
+    grid-column: 2 / 4;
+  }
+  .set-previous-label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+  .log-set,
+  .done-tick {
+    grid-column: 4;
+  }
+  .set-inputs {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+  // A logged set: what was done first, last time under it.
+  .logged-set {
+    grid-column: 2;
+  }
+  .edit-set {
+    grid-column: 3;
+  }
+  .set-card:has(.logged-set) .set-previous {
+    grid-row: 2;
+    grid-column: 2 / -1;
+  }
+}
+
+@container set-rows (max-width: 20rem) {
+  .set-inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

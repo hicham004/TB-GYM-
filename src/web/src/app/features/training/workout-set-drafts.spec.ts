@@ -8,12 +8,15 @@ import type {
 } from '../../core/api/generated';
 import {
   applyWorkoutSetSave,
+  effortOutOfRange,
   hasLoadUnitForActualLoad,
   previousSetFor,
   reconcileWorkoutSetDrafts,
   snapshotWorkoutSetDraft,
   startingWorkoutUnit,
+  toRecordSetRequest,
   updateWorkoutSetDraft,
+  withWorkoutUnit,
 } from './workout-set-drafts';
 
 describe('workout set drafts', () => {
@@ -238,6 +241,124 @@ describe('workout set drafts', () => {
       true,
     );
     expect(hasLoadUnitForActualLoad({ ...withoutUnit, actualLoad: null }, null)).toBe(true);
+  });
+
+  /**
+   * Audit CLIENT-1: tapping lb then kg emptied every load, marked every set edited and so blocked
+   * Finish. A choice of unit is not an edit, and kilograms and pounds are never converted.
+   */
+  describe('the kg or lb choice', () => {
+    it('restarts an untouched set in the unit chosen, not edited, and back again', () => {
+      const day = trainingDay();
+      const workout = day.workouts[0];
+      const start = reconcileWorkoutSetDrafts(day, {});
+
+      const pounds = withWorkoutUnit(start, workout, 'Pound');
+      // The coach wrote 100 kg: in pounds the set has no load until the client types one.
+      expect(pounds['set-1']).toMatchObject({
+        actualLoad: null,
+        actualLoadUnit: 'Pound',
+        actualRepetitions: 8,
+        dirty: false,
+      });
+
+      const kilograms = withWorkoutUnit(pounds, workout, 'Kilogram');
+      expect(kilograms['set-1']).toMatchObject({
+        actualLoad: 100,
+        actualLoadUnit: 'Kilogram',
+        dirty: false,
+      });
+    });
+
+    it('keeps a typed load’s number and gives it the unit chosen', () => {
+      const day = trainingDay();
+      let drafts = reconcileWorkoutSetDrafts(day, {});
+      drafts = updateWorkoutSetDraft(drafts, 'set-2', { actualLoad: 225 });
+      const typed = drafts['set-2'];
+
+      drafts = withWorkoutUnit(drafts, day.workouts[0], 'Pound');
+      expect(drafts['set-2']).toMatchObject({
+        actualLoad: 225,
+        actualLoadUnit: 'Pound',
+        dirty: true,
+      });
+      // A save already on its way in kilograms must not settle the draft now in pounds.
+      expect(drafts['set-2'].revision).toBe(typed.revision + 1);
+      // Choosing the unit it already has changes nothing.
+      expect(withWorkoutUnit(drafts, day.workouts[0], 'Pound')['set-2']).toBe(drafts['set-2']);
+    });
+
+    it('starts from last time’s load in the unit chosen, and leaves logged sets alone', () => {
+      const day = trainingDay();
+      const exercise = day.workouts[0].exercises[0];
+      exercise.previousPerformance = lastTime([
+        { position: 1, repetitions: 9, load: 225, loadUnit: 'Pound', rpe: 8 },
+        { position: 2, repetitions: 9, load: 102.5, loadUnit: 'Kilogram', rpe: 8 },
+      ]);
+      exercise.sets[2] = {
+        ...exercise.sets[2],
+        isCompleted: true,
+        actualRepetitions: 8,
+        actualLoad: 100,
+        actualLoadUnit: 'Kilogram',
+      };
+
+      const drafts = withWorkoutUnit(reconcileWorkoutSetDrafts(day, {}), day.workouts[0], 'Pound');
+      expect(drafts['set-1']).toMatchObject({ actualLoad: 225, actualLoadUnit: 'Pound' });
+      // Last time's 102.5 kg is not a pound number either.
+      expect(drafts['set-2']).toMatchObject({ actualLoad: null, actualLoadUnit: 'Pound' });
+      expect(drafts['set-3']).toMatchObject({ actualLoad: 100, actualLoadUnit: 'Kilogram' });
+    });
+
+    it('keeps the unit chosen when the day is read again', () => {
+      const day = trainingDay();
+      const drafts = reconcileWorkoutSetDrafts(day, {}, new Map([['session-1', 'Pound']]));
+
+      expect(drafts['set-1']).toMatchObject({ actualLoad: null, actualLoadUnit: 'Pound' });
+      expect(reconcileWorkoutSetDrafts(day, {})['set-1']).toMatchObject({
+        actualLoad: 100,
+        actualLoadUnit: 'Kilogram',
+      });
+    });
+  });
+
+  describe('effort', () => {
+    it('sends RPE or reps left, never both, RPE first (STR-003)', () => {
+      const snapshot = snapshotWorkoutSetDraft(
+        reconcileWorkoutSetDrafts(trainingDay(), {}),
+        'set-1',
+      )!;
+
+      expect(
+        toRecordSetRequest({ ...snapshot, actualRpe: 8, actualRir: 2 }, 'Kilogram', 4),
+      ).toMatchObject({
+        rpe: 8,
+        rir: null,
+      });
+      expect(
+        toRecordSetRequest({ ...snapshot, actualRpe: null, actualRir: 1.5 }, 'Kilogram', 4),
+      ).toMatchObject({
+        rpe: null,
+        rir: 1.5,
+      });
+    });
+
+    it('finds the number the server would refuse before it is sent (STR-004)', () => {
+      const effort = (actualRpe: number | null, actualRir: number | null) =>
+        effortOutOfRange({ actualRpe, actualRir });
+
+      expect([effort(8.5, null), effort(5, null), effort(10, null)]).toEqual([null, null, null]);
+      expect([effort(8.3, null), effort(11, null), effort(4.5, null)]).toEqual([
+        'rpe',
+        'rpe',
+        'rpe',
+      ]);
+      expect([effort(null, 0), effort(null, 1.5), effort(null, 5)]).toEqual([null, null, null]);
+      expect([effort(null, 6), effort(null, 0.3), effort(null, -1)]).toEqual(['rir', 'rir', 'rir']);
+      // The reps left a saved set reads back from its RPE are never checked over it.
+      expect(effort(8, 7)).toBeNull();
+      expect(effort(null, null)).toBeNull();
+    });
   });
 });
 

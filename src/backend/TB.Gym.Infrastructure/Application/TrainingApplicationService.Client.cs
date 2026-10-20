@@ -935,7 +935,8 @@ internal sealed partial class TrainingApplicationService
                 exercise.Sets.OrderBy(item => item.Position).Select(ToClientSet).ToArray())).ToArray(),
             notes.Select(ToView).ToArray(),
             execution.Version,
-            execution.StartedAtUtc);
+            execution.StartedAtUtc,
+            FinishedDurationSeconds(execution));
 
     private static ClientSetView ToClientSet(SetPrescription set) =>
         new(

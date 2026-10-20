@@ -10,8 +10,11 @@ import type {
   ClientSetView,
   ClientTrainingDayResult,
   ClientWorkoutView,
+  WorkoutFinishSummaryView,
   WorkoutSetSaveView,
 } from '../../core/api/generated';
+import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
@@ -19,6 +22,7 @@ import { personalRecord, programSummary } from '../../../testing/share-card-fixt
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { ShareCardMaker } from '../share-cards/share-card-maker';
 import { TodayTraining } from './today-training';
+import { trainingRoutes } from './training.routes';
 
 function set(overrides: Partial<ClientSetView> = {}): ClientSetView {
   return {
@@ -637,12 +641,12 @@ describe('TodayTraining interactions', () => {
   });
 
   it('reports a rejected save and keeps the typed values to retry', async () => {
-    const conflict = new HttpErrorResponse({
-      status: 409,
-      error: { title: 'This workout was changed elsewhere.' },
+    const refused = new HttpErrorResponse({
+      status: 400,
+      error: { message: 'The set could not be recorded.' },
     });
     const { fixture, host } = await render({
-      recordMyTrainingSet: vi.fn(() => throwError(() => conflict)),
+      recordMyTrainingSet: vi.fn(() => throwError(() => refused)),
     });
 
     fill(host, 'Actual repetitions', '8');
@@ -651,7 +655,7 @@ describe('TodayTraining interactions', () => {
     await settle(fixture);
 
     expect(query(host, '[role="alert"]').textContent).toContain(
-      'This workout was changed elsewhere.',
+      'Couldn’t save this set. Your entries are still on this page. Retry. The set could not be recorded.',
     );
     expect(field(host, 'Actual repetitions').value).toBe('8');
     expect(host.textContent).not.toContain('Set saved.');
@@ -967,7 +971,10 @@ describe('TodayTraining interactions', () => {
 
     expect(field(host, 'Actual load').value).toBe('60');
     expect(field(host, 'Actual repetitions').value).toBe('6');
-    expect(query(host, '.set-previous').textContent).toContain('57.5 × 7');
+    // Last time's set, with its unit, named on the row itself for a phone (WEA-7).
+    expect(query(host, '.set-previous').textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'Last time 57.5 kg × 7',
+    );
     expect(query(host, '.previous-performance').textContent).toContain('57.5');
 
     press(host, 'Log set');
@@ -1076,5 +1083,483 @@ describe('TodayTraining interactions', () => {
 
     expect(host.querySelector('.workout')).toBeNull();
     expect(host.textContent).not.toContain('Workout started.');
+  });
+});
+
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+const dialog = () => {
+  const open = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+  return open.length ? open[open.length - 1] : null;
+};
+
+function twoSetDay(secondLogged = false, version = 3): ClientTrainingDayResult {
+  return day({
+    workouts: [
+      workout({
+        executionVersion: version,
+        exercises: [
+          exercise({
+            sets: [
+              set(),
+              set({
+                prescriptionId: 'prescription-2',
+                performanceId: 'performance-2',
+                position: 2,
+                ...(secondLogged
+                  ? {
+                      actualRepetitions: 7,
+                      actualLoad: 60,
+                      actualLoadUnit: 'Kilogram' as const,
+                      isCompleted: true,
+                    }
+                  : {}),
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function finishedWith(summary: Partial<WorkoutFinishSummaryView> = {}) {
+  return vi.fn(() =>
+    of({
+      id: 'execution-1',
+      status: 'Completed' as const,
+      version: 5,
+      startedAtUtc: '2026-08-25T10:00:00Z',
+      completedAtUtc: '2026-08-25T10:50:00Z',
+      finishSummary: {
+        durationSeconds: 3000,
+        completedSetCount: 1,
+        totalSetCount: 1,
+        volume: [],
+        personalRecords: [],
+        ...summary,
+      },
+    }),
+  );
+}
+
+/** Audit batch A4 (docs/FULL-AUDIT-2026-10.md section 11): the workout player. */
+describe('TodayTraining, the audit’s player fixes', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+    TestBed.resetTestingModule();
+  });
+
+  describe('kg or lb (CLIENT-1)', () => {
+    it('is no edit: lb and back to kg keeps the coach’s load and Finish opens', async () => {
+      const { fixture, host, api } = await render();
+      expect(field(host, 'Actual load').value).toBe('60');
+      expect(textOf(query(host, '.set-step label span'))).toBe('Load (kg)');
+
+      field(host, 'lb').click();
+      await settle(fixture);
+      // The coach wrote 60 kg and nothing is converted: the load waits for the client's own, and
+      // the player says why instead of emptying it silently.
+      expect(field(host, 'Actual load').value).toBe('');
+      expect(textOf(query(host, '.set-step label span'))).toBe('Load (lb)');
+      expect(textOf(query(host, '.unit-note'))).toBe(
+        'Your coach set these loads in kg. Type what you lift in lb.',
+      );
+
+      field(host, 'kg').click();
+      await settle(fixture);
+      expect(field(host, 'Actual load').value).toBe('60');
+      expect(textOf(query(host, '.unit-note'))).toBe('');
+      press(host, 'Finish workout');
+      await settle(fixture);
+      expect(host.textContent).not.toContain('Save every edited set');
+      expect(textOf(query(host, '.finish-confirmation'))).toContain('0 of 1 sets logged');
+      expect(await fixture.componentInstance.canLeave()).toBe(true);
+      expect(api.recordMyTrainingSet).not.toHaveBeenCalled();
+    });
+
+    it('keeps a typed load’s number in the unit chosen after it', async () => {
+      const { fixture, host, api } = await render();
+      fill(host, 'Actual load', '135');
+      await settle(fixture);
+      field(host, 'lb').click();
+      await settle(fixture);
+      expect(field(host, 'Actual load').value).toBe('135');
+
+      press(host, 'Log set');
+      await settle(fixture);
+      expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+        'execution-1',
+        'performance-1',
+        expect.objectContaining({ load: 135, loadUnit: 'Pound' }),
+      );
+    });
+
+    it('starts an untouched set from last time’s load in the unit chosen', async () => {
+      const lastTimeInPounds = day({
+        workouts: [
+          workout({
+            exercises: [
+              exercise({
+                previousPerformance: {
+                  date: '2026-08-18',
+                  bestLoad: 135,
+                  unit: 'Pound',
+                  repetitions: 6,
+                  rpe: 8,
+                  sets: [{ position: 1, repetitions: 6, load: 135, loadUnit: 'Pound', rpe: 8 }],
+                },
+              }),
+            ],
+          }),
+        ],
+      });
+      const { fixture, host, api } = await render({}, lastTimeInPounds);
+      expect(field(host, 'Actual load').value).toBe('60');
+
+      field(host, 'lb').click();
+      await settle(fixture);
+      expect(field(host, 'Actual load').value).toBe('135');
+      press(host, 'Log set');
+      await settle(fixture);
+      expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+        'execution-1',
+        'performance-1',
+        expect.objectContaining({ load: 135, loadUnit: 'Pound', repetitions: 6 }),
+      );
+    });
+
+    it('keeps the unit chosen when the day is read again', async () => {
+      const { fixture, host, api } = await render();
+      field(host, 'lb').click();
+      await settle(fixture);
+      query<HTMLElement>(host, '.workout-footer summary').click();
+      fill(host, 'Workout note', 'Only pound plates here.');
+      await settle(fixture);
+      press(host, 'Send note');
+      await settle(fixture);
+
+      // Sending the note read the day again.
+      expect(api.getMyTrainingToday).toHaveBeenCalledTimes(2);
+      expect(field(host, 'lb').checked).toBe(true);
+      expect(field(host, 'Actual load').value).toBe('');
+      expect(textOf(query(host, '.set-step label span'))).toBe('Load (lb)');
+    });
+  });
+
+  describe('another phone or tab (CLIENT-3)', () => {
+    const conflict = new HttpErrorResponse({
+      status: 409,
+      error: {
+        code: 'concurrency_conflict',
+        message: 'Training data was changed by another request.',
+      },
+    });
+
+    it('reads the workout again, keeps what is typed and logs it on the version it has now', async () => {
+      const getMyTrainingToday = vi
+        .fn()
+        .mockReturnValueOnce(of(twoSetDay(false, 3)))
+        .mockReturnValue(of(twoSetDay(true, 6)));
+      const record = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => conflict))
+        .mockReturnValueOnce(of(saved({ executionVersion: 7, actualRepetitions: 8 })));
+      const { fixture, host } = await render({ getMyTrainingToday, recordMyTrainingSet: record });
+      const first = host.querySelectorAll<HTMLElement>('.set-card')[0];
+      fill(first, 'Actual repetitions', '8');
+      await settle(fixture);
+      press(first, 'Log set');
+      await settle(fixture);
+
+      expect(getMyTrainingToday).toHaveBeenCalledTimes(2);
+      expect(record).toHaveBeenNthCalledWith(
+        1,
+        'execution-1',
+        'performance-1',
+        expect.objectContaining({ repetitions: 8, version: 3 }),
+      );
+      expect(record).toHaveBeenNthCalledWith(
+        2,
+        'execution-1',
+        'performance-1',
+        expect.objectContaining({ repetitions: 8, version: 6 }),
+      );
+      expect(host.textContent).toContain('Set saved.');
+      expect(textOf(query(host, '#training-error-summary'))).toBe('');
+      // The set the other phone logged is on this one too.
+      expect(host.querySelectorAll('.set-card .logged-set')).toHaveLength(2);
+    });
+
+    it('says so in a person’s words when it keeps changing, keeping the entries', async () => {
+      const record = vi.fn(() => throwError(() => conflict));
+      const { fixture, host } = await render({ recordMyTrainingSet: record });
+      fill(host, 'Actual repetitions', '8');
+      await settle(fixture);
+      press(host, 'Log set');
+      await settle(fixture);
+
+      expect(record).toHaveBeenCalledTimes(2);
+      expect(textOf(query(host, '#training-error-summary'))).toBe(
+        'This workout changed on another phone or tab, so this set wasn’t saved. Your entries are still on this page. Log the set again.',
+      );
+      expect(host.textContent).not.toContain('Training data was changed by another request.');
+      expect(field(host, 'Actual repetitions').value).toBe('8');
+    });
+
+    it('does not try again once the workout was finished there', async () => {
+      const getMyTrainingToday = vi
+        .fn()
+        .mockReturnValueOnce(of(day()))
+        .mockReturnValue(
+          of(day({ workouts: [workout({ status: 'Completed', executionVersion: 9 })] })),
+        );
+      const record = vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: {
+                code: 'workout_immutable',
+                message: 'Completed workout history is immutable.',
+              },
+            }),
+        ),
+      );
+      const { fixture, host } = await render({ getMyTrainingToday, recordMyTrainingSet: record });
+      fill(host, 'Actual repetitions', '8');
+      await settle(fixture);
+      press(host, 'Log set');
+      await settle(fixture);
+
+      expect(record).toHaveBeenCalledTimes(1);
+      expect(textOf(query(host, '#training-error-summary'))).toBe(
+        'This workout was finished on another phone or tab, so this set wasn’t saved.',
+      );
+      expect(textOf(host.querySelector('app-status-label'))).toContain('Completed · read only');
+      // A finished workout takes nothing more, so leaving has nothing to ask about.
+      expect(await fixture.componentInstance.canLeave()).toBe(true);
+    });
+  });
+
+  describe('leaving (WEA-1)', () => {
+    it('asks before dropping a set changed but not logged', async () => {
+      const { fixture, host } = await render();
+      expect(await fixture.componentInstance.canLeave()).toBe(true);
+
+      fill(host, 'Actual repetitions', '8');
+      await settle(fixture);
+      const answer = fixture.componentInstance.canLeave();
+      await settle(fixture);
+      expect(textOf(dialog())).toContain('Leave without saving?');
+      expect(textOf(dialog())).toContain(
+        'Sets you changed aren’t logged. If you leave now, the changes are lost.',
+      );
+      press(dialog()!, 'Stay');
+      expect(await answer).toBe(false);
+
+      const again = fixture.componentInstance.canLeave();
+      await settle(fixture);
+      press(dialog()!, 'Leave without saving');
+      expect(await again).toBe(true);
+    });
+
+    it('is asked by a workspace switch or a sign-out about a note not sent', async () => {
+      const { fixture, host } = await render();
+      query<HTMLElement>(host, '.workout-footer summary').click();
+      fill(host, 'Workout note', 'Knee felt fine today.');
+      await settle(fixture);
+
+      const pending = TestBed.inject(UnsavedWork).confirmLeave();
+      await settle(fixture);
+      expect(textOf(dialog())).toContain(
+        'Your note to your coach isn’t sent. If you leave now, it is lost.',
+      );
+      press(dialog()!, 'Leave without saving');
+      expect(await pending).toBe(true);
+      fixture.destroy();
+      expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
+    });
+
+    it('has the browser ask before a reload drops typed work, and only then', async () => {
+      const { fixture, host } = await render();
+      const clean = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(clean);
+      expect(clean.defaultPrevented).toBe(false);
+
+      fill(host, 'Actual load', '62.5');
+      await settle(fixture);
+      const typed = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(typed);
+      expect(typed.defaultPrevented).toBe(true);
+    });
+
+    it('guards the player’s route', () => {
+      expect(trainingRoutes.find((route) => route.path === 'today')?.canDeactivate).toEqual([
+        confirmBeforeLeaving,
+      ]);
+    });
+  });
+
+  it('starts the first set’s rest when a second set is ticked before it saved (WEA-11)', async () => {
+    const first = new Subject<WorkoutSetSaveView>();
+    const second = new Subject<WorkoutSetSaveView>();
+    const record = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const restThenNone = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              sets: [
+                set({ restSeconds: 120 }),
+                set({
+                  prescriptionId: 'prescription-2',
+                  performanceId: 'performance-2',
+                  position: 2,
+                  restSeconds: null,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host } = await render({ recordMyTrainingSet: record }, restThenNone);
+    const cards = host.querySelectorAll<HTMLElement>('.set-card');
+    press(cards[0], 'Log set');
+    press(cards[1], 'Log set');
+    await settle(fixture);
+
+    first.next(saved());
+    first.complete();
+    await settle(fixture);
+    second.next(saved({ setPerformanceId: 'performance-2', executionVersion: 5 }));
+    second.complete();
+    await settle(fixture);
+
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(query(host, '[role="timer"]').textContent).toContain('2:00');
+  });
+
+  describe('the clock (UIQ-1)', () => {
+    it('shows the time a finished workout took, not the time since it started', async () => {
+      const done = day({
+        workouts: [
+          workout({
+            status: 'Completed',
+            startedAtUtc: '2026-08-25T10:00:00Z',
+            durationSeconds: 1925,
+          }),
+        ],
+      });
+      const { host } = await render({}, done);
+      expect(textOf(query(host, '.clock'))).toBe('Workout took 32:05');
+    });
+
+    it('turns to the summary’s time once the workout is finished here', async () => {
+      const running = day({
+        workouts: [workout({ startedAtUtc: new Date(Date.now() - 600_000).toISOString() })],
+      });
+      const { fixture, host } = await render({ completeMyWorkout: finishedWith() }, running);
+      expect(textOf(query(host, '.clock'))).toMatch(/^Workout time 10:0\d$/);
+
+      press(host, 'Log set');
+      await settle(fixture);
+      press(host, 'Finish workout');
+      await settle(fixture);
+      press(host, 'Confirm finish');
+      await settle(fixture);
+      expect(textOf(query(host, '.clock'))).toBe('Workout took 50:00');
+    });
+
+    it('shows no clock for a finished workout whose time is not known', async () => {
+      const { host } = await render({}, day({ workouts: [workout({ status: 'Completed' })] }));
+      expect(host.querySelector('.clock')).toBeNull();
+    });
+  });
+
+  describe('effort (CLIENT-5, CLIENT-9)', () => {
+    it('logs reps left when that is how the client counts effort', async () => {
+      const { fixture, host, api } = await render();
+      query<HTMLElement>(host, '.set-note summary').click();
+      fill(host, 'Actual RPE', '8');
+      await settle(fixture);
+      // One or the other is sent (STR-003): reps left typed after RPE takes its place.
+      fill(host, 'Actual reps left', '1.5');
+      await settle(fixture);
+      expect(field(host, 'Actual RPE').value).toBe('');
+
+      press(host, 'Log set');
+      await settle(fixture);
+      expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+        'execution-1',
+        'performance-1',
+        expect.objectContaining({ rpe: null, rir: 1.5 }),
+      );
+    });
+
+    it('says the RPE range before the save, and sends nothing outside it', async () => {
+      const { fixture, host, api } = await render();
+      query<HTMLElement>(host, '.set-note summary').click();
+      fill(host, 'Actual RPE', '8.3');
+      await settle(fixture);
+      const rpe = field(host, 'Actual RPE');
+      expect(rpe.getAttribute('aria-invalid')).toBe('true');
+      const hint = query(host, `#${rpe.getAttribute('aria-describedby')}`);
+      expect(textOf(hint)).toBe('5 to 10, in half steps');
+      expect(hint.classList).toContain('hint-wrong');
+
+      press(host, 'Log set');
+      await settle(fixture);
+      expect(api.recordMyTrainingSet).not.toHaveBeenCalled();
+      expect(textOf(query(host, '#training-error-summary'))).toBe(
+        'RPE is a number from 5 to 10 in half steps, like 8 or 8.5.',
+      );
+
+      fill(host, 'Actual RPE', '8.5');
+      await settle(fixture);
+      expect(rpe.getAttribute('aria-invalid')).toBeNull();
+      press(host, 'Log set');
+      await settle(fixture);
+      expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+        'execution-1',
+        'performance-1',
+        expect.objectContaining({ rpe: 8.5, rir: null }),
+      );
+    });
+
+    it('says the range of reps left before the save', async () => {
+      const { fixture, host, api } = await render();
+      query<HTMLElement>(host, '.set-note summary').click();
+      fill(host, 'Actual reps left', '6');
+      await settle(fixture);
+      press(host, 'Log set');
+      await settle(fixture);
+      expect(api.recordMyTrainingSet).not.toHaveBeenCalled();
+      expect(textOf(query(host, '#training-error-summary'))).toBe(
+        'Reps left is a number from 0 to 5 in half steps, like 2 or 1.5.',
+      );
+    });
+  });
+
+  it('calls the summary’s volume what was lifted, as Training does (CLIENT-5)', async () => {
+    const { fixture, host } = await render({
+      completeMyWorkout: finishedWith({
+        volume: [{ unit: 'Kilogram', loadTimesRepetitions: 2187.5 }],
+      }),
+    });
+    press(host, 'Log set');
+    await settle(fixture);
+    press(host, 'Finish workout');
+    await settle(fixture);
+    press(host, 'Confirm finish');
+    await settle(fixture);
+
+    const lifted = Array.from(host.querySelectorAll('.summary-stats > div')).find(
+      (stat) => textOf(stat.querySelector('span')) === 'kg lifted',
+    );
+    expect(textOf(lifted?.querySelector('strong'))).toBe('2,187.5');
+    expect(host.textContent).not.toContain('× reps');
   });
 });

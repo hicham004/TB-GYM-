@@ -374,14 +374,21 @@ backend always recomputes on apply. Rejection is atomic and leaves the mesocycle
 
 **TRN-015** Completing the last programmed session may make the mesocycle terminal, but the
 completed workout remains visible in the client's read model on its scheduled local date.
-Prescribed values and actual performance remain separate and visible after completion.
+Prescribed values and actual performance remain separate and visible after completion. A finished
+workout in that read carries the time it took (`durationSeconds`, its finish summary's whole seconds
+from start to finish), which the player shows instead of a clock counting on (audit A4, UIQ-1).
 
 **TRN-016** Recording a non-null actual load requires an explicit kg or lb unit. When a set
 has no prescribed load/unit, the client UI presents an unselected unit choice rather than
 displaying a default that is absent from the draft or silently assuming a measurement system.
 
 **TRN-017** Unsaved workout entries are client-side drafts kept separate from API DTOs and keyed
-by set-performance ID. Saving or failing one set never erases another set's unsaved values.
+by set-performance ID. Saving or failing one set never erases another set's unsaved values. When a
+set's save is refused because another tab or phone saved to the workout first (409), the player
+reads the workout again, keeping every draft, and tries that save once more on the version it has
+now; if the workout was finished there, it says so and sends nothing more (audit A4, CLIENT-3).
+Before the router, a workspace switch, a sign-out, an ended session or a reload leaves sets changed
+but not logged, or a note not sent, the player asks; nothing is logged on the way out (WEA-1).
 
 **TRN-018** The client's Today never calls a day a rest day on a guess (Step 3B). The upcoming read
 returns `todayCoverage`: the block covering the workspace's today with the same predicates as the
@@ -515,8 +522,13 @@ set's own unit; otherwise the field stays empty. A swapped exercise keeps the pr
 load, which the coach wrote for another lift, and its Target line leaves that load out. A logged set keeps
 what was logged, typing wins over all of it, and the row shows exactly what ✓ sends; last time's numbers
 stay on screen as a reference. The workout's kg or lb choice starts on the prescribed unit, else on the
-unit last time's loads brought into the sets, else on neither (TRN-016). Web only: the server records
-what it is sent.
+unit last time's loads brought into the sets, else on neither (TRN-016). Choosing a unit is not an edit
+(audit A4, CLIENT-1): a load the client typed keeps its number and takes the unit chosen, and a set not
+touched starts again where this rule starts it in that unit, the coach's load only when written in it,
+else last time's on the set in it, else empty. Kilograms and pounds are never converted, so choosing back
+brings the coach's number back; the player says when the coach's loads are in the other unit, every load
+names its unit, and the choice holds for that workout through every reload. Last time's set stays beside
+each set on a phone too. Web only: the server records what it is sent.
 
 **TRN-030** Share cards of records and programs (R6.1a, M9; the owner's decision of 2026-10-11). A client
 may turn a personal record from a workout's finish summary (TRN-019) or a finished program into a picture
@@ -553,7 +565,10 @@ RPE and derives RIR as `10 - RPE`; UI/API input cannot persist contradictory tar
 
 **STR-004** The plan's 0-10 range for both fields is rejected. Phase 3 accepts RPE 5-10 and
 RIR 0-5, each in 0.5 steps. This is a conservative v1 product policy, not a claim that the
-subjective scale is physiologically exact; changing it requires a strategy/version decision.
+subjective scale is physiologically exact; changing it requires a strategy/version decision. A
+client logs a set's effort as RPE or as reps left (RIR), and the player sends one of them, RPE when
+both are known (STR-003); it says each range beside its field and refuses a number outside it before
+anything is sent (audit A4, CLIENT-5, CLIENT-9). The server keeps refusing it too.
 
 **STR-005** There is no universal "most sophisticated" load formula. Phase 3 names and
 versions Epley v1 (1-12 reps), Brzycki v1 (1-10 reps), and `WorkingMaxLoad` v2. The latter

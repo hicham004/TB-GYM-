@@ -1039,6 +1039,7 @@ export type ClientWorkoutView = {
   notes: Array<WorkoutNoteView>;
   executionVersion: null | number | string;
   startedAtUtc?: null | string;
+  durationSeconds?: null | number | string;
 };
 
 export type CoachActivityItemView = {

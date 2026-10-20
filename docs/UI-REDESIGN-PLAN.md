@@ -1024,7 +1024,8 @@ of the implemented R1.3 screens before production rollout.
   was chosen was wiped by the choice; the inputs showed the target while ✓ would have sent an empty
   load; a logged set's Target line read at 2.4:1 on its dark card (axe). Not built: (1) choosing kg
   or lb still marks every set not yet logged as edited, so Finish refuses until each is logged (older
-  behaviour); a unit-only change should not count as unsaved work; (2) a locked phone hears nothing
+  behaviour); a unit-only change should not count as unsaved work (built in audit A4, 2026-10-20:
+  TRN-029); (2) a locked phone hears nothing
   at the end of a rest, since the page's timers sleep; that needs a push from a service worker, which
   §4 rules out for now; (3) no setting to turn the beeps off; (4) `RestTimer` stays a player part, not
   yet in `ui/` and the lab (§4 lists it in the kit), so the lab's baselines are not rewritten; (5) the
@@ -1100,7 +1101,8 @@ of the implemented R1.3 screens before production rollout.
     session; a list of past programs would offer the rest;
   - (e) `progress-dashboard.scss` names `'Instrument Serif'` too, so Progress's serif moment still falls
     back to Georgia;
-  - (f) the player's clock keeps counting on the finish summary;
+  - (f) the player's clock keeps counting on the finish summary (fixed in audit A4, 2026-10-20: it shows
+    the time the workout took, TRN-015);
   - (g) `R25bHistoryListsFinishedWorkoutsNewestFirstWithTheRecordsEachSet` fails like R34a's when a run
     starts in the hour after midnight in Beirut before 25 Oct: whole-day steps across the clock change
     land a day short. R6.1a's tests start their clock at midday instead.

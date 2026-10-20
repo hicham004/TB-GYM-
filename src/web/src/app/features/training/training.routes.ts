@@ -41,6 +41,8 @@ export const trainingRoutes: Routes = [
   {
     path: 'today',
     canActivate: [clientGuard],
+    // Sets changed but not logged, or a note not sent, are asked about before they are left (WEA-1).
+    canDeactivate: [confirmBeforeLeaving],
     title: $localize`Today's training | TB Gym`,
     // The player fills the screen: no tab bar over Finish, as in the prototype (R5.4a). It draws
     // itself dark in either mode (R5.3e); the exercise video sheet over it follows the person's.

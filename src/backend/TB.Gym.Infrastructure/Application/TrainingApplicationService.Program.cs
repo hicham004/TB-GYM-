@@ -358,8 +358,14 @@ internal sealed partial class TrainingApplicationService
     }
 
     private int WorkoutDurationSeconds(WorkoutExecution workout) =>
-        (int)Math.Max(0, Math.Floor(
-            ((workout.CompletedAtUtc ?? clock.UtcNow) - workout.StartedAtUtc).TotalSeconds));
+        WholeSecondsBetween(workout.StartedAtUtc, workout.CompletedAtUtc ?? clock.UtcNow);
+
+    /// <summary>A finished workout's duration as its finish summary gives it; null while it runs.</summary>
+    private static int? FinishedDurationSeconds(WorkoutExecution workout) =>
+        workout.CompletedAtUtc is { } completed ? WholeSecondsBetween(workout.StartedAtUtc, completed) : null;
+
+    private static int WholeSecondsBetween(DateTimeOffset start, DateTimeOffset end) =>
+        (int)Math.Max(0, Math.Floor((end - start).TotalSeconds));
 
     private sealed record ProgramBlockRow(
         Guid Id,

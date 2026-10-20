@@ -24,6 +24,12 @@
   font-size: clamp(1rem, 3vw, 1.35rem);
   margin: 0.15rem 0;
 }
+// At 200% text a long lift's name and the spaced-out labels break rather than run off the phone.
+.player-top h1,
+.exercise-heading h2,
+.eyebrow {
+  overflow-wrap: anywhere;
+}
 .eyebrow {
   color: #d1e0d4 !important;
   font-size: 0.72rem;
@@ -42,9 +48,11 @@
   font-size: 1.8rem;
   text-decoration: none;
 }
+// Accent text on the night colour reads the bright accent, which keeps AA under any brand (UIQ-18).
 .clock {
-  color: var(--tb-accent, #d9ed94);
+  color: var(--tb-accent-bright, #d9ed94);
   font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
 }
 .segments {
   display: flex;
@@ -66,7 +74,6 @@
 }
 .started-date,
 .workout-intro,
-.muted,
 .nextline {
   color: #a8bbaf;
 }
@@ -120,6 +127,11 @@ summary:focus-visible {
 .unit-choice {
   max-inline-size: 14rem;
 }
+.unit-note {
+  margin: 0 0 0.75rem;
+  color: #c7d6cc;
+  font-size: 0.9rem;
+}
 .player-body {
   margin-block-start: 1rem;
 }
@@ -142,7 +154,7 @@ summary:focus-visible {
   block-size: 4.5rem;
   border-radius: 1rem;
   background: var(--tb-brand);
-  color: var(--tb-accent);
+  color: var(--tb-accent-bright);
   font-size: 2.2rem;
 }
 .coach-note {
@@ -163,145 +175,15 @@ summary:focus-visible {
   color: #fff;
   font-variant-numeric: tabular-nums;
 }
-.set-head {
-  display: grid;
-  grid-template-columns: 2rem 1fr 1.2fr 1.2fr 3rem;
-  gap: 0.4rem;
-  padding: 0.4rem 0.7rem;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: #9bb0a1;
-}
-.sets {
-  display: grid;
-  gap: 0.55rem;
-}
-.set-card {
-  display: grid;
-  grid-template-columns: 2rem 1fr 1.2fr 1.2fr 3rem;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.7rem;
-  border-radius: 1rem;
-  background: #ffffff0e;
-}
-.set-card:has(.set-step) {
-  color: #14291e;
-  background: #f5f7ef;
-  box-shadow: 0 0 0 2px var(--tb-accent, #d9ed94);
-}
-.set-number {
-  font-weight: 700;
-  color: #a5b8aa;
-  text-align: center;
-}
-.set-previous {
-  color: #a5b8aa;
-  font-size: 0.84rem;
-}
-.set-card:has(.set-step) .set-previous {
-  color: #42554a;
-}
-.set-step {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-  border-radius: 0.65rem;
-  padding: 0.2rem;
-  background: #e8eee1;
-}
-.set-step button {
-  inline-size: 1.8rem;
-  min-block-size: 2rem;
-  color: #153d33;
-  background: #fff;
-  padding: 0;
-}
-.set-step label {
-  display: grid;
-  text-align: center;
-  font-size: 0.58rem;
-  color: #4f6057;
-}
-.set-step input {
-  inline-size: 100%;
-  min-inline-size: 2rem;
-  border: 0;
-  background: transparent;
-  text-align: center;
-  color: #14291e;
-  font-weight: 700;
-}
-.log-set {
-  inline-size: 2.7rem;
-  overflow: hidden;
-  font-size: 0;
-  color: #fff;
-  background: var(--tb-brand, #153d33);
-}
-.log-set::before {
-  content: '✓';
-  font-size: 1.4rem;
-}
-.edit-set {
-  grid-column: 4;
-  padding: 0.3rem;
-  color: var(--tb-accent, #d9ed94);
-  background: #ffffff1b;
-  font-size: 0.75rem;
-}
-.done-tick {
-  grid-column: 5;
-  display: grid;
-  place-items: center;
-  inline-size: 2.4rem;
-  block-size: 2.4rem;
-  border-radius: 0.7rem;
-  color: #11201b;
-  background: var(--tb-accent);
-}
-.pr-badge {
-  grid-column: 1 / -1;
-  color: var(--tb-accent);
-}
-.logged-set {
-  grid-column: 3;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-.prescription {
-  grid-column: 1 / -1;
-  margin: 0.15rem 0 0;
-  padding-inline-start: 0.25rem;
-  color: #a5b8aa;
-  font-size: 0.75rem;
-}
-// The set being entered is a light card; a logged one stays on the night colour.
-.set-card:has(.set-step) .prescription {
-  color: #52645a;
-}
-.set-card .coach-note {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: 0.8rem;
-}
-.set-note,
-.set-card .player-error {
-  grid-column: 1 / -1;
-}
-.set-note summary,
 .workout-footer summary {
   font-size: 0.78rem;
   cursor: pointer;
 }
-.set-note label,
 .workout-footer label {
   display: grid;
   gap: 0.25rem;
   margin-block: 0.6rem;
 }
-.set-note input,
 .workout-footer textarea {
   inline-size: 100%;
   min-block-size: 2.75rem;
@@ -339,6 +221,9 @@ summary:focus-visible {
 }
 .player-actions button {
   flex: 1;
+  // Never narrower than its longest word (the player lets everything else shrink), so large text
+  // wraps the row instead.
+  min-inline-size: auto;
 }
 .finish-confirmation {
   margin-block: 1rem;
@@ -365,7 +250,7 @@ summary:focus-visible {
 .finish-summary em {
   font-family: var(--tb-font-serif);
   font-weight: 400;
-  color: var(--tb-accent, #d9ed94);
+  color: var(--tb-accent-bright, #d9ed94);
 }
 .summary-stats {
   display: grid;
@@ -413,10 +298,11 @@ summary:focus-visible {
   text-align: center;
 }
 .save-status {
-  color: var(--tb-accent, #d9ed94);
+  color: var(--tb-accent-bright, #d9ed94);
 }
 .runner-summary-empty,
-.save-status-empty {
+.save-status-empty,
+.unit-note-empty {
   display: none;
 }
 .player-error {
@@ -462,32 +348,6 @@ summary:focus-visible {
 @media (max-width: 620px) {
   .player {
     padding: 1rem 0.75rem 7rem;
-  }
-  .set-head {
-    display: none;
-  }
-  .set-card {
-    grid-template-columns: 1.5rem 1fr 1fr 2.75rem;
-    gap: 0.25rem;
-    padding: 0.55rem;
-  }
-  .set-previous {
-    display: none;
-  }
-  .set-step button {
-    inline-size: 1.5rem;
-  }
-  .set-step input {
-    font-size: 0.9rem;
-  }
-  .logged-set {
-    grid-column: 2 / 4;
-  }
-  .edit-set {
-    grid-column: 3;
-  }
-  .done-tick {
-    grid-column: 4;
   }
   .previous-performance {
     font-size: 0.8rem;

@@ -3,7 +3,10 @@ import { ACCOUNTS, api, expect, memberships, requireLive, signIn, test } from '.
 /**
  * The workout player against a live API: start, log a set as prescribed and one edited, swap a lift
  * and log under it (which keeps that lift, TRN-010), finish with sets left, read the summary and find
- * the workout in Training's history (TRN-019, TRN-029).
+ * the workout in Training's history (TRN-019, TRN-029). Audit A4 adds the player's own fixes: effort
+ * checked before the save and reps left logged (CLIENT-5, CLIENT-9), kg or lb chosen without an edit
+ * (CLIENT-1), a set logged after another phone saved first (CLIENT-3), the question before leaving
+ * typed work (WEA-1), and a finished workout's time that stays put (UIQ-1).
  *
  * A session can be started once, so the file takes the first demo client who still has a workout
  * today that is not finished (Maya first, then Sara and Jad on a rebuilt demo), resumes one already
@@ -22,6 +25,7 @@ interface SetView {
   restSeconds: number | null;
   actualLoad: number | null;
   actualRepetitions: number | null;
+  actualRpe: number | null;
   isCompleted: boolean;
 }
 interface ExerciseView {
@@ -29,6 +33,7 @@ interface ExerciseView {
   prescribedExerciseId: string;
   prescribedExerciseName: string;
   actualExerciseName: string;
+  wasSubstituted: boolean;
   modificationPolicy: 'Locked' | 'CoachApprovedSwap';
   alternatives: { exerciseId: string; name: string }[];
   sets: SetView[];
@@ -264,32 +269,183 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
     await goToExercise();
   });
 
-  await test.step('A refused RPE keeps the set unlogged and the entries on the page', async () => {
-    const third = openSets[2] ? setCard(exercise.sets.indexOf(openSets[2])) : null;
-    if (third) {
-      await third.getByText('More options').click();
-      await third.getByRole('spinbutton', { name: 'Actual RPE' }).fill('8.3');
-      await third.getByRole('button', { name: 'Log set' }).click();
-      await expect(third.locator('.player-error')).toContainText('RPE must be between 5 and 10');
-      await expect(third.getByRole('button', { name: 'Log set' })).toBeVisible();
+  await test.step('Effort is checked before the save, and reps left is logged as its RPE (CLIENT-5, CLIENT-9)', async () => {
+    const third = openSets[2];
+    if (!third) {
+      test.info().annotations.push({
+        type: 'note',
+        description: 'This exercise had no third set to log, so the effort step was not run.',
+      });
+      return;
     }
+    const card = setCard(exercise.sets.indexOf(third));
+    const saves: string[] = [];
+    const watchSaves = (request: { method(): string; url(): string }) => {
+      if (request.method() === 'PUT' && request.url().includes('/sets/')) saves.push(request.url());
+    };
+    page.on('request', watchSaves);
+    await card.getByText('More options').click();
+    const rpe = card.getByRole('spinbutton', { name: 'Actual RPE' });
+    await rpe.fill('8.3');
+    // The range is said beside the field and the number marked, before anything is sent.
+    await expect(rpe).toHaveAttribute('aria-invalid', 'true');
+    await expect(card.locator('.hint-wrong')).toHaveText('5 to 10, in half steps');
+    await card.getByRole('button', { name: 'Log set' }).click();
+    await expect(card.locator('.player-error')).toHaveText(
+      'RPE is a number from 5 to 10 in half steps, like 8 or 8.5.',
+    );
+    expect(saves).toEqual([]);
+
+    await card.getByRole('spinbutton', { name: 'Actual reps left' }).fill('1.5');
+    await expect(rpe).toHaveValue('');
+    await card.getByRole('button', { name: 'Log set' }).click();
+    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    page.off('request', watchSaves);
+    expect(saves).toHaveLength(1);
+    await page
+      .getByRole('timer')
+      .getByRole('button', { name: 'Skip' })
+      .click()
+      .catch(() => undefined);
+    const saved = (await readWorkout(page, tenantId, workout.sessionId)).exercises[
+      exerciseIndex
+    ].sets.find((set) => set.position === third.position)!;
+    expect(saved.isCompleted).toBe(true);
+    expect(saved.actualRpe).toBe(8.5);
   });
 
-  await test.step('A unit toggle must not block Finish (CLIENT-1)', async () => {
-    // A fresh page first, so no typed draft of ours is pending: the toggle alone is under test.
+  await test.step('Choosing lb then kg changes no set and blocks nothing (CLIENT-1)', async () => {
+    // A fresh page first, so no typed draft of ours is pending: the choice alone is under test.
+    const current = await readWorkout(page, tenantId, workout.sessionId);
+    const loaded = current.exercises.findIndex(
+      (item) =>
+        !item.wasSubstituted &&
+        item.sets.some(
+          (set) =>
+            !set.isCompleted &&
+            set.prescribedLoad !== null &&
+            set.prescribedLoadUnit === 'Kilogram',
+        ),
+    );
     await openPlayer();
-    await page.getByRole('radio', { name: 'lb' }).click();
-    await page.getByRole('radio', { name: 'kg' }).click();
+    if (loaded >= 0) {
+      for (let i = 0; i < loaded; i++) {
+        await page.getByRole('button', { name: /Next exercise/ }).click();
+      }
+      const sets = current.exercises[loaded].sets;
+      const open = sets.findIndex((set) => !set.isCompleted && set.prescribedLoad !== null);
+      const input = setCard(open).getByRole('spinbutton', { name: 'Actual load', exact: true });
+      await expect(input).toHaveValue(String(sets[open].prescribedLoad));
+      await page.getByRole('radio', { name: 'lb' }).click();
+      // Nothing is converted: the coach's kilograms wait for the client's own pounds, and it says so.
+      await expect(input).toHaveValue('');
+      await expect(page.locator('.unit-note')).toHaveText(
+        'Your coach set these loads in kg. Type what you lift in lb.',
+      );
+      await expect(setCard(open).locator('.set-step label span').first()).toHaveText('Load (lb)');
+      await page.getByRole('radio', { name: 'kg' }).click();
+      await expect(input).toHaveValue(String(sets[open].prescribedLoad));
+    } else {
+      await page.getByRole('radio', { name: 'lb' }).click();
+      await page.getByRole('radio', { name: 'kg' }).click();
+    }
     await page.getByRole('button', { name: 'Finish workout' }).click();
-    // Known defect: the toggle marks every set edited and Finish refuses. Soft, so the flow goes on.
-    await expect
-      .soft(page.locator('#training-error-summary'), 'a unit toggle alone must not be an edit')
-      .not.toContainText('Save every edited set');
-    // The confirmation only opens when Finish was not refused, so give the click a short leash.
+    await expect(page.locator('.finish-confirmation')).toContainText('Finish workout?');
+    await expect(page.locator('#training-error-summary')).not.toContainText(
+      'Save every edited set',
+    );
+    await page.getByRole('button', { name: 'Keep training' }).click();
+  });
+
+  await test.step('Another phone logs first: the page reads the workout again and logs (CLIENT-3)', async () => {
+    await openPlayer();
+    const current = await readWorkout(page, tenantId, workout.sessionId);
+    const open = current.exercises.flatMap((item, index) =>
+      item.sets.filter((set) => !set.isCompleted).map((set) => ({ index, set })),
+    );
+    if (open.length < 2) {
+      test.info().annotations.push({
+        type: 'note',
+        description: 'Fewer than two sets were left to log, so the two-phone step was not run.',
+      });
+      return;
+    }
+    const [elsewhere, here] = open;
+    // The other phone logs its set (as prescribed, or 20 kg where the coach left the load open), so
+    // the version this page read moves on.
+    const other = await api(
+      page,
+      'PUT',
+      `/api/training/me/workouts/${current.workoutExecutionId}/sets/${elsewhere.set.performanceId}`,
+      {
+        tenantId,
+        body: {
+          repetitions: elsewhere.set.prescribedRepetitionsMinimum ?? 5,
+          load: elsewhere.set.prescribedLoad ?? 20,
+          loadUnit: elsewhere.set.prescribedLoadUnit ?? 'Kilogram',
+          rpe: null,
+          rir: null,
+          isCompleted: true,
+          clientNote: null,
+          version: current.executionVersion,
+        },
+      },
+    );
+    expect(other.status).toBe(200);
+
+    for (let i = 0; i < here.index; i++) {
+      await page.getByRole('button', { name: /Next exercise/ }).click();
+    }
+    const sets = current.exercises[here.index].sets;
+    await setCard(sets.indexOf(here.set)).getByRole('button', { name: 'Log set' }).click();
+    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    await expect(page.locator('#training-error-summary')).toHaveText('');
+    if (elsewhere.index === here.index) {
+      await expect(setCard(sets.indexOf(elsewhere.set)).locator('.logged-set')).toBeVisible();
+    }
     await page
-      .getByRole('button', { name: 'Keep training' })
-      .click({ timeout: 3_000 })
+      .getByRole('timer')
+      .getByRole('button', { name: 'Skip' })
+      .click()
       .catch(() => undefined);
+    const after = await readWorkout(page, tenantId, workout.sessionId);
+    const logged = after.exercises[here.index].sets.find(
+      (set) => set.performanceId === here.set.performanceId,
+    )!;
+    expect(logged.isCompleted).toBe(true);
+  });
+
+  await test.step('Leaving with a typed load asks first, and Stay keeps it (WEA-1)', async () => {
+    await openPlayer();
+    const current = await readWorkout(page, tenantId, workout.sessionId);
+    const index = current.exercises.findIndex((item) => item.sets.some((set) => !set.isCompleted));
+    if (index < 0) {
+      test.info().annotations.push({
+        type: 'note',
+        description: 'No set was left to type into, so the leaving step was not run.',
+      });
+      return;
+    }
+    for (let i = 0; i < index; i++) {
+      await page.getByRole('button', { name: /Next exercise/ }).click();
+    }
+    const setIndex = current.exercises[index].sets.findIndex((set) => !set.isCompleted);
+    const input = setCard(setIndex).getByRole('spinbutton', { name: 'Actual load', exact: true });
+    await input.fill('77.5');
+    await page.getByRole('link', { name: 'Back to Today' }).click();
+    const ask = page.getByRole('dialog', { name: 'Leave without saving?' });
+    await expect(ask).toContainText('Sets you changed aren’t logged.');
+    await ask.getByRole('button', { name: 'Stay' }).click();
+    await expect(ask).toHaveCount(0);
+    expect(new URL(page.url()).pathname).toBe('/training/today');
+    await expect(input).toHaveValue('77.5');
+
+    await page.getByRole('link', { name: 'Back to Today' }).click();
+    await ask.getByRole('button', { name: 'Leave without saving' }).click();
+    await page.waitForURL((url) => url.pathname === '/');
+    // Leaving logged nothing.
+    const after = await readWorkout(page, tenantId, workout.sessionId);
+    expect(after.exercises[index].sets[setIndex].isCompleted).toBe(false);
   });
 
   let summaryRecords: string[] = [];
@@ -316,9 +472,23 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
     const summary = page.locator('.finish-summary');
     await expect(summary).toBeVisible();
     await expect(summary).toContainText(`${loggedCount} / ${totalSets}`);
-    if (volume > 0) await expect(summary).toContainText(String(volume));
+    if (volume > 0) {
+      // In Training's words: "862.5 kg lifted", never "kg × reps" (CLIENT-5).
+      await expect(summary.locator('.summary-stats')).toContainText(
+        volume.toLocaleString('en-US', { maximumFractionDigits: 1 }),
+      );
+      await expect(summary.locator('.summary-stats')).toContainText('lifted');
+      await expect(summary).not.toContainText('× reps');
+    }
     expect((await readWorkout(page, tenantId, workout.sessionId)).status).toBe('Completed');
     summaryRecords = await summary.locator('.pr-list li').allInnerTexts();
+
+    // The header shows the summary's time and stops counting (UIQ-1).
+    const time = (await summary.locator('.summary-stats strong').first().innerText()).trim();
+    const clock = page.locator('.clock');
+    await expect(clock).toContainText(`Workout took ${time}`);
+    await page.waitForTimeout(2_500);
+    await expect(clock).toContainText(`Workout took ${time}`);
   });
 
   await test.step('Training lists the finished workout with its records; Today says Completed', async () => {
@@ -347,6 +517,12 @@ test('the player keeps a trained client’s finished workout read-only', async (
   await expect(page.getByText('Completed · read only')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Log set' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Finish workout' })).toHaveCount(0);
+  // The time it took, which no longer counts on from its start hours later (UIQ-1).
+  const clock = page.locator('.clock');
+  await expect(clock).toHaveText(/^\s*Workout took \d+:\d{2}\s*$/);
+  const took = await clock.textContent();
+  await page.waitForTimeout(2_500);
+  await expect(clock).toHaveText(took!);
 });
 
 test('Today never calls a day a rest day on a guess (TRN-018)', async ({ page }) => {

@@ -923,6 +923,10 @@ public sealed record CoachWorkoutDetailResult(
     DatedWorkoutView? Detail,
     int? NextNotesSkip);
 
+/// <param name="DurationSeconds">
+/// Set once the workout is finished: its finish summary's duration, so a finished workout shows the time it took
+/// instead of a clock still counting from its start (audit UIQ-1).
+/// </param>
 public sealed record ClientWorkoutView(
     Guid SessionId,
     Guid MesocycleId,
@@ -933,7 +937,8 @@ public sealed record ClientWorkoutView(
     IReadOnlyList<ClientExerciseView> Exercises,
     IReadOnlyList<WorkoutNoteView> Notes,
     uint? ExecutionVersion,
-    DateTimeOffset? StartedAtUtc = null);
+    DateTimeOffset? StartedAtUtc = null,
+    int? DurationSeconds = null);
 
 public sealed record ClientExerciseView(
     Guid PrescriptionId,
