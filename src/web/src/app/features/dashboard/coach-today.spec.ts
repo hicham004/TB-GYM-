@@ -16,15 +16,22 @@ import {
 } from '../../../testing/coach-today-fixtures';
 import { CoachToday } from './coach-today';
 
-async function render(getCoachToday: () => unknown = () => of(coachTodayView())) {
+async function render(
+  getCoachToday: () => unknown = () => of(coachTodayView()),
+  role: 'Owner' | 'Coach' = 'Owner',
+) {
   const tenant = signal<string | null>('tenant-1');
+  const membership = signal({ tenantId: 'tenant-1', tenantName: 'Atlas Performance', role });
   const api = { getCoachToday: vi.fn(getCoachToday) };
   await TestBed.configureTestingModule({
     imports: [CoachToday],
     providers: [
       provideRouter([]),
       { provide: ApiClient, useValue: api },
-      { provide: TenantStore, useValue: { selectedTenantId: tenant } },
+      {
+        provide: TenantStore,
+        useValue: { selectedTenantId: tenant, selectedMembership: membership },
+      },
       {
         provide: AuthStore,
         useValue: { user: signal({ id: OWNER_ID, displayName: 'Karim Haddad' }) },
@@ -177,6 +184,27 @@ describe('CoachToday', () => {
     expect(read()).toContain('Your coaching space is ready');
     expect(host.querySelector('app-empty-state a[href="/invitations"]')?.textContent).toContain(
       'Invite your first client',
+    );
+  });
+
+  /**
+   * Audit AUTH-16: a coach who joined somebody's team was told "Your coaching space is ready", as if
+   * they had made it. The space is the owner's; their clients come from their own invitations or the
+   * owner's hand.
+   */
+  it('welcomes a coach who joined a team to it, and says where their clients come from', async () => {
+    const { host, read } = await render(() => of(emptyCoachTodayView()), 'Coach');
+
+    expect(host.querySelector('app-stat-tile')).toBeNull();
+    expect(host.querySelector('app-empty-state h2')?.textContent?.trim()).toBe(
+      'Welcome to the team at Atlas Performance',
+    );
+    expect(read()).toContain(
+      'Clients you invite are yours, and the owner can assign clients to you.',
+    );
+    expect(read()).not.toContain('Your coaching space is ready');
+    expect(host.querySelector('app-empty-state a[href="/invitations"]')?.textContent?.trim()).toBe(
+      'Invite a client',
     );
   });
 

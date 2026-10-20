@@ -1856,7 +1856,9 @@ limited to the coach's assigned clients.
   with Change opening a sheet that searches every zone by city or region (the device's zone offered first); the
   week's first day and the currency new plans start in as segmented choices (US dollar, Lebanese pound, Another
   with a code checked against the browser's ISO list); the stored language is kept and not offered (see
-  follow-ups); Save changes, Undo changes and the leave warning. **Team**: the owner first, then each coach with
+  follow-ups). Since audit A11a the zone row and its sheet are the kit's `TimeZoneField`, and registration picks
+  its zone (from the device's, the sheet light like the page) and its currency the same way, with no language
+  select; Save changes, Undo changes and the leave warning. **Team**: the owner first, then each coach with
   initials for a face, the role, clients and when they joined; Invite a coach opens a sheet; who is still to
   accept sits under Waiting to join with how long the link works; Send a new link, Cancel the invitation and
   Remove from the team wait in each row's menu, removal asked first. **Billing**: where the bill stands and what

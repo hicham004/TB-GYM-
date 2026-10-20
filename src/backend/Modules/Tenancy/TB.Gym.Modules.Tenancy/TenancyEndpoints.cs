@@ -27,10 +27,12 @@ public static class TenancyEndpoints
                         result.Email,
                         result.DevelopmentConfirmationUrl,
                         result.EmailAvailable)),
+                // Saying the email is taken is the accepted trade-off of a registration form (audit BEB-4);
+                // the sentence says what to do next (AUTH-9).
                 WorkspaceRegistrationStatus.EmailAlreadyRegistered => Results.Conflict(new
                 {
                     code = "email_already_registered",
-                    message = "An account already uses this email.",
+                    message = "An account already uses this email. Sign in with it, or reset its password if you've forgotten it.",
                 }),
                 WorkspaceRegistrationStatus.Invalid => Results.ValidationProblem(
                     result.Errors ?? new Dictionary<string, string[]>()),

@@ -22,6 +22,8 @@ const ROUTES: {
 
 async function open(page: Page, route: (typeof ROUTES)[number]): Promise<void> {
   await route.arrange(page);
+  // Registration shows the time now in its time zone (audit AUTH-5); a still clock keeps the image still.
+  await page.clock.setFixedTime(new Date('2026-10-20T17:47:00Z'));
   await page.goto(route.path);
   await expect(page.locator(route.ready).first()).toBeVisible();
   await waitForFonts(page);

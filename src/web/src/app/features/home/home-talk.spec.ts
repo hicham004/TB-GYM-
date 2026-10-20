@@ -295,9 +295,29 @@ describe('HomeTalk', () => {
     press(host, 'Send');
     await settle(fixture);
 
-    expect(announced(host)).toContain('Too many messages from this connection for now.');
+    // No WhatsApp number is set here, so the sentence does not send the visitor there (AUTH-4).
+    expect(announced(host)).toBe(
+      'Too many messages from this connection for now. Try again in an hour.',
+    );
     expect(host.querySelector('form')).not.toBeNull();
     expect(host.textContent).not.toContain('Thanks,');
+
+    TestBed.resetTestingModule();
+    const withNumber = await render(
+      {
+        submitContactRequest: vi.fn(() =>
+          throwError(() => new HttpErrorResponse({ status: 429, error: null })),
+        ),
+      },
+      { whatsAppLink: 'https://wa.me/96170123456' },
+    );
+    fillTheForm(withNumber.host);
+    await settle(withNumber.fixture);
+    press(withNumber.host, 'Send');
+    await settle(withNumber.fixture);
+    expect(announced(withNumber.host)).toBe(
+      'Too many messages from this connection for now. Try again in an hour, or write to us on WhatsApp.',
+    );
 
     TestBed.resetTestingModule();
     const failed = await render({

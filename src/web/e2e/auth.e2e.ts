@@ -98,14 +98,23 @@ const SCREENS: {
   {
     name: 'reset password',
     open: async (page) => {
-      await signedOutWith(page, 'POST', '/api/auth/reset-password', 400);
+      // What the API answers for a link already used or replaced (AUTH-6).
+      await signedOutWith(page, 'POST', '/api/auth/reset-password', 400, {
+        code: 'invalid_or_expired_token',
+        message: 'This reset link has expired or was already used. Ask for a new one.',
+      });
       await page.goto('/auth/reset-password?userId=user-1&code=reset-code');
     },
     fail: async (page) => {
       await page.getByLabel('New password', { exact: true }).fill('correct-horse-battery');
       await page.getByLabel('Confirm new password', { exact: true }).fill('correct-horse-battery');
       await page.getByRole('button', { name: 'Update password' }).click();
-      await expect(page.getByRole('alert')).toContainText('invalid or expired');
+      // The way on, in place of a form that could never succeed (AUTH-7).
+      await expect(page.getByRole('alert')).toContainText('expired or was already used');
+      await expect(page.getByRole('link', { name: 'Request a new reset link' })).toHaveAttribute(
+        'href',
+        '/auth/forgot-password',
+      );
     },
   },
   {
@@ -254,4 +263,111 @@ test('every signed-out screen reflows at 200% text on a phone', async ({ page })
     await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
     await expectNoHorizontalOverflow(page);
   }
+});
+
+/** The kit's sheet, once its entrance has settled (it fades in). */
+async function openZoneSheet(page: Page) {
+  await page.getByRole('button', { name: 'Change' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Time zone' });
+  await expect(sheet).toBeVisible();
+  await page.waitForTimeout(600);
+  return sheet;
+}
+
+for (const width of [390, 1440]) {
+  /**
+   * Audit AUTH-5: registration asked for "Asia/Beirut" in a text box and refused "Beirut". It picks the
+   * zone by city in Settings' sheet, light like the page whatever the device's scheme.
+   */
+  test(`registration finds its time zone by city in a light sheet at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await mockSignedOut(page);
+    await page.goto('/auth/register');
+    await ready(page);
+    await expect(page.locator('[data-zone] strong')).toHaveText('UTC');
+    await expect(page.locator('select')).toHaveCount(0);
+
+    const sheet = await openZoneSheet(page);
+    await expect(page.locator('.cdk-overlay-pane:has([role="dialog"])')).toHaveAttribute(
+      'data-mode',
+      'light',
+    );
+    await expectAccessible(page);
+    await page.screenshot({ path: test.info().outputPath(`register-zones-${width}.png`) });
+    await sheet.getByLabel('Search by city').fill('beirut');
+    await sheet.getByRole('button', { name: /^Beirut/ }).click();
+    await expect(sheet).toBeHidden();
+    await expect(page.locator('[data-zone] strong')).toHaveText('Beirut, Asia');
+
+    await page.getByRole('radio', { name: 'Another' }).check();
+    await page.getByLabel('Currency code').fill('eur');
+    await expect(page.locator('[data-currency-line]')).toHaveText(
+      'New plans are priced in Euro (EUR). You can change it later in Settings.',
+    );
+    await expectNoHorizontalOverflow(page);
+    await expectAccessible(page);
+    await page.screenshot({
+      path: test.info().outputPath(`register-region-${width}.png`),
+      fullPage: true,
+    });
+  });
+
+  /** Audit AUTH-9: the email is taken (registration's accepted trade-off), and the answer says what next. */
+  test(`a taken email at registration offers signing in or a reset at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await signedOutWith(page, 'POST', '/api/auth/register/coach', 409, {
+      code: 'email_already_registered',
+      message:
+        "An account already uses this email. Sign in with it, or reset its password if you've forgotten it.",
+    });
+    await page.goto('/auth/register');
+    await ready(page);
+    await page.getByLabel('Your name').fill('Karim Haddad');
+    await page.getByLabel('Coaching space name').fill('Atlas Performance');
+    await page.getByLabel('Email').fill('karim@atlas.example');
+    await page.getByLabel('Password', { exact: true }).fill('Correct-Horse-2026!');
+    await page.getByLabel('Confirm password').fill('Correct-Horse-2026!');
+    await page.getByRole('button', { name: 'Create coach account' }).click();
+
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('An account already uses this email.');
+    await expect(alert.getByRole('link', { name: 'Sign in' })).toHaveAttribute(
+      'href',
+      '/auth/sign-in',
+    );
+    await expect(alert.getByRole('link', { name: 'Reset your password' })).toHaveAttribute(
+      'href',
+      '/auth/forgot-password',
+    );
+    await expectNoHorizontalOverflow(page);
+    await expectAccessible(page);
+    await alert.screenshot({ path: test.info().outputPath(`register-taken-${width}.png`) });
+  });
+}
+
+/**
+ * Audit UIQ-9: the signed-out screens stay light like the homepage whatever the device's scheme (the
+ * lead's call), so the browser's bar takes their cream too instead of going dark above a light page.
+ */
+test('under a dark scheme the signed-out screens keep their light page and a light browser bar', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await mockSignedOut(page);
+  const darkSchemeBar = page.locator('meta[name="theme-color"][media*="dark"]');
+  for (const path of ['/auth/sign-in', '/auth/register', '/auth/forgot-password']) {
+    await page.goto(path);
+    await ready(page);
+    await expect(page.locator('main')).toHaveAttribute('data-mode', 'light');
+    await expect(darkSchemeBar).toHaveAttribute('content', '#f5f3ea');
+  }
+  // Moving between them keeps it light.
+  await page.getByRole('link', { name: 'Return to sign in' }).click();
+  await expect(page.locator('h1')).toContainText('Welcome');
+  await expect(darkSchemeBar).toHaveAttribute('content', '#f5f3ea');
 });

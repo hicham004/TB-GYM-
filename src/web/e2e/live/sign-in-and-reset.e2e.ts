@@ -4,10 +4,10 @@ import { ACCOUNTS, api, expect, requireLive, signIn, test, uniqueEmail } from '.
 /**
  * Sign-in and password recovery against the real API: a wrong password is answered in plain
  * words, forgot-password answers a known and an unknown address identically (NOT-029), a bad
- * reset token fails safely and clears the password fields, a locked account is told so even with
- * the right password (AUTH-2), and a session ended from another device takes the open app to
- * sign-in and back (WEB-1). The last two use a new account, so no demo account is locked or
- * signed out.
+ * reset token fails safely and offers a new link in place of the form (AUTH-7), a locked account is
+ * told so even with the right password (AUTH-2), and a session ended from another device takes the
+ * open app to sign-in and back (WEB-1). The last two use a new account, so no demo account is locked
+ * or signed out.
  */
 requireLive();
 
@@ -94,7 +94,9 @@ test('forgot password answers the same for a known and an unknown address', asyn
   await expect(page.getByText(known.body.message)).toBeVisible();
 });
 
-test('a bad reset token fails safely and clears the password fields', async ({ page }) => {
+test('a bad reset token fails safely and offers a new link instead of a dead form', async ({
+  page,
+}) => {
   await page.goto(
     '/auth/reset-password?userId=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0&code=Q0ZESjhub3R2YWxpZA',
   );
@@ -106,14 +108,19 @@ test('a bad reset token fails safely and clears the password fields', async ({ p
   );
   await page.getByRole('button', { name: 'Update password' }).click();
   expect((await reset).status()).toBe(400);
-  // The link's own fault, in the app's words (audit AUTH-6).
-  await expect(page.locator('#reset-summary')).toHaveText(
+  // The link's own fault, in the app's words (audit AUTH-6), and the way on in place of a form that
+  // could never succeed (AUTH-7).
+  const notice = page.locator('[data-spent-link]');
+  await expect(notice).toHaveText(
     'This reset link has expired or was already used. Ask for a new one.',
   );
-  await expect(page.locator('#reset-password')).toHaveValue('');
-  await expect(page.locator('#reset-confirm-password')).toHaveValue('');
+  await expect(notice).toBeFocused();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
   // The spent token leaves the address bar by history replacement.
   expect(page.url()).not.toContain('code=');
+  await page.getByRole('link', { name: 'Request a new reset link' }).click();
+  await expect(page).toHaveURL(/\/auth\/forgot-password$/);
+  await expect(page.getByRole('button', { name: 'Send reset link' })).toBeVisible();
 });
 
 test('a locked account is told it is locked, even when the password is right', async ({ page }) => {

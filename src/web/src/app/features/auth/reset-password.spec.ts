@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
@@ -15,6 +15,15 @@ function link(params: Record<string, string>) {
 }
 
 const VALID_LINK = { userId: 'user-1', code: 'reset-code-1' };
+
+/** What the API answers for a link that was already used or replaced by a newer one. */
+const SPENT = new HttpErrorResponse({
+  status: 400,
+  error: {
+    code: 'invalid_or_expired_token',
+    message: 'This reset link has expired or was already used. Ask for a new one.',
+  },
+});
 
 async function render(params: Record<string, string>, api: Partial<ApiClient> = {}) {
   const scrubber = { scrub: vi.fn(() => Promise.resolve()) };
@@ -101,9 +110,13 @@ describe('ResetPassword', () => {
     expect(scrubber.scrub).toHaveBeenCalledOnce();
   });
 
-  it('reports a spent or expired link rather than claiming the password changed', async () => {
+  /**
+   * Audit AUTH-7: a spent link left the form on screen with its fields emptied, so the only thing
+   * to do was type a password that could never be accepted. It now offers a new link instead.
+   */
+  it('replaces the form with a new link to ask for when the link is spent or expired', async () => {
     const { fixture, host } = await render(VALID_LINK, {
-      resetPassword: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 400 }))),
+      resetPassword: vi.fn(() => throwError(() => SPENT)),
     });
 
     fill(host, 'New password', 'correct-horse-battery');
@@ -112,11 +125,63 @@ describe('ResetPassword', () => {
     press(host, 'Update password');
     await settle(fixture);
 
-    expect(query(host, '[role="alert"]').textContent).toContain(
-      'The reset link is invalid or expired.',
+    const notice = query(host, '[data-spent-link]');
+    expect(notice.getAttribute('role')).toBe('alert');
+    expect(notice.textContent?.trim()).toBe(
+      'This reset link has expired or was already used. Ask for a new one.',
     );
+    expect(document.activeElement).toBe(notice);
+    const request = query<HTMLAnchorElement>(host, 'a[href="/auth/forgot-password"]');
+    expect(request.textContent?.trim()).toBe('Request a new reset link');
     expect(host.textContent).not.toContain('Password updated');
+    expect(passwords(host)).toEqual([]);
+    expect(host.querySelector('button[type="submit"]')).toBeNull();
+  });
+
+  it('keeps the form for a password the server refuses, which the same link can still change', async () => {
+    const refused = new HttpErrorResponse({
+      status: 400,
+      error: { errors: { identity: ['Add a symbol, such as ! or #.'] } },
+    });
+    const { fixture, host, api } = await render(VALID_LINK, {
+      resetPassword: vi.fn(() => throwError(() => refused)),
+    });
+
+    fill(host, 'New password', 'correct-horse-battery');
+    fill(host, 'Confirm new password', 'correct-horse-battery');
+    await settle(fixture);
+    press(host, 'Update password');
+    await settle(fixture);
+
+    expect(query(host, '[role="alert"]').textContent).toContain('Add a symbol, such as ! or #.');
+    expect(host.querySelector('[data-spent-link]')).toBeNull();
     expect(passwords(host).map((input) => input.value)).toEqual(['', '']);
+
+    // The link was not spent: a better password goes out on the same identifiers.
+    fill(host, 'New password', 'correct-horse-battery!');
+    fill(host, 'Confirm new password', 'correct-horse-battery!');
+    await settle(fixture);
+    press(host, 'Update password');
+    await settle(fixture);
+    expect(api.resetPassword).toHaveBeenLastCalledWith(
+      'user-1',
+      'reset-code-1',
+      'correct-horse-battery!',
+    );
+  });
+
+  it('says it is updating the password while the server works, with the ellipsis character', async () => {
+    const { fixture, host } = await render(VALID_LINK, {
+      resetPassword: vi.fn(() => new Subject<void>()),
+    });
+
+    fill(host, 'New password', 'correct-horse-battery');
+    fill(host, 'Confirm new password', 'correct-horse-battery');
+    await settle(fixture);
+    press(host, 'Update password');
+    await settle(fixture);
+
+    expect(query(host, 'button[type="submit"]').textContent?.trim()).toBe('Updating…');
   });
 
   /**
@@ -125,7 +190,11 @@ describe('ResetPassword', () => {
    */
   it('keeps the server’s answer in view after an earlier refused submit', async () => {
     const { fixture, host } = await render(VALID_LINK, {
-      resetPassword: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 400 }))),
+      resetPassword: vi.fn(() =>
+        throwError(
+          () => new HttpErrorResponse({ status: 400, error: { message: 'Server wording.' } }),
+        ),
+      ),
     });
 
     press(host, 'Update password');
@@ -139,7 +208,7 @@ describe('ResetPassword', () => {
     await settle(fixture);
 
     const summary = query(host, '[role="alert"]').textContent;
-    expect(summary).toContain('The reset link is invalid or expired.');
+    expect(summary).toContain('Server wording.');
     expect(summary).not.toContain("can't be updated yet");
   });
 });

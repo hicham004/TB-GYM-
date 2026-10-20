@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
@@ -54,7 +54,17 @@ describe('ConfirmEmail', () => {
     expect(query<HTMLAnchorElement>(host, 'a.tb-button').getAttribute('href')).toBe(
       '/auth/sign-in',
     );
-    expect(host.textContent).not.toContain('Confirming your email...');
+    expect(host.textContent).not.toContain('Confirming your email…');
+  });
+
+  it('says it is confirming while the server works, with the ellipsis character', async () => {
+    const { host } = await render(
+      { userId: 'user-1', code: 'confirm-code-1' },
+      { confirmEmail: vi.fn(() => new Subject<void>()) },
+    );
+
+    // Audit WEB-16: the app writes "…", never three dots.
+    expect(query(host, '.auth-muted').textContent?.trim()).toBe('Confirming your email…');
   });
 
   it('says the link is incomplete instead of calling the server with nothing', async () => {

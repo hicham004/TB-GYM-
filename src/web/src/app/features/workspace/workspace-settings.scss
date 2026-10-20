@@ -1,4 +1,5 @@
-// Settings › Name and region (R5.2a). Brand v2 tokens only.
+// Settings › Name and region (R5.2a). Brand v2 tokens only; the time zone row and its sheet are the
+// kit's TimeZoneField.
 @use '../settings/settings-page';
 
 .settings {
@@ -8,160 +9,10 @@
   max-inline-size: 48rem;
 }
 
-.row-label {
-  color: var(--tb-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.zone-row {
-  align-items: flex-start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-  justify-content: space-between;
-}
-
-.zone-text {
-  display: flex;
-  flex: 1 1 18rem;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-inline-size: 0;
-}
-
-.zone-value {
-  align-items: baseline;
-  color: var(--tb-ink);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.625rem;
-  margin: 0;
-
-  strong {
-    font-size: 1.0625rem;
-    font-weight: 600;
-  }
-}
-
-.zone-meta {
-  color: var(--tb-muted);
-  font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
-}
-
 .code {
   max-inline-size: 12rem;
 
   input {
     text-transform: uppercase;
   }
-}
-
-// ---------- the time zone sheet ----------
-
-.zones {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.device {
-  align-items: center;
-  background: var(--tb-accent-soft);
-  border: 1px solid var(--tb-line);
-  border-radius: var(--tb-radius-control);
-  color: var(--tb-ink);
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  font-weight: 600;
-  gap: 0.5rem;
-  min-block-size: 2.75rem;
-  padding: 0.5rem 0.75rem;
-  text-align: start;
-
-  &:focus-visible {
-    outline: 3px solid var(--tb-focus);
-    outline-offset: 2px;
-  }
-}
-
-.none {
-  padding-block: 0.5rem;
-}
-
-.zone-list {
-  display: flex;
-
-  // Up to every zone (about 420) with nothing typed: rows off screen are not laid out.
-  li {
-    contain-intrinsic-size: auto 3rem;
-    content-visibility: auto;
-  }
-
-  flex-direction: column;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.zone-option {
-  align-items: center;
-  background: none;
-  border: 0;
-  border-block-end: 1px solid var(--tb-line);
-  color: var(--tb-ink);
-  cursor: pointer;
-  display: grid;
-  font: inherit;
-  gap: 0.125rem 0.75rem;
-  grid-template-columns: minmax(0, 1fr) auto 1.25rem;
-  inline-size: 100%;
-  min-block-size: 3rem;
-  padding: 0.5rem 0.25rem;
-  text-align: start;
-
-  &:hover {
-    background: var(--tb-surface-2);
-  }
-
-  &:focus-visible {
-    outline: 3px solid var(--tb-focus);
-    outline-offset: -3px;
-  }
-
-  &.chosen {
-    font-weight: 600;
-  }
-}
-
-.zone-name {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.5rem;
-  min-inline-size: 0;
-
-  strong {
-    font-weight: 600;
-  }
-}
-
-.zone-area {
-  color: var(--tb-muted);
-  font-size: 0.8125rem;
-}
-
-.zone-offset {
-  color: var(--tb-muted);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.zone-check {
-  color: var(--tb-accent-ink);
-  grid-column: 3;
 }

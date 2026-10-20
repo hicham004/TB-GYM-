@@ -135,7 +135,8 @@
 }
 
 a:focus-visible,
-.auth-summary:focus-visible {
+.auth-summary:focus-visible,
+.auth-message:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-accent);
   outline-offset: var(--focus-separation-gap);
 }
@@ -177,4 +178,28 @@ a:focus-visible,
 
 .auth-muted {
   color: var(--home-muted);
+}
+
+// A quiet line under a field or a group of fields.
+.auth-hint {
+  color: var(--home-muted);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin: 0;
+}
+
+// Registration's other currency, typed as its three letters.
+.auth-code {
+  max-inline-size: 12rem;
+}
+
+.auth-code input {
+  text-transform: uppercase;
+}
+
+// The next step a refusal names, such as signing in when the email already has an account.
+.auth-next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-16);
 }

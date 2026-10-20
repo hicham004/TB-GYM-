@@ -20,6 +20,7 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { houseMoment } from '../../core/i18n/house-dates';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
+import { InvitationHandoff } from '../../core/security/invitation-handoff';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { AuthFrame } from '../auth/auth-frame';
 import { newPasswordReasons, requiredReason } from '../auth/auth-reasons';
@@ -47,6 +48,7 @@ export class AcceptInvitation implements OnInit {
   private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly handoff = inject(InvitationHandoff);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrubber = inject(ActionTokenScrubber);
@@ -74,9 +76,6 @@ export class AcceptInvitation implements OnInit {
   protected readonly spent = signal(false);
   protected readonly token = signal('');
   protected readonly signedInUser = this.auth.user;
-  protected readonly returnUrl = computed(
-    () => `/invite?token=${encodeURIComponent(this.token())}`,
-  );
   /** A coach invitation adds the person to the team rather than making them a client (ADR 0026). */
   protected readonly isCoachInvitation = computed(() => this.invitation()?.kind === 'Coach');
   protected readonly signedInWithInvitedEmail = computed(() => {
@@ -92,7 +91,10 @@ export class AcceptInvitation implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.auth.initialize();
-    const token = this.route.snapshot.queryParamMap.get('token') ?? '';
+    // Back from signing in, the address holds no token: the invitation handed it over (WEB-10).
+    // Taken on every visit, so a token held for one link never stands in for another later.
+    const held = this.handoff.take();
+    const token = this.route.snapshot.queryParamMap.get('token') ?? held ?? '';
     this.token.set(token);
     if (!token) {
       this.error.set($localize`This invitation link is incomplete.`);
@@ -232,6 +234,14 @@ export class AcceptInvitation implements OnInit {
     } finally {
       this.submitting.set(false);
     }
+  }
+
+  /**
+   * "Sign in to accept" opens sign-in with `/invite` to come back to, never the token (audit WEB-10):
+   * the link hands the token over in memory, so no second address or history entry holds it.
+   */
+  protected handOverForSignIn(): void {
+    this.handoff.hold(this.token());
   }
 
   /**

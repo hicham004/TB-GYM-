@@ -1,6 +1,6 @@
 <app-auth-frame [embedded]="!!signedInUser()">
   @if (loading()) {
-    <p class="auth-muted" role="status" i18n>Checking invitation...</p>
+    <p class="auth-muted" role="status" i18n>Checking invitation…</p>
   } @else if (error() && !invitation()) {
     <!-- A dead link cannot say whether it was for a client or a coach (audit COACH-6). -->
     <p class="auth-eyebrow" i18n>Invitation</p>
@@ -90,12 +90,14 @@
         <p class="auth-message auth-message--notice" i18n>
           An account already exists for this email. Sign in to continue.
         </p>
+        <!-- Comes back to /invite alone: the token is handed over in memory (audit WEB-10). -->
         <a
           appButton
           size="touch"
           class="auth-submit"
           routerLink="/auth/sign-in"
-          [queryParams]="{ returnUrl: returnUrl() }"
+          [queryParams]="{ returnUrl: '/invite' }"
+          (click)="handOverForSignIn()"
           i18n
         >
           Sign in to accept
@@ -181,7 +183,7 @@
           aria-describedby="invitation-summary"
         >
           @if (submitting()) {
-            <span i18n>Joining...</span>
+            <span i18n>Joining…</span>
           } @else {
             <span i18n>Create account and join</span>
           }
@@ -204,7 +206,7 @@
           (click)="accept()"
         >
           @if (submitting()) {
-            <span i18n>Joining...</span>
+            <span i18n>Joining…</span>
           } @else {
             <span i18n>Accept invitation</span>
           }

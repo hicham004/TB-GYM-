@@ -69,6 +69,20 @@ export class CoachToday {
     () => (this.auth.user()?.displayName ?? '').trim().split(/\s+/)[0] ?? '',
   );
 
+  /**
+   * A coach on someone else's team, rather than the space's owner (audit AUTH-16): with no clients
+   * yet they are welcomed to the team, not told their coaching space is ready.
+   */
+  protected readonly joinedTeam = computed(
+    () => this.tenants.selectedMembership()?.role === 'Coach',
+  );
+  protected readonly teamWelcome = computed(() => {
+    const space = this.tenants.selectedMembership()?.tenantName.trim();
+    return space
+      ? $localize`Welcome to the team at ${space}:space:`
+      : $localize`Welcome to the team`;
+  });
+
   /** The people waiting, once each, for the faces on the Clients tile. */
   protected readonly waiting = computed<AvatarStackPerson[]>(() => {
     const seen = new Set<string>();

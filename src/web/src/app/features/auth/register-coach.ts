@@ -1,4 +1,13 @@
-import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import {
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -6,12 +15,24 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { RegistrationResponse } from '../../core/api/api.models';
 import { FormAttempt } from '../../core/forms/form-attempt';
+import {
+  chosenCurrency,
+  type CurrencyChoice,
+  currencyName,
+  currencyReasons,
+} from '../../core/i18n/currencies';
+import { deviceTimeZoneId } from '../../core/i18n/time-zones';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button, ButtonLink } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { PasswordReveal } from '../../ui/password-reveal';
+import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
+import { TimeZoneField } from '../../ui/time-zone-field';
 import { AuthFrame } from './auth-frame';
 import { emailReasons, newPasswordReasons, requiredReason } from './auth-reasons';
+
+/** The zone a new coaching space starts in when the device cannot say its own. */
+const FALLBACK_TIME_ZONE = 'Asia/Beirut';
 
 @Component({
   selector: 'app-register-coach',
@@ -24,6 +45,8 @@ import { emailReasons, newPasswordReasons, requiredReason } from './auth-reasons
     PasswordReveal,
     ReactiveFormsModule,
     RouterLink,
+    SegmentedControl,
+    TimeZoneField,
   ],
   templateUrl: './register-coach.html',
   styleUrl: './auth.scss',
@@ -32,12 +55,15 @@ export class RegisterCoach {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly locale = inject(LOCALE_ID);
   private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
 
   protected readonly attempt = new FormAttempt();
 
   protected readonly submitting = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** The email already has an account (audit AUTH-9): the answer offers signing in or a reset. */
+  protected readonly emailTaken = signal(false);
   protected readonly registration = signal<RegistrationResponse | null>(null);
   protected readonly form = this.formBuilder.nonNullable.group({
     displayName: ['', [Validators.required, Validators.maxLength(200)]],
@@ -45,9 +71,24 @@ export class RegisterCoach {
     password: ['', [Validators.required, Validators.minLength(12)]],
     confirmPassword: ['', Validators.required],
     workspaceName: ['', [Validators.required, Validators.maxLength(200)]],
-    timeZoneId: ['Asia/Beirut', Validators.required],
-    defaultCulture: ['en-LB', Validators.required],
-    defaultCurrencyCode: ['USD', [Validators.required, Validators.pattern(/^[A-Za-z]{3}$/)]],
+  });
+
+  /**
+   * The region is chosen as Settings › Name and region chooses it (audit AUTH-5): the time zone by
+   * city in a sheet, starting from this device's, and the currency in one tap or by its code.
+   */
+  protected readonly timeZoneId = signal(deviceTimeZoneId() ?? FALLBACK_TIME_ZONE);
+  protected readonly currencyChoice = signal<CurrencyChoice>('USD');
+  protected readonly otherCurrency = signal('');
+  protected readonly currencyOptions: readonly SegmentOption[] = [
+    { value: 'USD', label: $localize`US dollar` },
+    { value: 'LBP', label: $localize`Lebanese pound` },
+    { value: 'other', label: $localize`Another` },
+  ];
+  protected readonly currencyLine = computed(() => {
+    if (currencyReasons(this.currencyChoice(), this.otherCurrency()).length > 0) return '';
+    const code = chosenCurrency(this.currencyChoice(), this.otherCurrency());
+    return $localize`New plans are priced in ${currencyName(code, this.locale)}:currency: (${code}:code:). You can change it later in Settings.`;
   });
 
   protected displayNameReasons(): string[] {
@@ -77,17 +118,8 @@ export class RegisterCoach {
     );
   }
 
-  protected timeZoneReasons(): string[] {
-    return requiredReason(
-      this.form.controls.timeZoneId,
-      $localize`Enter a time zone, such as Asia/Beirut.`,
-    );
-  }
-
-  protected currencyReasons(): string[] {
-    return this.form.controls.defaultCurrencyCode.invalid
-      ? [$localize`Enter a three-letter currency code, such as USD.`]
-      : [];
+  protected currencyReasons(): readonly string[] {
+    return currencyReasons(this.currencyChoice(), this.otherCurrency());
   }
 
   protected formReasons(): string[] {
@@ -97,13 +129,16 @@ export class RegisterCoach {
       ...this.emailReasons(),
       ...this.passwordReasons(),
       ...this.confirmPasswordReasons(),
-      ...this.timeZoneReasons(),
       ...this.currencyReasons(),
     ];
   }
 
+  protected setCurrency(value: string): void {
+    this.currencyChoice.set(value as CurrencyChoice);
+  }
+
   protected async submit(): Promise<void> {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.currencyReasons().length > 0) {
       this.form.markAllAsTouched();
       this.attempt.attempt();
       this.summary()?.nativeElement.focus();
@@ -113,6 +148,7 @@ export class RegisterCoach {
     const value = this.form.getRawValue();
     if (value.password !== value.confirmPassword) {
       this.error.set($localize`Passwords do not match.`);
+      this.emailTaken.set(false);
       this.summary()?.nativeElement.focus();
       return;
     }
@@ -120,6 +156,7 @@ export class RegisterCoach {
     this.attempt.reset();
     this.submitting.set(true);
     this.error.set(null);
+    this.emailTaken.set(false);
     try {
       await this.csrf.refresh();
       this.registration.set(
@@ -129,14 +166,18 @@ export class RegisterCoach {
             email: value.email,
             password: value.password,
             workspaceName: value.workspaceName,
-            timeZoneId: value.timeZoneId,
-            defaultCulture: value.defaultCulture,
-            defaultCurrencyCode: value.defaultCurrencyCode.toUpperCase(),
+            timeZoneId: this.timeZoneId(),
+            // Emails and invitations exist in English only for now, as the page says.
+            defaultCulture: 'en-LB',
+            defaultCurrencyCode: chosenCurrency(this.currencyChoice(), this.otherCurrency()),
             weekStartsOn: 'Monday',
           }),
         ),
       );
     } catch (error) {
+      this.emailTaken.set(
+        error instanceof HttpErrorResponse && error.error?.code === 'email_already_registered',
+      );
       this.error.set(apiErrorMessage(error, $localize`Your coach account could not be created.`));
     } finally {
       this.submitting.set(false);

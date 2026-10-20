@@ -185,6 +185,11 @@ test('the owner ends coaching: read-only record, no access, invited back as a ne
     backPage.getByText('An account already exists for this email. Sign in to continue.'),
   ).toBeVisible();
   await backPage.getByRole('link', { name: 'Sign in to accept' }).click();
+  // Sign-in comes back to the invitation without the token in its address (audit WEB-10).
+  await expect(backPage).toHaveURL(/\/auth\/sign-in\?returnUrl=%2Finvite$/);
+  expect(
+    await backPage.evaluate(() => JSON.stringify([history.state, { ...sessionStorage }])),
+  ).not.toContain(new URL(again.body.developmentActionUrl).searchParams.get('token') ?? 'no token');
   await backPage.getByLabel('Email').fill(email);
   await backPage.getByLabel('Password', { exact: true }).fill(password);
   await backPage.getByRole('button', { name: 'Sign in' }).click();

@@ -1,5 +1,14 @@
-import { booleanAttribute, ChangeDetectionStrategy, Component, input } from '@angular/core';
+import {
+  booleanAttribute,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  effect,
+  inject,
+  input,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { BrowserBar } from '../../core/theme/browser-bar';
 
 /**
  * The signed-out layout shared by sign-in, registration, password recovery, email confirmation and
@@ -49,4 +58,20 @@ export class AuthFrame {
   /** A wider column, for registration's paired fields. */
   readonly wide = input(false, { transform: booleanAttribute });
   readonly embedded = input(false, { transform: booleanAttribute });
+
+  constructor() {
+    // The page is always light, so the browser's bar is too, whatever the device's scheme (UIQ-9);
+    // embedded in the app's shell, the bar follows the shell instead.
+    const bar = inject(BrowserBar);
+    let release: (() => void) | null = null;
+    effect(() => {
+      if (this.embedded()) {
+        release?.();
+        release = null;
+      } else {
+        release ??= bar.holdLight();
+      }
+    });
+    inject(DestroyRef).onDestroy(() => release?.());
+  }
 }

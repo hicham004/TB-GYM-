@@ -13,6 +13,7 @@ import type {
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
+import { InvitationHandoff } from '../../core/security/invitation-handoff';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, field as labeledField, fill, press, query, settle } from '../../../testing/dom';
 import { AcceptInvitation } from './accept-invitation';
@@ -58,6 +59,8 @@ async function render(
     invitation?: PublicInvitation;
     signedInAs?: CurrentUser | null;
     token?: string;
+    /** A token the invitation handed over before its "Sign in to accept" (WEB-10). */
+    heldToken?: string;
     api?: Partial<ApiClient>;
   } = {},
 ) {
@@ -99,6 +102,7 @@ async function render(
     ],
   }).compileComponents();
 
+  if (options.heldToken) TestBed.inject(InvitationHandoff).hold(options.heldToken);
   const fixture = TestBed.createComponent(AcceptInvitation);
   await settle(fixture);
   return {
@@ -266,17 +270,47 @@ describe('AcceptInvitation', () => {
     expect(host.textContent).not.toContain('no longer available');
   });
 
-  it('offers sign-in rather than account creation when the email already has an account', async () => {
-    const { host } = await render({
+  /**
+   * Audit WEB-10: the link used to carry the token in the sign-in page's returnUrl, a second address
+   * and history entry holding the credential. It comes back to /invite alone, and the token waits in
+   * memory for the invitation to take it back.
+   */
+  it('offers sign-in when the email already has an account, without the token in its address', async () => {
+    const { fixture, host, router } = await render({
       invitation: invitation({ requiresExistingAccountSignIn: true }),
     });
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     expect(host.textContent).toContain('An account already exists for this email');
     expect(host.querySelector('input[type="password"]')).toBeNull();
     const signIn = query<HTMLAnchorElement>(host, 'a.tb-button');
-    // The link carries the invitation back, so signing in does not lose it.
-    expect(signIn.getAttribute('href')).toContain('returnUrl');
-    expect(signIn.getAttribute('href')).toContain(encodeURIComponent(TOKEN));
+    expect(signIn.getAttribute('href')).toBe('/auth/sign-in?returnUrl=%2Finvite');
+
+    signIn.click();
+    await settle(fixture);
+    expect(String(navigate.mock.calls[0]?.[0])).toBe('/auth/sign-in?returnUrl=%2Finvite');
+    expect(JSON.stringify([{ ...localStorage }, { ...sessionStorage }])).not.toContain(TOKEN);
+    expect(TestBed.inject(InvitationHandoff).take()).toBe(TOKEN);
+  });
+
+  it('reads the handed-over invitation when sign-in brings the person back to /invite', async () => {
+    const { host, api } = await render({
+      token: '',
+      heldToken: TOKEN,
+      signedInAs: user('rana@example.test'),
+    });
+
+    expect(api.getPublicInvitation).toHaveBeenCalledWith(TOKEN);
+    expect(button(host, 'Accept invitation')).toBeTruthy();
+    // Taken once: a later visit to /invite without a link finds nothing held.
+    expect(TestBed.inject(InvitationHandoff).take()).toBeNull();
+  });
+
+  it('reads the link in the address over a handed-over one, and lets the held one go', async () => {
+    const { api } = await render({ heldToken: 'an-older-invitation' });
+
+    expect(api.getPublicInvitation).toHaveBeenCalledWith(TOKEN);
+    expect(TestBed.inject(InvitationHandoff).take()).toBeNull();
   });
 
   it('refuses two different passwords without creating anything', async () => {

@@ -2002,6 +2002,16 @@ A statistical test asserts the medians stay within a factor of three and 250 ms 
 is coarse on purpose: the regression worth catching is a reintroduced synchronous mint, and a tighter
 bound would fail on a loaded machine for reasons unrelated to enumeration.
 
+The other anonymous routes follow the same line (audit BEB-4, SEC-9, 2026-10-20). Sign-in reads the
+password before it says an account is waiting for its email to be confirmed: a wrong password on such
+an account answers 401 `invalid_credentials`, byte for byte what an unknown email gets, and counts
+towards the lock as a confirmed account's does; Identity's own order refused it first. Confirmation
+judges only the link: a code that is not the link's answers 400 `invalid_or_expired_token` alike for an
+unknown, a waiting and a confirmed account, where a confirmed one answered 204 to any code; the real
+link tapped again still answers 204. Registration alone still says an email is taken (409
+`email_already_registered`, its sentence naming signing in or a reset as the next step): the accepted
+trade-off of a registration form.
+
 ### Links, and the headers that may never build one
 
 Every link is built from `Application:PublicBaseUrl`, validated at startup in both composition roots
@@ -2032,7 +2042,12 @@ bar by **history replacement** rather than a new entry, so it is gone from the b
 they never write a token to local storage, session storage, analytics or a log. The invitation screen
 states plainly that resending cancels the previous link, because that is a consequence the person
 pressing it is entitled to know about in advance. Failed password reset and account-creating
-invitation submissions clear password controls while preserving safe fields such as display name.
+invitation submissions clear password controls while preserving safe fields such as display name; a
+reset whose link the API calls spent (`invalid_or_expired_token`) replaces its form with "Request a
+new reset link" (audit AUTH-7). An invitation's "Sign in to accept" opens sign-in with `/invite` to
+come back to and hands the token over in memory (`InvitationHandoff`, audit WEB-10), so no second
+address or history entry holds it; a reload of sign-in loses it, and the emailed link opens the
+invitation again.
 
 See `docs/adr/0021-tokenless-action-email-materialization.md`.
 

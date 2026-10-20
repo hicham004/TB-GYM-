@@ -1,4 +1,3 @@
-import type { DialogRef } from '@angular/cdk/dialog';
 import {
   afterNextRender,
   Component,
@@ -17,6 +16,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type { DayOfWeek, WorkspaceDetails } from '../../core/api/api.models';
 import { FormAttempt } from '../../core/forms/form-attempt';
+import { type CurrencyChoice, currencyName } from '../../core/i18n/currencies';
 import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -26,26 +26,18 @@ import { Button } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
-import { Icon } from '../../ui/icon';
-import type { ModalSurface } from '../../ui/modal-surface';
 import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
-import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
+import { TimeZoneField } from '../../ui/time-zone-field';
 import { UiToast } from '../../ui/toast';
 import { SettingsFrame } from '../settings/settings-frame';
 import {
-  type CurrencyChoice,
-  currencyName,
   draftChanged,
   draftCurrency,
   draftErrors,
   draftFrom,
-  searchTimeZones,
   type SpaceDraft,
   type SpaceField,
-  timeZoneIds,
-  timeZoneOption,
-  type TimeZoneOption,
 } from './workspace-settings.models';
 
 /**
@@ -55,7 +47,16 @@ import {
  */
 @Component({
   selector: 'app-workspace-settings',
-  imports: [Button, Control, Field, Icon, SegmentedControl, SettingsFrame, Skeleton, UiConfirm],
+  imports: [
+    Button,
+    Control,
+    Field,
+    SegmentedControl,
+    SettingsFrame,
+    Skeleton,
+    TimeZoneField,
+    UiConfirm,
+  ],
   templateUrl: './workspace-settings.html',
   styleUrl: './workspace-settings.scss',
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
@@ -64,16 +65,13 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
-  private readonly sheets = inject(UiSheet);
   private readonly dialogs = inject(UiDialog);
   private readonly toast = inject(UiToast);
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
-  private readonly zoneSheet = viewChild.required<TemplateRef<unknown>>('zoneSheet');
   private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
   private loadedTenantId: string | null = null;
-  private openZones: DialogRef<unknown, ModalSurface> | null = null;
 
   protected readonly loadingLabel = $localize`Loading your coaching space…`;
   protected readonly closeLabel = $localize`Close`;
@@ -108,10 +106,6 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
     const draft = this.draft();
     return draft ? draftErrors(draft) : { name: [], currency: [] };
   });
-  protected readonly zone = computed(() => {
-    const id = this.draft()?.timeZoneId;
-    return id ? timeZoneOption(id, new Date(), this.locale) : null;
-  });
   protected readonly currencyLine = computed(() => {
     const draft = this.draft();
     if (!draft) return '';
@@ -120,41 +114,12 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
     return $localize`New plans are priced in ${currencyName(code, this.locale)}:currency: (${code}:code:). Plans you already sell keep their own currency, and so do your clients’ plans and payments.`;
   });
 
-  /** The time zone sheet's search and its list, built once per opening. */
-  protected readonly zoneQuery = signal('');
-  private readonly zoneOptions = signal<readonly TimeZoneOption[]>([]);
-  /** With nothing typed, the saved zone leads and every other follows west to east. */
-  protected readonly zoneResults = computed(() => {
-    const options = this.zoneOptions();
-    const query = this.zoneQuery();
-    if (query.trim() !== '') return searchTimeZones(options, query).slice(0, 60);
-    const saved = this.draft()?.timeZoneId;
-    const all = searchTimeZones(options, '');
-    return [
-      ...all.filter((option) => option.id === saved),
-      ...all.filter((option) => option.id !== saved),
-    ];
-  });
-  /** The zone this device is set to, offered first when it differs from the saved one. */
-  protected readonly deviceZone = computed(() => {
-    let id: string;
-    try {
-      id = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return null;
-    }
-    return this.zoneOptions().find((option) => option.id === id) ?? null;
-  });
-
   constructor() {
     const unregister = inject(UnsavedWork).register(this);
-    inject(DestroyRef).onDestroy(() => {
-      unregister();
-      this.openZones?.close();
-    });
+    // The time zone field closes its own sheet when the form it sits in goes.
+    inject(DestroyRef).onDestroy(unregister);
     this.scope.onReset(() => {
       this.loadedTenantId = null;
-      this.openZones?.close();
       this.workspace.set(null);
       this.draft.set(null);
       this.state.set('loading');
@@ -281,36 +246,5 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
         if (owner.current) this.saving.set(false);
       }
     });
-  }
-
-  // ---------- the time zone sheet ----------
-
-  protected openTimeZones(): void {
-    const draft = this.draft();
-    if (!draft) return;
-    const now = new Date();
-    this.zoneOptions.set(
-      timeZoneIds(draft.timeZoneId).map((id) => timeZoneOption(id, now, this.locale)),
-    );
-    this.zoneQuery.set('');
-    this.openZones?.close();
-    const sheet = this.sheets.open(this.zoneSheet(), {
-      title: $localize`Time zone`,
-      closeLabel: this.closeLabel,
-      initialFocus: '#zone-search',
-    });
-    this.openZones = sheet;
-    sheet.closed.subscribe(() => {
-      if (this.openZones === sheet) this.openZones = null;
-    });
-  }
-
-  protected chooseZone(id: string): void {
-    this.set({ timeZoneId: id });
-    this.openZones?.close();
-  }
-
-  protected zoneLabel(option: TimeZoneOption): string {
-    return option.area ? `${option.city}, ${option.area}` : option.city;
   }
 }

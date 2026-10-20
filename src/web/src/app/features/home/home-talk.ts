@@ -218,7 +218,10 @@ export class HomeTalk {
 
   private explain(error: unknown): string {
     if (error instanceof HttpErrorResponse && error.status === 429) {
-      return $localize`Too many messages from this connection for now. Try again in an hour, or write to us on WhatsApp.`;
+      // WhatsApp is named only where the page links to it (audit AUTH-4).
+      return this.whatsAppLink()
+        ? $localize`Too many messages from this connection for now. Try again in an hour, or write to us on WhatsApp.`
+        : $localize`Too many messages from this connection for now. Try again in an hour.`;
     }
     return apiErrorMessage(
       error,

@@ -125,18 +125,16 @@ public static class IdentityEndpoints
             return AuthenticationFailed();
         }
 
+        if (!user.EmailConfirmed)
+        {
+            return await UnconfirmedSignInAsync(user, request.Password, context, userManager);
+        }
+
         var result = await signInManager.PasswordSignInAsync(
             user,
             request.Password,
             request.RememberMe,
             lockoutOnFailure: true);
-
-        if (result.IsNotAllowed && !user.EmailConfirmed)
-        {
-            return Results.Json(
-                new { code = "email_not_confirmed", message = "Confirm your email before signing in." },
-                statusCode: StatusCodes.Status403Forbidden);
-        }
 
         if (result.IsLockedOut)
         {
@@ -149,6 +147,37 @@ public static class IdentityEndpoints
         }
 
         return Results.Ok(await ToResponseAsync(user, userManager));
+    }
+
+    /// <summary>
+    /// An account still waiting for its email to be confirmed says so only to someone who knows its
+    /// password (audit BEB-4, SEC-9). Identity refuses such an account before it reads the password, which
+    /// told anybody who typed the email that an account was waiting there. Its wrong passwords count
+    /// towards the lock as a confirmed account's do, so the lock tells nothing apart either.
+    /// </summary>
+    private static async Task<IResult> UnconfirmedSignInAsync(
+        ApplicationUser user,
+        string password,
+        HttpContext context,
+        UserManager<ApplicationUser> userManager)
+    {
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            return AccountLocked(context, await userManager.GetLockoutEndDateAsync(user));
+        }
+
+        if (!await userManager.CheckPasswordAsync(user, password))
+        {
+            await userManager.AccessFailedAsync(user);
+            return await userManager.IsLockedOutAsync(user)
+                ? AccountLocked(context, await userManager.GetLockoutEndDateAsync(user))
+                : AuthenticationFailed();
+        }
+
+        await userManager.ResetAccessFailedCountAsync(user);
+        return Results.Json(
+            new { code = "email_not_confirmed", message = "Confirm your email before signing in." },
+            statusCode: StatusCodes.Status403Forbidden);
     }
 
     private static async Task<IResult> LogoutAsync(
@@ -244,10 +273,11 @@ public static class IdentityEndpoints
             return InvalidConfirmationLink();
         }
 
+        // Only the link itself is judged. A confirmed account once answered 204 to any code, which told
+        // a caller holding its id that it was confirmed (audit SEC-9). The real link tapped again still
+        // answers 204: confirming changes no security stamp, so its token stays valid for its day.
         var result = await userManager.ConfirmEmailAsync(user, token);
-        return result.Succeeded || user.EmailConfirmed
-            ? Results.NoContent()
-            : InvalidConfirmationLink();
+        return result.Succeeded ? Results.NoContent() : InvalidConfirmationLink();
     }
 
     /// <summary>

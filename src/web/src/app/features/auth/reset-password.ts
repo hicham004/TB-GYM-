@@ -1,4 +1,14 @@
-import { Component, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import {
+  afterNextRender,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -34,13 +44,20 @@ export class ResetPassword implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly scrubber = inject(ActionTokenScrubber);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly injector = inject(Injector);
   private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
+  private readonly spentNotice = viewChild<ElementRef<HTMLElement>>('spentNotice');
 
   protected readonly attempt = new FormAttempt();
 
   protected readonly submitting = signal(false);
   protected readonly complete = signal(false);
   protected readonly error = signal<string | null>(null);
+  /**
+   * The server said the link is spent or replaced (audit AUTH-7). The form could never succeed
+   * again, so the page offers a new link in its place instead of leaving a dead form.
+   */
+  protected readonly linkSpent = signal(false);
   /**
    * Captured once, from the URL, and held only in this component instance for the life of the page.
    * Reading it again after the exchange would be reading an address bar the scrubber has already
@@ -99,9 +116,16 @@ export class ResetPassword implements OnInit {
       await firstValueFrom(this.api.resetPassword(this.userId, this.code, value.password));
       this.complete.set(true);
     } catch (error) {
-      this.error.set(apiErrorMessage(error, $localize`The reset link is invalid or expired.`));
+      this.error.set(apiErrorMessage(error, $localize`Your password couldn’t be updated.`));
       this.form.controls.password.reset('');
       this.form.controls.confirmPassword.reset('');
+      if (error instanceof HttpErrorResponse && error.error?.code === 'invalid_or_expired_token') {
+        this.linkSpent.set(true);
+        // The form and its button are gone, so the sentence that replaces them takes focus.
+        afterNextRender(() => this.spentNotice()?.nativeElement.focus(), {
+          injector: this.injector,
+        });
+      }
     } finally {
       this.submitting.set(false);
       // The token is single-use and has now been presented, so it is spent whether or not the reset

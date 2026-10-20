@@ -56,32 +56,15 @@
 
           <section class="panel" aria-labelledby="calendar-heading">
             <h2 id="calendar-heading" i18n>Time and calendar</h2>
-            <div class="zone-row">
-              <div class="zone-text">
-                <p class="row-label" id="zone-label" i18n>Time zone</p>
-                @if (zone(); as tz) {
-                  <p class="zone-value" data-zone>
-                    <strong>{{ zoneLabel(tz) }}</strong
-                    >&ngsp;
-                    <span class="zone-meta">{{ tz.offset }} · {{ tz.now }}</span>
-                  </p>
-                }
-                <p class="quiet" id="zone-help" i18n>
-                  Days in programs, check-ins and plans start and end at midnight here, and
-                  reminders follow this clock.
-                </p>
-              </div>
-              <button
-                appButton
-                type="button"
-                variant="outlined"
-                aria-describedby="zone-label"
-                (click)="openTimeZones()"
-                i18n
-              >
-                Change
-              </button>
-            </div>
+            <app-time-zone-field
+              [zoneId]="current.timeZoneId"
+              (zoneIdChange)="set({ timeZoneId: $event })"
+            >
+              <p class="quiet" i18n>
+                Days in programs, check-ins and plans start and end at midnight here, and reminders
+                follow this clock.
+              </p>
+            </app-time-zone-field>
             <app-segmented-control
               label="Weeks start on"
               i18n-label
@@ -151,68 +134,6 @@
     }
   }
 </app-settings-frame>
-
-<ng-template #zoneSheet>
-  <div class="zones">
-    <app-field label="Search by city" i18n-label>
-      <input
-        appControl
-        id="zone-search"
-        name="zone-search"
-        type="search"
-        autocomplete="off"
-        spellcheck="false"
-        [value]="zoneQuery()"
-        (input)="zoneQuery.set($any($event.target).value)"
-      />
-    </app-field>
-    @if (deviceZone(); as device) {
-      @if (device.id !== draft()?.timeZoneId && zoneQuery() === '') {
-        <button class="device" type="button" (click)="chooseZone(device.id)" data-device-zone>
-          <span i18n>Use this device’s time zone: {{ zoneLabel(device) }}</span>
-        </button>
-      }
-    }
-    <p class="tb-visually-hidden" role="status">
-      @if (zoneQuery() !== '') {
-        <ng-container i18n>{zoneResults().length, plural,
-          =0 {No time zone matches}
-          =1 {1 time zone matches}
-          other {{{ zoneResults().length }} time zones match}
-        }</ng-container>
-      }
-    </p>
-    @if (zoneResults().length === 0) {
-      <p class="quiet none" i18n>
-        No time zone matches “{{ zoneQuery() }}”. Try the nearest big city.
-      </p>
-    }
-    <ul class="zone-list" role="list" tabindex="-1">
-      @for (option of zoneResults(); track option.id) {
-        <li>
-          <button
-            type="button"
-            class="zone-option"
-            [class.chosen]="option.id === draft()?.timeZoneId"
-            [attr.aria-current]="option.id === draft()?.timeZoneId ? 'true' : null"
-            (click)="chooseZone(option.id)"
-          >
-            <span class="zone-name">
-              <strong>{{ option.city }}</strong>
-              @if (option.area) {
-                &ngsp;<span class="zone-area">{{ option.area }}</span>
-              }
-            </span>
-            &ngsp;<span class="zone-offset">{{ option.offset }} · {{ option.now }}</span>
-            @if (option.id === draft()?.timeZoneId) {
-              <app-icon name="check-circle" class="zone-check" />
-            }
-          </button>
-        </li>
-      }
-    </ul>
-  </div>
-</ng-template>
 
 <ng-template #leaveDialog let-dialog>
   <app-confirm
