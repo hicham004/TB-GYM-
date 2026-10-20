@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { UiToast } from '../../ui/toast';
 import { fill, focusedId, press, settle } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
@@ -90,6 +92,14 @@ async function render(api: Partial<Record<keyof TeamApi, unknown>> = {}, emailOf
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: UiToast, useValue: toast },
       { provide: AuthStore, useValue: { user: signal({ id: 'owner-1' }) } },
+      // The workspace's clock dates each row (COACH-6).
+      {
+        provide: WorkspaceCalendar,
+        useValue: {
+          resolveToday: vi.fn(() => Promise.resolve('2026-10-18')),
+          timeZone: signal('Asia/Beirut'),
+        },
+      },
       provideEmailDelivery(emailOff),
       {
         provide: TenantStore,
@@ -160,7 +170,8 @@ describe('Settings › Team', () => {
     expect(textOf(cara.querySelector('app-avatar'))).toBe('CN');
     expect(textOf(cara.querySelector('.role'))).toBe('Coach');
     expect(textOf(cara.querySelector('.clients'))).toBe('2 clients');
-    expect(textOf(cara.querySelector('.joined'))).toBe('Joined Aug 20');
+    // The workspace's day in the house style (COACH-6); another year names its year instead.
+    expect(textOf(cara.querySelector('.joined'))).toMatch(/^Joined (Thu 20 Aug|20 Aug 2026)$/);
     // Only a coach can be removed; the owner row offers nothing.
     expect(owner.querySelector('app-menu')).toBeNull();
     expect(cara.querySelector('button[aria-label="More for Cara Nassar"]')).not.toBeNull();
@@ -183,8 +194,9 @@ describe('Settings › Team', () => {
       'invite-old',
     ]);
     expect(textOf(waiting[0].querySelector('.role'))).toBe('Invited');
+    // The pill says Invited, so the line says when it was sent, never "Invited · Invited" (COACH-6).
     expect(textOf(waiting[0].querySelector('.joined'))).toMatch(
-      /^Invited \w+ \d+ · the link works until \w+ \d+$/,
+      /^Sent (\w{3} \d+ \w{3}|\d+ \w{3} \d{4}) · the link works until (\w{3} \d+ \w{3}|\d+ \w{3} \d{4})$/,
     );
     expect(textOf(waiting[1].querySelector('.role'))).toBe('Link ran out');
     expect(textOf(waiting[1].querySelector('.joined'))).toContain('the link ran out');
@@ -316,6 +328,59 @@ describe('Settings › Team', () => {
     expect(toast.show).toHaveBeenCalledWith('Cara Nassar left the team. 2 clients moved to you.', {
       tone: 'success',
     });
+  });
+
+  it('says one client in the singular when a coach with one client is removed', async () => {
+    const { fixture, host, toast } = await render({
+      getTeamMembers: vi.fn(() => of([{ ...CARA, assignedClientCount: 1 }, member()])),
+      removeTeamCoach: vi.fn(() => of({ reassignedClientCount: 1, reassignedInvitationCount: 0 })),
+    });
+
+    await choose(fixture, host, 'More for Cara Nassar', 'Remove from the team');
+    // Never "Their 1 clients move to you" (COACH-18).
+    expect(textOf(dialog())).toContain('Their client moves to you with all their history');
+    expect(textOf(dialog())).not.toContain('1 clients');
+    press(dialog()!, 'Remove coach');
+    await settle(fixture);
+    expect(toast.show).toHaveBeenCalledWith(
+      'Cara Nassar left the team. Their client moved to you.',
+      { tone: 'success' },
+    );
+  });
+
+  it('asks before Browser Back, a workspace switch or sign-out drops a half-typed invitation', async () => {
+    const { fixture, host, api } = await render();
+    press(host, 'Invite a coach');
+    await settle(fixture);
+    const sheet = dialog()!;
+
+    // Nothing typed: leaving asks nothing (audit COACH-1).
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
+    expect(dialog()).toBe(sheet);
+
+    fill(sheet, 'Email', 'rami@example.test');
+    await settle(fixture);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    // The question the route guard and the session both ask; staying keeps the sheet and its text.
+    const staying = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    expect(textOf(dialog()?.querySelector('h2'))).toBe('Close without sending?');
+    press(dialog()!, 'Keep editing');
+    expect(await staying).toBe(false);
+    await settle(fixture);
+    expect(dialog()).toBe(sheet);
+    expect(sheet.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe(
+      'rami@example.test',
+    );
+
+    const leaving = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    press(dialog()!, 'Close without sending');
+    expect(await leaving).toBe(true);
+    expect(api.createCoachInvitation).not.toHaveBeenCalled();
   });
 
   it('sends nothing when a removal is not confirmed', async () => {

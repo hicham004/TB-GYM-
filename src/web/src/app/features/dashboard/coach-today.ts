@@ -77,12 +77,15 @@ export class CoachToday {
       .map((row) => ({ name: row.name, initials: row.initials }));
   });
 
+  /** What the faces count: the clients in Needs you, not the client list's Needs attention (COACH-4). */
   protected readonly clientsContext = computed(() => {
     const today = this.today();
     if (!today) return '';
     const needs = today.needsCount;
-    if (needs === 0) return $localize`Everyone is on track today`;
-    return needs === 1 ? $localize`1 needs you today` : $localize`${needs}:count: need you today`;
+    if (needs === 0) return $localize`Nothing waiting for you today`;
+    return needs === 1
+      ? $localize`1 has something for you today`
+      : $localize`${needs}:count: have something for you today`;
   });
 
   protected readonly sessionsValue = computed(() => {

@@ -427,6 +427,38 @@ describe('a client’s Training', () => {
       expect(all(host, '.hero-actions button').map(textOf)).toEqual(['Manage program']);
     });
 
+    it('keeps the program’s history in a closed fold under its header, with the cancel reason (LOST-6)', async () => {
+      const lifecycle = [
+        {
+          id: 'e1',
+          eventType: 'Assigned' as const,
+          fromStatus: null,
+          toStatus: 'Active' as const,
+          reason: 'Assigned from a published program template.',
+          occurredAtUtc: '2026-05-01T09:00:00Z',
+          actorUserId: 'owner-1',
+        },
+        {
+          id: 'e2',
+          eventType: 'Cancelled' as const,
+          fromStatus: 'Active' as const,
+          toStatus: 'Cancelled' as const,
+          reason: 'Moved to a gym program',
+          occurredAtUtc: '2026-05-11T09:00:00Z',
+          actorUserId: 'owner-1',
+        },
+      ];
+      const { host } = await render({ program: coachProgram([cancelledBlock({ lifecycle })]) });
+
+      const fold = host.querySelector<HTMLDetailsElement>('.hero [data-program-history]')!;
+      expect(fold.open).toBe(false);
+      expect(textOf(fold.querySelector('summary'))).toBe('History (2)');
+      expect(all(fold, 'li').map(textOf)).toEqual([
+        'Assigned Fri 1 May',
+        'Cancelled Mon 11 May Moved to a gym program',
+      ]);
+    });
+
     it('asks for a new program when the one in front of the coach is over and none is lined up', async () => {
       const { host } = await render({ program: coachProgram([completedBlock()]) });
 

@@ -110,6 +110,24 @@ internal sealed partial class TrainingApplicationService
             .Where(item => sessionIds.Contains(item.TrainingSessionId))
             .Select(item => new { item.TrainingSessionId, item.Id, item.Status })
             .ToDictionaryAsync(item => item.TrainingSessionId, cancellationToken);
+        // Each block's history in one read, so a cancel reason is seen again on the Training tab (LOST-6).
+        var lifecycle = (await dbContext.MesocycleLifecycleEvents.AsNoTracking()
+                .Where(item => blockIds.Contains(item.MesocycleId))
+                .OrderBy(item => item.OccurredAtUtc).ThenBy(item => item.Id)
+                .Select(item => new
+                {
+                    item.MesocycleId,
+                    View = new MesocycleLifecycleEventView(
+                        item.Id,
+                        item.EventType,
+                        item.FromStatus,
+                        item.ToStatus,
+                        item.Reason,
+                        item.OccurredAtUtc,
+                        item.CreatedByUserId),
+                })
+                .ToListAsync(cancellationToken))
+            .ToLookup(item => item.MesocycleId, item => item.View);
         var weeksByBlock = weeks.ToLookup(item => item.MesocycleId);
         var sessionsByWeek = sessions.ToLookup(item => item.MesocycleWeekId);
 
@@ -155,7 +173,8 @@ internal sealed partial class TrainingApplicationService
                 all.Length,
                 all.Count(item => item.State == ClientSessionState.Completed),
                 all.Count(item => item.State == ClientSessionState.Missed),
-                weekViews);
+                weekViews,
+                lifecycle[block.Id].ToArray());
         }).ToArray();
         return new(true, access.Reason.ToString(), today, views,
             ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);

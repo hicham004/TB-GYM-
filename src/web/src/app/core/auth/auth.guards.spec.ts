@@ -8,7 +8,8 @@ import {
   type RouterStateSnapshot,
 } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { authGuard, signedOutGuard } from './auth.guards';
+import { TenantStore } from '../tenancy/tenant.store';
+import { authGuard, memberGuard, signedOutGuard } from './auth.guards';
 import { AuthStore } from './auth.store';
 
 function configure(state: { signedIn: boolean; ended?: boolean }) {
@@ -79,5 +80,36 @@ describe('auth guards', () => {
     configure({ signedIn: false });
 
     expect(await run(signedOutGuard, '/auth/sign-in')).toBe(true);
+  });
+});
+
+describe('the member guard on Messages and Notifications (audit COACH-14)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function configureRole(role: 'Owner' | 'Coach' | 'Client' | null) {
+    configure({ signedIn: true });
+    TestBed.overrideProvider(TenantStore, {
+      useValue: {
+        canCoach: signal(role === 'Owner' || role === 'Coach'),
+        isClient: signal(role === 'Client'),
+      },
+    });
+  }
+
+  it('lets a coach, an owner and a client in', async () => {
+    for (const role of ['Owner', 'Coach', 'Client'] as const) {
+      configureRole(role);
+      expect(await run(memberGuard, '/messages')).toBe(true);
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('sends a client who left or whose coaching ended to Today, which tells them so', async () => {
+    configureRole(null);
+
+    expect(serialized(await run(memberGuard, '/messages'))).toBe('/');
+    expect(serialized(await run(memberGuard, '/notifications'))).toBe('/');
   });
 });

@@ -1,15 +1,29 @@
 import { formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, effect, inject, LOCALE_ID, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  LOCALE_ID,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type { NutritionWorkspaceSettingsView } from '../../core/api/generated';
 import { FormAttempt } from '../../core/forms/form-attempt';
+import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
 import { Skeleton } from '../../ui/skeleton';
 import { UiToast } from '../../ui/toast';
@@ -61,25 +75,32 @@ export function nutritionFormIssues(
  * Settings › Nutrition (C7 and C9, R4.4c): how calories are counted for every food and recipe in the
  * workspace, when a food's label calories are flagged, and the AI recipe suggestions the workspace
  * allows itself within TB Gym's ceiling. The owner's alone, like every Settings page; the API agrees.
- * Whether suggestions are on is the same answer the recipe editor reads (LOST-4).
+ * Whether suggestions are on is the same answer the recipe editor reads (LOST-4). Leaving with changes
+ * asks first, whether by a link, Browser Back, a workspace switch, sign-out or a reload (plan §9,
+ * audit COACH-1).
  */
 @Component({
   selector: 'app-workspace-nutrition',
-  imports: [Button, Control, Field, FormsModule, SettingsFrame, Skeleton],
+  imports: [Button, Control, Field, FormsModule, SettingsFrame, Skeleton, UiConfirm],
   templateUrl: './workspace-nutrition.html',
   styleUrl: './workspace-nutrition.scss',
-  host: { class: 'tb-theme' },
+  host: { class: 'tb-theme', '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
-export class WorkspaceNutrition {
+export class WorkspaceNutrition implements HoldsUnsavedWork {
   private readonly api = inject(FoodApi);
   private readonly recipes = inject(RecipeApi);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly toast = inject(UiToast);
+  private readonly dialogs = inject(UiDialog);
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
   private loadedTenantId: string | null = null;
 
+  protected readonly leaveMessage = $localize`Your changes to these settings aren’t saved. If you leave now, they are lost.`;
+  protected readonly leaveConfirm = $localize`Leave without saving`;
+  protected readonly leaveCancel = $localize`Stay`;
   protected readonly attempt = new FormAttempt();
   protected readonly saved = signal<NutritionWorkspaceSettingsView | null>(null);
   protected readonly loadFailed = signal(false);
@@ -125,7 +146,23 @@ export class WorkspaceNutrition {
     );
   });
 
+  /** The form differs from the settings as saved. */
+  protected readonly dirty = computed(() => {
+    const saved = this.saved();
+    if (!saved) return false;
+    const form = this.form();
+    return (
+      form.policy !== saved.energyPolicyKey ||
+      form.tolerance !== numeric(saved.providerCalorieTolerance) ||
+      form.requests !== numeric(saved.aiMonthlyRequestLimit) ||
+      form.cost !== numeric(saved.aiMonthlyCostLimit)
+    );
+  });
+
   constructor() {
+    // A workspace switch and a sign-out ask too: both change the session before any route changes.
+    const unregister = inject(UnsavedWork).register(this);
+    inject(DestroyRef).onDestroy(unregister);
     this.scope.onReset(() => {
       this.loadedTenantId = null;
       this.saved.set(null);
@@ -140,6 +177,23 @@ export class WorkspaceNutrition {
         void this.load();
       }
     });
+  }
+
+  /** Asks before the router, a workspace switch or a sign-out drops changes not saved yet (plan §9). */
+  async canLeave(): Promise<boolean> {
+    if (!this.dirty() || this.saving()) return true;
+    const dialog = this.dialogs.open<boolean>(this.leaveDialog(), {
+      title: $localize`Leave without saving?`,
+      closeLabel: $localize`Close`,
+      closeOnNavigation: false,
+    });
+    return (await firstValueFrom(dialog.closed)) === true;
+  }
+
+  protected onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.dirty()) return;
+    event.preventDefault();
+    event.returnValue = '';
   }
 
   protected shown(field: NutritionField): string[] | null {

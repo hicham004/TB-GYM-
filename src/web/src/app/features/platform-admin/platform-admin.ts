@@ -294,7 +294,7 @@ export class PlatformAdmin {
         !this.planDirty ||
         this.ask(
           $localize`Close without publishing? What you changed will be lost.`,
-          $localize`Close`,
+          $localize`Discard`,
           $localize`Keep editing`,
           $localize`Discard changes?`,
         ),

@@ -340,7 +340,7 @@ for (const width of [390, 1440]) {
       'Your day and food',
       'Your health',
     ]);
-    await expect(page.getByText('Apr 2, 1996')).toBeVisible();
+    await expect(page.getByText('2 Apr 1996')).toBeVisible();
     await expect(page.locator('.answer', { hasText: 'Medications' })).toContainText('Not added');
     await expectNoHorizontalOverflow(page);
     await axe(page);

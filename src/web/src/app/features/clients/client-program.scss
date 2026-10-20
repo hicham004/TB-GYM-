@@ -84,8 +84,10 @@
 
 // ---------- the program ----------
 
-// The program's header and, once the page is wide enough, its training maxes beside it (P2). The maxes
-// panel marks itself filled, so a program that works no weight out from a max keeps the full width.
+// The program's header, its training maxes and its timeline. Once the page is wide enough the maxes sit
+// beside the other two (P2), down the whole right column, so the timeline starts right under the header
+// rather than under the taller maxes panel (UIQ-14). The maxes panel marks itself filled, so a program
+// that works no weight out from a max keeps the full width.
 .top {
   display: grid;
   gap: 1.125rem;
@@ -97,6 +99,23 @@
   .top:has(app-program-maxes[data-filled]) {
     align-items: start;
     grid-template-columns: minmax(0, 1fr) 22rem;
+    // Whatever the maxes panel adds beyond the header and the timeline goes below the timeline.
+    grid-template-rows: auto 1fr;
+  }
+
+  .top:has(app-program-maxes[data-filled]) > .hero {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .top:has(app-program-maxes[data-filled]) > app-program-maxes {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .top:has(app-program-maxes[data-filled]) > .timeline {
+    grid-column: 1;
+    grid-row: 2;
   }
 }
 

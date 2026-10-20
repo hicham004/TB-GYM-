@@ -763,6 +763,7 @@ export type ClientOverviewRow = {
   goals: null | string;
   joinedOn: string;
   isNew: boolean;
+  onboardingStatus: ClientOnboardingStatus;
   status: ClientOverviewStatus;
   planState: ClientPlanState;
   planEndsOn: null | string;
@@ -1078,6 +1079,7 @@ export type CoachAttentionItemView = {
   weekNumber: null | number | string;
   subjectId: null | string;
   maxes?: null | Array<CoachMaxSuggestionView>;
+  newestAt?: null | string;
 };
 
 export type CoachAttentionKind =
@@ -1088,7 +1090,8 @@ export type CoachAttentionKind =
   | 'WeekNotShared'
   | 'MissedSessions'
   | 'NoProgram'
-  | 'MaxesToReview';
+  | 'MaxesToReview'
+  | 'NoPlan';
 
 export type CoachClientDetails = {
   id: string;
@@ -1174,6 +1177,7 @@ export type CoachProgramBlockView = {
   completedCount: number | string;
   missedCount: number | string;
   weeks: Array<CoachProgramWeekView>;
+  lifecycle: Array<MesocycleLifecycleEventView>;
 };
 
 export type CoachProgramSessionView = {
@@ -2927,6 +2931,7 @@ export type PublicInvitationDetails = {
   status: InvitationStatus;
   expiresAtUtc: string;
   requiresExistingAccountSignIn: boolean;
+  timeZoneId: string;
   kind?: InvitationKind;
 };
 

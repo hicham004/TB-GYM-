@@ -87,12 +87,13 @@ test('Lea invites a client, sends the link again, cancels another and is refused
   expect(created?.sendCount).toBe(1);
   const oldLink = created?.developmentActionUrl ?? null;
   expect(oldLink).not.toBeNull();
-  // The row says until when the newest link works: the day the API's expiry falls on in Beirut.
-  const expiryDay = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Beirut',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(created!.expiresAtUtc));
+  // The row says until when the newest link works: the day the API's expiry falls on in Beirut, the
+  // workspace's zone, written as every coach page writes a day ("Tue 27 Oct", audit COACH-6).
+  const part = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Beirut', ...options }).format(
+      new Date(created!.expiresAtUtc),
+    );
+  const expiryDay = `${part({ weekday: 'short' })} ${part({ day: 'numeric' })} ${part({ month: 'short' })}`;
   const row = page.locator(`[data-invitation="${created!.id}"]`);
   await expect(row.locator('.line')).toHaveText(
     `Sent once · the newest link works until ${expiryDay}`,
@@ -148,7 +149,8 @@ test('Lea invites a client, sends the link again, cancels another and is refused
   await young.getByRole('button', { name: 'Not now' }).click();
   const closeAsk = page.getByRole('dialog').last();
   await expect(closeAsk.getByRole('button', { name: 'Keep editing' })).toBeVisible();
-  await closeAsk.getByRole('button', { name: 'Close', exact: true }).last().click();
+  // The action that loses the typing says Discard, beside the question's own Close (audit UIQ-12).
+  await closeAsk.getByRole('button', { name: 'Discard', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // An email already in the coaching space: the server's refusal, kept on screen.
@@ -165,8 +167,7 @@ test('Lea invites a client, sends the link again, cancels another and is refused
   await page
     .getByRole('dialog')
     .last()
-    .getByRole('button', { name: 'Close', exact: true })
-    .last()
+    .getByRole('button', { name: 'Discard', exact: true })
     .click();
 
   // The old link is dead, in a signed-out context; the new one shows the invitation.
@@ -265,7 +266,15 @@ test('the client joins, resumes the steps after a reload, and Lea finishes the s
   const row = lea.locator('.clients li.client-row', { hasText: fullName });
   await expect(row).toBeVisible();
   await expect(row.locator('.plan')).toHaveText('No plan yet');
-  await expect(row.locator('app-status-pill')).toHaveText('No active plan');
+  // A new client with no plan asks for one, and one who has not finished setting up says so
+  // (audit COACH-9 and LOST-12, the owner's decision of 2026-10-19).
+  await expect(row.locator('app-status-pill')).toHaveText('Needs attention');
+  await expect(row.locator('.reasons')).toHaveText('Joined, no plan yet');
+  await expect(row.locator('[data-not-set-up]')).toHaveText('Not set up yet');
+  await lea.goto('/');
+  const joined = lea.locator('li.need[data-kind="NoPlan"]', { hasText: fullName });
+  await expect(joined.locator('.need-heading')).toHaveText(`${fullName} joined`);
+  await expect(joined.getByRole('link', { name: /Start a plan/ })).toBeVisible();
   await lea.goto(`/clients/${clientProfileId}/intake`);
   await expect(
     lea.getByText(

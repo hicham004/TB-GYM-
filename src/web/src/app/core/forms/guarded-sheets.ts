@@ -43,11 +43,14 @@ export abstract class GuardedSheets {
   protected dirty = false;
   private openedSheet: { close: () => void } | null = null;
 
-  /** What closing with typed work asks; a host may word it its own way. */
+  /**
+   * What closing with typed work asks; a host may word it its own way. The action that loses the work says
+   * so: beside the dialog's own Close, a second "Close" meant the opposite (audit UIQ-12).
+   */
   protected readonly leaveQuestion: LeaveQuestion = {
     title: $localize`Discard what you typed?`,
     message: $localize`Close without saving? What you typed will be lost.`,
-    confirm: $localize`Close`,
+    confirm: $localize`Discard`,
     cancel: $localize`Keep editing`,
   };
 

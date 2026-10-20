@@ -124,6 +124,37 @@ describe('what needs the coach on a client’s page', () => {
     expect(single).toMatchObject({ heading: '1 unread message', detail: 'Sent 30 minutes ago' });
   });
 
+  it('names the newest of several check-ins as well as the first (CLIENT-19)', () => {
+    const [many] = needRows(
+      [
+        attentionItem('CheckInToReview', MAYA, {
+          count: 2,
+          since: '2026-09-25T12:00:00Z',
+          newestAt: '2026-10-01T11:00:00Z',
+          subjectId: 'assignment-1',
+        }),
+      ],
+      COACH_TODAY,
+      context,
+    );
+    expect(many.detail).toBe('The newest was sent 1 hour ago, the first 6 days ago');
+  });
+
+  it('asks to start a plan for a new client who has none, on Service & access (COACH-9)', () => {
+    const [joined] = needRows(
+      [attentionItem('NoPlan', MAYA, { date: '2026-09-29' })],
+      COACH_TODAY,
+      context,
+    );
+    expect(joined).toMatchObject({
+      tone: 'new',
+      tag: 'New',
+      heading: 'No plan yet',
+      detail: 'Joined Tue 29 Sep. Start a plan so Maya can use what it includes.',
+      action: { label: 'Start a plan', link: `${page}/service`, queryParams: { action: 'start' } },
+    });
+  });
+
   it('names a plan ending today, tomorrow and in days, and renews the plan that ends', () => {
     const ends = (date: string) =>
       needRows(

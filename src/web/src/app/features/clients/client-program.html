@@ -84,6 +84,24 @@
                   </li>
                 }
               </ol>
+              <!-- The program's history, closed by default (§2 rule 7): a cancel's reason is seen again (LOST-6). -->
+              @if (block.history.length > 0) {
+                <details class="history" data-program-history>
+                  <summary i18n>History ({{ block.history.length }})</summary>
+                  <ol class="history-rows">
+                    @for (row of block.history; track row.id) {
+                      <li>
+                        <span class="history-what" dir="auto">{{ row.what }}</span
+                        >&ngsp;
+                        <span class="history-day">{{ row.day }}</span>
+                        @if (row.reason; as reason) {
+                          &ngsp;<q class="history-reason" dir="auto">{{ reason }}</q>
+                        }
+                      </li>
+                    }
+                  </ol>
+                </details>
+              }
             </section>
             <app-program-maxes
               [block]="block"
@@ -91,97 +109,98 @@
               [reveal]="revealMaxes()"
               (update)="openMaxesUpdate($event)"
             />
-          </div>
 
-          <section class="panel timeline" aria-labelledby="timeline-title">
-            <header class="panel-head">
-              <h2 id="timeline-title" i18n>Timeline</h2>
-              <p class="panel-span" dir="auto" i18n>
-                Open a session to see what it asks for and what {{ firstName() }} did.
-              </p>
-            </header>
+            <!-- In the same grid as the header, so beside a tall maxes panel it starts under the header (UIQ-14). -->
+            <section class="panel timeline" aria-labelledby="timeline-title">
+              <header class="panel-head">
+                <h2 id="timeline-title" i18n>Timeline</h2>
+                <p class="panel-span" dir="auto" i18n>
+                  Open a session to see what it asks for and what {{ firstName() }} did.
+                </p>
+              </header>
 
-            <div class="week-picker" role="group" aria-label="Choose a week" i18n-aria-label>
-              @for (week of block.weeks; track week.id) {
-                <button
-                  type="button"
-                  class="pick"
-                  [class.current]="week.isCurrent"
-                  [attr.aria-pressed]="week.number === shownWeek()"
-                  [attr.aria-label]="week.title + ', ' + week.range"
-                  (click)="chooseWeek(week.number)"
-                >
-                  {{ week.number }}
-                </button>
-              }
-            </div>
+              <div class="week-picker" role="group" aria-label="Choose a week" i18n-aria-label>
+                @for (week of block.weeks; track week.id) {
+                  <button
+                    type="button"
+                    class="pick"
+                    [class.current]="week.isCurrent"
+                    [attr.aria-pressed]="week.number === shownWeek()"
+                    [attr.aria-label]="week.title + ', ' + week.range"
+                    (click)="chooseWeek(week.number)"
+                  >
+                    {{ week.number }}
+                  </button>
+                }
+              </div>
 
-            <div
-              class="strip"
-              #scroller
-              role="group"
-              aria-label="The weeks of the program"
-              i18n-aria-label
-            >
-              @for (week of block.weeks; track week.id) {
-                <section
-                  class="week"
-                  [class.current]="week.isCurrent"
-                  [class.shown]="week.number === shownWeek()"
-                  [attr.aria-labelledby]="'week-' + week.id"
-                >
-                  <header class="week-head">
-                    <div class="week-title">
-                      <h3 [id]="'week-' + week.id">{{ week.title }}</h3>
-                      @if (week.isCurrent) {
-                        <span class="now" i18n>This week</span>
+              <div
+                class="strip"
+                #scroller
+                role="group"
+                aria-label="The weeks of the program"
+                i18n-aria-label
+              >
+                @for (week of block.weeks; track week.id) {
+                  <section
+                    class="week"
+                    [class.current]="week.isCurrent"
+                    [class.shown]="week.number === shownWeek()"
+                    [attr.aria-labelledby]="'week-' + week.id"
+                  >
+                    <header class="week-head">
+                      <div class="week-title">
+                        <h3 [id]="'week-' + week.id">{{ week.title }}</h3>
+                        @if (week.isCurrent) {
+                          <span class="now" i18n>This week</span>
+                        }
+                      </div>
+                      <p class="range">{{ week.range }}</p>
+                      <p class="summary">{{ week.summary }}</p>
+                    </header>
+
+                    <div class="share">
+                      <app-checkbox [label]="shareText()">
+                        <input
+                          type="checkbox"
+                          appControl
+                          [checked]="week.share !== 'unshared'"
+                          [disabled]="block.terminal || sharing()"
+                          [attr.aria-label]="week.title + ': ' + shareText()"
+                          (change)="toggleShare(week, $any($event.target))"
+                        />
+                      </app-checkbox>
+                      @if (week.share === 'locked') {
+                        <p class="share-note">{{ week.shareLabel }}</p>
                       }
                     </div>
-                    <p class="range">{{ week.range }}</p>
-                    <p class="summary">{{ week.summary }}</p>
-                  </header>
 
-                  <div class="share">
-                    <app-checkbox [label]="shareText()">
-                      <input
-                        type="checkbox"
-                        appControl
-                        [checked]="week.share !== 'unshared'"
-                        [disabled]="block.terminal || sharing()"
-                        [attr.aria-label]="week.title + ': ' + shareText()"
-                        (change)="toggleShare(week, $any($event.target))"
-                      />
-                    </app-checkbox>
-                    @if (week.share === 'locked') {
-                      <p class="share-note">{{ week.shareLabel }}</p>
-                    }
-                  </div>
-
-                  <ul class="sessions">
-                    @for (session of week.sessions; track session.id) {
-                      <li>
-                        <button
-                          type="button"
-                          class="session"
-                          [attr.data-mark]="session.mark"
-                          (click)="openSession(week, session)"
-                        >
-                          <span class="s-top">
-                            <span class="s-day">{{ session.day }}</span>
-                            <span class="s-mark">{{ session.markLabel }}</span>
-                          </span>
-                          <span class="s-name" dir="auto">{{ session.name }}</span>
-                          <span class="s-detail">{{ session.detail }}</span>
-                        </button>
-                      </li>
-                    } @empty {
-                      <li class="none" i18n>No sessions this week.</li>
-                    }
-                  </ul>
-                </section>
-              }
-            </div>
-          </section>
+                    <ul class="sessions">
+                      @for (session of week.sessions; track session.id) {
+                        <li>
+                          <button
+                            type="button"
+                            class="session"
+                            [attr.data-mark]="session.mark"
+                            (click)="openSession(week, session)"
+                          >
+                            <span class="s-top">
+                              <span class="s-day">{{ session.day }}</span>
+                              <span class="s-mark">{{ session.markLabel }}</span>
+                            </span>
+                            <span class="s-name" dir="auto">{{ session.name }}</span>
+                            <span class="s-detail">{{ session.detail }}</span>
+                          </button>
+                        </li>
+                      } @empty {
+                        <li class="none" i18n>No sessions this week.</li>
+                      }
+                    </ul>
+                  </section>
+                }
+              </div>
+            </section>
+          </div>
 
           @if (hasOthers()) {
             <section class="panel others" aria-labelledby="others-title">

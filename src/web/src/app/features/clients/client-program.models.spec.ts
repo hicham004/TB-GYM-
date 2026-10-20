@@ -209,6 +209,82 @@ describe('a program that has not started, or has ended', () => {
     expect(left).toMatchObject({ mark: 'closed', markLabel: 'Cancelled' });
   });
 
+  it('keeps its history with the coach’s reason for the cancel, on the workspace’s days (LOST-6)', () => {
+    const event = (
+      id: string,
+      eventType: 'Assigned' | 'Renamed' | 'Cancelled' | 'Completed',
+      occurredAtUtc: string,
+      reason: string,
+    ) => ({
+      id,
+      eventType,
+      fromStatus: null,
+      toStatus: eventType === 'Cancelled' ? ('Cancelled' as const) : ('Active' as const),
+      reason,
+      occurredAtUtc,
+      actorUserId: 'owner-1',
+    });
+    const card = blockCard(
+      cancelledBlock({
+        lifecycle: [
+          event(
+            'e1',
+            'Assigned',
+            '2026-05-01T09:00:00Z',
+            'Assigned from a published program template.',
+          ),
+          event(
+            'e2',
+            'Renamed',
+            '2026-05-02T09:00:00Z',
+            'Renamed from "Summer block" to "Summer Reset".',
+          ),
+          // 21:30 UTC is already the 12th in Beirut.
+          event('e3', 'Cancelled', '2026-05-11T21:30:00Z', '  Moved to a gym program  '),
+        ],
+      }),
+      { ...context, timeZone: 'Asia/Beirut' },
+    );
+
+    expect(card.history).toEqual([
+      { id: 'e1', what: 'Assigned', day: 'Fri 1 May', reason: null },
+      { id: 'e2', what: 'Renamed from “Summer block”', day: 'Sat 2 May', reason: null },
+      { id: 'e3', what: 'Cancelled', day: 'Tue 12 May', reason: 'Moved to a gym program' },
+    ]);
+  });
+
+  it('says how a finished program closed, in the app’s words rather than the server’s', () => {
+    const closed = (reason: string) =>
+      blockCard(
+        completedBlock({
+          lifecycle: [
+            {
+              id: 'c1',
+              eventType: 'Completed',
+              fromStatus: 'Active',
+              toStatus: 'Completed',
+              reason,
+              occurredAtUtc: '2026-09-28T09:00:00Z',
+              actorUserId: null,
+            },
+          ],
+        }),
+        context,
+      ).history[0];
+
+    expect(closed('All programmed sessions were completed.').what).toBe(
+      'Finished · every session done',
+    );
+    expect(closed('Closed after its last day with 2 programmed session(s) not done.').what).toBe(
+      'Closed after its last day · 2 sessions not done',
+    );
+    expect(closed('Closed after its last day with 1 programmed session(s) not done.').what).toBe(
+      'Closed after its last day · 1 session not done',
+    );
+    // A program with no recorded history shows no fold.
+    expect(blockCard(completedBlock(), context).history).toEqual([]);
+  });
+
   it('puts the year on dates that are not this year’s', () => {
     const lastYear = blockCard(completedBlock({ id: 'old', start: '2025-12-22' }), context);
 

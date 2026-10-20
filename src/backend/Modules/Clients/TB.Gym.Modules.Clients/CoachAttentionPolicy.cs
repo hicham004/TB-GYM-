@@ -3,14 +3,14 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// Coach attention v2 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review): which of a client's signals ask
-/// the coach to act, how the queue is ranked, and the one status the client list shows. The signals arrive
-/// already gated by the client's plan, so this rule only weighs them.
+/// Coach attention v3 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
+/// plan): which of a client's signals ask the coach to act, how the queue is ranked, and the one status the client
+/// list shows. The signals arrive already gated by the client's plan, so this rule only weighs them.
 /// </summary>
 public static class CoachAttentionPolicy
 {
     public const string Key = "CoachAttention";
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>A running plan whose last covered day falls within this many days is ending soon.</summary>
     public const int PlanEndingWithinDays = 14;
@@ -30,6 +30,23 @@ public static class CoachAttentionPolicy
     public const int ActivityDays = 7;
 
     public const int ActivityLimit = 20;
+
+    /// <summary>
+    /// The queue's order, most urgent first. A new client with no plan comes after a renewal request: both wait
+    /// for the coach to sell a plan, and nothing else can reach the coach from that client until one runs.
+    /// </summary>
+    private static readonly CoachAttentionKind[] RankOrder =
+    [
+        CoachAttentionKind.CheckInToReview,
+        CoachAttentionKind.UnreadMessages,
+        CoachAttentionKind.RenewalRequested,
+        CoachAttentionKind.NoPlan,
+        CoachAttentionKind.PlanEndingSoon,
+        CoachAttentionKind.WeekNotShared,
+        CoachAttentionKind.MissedSessions,
+        CoachAttentionKind.NoProgram,
+        CoachAttentionKind.MaxesToReview,
+    ];
 
     /// <summary>The kinds this client raises, in rank order.</summary>
     public static IReadOnlyList<CoachAttentionKind> Flags(
@@ -53,6 +70,15 @@ public static class CoachAttentionPolicy
             asked > today.AddDays(-RenewalRequestDays))
         {
             flags.Add(CoachAttentionKind.RenewalRequested);
+        }
+
+        // Audit COACH-9 (the owner's decision of 2026-10-19): a client who joined lately and has no plan at all
+        // asks for one; an ended, unpaid, coming or blocked plan is not "no plan".
+        if (planState == ClientPlanState.None &&
+            signals.JoinedOn is { } joinedOn &&
+            IsNew(joinedOn, today))
+        {
+            flags.Add(CoachAttentionKind.NoPlan);
         }
 
         if (planState == ClientPlanState.Running &&
@@ -146,7 +172,7 @@ public static class CoachAttentionPolicy
     /// </summary>
     public static IReadOnlyList<CoachAttentionItemView> Rank(IEnumerable<CoachAttentionItemView> items) =>
         items
-            .OrderBy(item => item.Kind)
+            .OrderBy(item => RankOf(item.Kind))
             .ThenByDescending(item => item.Kind == CoachAttentionKind.MissedSessions ? item.Count ?? 0 : 0)
             .ThenBy(item => item.Since ?? DateTimeOffset.MaxValue)
             .ThenBy(item => item.Date ?? DateOnly.MaxValue)
@@ -154,6 +180,13 @@ public static class CoachAttentionPolicy
             .ThenBy(item => item.Client.FirstName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Client.ClientProfileId)
             .ToArray();
+
+    /// <summary>Where a kind stands in the queue; a kind this rule does not know goes last.</summary>
+    public static int RankOf(CoachAttentionKind kind)
+    {
+        var index = Array.IndexOf(RankOrder, kind);
+        return index < 0 ? RankOrder.Length : index;
+    }
 }
 
 /// <summary>
@@ -165,6 +198,7 @@ public static class CoachAttentionPolicy
 /// <param name="MissedSinceLastWorkout">Training rule TRN-021.</param>
 /// <param name="HasNoProgram">Training is in the plan but no block is running or coming.</param>
 /// <param name="MaxesToReview">Lifts of a running block whose logged sets suggest a new max (STR-012).</param>
+/// <param name="JoinedOn">The workspace day the client joined, for a new client with no plan (audit COACH-9).</param>
 public sealed record ClientAttentionSignals(
     int CheckInsToReview,
     long UnreadMessages,
@@ -173,4 +207,5 @@ public sealed record ClientAttentionSignals(
     bool HasWeekToShare,
     int MissedSinceLastWorkout,
     bool HasNoProgram,
-    int MaxesToReview = 0);
+    int MaxesToReview = 0,
+    DateOnly? JoinedOn = null);

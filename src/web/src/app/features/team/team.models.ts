@@ -1,4 +1,5 @@
 import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
+import { dayInZone, houseDay } from '../../core/i18n/house-dates';
 import type { UiMenuItem } from '../../ui/menu';
 import { initialsOf } from '../../shell/initials';
 
@@ -22,7 +23,7 @@ export interface InvitationRow {
   readonly invitation: ClientInvitation;
   readonly name: string;
   readonly initials: string;
-  /** "Invited 3 Oct · the link works until 10 Oct", or that it ran out. */
+  /** "Sent Sat 3 Oct · the link works until Sat 10 Oct", or that it ran out; the pill says Invited. */
   readonly detail: string;
   readonly expired: boolean;
   readonly menu: readonly UiMenuItem[];
@@ -33,6 +34,7 @@ export function memberRows(
   members: readonly TeamMember[],
   me: string | null,
   locale: string,
+  timeZone: string | null = null,
 ): readonly MemberRow[] {
   return [...members]
     .sort(
@@ -49,7 +51,7 @@ export function memberRows(
         isYou: member.userId === me,
         role: isOwner ? $localize`Owner` : $localize`Coach`,
         clients: clientCount(member.assignedClientCount),
-        joined: $localize`Joined ${shortDate(member.joinedAtUtc, locale, true)}:date:`,
+        joined: $localize`Joined ${workspaceDay(member.joinedAtUtc, locale, timeZone)}:date:`,
         menu: isOwner
           ? []
           : [
@@ -69,6 +71,7 @@ export function invitationRows(
   invitations: readonly ClientInvitation[],
   now: Date,
   locale: string,
+  timeZone: string | null = null,
 ): readonly InvitationRow[] {
   return invitations
     .filter((invitation) => invitation.status === 'Pending')
@@ -76,16 +79,17 @@ export function invitationRows(
     .map((invitation) => {
       const name = `${invitation.firstName} ${invitation.lastName}`.trim();
       const expired = new Date(invitation.expiresAtUtc).getTime() <= now.getTime();
-      const invited = shortDate(invitation.createdAtUtc, locale, false);
-      const until = shortDate(invitation.expiresAtUtc, locale, false);
+      const sent = workspaceDay(invitation.createdAtUtc, locale, timeZone, now);
+      const until = workspaceDay(invitation.expiresAtUtc, locale, timeZone, now);
       return {
         invitation,
         name,
         initials: initialsOf(name, invitation.email),
         expired,
+        // The pill already says Invited, so the line says when it was sent (audit COACH-6).
         detail: expired
-          ? $localize`Invited ${invited}:invited: · the link ran out ${until}:until:`
-          : $localize`Invited ${invited}:invited: · the link works until ${until}:until:`,
+          ? $localize`Sent ${sent}:sent: · the link ran out ${until}:until:`
+          : $localize`Sent ${sent}:sent: · the link works until ${until}:until:`,
         menu: expired
           ? [
               {
@@ -127,13 +131,15 @@ function clientCount(count: number): string {
   return count === 1 ? $localize`1 client` : $localize`${count}:count: clients`;
 }
 
-/** "3 Oct", or "3 Oct 2025" outside this year when asked to say the year then. */
-function shortDate(iso: string, locale: string, yearWhenOther: boolean): string {
-  const date = new Date(iso);
-  const otherYear = yearWhenOther && date.getUTCFullYear() !== new Date().getUTCFullYear();
-  return new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    ...(otherYear ? { year: 'numeric' } : {}),
-  }).format(date);
+/**
+ * "Sat 3 Oct", or "3 Oct 2025" in another year: the day an instant falls on in the workspace, as every
+ * coach page writes a day (audit COACH-6), never the device's day or UTC's.
+ */
+function workspaceDay(
+  iso: string,
+  locale: string,
+  timeZone: string | null,
+  now = new Date(),
+): string {
+  return houseDay(dayInZone(iso, timeZone), locale, dayInZone(now, timeZone));
 }

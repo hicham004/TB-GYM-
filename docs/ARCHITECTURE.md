@@ -1986,7 +1986,10 @@ invitation submissions clear password controls while preserving safe fields such
 See `docs/adr/0021-tokenless-action-email-materialization.md`.
 
 Phase 5 review (2026-10-11): sheet hosts register with `UnsavedWork` and routed parents ask before
-teardown; guarded sheets survive popstate until that decision. Every plan/exercise/media continuation
+teardown; guarded sheets survive popstate until that decision. Audit A8 (COACH-1) moves the last two
+hand-rolled sheet hosts, Invitations and Team, onto `GuardedSheets` behind `confirmSheetLeave`, and puts
+the Brand and Nutrition settings pages in `UnsavedWork` behind `confirmBeforeLeaving`, as Name and region
+was; `memberGuard` (COACH-14) keeps Messages and Notifications to someone with a role in the workspace. Every plan/exercise/media continuation
 uses `TenantOperation`. Inbox pagination can use a recipient-scoped keyset cursor with `hasMore`;
 read-state changes do not shift its boundary. Delivered week numbers are stored in the immutable
 notification snapshot, never rewritten into the outbox, and links narrow them by current visibility.

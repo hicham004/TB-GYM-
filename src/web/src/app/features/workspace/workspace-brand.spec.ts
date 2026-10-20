@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type { WorkspaceDetails } from '../../core/api/api.models';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { brandTokens } from '../../core/theme/brand-theme';
@@ -304,6 +305,36 @@ describe('WorkspaceBrand', () => {
     const dirty = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(dirty);
     expect(dirty.defaultPrevented).toBe(true);
+  });
+
+  it('asks before a link, Browser Back, a workspace switch or sign-out drops a brand not saved', async () => {
+    const { fixture, host } = await render();
+    const page = fixture.componentInstance;
+    const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    const words = (element: Element | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+    // Nothing changed, so leaving asks nothing.
+    expect(await page.canLeave()).toBe(true);
+
+    // A changed look asks first, and staying keeps it (audit COACH-1).
+    pick(host, 'plum');
+    await settle(fixture);
+    const staying = page.canLeave();
+    await settle(fixture);
+    expect(words(dialog()?.querySelector('h2') ?? undefined)).toBe('Leave without saving?');
+    expect(words(dialog())).toContain('Your changes to your brand aren’t saved.');
+    press(dialog()!, 'Stay');
+    expect(await staying).toBe(false);
+    await settle(fixture);
+    expect(look(host, 'plum').checked).toBe(true);
+
+    // A workspace switch or a sign-out asks the same, through the page's place in the register.
+    const switching = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    press(dialog()!, 'Leave without saving');
+    expect(await switching).toBe(true);
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
   });
 
   it('says the switch only changes the preview, and links to Appearance for the coach’s own mode', async () => {

@@ -28,6 +28,7 @@ function invitation(overrides: Partial<PublicInvitation> = {}): PublicInvitation
     status: 'Pending',
     expiresAtUtc: '2026-09-01T09:00:00Z',
     requiresExistingAccountSignIn: false,
+    timeZoneId: 'Asia/Beirut',
     ...overrides,
   };
 }
@@ -339,6 +340,22 @@ describe('AcceptInvitation', () => {
     expect(host.textContent).toContain('This invitation link is invalid or no longer available.');
     expect(host.querySelector('form')).toBeNull();
     expect(scrubber.scrub).toHaveBeenCalledOnce();
+    // A dead link cannot say whether it was for a client or a coach, so it names neither (COACH-6).
+    expect(host.querySelector('.auth-eyebrow')?.textContent?.trim()).toBe('Invitation');
+  });
+
+  it('says when the link stops working on the workspace’s clock, without seconds (COACH-6)', async () => {
+    const { host } = await render({
+      // 21:16 UTC is 00:16 the next day in Beirut, the workspace's own day.
+      invitation: invitation({ expiresAtUtc: '2026-09-01T21:16:58Z', timeZoneId: 'Asia/Beirut' }),
+    });
+
+    const expires = Array.from(host.querySelectorAll('.invitation-details div')).find(
+      (row) => row.querySelector('dt')?.textContent?.trim() === 'Expires',
+    );
+    expect(expires?.querySelector('dd')?.textContent?.trim()).toMatch(
+      /^(Wed 2 Sep|2 Sep 2026), 12:16\s?AM$/,
+    );
   });
 
   /**

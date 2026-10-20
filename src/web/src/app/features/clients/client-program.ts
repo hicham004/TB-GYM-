@@ -91,7 +91,7 @@ import { ProgramSession } from './program-session';
     StatusPill,
   ],
   templateUrl: './client-program.html',
-  styleUrls: ['./client-program.scss'],
+  styleUrls: ['./client-program.scss', './client-program-history.scss'],
 })
 export class ClientProgram {
   private readonly api = inject(ApiClient);
@@ -163,6 +163,7 @@ export class ClientProgram {
     locale: this.locale,
     today: this.today(),
     firstName: this.firstName(),
+    timeZone: this.context.workspace()?.timeZoneId ?? null,
   }));
 
   private readonly blocks = computed(() => this.read()?.blocks ?? []);

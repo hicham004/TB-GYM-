@@ -118,6 +118,22 @@ describe('Clients', () => {
     expect(host.textContent).not.toContain('Phone');
   });
 
+  it('says Not set up yet beside the status of a client who never finished their profile', async () => {
+    const view = clientListView();
+    const [first, ...rest] = view.clients;
+    const { host } = await render({
+      getOverview: () =>
+        of({ ...view, clients: [{ ...first, onboardingStatus: 'NotStarted' }, ...rest] }),
+    });
+
+    const chips = Array.from(host.querySelectorAll('[data-not-set-up]'));
+    expect(chips).toHaveLength(1);
+    expect(squash(chips[0].textContent)).toBe('Not set up yet');
+    // In the row's status, beside the pill (LOST-12), and not a column of its own.
+    expect(chips[0].closest('.state')).not.toBeNull();
+    expect(host.textContent).not.toContain('Onboarding');
+  });
+
   it("names the coach on a team member's client only", async () => {
     const { host } = await render({ isOwner: true });
 

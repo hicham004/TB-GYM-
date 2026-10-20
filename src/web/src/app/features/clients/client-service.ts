@@ -227,23 +227,27 @@ export class ClientService extends GuardedSheets {
       }
     });
 
-    // The Overview's and the header's "Renew plan" arrive as `?renew=<plan id>`, and Coach Today's "Record
-    // payment" for a renewal still unpaid (BEB-7) as `?pay=<plan id>`: open that sheet once the page has
-    // loaded, then take it out of the address so Back and a reload do not reopen it.
+    // The Overview's and the header's "Renew plan" arrive as `?renew=<plan id>`, Coach Today's "Record
+    // payment" for a renewal still unpaid (BEB-7) as `?pay=<plan id>`, and its "Start a plan" for a new
+    // client with none (COACH-9) as `?action=start`: open that sheet once the page has loaded, then take
+    // it out of the address so Back and a reload do not reopen it.
     effect(() => {
       const renew = this.query().get('renew');
       const pay = this.query().get('pay');
-      if ((!renew && !pay) || this.state() !== 'ready') return;
+      const start = this.query().get('action') === 'start';
+      if ((!renew && !pay && !start) || this.state() !== 'ready') return;
       // Untracked: picking the plan changes what the page reads, which must not run this again.
       untracked(() => {
         void this.router.navigate([], {
           relativeTo: this.route,
-          queryParams: { renew: null, pay: null },
+          queryParams: { renew: null, pay: null, action: null },
           queryParamsHandling: 'merge',
           replaceUrl: true,
         });
+        if (this.context.isFormer()) return;
+        if (start) return this.openStart();
         const plan = this.plans().find((item) => item.id === (pay ?? renew));
-        if (!plan || this.context.isFormer()) return;
+        if (!plan) return;
         this.picked.set(plan.id);
         if (!pay) return this.openRenew(plan);
         // Shown either way; the sheet only while the plan still waits for the payment.

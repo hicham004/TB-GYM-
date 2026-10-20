@@ -32,19 +32,25 @@ describe('invitation words', () => {
     expect(sentText(5)).toBe('Sent 5 times');
   });
 
-  it('says what is true of each invitation now', () => {
+  it('says what is true of each invitation now, on the workspace clock in the house style', () => {
+    const now = new Date('2026-10-09T09:00:00Z');
     const line = (overrides: Parameters<typeof invitation>[0]) =>
-      invitationLine(invitation(overrides), LOCALE);
+      invitationLine(invitation(overrides), LOCALE, 'Asia/Beirut', now);
 
-    expect(line({ sendCount: 1 })).toBe('Sent once · the newest link works until Oct 14');
+    expect(line({ sendCount: 1 })).toBe('Sent once · the newest link works until Wed 14 Oct');
+    // 23:30 UTC is already the next day in Beirut, which is the day the coach and client live (COACH-6).
     expect(line({ sendCount: 3, expiresAtUtc: '2026-10-20T23:30:00Z' })).toBe(
-      'Sent 3 times · the newest link works until Oct 20',
+      'Sent 3 times · the newest link works until Wed 21 Oct',
     );
     expect(line({ status: 'Accepted' })).toBe('Set up their account and joined');
     expect(line({ status: 'Expired', expiresAtUtc: '2026-10-01T09:00:00Z' })).toBe(
-      'The link ran out on Oct 1',
+      'The link ran out on Thu 1 Oct',
     );
     expect(line({ status: 'Revoked' })).toBe('The link was cancelled');
+    // Another year says its year instead of a weekday.
+    expect(line({ status: 'Expired', expiresAtUtc: '2025-11-03T09:00:00Z' })).toBe(
+      'The link ran out on 3 Nov 2025',
+    );
   });
 });
 

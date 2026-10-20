@@ -388,12 +388,11 @@ test('the owner removes a coach from Team: their client moves to the owner and i
   await page.getByRole('button', { name: `More for ${coach.name}` }).click();
   await page.locator('button.item', { hasText: 'Remove from the team' }).click();
   const ask = page.getByRole('dialog');
-  // "Their 1 clients" is a plural slip the audit recorded (COACH-18); the rule itself is what matters here.
-  await expect(ask).toContainText(/Their 1 clients? moves? to you with all their history/);
+  // One client is said in the singular, never "Their 1 clients" (audit COACH-18).
+  await expect(ask).toContainText('Their client moves to you with all their history');
   await ask.getByRole('button', { name: 'Remove coach' }).click();
-  // The toast repeats the plural slip ("1 clients moved to you", COACH-18); the move itself is what matters.
   await expect(
-    page.getByText(new RegExp(`${coach.name} left the team. 1 clients? moved to you.`)),
+    page.getByText(`${coach.name} left the team. Their client moved to you.`),
   ).toBeVisible();
   await expect(page.locator('li.person', { hasText: coach.name })).toHaveCount(0);
   const history = await assignments(page, tenantId, client.id);

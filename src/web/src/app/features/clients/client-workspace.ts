@@ -120,7 +120,7 @@ export class ClientWorkspace {
     const workspace = this.context.workspace();
     if (!workspace || !this.context.plans()) return null;
     const enrollment = this.enrollment();
-    if (!enrollment) return { label: $localize`No plan`, tone: 'neutral' };
+    if (!enrollment) return { label: $localize`No plan yet`, tone: 'neutral' };
     switch (enrollment.effectiveStatus) {
       case 'Active': {
         const daysLeft = daysBetween(workspace.currentDate, enrollment.lastActiveDate);
@@ -195,9 +195,13 @@ export class ClientWorkspace {
     otherCoachName(this.profile(), this.auth.user()?.id ?? null),
   );
 
-  /** Only said when the plan simply lacks messaging; a block or a lapse is told by the plan pill. */
+  /**
+   * Only said when a plan simply lacks messaging; a block or a lapse is told by the plan pill, and a
+   * client with no plan at all reads "No plan yet" alone (audit COACH-10).
+   */
   protected readonly messagingNote = computed(() =>
-    this.messagingDecision()?.reason === 'NoEntitlement'
+    this.messagingDecision()?.reason === 'NoEntitlement' &&
+    (this.context.plans()?.enrollments.length ?? 0) > 0
       ? $localize`Messaging isn’t part of this plan.`
       : '',
   );

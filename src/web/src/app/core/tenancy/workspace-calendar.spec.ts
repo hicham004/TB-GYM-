@@ -59,6 +59,18 @@ describe('WorkspaceCalendar', () => {
     expect(calendar.today()).toBe('2026-09-21');
   });
 
+  it('knows the workspace time zone once read, and none for another workspace (COACH-6)', async () => {
+    const tenantId = configure(vi.fn(() => of(workspace)));
+    const calendar = TestBed.inject(WorkspaceCalendar);
+
+    expect(calendar.timeZone()).toBeNull();
+    await calendar.resolveToday();
+    expect(calendar.timeZone()).toBe('Asia/Beirut');
+    tenantId.set('workspace-b');
+    TestBed.inject(TenantContext).invalidate();
+    expect(calendar.timeZone()).toBeNull();
+  });
+
   it('reads the workspace once and shares one request between concurrent callers', async () => {
     const getWorkspace = vi.fn(() => of(workspace));
     configure(getWorkspace);

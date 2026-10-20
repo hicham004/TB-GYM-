@@ -303,6 +303,19 @@ describe('ClientWorkspace', () => {
     expect(unknown.host.textContent).toContain('Message Maya');
   });
 
+  it('says No plan yet alone for a client with no plan at all (COACH-10)', async () => {
+    const { host } = await render({
+      enrollments: [],
+      featureAccess: [decision('Messaging', false)],
+    });
+
+    expect(pill(host)).toBe('No plan yet');
+    // Not "Messaging isn't part of this plan." about a plan that does not exist.
+    expect(host.querySelector('.messaging-note')).toBeNull();
+    expect(host.textContent).not.toContain('Message Maya');
+    expect(host.querySelector('.plan-line')).toBeNull();
+  });
+
   it('puts the secondary actions behind one menu that names where each goes', async () => {
     const { host, harness } = await render();
 

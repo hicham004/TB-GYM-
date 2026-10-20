@@ -1,0 +1,51 @@
+// The History fold under a client's program header (audit LOST-6): what happened to the program, closed by
+// default (plan §2 rule 7). A sheet of its own, so the Training tab's main sheet keeps room under its budget.
+.history {
+  border-block-start: 1px solid var(--tb-line);
+  margin-block-start: 1rem;
+  padding-block-start: 0.75rem;
+}
+
+.history summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-block-size: 1.5rem;
+}
+
+.history summary:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.history-rows {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.625rem 0 0;
+  padding: 0;
+}
+
+.history-rows li {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-what {
+  font-weight: 600;
+}
+
+.history-day {
+  color: var(--tb-muted);
+}
+
+.history-reason {
+  color: var(--tb-muted);
+  display: block;
+  font-style: italic;
+  margin-block-start: 0.125rem;
+}

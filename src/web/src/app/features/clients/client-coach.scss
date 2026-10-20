@@ -55,3 +55,56 @@
   color: var(--color-danger);
   margin: 0;
 }
+
+// The coach history (COACH-16): closed until asked for, so the dialog stays one decision.
+.history {
+  border-block-start: 1px solid var(--tb-line);
+  padding-block-start: 0.75rem;
+}
+
+.history summary {
+  color: var(--tb-ink);
+  cursor: pointer;
+  font-weight: 600;
+  min-block-size: 1.5rem;
+}
+
+.history summary:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.history-rows {
+  display: grid;
+  gap: 0.625rem;
+  list-style: none;
+  margin: 0.625rem 0 0;
+  padding: 0;
+}
+
+.history-rows li {
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.history-coach {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.history-line,
+.history-note,
+.history-failed {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-note {
+  color: var(--tb-ink);
+  font-style: italic;
+}

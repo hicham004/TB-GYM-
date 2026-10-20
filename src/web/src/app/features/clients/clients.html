@@ -137,6 +137,10 @@
                 </div>
                 <div class="state">
                   <app-status-pill [label]="row.status.label" [tone]="row.status.tone" />
+                  @if (row.notSetUp) {
+                    <!-- The client has not finished their profile; the Intake says what is missing. -->
+                    <span class="setup" data-not-set-up i18n>Not set up yet</span>
+                  }
                   @if (row.reasons) {
                     <p class="reasons">{{ row.reasons }}</p>
                   }

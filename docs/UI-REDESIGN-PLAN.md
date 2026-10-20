@@ -1480,6 +1480,9 @@ limited to the coach's assigned clients.
   - The feed shows the newest six with "Show all".
   - The week is drawn as bars, with a hidden table for screen readers.
   - An empty workspace gets one "Invite your first client" card instead of zeros.
+  - Audit A8 (the owner's decision of 2026-10-19): a new client with no plan has a row, "Rana Khalil joined ·
+    Today · no plan yet" with Start a plan (Service with `?action=start`); the greeting says what it counts,
+    "11 clients have something for you today, listed under Needs you".
   - Coach Today follows dark mode; the client's Today at the same route does too since its dark
     pass in R5.4b.
   - Screenshots on the Atlas demo: `docs/design/r32-coach-today-*.png`.
@@ -1511,6 +1514,8 @@ limited to the coach's assigned clients.
     attention for something else), Paused (the plan) and New, with counts; the chip is kept in
     `?show=`. Search covers names and goals, ignoring case and accents.
   - Former clients (`/clients/former`, Owner) use the same rows: how and when coaching ended, and why.
+  - Audit A8 (the owner's decision of 2026-10-19): a client who never finished their profile carries a quiet
+    "Not set up yet" chip beside the status pill; it is not a column and not an attention reason.
   - Both lists follow dark mode. Screenshots on the Atlas demo: `docs/design/r33a-clients-*.png`.
 - Built in R5.3a at `/invitations` (follows dark mode): **Waiting to join** with a count, then one row per
   person (face, name and email, the status pill, "Sent once · the newest link works until Oct 16", Send again

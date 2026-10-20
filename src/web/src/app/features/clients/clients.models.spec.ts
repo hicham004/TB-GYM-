@@ -176,6 +176,39 @@ describe('client list (C2)', () => {
     expect(today.plan).toEqual({ label: 'Plan ends today', soon: true });
   });
 
+  it('marks a client who never finished their profile Not set up yet (LOST-12)', () => {
+    const row = (onboardingStatus: 'NotStarted' | 'InProgress' | 'Completed') =>
+      clientRow(
+        overviewRow(coachClient('c-z', 'Rita', 'Daher'), { onboardingStatus }),
+        COACH_TODAY,
+        context,
+      );
+    expect(row('NotStarted').notSetUp).toBe(true);
+    expect(row('InProgress').notSetUp).toBe(true);
+    expect(row('Completed').notSetUp).toBe(false);
+    // The fixtures' clients have all finished theirs.
+    expect(Object.values(rows()).some((item) => item.notSetUp)).toBe(false);
+  });
+
+  it('says a new client with no plan needs one (COACH-9)', () => {
+    const joined = clientRow(
+      overviewRow(coachClient('c-n', 'Rita', 'Daher'), {
+        status: 'NeedsAttention',
+        planState: 'None',
+        planEndsOn: null,
+        isNew: true,
+        attention: ['NoPlan'],
+        recentSessions: null,
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(joined.reasons).toBe('Joined, no plan yet');
+    expect(joined.status).toEqual({ label: 'Needs attention', tone: 'warning' });
+    expect(joined.plan.label).toBe('No plan yet');
+    expect([...joined.filters]).toEqual(['all', 'attention', 'new']);
+  });
+
   it("names the coach only on a team member's client", () => {
     const { Maya, Rami } = rows();
 

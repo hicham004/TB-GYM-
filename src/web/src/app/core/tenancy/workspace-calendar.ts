@@ -7,6 +7,7 @@ import { TenantStore } from './tenant.store';
 interface ResolvedDate {
   key: string;
   date: string;
+  timeZone: string;
 }
 
 /**
@@ -45,6 +46,15 @@ export class WorkspaceCalendar {
     return resolved !== null && resolved.key === this.key() ? resolved.date : browserDate();
   });
 
+  /**
+   * The workspace's time zone once the workspace has been read (`resolveToday`), and null until then, when a
+   * date shown from an instant falls back to the device's clock (audit COACH-6).
+   */
+  readonly timeZone = computed(() => {
+    const resolved = this.resolved();
+    return resolved !== null && resolved.key === this.key() ? resolved.timeZone : null;
+  });
+
   /** Reads the workspace once per active workspace; concurrent callers share the one request. */
   async resolveToday(): Promise<string> {
     const key = this.key();
@@ -71,7 +81,7 @@ export class WorkspaceCalendar {
         return browserDate();
       }
 
-      this.resolved.set({ key, date: workspace.currentDate });
+      this.resolved.set({ key, date: workspace.currentDate, timeZone: workspace.timeZoneId });
       return workspace.currentDate;
     } catch {
       return browserDate();

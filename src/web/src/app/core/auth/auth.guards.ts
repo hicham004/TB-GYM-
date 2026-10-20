@@ -49,6 +49,19 @@ export const ownerGuard: CanActivateFn = async () => {
   return tenants.isOwner() ? true : router.createUrlTree(['/']);
 };
 
+/**
+ * A page every member of the chosen workspace has, whatever their role: Messages and Notifications. Someone
+ * with no role there, such as a client who left or whose coaching ended, goes to Today, which tells them so,
+ * as every other page does (audit COACH-14); the API would refuse them on these pages anyway.
+ */
+export const memberGuard: CanActivateFn = async () => {
+  const auth = inject(AuthStore);
+  const tenants = inject(TenantStore);
+  const router = inject(Router);
+  await auth.initialize();
+  return tenants.canCoach() || tenants.isClient() ? true : router.createUrlTree(['/']);
+};
+
 export const clientGuard: CanActivateFn = async () => {
   const auth = inject(AuthStore);
   const tenants = inject(TenantStore);

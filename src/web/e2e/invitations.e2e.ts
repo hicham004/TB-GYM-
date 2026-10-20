@@ -37,6 +37,9 @@ async function openInvitations(
   await mockSession(page, {
     extra: {
       'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
+      // Each link is dated on the workspace's clock (audit COACH-6).
+      'GET /api/workspace': (route) =>
+        json(route, 200, { timeZoneId: 'Asia/Beirut', currentDate: NOW.slice(0, 10) }),
       'GET /api/invitations': (route) => json(route, 200, list),
       'POST /api/invitations': (route) => {
         const body = route.request().postDataJSON() as {
@@ -108,7 +111,7 @@ for (const width of [390, 1440]) {
 
     await expect(page.locator('[data-waiting] .name')).toHaveText(['Rana Haddad', 'Karl Bou Saab']);
     await expect(page.locator('[data-invitation="invitation-2"] .line')).toHaveText(
-      'Sent twice · the newest link works until Oct 13',
+      'Sent twice · the newest link works until Tue 13 Oct',
     );
     await expect(page.locator('[data-earlier] summary')).toHaveText('Earlier invitations (3)');
     await expectNoHorizontalOverflow(page);

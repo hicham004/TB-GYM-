@@ -1,8 +1,9 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoachClientDetails, TeamMember } from '../../core/api/api.models';
+import type { ClientCoachAssignmentView } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -50,7 +51,11 @@ class Host {
   readonly changed: CoachClientDetails[] = [];
 }
 
-async function render(team: TeamMember[], signedIn = 'owner-1') {
+async function render(
+  team: TeamMember[],
+  signedIn = 'owner-1',
+  history: () => unknown = () => of([]),
+) {
   await TestBed.configureTestingModule({
     imports: [Host],
     providers: [
@@ -58,6 +63,7 @@ async function render(team: TeamMember[], signedIn = 'owner-1') {
         provide: TeamApi,
         useValue: {
           getTeamMembers: vi.fn(() => of(team)),
+          getCoachAssignments: vi.fn(history),
           reassignClientCoach: vi.fn(() =>
             of({
               ...client,
@@ -152,6 +158,78 @@ describe('ClientCoach', () => {
       'coach-1',
     ]);
     expect(text(fixture)).toContain('Sam now has Cara Coach as their coach.');
+  });
+
+  it('shows the coach history its note is kept in, newest first, with each change and note (COACH-16)', async () => {
+    const assignment = (
+      sequence: number,
+      coachName: string,
+      assignedAtUtc: string,
+      reason: ClientCoachAssignmentView['reason'],
+      fields: Partial<ClientCoachAssignmentView> = {},
+    ): ClientCoachAssignmentView => ({
+      id: `a-${sequence}`,
+      sequence,
+      coachUserId: `u-${sequence}`,
+      coachName,
+      previousCoachUserId: null,
+      previousCoachName: null,
+      reason,
+      note: null,
+      assignedAtUtc,
+      assignedByUserId: 'owner-1',
+      ...fields,
+    });
+    const { fixture, host, api } = await render([owner, coach], 'owner-1', () =>
+      of([
+        assignment(1, 'Olivia Owner', '2026-09-05T08:00:00Z', 'Invitation'),
+        assignment(2, 'Cara Coach', '2026-09-20T08:00:00Z', 'Reassigned', {
+          previousCoachName: 'Olivia Owner',
+          note: 'Evening schedule suits Cara',
+        }),
+        assignment(3, 'Olivia Owner', '2026-10-01T08:00:00Z', 'CoachRemoved', {
+          previousCoachName: 'Cara Coach',
+        }),
+      ]),
+    );
+
+    press(host, 'Reassign coach');
+    await settle(fixture);
+
+    expect(api.getCoachAssignments).toHaveBeenCalledWith('client-1');
+    const history = host.querySelector<HTMLDetailsElement>('dialog [data-coach-history]')!;
+    expect(history.open).toBe(false);
+    expect(history.querySelector('summary')?.textContent?.trim()).toBe('Coach history (3)');
+    const rows = Array.from(history.querySelectorAll('li')).map((row) =>
+      (row.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    expect(rows).toEqual([
+      expect.stringMatching(
+        /^Olivia Owner Since (Thu 1 Oct|1 Oct 2026) · Cara Coach was removed from the team$/,
+      ),
+      expect.stringMatching(
+        /^Cara Coach (Sun 20 Sep|20 Sep 2026) to (Thu 1 Oct|1 Oct 2026) · moved from Olivia Owner Evening schedule suits Cara$/,
+      ),
+      expect.stringMatching(
+        /^Olivia Owner (Sat 5 Sep|5 Sep 2026) to (Sun 20 Sep|20 Sep 2026) · joined$/,
+      ),
+    ]);
+    expect(history.querySelector('li.current .history-coach')?.textContent?.trim()).toBe(
+      'Olivia Owner',
+    );
+  });
+
+  it('keeps the dialog usable when the coach history cannot be read', async () => {
+    const { fixture, host } = await render([owner, coach], 'owner-1', () =>
+      throwError(() => new Error('offline')),
+    );
+
+    press(host, 'Reassign coach');
+    await settle(fixture);
+
+    expect(text(fixture)).toContain('The coach history couldn’t be loaded.');
+    expect(host.querySelector('dialog [data-coach-history]')).toBeNull();
+    expect(host.querySelectorAll('option')).toHaveLength(1);
   });
 
   it('offers only the other members of the team as the new coach', async () => {

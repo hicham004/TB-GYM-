@@ -718,6 +718,12 @@
   margin: 0 0 var(--space-12);
 }
 
+// A field's message in a native dialog is still an error, not the dialog's quiet text: the rule
+// above outranks the field's own and painted a refused reason grey (audit COACH-15).
+.tb-dialog .tb-field__support--error {
+  color: var(--color-danger);
+}
+
 .tb-dialog__actions {
   display: flex;
   flex-wrap: wrap;

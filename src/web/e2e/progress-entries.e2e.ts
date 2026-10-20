@@ -349,7 +349,7 @@ test('asks before a sheet with typed work is closed', async ({ page }) => {
   await page
     .getByRole('dialog', { name: 'Discard what you typed?' })
     .locator('app-confirm')
-    .getByRole('button', { name: 'Close' })
+    .getByRole('button', { name: 'Discard' })
     .click();
   await expect(sheet).toBeHidden();
 });

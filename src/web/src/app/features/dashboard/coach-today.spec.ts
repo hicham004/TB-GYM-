@@ -46,15 +46,17 @@ async function render(getCoachToday: () => unknown = () => of(coachTodayView()))
 describe('CoachToday', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('greets the coach with the workspace date and how many clients need them', async () => {
+  it('greets the coach with the workspace date and how many clients are in Needs you', async () => {
     const { host, read } = await render();
 
     expect(read()).toContain('Thursday 1 October');
     expect(host.querySelector('h1')?.textContent).toMatch(
       /Good (morning|afternoon|evening), Karim\./,
     );
+    // It counts the queue, plans ending and maxes included, so it says so (COACH-4): the client list's
+    // "need attention" leaves those out, and never claims everyone else is on track.
     expect(host.querySelector('.needs')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      '7 clients need you today. Everyone else is on track.',
+      '7 clients have something for you today, listed under Needs you.',
     );
     expect(host.querySelector('a[href="/invitations"]')?.textContent).toContain('Invite client');
     expect(host.querySelector('a[href="/clients"]')?.textContent).toContain('Find a client');
@@ -68,7 +70,7 @@ describe('CoachToday', () => {
     );
     expect(tiles[0]).toContain('Clients');
     expect(tiles[0]).toContain('12');
-    expect(tiles[0]).toContain('7 need you today');
+    expect(tiles[0]).toContain('7 have something for you today');
     expect(tiles[1]).toContain('10 of 27');
     expect(tiles[1]).toContain('15 were due by today');
     expect(tiles[2]).toContain('3');
@@ -163,7 +165,9 @@ describe('CoachToday', () => {
 
     expect(host.querySelector('li.need')).toBeNull();
     expect(read()).toContain('All caught up.');
-    expect(read()).toContain('Everyone is on track today.');
+    expect(read()).toContain('Nothing needs you today.');
+    expect(read()).toContain('Nothing waiting for you today');
+    expect(read()).not.toContain('on track');
   });
 
   it('invites the first client in an empty coaching space instead of showing zeros', async () => {

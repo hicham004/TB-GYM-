@@ -456,6 +456,7 @@ internal sealed class InvitationApplicationService(
             invitation.Status,
             invitation.ExpiresAtUtc,
             existingUser is not null && currentUser.UserId != existingUser.Id,
+            tenant.TimeZoneId,
             invitation.Kind);
     }
 

@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { NutritionWorkspaceSettingsView } from '../../core/api/generated';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, fill, leave, settle } from '../../../testing/dom';
@@ -194,6 +195,47 @@ describe('Settings › Nutrition', () => {
     button(host, 'Save settings').click();
     await settle(fixture);
     expect(api.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('asks before a link, Browser Back, a switch, sign-out or a reload drops a change', async () => {
+    const { fixture, host, api } = await render();
+    const page = fixture.componentInstance;
+    const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    const unload = () => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    // Nothing changed: no question and no reload warning.
+    expect(await page.canLeave()).toBe(true);
+    expect(unload()).toBe(false);
+
+    // A changed allowance asks, and staying keeps it (audit COACH-1).
+    fill(host, 'Suggestions a month', '80');
+    await settle(fixture);
+    expect(unload()).toBe(true);
+    const staying = page.canLeave();
+    await settle(fixture);
+    expect(textOf(dialog()?.querySelector('h2'))).toBe('Leave without saving?');
+    expect(textOf(dialog())).toContain('Your changes to these settings aren’t saved.');
+    button(dialog()!, 'Stay').click();
+    expect(await staying).toBe(false);
+    await settle(fixture);
+    expect(unload()).toBe(true);
+
+    // A workspace switch or a sign-out asks too; leaving lets it go.
+    const switching = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    button(dialog()!, 'Leave without saving').click();
+    expect(await switching).toBe(true);
+    expect(api.updateSettings).not.toHaveBeenCalled();
+
+    // Saved, it asks nothing again.
+    button(host, 'Save settings').click();
+    await settle(fixture);
+    expect(await page.canLeave()).toBe(true);
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
   });
 
   it('offers their settings when someone saved first', async () => {

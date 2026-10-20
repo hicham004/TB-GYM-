@@ -101,17 +101,44 @@ describe('ClientRelease', () => {
     expect(text(off.fixture)).not.toContain('included in the email');
   });
 
-  it('requires a reason', async () => {
+  it('requires a reason, says so under the box and puts the cursor there (COACH-15)', async () => {
     const { fixture, host, releaseClient } = await render();
 
     press(host, 'End coaching');
     await settle(fixture);
+    const box = host.querySelector<HTMLTextAreaElement>('textarea')!;
+    // Nothing is said before the first press.
+    expect(box.getAttribute('aria-invalid')).toBeNull();
     fill(host, 'Reason', '   ');
     press(host, 'End coaching permanently');
     await settle(fixture);
 
     expect(releaseClient).not.toHaveBeenCalled();
     expect(host.querySelector('dialog')?.open).toBe(true);
+    expect(text(fixture)).toContain('Write why coaching ends. Only your team sees it.');
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(box);
+
+    // Typing a reason takes the message away, and the release goes.
+    fill(host, 'Reason', 'Moved away');
+    await settle(fixture);
+    expect(text(fixture)).not.toContain('Write why coaching ends.');
+    press(host, 'End coaching permanently');
+    await settle(fixture);
+    expect(releaseClient).toHaveBeenCalledWith('client-1', 'Moved away', 7);
+  });
+
+  it('refuses a reason over 500 characters in words, before sending it', async () => {
+    const { fixture, host, releaseClient } = await render();
+
+    press(host, 'End coaching');
+    await settle(fixture);
+    fill(host, 'Reason', 'x'.repeat(501));
+    press(host, 'End coaching permanently');
+    await settle(fixture);
+
+    expect(releaseClient).not.toHaveBeenCalled();
+    expect(text(fixture)).toContain('Keep it to 500 characters.');
   });
 
   it('releases with the trimmed reason and the version it was shown, then hands back the record', async () => {

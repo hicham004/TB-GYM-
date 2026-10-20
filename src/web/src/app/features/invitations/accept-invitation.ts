@@ -1,6 +1,14 @@
-import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  LOCALE_ID,
+  OnInit,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -9,6 +17,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { PublicInvitation } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { FormAttempt } from '../../core/forms/form-attempt';
+import { houseMoment } from '../../core/i18n/house-dates';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -25,7 +34,6 @@ import { PasswordReveal } from '../../ui/password-reveal';
     Button,
     ButtonLink,
     Control,
-    DatePipe,
     Field,
     PasswordReveal,
     ReactiveFormsModule,
@@ -43,9 +51,20 @@ export class AcceptInvitation implements OnInit {
   private readonly router = inject(Router);
   private readonly scrubber = inject(ActionTokenScrubber);
   private readonly tenants = inject(TenantStore);
+  private readonly locale = inject(LOCALE_ID);
   private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
 
   protected readonly attempt = new FormAttempt();
+  /**
+   * "Sun 25 Oct, 9:16 PM": when the link stops working, on the workspace's clock as its coach reads it,
+   * without seconds (audit COACH-6).
+   */
+  protected readonly expires = computed(() => {
+    const invitation = this.invitation();
+    return invitation
+      ? houseMoment(invitation.expiresAtUtc, this.locale, invitation.timeZoneId ?? null)
+      : '';
+  });
 
   protected readonly invitation = signal<PublicInvitation | null>(null);
   protected readonly loading = signal(true);

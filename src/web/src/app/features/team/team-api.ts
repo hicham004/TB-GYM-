@@ -10,6 +10,7 @@ import {
   TeamMember,
 } from '../../core/api/api.models';
 import type {
+  ClientCoachAssignmentView,
   CoachClientDetails as ContractCoachClientDetails,
   CoachRemovalResponse,
   InvitationSummary,
@@ -78,6 +79,11 @@ export class TeamApi {
     return this.http
       .post<InvitationSummary>(`/api/team/invitations/${invitationId}/revoke`, { version })
       .pipe(map(toInvitation));
+  }
+
+  /** Every coach the client has had here, with why each change was made and the owner's note (ADR 0026). */
+  getCoachAssignments(clientId: string): Observable<ClientCoachAssignmentView[]> {
+    return this.http.get<ClientCoachAssignmentView[]>(`/api/clients/${clientId}/coach-assignments`);
   }
 
   /** The owner moves a client to another coach. The version is the client profile the owner saw. */

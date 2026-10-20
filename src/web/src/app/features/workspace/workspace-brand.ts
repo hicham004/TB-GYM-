@@ -3,11 +3,13 @@ import {
   afterNextRender,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
   Injector,
   signal,
+  TemplateRef,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -16,6 +18,8 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import type { WorkspaceDetails } from '../../core/api/api.models';
 import { FormAttempt } from '../../core/forms/form-attempt';
+import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -23,6 +27,8 @@ import { BRAND_PRESETS, type BrandColors, TB_GYM_BRAND } from '../../core/theme/
 import { PersonalModeStore } from '../../core/theme/personal-mode.store';
 import { initialsOf } from '../../shell/initials';
 import { Button } from '../../ui/button';
+import { UiConfirm } from '../../ui/confirm';
+import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
@@ -51,7 +57,8 @@ interface DraftLogo {
  * The coach's brand (R3.5a, plan §3.1): a look from the four presets or their own two colours, and
  * a logo, with a preview of both the coach's and the client's screens before saving. The colours
  * are stored as picked; the app derives readable tones from them wherever they are drawn, and says
- * here when it had to adjust one.
+ * here when it had to adjust one. Leaving with changes asks first, whether by a link, Browser Back,
+ * a workspace switch, sign-out or a reload (plan §9, audit COACH-1).
  */
 @Component({
   selector: 'app-workspace-brand',
@@ -64,6 +71,7 @@ interface DraftLogo {
     SettingsFrame,
     SegmentedControl,
     Skeleton,
+    UiConfirm,
   ],
   templateUrl: './workspace-brand.html',
   styleUrl: './workspace-brand.scss',
@@ -72,20 +80,25 @@ interface DraftLogo {
     '(window:beforeunload)': 'warnBeforeLeaving($event)',
   },
 })
-export class WorkspaceBrand {
+export class WorkspaceBrand implements HoldsUnsavedWork {
   private readonly api = inject(ApiClient);
   private readonly brandApi = inject(WorkspaceBrandApi);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly toast = inject(UiToast);
+  private readonly dialogs = inject(UiDialog);
   private readonly document = inject(DOCUMENT);
   private readonly personalMode = inject(PersonalModeStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private loadedTenantId: string | null = null;
 
+  protected readonly leaveMessage = $localize`Your changes to your brand aren’t saved. If you leave now, they are lost.`;
+  protected readonly leaveConfirm = $localize`Leave without saving`;
+  protected readonly leaveCancel = $localize`Stay`;
   protected readonly presets = BRAND_PRESETS;
   protected readonly logoTypes = LOGO_TYPES.join(',');
   protected readonly modeOptions = [
@@ -167,6 +180,9 @@ export class WorkspaceBrand {
   private lastGood: BrandColors = TB_GYM_BRAND;
 
   constructor() {
+    // A workspace switch and a sign-out ask too: both change the session before any route changes.
+    const unregister = inject(UnsavedWork).register(this);
+    inject(DestroyRef).onDestroy(unregister);
     this.scope.onReset(() => this.resetTenantState());
     effect(() => {
       this.scope.epoch();
@@ -180,6 +196,17 @@ export class WorkspaceBrand {
       const colors = this.colors();
       if (this.choice() === 'custom') this.lastGood = colors;
     });
+  }
+
+  /** Asks before the router, a workspace switch or a sign-out drops a brand not saved yet (plan §9). */
+  async canLeave(): Promise<boolean> {
+    if (!this.dirty() || this.saving()) return true;
+    const dialog = this.dialogs.open<boolean>(this.leaveDialog(), {
+      title: $localize`Leave without saving?`,
+      closeLabel: $localize`Close`,
+      closeOnNavigation: false,
+    });
+    return (await firstValueFrom(dialog.closed)) === true;
   }
 
   protected choose(choice: BrandChoice): void {
@@ -306,7 +333,9 @@ export class WorkspaceBrand {
   }
 
   protected warnBeforeLeaving(event: BeforeUnloadEvent): void {
-    if (this.dirty()) event.preventDefault();
+    if (!this.dirty()) return;
+    event.preventDefault();
+    event.returnValue = '';
   }
 
   private async load(): Promise<void> {

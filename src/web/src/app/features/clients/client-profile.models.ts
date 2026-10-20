@@ -85,8 +85,13 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
           count > 1
             ? $localize`${count}:count: check-ins to review`
             : $localize`Check-in ready to review`,
+        // The newest is the one the coach may not have seen yet (CLIENT-19).
         detail:
-          count > 1 ? $localize`The first was sent ${since}:ago:` : $localize`Sent ${since}:ago:`,
+          count > 1 && item.newestAt
+            ? $localize`The newest was sent ${elapsed(item.newestAt, context)}:newest:, the first ${since}:ago:`
+            : count > 1
+              ? $localize`The first was sent ${since}:ago:`
+              : $localize`Sent ${since}:ago:`,
         // One waiting opens straight at its review; several open the list, where each can be read.
         action:
           item.subjectId && count <= 1
@@ -210,6 +215,21 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
           label: $localize`Assign program`,
           link: `${page}/training`,
           queryParams: { action: 'assign' },
+        },
+      };
+    case 'NoPlan':
+      // A new client with no plan at all (COACH-9): nothing else can reach the coach until one runs.
+      return {
+        ...base,
+        tone: 'new',
+        tag: $localize`New`,
+        heading: $localize`No plan yet`,
+        detail: $localize`Joined ${date(item.date)}:date:. Start a plan so ${name}:name: can use what it includes.`,
+        // Opens Service & access with the Start a plan sheet already open.
+        action: {
+          label: $localize`Start a plan`,
+          link: `${page}/service`,
+          queryParams: { action: 'start' },
         },
       };
   }

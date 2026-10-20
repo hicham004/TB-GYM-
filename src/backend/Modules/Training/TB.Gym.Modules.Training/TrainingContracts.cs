@@ -1089,7 +1089,8 @@ public sealed record CoachClientProgramView(
 /// Counts cover every session of the block, shared or not. <c>CurrentWeekNumber</c> is set only while
 /// the block is running; an active block past its last day (a missed session keeps it from closing)
 /// has none. <c>Version</c> is the concurrency token the block's changes (share a week, reschedule,
-/// complete, cancel, add weeks) must send back.
+/// complete, cancel, add weeks) must send back. <c>Lifecycle</c> is the block's audited history, oldest
+/// first: assigned, renamed, cancelled with the coach's reason, completed (audit LOST-6).
 /// </summary>
 public sealed record CoachProgramBlockView(
     Guid Id,
@@ -1105,7 +1106,8 @@ public sealed record CoachProgramBlockView(
     int SessionCount,
     int CompletedCount,
     int MissedCount,
-    IReadOnlyList<CoachProgramWeekView> Weeks);
+    IReadOnlyList<CoachProgramWeekView> Weeks,
+    IReadOnlyList<MesocycleLifecycleEventView> Lifecycle);
 
 /// <summary>
 /// <c>IsShared</c> is the coach's choice; <c>IsVisible</c> is what the client can open today (shared

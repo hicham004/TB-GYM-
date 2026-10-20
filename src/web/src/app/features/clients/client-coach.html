@@ -46,6 +46,28 @@
       >
         <textarea appControl dir="auto" rows="3" formControlName="note"></textarea>
       </app-field>
+      <!-- The history the note above is kept in (audit COACH-16), newest first. -->
+      @if (history(); as rows) {
+        @if (rows.length > 0) {
+          <details class="history" data-coach-history>
+            <summary i18n>Coach history ({{ rows.length }})</summary>
+            <ol class="history-rows">
+              @for (row of rows; track row.id) {
+                <li [class.current]="row.current">
+                  <span class="history-coach" dir="auto">{{ row.coach }}</span
+                  >&ngsp;
+                  <span class="history-line" dir="auto">{{ row.line }}</span>
+                  @if (row.note; as note) {
+                    &ngsp;<q class="history-note" dir="auto">{{ note }}</q>
+                  }
+                </li>
+              }
+            </ol>
+          </details>
+        }
+      } @else if (historyFailed()) {
+        <p class="history-failed tb-text-compact" i18n>The coach history couldn’t be loaded.</p>
+      }
       <p class="reassign-error tb-text-compact" role="alert">{{ error() }}</p>
       <div class="tb-dialog__actions">
         <button appButton variant="outlined" type="button" (click)="cancel($event)" i18n>

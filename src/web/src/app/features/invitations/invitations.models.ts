@@ -1,4 +1,5 @@
 import type { ClientInvitation, InvitationStatus } from '../../core/api/api.models';
+import { dayInZone, houseDay } from '../../core/i18n/house-dates';
 import { initialsOf } from '../../shell/initials';
 import { addYears, adultCutoff, isIsoDate, type IsoDate } from '../../ui/calendar';
 import type { DateInputStatus } from '../../ui/date-input';
@@ -36,12 +37,12 @@ export function statusTone(status: InvitationStatus): StatusPillTone {
   }
 }
 
-function shortDate(date: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  }).format(new Date(date));
+/**
+ * "Sun 25 Oct", or "1 Oct 2025" in another year: the day an instant falls on in the workspace, as every
+ * coach page writes a day (COACH-6), never UTC's day.
+ */
+function workspaceDay(instant: string, locale: string, timeZone: string | null, now: Date): string {
+  return houseDay(dayInZone(instant, timeZone), locale, dayInZone(now, timeZone));
 }
 
 /** How many times the link was sent on purpose: once, twice, "3 times". */
@@ -52,8 +53,13 @@ export function sentText(count: number): string {
 }
 
 /** The line under a person's name: what happened and what happens next. */
-export function invitationLine(invitation: ClientInvitation, locale: string): string {
-  const until = shortDate(invitation.expiresAtUtc, locale);
+export function invitationLine(
+  invitation: ClientInvitation,
+  locale: string,
+  timeZone: string | null = null,
+  now: Date = new Date(),
+): string {
+  const until = workspaceDay(invitation.expiresAtUtc, locale, timeZone, now);
   switch (invitation.status) {
     case 'Pending':
       return $localize`${sentText(invitation.sendCount)}:sent: · the newest link works until ${until}:date:`;
@@ -85,7 +91,12 @@ export interface InvitationRow {
   readonly invitation: ClientInvitation;
 }
 
-export function invitationRow(invitation: ClientInvitation, locale: string): InvitationRow {
+export function invitationRow(
+  invitation: ClientInvitation,
+  locale: string,
+  timeZone: string | null = null,
+  now: Date = new Date(),
+): InvitationRow {
   const name = `${invitation.firstName} ${invitation.lastName}`.trim();
   return {
     id: invitation.id,
@@ -95,7 +106,7 @@ export function invitationRow(invitation: ClientInvitation, locale: string): Inv
     status: invitation.status,
     statusLabel: statusLabel(invitation.status),
     tone: statusTone(invitation.status),
-    line: invitationLine(invitation, locale),
+    line: invitationLine(invitation, locale, timeZone, now),
     canSendAgain: invitation.status === 'Pending',
     canCancel: invitation.status === 'Pending',
     canInviteAgain: invitation.status === 'Expired' || invitation.status === 'Revoked',
@@ -108,10 +119,12 @@ export function invitationRow(invitation: ClientInvitation, locale: string): Inv
 export function splitInvitations(
   invitations: readonly ClientInvitation[],
   locale: string,
+  timeZone: string | null = null,
+  now: Date = new Date(),
 ): { waiting: InvitationRow[]; earlier: InvitationRow[] } {
   const rows = [...invitations]
     .sort((a, b) => b.createdAtUtc.localeCompare(a.createdAtUtc))
-    .map((invitation) => invitationRow(invitation, locale));
+    .map((invitation) => invitationRow(invitation, locale, timeZone, now));
   return {
     waiting: rows.filter((row) => row.status === 'Pending'),
     earlier: rows.filter((row) => row.status !== 'Pending'),

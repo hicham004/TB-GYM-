@@ -126,14 +126,17 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v2 (`CoachAttention`; v1 in R3.1, v2 in P4c) is what Coach Today asks a coach to act on
-and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
+**CLI-018** Coach attention v3 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8) is what Coach Today asks a
+coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
 their own, the Owner all) and never a former client. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
 check-ins never appear; a weigh-in follows Progress and needs only an unblocked relationship. Ranked
-most urgent first: a submitted check-in not reviewed; the caller's own unread messages (another
+most urgent first: a submitted check-in not reviewed (several rank by the oldest and also name the newest,
+audit CLIENT-19); the caller's own unread messages (another
 coach's chat is never counted, not even for the Owner); a renewal request from the last 30 days
-while the whole plan is still ended (ADR 0029); a running plan whose last covered day is within 14
+while the whole plan is still ended (ADR 0029); a new client with no plan at all, while they are new ("Joined,
+start a plan"; an ended, unpaid, coming, paused or blocked plan is not "no plan"; audit COACH-9, the owner's
+decision of 2026-10-19); a running plan whose last covered day is within 14
 days, counting paid renewals already in place: a renewal still waiting for payment covers nothing
 (SUB-008), so the item names it to record its payment (audit BEB-7, the owner's decision of 2026-10-19);
 a week not shared (TRN-021); two or more missed sessions
@@ -142,7 +145,9 @@ program and what its logged sets suggest for the next one (STR-014); and, last, 
 coming block whose logged sets suggest a new max (STR-012, after any keep, STR-013), named with the max
 in use and the suggestion. The status is Needs attention for any of those but the plan's end and maxes
 to review (a client getting stronger is good news), else Paused, Ending soon, On track for a running
-plan, or No active plan. A client is new for 14 days after joining. The activity feed holds finished workouts,
+plan, or No active plan. A client is new for 14 days after joining. The list also says which clients have not
+finished setting up their profile ("Not set up yet", audit LOST-12); that is shown beside the status and is not
+an attention reason. The activity feed holds finished workouts,
 with their records (TRN-019), and sent check-ins of the last 7 days; a weigh-in counts only as a
 client's last activity. Counts carry their dates; no percentage is derived on the server.
 A client's own page (R3.3b, `GET /api/clients/{clientId}/overview`) reads the same rule for that one

@@ -5,6 +5,7 @@ import {
   ElementRef,
   inject,
   input,
+  LOCALE_ID,
   output,
   signal,
   viewChild,
@@ -20,13 +21,16 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { coachHistoryRows, type CoachHistoryRow } from './client-coach.models';
+import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
  * The client's coach, and the owner's action to move the client to another one (ADR 0026).
  *
  * Owner-only, and silent in a workspace with nobody else to move a client to, so a solo coach sees
- * no change. The API is the authority: it refuses a reassignment from anyone but the owner, to
- * anyone who is not active staff, or against a stale client version.
+ * no change. The dialog shows the coach history its note is kept in (audit COACH-16), read when it
+ * opens. The API is the authority: it refuses a reassignment from anyone but the owner, to anyone
+ * who is not active staff, or against a stale client version.
  */
 @Component({
   selector: 'app-client-coach',
@@ -40,6 +44,8 @@ export class ClientCoach {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
+  private readonly locale = inject(LOCALE_ID);
+  private readonly record = inject(ClientWorkspaceContext, { optional: true });
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('reassignDialog');
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('reassignTrigger');
@@ -52,6 +58,9 @@ export class ClientCoach {
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  /** The coach history, read each time the dialog opens; null while it is read or if it failed. */
+  protected readonly history = signal<readonly CoachHistoryRow[] | null>(null);
+  protected readonly historyFailed = signal(false);
   /**
    * The owner is this client's coach: they keep the record, as the owner sees every client, but their
    * chat closes like any coach's (ADR 0026, audit COACH-13).
@@ -94,6 +103,25 @@ export class ClientCoach {
     this.notice.set(null);
     const dialog = this.dialog()?.nativeElement;
     if (dialog && !dialog.open) dialog.showModal();
+    void this.loadHistory();
+  }
+
+  private async loadHistory(): Promise<void> {
+    return this.scope.run('history', async (owner) => {
+      this.history.set(null);
+      this.historyFailed.set(false);
+      try {
+        const items = await owner.wait(
+          firstValueFrom(this.api.getCoachAssignments(this.client().id)),
+        );
+        this.history.set(
+          coachHistoryRows(items, this.locale, this.record?.workspace()?.timeZoneId ?? null),
+        );
+      } catch {
+        // The dialog still works without it; it says the history could not be read.
+        if (owner.current) this.historyFailed.set(true);
+      }
+    });
   }
 
   protected cancel(event?: Event): void {

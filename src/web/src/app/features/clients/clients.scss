@@ -161,6 +161,18 @@ h1 {
   color: var(--tb-ink);
 }
 
+// A client who never finished their profile (LOST-12): a quiet chip beside the status, not a status.
+.setup {
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 999px;
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0.0625rem 0.5rem;
+  white-space: nowrap;
+}
+
 .facts {
   align-items: center;
   display: flex;

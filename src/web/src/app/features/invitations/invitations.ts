@@ -4,7 +4,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -17,28 +16,29 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type { ClientInvitation } from '../../core/api/api.models';
+import { GuardedSheets, type LeaveQuestion } from '../../core/forms/guarded-sheets';
 import { CsrfService } from '../../core/security/csrf.service';
 import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Avatar } from '../../ui/avatar';
 import { Button } from '../../ui/button';
 import { deviceToday } from '../../ui/calendar';
 import { UiConfirm } from '../../ui/confirm';
-import { UiDialog } from '../../ui/dialog';
 import { EmptyState } from '../../ui/empty-state';
-import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
-import { UiToast } from '../../ui/toast';
 import { InviteClient, type InvitePrefill } from './invite-client';
 import { splitInvitations, type InvitationRow } from './invitations.models';
 
 /**
  * Invitations (R5.3a): who is still to join, with a new link or a cancellation one press away, and
- * everyone invited before behind a closed disclosure. Inviting is a sheet. A new link replaces every
- * earlier link, so "Send again" is a deliberate press that carries the version it was shown: a stale
- * list conflicts instead of cancelling a link the coach did not know existed.
+ * everyone invited before behind a closed disclosure. Inviting is a sheet, which asks before Browser
+ * Back, a workspace switch, sign-out or a reload drops what was typed in it (audit COACH-1), as every
+ * sheet host does. A new link replaces every earlier link, so "Send again" is a deliberate press that
+ * carries the version it was shown: a stale list conflicts instead of cancelling a link the coach did
+ * not know existed. Dates are the workspace's days (COACH-6).
  */
 @Component({
   selector: 'app-invitations',
@@ -56,23 +56,24 @@ import { splitInvitations, type InvitationRow } from './invitations.models';
   templateUrl: './invitations.html',
   styleUrl: './invitations.scss',
 })
-export class Invitations {
+export class Invitations extends GuardedSheets {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly calendar = inject(WorkspaceCalendar);
   private readonly locale = inject(LOCALE_ID);
-  private readonly sheets = inject(UiSheet);
-  private readonly dialogs = inject(UiDialog);
-  private readonly toast = inject(UiToast);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly inviteSheet = viewChild.required<TemplateRef<unknown>>('inviteSheet');
-  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+  private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private loadedTenantId: string | null = null;
-  private openSheet: { close: () => void } | null = null;
-  private sheetDirty = false;
 
-  protected readonly closeLabel = $localize`Close`;
+  protected override readonly leaveQuestion: LeaveQuestion = {
+    title: $localize`Discard what you typed?`,
+    message: $localize`Close without sending? What you typed will be lost.`,
+    confirm: $localize`Discard`,
+    cancel: $localize`Keep editing`,
+  };
   protected readonly loadingLabel = $localize`Loading invitations…`;
   protected readonly today = deviceToday();
 
@@ -80,11 +81,10 @@ export class Invitations {
   protected readonly invitations = signal<ClientInvitation[]>([]);
   protected readonly acting = signal<string | null>(null);
   protected readonly prefill = signal<InvitePrefill | null>(null);
-  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
-    null,
-  );
 
-  protected readonly sections = computed(() => splitInvitations(this.invitations(), this.locale));
+  protected readonly sections = computed(() =>
+    splitInvitations(this.invitations(), this.locale, this.calendar.timeZone()),
+  );
   protected readonly waiting = computed(() => this.sections().waiting);
   protected readonly earlier = computed(() => this.sections().earlier);
   /** This server sends no email (audit LOST-1): no screen here may promise one. */
@@ -96,10 +96,10 @@ export class Invitations {
   );
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.openSheet?.close());
+    super();
     this.scope.onReset(() => {
       this.loadedTenantId = null;
-      this.openSheet?.close();
+      this.closeSheets();
       this.invitations.set([]);
       this.state.set('loading');
       this.acting.set(null);
@@ -119,13 +119,21 @@ export class Invitations {
     return this.scope.run('load', async (owner) => {
       this.state.set('loading');
       try {
-        this.invitations.set(await owner.wait(firstValueFrom(this.api.getInvitations())));
+        // The workspace's own clock dates each link; it is read once per workspace and shared.
+        const [invitations] = await owner.wait(
+          Promise.all([firstValueFrom(this.api.getInvitations()), this.calendar.resolveToday()]),
+        );
+        this.invitations.set(invitations);
         this.state.set('ready');
       } catch {
         if (!owner.current) return;
         this.state.set('error');
       }
     });
+  }
+
+  protected confirmDialog(): TemplateRef<unknown> {
+    return this.confirmTemplate();
   }
 
   protected openInvite(again: InvitationRow | null = null): void {
@@ -138,16 +146,11 @@ export class Invitations {
           }
         : null,
     );
-    this.sheetDirty = false;
-    this.openSheet?.close();
-    const sheet = this.sheets.open<ClientInvitation | null>(this.inviteSheet(), {
-      title: again ? $localize`Invite ${again.name}:name: again` : $localize`Invite a client`,
-      closeLabel: this.closeLabel,
-      canClose: () => this.canCloseInvite(),
-    });
-    this.openSheet = sheet;
+    const sheet = this.show<ClientInvitation | null>(
+      this.inviteSheet(),
+      again ? $localize`Invite ${again.name}:name: again` : $localize`Invite a client`,
+    );
     sheet.closed.subscribe((created) => {
-      if (this.openSheet === sheet) this.openSheet = null;
       if (!created) return;
       // An older invitation for the same email is replaced by this one on the server: read the list again.
       this.toast.show(
@@ -161,20 +164,7 @@ export class Invitations {
   }
 
   protected setDirty(dirty: boolean): void {
-    this.sheetDirty = dirty;
-  }
-
-  /** The close button, Escape, the backdrop and Not now all ask the same question. */
-  private canCloseInvite(): boolean | Promise<boolean> {
-    return (
-      !this.sheetDirty ||
-      this.ask(
-        $localize`Close without sending? What you typed will be lost.`,
-        $localize`Close`,
-        $localize`Keep editing`,
-        $localize`Discard what you typed?`,
-      )
-    );
+    this.dirty = dirty;
   }
 
   /** The sheet's own buttons: a sent invitation closes it for good, Not now asks first when needed. */
@@ -182,7 +172,12 @@ export class Invitations {
     created: ClientInvitation | null,
     sheet: { close(result: ClientInvitation | null): void },
   ): Promise<void> {
-    if (created || (await this.canCloseInvite())) sheet.close(created);
+    if (created) {
+      this.dirty = false;
+      sheet.close(created);
+      return;
+    }
+    if (await this.canClose()) sheet.close(null);
   }
 
   /**
@@ -249,21 +244,5 @@ export class Invitations {
     } finally {
       if (owner.current) this.acting.set(null);
     }
-  }
-
-  private async ask(
-    message: string,
-    confirm: string,
-    cancel: string,
-    title: string,
-  ): Promise<boolean> {
-    this.asking.set({ message, confirm, cancel });
-    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
-      title,
-      closeLabel: this.closeLabel,
-    });
-    const answer = await firstValueFrom(dialog.closed);
-    this.asking.set(null);
-    return answer === true;
   }
 }

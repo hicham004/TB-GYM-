@@ -180,6 +180,10 @@ public sealed record InvitationSummary(
     string? DevelopmentActionUrl = null,
     InvitationKind Kind = InvitationKind.Client);
 
+/// <summary>
+/// What the holder of a working link may see. <c>TimeZoneId</c> is the workspace's, so the page says when
+/// the link stops working on the workspace's clock, as its coach's pages do (audit COACH-6).
+/// </summary>
 public sealed record PublicInvitationDetails(
     string WorkspaceName,
     string Email,
@@ -188,6 +192,7 @@ public sealed record PublicInvitationDetails(
     InvitationStatus Status,
     DateTimeOffset ExpiresAtUtc,
     bool RequiresExistingAccountSignIn,
+    string TimeZoneId,
     InvitationKind Kind = InvitationKind.Client);
 
 public sealed record InvitationCommandResult(

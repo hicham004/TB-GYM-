@@ -3,7 +3,6 @@ import {
   afterNextRender,
   Component,
   computed,
-  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -17,23 +16,22 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { FormAttempt } from '../../core/forms/form-attempt';
+import { GuardedSheets, type LeaveQuestion } from '../../core/forms/guarded-sheets';
 import { CsrfService } from '../../core/security/csrf.service';
 import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Avatar } from '../../ui/avatar';
 import { Button } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
-import { UiDialog } from '../../ui/dialog';
 import { EmptyState } from '../../ui/empty-state';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { UiMenu } from '../../ui/menu';
 import type { ModalSurface } from '../../ui/modal-surface';
-import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
-import { UiToast } from '../../ui/toast';
 import { SettingsFrame } from '../settings/settings-frame';
 import { TeamApi } from './team-api';
 import {
@@ -57,8 +55,10 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Settings › Team (C9, R5.2a; ADR 0026): who coaches here, each with a face, their clients and when
- * they joined; inviting a coach in a sheet; who is still to accept, with a new link or a cancel in
- * each row's menu; and removing a coach, asked first because their clients move to the owner.
+ * they joined; inviting a coach in a sheet, which asks before Browser Back, a workspace switch, sign-out
+ * or a reload drops what was typed (audit COACH-1); who is still to accept, with a new link or a cancel
+ * in each row's menu; and removing a coach, asked first because their clients move to the owner. Days
+ * are the workspace's (COACH-6).
  *
  * Presentation only. The API refuses every call here to anyone but the owner, and moves a removed
  * coach's clients in the same transaction.
@@ -81,25 +81,28 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   templateUrl: './team.html',
   styleUrl: './team.scss',
 })
-export class Team {
+export class Team extends GuardedSheets {
   private readonly api = inject(TeamApi);
   private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
-  private readonly sheets = inject(UiSheet);
-  private readonly dialogs = inject(UiDialog);
-  private readonly toast = inject(UiToast);
+  private readonly calendar = inject(WorkspaceCalendar);
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly inviteSheet = viewChild.required<TemplateRef<unknown>>('inviteSheet');
-  private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+  private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private loadedTenant: string | null = null;
   private openInvite: DialogRef<unknown, ModalSurface> | null = null;
 
+  protected override readonly leaveQuestion: LeaveQuestion = {
+    title: $localize`Close without sending?`,
+    message: $localize`What you typed isn’t sent. If you close it now, it is lost.`,
+    confirm: $localize`Close without sending`,
+    cancel: $localize`Keep editing`,
+  };
   /** This server sends no email (audit LOST-1): the invite sheet and its notices must not promise one. */
   protected readonly emailOff = inject(EmailDelivery).off;
-  protected readonly closeLabel = $localize`Close`;
   protected readonly loadingLabel = $localize`Loading your team…`;
   protected readonly invitedLabel = $localize`Invited`;
   protected readonly expiredLabel = $localize`Link ran out`;
@@ -109,9 +112,6 @@ export class Team {
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   /** The member or invitation a write is changing, so its menu waits. */
   protected readonly working = signal<string | null>(null);
-  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
-    null,
-  );
 
   protected readonly invite = signal<InviteDraft>(EMPTY_INVITE);
   protected readonly inviting = signal(false);
@@ -121,10 +121,10 @@ export class Team {
   protected readonly devLink = signal<string | null>(null);
 
   protected readonly rows = computed(() =>
-    memberRows(this.members(), this.auth.user()?.id ?? null, this.locale),
+    memberRows(this.members(), this.auth.user()?.id ?? null, this.locale, this.calendar.timeZone()),
   );
   protected readonly waiting = computed(() =>
-    invitationRows(this.invitations(), new Date(), this.locale),
+    invitationRows(this.invitations(), new Date(), this.locale, this.calendar.timeZone()),
   );
   protected readonly summary = computed(() => teamSummary(this.members()));
   protected readonly coachCount = computed(
@@ -133,10 +133,10 @@ export class Team {
   protected readonly inviteErrors = computed(() => inviteErrors(this.invite()));
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.openInvite?.close());
+    super();
     this.scope.onReset(() => {
       this.loadedTenant = null;
-      this.openInvite?.close();
+      this.closeSheets();
       this.members.set([]);
       this.invitations.set([]);
       this.state.set('loading');
@@ -158,10 +158,12 @@ export class Team {
     return this.scope.run('load', async (owner) => {
       if (this.members().length === 0) this.state.set('loading');
       try {
+        // The workspace's clock dates each row; it is read once per workspace and shared.
         const [members, invitations] = await owner.wait(
           Promise.all([
             firstValueFrom(this.api.getTeamMembers()),
             firstValueFrom(this.api.getCoachInvitations()),
+            this.calendar.resolveToday(),
           ]),
         );
         this.members.set(members);
@@ -177,16 +179,15 @@ export class Team {
 
   // ---------- inviting ----------
 
+  protected confirmDialog(): TemplateRef<unknown> {
+    return this.confirmTemplate();
+  }
+
   protected openInviteSheet(): void {
     this.invite.set(EMPTY_INVITE);
     this.inviteError.set(null);
     this.attempt.reset();
-    this.openInvite?.close();
-    const sheet = this.sheets.open(this.inviteSheet(), {
-      title: $localize`Invite a coach`,
-      closeLabel: this.closeLabel,
-      canClose: () => this.mayDiscardInvite(),
-    });
+    const sheet = this.show(this.inviteSheet(), $localize`Invite a coach`);
     this.openInvite = sheet;
     sheet.closed.subscribe(() => {
       if (this.openInvite === sheet) this.openInvite = null;
@@ -196,6 +197,9 @@ export class Team {
   protected setInvite(change: Partial<InviteDraft>): void {
     this.invite.update((draft) => ({ ...draft, ...change }));
     this.inviteError.set(null);
+    // Anything typed is work the sheet asks about before it closes (plan §9).
+    const draft = this.invite();
+    this.dirty = !!(draft.email.trim() || draft.firstName.trim() || draft.lastName.trim());
   }
 
   protected shownInviteErrors(field: InviteField): readonly string[] | null {
@@ -204,7 +208,7 @@ export class Team {
   }
 
   protected async cancelInvite(): Promise<void> {
-    if (await this.mayDiscardInvite()) this.openInvite?.close();
+    if (await this.canClose()) this.openInvite?.close();
   }
 
   protected async sendInvite(): Promise<void> {
@@ -237,6 +241,7 @@ export class Team {
         this.invitations.update((items) => [invitation, ...items]);
         this.devLink.set(invitation.developmentActionUrl);
         this.invite.set(EMPTY_INVITE);
+        this.dirty = false;
         this.openInvite?.close();
         this.toast.show(
           this.emailOff()
@@ -251,18 +256,6 @@ export class Team {
         if (owner.current) this.inviting.set(false);
       }
     });
-  }
-
-  /** True when nothing typed would be lost, or the owner chose to lose it. */
-  private async mayDiscardInvite(): Promise<boolean> {
-    const draft = this.invite();
-    if (!draft.email.trim() && !draft.firstName.trim() && !draft.lastName.trim()) return true;
-    return this.ask(
-      $localize`What you typed isn’t sent. If you close it now, it is lost.`,
-      $localize`Close without sending`,
-      $localize`Keep editing`,
-      $localize`Close without sending?`,
-    );
   }
 
   // ---------- rows ----------
@@ -282,7 +275,9 @@ export class Team {
     const yes = await this.ask(
       clients === 0
         ? $localize`${member.displayName}:name: loses access right away. Any client invitation they sent lands with you. Nothing is deleted.`
-        : $localize`${member.displayName}:name: loses access right away. Their ${clients}:count: clients move to you with all their history, and any client invitation they sent lands with you. Nothing is deleted, and you can give each client another coach afterwards.`,
+        : clients === 1
+          ? $localize`${member.displayName}:name: loses access right away. Their client moves to you with all their history, and any client invitation they sent lands with you. Nothing is deleted, and you can give the client another coach afterwards.`
+          : $localize`${member.displayName}:name: loses access right away. Their ${clients}:count: clients move to you with all their history, and any client invitation they sent lands with you. Nothing is deleted, and you can give each client another coach afterwards.`,
       $localize`Remove coach`,
       $localize`Keep them`,
       $localize`Remove ${member.displayName}:name:?`,
@@ -297,10 +292,13 @@ export class Team {
           firstValueFrom(this.api.removeTeamCoach(member.userId, member.version)),
         );
         await owner.wait(this.load());
+        const moved = outcome.reassignedClientCount;
         this.toast.show(
-          outcome.reassignedClientCount === 0
+          moved === 0
             ? $localize`${member.displayName}:name: left the team.`
-            : $localize`${member.displayName}:name: left the team. ${outcome.reassignedClientCount}:count: clients moved to you.`,
+            : moved === 1
+              ? $localize`${member.displayName}:name: left the team. Their client moved to you.`
+              : $localize`${member.displayName}:name: left the team. ${moved}:count: clients moved to you.`,
           { tone: 'success' },
         );
       } catch (error) {
@@ -366,17 +364,6 @@ export class Team {
         if (owner.current) this.working.set(null);
       }
     });
-  }
-
-  private async ask(message: string, confirm: string, cancel: string, title: string) {
-    this.asking.set({ message, confirm, cancel });
-    const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
-      title,
-      closeLabel: this.closeLabel,
-    });
-    const answer = await firstValueFrom(dialog.closed);
-    this.asking.set(null);
-    return answer === true;
   }
 }
 

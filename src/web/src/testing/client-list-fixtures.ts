@@ -45,6 +45,7 @@ export function overviewRow(
     goals: null,
     joinedOn: '2026-07-01',
     isNew: false,
+    onboardingStatus: 'Completed',
     status: 'OnTrack',
     planState: 'Running',
     planEndsOn: '2026-12-20',

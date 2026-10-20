@@ -458,26 +458,47 @@ export function exerciseRequest(
   };
 }
 
-/** "Video link · YouTube", "Video", "Picture": a media row's kind, in words. */
+/**
+ * "YouTube link · youtu.be/dQw4w9WgXcQ", "Video", "Picture": a media row's kind, in words. A link names its
+ * address, so two links added to one exercise, which both carry its name as their title, read apart (audit
+ * TRAIN-7). Nothing is fetched from the provider: the content policy stays as it is (C18).
+ */
 export function mediaLine(asset: MediaAssetView): string {
   if (asset.source === 'ExternalEmbed') {
-    return asset.externalProvider === 'Vimeo'
-      ? $localize`Video link · Vimeo`
-      : $localize`Video link · YouTube`;
+    const id = asset.externalMediaId?.trim();
+    if (asset.externalProvider === 'Vimeo') {
+      return id ? $localize`Vimeo link · vimeo.com/${id}:id:` : $localize`Video link · Vimeo`;
+    }
+    return id ? $localize`YouTube link · youtu.be/${id}:id:` : $localize`Video link · YouTube`;
   }
   return asset.kind === 'Image' ? $localize`Picture` : $localize`Video`;
 }
 
-/** A refusal in coach words; anything unexpected falls back to the server's own message. */
+/** Someone saved the row after it was read: the answer to a stale version. */
+export function isStaleWrite(error: unknown): boolean {
+  if (!(error instanceof HttpErrorResponse)) return false;
+  const code = (error.error as { code?: string } | null)?.code;
+  return code === 'concurrency_conflict' || (error.status === 409 && !code);
+}
+
+/**
+ * A refusal in coach words; anything unexpected falls back to the server's own message. A stale write is
+ * read again by the sheet before this is said (audit WEA-3), so the sentence promises only what happened.
+ */
 export function exerciseWriteError(error: unknown, fallback: string): string {
   if (error instanceof HttpErrorResponse) {
     const code = (error.error as { code?: string } | null)?.code;
     if (code === 'exercise_name_conflict') {
       return $localize`You already have an exercise with this name. Choose another name, or restore the archived one.`;
     }
-    if (code === 'concurrency_conflict' || (error.status === 409 && !code)) {
-      return $localize`This exercise changed since you opened it. The library has been reloaded; try again.`;
+    if (isStaleWrite(error)) {
+      return $localize`This changed since you opened it, so it was read again. Try again.`;
     }
   }
   return apiErrorMessage(error, fallback);
+}
+
+/** Said after a save met a newer copy of the exercise, which the sheet now shows (audit WEA-3). */
+export function staleExerciseMessage(): string {
+  return $localize`Someone saved this exercise after you opened it. It now shows what they saved: make your change again.`;
 }

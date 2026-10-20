@@ -27,8 +27,16 @@
     </p>
   }
   <form class="release-form" [formGroup]="form" (ngSubmit)="release()" novalidate>
-    <app-field label="Reason" i18n-label [help]="reasonHelp()">
-      <textarea appControl dir="auto" rows="3" formControlName="reason" required></textarea>
+    <app-field label="Reason" i18n-label [help]="reasonHelp()" [errors]="reasonErrors()">
+      <textarea
+        #reasonBox
+        appControl
+        dir="auto"
+        rows="3"
+        formControlName="reason"
+        required
+        (input)="reasonTyped()"
+      ></textarea>
     </app-field>
     <p class="release-error tb-text-compact" role="alert">{{ error() }}</p>
     <div class="tb-dialog__actions">

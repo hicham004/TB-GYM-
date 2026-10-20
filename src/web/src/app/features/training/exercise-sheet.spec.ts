@@ -1,6 +1,7 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ExerciseSearchResult, ExerciseView, MediaAssetView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -10,7 +11,7 @@ import { asset, exercise, results } from '../../../testing/exercise-fixtures';
 import { settle } from '../../../testing/dom';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import { ExerciseSheet } from './exercise-sheet';
-import type { ExerciseValues } from './exercise-library.models';
+import { mediaLine, type ExerciseValues } from './exercise-library.models';
 
 async function render() {
   const tenant = signal('tenant-a');
@@ -146,4 +147,66 @@ it('reaches exercise 101 through bounded server pages', async () => {
   expect(api.search).toHaveBeenLastCalledWith({ query: '', skip: 100, take: 25 });
   expect(sheet.shownOthers()).toHaveLength(101);
   expect(sheet.shownOthers().some((row) => row.id === 'swap-101')).toBe(true);
+});
+
+it('reads the exercise again after a stale save, shows what was saved, and saves with its version (WEA-3)', async () => {
+  const { fixture, api } = await render();
+  const opened = exercise('Back Squat', { id: 'ex-squat', version: 3 });
+  fixture.componentRef.setInput('exercise', opened);
+  await settle(fixture);
+  const sheet = fixture.componentInstance as unknown as {
+    set(change: Partial<ExerciseValues>): void;
+    submit(): Promise<void>;
+    values(): ExerciseValues;
+    error(): string | null;
+  };
+  const dirty: boolean[] = [];
+  const reloaded: unknown[] = [];
+  fixture.componentInstance.dirtyChange.subscribe((value) => dirty.push(value));
+  fixture.componentInstance.reloaded.subscribe(() => reloaded.push(true));
+  api.update.mockReturnValueOnce(
+    throwError(
+      () => new HttpErrorResponse({ status: 409, error: { code: 'concurrency_conflict' } }),
+    ) as never,
+  );
+  api.get.mockReturnValueOnce(
+    of(exercise('Back Squat (paused)', { id: 'ex-squat', version: 4 })) as never,
+  );
+
+  sheet.set({ name: 'Back Squat, high bar' });
+  await sheet.submit();
+  await settle(fixture);
+
+  // Read again, as the sentence says, and the library behind reads again too.
+  expect(api.get).toHaveBeenCalledWith('ex-squat');
+  expect(sheet.error()).toBe(
+    'Someone saved this exercise after you opened it. It now shows what they saved: make your change again.',
+  );
+  expect(sheet.values().name).toBe('Back Squat (paused)');
+  expect(dirty.at(-1)).toBe(false);
+  expect(reloaded).toHaveLength(1);
+
+  // The next save carries the version just read, so it is not refused again.
+  api.update.mockClear();
+  sheet.set({ name: 'Back Squat, high bar' });
+  await sheet.submit();
+  expect(api.update).toHaveBeenCalledWith('ex-squat', expect.objectContaining({ version: 4 }));
+});
+
+it('names each video link by its address, so two links on one exercise read apart (TRAIN-7)', () => {
+  const link = (provider: 'YouTube' | 'Vimeo', id: string | null) =>
+    mediaLine(
+      asset({
+        source: 'ExternalEmbed',
+        kind: 'Video',
+        externalProvider: provider,
+        externalMediaId: id,
+      }),
+    );
+  expect(link('YouTube', 'dQw4w9WgXcQ')).toBe('YouTube link · youtu.be/dQw4w9WgXcQ');
+  expect(link('YouTube', 'aBcDeFgHiJk')).toBe('YouTube link · youtu.be/aBcDeFgHiJk');
+  expect(link('Vimeo', '76979871')).toBe('Vimeo link · vimeo.com/76979871');
+  expect(link('YouTube', null)).toBe('Video link · YouTube');
+  expect(mediaLine(asset({}))).toBe('Picture');
+  expect(mediaLine(asset({ kind: 'Video' }))).toBe('Video');
 });

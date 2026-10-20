@@ -166,7 +166,11 @@ export function attentionRow(
           count > 1
             ? $localize`${name}:name: sent ${count}:count: check-ins`
             : $localize`${name}:name: sent a check-in`,
-        detail: $localize`Sent ${ago(item.since, context)}:ago:`,
+        // The oldest ranks the row; the newest is the one the coach may not have seen (CLIENT-19).
+        detail:
+          count > 1 && item.newestAt
+            ? $localize`The newest came ${ago(item.newestAt, context)}:newest:, the first ${ago(item.since, context)}:first:`
+            : $localize`Sent ${ago(item.since, context)}:ago:`,
         tag: $localize`Check-in`,
         tone: 'review',
         // One waiting opens straight at its review; several open the client's list of check-ins.
@@ -268,6 +272,17 @@ export function attentionRow(
         action: go($localize`Review maxes`, `${clientPage}/training`, { action: 'maxes' }),
       };
     }
+    case 'NoPlan':
+      // A new client with no plan at all (COACH-9, the owner's decision of 2026-10-19).
+      return {
+        ...base,
+        heading: $localize`${name}:name: joined`,
+        detail: joinedDetail(item.date, today, context.locale),
+        tag: $localize`New`,
+        tone: 'new',
+        // Opens the client's Service & access with Start a plan already open.
+        action: go($localize`Start a plan`, `${clientPage}/service`, { action: 'start' }),
+      };
     case 'NoProgram': {
       const isNew = item.date !== null && -daysBetween(today, item.date) < NEW_CLIENT_DAYS;
       // A client whose program ended carries what its logged sets suggest into the next one (STR-014).
@@ -411,6 +426,15 @@ function weekBars(view: CoachTodayView, locale: string): WeekBar[] {
         ? Math.round((100 * Math.min(day.completed, day.scheduled)) / day.scheduled)
         : 0,
   }));
+}
+
+/** When a new client joined, beside "no plan yet": "Today · no plan yet", "Mon 12 Oct · no plan yet". */
+export function joinedDetail(joinedOn: string | null, today: string, locale: string): string {
+  if (!joinedOn) return $localize`No plan yet`;
+  const daysAgo = -daysBetween(today, joinedOn);
+  if (daysAgo <= 0) return $localize`Today · no plan yet`;
+  if (daysAgo === 1) return $localize`Yesterday · no plan yet`;
+  return $localize`${formatDate(joinedOn, 'EEE d MMM', locale)}:date: · no plan yet`;
 }
 
 function endsHeading(name: string, inDays: number, date: string): string {

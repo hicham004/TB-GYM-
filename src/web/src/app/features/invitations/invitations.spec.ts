@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
+import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { fill, press, settle, type } from '../../../testing/dom';
@@ -17,6 +18,8 @@ type Api = Partial<Record<keyof ApiClient, ReturnType<typeof vi.fn>>>;
 async function render(overrides: Api = {}, options: { emailOff?: boolean } = {}) {
   const api: Api = {
     getInvitations: vi.fn(() => of([])),
+    // The workspace's clock dates each link (COACH-6).
+    getWorkspace: vi.fn(() => of({ timeZoneId: 'Asia/Beirut', currentDate: '2026-10-09' })),
     createInvitation: vi.fn(() => of(invitation())),
     resendInvitation: vi.fn(() =>
       of(invitation({ sendCount: 2, logicalSendGeneration: 2, version: 8 })),
@@ -75,10 +78,10 @@ describe('Invitations', () => {
     expect(textOf(rana.querySelector('.email'))).toBe('rana@example.test');
     expect(textOf(rana.querySelector('app-status-pill'))).toBe('Waiting to join');
     expect(textOf(rana.querySelector('.line'))).toBe(
-      'Sent once · the newest link works until Oct 14',
+      'Sent once · the newest link works until Wed 14 Oct',
     );
     expect(textOf(host.querySelector('[data-invitation="invitation-2"] .line'))).toBe(
-      'Sent twice · the newest link works until Oct 13',
+      'Sent twice · the newest link works until Tue 13 Oct',
     );
 
     const earlier = host.querySelector<HTMLDetailsElement>('[data-earlier]')!;
@@ -308,9 +311,43 @@ describe('Invitations', () => {
     press(dialog()!, 'Not now');
     await settle(fixture);
     expect(textOf(dialog()!.querySelector('h2'))).toBe('Discard what you typed?');
-    press(dialog()!, 'Close');
+    // The action that loses the work says so, beside the dialog's own Close (UIQ-12).
+    press(dialog()!, 'Discard');
     await settle(fixture);
     expect(dialog()).toBeNull();
+  });
+
+  it('asks before Browser Back, a workspace switch, sign-out or a reload drops a half-typed invitation', async () => {
+    const { fixture, host, api } = await render();
+    press(host, 'Invite a client');
+    await settle(fixture);
+    const sheet = dialog()!;
+
+    // Nothing typed: nothing is asked (audit COACH-1).
+    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(true);
+    expect(dialog()).toBe(sheet);
+
+    fill(sheet, 'First name', 'Rana');
+    await settle(fixture);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    // The route guard and the session ask through the same register; staying keeps the sheet.
+    const staying = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    expect(textOf(dialog()!.querySelector('h2'))).toBe('Discard what you typed?');
+    press(dialog()!, 'Keep editing');
+    expect(await staying).toBe(false);
+    await settle(fixture);
+    expect(dialog()).toBe(sheet);
+    expect(sheet.querySelector<HTMLInputElement>('input[name="firstName"]')!.value).toBe('Rana');
+
+    const leaving = TestBed.inject(UnsavedWork).confirmLeave();
+    await settle(fixture);
+    press(dialog()!, 'Discard');
+    expect(await leaving).toBe(true);
+    expect(api.createInvitation).not.toHaveBeenCalled();
   });
 
   it('sends a new link with an idempotency key and the version it last saw, and says the old link is dead', async () => {

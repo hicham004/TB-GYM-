@@ -37,11 +37,13 @@ import {
   exerciseWriteError,
   type ExerciseValues,
   type FieldMessages,
+  isStaleWrite,
   type LibraryFilters,
   mediaLine,
   MUSCLES,
   parseVideoLink,
   PATTERNS,
+  staleExerciseMessage,
   TYPES,
   valuesFrom,
 } from './exercise-library.models';
@@ -461,6 +463,8 @@ import {
     .media-kind {
       color: var(--tb-muted);
       font-size: 0.8125rem;
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
     }
 
     .confirm {
@@ -552,6 +556,8 @@ export class ExerciseSheet implements OnInit {
   /** The saved exercise, or null when the coach closed the sheet without saving. */
   readonly closed = output<ExerciseView | null>();
   readonly dirtyChange = output<boolean>();
+  /** The sheet read a newer copy of the exercise, so the library behind it should read again (WEA-3). */
+  readonly reloaded = output<void>();
 
   protected readonly attempt = new FormAttempt();
   protected readonly busy = signal(false);
@@ -581,8 +587,10 @@ export class ExerciseSheet implements OnInit {
   protected readonly alternativesLabel = $localize`Exercises a client may swap to`;
   protected readonly deleteGroupLabel = $localize`Delete from your media`;
 
+  /** The exercise as last read: the one opened, or the saved copy read again after a stale save (WEA-3). */
+  private readonly current = linkedSignal<ExerciseView | null>(() => this.exercise());
   protected readonly values = linkedSignal<ExerciseValues>(() => {
-    const exercise = this.exercise();
+    const exercise = this.current();
     return exercise ? valuesFrom(exercise) : emptyExercise(this.filters() ?? undefined);
   });
   /** Editing shows every field; a new exercise starts with the few most coaches fill in. */
@@ -797,6 +805,12 @@ export class ExerciseSheet implements OnInit {
         this.deleting.set(null);
       } catch (error) {
         if (!owner.current) return;
+        // A file changed since the list was read: read the list again, as the sentence says.
+        if (isStaleWrite(error)) {
+          const media = await owner.wait(firstValueFrom(this.api.listMedia())).catch(() => null);
+          if (!owner.current) return;
+          if (media) this.library.set(media.items.filter((item) => item.status === 'Ready'));
+        }
         this.mediaError.set(
           exerciseWriteError(error, $localize`It could not be deleted. Try again.`),
         );
@@ -831,7 +845,7 @@ export class ExerciseSheet implements OnInit {
           ? [linkId, ...values.mediaAssetIds.filter((id) => id !== linkId)]
           : [...values.mediaAssetIds];
         const request = exerciseRequest(values, media);
-        const current = this.exercise();
+        const current = this.current();
         const saved = await owner.wait(
           firstValueFrom(
             current
@@ -843,6 +857,11 @@ export class ExerciseSheet implements OnInit {
         this.closed.emit(saved);
       } catch (error) {
         if (!owner.current) return;
+        const current = this.current();
+        if (current && isStaleWrite(error) && (await this.readAgain(current.id, owner))) {
+          this.error.set(staleExerciseMessage());
+          return;
+        }
         this.error.set(
           exerciseWriteError(error, $localize`The exercise could not be saved. Try again.`),
         );
@@ -852,6 +871,23 @@ export class ExerciseSheet implements OnInit {
         }
       }
     });
+  }
+
+  /**
+   * After a stale save: the exercise as saved now, so the form shows what someone else saved and the next
+   * save carries its version, and the library behind reads again. True when the newer copy arrived.
+   */
+  private async readAgain(id: string, owner: TenantOperation): Promise<boolean> {
+    try {
+      const fresh = await owner.wait(firstValueFrom(this.api.get(id)));
+      this.current.set(fresh);
+      this.attempt.reset();
+      this.dirtyChange.emit(false);
+      this.reloaded.emit();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async registerLink(

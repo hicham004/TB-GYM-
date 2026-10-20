@@ -507,7 +507,7 @@ describe('A client’s Nutrition tab', () => {
       press(dialog()!, 'Not now');
       await settle(fixture);
       await settle(fixture);
-      press(dialog()!.querySelector('app-confirm')!, 'Close');
+      press(dialog()!.querySelector('app-confirm')!, 'Discard');
       await settle(fixture);
       await settle(fixture);
       expect(dialog()).toBeNull();

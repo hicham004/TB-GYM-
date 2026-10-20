@@ -40,6 +40,12 @@ public enum CoachAttentionKind
 
     /// <summary>The client's logged sets suggest new training maxes (STR-012); good news, so last.</summary>
     MaxesToReview = 8,
+
+    /// <summary>
+    /// A client who joined within the last 14 days has no plan at all: start one (audit COACH-9). Ranked after a
+    /// renewal request (<see cref="CoachAttentionPolicy.RankOf"/>), whatever its number.
+    /// </summary>
+    NoPlan = 9,
 }
 
 /// <summary>The one status a client shows in the coach's list (CLI-018).</summary>
@@ -93,7 +99,8 @@ public sealed record CoachClientRef(
 /// <summary>
 /// One thing waiting for the coach. Which fields are set depends on <see cref="Kind"/>:
 /// <list type="bullet">
-/// <item><c>CheckInToReview</c>: Count waiting, Since the oldest was sent, SubjectId its assignment.</item>
+/// <item><c>CheckInToReview</c>: Count waiting, Since the oldest was sent (the rank), NewestAt the newest (audit
+/// CLIENT-19), SubjectId the oldest's assignment.</item>
 /// <item><c>UnreadMessages</c>: Count unread, Since the oldest unread was sent, SubjectId the conversation.</item>
 /// <item><c>RenewalRequested</c>: Since the client asked, Date the ended plan's last day, SubjectId that enrollment.</item>
 /// <item><c>PlanEndingSoon</c>: Date the plan's last paid day (BEB-7). Count the renewals after it still waiting
@@ -105,6 +112,7 @@ public sealed record CoachClientRef(
 /// one), and Maxes what its logged sets suggest, for the next program to start from (STR-014).</item>
 /// <item><c>MaxesToReview</c>: Count of lifts, Since the newest set behind them was logged, SubjectId the
 /// program, and Maxes each lift with its max and the suggestion.</item>
+/// <item><c>NoPlan</c>: Date the client joined.</item>
 /// </list>
 /// </summary>
 public sealed record CoachAttentionItemView(
@@ -115,7 +123,8 @@ public sealed record CoachAttentionItemView(
     int? Count,
     int? WeekNumber,
     Guid? SubjectId,
-    IReadOnlyList<CoachMaxSuggestionView>? Maxes = null);
+    IReadOnlyList<CoachMaxSuggestionView>? Maxes = null,
+    DateTimeOffset? NewestAt = null);
 
 /// <summary>
 /// A lift whose max the client's logged sets suggest changing (STR-012), named with both numbers so the coach
@@ -185,13 +194,15 @@ public sealed record CoachTodayView(
 /// <summary>
 /// One client in the coach's list (C2). <see cref="RecentSessions"/> covers the view's recent days and
 /// is null when the plan does not include training; <see cref="PlanEndsOn"/> is the last day the plan
-/// covers, past when it has ended.
+/// covers, past when it has ended. <see cref="OnboardingStatus"/> says whether the client has finished
+/// setting up their profile, for the list's "Not set up yet" (audit LOST-12).
 /// </summary>
 public sealed record ClientOverviewRow(
     CoachClientRef Client,
     string? Goals,
     DateOnly JoinedOn,
     bool IsNew,
+    ClientOnboardingStatus OnboardingStatus,
     ClientOverviewStatus Status,
     ClientPlanState PlanState,
     DateOnly? PlanEndsOn,

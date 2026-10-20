@@ -63,6 +63,8 @@ export interface ClientRow {
   status: { label: string; tone: StatusPillTone };
   /** Why the client needs attention, in short words joined by "·"; empty when nothing does. */
   reasons: string;
+  /** The client has not finished setting up their profile: "Not set up yet" (audit LOST-12). */
+  notSetUp: boolean;
   activity: string;
   activityAt: string | null;
   /** Null when training is not in the client's plan. */
@@ -141,6 +143,7 @@ export function clientRow(
       .filter((kind) => kind !== 'PlanEndingSoon')
       .map(attentionReason)
       .join(' · '),
+    notSetUp: row.onboardingStatus === 'NotStarted' || row.onboardingStatus === 'InProgress',
     activity: activityLabel(row, context),
     activityAt: row.lastActivityAtUtc,
     week: row.recentSessions ? clientWeek(row.recentSessions, today) : null,
@@ -207,6 +210,8 @@ function attentionReason(kind: CoachAttentionKind): string {
       return $localize`No program yet`;
     case 'MaxesToReview':
       return $localize`Maxes to review`;
+    case 'NoPlan':
+      return $localize`Joined, no plan yet`;
   }
 }
 

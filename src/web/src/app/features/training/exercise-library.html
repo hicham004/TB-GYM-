@@ -206,6 +206,7 @@
       [filters]="filters()"
       (closed)="sheetClosed($event)"
       (dirtyChange)="sheetChanged($event)"
+      (reloaded)="load()"
     />
   }
 </ng-template>

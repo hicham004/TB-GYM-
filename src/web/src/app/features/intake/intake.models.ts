@@ -1,3 +1,4 @@
+import { formatDate } from '@angular/common';
 import type {
   BodyweightUnit,
   ClientIntakeProfile,
@@ -532,13 +533,9 @@ export function unitWords(unit: LengthUnit): string {
   return unit === 'Inch' ? $localize`in` : $localize`cm`;
 }
 
+/** "14 Mar 1994": a calendar day with its year, as the app writes one (audit COACH-6), never "Mar 14, 1994". */
 function longDate(date: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(`${date}T00:00:00Z`));
+  return formatDate(date, 'd MMM y', locale);
 }
 
 /** The answers of one group as the summary lists them: a label and a value, or nothing. */

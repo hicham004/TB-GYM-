@@ -314,7 +314,7 @@ describe('Platform billing: one coaching space', () => {
 
       dialog()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
       await settle(view.fixture);
-      press(dialog()!, 'Close');
+      press(dialog()!, 'Discard');
       await settle(view.fixture);
       expect(dialog()).toBeNull();
       expect(view.api.recordPayment).not.toHaveBeenCalled();

@@ -70,6 +70,8 @@ export interface BlockOptions {
   currentWeekNumber?: number | null;
   revealAllWeeks?: boolean;
   version?: number;
+  /** The block's history, oldest first (LOST-6); none by default. */
+  lifecycle?: CoachProgramBlockView['lifecycle'];
 }
 
 /** A block from its weeks; the counts and end date follow from them, as the server derives them. */
@@ -94,6 +96,7 @@ export function programBlock(
     completedCount: sessions.filter((session) => session.state === 'Completed').length,
     missedCount: sessions.filter((session) => session.state === 'Missed').length,
     weeks: [...weeks],
+    lifecycle: options.lifecycle ?? [],
   };
 }
 

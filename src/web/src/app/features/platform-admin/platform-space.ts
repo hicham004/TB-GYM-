@@ -311,7 +311,7 @@ export class PlatformSpace {
         !this.sheetDirty ||
         this.ask(
           $localize`Close without saving? What you typed will be lost.`,
-          $localize`Close`,
+          $localize`Discard`,
           $localize`Keep editing`,
           $localize`Discard what you typed?`,
         ),

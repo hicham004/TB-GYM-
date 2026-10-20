@@ -117,8 +117,8 @@ test('log, correct, move and re-log a weigh-in; the history and the stored kilog
     await expect(sheet(page).locator('[data-already]')).toContainText('is already logged for');
     await expect(sheet(page).getByRole('button', { name: 'Correct that weight' })).toBeVisible();
     await sheet(page).getByRole('button', { name: 'Not now' }).click();
-    // A sheet with typed work asks first; Close discards the 70.3 and lets the next step tap freely.
-    await page.locator('app-confirm button', { hasText: 'Close' }).click();
+    // A sheet with typed work asks first; Discard drops the 70.3 and lets the next step tap freely.
+    await page.locator('app-confirm button', { hasText: 'Discard' }).click();
     await expect(page.locator('app-confirm')).toHaveCount(0);
   });
 

@@ -87,6 +87,7 @@ internal sealed class CoachOverviewReader(
                 state.Client.Goals,
                 state.JoinedOn,
                 CoachAttentionPolicy.IsNew(state.JoinedOn, today),
+                state.Client.OnboardingStatus,
                 CoachAttentionPolicy.Status(state.Flags, state.PlanState),
                 state.PlanState,
                 state.PlanEndsOn,
@@ -200,7 +201,8 @@ internal sealed class CoachOverviewReader(
                 client.AssignedCoachUserId,
                 coach.DisplayName,
                 client.CreatedAtUtc,
-                client.IsCoachBlocked))
+                client.IsCoachBlocked,
+                client.OnboardingStatus))
             .ToListAsync(cancellationToken);
         var access = await featureAccessService.EvaluateManyAsync(
             tenantContext.TenantId,
@@ -291,6 +293,7 @@ internal sealed class CoachOverviewReader(
             var carried = lastProgram is null
                 ? []
                 : Suggestions(programs.Where(item => item.MesocycleId == lastProgram.MesocycleId));
+            var joinedOn = scope.LocalDate(client.CreatedAtUtc);
             var signals = new ClientAttentionSignals(
                 checkIn.Length,
                 conversations.Sum(item => item.Count),
@@ -299,10 +302,11 @@ internal sealed class CoachOverviewReader(
                 weekToShare is not null,
                 missed,
                 trainingIncluded && clientBlocks.Length == 0,
-                clientMaxes.Length);
+                clientMaxes.Length,
+                joinedOn);
             return new ClientState(
                 client,
-                scope.LocalDate(client.CreatedAtUtc),
+                joinedOn,
                 planState,
                 runningPlan?.EndDateExclusive.AddDays(-1) ?? endedPlan?.LastDay,
                 runningPlan?.EnrollmentId,
@@ -313,6 +317,7 @@ internal sealed class CoachOverviewReader(
                 CoachAttentionPolicy.Flags(signals, planState, today),
                 signals,
                 checkIn.FirstOrDefault(),
+                checkIn.LastOrDefault(),
                 conversations.FirstOrDefault(),
                 renewal,
                 weekToShare,
@@ -337,8 +342,10 @@ internal sealed class CoachOverviewReader(
     private static IEnumerable<CoachAttentionItemView> Items(ClientState state) =>
         state.Flags.Select(kind => kind switch
         {
+            // The oldest waiting sets the rank; the newest is what the coach may not have seen yet (CLIENT-19).
             CoachAttentionKind.CheckInToReview => Item(kind, state, since: state.OldestCheckIn?.SubmittedAtUtc,
-                count: state.Signals.CheckInsToReview, subjectId: state.OldestCheckIn?.AssignmentId),
+                count: state.Signals.CheckInsToReview, subjectId: state.OldestCheckIn?.AssignmentId,
+                newestAt: state.NewestCheckIn?.SubmittedAtUtc),
             CoachAttentionKind.UnreadMessages => Item(kind, state, since: state.OldestUnread?.OldestUnreadAtUtc,
                 count: (int)Math.Min(int.MaxValue, state.Signals.UnreadMessages),
                 subjectId: state.OldestUnread?.ConversationId),
@@ -359,6 +366,7 @@ internal sealed class CoachOverviewReader(
                 count: state.MaxSuggestions.Count,
                 subjectId: state.MaxSuggestions.MaxBy(item => item.LoggedAtUtc)!.MesocycleId,
                 maxes: MaxViews(state.MaxSuggestions)),
+            CoachAttentionKind.NoPlan => Item(kind, state, date: state.JoinedOn),
             _ => throw new InvalidOperationException($"Unknown attention kind {kind}."),
         });
 
@@ -370,8 +378,9 @@ internal sealed class CoachOverviewReader(
         int? count = null,
         int? weekNumber = null,
         Guid? subjectId = null,
-        IReadOnlyList<CoachMaxSuggestionView>? maxes = null) =>
-        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, maxes);
+        IReadOnlyList<CoachMaxSuggestionView>? maxes = null,
+        DateTimeOffset? newestAt = null) =>
+        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, maxes, newestAt);
 
     private static CoachMaxSuggestionView[] MaxViews(IEnumerable<MaxSuggestionRow> rows) =>
         [.. rows.Select(item => new CoachMaxSuggestionView(
@@ -991,7 +1000,8 @@ internal sealed class CoachOverviewReader(
         Guid CoachUserId,
         string? CoachName,
         DateTimeOffset CreatedAtUtc,
-        bool IsCoachBlocked)
+        bool IsCoachBlocked,
+        ClientOnboardingStatus OnboardingStatus)
     {
         public CoachClientRef Ref => new(
             Id,
@@ -1014,6 +1024,7 @@ internal sealed class CoachOverviewReader(
         IReadOnlyList<CoachAttentionKind> Flags,
         ClientAttentionSignals Signals,
         WaitingCheckIn? OldestCheckIn,
+        WaitingCheckIn? NewestCheckIn,
         UnreadConversation? OldestUnread,
         RenewalAsk? Renewal,
         AttentionWeek? WeekToShare,

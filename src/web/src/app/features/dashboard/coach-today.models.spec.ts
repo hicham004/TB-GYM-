@@ -221,6 +221,47 @@ describe('Coach Today view model', () => {
     expect(settled.tag).toBe('Program');
   });
 
+  it('names when the newest of several check-ins came, not only the oldest (CLIENT-19)', () => {
+    const several = attentionRow(
+      attentionItem('CheckInToReview', SARA, {
+        count: 2,
+        since: '2026-09-25T12:00:00Z',
+        newestAt: '2026-10-01T11:55:00Z',
+        subjectId: 'a-oldest',
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(several.heading).toBe('Sara Mansour sent 2 check-ins');
+    expect(several.detail).toBe('The newest came 5 minutes ago, the first 6 days ago');
+    // Several open the list of check-ins, where each can be read.
+    expect(several.action.link).toBe(`/clients/${SARA.clientProfileId}/checkins`);
+    // An older server that sends no newest keeps the one time it has.
+    const older = attentionRow(
+      attentionItem('CheckInToReview', SARA, { count: 2, since: '2026-09-25T12:00:00Z' }),
+      COACH_TODAY,
+      context,
+    );
+    expect(older.detail).toBe('Sent 6 days ago');
+  });
+
+  it('asks to start a plan for a new client who has none (COACH-9)', () => {
+    const joined = (date: string | null) =>
+      attentionRow(attentionItem('NoPlan', SARA, { date }), COACH_TODAY, context);
+
+    const today = joined(COACH_TODAY);
+    expect(today.heading).toBe('Sara Mansour joined');
+    expect(today.detail).toBe('Today · no plan yet');
+    expect([today.tag, today.tone]).toEqual(['New', 'new']);
+    expect(today.action).toMatchObject({
+      label: 'Start a plan',
+      link: `/clients/${SARA.clientProfileId}/service`,
+      queryParams: { action: 'start' },
+    });
+    expect(joined('2026-09-30').detail).toBe('Yesterday · no plan yet');
+    expect(joined('2026-09-24').detail).toBe('Thu 24 Sep · no plan yet');
+  });
+
   it('names the lifts whose logged sets suggest a new max, with both numbers', () => {
     const lift = (
       exerciseName: string,

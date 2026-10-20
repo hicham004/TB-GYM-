@@ -2,7 +2,8 @@
   @if (loading()) {
     <p class="auth-muted" role="status" i18n>Checking invitation...</p>
   } @else if (error() && !invitation()) {
-    <p class="auth-eyebrow" i18n>Client invitation</p>
+    <!-- A dead link cannot say whether it was for a client or a coach (audit COACH-6). -->
+    <p class="auth-eyebrow" i18n>Invitation</p>
     <h1 class="auth-title" i18n>Link <em>unavailable.</em></h1>
     <div class="auth-stack">
       <p class="auth-message auth-message--error" role="alert">{{ error() }}</p>
@@ -43,7 +44,7 @@
       </div>
       <div>
         <dt i18n>Expires</dt>
-        <dd>{{ invite.expiresAtUtc | date: 'medium' }}</dd>
+        <dd>{{ expires() }}</dd>
       </div>
     </dl>
 

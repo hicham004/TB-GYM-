@@ -4,11 +4,13 @@ import type {
   CoachProgramBlockView,
   CoachProgramSessionView,
   CoachProgramWeekView,
+  MesocycleLifecycleEventView,
   MesocycleStatus,
   SetPrescriptionView,
   TrainingLoadUnit,
   TrainingSessionView,
 } from '../../core/api/generated';
+import { dayInZone, houseDay } from '../../core/i18n/house-dates';
 import type { StatusPillTone } from '../../ui/status-pill';
 import { unitLabel } from '../training/training-program.models';
 import type { ClientAction } from './client-actions';
@@ -27,6 +29,8 @@ export interface ProgramContext {
   today: string;
   /** The name the sentences use: "Maya sees every shared week now". */
   firstName: string;
+  /** The workspace's time zone, for the day each history event happened on; the device's when unknown. */
+  timeZone?: string | null;
 }
 
 function count(value: number | string): number {
@@ -255,6 +259,62 @@ export interface BlockCard {
   readonly inProgress: boolean;
   /** The week a phone shows first: this week while it runs, else the first. */
   readonly openWeek: number;
+  /** What happened to the program, oldest first, with the coach's reason for a cancel (LOST-6). */
+  readonly history: readonly HistoryRow[];
+}
+
+/** One event in a program's History fold: what happened, on which workspace day, and why. */
+export interface HistoryRow {
+  readonly id: string;
+  /** "Assigned", "Renamed from “Strength block”", "Cancelled", "Finished · every session done". */
+  readonly what: string;
+  readonly day: string;
+  /** The coach's own words, typed when they cancelled it; null for every other event. */
+  readonly reason: string | null;
+}
+
+/**
+ * A program's lifecycle (assigned, renamed, cancelled, completed) in the app's words. The server's text is
+ * read only for the earlier name and the sessions not done, and a cancel shows the reason as it was typed.
+ */
+export function historyRows(
+  events: readonly MesocycleLifecycleEventView[],
+  context: ProgramContext,
+): HistoryRow[] {
+  return events.map((event) => ({
+    id: event.id,
+    what: historyWords(event),
+    day: houseDay(
+      dayInZone(event.occurredAtUtc, context.timeZone ?? null),
+      context.locale,
+      context.today,
+    ),
+    reason: event.eventType === 'Cancelled' ? event.reason.trim() || null : null,
+  }));
+}
+
+function historyWords(event: MesocycleLifecycleEventView): string {
+  switch (event.eventType) {
+    case 'Assigned':
+      return $localize`Assigned`;
+    case 'Renamed': {
+      const earlier = /^Renamed from "(.+)" to ".+"\.$/s.exec(event.reason)?.[1];
+      return earlier ? $localize`Renamed from “${earlier}:name:”` : $localize`Renamed`;
+    }
+    case 'Cancelled':
+      return $localize`Cancelled`;
+    case 'Completed': {
+      const notDone = /^Closed after its last day with (\d+) programmed session/.exec(
+        event.reason,
+      )?.[1];
+      if (notDone) {
+        return Number(notDone) === 1
+          ? $localize`Closed after its last day · 1 session not done`
+          : $localize`Closed after its last day · ${notDone}:count: sessions not done`;
+      }
+      return $localize`Finished · every session done`;
+    }
+  }
 }
 
 function dateRange(start: string, lastDay: string, context: ProgramContext): string {
@@ -354,6 +414,7 @@ export function blockCard(block: CoachProgramBlockView, context: ProgramContext)
     started: sessions.some((session) => session.workoutExecutionId !== null),
     inProgress: sessions.some((session) => session.state === 'InProgress'),
     openWeek: current ?? weeks[0]?.number ?? 1,
+    history: historyRows(block.lifecycle ?? [], context),
   };
 }
 

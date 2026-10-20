@@ -65,7 +65,7 @@ for (const [width, height] of [
 
     await expect(page).toHaveTitle('Today | TB Gym');
     await expect(page.locator('.needs')).toHaveText(
-      '7 clients need you today. Everyone else is on track.',
+      '7 clients have something for you today, listed under Needs you.',
     );
     const rows = page.locator('li.need');
     await expect(rows).toHaveCount(7);

@@ -380,7 +380,7 @@ describe('the answers as a person reads them', () => {
       ['Name', 'Rana Haddad'],
       ['Email', 'rana@example.test'],
       ['Phone number', '+96170123456'],
-      ['Date of birth', 'Apr 2, 1996'],
+      ['Date of birth', '2 Apr 1996'],
       ['Height', '168 cm'],
     ]);
     expect(rows('life')).toEqual([

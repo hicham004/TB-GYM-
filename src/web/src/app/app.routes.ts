@@ -4,6 +4,7 @@ import {
   authGuard,
   clientGuard,
   coachGuard,
+  memberGuard,
   ownerGuard,
   publicHomeGuard,
   signedOutGuard,
@@ -19,8 +20,9 @@ export const routes: Routes = [
     loadChildren: () => import('./features/auth/auth.routes').then((module) => module.authRoutes),
   },
   {
+    // For a client's and a coach's link alike, so the title names neither (audit COACH-6).
     path: 'invite',
-    title: $localize`Client invitation | TB Gym`,
+    title: $localize`Invitation | TB Gym`,
     loadComponent: () =>
       import('./features/invitations/accept-invitation').then((module) => module.AcceptInvitation),
   },
@@ -58,6 +60,8 @@ export const routes: Routes = [
   {
     path: 'invitations',
     canActivate: [authGuard, coachGuard],
+    // Its Invite a client sheet asks before Browser Back drops what was typed (audit COACH-1).
+    canDeactivate: [confirmSheetLeave],
     // Rebuilt in R5.3a: follows the coach's mode, invites in a sheet.
     data: REDESIGNED,
     title: $localize`Invitations | TB Gym`,
@@ -93,20 +97,21 @@ export const routes: Routes = [
   },
   {
     // Both sides of a conversation are active members of the workspace, whatever their role, so this
-    // sits behind the plain authenticated guard. Who may open which conversation is an explicit
-    // participant row the API checks, and a route guard could never stand in for it.
+    // asks only for a role there; someone who has none is told so on Today (audit COACH-14). Who may
+    // open which conversation is an explicit participant row the API checks, and a route guard could
+    // never stand in for it.
     path: 'messages',
-    canActivate: [authGuard],
+    canActivate: [authGuard, memberGuard],
     // The chat follows dark mode for coaches and clients alike (C6, M7; checked in R3.5b).
     data: REDESIGNED,
     loadChildren: () =>
       import('./features/messaging/messages.routes').then((module) => module.messagingRoutes),
   },
   {
-    // Every active member of a workspace has an inbox, whatever their role, so this sits behind the
-    // plain authenticated guard rather than a role guard.
+    // Every active member of a workspace has an inbox, whatever their role, so this asks only for a
+    // role there rather than a particular one (audit COACH-14).
     path: 'notifications',
-    canActivate: [authGuard],
+    canActivate: [authGuard, memberGuard],
     loadChildren: () =>
       import('./features/notifications/notifications.routes').then(
         (module) => module.notificationRoutes,
@@ -155,9 +160,11 @@ export const routes: Routes = [
       import('./features/progress/progress-entries').then((module) => module.ProgressEntries),
   },
   {
-    // The coach's brand (R3.5a, plan §3.1), a Settings page beside the coaching space's details.
+    // The coach's brand (R3.5a, plan §3.1), a Settings page beside the coaching space's details. Leaving
+    // with changes asks first, as Name and region does (audit COACH-1).
     path: 'workspace/brand',
     canActivate: [authGuard, ownerGuard],
+    canDeactivate: [confirmBeforeLeaving],
     data: REDESIGNED,
     title: $localize`Brand | TB Gym`,
     loadComponent: () =>
@@ -165,8 +172,10 @@ export const routes: Routes = [
   },
   {
     // How calories are counted and the AI allowance (R4.4c), a Settings page; the API is the owner's too.
+    // Leaving with changes asks first (audit COACH-1).
     path: 'workspace/nutrition',
     canActivate: [authGuard, ownerGuard],
+    canDeactivate: [confirmBeforeLeaving],
     data: REDESIGNED,
     title: $localize`Nutrition settings | TB Gym`,
     loadComponent: () =>
@@ -187,6 +196,8 @@ export const routes: Routes = [
   {
     path: 'team',
     canActivate: [authGuard, ownerGuard],
+    // Its Invite a coach sheet asks before Browser Back drops what was typed (audit COACH-1).
+    canDeactivate: [confirmSheetLeave],
     data: REDESIGNED,
     title: $localize`Team | TB Gym`,
     loadComponent: () => import('./features/team/team').then((module) => module.Team),
