@@ -130,58 +130,6 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         }
     }
 
-    public async Task<TrainingCommandResult> AddTemplateVersionAsync(
-        Guid templateId,
-        SaveProgramTemplateRequest request,
-        CancellationToken cancellationToken)
-    {
-        var template = await dbContext.ProgramTemplates.SingleOrDefaultAsync(
-            item => item.Id == templateId,
-            cancellationToken);
-        if (template is null)
-        {
-            return NotFound();
-        }
-
-        try
-        {
-            if (request.TemplateVersion is not { } expectedVersion)
-            {
-                return Invalid("templateVersion", "The current template version is required.");
-            }
-
-            var blueprint = await BuildProgramBlueprintAsync(request, cancellationToken);
-            dbContext.Entry(template).Property(item => item.Version).OriginalValue = expectedVersion;
-            var number = template.CreateNextVersion(request.Name);
-            var version = ProgramTemplateVersion.Create(
-                tenantContext.TenantId,
-                template.Id,
-                number,
-                blueprint,
-                request.Publish,
-                clock.UtcNow);
-            dbContext.ProgramTemplateVersions.Add(version);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return SuccessTemplate(ToView(version));
-        }
-        catch (ArgumentException exception)
-        {
-            return Invalid("program", exception.PersonMessage());
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Invalid("program", exception.PersonMessage());
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return ConcurrencyConflict();
-        }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
-        {
-            return Conflict("template_conflict", "A conflicting program version was saved.");
-        }
-    }
-
     public async Task<IReadOnlyList<SavedSessionView>> ListSavedSessionsAsync(
         CancellationToken cancellationToken)
     {

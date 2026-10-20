@@ -542,17 +542,12 @@ public sealed partial class Phase3TrainingWorkflowTests
                 },
             },
         }).ToArray();
-        await RefreshCsrfAsync(coach);
-        var response = await coach.PostAsJsonAsync("/api/training/templates", new
+        return await PublishProgramAsync(coach, new
         {
             name = $"{weekCount}-week scenario",
             description = "Focused Phase 3 scenario",
-            publish = true,
-            templateVersion = (uint?)null,
             weeks,
         });
-        await AssertStatusAsync(response, HttpStatusCode.OK);
-        return await RequiredJsonAsync<TemplateVersion>(response);
     }
 
     private static object AssignmentRequestAt(

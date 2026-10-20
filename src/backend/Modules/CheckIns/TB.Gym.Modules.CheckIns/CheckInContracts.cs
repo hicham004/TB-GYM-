@@ -60,18 +60,9 @@ public interface ICheckInApplicationService
         int take,
         CancellationToken cancellationToken);
 
-    Task<CheckInAssignmentDetailResult> GetClientAssignmentAsync(
-        Guid clientProfileId,
-        Guid assignmentId,
-        CancellationToken cancellationToken);
-
     Task<CheckInAssignmentListResult> ListOwnAssignmentsAsync(
         int skip,
         int take,
-        CancellationToken cancellationToken);
-
-    Task<CheckInAssignmentDetailResult> GetOwnAssignmentAsync(
-        Guid assignmentId,
         CancellationToken cancellationToken);
 }
 
@@ -259,9 +250,4 @@ public sealed record CheckInAssignmentCommandResult(
 public sealed record CheckInAssignmentListResult(
     CheckInCommandStatus Status,
     CheckInAssignmentListView? Assignments = null,
-    FeatureAccessReason? AccessReason = null);
-
-public sealed record CheckInAssignmentDetailResult(
-    CheckInCommandStatus Status,
-    CheckInAssignmentDetail? Assignment = null,
     FeatureAccessReason? AccessReason = null);

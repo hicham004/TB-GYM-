@@ -135,11 +135,15 @@ app.MapTenancyModule();
 app.MapInvitationsModule();
 app.MapClientsModule();
 app.MapSubscriptionsModule();
-app.MapExerciseLibraryModule();
-app.MapStrengthModule();
-app.MapTrainingModule();
-app.MapNutritionModule();
-app.MapProgressModule();
+// A person's authoring and logging: every write of these modules counts against the routine limit
+// unless its route names a stricter policy (audit INV-10, ARCHITECTURE section 6). The routes of the
+// other modules each name theirs.
+var routineWrites = app.MapGroup(string.Empty).RequireRateLimitingOnWrites(RateLimitPolicies.RoutineWrite);
+routineWrites.MapExerciseLibraryModule();
+routineWrites.MapStrengthModule();
+routineWrites.MapTrainingModule();
+routineWrites.MapNutritionModule();
+routineWrites.MapProgressModule();
 app.MapCheckInsModule();
 app.MapCheckInResponses();
 app.MapMediaModule();

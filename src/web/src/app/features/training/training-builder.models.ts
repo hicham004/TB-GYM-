@@ -4,7 +4,6 @@ import type {
   ProgramDraftContent,
   ProgramDraftView,
   ProgramTemplateVersionView,
-  SaveProgramTemplateRequest,
   SavedSessionView,
   TrainingLoadStrategy,
   TrainingLoadUnit,
@@ -15,11 +14,9 @@ import type {
 
 export interface ProgramDraft {
   templateId: string | null;
-  sourceVersion: number | null;
   sourceVersionId: string | null;
   name: string;
   description: string;
-  publish: boolean;
   weeks: DraftWeek[];
 }
 
@@ -78,11 +75,9 @@ function key(): string {
 export function emptyProgram(): ProgramDraft {
   return {
     templateId: null,
-    sourceVersion: null,
     sourceVersionId: null,
     name: '',
     description: '',
-    publish: false,
     weeks: [emptyWeek(1)],
   };
 }
@@ -183,11 +178,9 @@ export function withExertionPreference(
 export function draftFromVersion(version: ProgramTemplateVersionView): ProgramDraft {
   return {
     templateId: version.templateId,
-    sourceVersion: numeric(version.versionNumber),
     sourceVersionId: version.id,
     name: version.name,
     description: version.description ?? '',
-    publish: false,
     weeks: version.weeks.map((week) => ({
       key: key(),
       sourceId: week.id,
@@ -238,16 +231,6 @@ export function moveItem<T>(items: readonly T[], from: number, to: number): T[] 
   return result;
 }
 
-export function toProgramRequest(draft: ProgramDraft): SaveProgramTemplateRequest {
-  return {
-    name: draft.name.trim(),
-    description: nullableText(draft.description),
-    publish: draft.publish,
-    templateVersion: draft.sourceVersion,
-    weeks: draft.weeks.map(toWeekRequest),
-  };
-}
-
 export function toWeekRequest(week: DraftWeek): TrainingWeekRequest {
   return {
     label: nullableText(week.label),
@@ -261,8 +244,11 @@ export function toWeekRequest(week: DraftWeek): TrainingWeekRequest {
  * checked only when it is published, so a half-typed number travels as it is.
  */
 export function toDraftContent(draft: ProgramDraft): ProgramDraftContent {
-  const { name, description, weeks } = toProgramRequest(draft);
-  return { name, description, weeks };
+  return {
+    name: draft.name.trim(),
+    description: nullableText(draft.description),
+    weeks: draft.weeks.map(toWeekRequest),
+  };
 }
 
 /**
@@ -274,11 +260,9 @@ export function draftFromContent(view: ProgramDraftView): ProgramDraft {
   const content = view.content;
   return {
     templateId: view.templateId,
-    sourceVersion: null,
     sourceVersionId: view.sourceVersionId,
     name: content.name,
     description: content.description ?? '',
-    publish: false,
     weeks: content.weeks.map((week) => weekFromRequest(week, names)),
   };
 }

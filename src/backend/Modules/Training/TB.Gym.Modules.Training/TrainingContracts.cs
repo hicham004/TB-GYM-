@@ -16,12 +16,11 @@ public interface ITrainingApplicationService
         Guid templateVersionId,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A program and its version 1 in one step, for the demo workspace generator. No route calls it:
+    /// people make programs by publishing a draft (TRN-024, audit INV-12).
+    /// </summary>
     Task<TrainingCommandResult> CreateTemplateAsync(
-        SaveProgramTemplateRequest request,
-        CancellationToken cancellationToken);
-
-    Task<TrainingCommandResult> AddTemplateVersionAsync(
-        Guid templateId,
         SaveProgramTemplateRequest request,
         CancellationToken cancellationToken);
 
@@ -286,11 +285,14 @@ public sealed record ProgramTemplateVersionView(
     bool IsPublished,
     IReadOnlyList<TrainingWeekView> Weeks);
 
+/// <summary>
+/// A version's content as publishing a draft, and the demo workspace generator, hand it to the checks
+/// every version passes (TRN-005). No route accepts it since the direct template writes went (audit INV-12).
+/// </summary>
 public sealed record SaveProgramTemplateRequest(
     string Name,
     string? Description,
     bool Publish,
-    uint? TemplateVersion,
     IReadOnlyList<TrainingWeekRequest> Weeks);
 
 public sealed record TrainingWeekRequest(

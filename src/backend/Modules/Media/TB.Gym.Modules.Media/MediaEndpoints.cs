@@ -68,7 +68,8 @@ public static class MediaEndpoints
         })
         .WithName("RegisterExternalExerciseMedia")
         .Produces<MediaAssetView>()
-        .ProducesValidationProblem();
+        .ProducesValidationProblem()
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         coach.MapDelete("/{assetId:guid}", async (
             Guid assetId,
@@ -83,7 +84,8 @@ public static class MediaEndpoints
         })
         .WithName("DeleteMediaAsset")
         .Produces<MediaAssetView>()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         // The workspace logo (MED-013) is the owner's, like the rest of the brand (GAM-005). It is only
         // ever an image, so the request is held to the logo's own limit rather than the video one.
@@ -158,7 +160,8 @@ public static class MediaEndpoints
         .Produces<MediaAccessView>()
         .Produces(StatusCodes.Status403Forbidden)
         .Produces(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         // A screen showing many protected thumbnails needs one grant per asset before the browser
         // can fetch any of them. Asking per tile is one request per asset and grows with the
@@ -196,7 +199,8 @@ public static class MediaEndpoints
         .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
         .WithName("CreatePrivateMediaAccessBatch")
         .Produces<MediaAccessBatchView>()
-        .ProducesValidationProblem();
+        .ProducesValidationProblem()
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         endpoints.MapGet("/api/media/{assetId:guid}/content", async (
             Guid assetId,

@@ -133,7 +133,9 @@ The module owns calculation, preparation-basis, allergen, AI-review, and coverag
 Infrastructure owns EF persistence and the USDA FoodData Central HTTP adapter. See
 `docs/adr/0008-nutrition-engine-v1.md`. R4.4a adds `nutrition."MealPlanDrafts"` (NUT-013), the
 meal-plan builder's working copies, shaped and guarded exactly as the program builder's (ADR 0033):
-Publish turns one into the next `MealPlanTemplateVersion`, already published, in one transaction.
+Publish turns one into the next `MealPlanTemplateVersion`, already published, in one transaction, and
+is the API's only way to make one since the direct create, version and publish routes went (audit
+INV-12; the demo workspace generator still builds through the service).
 R4.4b gives each `RecipeVersion` an optional cover photo, `PhotoMediaAssetId`, a Media asset of the
 same workspace by composite key (MED-014). Media owns the upload (`POST /api/media/recipe-photo`, new
 `RecipePhoto` purpose) and the staff-only read; Infrastructure checks the photo when a version is
@@ -304,6 +306,19 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   authorization handler runs later — so mixing it in let a caller reset their own allowance by
   varying a header they control, and a limit whose partition the attacker chooses is not a limit.
   One bucket per user is strictly tighter than one per user and workspace.
+- Every state-changing API route names a limit (audit INV-10; an integration test fails when one does
+  not), each policy its own bucket per user. `SensitiveWrite` (60 a minute): every write of Messaging,
+  Invitations, Notifications, Check-ins, Subscriptions and PlatformBilling, and the writes that change a
+  relationship, the team or an account (a client's release, block, leave and coach change, a coach's
+  removal and resignation, a password change, signing out everywhere, a legal acceptance, a photo
+  export). `RoutineWrite` (300 a minute; `RateLimiting:RoutineWriteWindowSeconds` lengthens like the
+  sensitive window): a person's own authoring and logging, bursty by nature (the builders autosave
+  after each pause, the player saves every set), so it has a bucket of its own rather than starving
+  the sensitive one. It covers every other write of Exercises, Strength, Training, Nutrition and
+  Progress, given at their group in `Program.cs` (`RequireRateLimitingOnWrites`, so a route added
+  there is limited without being named), and is named per route for intake, onboarding, coach notes,
+  personal settings, signing out, the workspace's settings and brand, and media grants, links and
+  removal. Uploads count against `MediaUpload` (10 an hour), anonymous routes against their address.
 - Tenant policies verify membership on every scoped request. A UI role check is cosmetic.
 - Account authentication and coaching-feature access are separate. An unpaid client can
   authenticate and view permitted profile/account data. `ICoachingFeatureAccessService`
@@ -1339,7 +1354,10 @@ programs not published yet, each tied to its owner's membership. The builder wri
 after each change, carrying the row version so two tabs never overwrite each other; its content is
 JSON with only its shape checked. Publish runs the same checks as any save, creates the next version
 and deletes the draft in one transaction. Drafts are private to their owner, never reach a client,
-and are blocked like any staff write while the workspace is read-only.
+and are blocked like any staff write while the workspace is read-only. Publishing a draft is the API's
+only way to make a program or a version: the direct template writes the builder used before drafts
+are gone (audit INV-12), and only the demo workspace generator still calls the service's one-step
+create.
 
 R4.2b shares `ProgramSetsEditor` between the grid and session sheet. Publish previews a read-only
 copy of the draft's client-visible prescriptions; only confirmation calls the draft publish API.
@@ -1389,9 +1407,11 @@ nothing was assigned. Only an unexplained failure falls back to a generic error.
 An unsubmitted draft is private to the client writing it. The coach's read returns the response, its
 status and its dates with no answers and an explicit `AnswersWithheld`, decided once in the backend
 mapping rather than by the screen; the client's own read is complete. The coach's assignment list
-carries each response's status so the screen needs no per-assignment read, and every asynchronous
-result on that screen checks which client it was requested for before it writes anything, so a
-reply that arrives after the coach has moved on is discarded rather than shown under the wrong name.
+carries each response's status so the screen needs no per-assignment read (one assignment is read
+with its response, `…/assignments/{assignmentId}/response`, the only single read since audit INV-12),
+and every asynchronous result on that screen checks which client it was requested for before it
+writes anything, so a reply that arrives after the coach has moved on is discarded rather than shown
+under the wrong name.
 Due-date validation reads the workspace's own `currentDate` from `GET /api/workspace` rather than
 deriving today from the browser clock, which is a different calendar around midnight.
 

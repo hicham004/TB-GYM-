@@ -146,17 +146,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         var exercise = await CreateExerciseAsync(coach, "Competition squat", [], []);
         var bench = await CreateExerciseAsync(coach, "Bench press", [], []);
         var saved = await RecordWorkingMaxAsync(coach, clientId, exercise.Id, 100m);
-        await RefreshCsrfAsync(coach);
-        var created = await coach.PostAsJsonAsync("/api/training/templates", new
+        var template = await PublishProgramAsync(coach, new
         {
             name = "p4c-carry program",
             description = (string?)null,
-            publish = true,
-            templateVersion = (uint?)null,
             weeks = P4cOneWeek(exercise.Id),
         });
-        await AssertStatusAsync(created, HttpStatusCode.OK);
-        var scenario = new P2Custom(workspaceId, clientId, enrollment, exercise, saved, await RequiredJsonAsync<TemplateVersion>(created));
+        var scenario = new P2Custom(workspaceId, clientId, enrollment, exercise, saved, template);
 
         // No program yet: nothing to carry, and the read says so.
         var empty = await ReadSliceAsync<PreviousProgramMaxesView>(coach, P4cPreviousMaxesUrl(clientId));

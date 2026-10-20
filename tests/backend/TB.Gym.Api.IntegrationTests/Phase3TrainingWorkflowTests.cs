@@ -17,6 +17,7 @@ using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Media;
 using TB.Gym.Modules.Nutrition;
+using TB.Gym.Modules.Training;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Api.IntegrationTests;
@@ -94,6 +95,14 @@ public sealed partial class Phase3TrainingWorkflowTests
             if (realUsdaProvider)
             {
                 builder.UseSetting("Nutrition:UsdaFoodDataCentral:ApiKey", UsdaFoodDataCentralFake.ApiKey);
+            }
+
+            // The routine limit's own test makes its 300 writes inside an hour rather than a minute, so a slow
+            // machine cannot let the window turn over mid-loop and hide the limiter (A10b). Lengthening the
+            // window only makes the limit stricter.
+            if (TestContext.TestName?.StartsWith("A10bRoutineWrites", StringComparison.Ordinal) == true)
+            {
+                builder.UseSetting("RateLimiting:RoutineWriteWindowSeconds", "3600");
             }
 
             builder.ConfigureAppConfiguration((_, configuration) =>
@@ -306,13 +315,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(100m, mesocycle.WorkingMaxes[0].Value);
         Assert.AreEqual(77.5m, mesocycle.Weeks[0].Sessions[0].Exercises[0].Sets[0].PrescribedLoad);
 
-        var templatePage = await coach.GetFromJsonAsync<TemplatePage>("/api/training/templates")
-            ?? throw new AssertFailedException("Template list was empty.");
-        await RefreshCsrfAsync(coach);
-        var nextVersionResponse = await coach.PostAsJsonAsync(
-            $"/api/training/templates/{template.TemplateId}/versions",
-            TemplateRequest(squat.Id, alternative.Id, targetRpe: 9m, templatePage.Items.Single().Version));
-        await AssertStatusAsync(nextVersionResponse, HttpStatusCode.OK);
+        // The program's next version, published from the builder, leaves the assigned snapshot as it was.
+        await PublishProgramAsync(coach, TemplateContent(squat.Id, alternative.Id, targetRpe: 9m), template, fromVersionNumber: 1);
         mesocycle = await coach.GetFromJsonAsync<Mesocycle>($"/api/training/mesocycles/{mesocycle.Id}")
             ?? throw new AssertFailedException("Mesocycle response was empty.");
         Assert.AreEqual(6m, mesocycle.Weeks[0].Sessions[0].Exercises[0].Sets[0].TargetRpe);
@@ -703,30 +707,57 @@ public sealed partial class Phase3TrainingWorkflowTests
         return await RequiredJsonAsync<StrengthMax>(response);
     }
 
-    private static async Task<TemplateVersion> CreateTemplateAsync(
+    private static Task<TemplateVersion> CreateTemplateAsync(
         HttpClient coach,
         Guid exerciseId,
         Guid alternativeId,
-        decimal targetRpe)
+        decimal targetRpe) =>
+        PublishProgramAsync(coach, TemplateContent(exerciseId, alternativeId, targetRpe));
+
+    /// <summary>
+    /// Publishes a program as the builder does (TRN-024): its content as a draft, then Publish, the only
+    /// way the API makes a program or a version since the direct template writes went (audit INV-12).
+    /// Given a version it publishes the program's next one from it, as read at that version number.
+    /// </summary>
+    private static async Task<HttpResponseMessage> PublishProgramContentAsync(
+        HttpClient coach,
+        object content,
+        TemplateVersion? from = null,
+        int? fromVersionNumber = null)
     {
         await RefreshCsrfAsync(coach);
-        var response = await coach.PostAsJsonAsync(
-            "/api/training/templates",
-            TemplateRequest(exerciseId, alternativeId, targetRpe, null));
-        await AssertStatusAsync(response, HttpStatusCode.OK);
-        return await RequiredJsonAsync<TemplateVersion>(response);
+        var started = await coach.PostAsJsonAsync(R42aDraftsUrl, new
+        {
+            templateId = from?.TemplateId,
+            sourceVersionId = from?.Id,
+            templateVersionNumber = fromVersionNumber,
+            content,
+        });
+        await AssertStatusAsync(started, HttpStatusCode.OK);
+        var draft = await RequiredJsonAsync<ProgramDraftSaveView>(started);
+        await RefreshCsrfAsync(coach);
+        return await coach.PostAsJsonAsync(R42aPublishUrl(draft.Id), new PublishProgramDraftRequest(draft.Version, false));
     }
 
-    private static object TemplateRequest(
+    private static async Task<TemplateVersion> PublishProgramAsync(
+        HttpClient coach,
+        object content,
+        TemplateVersion? from = null,
+        int? fromVersionNumber = null)
+    {
+        var published = await PublishProgramContentAsync(coach, content, from, fromVersionNumber);
+        await AssertStatusAsync(published, HttpStatusCode.OK);
+        return await RequiredJsonAsync<TemplateVersion>(published);
+    }
+
+    /// <summary>One week, one session, one exercise with one top set, as the builder sends a program.</summary>
+    private static object TemplateContent(
         Guid exerciseId,
         Guid alternativeId,
-        decimal targetRpe,
-        uint? templateVersion) => new
+        decimal targetRpe) => new
         {
             name = "Powerlifting Base",
             description = "Fast strength template",
-            publish = true,
-            templateVersion,
             weeks = new[]
             {
                 new
@@ -883,8 +914,6 @@ public sealed partial class Phase3TrainingWorkflowTests
     private sealed record Exercise(Guid Id, uint Version);
     private sealed record StrengthMax(Guid Id, decimal Value);
     private sealed record TemplateVersion(Guid Id, Guid TemplateId);
-    private sealed record TemplateSummary(Guid Id, uint Version);
-    private sealed record TemplatePage(long Total, TemplateSummary[] Items);
     private sealed record WorkingMax(Guid Id, decimal Value);
     private sealed record Mesocycle(
         Guid Id,

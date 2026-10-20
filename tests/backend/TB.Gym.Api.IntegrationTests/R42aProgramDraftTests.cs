@@ -300,6 +300,9 @@ public sealed partial class Phase3TrainingWorkflowTests
             content with { Weeks = [.. Enumerable.Repeat(week with { Sessions = [.. Enumerable.Repeat(heavy, 10)] }, 11)] },
             "content");
 
+        // A saved program, published (through a draft) before the new ones below are started.
+        var program = await CreateTemplateAsync(owner, squat.Id, alternative.Id, 8m);
+
         // At most twenty new programs per coach, even when two starts race for the last place.
         for (var count = 0; count < ProgramDraft.MaximumNewProgramsPerOwner - 1; count++)
         {
@@ -318,7 +321,6 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.HasCount(ProgramDraft.MaximumNewProgramsPerOwner, await ReadSliceAsync<ProgramDraftSummary[]>(owner, R42aDraftsUrl));
 
         // Changes to a saved program do not count against it.
-        var program = await CreateTemplateAsync(owner, squat.Id, alternative.Id, 8m);
         await R42aCreateAsync(owner, new(program.TemplateId, program.Id, 1, content));
     }
 

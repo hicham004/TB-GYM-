@@ -137,17 +137,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         var enrollment = await CreateTrainingEnrollmentAsync(coach, clientId, TenantToday(), 8);
         var exercise = await CreateExerciseAsync(coach, "Competition squat", [], []);
         var max = await RecordWorkingMaxAsync(coach, clientId, exercise.Id, 100m);
-        await RefreshCsrfAsync(coach);
-        var created = await coach.PostAsJsonAsync("/api/training/templates", new
+        var template = await PublishProgramAsync(coach, new
         {
             name = "p4c-team program",
             description = (string?)null,
-            publish = true,
-            templateVersion = (uint?)null,
             weeks = P4bWeeks(exercise.Id),
         });
-        await AssertStatusAsync(created, HttpStatusCode.OK);
-        var scenario = new P2Custom(workspaceId, clientId, enrollment, exercise, max, await RequiredJsonAsync<TemplateVersion>(created));
+        var scenario = new P2Custom(workspaceId, clientId, enrollment, exercise, max, template);
         var block = await P2AssignAsync(coach, scenario, [P2SavedMax(scenario)]);
 
         RequiredTestClock.Advance(TimeSpan.FromMinutes(1));

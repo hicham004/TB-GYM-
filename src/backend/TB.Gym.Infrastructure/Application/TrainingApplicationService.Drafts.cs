@@ -188,7 +188,7 @@ internal sealed partial class TrainingApplicationService
         {
             // The same checks as any save: every rule of the program, and every exercise active here.
             var blueprint = await BuildProgramBlueprintAsync(
-                new SaveProgramTemplateRequest(content.Name, content.Description, true, null, content.Weeks),
+                new SaveProgramTemplateRequest(content.Name, content.Description, true, content.Weeks),
                 cancellationToken);
             var template = existing ?? ProgramTemplate.Create(tenantContext.TenantId, content.Name);
             if (existing is null)

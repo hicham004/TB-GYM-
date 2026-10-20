@@ -55,37 +55,8 @@ public static class TrainingEndpoints
         .Produces<ProgramTemplateVersionView>()
         .Produces(StatusCodes.Status404NotFound);
 
-        coach.MapPost("/templates", async (
-            SaveProgramTemplateRequest request,
-            HttpContext context,
-            IAntiforgery antiforgery,
-            ITrainingApplicationService service,
-            CancellationToken cancellationToken) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return ToResult(await service.CreateTemplateAsync(request, cancellationToken));
-        })
-        .WithName("CreateProgramTemplate")
-        .Produces<ProgramTemplateVersionView>()
-        .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
-
-        coach.MapPost("/templates/{templateId:guid}/versions", async (
-            Guid templateId,
-            SaveProgramTemplateRequest request,
-            HttpContext context,
-            IAntiforgery antiforgery,
-            ITrainingApplicationService service,
-            CancellationToken cancellationToken) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return ToResult(await service.AddTemplateVersionAsync(templateId, request, cancellationToken));
-        })
-        .WithName("AddProgramTemplateVersion")
-        .Produces<ProgramTemplateVersionView>()
-        .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
-
+        // A program and its versions are made only by publishing a draft (TRN-024): the direct template
+        // writes the builder used before drafts are gone (audit INV-12).
         MapProgramDrafts(coach);
 
         coach.MapGet("/saved-sessions", async (

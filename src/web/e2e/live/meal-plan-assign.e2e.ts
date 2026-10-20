@@ -55,6 +55,11 @@ interface MealPlanSummary {
   status: string;
 }
 
+interface MealPlanDraftSaved {
+  id: string;
+  version: number;
+}
+
 const PLAN_DAYS = 7;
 
 function todayInBeirut(): string {
@@ -139,29 +144,31 @@ test.describe('meal plan assignment live', () => {
     expect(recipe, 'the demo has at least one published recipe').toBeDefined();
     const recipeVersionId = recipe!.publishedVersionId!;
 
-    const created = await api<MealPlanSummary>(lea, 'POST', '/api/nutrition/meal-plans', {
+    // Made as the builder makes it (NUT-013): a draft of the plan, then Publish.
+    const created = await api<MealPlanDraftSaved>(lea, 'POST', '/api/nutrition/meal-plan-drafts', {
       tenantId,
       body: {
-        name: planName,
-        dayCount: PLAN_DAYS,
-        targetCalories: 2000,
-        targetProteinGrams: 150,
-        targetCarbohydrateGrams: 200,
-        targetFatGrams: 70,
-        slots: Array.from({ length: PLAN_DAYS }, (_, day) => ({
-          dayOffset: day,
-          order: 0,
-          name: 'Breakfast',
-          choices: [{ recipeVersionId, servings: 1 }],
-        })),
+        mealPlanTemplateId: null,
+        sourceVersionId: null,
+        templateRevision: null,
+        content: {
+          name: planName,
+          targetCalories: 2000,
+          targetProteinGrams: 150,
+          targetCarbohydrateGrams: 200,
+          targetFatGrams: 70,
+          days: Array.from({ length: PLAN_DAYS }, () => ({
+            meals: [{ name: 'Breakfast', choices: [{ recipeVersionId, servings: 1 }] }],
+          })),
+        },
       },
     });
     expect(created.status, JSON.stringify(created.body)).toBe(200);
     const publishedPlan = await api<MealPlanSummary>(
       lea,
       'POST',
-      `/api/nutrition/meal-plan-versions/${created.body.versionId}/publish`,
-      { tenantId, body: {} },
+      `/api/nutrition/meal-plan-drafts/${created.body.id}/publish`,
+      { tenantId, body: { version: created.body.version, replaceNewer: false } },
     );
     expect(publishedPlan.status, JSON.stringify(publishedPlan.body)).toBe(200);
     expect(publishedPlan.body.status).toBe('Published');

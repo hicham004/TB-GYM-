@@ -107,7 +107,8 @@ public static class TenancyEndpoints
         .WithTags(TenancyModule.Name)
         .Produces<WorkspaceDetails>()
         .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         // The brand is the owner's, like the other workspace settings (GAM-005); every member reads it
         // with the workspace and with their list of workspaces.
@@ -138,7 +139,8 @@ public static class TenancyEndpoints
         .WithTags(TenancyModule.Name)
         .Produces<WorkspaceDetails>()
         .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         endpoints.MapTeamEndpoints();
         return endpoints;

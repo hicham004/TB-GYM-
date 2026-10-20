@@ -23,8 +23,13 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> AddRecipeVersionAsync(Guid recipeId, AddRecipeVersionRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> PublishRecipeVersionAsync(Guid recipeVersionId, CancellationToken cancellationToken);
     Task<MealPlanTemplatePage> ListMealPlansAsync(int skip, int take, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A meal plan with an unpublished version 1, which the demo workspace generator then publishes with
+    /// <see cref="PublishMealPlanVersionAsync"/>. No route calls either: people make meal plans by
+    /// publishing a draft (NUT-013, audit INV-12).
+    /// </summary>
     Task<NutritionCommandResult> CreateMealPlanAsync(CreateMealPlanRequest request, CancellationToken cancellationToken);
-    Task<NutritionCommandResult> AddMealPlanVersionAsync(Guid mealPlanTemplateId, AddMealPlanVersionRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> PublishMealPlanVersionAsync(Guid mealPlanVersionId, CancellationToken cancellationToken);
 
     /// <summary>One meal plan with every version, newest first, and the caller's own draft of it.</summary>
@@ -300,8 +305,6 @@ public sealed record MealPlanChoiceRequest(Guid RecipeVersionId, decimal Serving
 public sealed record MealPlanSlotRequest(int DayOffset, int Order, string Name, IReadOnlyList<MealPlanChoiceRequest> Choices);
 
 public sealed record CreateMealPlanRequest(string Name, int DayCount, decimal TargetCalories, decimal TargetProteinGrams, decimal TargetCarbohydrateGrams, decimal TargetFatGrams, IReadOnlyList<MealPlanSlotRequest> Slots);
-
-public sealed record AddMealPlanVersionRequest(int DayCount, decimal TargetCalories, decimal TargetProteinGrams, decimal TargetCarbohydrateGrams, decimal TargetFatGrams, IReadOnlyList<MealPlanSlotRequest> Slots);
 
 /// <summary>
 /// A meal plan at its newest version. <paramref name="Draft"/> is the caller's own unpublished

@@ -8,11 +8,7 @@ import {
 } from '../../features/training/training-read.models';
 import { mapRenewalStatus, type RenewalStatus } from '../../features/dashboard/renewal.models';
 import { mapTrainingWeek, type TrainingWeek } from '../../features/dashboard/today.models';
-import {
-  mapAiDraft,
-  mapNutritionDay,
-  mapRecipePage,
-} from '../../features/nutrition/nutrition.models';
+import { mapNutritionDay, mapRecipePage } from '../../features/nutrition/nutrition.models';
 import {
   mapDateCorrection,
   mapHistory,
@@ -83,8 +79,6 @@ import {
   CoachingProduct,
   CompleteClientOnboardingRequest,
   CreateClientInvitationRequest,
-  CreateCoachingProductRequest,
-  CreateProductOfferRequest,
   CurrentUser,
   EmailActionResponse,
   FeatureAccessDecision,
@@ -97,7 +91,6 @@ import {
   RecordManualPaymentRequest,
   RegistrationResponse,
   TenantMembership,
-  UpdateCoachingProductRequest,
   UpdateClientIntakeRequest,
   WorkspaceDetails,
   AssignProductRequest,
@@ -314,30 +307,6 @@ export class ApiClient {
       .pipe(map(toProductCatalog));
   }
 
-  createCoachingProduct(request: CreateCoachingProductRequest): Observable<CoachingProduct> {
-    return this.http
-      .post<ContractCoachingProductView>('/api/commercial/products', request)
-      .pipe(map(toCoachingProduct));
-  }
-
-  updateCoachingProduct(
-    productId: string,
-    request: UpdateCoachingProductRequest,
-  ): Observable<CoachingProduct> {
-    return this.http
-      .put<ContractCoachingProductView>(`/api/commercial/products/${productId}`, request)
-      .pipe(map(toCoachingProduct));
-  }
-
-  addProductOffer(
-    productId: string,
-    request: CreateProductOfferRequest,
-  ): Observable<CoachingProduct> {
-    return this.http
-      .post<ContractCoachingProductView>(`/api/commercial/products/${productId}/offers`, request)
-      .pipe(map(toCoachingProduct));
-  }
-
   setOfferAvailability(
     offerId: string,
     isActive: boolean,
@@ -348,15 +317,6 @@ export class ApiClient {
         isActive,
         version,
       })
-      .pipe(map(toCoachingProduct));
-  }
-
-  changeProductOfferPrice(
-    offerId: string,
-    request: Phase3Contracts.ChangeProductOfferPriceRequest,
-  ): Observable<CoachingProduct> {
-    return this.http
-      .post<ContractCoachingProductView>(`/api/commercial/offers/${offerId}/price-changes`, request)
       .pipe(map(toCoachingProduct));
   }
 
@@ -495,29 +455,6 @@ export class ApiClient {
     });
   }
 
-  createExercise(
-    request: Phase3Contracts.CreateExerciseRequest,
-  ): Observable<Phase3Contracts.ExerciseView> {
-    return this.http.post<Phase3Contracts.ExerciseView>('/api/exercises', request);
-  }
-
-  updateExercise(
-    exerciseId: string,
-    request: Phase3Contracts.UpdateExerciseRequest,
-  ): Observable<Phase3Contracts.ExerciseView> {
-    return this.http.put<Phase3Contracts.ExerciseView>(`/api/exercises/${exerciseId}`, request);
-  }
-
-  setExerciseArchived(
-    exerciseId: string,
-    request: Phase3Contracts.SetExerciseArchivedRequest,
-  ): Observable<Phase3Contracts.ExerciseView> {
-    return this.http.put<Phase3Contracts.ExerciseView>(
-      `/api/exercises/${exerciseId}/archive`,
-      request,
-    );
-  }
-
   listMedia(skip = 0, take = 100): Observable<Phase3Contracts.MediaAssetPage> {
     return this.http.get<Phase3Contracts.MediaAssetPage>('/api/media', {
       params: { skip, take },
@@ -529,12 +466,6 @@ export class ApiClient {
     body.append('title', title);
     body.append('file', file, file.name);
     return this.http.post<Phase3Contracts.MediaAssetView>('/api/media/uploads', body);
-  }
-
-  registerExternalMedia(
-    request: Phase3Contracts.RegisterExternalMediaRequest,
-  ): Observable<Phase3Contracts.MediaAssetView> {
-    return this.http.post<Phase3Contracts.MediaAssetView>('/api/media/external', request);
   }
 
   createMediaAccess(assetId: string): Observable<Phase3Contracts.MediaAccessView> {
@@ -574,25 +505,6 @@ export class ApiClient {
   ): Observable<Phase3Contracts.ProgramTemplateVersionView> {
     return this.http.get<Phase3Contracts.ProgramTemplateVersionView>(
       `/api/training/template-versions/${versionId}`,
-    );
-  }
-
-  createProgramTemplate(
-    request: Phase3Contracts.SaveProgramTemplateRequest,
-  ): Observable<Phase3Contracts.ProgramTemplateVersionView> {
-    return this.http.post<Phase3Contracts.ProgramTemplateVersionView>(
-      '/api/training/templates',
-      request,
-    );
-  }
-
-  addProgramTemplateVersion(
-    templateId: string,
-    request: Phase3Contracts.SaveProgramTemplateRequest,
-  ): Observable<Phase3Contracts.ProgramTemplateVersionView> {
-    return this.http.post<Phase3Contracts.ProgramTemplateVersionView>(
-      `/api/training/templates/${templateId}/versions`,
-      request,
     );
   }
 
@@ -878,12 +790,6 @@ export class ApiClient {
     );
   }
 
-  getAiMealDraftAvailability() {
-    return this.http
-      .get<Phase3Contracts.AiMealDraftAvailabilityView>('/api/nutrition/ai-drafts/availability')
-      .pipe(map((value) => ({ isConfigured: value.isConfigured === true })));
-  }
-
   listRecipes(query = '', skip = 0, take = 100) {
     return this.http
       .get<Phase3Contracts.RecipePage>('/api/nutrition/recipes', { params: { query, skip, take } })
@@ -892,27 +798,6 @@ export class ApiClient {
 
   createRecipe(request: Phase3Contracts.CreateRecipeRequest) {
     return this.http.post<Phase3Contracts.RecipeSummary>('/api/nutrition/recipes', request);
-  }
-
-  publishRecipe(versionId: string) {
-    return this.http.post<Phase3Contracts.RecipeSummary>(
-      `/api/nutrition/recipe-versions/${versionId}/publish`,
-      {},
-    );
-  }
-
-  createMealPlan(request: Phase3Contracts.CreateMealPlanRequest) {
-    return this.http.post<Phase3Contracts.MealPlanTemplateSummary>(
-      '/api/nutrition/meal-plans',
-      request,
-    );
-  }
-
-  publishMealPlan(versionId: string) {
-    return this.http.post<Phase3Contracts.MealPlanTemplateSummary>(
-      `/api/nutrition/meal-plan-versions/${versionId}/publish`,
-      {},
-    );
   }
 
   getMyNutritionDay(localDate?: string) {
@@ -961,21 +846,6 @@ export class ApiClient {
         request,
       )
       .pipe(map(mapNutritionDay));
-  }
-
-  generateAiMealDraft(request: Phase3Contracts.GenerateAiMealDraftRequest) {
-    return this.http
-      .post<Phase3Contracts.AiMealDraftView>('/api/nutrition/ai-drafts', request)
-      .pipe(map(mapAiDraft));
-  }
-
-  reviewAiMealDraft(operationId: string, request: Phase3Contracts.ReviewAiMealDraftRequest) {
-    return this.http
-      .post<Phase3Contracts.AiMealDraftView>(
-        `/api/nutrition/ai-drafts/${operationId}/review`,
-        request,
-      )
-      .pipe(map(mapAiDraft));
   }
 
   getMyProgress(

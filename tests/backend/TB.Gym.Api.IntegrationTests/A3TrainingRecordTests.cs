@@ -259,13 +259,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         };
 
         // A heavy top set, then the same lift again for a lighter back-off set.
-        await RefreshCsrfAsync(coach);
-        var created = await coach.PostAsJsonAsync("/api/training/templates", new
+        var created = await PublishProgramContentAsync(coach, new
         {
             name = "Top and back-off",
             description = (string?)null,
-            publish = true,
-            templateVersion = (uint?)null,
             weeks = new[]
             {
                 new
@@ -363,13 +360,10 @@ public sealed partial class Phase3TrainingWorkflowTests
             $"Week 1, Week 1 squat: Competition squat, set 1: {Zero}");
 
         // And a program written at 1%, assigned after this one.
-        await RefreshCsrfAsync(coach);
-        var tiny = await coach.PostAsJsonAsync("/api/training/templates", new
+        var tiny = await PublishProgramContentAsync(coach, new
         {
             name = "Tiny",
             description = (string?)null,
-            publish = true,
-            templateVersion = (uint?)null,
             weeks = new[] { P2Week("Week 1", scenario.Exercise.Id, P1Set(1, "PercentageWorkingMax", rpe: null, percentage: 1m)) },
         });
         await AssertStatusAsync(tiny, HttpStatusCode.OK);

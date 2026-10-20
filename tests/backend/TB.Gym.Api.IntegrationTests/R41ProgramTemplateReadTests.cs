@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using TB.Gym.Modules.Training;
 
 namespace TB.Gym.Api.IntegrationTests;
@@ -27,13 +26,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         var only = opened.Versions.Single();
         Assert.AreEqual((first.Id, 1, true, 1), (only.Id, only.VersionNumber, only.IsPublished, only.WeekCount));
 
-        // The token from this read is the one a save checks: it lands, and the read then lists both.
-        await RefreshCsrfAsync(owner);
-        var saved = await owner.PostAsJsonAsync(
-            $"/api/training/templates/{first.TemplateId}/versions",
-            TemplateRequest(squat.Id, alternative.Id, 8.5m, opened.Version));
-        await AssertStatusAsync(saved, HttpStatusCode.OK);
-        var second = await RequiredJsonAsync<TemplateVersion>(saved);
+        // Changes started from this read publish as the next version, and the read then lists both.
+        var second = await PublishProgramAsync(
+            owner, TemplateContent(squat.Id, alternative.Id, 8.5m), first, opened.CurrentVersionNumber);
         var reopened = await ReadSliceAsync<ProgramTemplateSummary>(owner, R41ProgramUrl(first.TemplateId));
         Assert.AreEqual(2, reopened.CurrentVersionNumber);
         CollectionAssert.AreEqual(
@@ -42,13 +37,11 @@ public sealed partial class Phase3TrainingWorkflowTests
             "Newest first, as the list shows them.");
         Assert.AreNotEqual(opened.Version, reopened.Version);
 
-        // A save from the older read is refused: someone saved in between.
-        await RefreshCsrfAsync(owner);
-        await AssertStatusAsync(
-            await owner.PostAsJsonAsync(
-                $"/api/training/templates/{first.TemplateId}/versions",
-                TemplateRequest(squat.Id, alternative.Id, 9m, opened.Version)),
-            HttpStatusCode.Conflict);
+        // Changes started from the older read are not published over the newer version without asking.
+        var stale = await PublishProgramContentAsync(
+            owner, TemplateContent(squat.Id, alternative.Id, 9m), first, opened.CurrentVersionNumber);
+        await AssertStatusAsync(stale, HttpStatusCode.Conflict);
+        Assert.AreEqual(ProgramDraftConflictCodes.NewerVersionPublished, (await RequiredJsonAsync<R42aConflict>(stale)).Code);
 
         // The program belongs to the workspace, so a coach on the team reopens it too.
         using var coach = CreateClient();

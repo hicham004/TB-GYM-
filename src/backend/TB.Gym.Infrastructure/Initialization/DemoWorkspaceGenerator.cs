@@ -277,7 +277,6 @@ internal sealed partial class DemoWorkspaceGenerator
             program.Name,
             program.Description,
             Publish: true,
-            TemplateVersion: null,
             [.. program.Weeks.Select(week => new TrainingWeekRequest(
                 week.Label,
                 IsPublished: true,

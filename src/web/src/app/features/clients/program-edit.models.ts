@@ -182,11 +182,9 @@ export function programEdit(
     locked,
     draft: {
       templateId: null,
-      sourceVersion: null,
       sourceVersionId: null,
       name: view.name,
       description: '',
-      publish: false,
       weeks: weeks.map((week) => ({
         key: newKey(),
         sourceId: week.id,

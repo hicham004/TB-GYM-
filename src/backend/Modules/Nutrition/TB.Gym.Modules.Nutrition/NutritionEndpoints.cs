@@ -101,21 +101,8 @@ public static class NutritionEndpoints
             var page = Page(skip, take);
             return Results.Ok(await service.ListMealPlansAsync(page.Skip, page.Take, token));
         }).WithName("ListMealPlanTemplates").Produces<MealPlanTemplatePage>();
-        coach.MapPost("/meal-plans", async (CreateMealPlanRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return ToResult(await service.CreateMealPlanAsync(request, token));
-        }).WithName("CreateMealPlanTemplate").Produces<MealPlanTemplateSummary>().ProducesValidationProblem();
-        coach.MapPost("/meal-plans/{mealPlanTemplateId:guid}/versions", async (Guid mealPlanTemplateId, AddMealPlanVersionRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return ToResult(await service.AddMealPlanVersionAsync(mealPlanTemplateId, request, token));
-        }).WithName("AddMealPlanTemplateVersion").Produces<MealPlanTemplateSummary>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound);
-        coach.MapPost("/meal-plan-versions/{mealPlanVersionId:guid}/publish", async (Guid mealPlanVersionId, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return ToResult(await service.PublishMealPlanVersionAsync(mealPlanVersionId, token));
-        }).WithName("PublishMealPlanTemplateVersion").Produces<MealPlanTemplateSummary>().ProducesProblem(StatusCodes.Status409Conflict);
+        // A meal plan and its versions are made only by publishing a draft (NUT-013): the direct create,
+        // version and publish routes are gone (audit INV-12).
 
         coach.MapGet("/meal-plans/{mealPlanTemplateId:guid}", async (Guid mealPlanTemplateId, INutritionApplicationService service, CancellationToken token) =>
         {

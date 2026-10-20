@@ -39,6 +39,12 @@ public static class RateLimitPolicies
 
     public const string SensitiveWrite = "SensitiveWrite";
 
+    /// <summary>
+    /// A person's own authoring and logging (programs, meal plans, sets, meals, weigh-ins, settings):
+    /// every state-changing route that names no stricter policy, in a bucket of its own (audit INV-10).
+    /// </summary>
+    public const string RoutineWrite = "RoutineWrite";
+
     public const string MediaUpload = "MediaUpload";
 
     /// <summary>

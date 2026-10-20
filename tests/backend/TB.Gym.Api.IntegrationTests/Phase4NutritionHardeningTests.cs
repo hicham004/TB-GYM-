@@ -35,16 +35,19 @@ public sealed partial class Phase3TrainingWorkflowTests
             servings = 1m,
             ingredients = new[] { new { foodItemVersionId = scenario.FoodVersionId, quantity = 50m, unit = "Gram", basis = "Prepared", yieldFactorId = (Guid?)null, retentionFactorId = (Guid?)null } },
         }), HttpStatusCode.OK);
-        await RefreshCsrfAsync(coach);
-        await AssertStatusAsync(await coach.PostAsJsonAsync($"/api/nutrition/meal-plans/{scenario.MealPlanId}/versions", new
-        {
-            dayCount = 1,
-            targetCalories = 1_900m,
-            targetProteinGrams = 140m,
-            targetCarbohydrateGrams = 210m,
-            targetFatGrams = 55m,
-            slots = new[] { new { dayOffset = 0, order = 0, name = "Edited meal", choices = new[] { new { recipeVersionId = scenario.RecipeVersionId, servings = 1m } } } },
-        }), HttpStatusCode.OK);
+        // The plan's next version, published from the builder (NUT-013).
+        var edit = await R44aCreateAsync(coach, new CreateMealPlanDraftRequest(
+            scenario.MealPlanId,
+            scenario.MealPlanVersionId,
+            1,
+            new MealPlanDraftContent(
+                "Edited plan",
+                1_900m,
+                140m,
+                210m,
+                55m,
+                [new MealPlanDraftDay([new MealPlanDraftMeal("Edited meal", [new MealPlanChoiceRequest(scenario.RecipeVersionId, 1m)])])])));
+        await R44aPublishAsync(coach, edit.Id, edit.Version, replaceNewer: false);
 
         await RefreshCsrfAsync(coach);
         var edited = await coach.PostAsJsonAsync($"/api/nutrition/foods/{scenario.FoodId}/versions", FoodVersion(40m, []));
@@ -126,7 +129,17 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(foreignCoach);
         Assert.AreEqual(HttpStatusCode.NotFound, (await foreignCoach.PostAsJsonAsync($"/api/nutrition/recipes/{scenario.RecipeId}/versions", new { instructions = "Cross-tenant", servings = 1m, ingredients = Array.Empty<object>() })).StatusCode);
         await RefreshCsrfAsync(foreignCoach);
-        Assert.AreEqual(HttpStatusCode.NotFound, (await foreignCoach.PostAsJsonAsync($"/api/nutrition/meal-plans/{scenario.MealPlanId}/versions", new { dayCount = 1, targetCalories = 1m, targetProteinGrams = 0m, targetCarbohydrateGrams = 0m, targetFatGrams = 0m, slots = Array.Empty<object>() })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.NotFound, (await foreignCoach.PostAsJsonAsync(R44aDraftsUrl, new CreateMealPlanDraftRequest(
+            scenario.MealPlanId,
+            scenario.MealPlanVersionId,
+            1,
+            new MealPlanDraftContent(
+                "Cross-tenant",
+                1m,
+                0m,
+                0m,
+                0m,
+                [new MealPlanDraftDay([new MealPlanDraftMeal("Meal", [new MealPlanChoiceRequest(scenario.RecipeVersionId, 1m)])])])))).StatusCode);
 
         using var anonymous = CreateClient();
         Assert.AreEqual(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/nutrition/foods")).StatusCode);
@@ -509,28 +522,16 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(coach);
         await AssertStatusAsync(await coach.PostAsync($"/api/nutrition/recipe-versions/{recipe.VersionId}/publish", null), HttpStatusCode.OK);
 
-        var slots = Enumerable.Range(0, dayCount).Select(day => new
-        {
-            dayOffset = day,
-            order = 0,
-            name = "Meal",
-            choices = new[] { new { recipeVersionId = recipe.VersionId, servings = 1m } },
-        }).ToArray();
-        await RefreshCsrfAsync(coach);
-        var planResponse = await coach.PostAsJsonAsync("/api/nutrition/meal-plans", new
-        {
-            name = $"Plan {Guid.NewGuid():N}",
-            dayCount,
-            targetCalories = 2000m,
-            targetProteinGrams = 150m,
-            targetCarbohydrateGrams = 220m,
-            targetFatGrams = 60m,
-            slots,
-        });
-        await AssertStatusAsync(planResponse, HttpStatusCode.OK);
-        var plan = await RequiredJsonAsync<Phase4MealPlan>(planResponse);
-        await RefreshCsrfAsync(coach);
-        await AssertStatusAsync(await coach.PostAsync($"/api/nutrition/meal-plan-versions/{plan.VersionId}/publish", null), HttpStatusCode.OK);
+        // The plan as the builder publishes it (NUT-013): one meal a day, of the recipe above.
+        var draft = await R44aCreateAsync(coach, new CreateMealPlanDraftRequest(null, null, null, new MealPlanDraftContent(
+            $"Plan {Guid.NewGuid():N}",
+            2000m,
+            150m,
+            220m,
+            60m,
+            [.. Enumerable.Range(0, dayCount).Select(_ =>
+                new MealPlanDraftDay([new MealPlanDraftMeal("Meal", [new MealPlanChoiceRequest(recipe.VersionId, 1m)])]))])));
+        var plan = await R44aPublishAsync(coach, draft.Id, draft.Version, replaceNewer: false);
 
         await RefreshCsrfAsync(coach);
         var calculationResponse = await coach.PostAsJsonAsync($"/api/nutrition/clients/{clientId}/calculations", new
@@ -624,7 +625,6 @@ public sealed partial class Phase3TrainingWorkflowTests
     private sealed record Phase4Food(Guid Id, Phase4FoodVersion CurrentVersion);
     private sealed record Phase4FoodVersion(Guid Id);
     private sealed record Phase4Recipe(Guid Id, Guid VersionId);
-    private sealed record Phase4MealPlan(Guid Id, Guid VersionId);
     private sealed record Phase4Calculation(Guid Id);
     private sealed record Phase4Day(Guid PlanId, Guid PlanDayId, Guid? DailyLogId, uint? DailyLogVersion, string? LogStatus, decimal SelectedCalories, Phase4Slot[] Slots, Phase4CustomFood[] CustomFoods);
     private sealed record Phase4CustomFood(Guid Id, string Name, decimal Amount, string Unit, decimal Calories);

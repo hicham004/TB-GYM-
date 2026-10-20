@@ -125,25 +125,28 @@ public sealed class GoLiveReadinessTests
     }
 
     /// <summary>
-    /// Tests may lengthen the sensitive-write window, which only makes the limit stricter. No setting
-    /// may shorten it below the production minute, which would loosen the limit.
+    /// Tests may lengthen the sensitive-write and routine-write windows, which only makes the limits
+    /// stricter. No setting may shorten either below the production minute, which would loosen it.
     /// </summary>
     [TestMethod]
-    public void TheSensitiveWriteWindowCanOnlyBeLengthened()
+    public void TheWriteWindowsCanOnlyBeLengthened()
     {
-        foreach (var seconds in new[] { "59", "1", "0", "86401" })
+        foreach (var key in new[] { "RateLimiting:SensitiveWriteWindowSeconds", "RateLimiting:RoutineWriteWindowSeconds" })
         {
-            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            foreach (var seconds in new[] { "59", "1", "0", "86401" })
             {
-                builder.UseEnvironment("Development");
-                builder.UseSetting("ConnectionStrings:Database", UnusedDatabase);
-                builder.UseSetting("RateLimiting:SensitiveWriteWindowSeconds", seconds);
-            });
+                using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+                {
+                    builder.UseEnvironment("Development");
+                    builder.UseSetting("ConnectionStrings:Database", UnusedDatabase);
+                    builder.UseSetting(key, seconds);
+                });
 
-            var failure = Assert.ThrowsExactly<InvalidOperationException>(
-                () => factory.CreateClient(),
-                $"A {seconds}-second window was accepted.");
-            Assert.Contains("RateLimiting:SensitiveWriteWindowSeconds", failure.Message);
+                var failure = Assert.ThrowsExactly<InvalidOperationException>(
+                    () => factory.CreateClient(),
+                    $"A {seconds}-second window was accepted for {key}.");
+                Assert.Contains(key, failure.Message);
+            }
         }
     }
 

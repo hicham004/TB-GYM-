@@ -317,12 +317,11 @@ public static class DependencyInjection
         // 60 sensitive writes per user per window, and the window is a minute unless configured longer.
         // It may only be lengthened, which makes the limit stricter: tests stretch it so a slow machine
         // cannot outrun the minute and hide the limiter, and no setting can loosen production.
-        var sensitiveWriteWindowSeconds = configuration.GetValue("RateLimiting:SensitiveWriteWindowSeconds", 60);
-        if (sensitiveWriteWindowSeconds is < 60 or > 86400)
-        {
-            throw new InvalidOperationException(
-                "RateLimiting:SensitiveWriteWindowSeconds must be between 60 seconds and 24 hours.");
-        }
+        var sensitiveWriteWindowSeconds = WriteWindowSeconds(configuration, "RateLimiting:SensitiveWriteWindowSeconds");
+        // 300 routine writes per user per window, in a bucket of their own and under the same window rule
+        // (audit INV-10): the builders' autosave and the workout player stay far below it, and a script
+        // hammering the database does not.
+        var routineWriteWindowSeconds = WriteWindowSeconds(configuration, "RateLimiting:RoutineWriteWindowSeconds");
 
         services.AddRateLimiter(options =>
         {
@@ -364,6 +363,16 @@ public static class DependencyInjection
                     {
                         PermitLimit = 60,
                         Window = TimeSpan.FromSeconds(sensitiveWriteWindowSeconds),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    }));
+            options.AddPolicy(RateLimitPolicies.RoutineWrite, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ActorPartitionKey(context, "routine"),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 300,
+                        Window = TimeSpan.FromSeconds(routineWriteWindowSeconds),
                         QueueLimit = 0,
                         AutoReplenishment = true,
                     }));
@@ -456,5 +465,14 @@ public static class DependencyInjection
         return userId is { Length: > 0 }
             ? $"{scope}:user:{userId}"
             : $"{scope}:address:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+    }
+
+    /// <summary>A per-user write window: a minute unless configured longer, and never shorter.</summary>
+    private static int WriteWindowSeconds(IConfiguration configuration, string key)
+    {
+        var seconds = configuration.GetValue(key, 60);
+        return seconds is < 60 or > 86400
+            ? throw new InvalidOperationException($"{key} must be between 60 seconds and 24 hours.")
+            : seconds;
     }
 }

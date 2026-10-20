@@ -46,15 +46,6 @@ export type AddFoodVersionRequest = {
   carbohydrateDeclaration?: null | CarbohydrateDeclaration;
 };
 
-export type AddMealPlanVersionRequest = {
-  dayCount: number | string;
-  targetCalories: number | string;
-  targetProteinGrams: number | string;
-  targetCarbohydrateGrams: number | string;
-  targetFatGrams: number | string;
-  slots: Array<MealPlanSlotRequest>;
-};
-
 export type AddNutritionCustomFoodRequest = {
   planDayId: string;
   name: string;
@@ -1505,16 +1496,6 @@ export type CreateMealPlanDraftRequest = {
   content: MealPlanDraftContent;
 };
 
-export type CreateMealPlanRequest = {
-  name: string;
-  dayCount: number | string;
-  targetCalories: number | string;
-  targetProteinGrams: number | string;
-  targetCarbohydrateGrams: number | string;
-  targetFatGrams: number | string;
-  slots: Array<MealPlanSlotRequest>;
-};
-
 export type CreateProductOfferRequest = {
   label: string;
   durationCount: number | string;
@@ -2120,13 +2101,6 @@ export type MealPlanDraftView = {
   version: number | string;
   content: MealPlanDraftContent;
   recipes: Array<RecipeSummary>;
-};
-
-export type MealPlanSlotRequest = {
-  dayOffset: number | string;
-  order: number | string;
-  name: string;
-  choices: Array<MealPlanChoiceRequest>;
 };
 
 export type MealPlanTemplateDetail = {
@@ -3310,14 +3284,6 @@ export type SaveMealPlanDraftRequest = {
 export type SaveProgramDraftRequest = {
   content: ProgramDraftContent;
   version: number | string;
-};
-
-export type SaveProgramTemplateRequest = {
-  name: string;
-  description: null | string;
-  publish: boolean;
-  templateVersion: null | number | string;
-  weeks: Array<TrainingWeekRequest>;
 };
 
 export type SaveSessionTemplateRequest = {
@@ -6209,37 +6175,6 @@ export type ListProgramTemplatesResponses = {
 export type ListProgramTemplatesResponse =
   ListProgramTemplatesResponses[keyof ListProgramTemplatesResponses];
 
-export type CreateProgramTemplateData = {
-  body: SaveProgramTemplateRequest;
-  path?: never;
-  query?: never;
-  url: '/api/training/templates';
-};
-
-export type CreateProgramTemplateErrors = {
-  /**
-   * Bad Request
-   */
-  400: HttpValidationProblemDetails;
-  /**
-   * Conflict
-   */
-  409: ProblemDetails;
-};
-
-export type CreateProgramTemplateError =
-  CreateProgramTemplateErrors[keyof CreateProgramTemplateErrors];
-
-export type CreateProgramTemplateResponses = {
-  /**
-   * OK
-   */
-  200: ProgramTemplateVersionView;
-};
-
-export type CreateProgramTemplateResponse =
-  CreateProgramTemplateResponses[keyof CreateProgramTemplateResponses];
-
 export type GetProgramTemplateData = {
   body?: never;
   path: {
@@ -6291,39 +6226,6 @@ export type GetProgramTemplateVersionResponses = {
 
 export type GetProgramTemplateVersionResponse =
   GetProgramTemplateVersionResponses[keyof GetProgramTemplateVersionResponses];
-
-export type AddProgramTemplateVersionData = {
-  body: SaveProgramTemplateRequest;
-  path: {
-    templateId: string;
-  };
-  query?: never;
-  url: '/api/training/templates/{templateId}/versions';
-};
-
-export type AddProgramTemplateVersionErrors = {
-  /**
-   * Bad Request
-   */
-  400: HttpValidationProblemDetails;
-  /**
-   * Conflict
-   */
-  409: ProblemDetails;
-};
-
-export type AddProgramTemplateVersionError =
-  AddProgramTemplateVersionErrors[keyof AddProgramTemplateVersionErrors];
-
-export type AddProgramTemplateVersionResponses = {
-  /**
-   * OK
-   */
-  200: ProgramTemplateVersionView;
-};
-
-export type AddProgramTemplateVersionResponse =
-  AddProgramTemplateVersionResponses[keyof AddProgramTemplateVersionResponses];
 
 export type ListProgramDraftsData = {
   body?: never;
@@ -8002,95 +7904,6 @@ export type ListMealPlanTemplatesResponses = {
 
 export type ListMealPlanTemplatesResponse =
   ListMealPlanTemplatesResponses[keyof ListMealPlanTemplatesResponses];
-
-export type CreateMealPlanTemplateData = {
-  body: CreateMealPlanRequest;
-  path?: never;
-  query?: never;
-  url: '/api/nutrition/meal-plans';
-};
-
-export type CreateMealPlanTemplateErrors = {
-  /**
-   * Bad Request
-   */
-  400: HttpValidationProblemDetails;
-};
-
-export type CreateMealPlanTemplateError =
-  CreateMealPlanTemplateErrors[keyof CreateMealPlanTemplateErrors];
-
-export type CreateMealPlanTemplateResponses = {
-  /**
-   * OK
-   */
-  200: MealPlanTemplateSummary;
-};
-
-export type CreateMealPlanTemplateResponse =
-  CreateMealPlanTemplateResponses[keyof CreateMealPlanTemplateResponses];
-
-export type AddMealPlanTemplateVersionData = {
-  body: AddMealPlanVersionRequest;
-  path: {
-    mealPlanTemplateId: string;
-  };
-  query?: never;
-  url: '/api/nutrition/meal-plans/{mealPlanTemplateId}/versions';
-};
-
-export type AddMealPlanTemplateVersionErrors = {
-  /**
-   * Bad Request
-   */
-  400: HttpValidationProblemDetails;
-  /**
-   * Not Found
-   */
-  404: unknown;
-};
-
-export type AddMealPlanTemplateVersionError =
-  AddMealPlanTemplateVersionErrors[keyof AddMealPlanTemplateVersionErrors];
-
-export type AddMealPlanTemplateVersionResponses = {
-  /**
-   * OK
-   */
-  200: MealPlanTemplateSummary;
-};
-
-export type AddMealPlanTemplateVersionResponse =
-  AddMealPlanTemplateVersionResponses[keyof AddMealPlanTemplateVersionResponses];
-
-export type PublishMealPlanTemplateVersionData = {
-  body?: never;
-  path: {
-    mealPlanVersionId: string;
-  };
-  query?: never;
-  url: '/api/nutrition/meal-plan-versions/{mealPlanVersionId}/publish';
-};
-
-export type PublishMealPlanTemplateVersionErrors = {
-  /**
-   * Conflict
-   */
-  409: ProblemDetails;
-};
-
-export type PublishMealPlanTemplateVersionError =
-  PublishMealPlanTemplateVersionErrors[keyof PublishMealPlanTemplateVersionErrors];
-
-export type PublishMealPlanTemplateVersionResponses = {
-  /**
-   * OK
-   */
-  200: MealPlanTemplateSummary;
-};
-
-export type PublishMealPlanTemplateVersionResponse =
-  PublishMealPlanTemplateVersionResponses[keyof PublishMealPlanTemplateVersionResponses];
 
 export type GetMealPlanTemplateData = {
   body?: never;
@@ -10294,40 +10107,6 @@ export type AssignCheckInResponses = {
 
 export type AssignCheckInResponse = AssignCheckInResponses[keyof AssignCheckInResponses];
 
-export type GetClientCheckInAssignmentData = {
-  body?: never;
-  path: {
-    clientProfileId: string;
-    assignmentId: string;
-  };
-  query?: never;
-  url: '/api/checkins/clients/{clientProfileId}/assignments/{assignmentId}';
-};
-
-export type GetClientCheckInAssignmentErrors = {
-  /**
-   * Forbidden
-   */
-  403: ProblemDetails;
-  /**
-   * Not Found
-   */
-  404: ProblemDetails;
-};
-
-export type GetClientCheckInAssignmentError =
-  GetClientCheckInAssignmentErrors[keyof GetClientCheckInAssignmentErrors];
-
-export type GetClientCheckInAssignmentResponses = {
-  /**
-   * OK
-   */
-  200: CheckInAssignmentDetail;
-};
-
-export type GetClientCheckInAssignmentResponse =
-  GetClientCheckInAssignmentResponses[keyof GetClientCheckInAssignmentResponses];
-
 export type ListOwnCheckInAssignmentsData = {
   body?: never;
   path?: never;
@@ -10361,39 +10140,6 @@ export type ListOwnCheckInAssignmentsResponses = {
 
 export type ListOwnCheckInAssignmentsResponse =
   ListOwnCheckInAssignmentsResponses[keyof ListOwnCheckInAssignmentsResponses];
-
-export type GetOwnCheckInAssignmentData = {
-  body?: never;
-  path: {
-    assignmentId: string;
-  };
-  query?: never;
-  url: '/api/checkins/me/assignments/{assignmentId}';
-};
-
-export type GetOwnCheckInAssignmentErrors = {
-  /**
-   * Forbidden
-   */
-  403: ProblemDetails;
-  /**
-   * Not Found
-   */
-  404: ProblemDetails;
-};
-
-export type GetOwnCheckInAssignmentError =
-  GetOwnCheckInAssignmentErrors[keyof GetOwnCheckInAssignmentErrors];
-
-export type GetOwnCheckInAssignmentResponses = {
-  /**
-   * OK
-   */
-  200: CheckInAssignmentDetail;
-};
-
-export type GetOwnCheckInAssignmentResponse =
-  GetOwnCheckInAssignmentResponses[keyof GetOwnCheckInAssignmentResponses];
 
 export type GetOwnCheckInResponseData = {
   body?: never;

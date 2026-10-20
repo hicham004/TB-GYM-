@@ -6,7 +6,7 @@ import {
   emptySet,
   followMainLiftRest,
   moveItem,
-  toProgramRequest,
+  toDraftContent,
   withExertionPreference,
 } from './training-builder.models';
 
@@ -32,8 +32,11 @@ describe('training builder model', () => {
     exercise.sets[0].exertionTarget = 3;
     draft.weeks[0].sessions[0].exercises.push(exercise);
 
-    const request = toProgramRequest(draft);
+    const request = toDraftContent(draft);
     const set = request.weeks[0].sessions[0].exercises[0].sets[0];
+
+    // The draft's content, nothing of the direct template save the API no longer has (audit INV-12).
+    expect(Object.keys(request).sort()).toEqual(['description', 'name', 'weeks']);
 
     expect(set.position).toBe(1);
     expect(set.targetRpe).toBeNull();
@@ -50,7 +53,7 @@ describe('training builder model', () => {
     const draft = emptyProgram();
     draft.name = 'Strength base';
     draft.weeks[0].sessions[0].exercises.push(emptyExercise('exercise-1', true));
-    expect(toProgramRequest(draft).weeks[0].sessions[0].exercises[0].sets[0].restSeconds).toBe(180);
+    expect(toDraftContent(draft).weeks[0].sessions[0].exercises[0].sets[0].restSeconds).toBe(180);
   });
 
   it('moves only the rests still on a default when Main lift changes', () => {

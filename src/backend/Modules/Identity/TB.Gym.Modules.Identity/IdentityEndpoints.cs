@@ -50,6 +50,7 @@ public static class IdentityEndpoints
             .Produces(StatusCodes.Status429TooManyRequests);
         group.MapPost("/logout", LogoutAsync)
             .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicies.RoutineWrite)
             .WithName("Logout")
             .Produces(StatusCodes.Status204NoContent);
         group.MapGet("/me", MeAsync)
@@ -59,12 +60,14 @@ public static class IdentityEndpoints
             .Produces(StatusCodes.Status401Unauthorized);
         group.MapPut("/me/theme", UpdateThemeModeAsync)
             .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicies.RoutineWrite)
             .WithName("UpdateOwnThemeMode")
             .Produces<CurrentUserResponse>()
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status401Unauthorized);
         group.MapPut("/me/weight-unit", UpdateWeightUnitAsync)
             .RequireAuthorization()
+            .RequireRateLimiting(RateLimitPolicies.RoutineWrite)
             .WithName("UpdateOwnWeightUnit")
             .Produces<CurrentUserResponse>()
             .ProducesValidationProblem()

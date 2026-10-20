@@ -236,13 +236,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         var max = await RecordWorkingMaxAsync(coach, clientId, squat.Id, 140m);
 
         // Week 1: 5 reps at RPE 7 from the chart; a second set at 3 reps and RPE 8 beside a fixed weight.
-        await RefreshCsrfAsync(coach);
-        var created = await coach.PostAsJsonAsync("/api/training/templates", new
+        var created = await PublishProgramContentAsync(coach, new
         {
             name = "Chart base",
             description = (string?)null,
-            publish = true,
-            templateVersion = (uint?)null,
             weeks = new[]
             {
                 P1Week(squat.Id,
@@ -286,15 +283,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RegisterCoachAsync(coach, "p1-publish@example.test", "P1 Coach", "P1 Publish");
         var squat = await CreateExerciseAsync(coach, "Back squat", [], []);
 
+        // A draft keeps any value mid-edit (TRN-024); Publish is where the chart's range is checked.
         foreach (var (rpe, reps) in new[] { (6m, 5), (10m, 13), (6.5m, 0) })
         {
-            await RefreshCsrfAsync(coach);
-            var response = await coach.PostAsJsonAsync("/api/training/templates", new
+            var response = await PublishProgramContentAsync(coach, new
             {
                 name = "Outside the chart",
                 description = (string?)null,
-                publish = true,
-                templateVersion = (uint?)null,
                 weeks = new[] { P1Week(squat.Id, P1Set(1, "RpeChart", rpe: rpe, reps: reps)) },
             });
             Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, $"RPE {rpe} x {reps} reps");

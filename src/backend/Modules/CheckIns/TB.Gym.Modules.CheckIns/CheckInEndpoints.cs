@@ -98,7 +98,8 @@ public static class CheckInEndpoints
         .Produces<CheckInFormDetails>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
 
         forms.MapPost("/{formId:guid}/archive", async (
             Guid formId,
@@ -114,7 +115,8 @@ public static class CheckInEndpoints
         .WithName("ArchiveCheckInForm")
         .Produces<CheckInFormDetails>()
         .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
 
         forms.MapPost("/{formId:guid}/restore", async (
             Guid formId,
@@ -130,7 +132,8 @@ public static class CheckInEndpoints
         .WithName("RestoreCheckInForm")
         .Produces<CheckInFormDetails>()
         .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
 
         forms.MapPost("/{formId:guid}/versions", async (
             Guid formId,
@@ -185,7 +188,8 @@ public static class CheckInEndpoints
         .Produces<CheckInFormVersionView>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
     }
 
     private static void MapCoachAssignments(IEndpointRouteBuilder endpoints)
@@ -210,17 +214,7 @@ public static class CheckInEndpoints
         .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
-        coach.MapGet("/{assignmentId:guid}", async (
-            Guid clientProfileId,
-            Guid assignmentId,
-            ICheckInApplicationService service,
-            CancellationToken token) =>
-            ToDetailResult(await service.GetClientAssignmentAsync(clientProfileId, assignmentId, token)))
-        .WithName("GetClientCheckInAssignment")
-        .Produces<CheckInAssignmentDetail>()
-        .ProducesProblem(StatusCodes.Status403Forbidden)
-        .ProducesProblem(StatusCodes.Status404NotFound);
-
+        // One assignment is read with its response (CheckInResponseEndpoints), as the review page does.
         coach.MapPost("", async (
             Guid clientProfileId,
             AssignCheckInRequest request,
@@ -243,8 +237,8 @@ public static class CheckInEndpoints
 
     private static void MapClientAssignments(IEndpointRouteBuilder endpoints)
     {
-        // Read-only in this chunk: a client sees what they were asked and by when. Answering,
-        // drafting and submitting are a separate chunk and have no route here.
+        // A client sees what they were asked and by when. One assignment is read, drafted and
+        // submitted through its response (CheckInResponseEndpoints).
         var client = endpoints.MapGroup("/api/checkins/me/assignments")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)
             .WithTags(CheckInsModule.Name);
@@ -260,16 +254,6 @@ public static class CheckInEndpoints
                 token)))
         .WithName("ListOwnCheckInAssignments")
         .Produces<CheckInAssignmentListView>()
-        .ProducesProblem(StatusCodes.Status403Forbidden)
-        .ProducesProblem(StatusCodes.Status404NotFound);
-
-        client.MapGet("/{assignmentId:guid}", async (
-            Guid assignmentId,
-            ICheckInApplicationService service,
-            CancellationToken token) =>
-            ToDetailResult(await service.GetOwnAssignmentAsync(assignmentId, token)))
-        .WithName("GetOwnCheckInAssignment")
-        .Produces<CheckInAssignmentDetail>()
         .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status404NotFound);
     }
@@ -316,14 +300,6 @@ public static class CheckInEndpoints
     private static IResult ToListResult(CheckInAssignmentListResult result) => result.Status switch
     {
         CheckInCommandStatus.Success => Results.Ok(result.Assignments),
-        CheckInCommandStatus.NotFound => Results.NotFound(),
-        CheckInCommandStatus.Forbidden => Denied(result.AccessReason),
-        _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
-    };
-
-    private static IResult ToDetailResult(CheckInAssignmentDetailResult result) => result.Status switch
-    {
-        CheckInCommandStatus.Success => Results.Ok(result.Assignment),
         CheckInCommandStatus.NotFound => Results.NotFound(),
         CheckInCommandStatus.Forbidden => Denied(result.AccessReason),
         _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),

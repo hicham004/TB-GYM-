@@ -559,36 +559,6 @@ internal sealed partial class NutritionApplicationService(
         }
     }
 
-    public async Task<NutritionCommandResult> AddMealPlanVersionAsync(Guid mealPlanTemplateId, AddMealPlanVersionRequest request, CancellationToken cancellationToken)
-    {
-        var template = await dbContext.MealPlanTemplates.SingleOrDefaultAsync(item => item.Id == mealPlanTemplateId, cancellationToken);
-        if (template is null)
-        {
-            return NotFound();
-        }
-
-        try
-        {
-            var slots = await BuildMealSlotsAsync(request.Slots, cancellationToken);
-            var version = template.AddDraft(request.DayCount, request.TargetCalories, request.TargetProteinGrams, request.TargetCarbohydrateGrams, request.TargetFatGrams, slots);
-            dbContext.MealPlanTemplateVersions.Add(version);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, MealPlan: ToMealPlanSummary(template, version));
-        }
-        catch (NutritionInputException exception)
-        {
-            return Invalid(exception.Field, exception.PersonMessage());
-        }
-        catch (ArgumentException exception)
-        {
-            return Invalid("mealPlan", exception.PersonMessage());
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Conflict("meal_plan_version_conflict", "The meal plan was versioned by another request.");
-        }
-    }
-
     public async Task<NutritionCommandResult> PublishMealPlanVersionAsync(Guid mealPlanVersionId, CancellationToken cancellationToken)
     {
         var version = await dbContext.MealPlanTemplateVersions.Include(item => item.Slots).SingleOrDefaultAsync(item => item.Id == mealPlanVersionId, cancellationToken);

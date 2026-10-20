@@ -293,7 +293,7 @@ is precisely why they are written down here.
   tenant crossover, CSRF, injection, SSRF, file handling, and business-logic races.
 - [ ] Verify authorization and `ICoachingFeatureAccessService` on every protected endpoint;
   never rely on hidden Angular navigation.
-- [ ] Tune per-IP authentication and per-user/workspace sensitive-write rate limits using
+- [ ] Tune per-IP authentication and per-user sensitive-write and routine-write rate limits using
   observed traffic; add gateway/WAF abuse controls and safe 429 monitoring.
 - [ ] Run dependency/container/secret/SAST scans, pin deployment artifacts by digest, produce
   an SBOM, and define security update SLAs.

@@ -483,17 +483,6 @@ internal sealed class CheckInApplicationService(
                 await BuildListAsync(clientProfileId, skip, take, cancellationToken));
     }
 
-    public async Task<CheckInAssignmentDetailResult> GetClientAssignmentAsync(
-        Guid clientProfileId,
-        Guid assignmentId,
-        CancellationToken cancellationToken)
-    {
-        var access = await ResolveClientAccessAsync(clientProfileId, cancellationToken);
-        return access.Status != CheckInCommandStatus.Success
-            ? new CheckInAssignmentDetailResult(access.Status, AccessReason: access.Reason)
-            : await BuildDetailResultAsync(clientProfileId, assignmentId, cancellationToken);
-    }
-
     public async Task<CheckInAssignmentListResult> ListOwnAssignmentsAsync(
         int skip,
         int take,
@@ -505,16 +494,6 @@ internal sealed class CheckInApplicationService(
             : new CheckInAssignmentListResult(
                 CheckInCommandStatus.Success,
                 await BuildListAsync(access.ClientProfileId, skip, take, cancellationToken));
-    }
-
-    public async Task<CheckInAssignmentDetailResult> GetOwnAssignmentAsync(
-        Guid assignmentId,
-        CancellationToken cancellationToken)
-    {
-        var access = await ResolveOwnAccessAsync(cancellationToken);
-        return access.Status != CheckInCommandStatus.Success
-            ? new CheckInAssignmentDetailResult(access.Status, AccessReason: access.Reason)
-            : await BuildDetailResultAsync(access.ClientProfileId, assignmentId, cancellationToken);
     }
 
     private async Task<CheckInFormCommandResult> SetArchivedAsync(
@@ -566,23 +545,6 @@ internal sealed class CheckInApplicationService(
 
     private Task<CheckInClientAccess> ResolveOwnAccessAsync(CancellationToken cancellationToken) =>
         accessResolver.ForCurrentClientAsync(cancellationToken);
-
-    private async Task<CheckInAssignmentDetailResult> BuildDetailResultAsync(
-        Guid clientProfileId,
-        Guid assignmentId,
-        CancellationToken cancellationToken)
-    {
-        var assignment = await dbContext.CheckInAssignments
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.Id == assignmentId && item.ClientProfileId == clientProfileId,
-                cancellationToken);
-        return assignment is null
-            ? new CheckInAssignmentDetailResult(CheckInCommandStatus.NotFound)
-            : new CheckInAssignmentDetailResult(
-                CheckInCommandStatus.Success,
-                await RequireAssignmentDetailAsync(assignment.Id, cancellationToken));
-    }
 
     /// <summary>
     /// A bounded page of assignments, each already carrying the state of its response.

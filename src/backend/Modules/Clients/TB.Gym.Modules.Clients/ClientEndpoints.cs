@@ -48,7 +48,8 @@ public static class ClientEndpoints
         .WithName("UpdateClientIntakeForCoach")
         .Produces<CoachClientDetails>()
         .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         coachGroup.MapPost("/{clientId:guid}/complete-onboarding", async (
             Guid clientId,
@@ -64,7 +65,8 @@ public static class ClientEndpoints
         .WithName("CompleteClientOnboardingForCoach")
         .Produces<CoachClientDetails>()
         .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         coachGroup.MapPut("/{clientId:guid}/coach-notes", async (
             Guid clientId,
@@ -80,7 +82,8 @@ public static class ClientEndpoints
         .WithName("UpdateClientCoachNotes")
         .Produces<CoachClientDetails>()
         .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         coachGroup.MapPost("/{clientId:guid}/relationship/block", async (
             Guid clientId,
@@ -247,7 +250,8 @@ public static class ClientEndpoints
         .WithName("UpdateOwnClientIntake")
         .Produces<ClientSelfProfile>()
         .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         // A client leaves the workspace themselves (ADR 0027). Their access ends with this request.
         selfGroup.MapPost("/me/leave", async (
@@ -280,7 +284,8 @@ public static class ClientEndpoints
         .WithName("CompleteOwnClientOnboarding")
         .Produces<ClientSelfProfile>()
         .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict);
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         return endpoints;
     }

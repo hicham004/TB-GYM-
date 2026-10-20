@@ -1,5 +1,4 @@
 import type {
-  AiMealDraftView as ContractAiMealDraftView,
   AllergenCode,
   ClientNutritionDayView as ContractClientNutritionDayView,
   RecipePage as ContractRecipePage,
@@ -96,17 +95,6 @@ export interface NutritionDay {
   logVersion: number | null;
 }
 
-export interface AiMealDraft {
-  id: string;
-  status: 'Pending' | 'Failed' | 'AwaitingCoachReview' | 'Approved' | 'Rejected';
-  model: string | null;
-  modelVersion: string | null;
-  validatedDraftJson: string | null;
-  uncertainFieldsJson: string | null;
-  failureCode: string | null;
-  createdRecipeVersionId: string | null;
-}
-
 export function mapRecipePage(value: ContractRecipePage): RecipePage {
   return {
     total: numeric(value.total),
@@ -172,19 +160,6 @@ export function mapNutritionDay(value: ContractClientNutritionDayView): Nutritio
     })),
     safetyNotice: value.safetyNotice,
     logVersion: value.dailyLogVersion === null ? null : numeric(value.dailyLogVersion),
-  };
-}
-
-export function mapAiDraft(value: ContractAiMealDraftView): AiMealDraft {
-  return {
-    id: value.id,
-    status: value.status,
-    model: value.model,
-    modelVersion: value.modelVersion,
-    validatedDraftJson: value.validatedDraftJson,
-    uncertainFieldsJson: value.uncertainFieldsJson,
-    failureCode: value.failureCode,
-    createdRecipeVersionId: value.createdRecipeVersionId,
   };
 }
 

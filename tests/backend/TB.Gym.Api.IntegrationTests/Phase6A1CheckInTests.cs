@@ -73,8 +73,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         // Nothing has been answered, so the list says so rather than implying an empty draft row.
         Assert.IsNull(clientList.Items[0].Response);
 
+        // One assignment is read with its response, as the client's check-in page reads it.
         var clientDetail = await clientA.GetFromJsonAsync<Phase6AssignmentDetail>(
-            $"/api/checkins/me/assignments/{firstAssignment.Assignment.Id}")
+            $"/api/checkins/me/assignments/{firstAssignment.Assignment.Id}/response")
             ?? throw new AssertFailedException("Client assignment detail was empty.");
         Assert.AreEqual("How is your body feeling?", clientDetail.Version.Questions[0].Prompt);
         CollectionAssert.AreEqual(
@@ -128,7 +129,7 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         // The existing assignment still resolves v1's exact wording and options.
         var reReadFirst = await clientA.GetFromJsonAsync<Phase6AssignmentDetail>(
-            $"/api/checkins/me/assignments/{firstAssignment.Assignment.Id}")
+            $"/api/checkins/me/assignments/{firstAssignment.Assignment.Id}/response")
             ?? throw new AssertFailedException("Client assignment detail was empty.");
         Assert.AreEqual(firstVersion.Id, reReadFirst.Assignment.FormVersionId);
         Assert.AreEqual(1, reReadFirst.Assignment.FormVersionNumber);
