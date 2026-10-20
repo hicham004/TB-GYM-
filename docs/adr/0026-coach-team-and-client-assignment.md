@@ -1,6 +1,7 @@
 # ADR 0026: Coach team and client assignment
 
-Status: accepted, 2026-09-23; amended 2026-09-24 (a coach can resign, and their clients are told)
+Status: accepted, 2026-09-23; amended 2026-09-24 (a coach can resign, and their clients are told);
+amended 2026-10-20 (the owner's old thread closes too, audit COACH-13)
 
 ## Context
 
@@ -36,7 +37,13 @@ Business rules, decided by the product owner on 2026-09-23:
   workspace is a normal invitation from that workspace.
 - **Chats stay private.** The owner cannot read another coach's chats. After a reassignment the old
   coach loses the thread, the client keeps it read-only, and the new coach starts a fresh one.
-  Reassigning back reopens it, because nothing was deleted.
+  Reassigning back reopens it, because nothing was deleted. The owner is no exception (2026-10-20,
+  audit COACH-13): a thread is live only with the client's assigned coach, so the owner's thread with
+  a client they hand to a coach closes the same way, and the owner starts a chat only with their own
+  clients. On a team member's client the owner's screens say who messages them instead of offering
+  one; to message the client themselves the owner reassigns them first. The rule is
+  `CoachClientScope.IsAssignedCoachAsync`, asked by every messaging read, write, badge and live
+  delivery.
 - No other permission changed: coaches still create products, record payments and edit the shared
   libraries.
 

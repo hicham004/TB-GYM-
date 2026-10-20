@@ -395,44 +395,44 @@ public sealed class Phase6B2BRealtimeMessagingDomainTests
     // ---------- acknowledgement ----------
 
     /// <summary>
-    /// The rule that keeps the counterpart-delivery timestamp honest.
+    /// The rule that keeps counterpart delivery honest: only somebody other than the sender counts.
     /// </summary>
     [TestMethod]
     public void ASenderAcknowledgingTheirOwnMessageDoesNotSetCounterpartDelivery()
     {
         var message = NewMessage();
 
-        var wrote = message.AcknowledgeRealtimeDelivery(CoachUserId, Now.AddMinutes(1));
-
-        Assert.IsFalse(wrote, "The sender's own tab receiving its own message is evidence about nobody.");
-        Assert.IsNull(message.RealtimeAcknowledgedAtUtc);
-        Assert.AreEqual(MessageDeliveryState.Persisted, message.DeliveryState);
+        Assert.AreEqual(
+            MessageDeliveryState.Persisted,
+            message.DeliveryStateFor([CoachUserId]),
+            "The sender's own tab receiving its own message is evidence about nobody.");
     }
 
     [TestMethod]
-    public void ARecipientAcknowledgementSetsTheTimestampOnceAndNeverMovesIt()
+    public void ARecipientAcknowledgementIsCounterpartDeliveryHoweverOftenItRepeats()
     {
         var message = NewMessage();
-        var first = Now.AddMinutes(1);
 
-        Assert.IsTrue(message.AcknowledgeRealtimeDelivery(ClientUserId, first));
-        Assert.AreEqual(first, message.RealtimeAcknowledgedAtUtc);
-        Assert.AreEqual(MessageDeliveryState.RealtimeAcknowledged, message.DeliveryState);
-
+        Assert.AreEqual(MessageDeliveryState.RealtimeAcknowledged, message.DeliveryStateFor([ClientUserId]));
         // Delivery is at least once, so a duplicate after a reclaimed publication, a reconnect or a
-        // second device is normal. The interesting instant is the first one.
-        Assert.IsFalse(message.AcknowledgeRealtimeDelivery(ClientUserId, Now.AddHours(3)));
-        Assert.AreEqual(first, message.RealtimeAcknowledgedAtUtc);
+        // second device is normal, and the sender's own acknowledgement beside it changes nothing.
+        Assert.AreEqual(
+            MessageDeliveryState.RealtimeAcknowledged,
+            message.DeliveryStateFor([CoachUserId, ClientUserId, ClientUserId]));
     }
 
+    /// <summary>
+    /// The fact is the acknowledgement row, not the message (NCM-12): the message carries no
+    /// counterpart timestamp and nothing about acknowledging writes it, so the version its sender
+    /// edits against never moves because the other side's application had it.
+    /// </summary>
     [TestMethod]
-    public void AnAcknowledgementNeverPrecedesAvailabilityAndProviderAcknowledgementStaysNull()
+    public void AcknowledgementIsNotStoredOnTheMessageAndProviderAcknowledgementStaysNull()
     {
         var message = NewMessage();
 
-        // A clock adjustment must not be able to say the other side had a message before it existed.
-        Assert.IsTrue(message.AcknowledgeRealtimeDelivery(ClientUserId, Now.AddHours(-5)));
-        Assert.AreEqual(message.AvailableAtUtc, message.RealtimeAcknowledgedAtUtc);
+        Assert.IsNull(typeof(Message).GetProperty("RealtimeAcknowledgedAtUtc"));
+        Assert.IsNull(typeof(Message).GetMethod("AcknowledgeRealtimeDelivery"));
         Assert.IsNull(
             message.ProviderAcknowledgedAtUtc,
             "No provider channel exists, so nothing can have acknowledged one.");
@@ -443,8 +443,7 @@ public sealed class Phase6B2BRealtimeMessagingDomainTests
     {
         var message = NewMessage();
 
-        Assert.IsFalse(message.AcknowledgeRealtimeDelivery(Guid.Empty, Now.AddMinutes(1)));
-        Assert.IsNull(message.RealtimeAcknowledgedAtUtc);
+        Assert.AreEqual(MessageDeliveryState.Persisted, message.DeliveryStateFor([Guid.Empty]));
     }
 
     [TestMethod]

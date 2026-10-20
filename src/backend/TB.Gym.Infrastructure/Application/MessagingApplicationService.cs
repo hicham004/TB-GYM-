@@ -169,10 +169,17 @@ internal sealed class MessagingApplicationService(
             return ConversationCommandResult.NotFound();
         }
 
-        // Another coach's client is refused exactly as a missing one is. The owner may message anyone.
-        if (!await coachClientScope.MayCoachAsync(coachUserId, request.ClientProfileId, cancellationToken))
+        // Only the client's own coach starts a thread with them, the owner included: a thread belongs
+        // to the coach who has the client (ADR 0026), so the owner's thread with another coach's
+        // client would be closed the moment it opened. A Coach is refused another coach's client
+        // exactly as a missing one; the owner, who sees every client, is told why.
+        if (!await coachClientScope.IsAssignedCoachAsync(coachUserId, request.ClientProfileId, cancellationToken))
         {
-            return ConversationCommandResult.NotFound();
+            return await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is null
+                ? ConversationCommandResult.Conflict(
+                    MessagingConflictCodes.NotTheClientsCoach,
+                    "Only the client's own coach can message them. Reassign the client to message them yourself.")
+                : ConversationCommandResult.NotFound();
         }
 
         // Membership, platform block, relationship block, entitlement, dates, lifecycle and payment,
@@ -319,8 +326,9 @@ internal sealed class MessagingApplicationService(
         rows.Reverse();
 
         var bodies = await CurrentBodiesAsync(rows, cancellationToken);
+        var deliveries = await MessagingMessageProjection.DeliveryStatesAsync(dbContext, rows, cancellationToken);
         var views = rows
-            .Select(message => ToView(message, participant, bodies))
+            .Select(message => ToView(message, participant, bodies, deliveries))
             .ToArray();
 
         return MessagePageResult.Success(new MessagePage(
@@ -650,7 +658,7 @@ internal sealed class MessagingApplicationService(
         {
             // A coach's badge never counts a thread they are no longer allowed to open.
             if (membership.Role == ConversationParticipantRole.Coach &&
-                !await coachClientScope.MayCoachAsync(membership.CoachUserId, membership.ClientProfileId, cancellationToken))
+                !await coachClientScope.IsAssignedCoachAsync(membership.CoachUserId, membership.ClientProfileId, cancellationToken))
             {
                 continue;
             }
@@ -808,7 +816,7 @@ internal sealed class MessagingApplicationService(
             where realtimeEvent.ConversationId == conversationId &&
                   sequences.Contains(realtimeEvent.EventSequence) &&
                   recipient.RecipientUserId == participant.UserId
-            select new { realtimeEvent.Id, realtimeEvent.MessageId })
+            select realtimeEvent.Id)
             .ToListAsync(cancellationToken);
         if (addressed.Count == 0)
         {
@@ -819,7 +827,7 @@ internal sealed class MessagingApplicationService(
                 conversation.LastEventSequence));
         }
 
-        var eventIds = addressed.Select(item => item.Id).ToArray();
+        var eventIds = addressed.ToArray();
 
         var accepted = await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
@@ -832,7 +840,11 @@ internal sealed class MessagingApplicationService(
             // back unrelated events in the same bounded batch. PostgreSQL resolves each insert
             // independently: an overlapping tab contributes zero rows for that event while every
             // non-overlapping event still commits in this transaction.
-            foreach (var item in addressed)
+            //
+            // The acknowledgement is the whole fact. Nothing about the message row is touched: the
+            // counterpart's delivery is read from these rows (MSG-015), so the version the sender
+            // edits and removes against changes only when the message itself does (NCM-12).
+            foreach (var eventId in addressed)
             {
                 var acknowledgementId = Guid.CreateVersion7();
                 var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync(
@@ -841,7 +853,7 @@ internal sealed class MessagingApplicationService(
                         ("Id", "TenantId", "ConversationId", "RealtimeEventId",
                          "AcknowledgedByUserId", "AcknowledgedAtUtc", "CreatedAtUtc",
                          "CreatedByUserId", "UpdatedAtUtc", "UpdatedByUserId")
-                    VALUES ({acknowledgementId}, {tenantContext.TenantId}, {conversationId}, {item.Id},
+                    VALUES ({acknowledgementId}, {tenantContext.TenantId}, {conversationId}, {eventId},
                             {participant.UserId}, {now}, {now}, {participant.UserId}, {now},
                             {participant.UserId})
                     ON CONFLICT ("TenantId", "RealtimeEventId", "AcknowledgedByUserId") DO NOTHING
@@ -849,32 +861,9 @@ internal sealed class MessagingApplicationService(
                     cancellationToken);
                 if (inserted == 1)
                 {
-                    insertedEventIds.Add(item.Id);
+                    insertedEventIds.Add(eventId);
                 }
             }
-
-            var messageIds = addressed
-                .Where(item => insertedEventIds.Contains(item.Id) && item.MessageId is not null)
-                .Select(item => item.MessageId!.Value)
-                .Distinct()
-                .ToArray();
-            var messages = messageIds.Length == 0
-                ? []
-                : await dbContext.Messages
-                    .Where(message => messageIds.Contains(message.Id))
-                    .ToListAsync(cancellationToken);
-
-            // The counterpart-delivery timestamp, and the one rule that keeps it honest: it is set
-            // only from an acknowledgement by somebody who is not the sender. A second tab of the
-            // sender's own browser acknowledging its own event is a real acknowledgement of that
-            // event and evidence about nobody else, so the aggregate refuses to write it. It is also
-            // written once and never moved, because at-least-once delivery makes repetition normal.
-            foreach (var message in messages)
-            {
-                message.AcknowledgeRealtimeDelivery(participant.UserId, now);
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
             return insertedEventIds.Count;
@@ -1290,9 +1279,10 @@ internal sealed class MessagingApplicationService(
             return new ConversationAccess(MessagingCommandStatus.NotFound, null, null, null);
         }
 
-        // A thread belongs to the coach who has the client now. After a reassignment the old coach is
-        // refused like a stranger and the client keeps a read-only copy (ADR 0026).
-        var isCurrent = await coachClientScope.MayCoachAsync(
+        // A thread belongs to the coach who has the client now. After a reassignment the old coach,
+        // the owner included, is refused like a stranger and the client keeps a read-only copy
+        // (ADR 0026, COACH-13).
+        var isCurrent = await coachClientScope.IsAssignedCoachAsync(
             conversation.CoachUserId,
             conversation.ClientProfileId,
             cancellationToken);
@@ -1384,7 +1374,7 @@ internal sealed class MessagingApplicationService(
         var readOnly = new HashSet<Guid>();
         foreach (var conversation in ordered)
         {
-            if (!await coachClientScope.MayCoachAsync(
+            if (!await coachClientScope.IsAssignedCoachAsync(
                     conversation.CoachUserId,
                     conversation.ClientProfileId,
                     cancellationToken))
@@ -1495,7 +1485,7 @@ internal sealed class MessagingApplicationService(
         foreach (var conversation in available)
         {
             if (roles.GetValueOrDefault(conversation.Id) == ConversationParticipantRole.Coach ||
-                await coachClientScope.MayCoachAsync(conversation.CoachUserId, conversation.ClientProfileId, cancellationToken))
+                await coachClientScope.IsAssignedCoachAsync(conversation.CoachUserId, conversation.ClientProfileId, cancellationToken))
             {
                 writable.Add(conversation.Id);
             }
@@ -1691,8 +1681,9 @@ internal sealed class MessagingApplicationService(
     private static MessageView ToView(
         Message message,
         ConversationParticipant participant,
-        IReadOnlyDictionary<Guid, string> bodies) =>
-        MessagingMessageProjection.ToView(message, participant, bodies);
+        IReadOnlyDictionary<Guid, string> bodies,
+        IReadOnlyDictionary<Guid, MessageDeliveryState> deliveries) =>
+        MessagingMessageProjection.ToView(message, participant, bodies, deliveries);
 
     private async Task<ConversationReadState> ReadStateAsync(
         Conversation conversation,
@@ -1727,8 +1718,8 @@ internal sealed class MessagingApplicationService(
         // A row-value comparison, so PostgreSQL can walk the (LastActivityAtUtc, Id) index from the
         // cursor rather than filtering after sorting. Written as SQL because the tie-breaker compares
         // two uuids, which LINQ has no operator for. On the coach side a thread is listed only while
-        // its coach still has the client (the owner always does), the same rule ResolveAsync applies,
-        // so a page is never short because rows were dropped after the query.
+        // its coach is still the client's coach, the owner included, the same rule ResolveAsync
+        // applies, so a page is never short because rows were dropped after the query.
         if (beforeActivityAtUtc is { } activity && beforeConversationId is { } cursorId)
         {
             return await dbContext.Database.SqlQuery<Guid>($"""
@@ -1739,9 +1730,6 @@ internal sealed class MessagingApplicationService(
                 WHERE c."TenantId" = {tenantId}
                   AND p."UserId" = {userId}
                   AND (p."Role" <> 'Coach'
-                       OR EXISTS (SELECT 1 FROM tenancy."Memberships" AS m
-                                  WHERE m."TenantId" = c."TenantId" AND m."UserId" = c."CoachUserId"
-                                    AND m."Role" = 'Owner' AND m."Status" = 'Active')
                        OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS cp
                                   WHERE cp."TenantId" = c."TenantId" AND cp."Id" = c."ClientProfileId"
                                     AND cp."AssignedCoachUserId" = c."CoachUserId"))
@@ -1763,9 +1751,6 @@ internal sealed class MessagingApplicationService(
             WHERE c."TenantId" = {tenantId}
               AND p."UserId" = {userId}
               AND (p."Role" <> 'Coach'
-                   OR EXISTS (SELECT 1 FROM tenancy."Memberships" AS m
-                              WHERE m."TenantId" = c."TenantId" AND m."UserId" = c."CoachUserId"
-                                AND m."Role" = 'Owner' AND m."Status" = 'Active')
                    OR EXISTS (SELECT 1 FROM clients."ClientProfiles" AS cp
                               WHERE cp."TenantId" = c."TenantId" AND cp."Id" = c."ClientProfileId"
                                 AND cp."AssignedCoachUserId" = c."CoachUserId"))
@@ -1836,7 +1821,8 @@ internal sealed class MessagingApplicationService(
         }
 
         var bodies = await CurrentBodiesAsync([message], cancellationToken);
-        return MessageCommandResult.Success(ToView(message, participant, bodies));
+        var deliveries = await MessagingMessageProjection.DeliveryStatesAsync(dbContext, [message], cancellationToken);
+        return MessageCommandResult.Success(ToView(message, participant, bodies, deliveries));
     }
 
     private async Task<ConversationCommandResult> ConversationSuccessAsync(

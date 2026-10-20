@@ -374,6 +374,31 @@ describe('Notifications', () => {
     expect(harness.store.unread()).toBe(0);
   });
 
+  it('marks a notice read even when following its link destroys the inbox first (WEB-2)', async () => {
+    const harness = await render(({ list, markRead, unreadCount }) => {
+      unreadCount.mockReturnValue(of(1));
+      const notice: NotificationItem = {
+        ...item('p1', moments(1), false, 'Your coach set up a new program'),
+        kind: 'ProgramAssigned',
+      };
+      list.mockReturnValue(of(page(1, 1, notice)));
+      markRead.mockReturnValue(of({ ...notice, isRead: true }));
+    });
+    // The antiforgery token takes a while, as it does on a phone; the link's page is cached.
+    let tokenArrives!: () => void;
+    const csrf = TestBed.inject(CsrfService) as unknown as { refresh: ReturnType<typeof vi.fn> };
+    csrf.refresh.mockReturnValueOnce(new Promise<void>((resolve) => (tokenArrives = resolve)));
+
+    query<HTMLAnchorElement>(harness.host, 'a.row').click();
+    harness.fixture.destroy();
+    tokenArrives();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The inbox is gone, but the write was never the inbox's.
+    expect(harness.markRead).toHaveBeenCalledWith('p1');
+    expect(harness.store.unread()).toBe(0);
+  });
+
   it('distinguishes read from unread without relying on colour', async () => {
     const { host } = await render(({ list }) => {
       list.mockReturnValue(

@@ -1466,7 +1466,7 @@ internal sealed class MediaApplicationService(
         // The Owner sees every client's photos; a Coach only those of their own clients (ADR 0026).
         return role == TenantRole.Owner ||
             (role == TenantRole.Coach &&
-             await coachClientScope.MayCoachAsync(userId, photo.ClientProfileId, cancellationToken));
+             await coachClientScope.IsAssignedCoachAsync(userId, photo.ClientProfileId, cancellationToken));
     }
 
     /// <summary>

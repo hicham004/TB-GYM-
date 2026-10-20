@@ -287,12 +287,11 @@ of the implemented R1.3 screens before production rollout.
   titles and bodies ("Open your workspace…", `NotificationTemplates.cs`), stored history reasons
   ("Assigned from a published program template."), emails and problem messages such as the
   training-coverage refusal. They need a backend words pass with its own tests.
-- **Reading live messages (from R2.5a).** A message that arrives while its thread is open shows at
-  once but stays unread until the thread is next opened: the screen moves the read cursor only when
-  it loads a thread, and a test pins "never advances read state from a realtime event" (ADR 0020
-  keeps delivery apart from reading). So the Messages badge can count a message already on screen.
-  Advancing the cursor for a message shown while the page is visible would fix it; it changes a
-  documented read rule, so it needs an owner decision.
+- **Reading live messages (from R2.5a).** Built in audit batch A5 (NCM-4, 2026-10-20, the owner's
+  approval of the batch): a message that arrives in the open thread of a shown tab while the reader is
+  at its newest message is read at once; one in a hidden tab or below where they are reading waits
+  until they reach it, and the badge, the row and the thread's status agree (MSG-009). Delivery and
+  its acknowledgement still never write the read cursor (ADR 0020).
 - **Coach chat extras (R3.5b, R3.5c).** R3.5b built search, the filters and the client beside the
   thread; R3.5c saved replies. The owner said "continue" without choosing between each coach's own
   replies and replies shared with the team, so R3.5c built Claude's recommendation: each coach's own

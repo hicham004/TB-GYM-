@@ -295,7 +295,8 @@ li.mine article {
 .options:focus-visible,
 .actions button:focus-visible,
 .link:focus-visible,
-.older:focus-visible {
+.older:focus-visible,
+.feed:focus-visible {
   outline: 2px solid var(--tb-focus);
   outline-offset: 2px;
 }

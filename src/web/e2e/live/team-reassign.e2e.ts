@@ -16,9 +16,10 @@ import {
  * context, reassigns a client created here with a note, the chat rule holds for a Coach (the old coach
  * loses the thread, the client keeps it read-only, the new coach starts fresh), the coach resigns from
  * Settings and their client and pending invitation move to the owner, and a second coach is removed
- * from Team with the client told. The last test pins the same chat rule for the owner as old coach; it
- * fails while the owner keeps a live thread with a client who has another coach (audit finding COACH-13).
- * Names carry a run-unique suffix so a rerun on the same database never collides.
+ * from Team with the client told. The last test pins the same chat rule for the owner as old coach (audit
+ * finding COACH-13): the owner's thread closes, the client keeps it read-only, and the owner's screens say
+ * who messages the client instead of offering a chat. Names carry a run-unique suffix so a rerun on the
+ * same database never collides.
  */
 requireLive();
 
@@ -410,7 +411,7 @@ test('the owner removes a coach from Team: their client moves to the owner and i
   await lea.context().close();
 });
 
-test('the owner as old coach loses the thread too (ADR 0026); fails while the owner keeps it live', async ({
+test('the owner as old coach loses the thread too (ADR 0026, COACH-13)', async ({
   browser,
   page,
 }) => {
@@ -478,6 +479,34 @@ test('the owner as old coach loses the thread too (ADR 0026); fails while the ow
       )
     ).status,
   ).not.toBe(200);
+  expect(
+    (
+      await api(
+        page,
+        'GET',
+        `/api/messaging/conversations/${thread.body.conversation.id}/messages`,
+        {
+          tenantId,
+        },
+      )
+    ).status,
+  ).toBe(404);
+
+  // On screen: the owner is told who messages the client, and the owner's inbox no longer lists them.
+  await page.goto(`/clients/${client.id}`);
+  await expect(page.locator('.messaging-note')).toHaveText('Messages go through Lea Khoury.');
+  await expect(page.getByRole('button', { name: /^Message / })).toHaveCount(0);
+  await page.goto('/messages');
+  await expect(page.locator('#messages-heading')).toBeVisible();
+  await expect(page.locator('button.conversation', { hasText: client.name })).toHaveCount(0);
+
+  // The client reads the old thread, its only one so it opens by itself, sees who it was with, and is
+  // offered no composer in it.
+  await client.page.goto('/messages');
+  await expect(client.page.locator('#thread-heading')).toHaveText('Karim Haddad');
+  await expect(client.page.locator('.thread-role')).toHaveText('Your former coach');
+  await expect(client.page.locator('.read-only-notice')).toBeVisible();
+  await expect(client.page.locator('#draft')).toHaveCount(0);
   await client.page.context().close();
   await lea.context().close();
 });

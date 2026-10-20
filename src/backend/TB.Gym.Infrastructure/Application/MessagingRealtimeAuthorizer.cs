@@ -94,9 +94,10 @@ internal sealed class MessagingRealtimeAuthorizer(
             return false;
         }
 
-        // A coach whose client was reassigned away no longer reads this thread (ADR 0026).
+        // A coach whose client was reassigned away no longer reads this thread, the owner included
+        // (ADR 0026).
         if (conversation.CoachUserId == userId &&
-            !await coachClientScope.MayCoachAsync(userId, conversation.ClientProfileId, cancellationToken))
+            !await coachClientScope.IsAssignedCoachAsync(userId, conversation.ClientProfileId, cancellationToken))
         {
             return false;
         }
@@ -182,7 +183,7 @@ internal sealed class MessagingRealtimeAuthorizer(
         }
 
         if (conversation.CoachUserId == recipientUserId &&
-            !await coachClientScope.MayCoachAsync(recipientUserId, conversation.ClientProfileId, cancellationToken))
+            !await coachClientScope.IsAssignedCoachAsync(recipientUserId, conversation.ClientProfileId, cancellationToken))
         {
             return MessagingRealtimeSuppressionCodes.CoachNotAssigned;
         }

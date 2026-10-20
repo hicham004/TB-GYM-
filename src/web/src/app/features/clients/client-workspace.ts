@@ -33,7 +33,7 @@ import {
   RENEWAL_PROMPT_DAYS,
   renewalPrompt,
 } from './client-overview.models';
-import { ClientWorkspaceContext } from './client-workspace.context';
+import { ClientWorkspaceContext, otherCoachName } from './client-workspace.context';
 
 /**
  * One client's record (C3): the header, the section links and the open section. Each section is
@@ -180,6 +180,11 @@ export class ClientWorkspace {
 
   protected readonly messagingIncluded = computed(
     () => this.messagingDecision()?.isAllowed ?? true,
+  );
+
+  /** A team member's client is messaged by their own coach, so the owner is told who instead. */
+  protected readonly otherCoach = computed(() =>
+    otherCoachName(this.profile(), this.auth.user()?.id ?? null),
   );
 
   /** Only said when the plan simply lacks messaging; a block or a lapse is told by the plan pill. */

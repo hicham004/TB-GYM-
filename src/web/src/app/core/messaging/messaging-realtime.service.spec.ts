@@ -16,6 +16,7 @@ import {
   jitteredDelay,
   MESSAGING_HUB_CONNECTION,
   MessagingRealtimeService,
+  offlineAfterFailedReconnects,
   type ConversationRealtimeSink,
 } from './messaging-realtime.service';
 
@@ -46,9 +47,25 @@ class FakeHubConnection {
   private reconnectingCallbacks: (() => void)[] = [];
   private closedCallbacks: (() => void)[] = [];
 
-  constructor(url: string) {
+  constructor(
+    url: string,
+    private readonly nextRetryDelay: (previousRetryCount: number) => number = () => 0,
+  ) {
     this.url = url;
     FakeHubConnection.instances.push(this);
+  }
+
+  /**
+   * What the real client does while it reconnects: it asks the policy how long to wait, first with
+   * nothing failed yet and then once after every attempt that failed.
+   */
+  failReconnects(count: number): number[] {
+    const delays: number[] = [];
+    for (let previous = 0; previous <= count; previous++) {
+      delays.push(this.nextRetryDelay(previous));
+    }
+
+    return delays;
   }
 
   on(method: string, handler: (payload: unknown) => void): void {
@@ -261,7 +278,8 @@ function build(configure?: (api: Record<string, ReturnType<typeof vi.fn>>) => vo
       },
       {
         provide: MESSAGING_HUB_CONNECTION,
-        useValue: (url: string) => new FakeHubConnection(url),
+        useValue: (url: string, nextRetryDelay: (previousRetryCount: number) => number) =>
+          new FakeHubConnection(url, nextRetryDelay),
       },
     ],
   });
@@ -768,6 +786,55 @@ describe('MessagingRealtimeService', () => {
     await flush(1000);
 
     expect(harness.service.listRefreshRequests()).toBeGreaterThan(before);
+  });
+
+  it('says offline once a few reconnects have failed, and keeps reconnecting (NCM-14)', async () => {
+    const harness = build();
+    await flush();
+    const connection = harness.connection();
+
+    connection.reconnecting();
+    expect(harness.service.state()).toBe('reconnecting');
+    connection.failReconnects(offlineAfterFailedReconnects - 1);
+    expect(harness.service.state()).toBe('reconnecting');
+
+    // The next failure turns it: new messages will not appear on their own, so the screen says so
+    // and offers to check. The policy still answers a delay, so the client never gives up.
+    const delays = connection.failReconnects(offlineAfterFailedReconnects);
+    expect(harness.service.state()).toBe('offline');
+    expect(delays.every((delay) => delay > 0 && delay <= 30000)).toBe(true);
+
+    connection.reconnected();
+    await flush(1000);
+    expect(harness.service.state()).toBe('connected');
+  });
+
+  it('says offline as soon as the browser does, and connected again if the socket held', async () => {
+    const harness = build();
+    await flush();
+    expect(harness.service.state()).toBe('connected');
+
+    window.dispatchEvent(new Event('offline'));
+    expect(harness.service.state()).toBe('offline');
+
+    // The network came back before the socket noticed it had gone.
+    window.dispatchEvent(new Event('online'));
+    expect(harness.service.state()).toBe('connected');
+  });
+
+  it('stays offline through a reconnect the browser already knows cannot work', async () => {
+    const harness = build();
+    await flush();
+    const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+
+    window.dispatchEvent(new Event('offline'));
+    harness.connection().reconnecting();
+    expect(harness.service.state()).toBe('offline');
+
+    onLine.mockReturnValue(true);
+    harness.connection().reconnected();
+    await flush(1000);
+    expect(harness.service.state()).toBe('connected');
   });
 
   it('reports offline when the connection closes without claiming anything was lost', async () => {

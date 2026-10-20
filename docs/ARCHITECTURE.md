@@ -1385,7 +1385,9 @@ their role, plus an unread badge in the topbar. The badge and the inbox are both
 recipient-and-workspace pair: whenever that pair changes, both are cleared _before_ anything is
 fetched, and every asynchronous reply — list, Load More, unread count, mark-read success and
 mark-read failure — checks which pair it was asked for before it writes. Without that, a slow reply
-for the workspace the user has just left lands on top of the current one.
+for the workspace the user has just left lands on top of the current one. Marking a notice read is
+the root `NotificationStore`'s write, not the page's, so following a notice's link cannot cancel it
+while the antiforgery token is on its way (audit WEB-2); it still belongs to the pair it was asked for.
 
 Load More advances its server offset by the number of server rows consumed, not the number of unique
 rows rendered. An insertion between pages can make adjacent pages overlap; de-duplication keeps DOM
@@ -1487,8 +1489,12 @@ R2.5a redraws that screen as a chat (M7; the coach's C6 reuses it) with no contr
 rule changed. Day groups, runs and the "New messages" line come from the pure `chat-timeline.ts`,
 in the reader's local days; the line is fixed when a thread loads, so it outlives the cursor move.
 A client with a single conversation lands straight in it. There is no Refresh button: only an offline
-channel offers a manual check. The read cursor still moves only when a thread is loaded and shown,
-so a message arriving live stays unread until the next open (ADR 0020). `ClientTabs` publishes its
+channel offers a manual check, shown after three failed reconnects or when the browser says it is
+offline (NCM-14). The read cursor moves when a thread is loaded and shown, and when a message arrives
+live in the open thread of a shown tab while the reader is at its newest message; otherwise it waits
+until they scroll to it or come back to the tab, and the badge, the row and the thread's status say
+the same (NCM-4, MSG-009). A live list refresh never clears a refused send's sentence (VER3A-NEW-1),
+and a stale-version 409 re-reads the message and retries once only while it is unchanged (NCM-12). `ClientTabs` publishes its
 height as `--tb-client-tabs-block-size` so the composer can pin above the tab bar. `CoachShell`
 publishes its top bar the same way (`--tb-topbar-block-size`), so on a phone the thread header
 sticks below it; the client's check-in review pins its send bar above the tab bar the same way.
@@ -1530,8 +1536,8 @@ REST command (cookie, antiforgery, idempotency key, concurrency, authorization)
             invalidation -> tenant + user group        (closed thread refreshes its row)
        -> finalize: attempt Published, recipient Published
   -> browser: subscribe, then catch up, then acknowledge what it actually merged
-       POST /realtime-acknowledgements -> append-only fact
-            -> counterpart's Message.RealtimeAcknowledgedAtUtc, set once, never moved
+       POST /realtime-acknowledgements -> append-only fact, and nothing else
+            -> read back as the message's delivery state; the message row is untouched (NCM-12)
 ```
 
 **The channel is a convenience over a record that is already correct without it.** PostgreSQL commits

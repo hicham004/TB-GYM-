@@ -164,7 +164,14 @@
           <p class="denied" role="status">{{ denialMessage() }}</p>
         </div>
       } @else {
-        <div class="feed" #feed>
+        <!-- A read-only thread has nothing in it to focus, so the history itself takes focus and
+             scrolls by keyboard. -->
+        <div
+          class="feed"
+          #feed
+          [attr.tabindex]="conversation.isReadOnly ? 0 : null"
+          (scroll)="readIfInView()"
+        >
           @if (hasOlder()) {
             <button
               type="button"

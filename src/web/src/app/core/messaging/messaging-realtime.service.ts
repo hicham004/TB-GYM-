@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   computed,
   DestroyRef,
@@ -35,20 +36,29 @@ export interface MessagingHubConnection {
   invoke<T>(method: string, argument: unknown): Promise<T>;
 }
 
-export type MessagingHubConnectionFactory = (url: string) => MessagingHubConnection;
+/**
+ * Builds a connection. `nextRetryDelay` is the reconnect policy: asked with the number of reconnect
+ * attempts that have failed so far, it answers how long to wait before the next one. It is the
+ * service's, so the service knows when a reconnect has been failing long enough to say so.
+ */
+export type MessagingHubConnectionFactory = (
+  url: string,
+  nextRetryDelay: (previousRetryCount: number) => number,
+) => MessagingHubConnection;
 
 /**
  * How a hub connection is built.
  *
  * The default is the real `@microsoft/signalr` client, configured for the browser session: a
  * relative same-origin URL, the HTTP-only cookie the browser already holds, a logging level that
- * cannot record payload content, and automatic reconnect with bounded jitter.
+ * cannot record payload content, and automatic reconnect on the service's bounded, jittered policy.
+ * The policy never gives up, so the connection is never closed for good while the reader waits.
  */
 export const MESSAGING_HUB_CONNECTION = new InjectionToken<MessagingHubConnectionFactory>(
   'messaging hub connection factory',
   {
     providedIn: 'root',
-    factory: () => (url: string) =>
+    factory: () => (url: string, nextRetryDelay: (previousRetryCount: number) => number) =>
       new HubConnectionBuilder()
         // A relative, same-origin URL with the session cookie the browser already holds. There is no
         // access token: the cookie is HTTP-only for a reason, and an accessTokenFactory would mean
@@ -58,12 +68,7 @@ export const MESSAGING_HUB_CONNECTION = new InjectionToken<MessagingHubConnectio
         // for this hub means message projections in the browser console.
         .configureLogging(LogLevel.Warning)
         .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (context) =>
-            jitteredDelay(
-              context.previousRetryCount,
-              initialStartBaseDelayMs,
-              initialStartMaximumDelayMs,
-            ),
+          nextRetryDelayInMilliseconds: (context) => nextRetryDelay(context.previousRetryCount),
         })
         .build(),
   },
@@ -94,6 +99,12 @@ const maximumCatchUpPages = 200;
 
 const initialStartBaseDelayMs = 1000;
 const initialStartMaximumDelayMs = 30000;
+/**
+ * How many reconnect attempts may fail before the reader is told they are offline (audit NCM-14).
+ * The reconnect keeps going after that; what changes is that the screen stops promising it is about
+ * to work and offers "Check for new messages" instead. Three attempts is about five to ten seconds.
+ */
+export const offlineAfterFailedReconnects = 3;
 const invalidationDebounceMs = 400;
 const acknowledgementDebounceMs = 250;
 const retryBaseDelayMs = 1000;
@@ -133,6 +144,7 @@ export class MessagingRealtimeService {
   private destroyed = false;
   private readonly csrf = inject(CsrfService);
   private readonly connectionFactory = inject(MESSAGING_HUB_CONNECTION);
+  private readonly window = inject(DOCUMENT).defaultView;
 
   private readonly connectionState = signal<RealtimeConnectionState>('idle');
   /** Bumped when a bounded conversation-list and unread refresh is due. Never a polling timer. */
@@ -178,9 +190,17 @@ export class MessagingRealtimeService {
 
   constructor() {
     const remove = this.tenantContext.onChange(() => void this.shutdown());
+    // The browser knows before the socket does. Without this the screen kept saying it was
+    // reconnecting for as long as the device had no network at all (NCM-14).
+    const offline = () => this.onBrowserOffline();
+    const online = () => this.onBrowserOnline();
+    this.window?.addEventListener('offline', offline);
+    this.window?.addEventListener('online', online);
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
       remove();
+      this.window?.removeEventListener('offline', offline);
+      this.window?.removeEventListener('online', online);
       void this.shutdown();
     });
     effect(() => {
@@ -265,6 +285,7 @@ export class MessagingRealtimeService {
     // PostgreSQL before the connection is usable and binds the workspace to it thereafter.
     const connection = this.connectionFactory(
       `/hubs/chat?tenantId=${encodeURIComponent(tenantId)}`,
+      (previousRetryCount) => this.reconnectDelay(context, previousRetryCount),
     );
 
     connection.on('RealtimeEvent', (event: unknown) => this.onRealtimeEvent(context, event));
@@ -273,7 +294,7 @@ export class MessagingRealtimeService {
     );
     connection.onreconnecting(() => {
       if (this.ownsContext(context)) {
-        this.connectionState.set('reconnecting');
+        this.connectionState.set(this.browserIsOffline() ? 'offline' : 'reconnecting');
       }
     });
     // An ordinary reconnect is a new connection with a new identity, and every group it was in is
@@ -341,6 +362,45 @@ export class MessagingRealtimeService {
         void this.start(context);
       }, delay);
     }
+  }
+
+  /**
+   * The reconnect policy. A dropped connection is retried for ever with bounded jittered backoff,
+   * but after a few failed attempts the reader is told the truth: they are offline, new messages
+   * will not appear on their own, and they can check by hand (NCM-14). `onclose` never fires while
+   * the policy keeps retrying, which is why the state is set here rather than there.
+   */
+  private reconnectDelay(context: number, previousRetryCount: number): number {
+    if (
+      previousRetryCount >= offlineAfterFailedReconnects &&
+      this.ownsContext(context) &&
+      this.connectionState() === 'reconnecting'
+    ) {
+      this.connectionState.set('offline');
+    }
+
+    return jitteredDelay(previousRetryCount, initialStartBaseDelayMs, initialStartMaximumDelayMs);
+  }
+
+  private onBrowserOffline(): void {
+    const state = this.connectionState();
+    if (state === 'connected' || state === 'connecting' || state === 'reconnecting') {
+      this.connectionState.set('offline');
+    }
+  }
+
+  /** Back online with the socket still up: nothing was missed that the live channel will not say. */
+  private onBrowserOnline(): void {
+    if (
+      this.connectionState() === 'offline' &&
+      this.connection?.state === HubConnectionState.Connected
+    ) {
+      this.connectionState.set('connected');
+    }
+  }
+
+  private browserIsOffline(): boolean {
+    return this.window?.navigator.onLine === false;
   }
 
   private async onReconnected(context: number): Promise<void> {

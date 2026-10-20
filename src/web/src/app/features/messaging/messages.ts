@@ -1,5 +1,6 @@
-import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { DOCUMENT } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   Component,
@@ -56,7 +57,9 @@ import {
   isNewerProjection,
   mergeNewer,
   mergeOlder,
+  reconcileOpenConversation,
   type Conversation,
+  type ConversationReadState,
   type InboxCounts,
   type InboxFilter,
   type InboxQuery,
@@ -101,7 +104,11 @@ const plainQuery: InboxQuery = { filter: 'all', search: '' };
  */
 @Component({
   selector: 'app-messages',
-  host: { '(keydown.escape)': 'closeOptions()' },
+  host: {
+    '(keydown.escape)': 'closeOptions()',
+    '(document:visibilitychange)': 'readIfInView()',
+    '(window:scroll)': 'readIfInView()',
+  },
   imports: [
     Avatar,
     Button,
@@ -181,6 +188,10 @@ export class Messages {
   private readonly oldestSequence = signal<number | null>(null);
   protected readonly latestSequence = signal(0);
   protected readonly conversationUnread = signal(0);
+  /** The open thread's read cursor as the server last confirmed it. */
+  private confirmedRead = 0;
+  /** The highest position already asked to be marked read, so scrolling sends it once. */
+  private readTarget = 0;
 
   protected readonly draft = signal('');
   protected readonly editingId = signal<string | null>(null);
@@ -194,6 +205,12 @@ export class Messages {
   protected readonly threadLoadingOlder = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
+  /**
+   * Whether the error line is the list's own failure. Only that one may be cleared by a live
+   * refresh of the list; a refused send, edit or removal stays until the person acts again
+   * (audit VER3A-NEW-1).
+   */
+  private errorFromList = false;
   protected readonly deniedReason = signal<FeatureAccessReason | null>(null);
 
   /** The message whose options (edit, remove) are open. One at a time. */
@@ -453,6 +470,21 @@ export class Messages {
       this.scrollToLatest();
     }
 
+    if (arrived && !incoming.isFromCaller && !incoming.isDeleted && incoming.isUnreadByCaller) {
+      if (following && this.isShown()) {
+        // It lands in front of the reader, so it is read (audit NCM-4). Counting it unread made the
+        // badge climb while the person read every word, and the thread said nothing was unread.
+        void this.readThrough(incoming.sequence);
+      } else {
+        // Below where they are reading, or in a tab they are not looking at: it waits, the thread
+        // says so, and it is read once they reach it (readIfInView).
+        this.conversationUnread.update((count) => count + 1);
+        if (this.unreadFrom() === null) {
+          this.unreadFrom.set(incoming.sequence);
+        }
+      }
+    }
+
     if (this.editingId() === incoming.id && incoming.isDeleted) {
       // The message being edited was removed underneath. Keeping the form open would offer to save
       // an edit the server has already made impossible.
@@ -464,6 +496,27 @@ export class Messages {
     }
 
     return true;
+  }
+
+  /**
+   * Reads what is unread in the open thread once the reader can see it: the tab is shown and they
+   * are at the newest message. Called when the tab comes back into view and as the thread scrolls.
+   */
+  protected readIfInView(): void {
+    if (
+      this.conversationUnread() === 0 ||
+      this.selectedId() === null ||
+      !this.isShown() ||
+      !this.isNearLatest()
+    ) {
+      return;
+    }
+
+    const newest = this.messages().reduce(
+      (highest, message) => Math.max(highest, message.sequence),
+      0,
+    );
+    void this.readThrough(newest);
   }
 
   /** Why this conversation is closed, in the audience's own words. */
@@ -696,6 +749,7 @@ export class Messages {
           this.error.set(
             apiErrorMessage(error, $localize`More conversations could not be loaded.`),
           );
+          this.errorFromList = true;
         }
       } finally {
         if (owner.current) {
@@ -783,6 +837,7 @@ export class Messages {
         if (!owner.current) return;
         if (this.ownsThread(generation, thread, request)) {
           this.error.set(apiErrorMessage(error, $localize`Older messages could not be loaded.`));
+          this.errorFromList = false;
         }
       } finally {
         if (owner.current) {
@@ -904,21 +959,45 @@ export class Messages {
           return;
         }
 
-        const edited = await owner.wait(
-          firstValueFrom(
-            this.api.editConversationMessage(
-              conversationId,
-              message.id,
-              body,
-              message.version,
-              idempotencyKey,
+        const result = await this.sendFresh(
+          owner,
+          conversationId,
+          message,
+          () => this.owns(generation, thread),
+          // Only the words the person was editing: a newer revision is not overwritten unseen.
+          (current) => !current.isDeleted && current.revisionNumber === message.revisionNumber,
+          (version) =>
+            firstValueFrom(
+              this.api.editConversationMessage(
+                conversationId,
+                message.id,
+                body,
+                version,
+                idempotencyKey,
+              ),
             ),
-          ),
         );
         if (!this.owns(generation, thread)) {
           return;
         }
 
+        if (result.sent === null) {
+          if (result.current === null || result.current.isDeleted) {
+            this.cancelEdit();
+            this.showError(
+              $localize`This message was removed on another phone or tab, so your edit wasn’t saved.`,
+            );
+          } else {
+            // The form keeps the person's words; the message behind it now carries the newer
+            // version, so saving again is a deliberate choice made knowing it changed.
+            this.showError(
+              $localize`This message was changed on another phone or tab while you were editing. Save again to use your words, or cancel to keep what it says now.`,
+            );
+          }
+          return;
+        }
+
+        const edited = result.sent;
         this.messages.update((loaded) => mergeNewer(loaded, [edited]));
         this.applyToPreview(edited);
         this.commandKeys.release('edit', message.id);
@@ -959,20 +1038,43 @@ export class Messages {
           return;
         }
 
-        const removed = await owner.wait(
-          firstValueFrom(
-            this.api.deleteConversationMessage(
-              conversationId,
-              message.id,
-              message.version,
-              idempotencyKey,
+        const result = await this.sendFresh(
+          owner,
+          conversationId,
+          message,
+          () => this.owns(generation, thread),
+          // Taking back one's own message is about the message, whatever it says now: its words are
+          // the person's own either way.
+          (current) => !current.isDeleted,
+          (version) =>
+            firstValueFrom(
+              this.api.deleteConversationMessage(
+                conversationId,
+                message.id,
+                version,
+                idempotencyKey,
+              ),
             ),
-          ),
         );
         if (!this.owns(generation, thread)) {
           return;
         }
 
+        if (result.sent === null) {
+          if (result.current?.isDeleted) {
+            // Already taken back on another phone or tab: what the person asked for has happened.
+            this.commandKeys.release('delete', message.id);
+            this.optionsFor.set(null);
+            if (this.editingId() === message.id) {
+              this.cancelEdit();
+            }
+          } else {
+            this.showError($localize`This message could not be removed.`);
+          }
+          return;
+        }
+
+        const removed = result.sent;
         this.messages.update((loaded) => mergeNewer(loaded, [removed]));
         this.applyToPreview(removed);
         this.commandKeys.release('delete', message.id);
@@ -1039,21 +1141,42 @@ export class Messages {
           return;
         }
 
-        const removed = await owner.wait(
-          firstValueFrom(
-            this.api.moderateConversationMessage(
-              conversationId,
-              message.id,
-              reason,
-              message.version,
-              idempotencyKey,
+        const result = await this.sendFresh(
+          owner,
+          conversationId,
+          message,
+          () => this.owns(generation, thread),
+          // Somebody else's words: removed only as the coach read them.
+          (current) => !current.isDeleted && current.revisionNumber === message.revisionNumber,
+          (version) =>
+            firstValueFrom(
+              this.api.moderateConversationMessage(
+                conversationId,
+                message.id,
+                reason,
+                version,
+                idempotencyKey,
+              ),
             ),
-          ),
         );
         if (!this.owns(generation, thread)) {
           return;
         }
 
+        if (result.sent === null) {
+          if (result.current?.isDeleted) {
+            // Gone already, so what the coach asked for has happened.
+            this.cancelModeration();
+          } else {
+            const name = this.selected()?.counterpart.displayName ?? '';
+            this.showError(
+              $localize`${name}:name: changed this message after you opened it. Read it again, then confirm the removal if you still want it gone.`,
+            );
+          }
+          return;
+        }
+
+        const removed = result.sent;
         this.messages.update((loaded) => mergeNewer(loaded, [removed]));
         this.applyToPreview(removed);
         this.commandKeys.release('moderate', message.id);
@@ -1074,6 +1197,54 @@ export class Messages {
   }
 
   /**
+   * Sends one command against a message, and if the server says the message changed since this
+   * screen read it (a stale version), reads that message again (audit NCM-12). When it still says
+   * what the person acted on, the command goes once more, with the same key and the version the
+   * server holds now; otherwise nothing is sent and the screen shows the message as it is. A changed
+   * message is never overwritten or removed unseen, and a second refusal is not retried.
+   *
+   * @returns the command's answer, or null with the message as it is now (null when it is gone).
+   */
+  private async sendFresh(
+    owner: TenantOperation,
+    conversationId: string,
+    message: Message,
+    owns: () => boolean,
+    unchanged: (current: Message) => boolean,
+    send: (version: number) => Promise<Message>,
+  ): Promise<{ sent: Message | null; current: Message | null }> {
+    try {
+      return { sent: await owner.wait(send(message.version)), current: null };
+    } catch (error) {
+      if (!isStaleVersion(error)) throw error;
+    }
+
+    const page = await owner.wait(
+      firstValueFrom(this.api.listConversationMessages(conversationId, message.sequence + 1, 1)),
+    );
+    const current = page.items.find((item) => item.id === message.id) ?? null;
+    if (!owns()) {
+      return { sent: null, current };
+    }
+
+    if (current !== null) {
+      this.messages.update((loaded) => mergeNewer(loaded, [current]));
+      this.applyToPreview(current);
+    }
+
+    if (current === null || !unchanged(current)) {
+      return { sent: null, current };
+    }
+
+    try {
+      return { sent: await owner.wait(send(current.version)), current };
+    } catch (error) {
+      if (!isStaleVersion(error)) throw error;
+      return { sent: null, current };
+    }
+  }
+
+  /**
    * Re-reads the bounded conversation list and the unread badge, and nothing else.
    *
    * This is what a coalesced invalidation and a reconnect both resolve to. It deliberately does not
@@ -1084,7 +1255,7 @@ export class Messages {
    */
   private async refreshList(generation: number): Promise<void> {
     return this.scope.run('refreshList', async (owner) => {
-      await owner.wait(this.loadConversations(generation));
+      await owner.wait(this.loadConversations(generation, true));
     });
   }
 
@@ -1131,14 +1302,21 @@ export class Messages {
     });
   }
 
-  private async loadConversations(generation: number): Promise<void> {
+  /**
+   * Reads the first page of the list. A quiet read is the live refresh: it leaves the error line to
+   * whatever put it there and, if it fails, keeps the list on screen rather than emptying it, so a
+   * refused send is not wiped by the other person's next message (audit VER3A-NEW-1).
+   */
+  private async loadConversations(generation: number, quiet = false): Promise<void> {
     return this.scope.run('conversations', async (owner) => {
       const request = ++this.listRequest;
       // This supersedes any Load-more already in flight. Its own `finally` is guarded on being the
       // newest request, so without clearing the flag here the control would stay disabled for ever.
       this.listLoadingMore.set(false);
       this.listLoading.set(true);
-      this.error.set(null);
+      if (!quiet) {
+        this.error.set(null);
+      }
       try {
         const page = await owner.wait(
           firstValueFrom(
@@ -1150,9 +1328,28 @@ export class Messages {
         }
 
         this.now.set(new Date());
-        this.conversations.set(page.items);
-        this.counts.set(page.counts);
+        // The open thread's own reads may be newer than this page, which can have been read before a
+        // cursor move landed: the row and the chip keep what the thread knows (audit NCM-4).
+        const open = this.selectedId();
+        const reconciled = page.items.map((item) =>
+          item.id === open
+            ? reconcileOpenConversation(item, this.confirmedRead, this.conversationUnread())
+            : item,
+        );
+        const settled = page.items.filter(
+          (item, index) => item.unreadCount > 0 && reconciled[index].unreadCount === 0,
+        ).length;
+        this.conversations.set(reconciled);
+        this.counts.set(
+          page.counts === null || settled === 0
+            ? page.counts
+            : { ...page.counts, unread: Math.max(0, page.counts.unread - settled) },
+        );
         this.applyCursor(page);
+        if (quiet && this.errorFromList) {
+          this.error.set(null);
+          this.errorFromList = false;
+        }
         const requested = this.conversationLaunch.take(this.tenants.selectedTenantId());
         const linked = requested ? null : this.takeLinkedConversation(page.items);
         if (requested) {
@@ -1170,10 +1367,11 @@ export class Messages {
         }
       } catch (error) {
         if (!owner.current) return;
-        if (this.ownsList(generation, request)) {
+        if (this.ownsList(generation, request) && !quiet) {
           this.conversations.set([]);
           this.conversationsHasMore.set(false);
           this.error.set(apiErrorMessage(error, $localize`Conversations could not be loaded.`));
+          this.errorFromList = true;
         }
       } finally {
         if (owner.current) {
@@ -1243,15 +1441,44 @@ export class Messages {
     generation: number,
     thread: number,
   ): Promise<void> {
-    return this.scope.run('advanceRead', async (owner) => {
-      const displayed = page.items.reduce(
-        (highest, message) => Math.max(highest, message.sequence),
-        0,
-      );
-      if (displayed <= page.readState.lastReadSequence) {
-        return;
-      }
+    this.confirmedRead = Math.max(this.confirmedRead, page.readState.lastReadSequence);
+    const displayed = page.items.reduce(
+      (highest, message) => Math.max(highest, message.sequence),
+      0,
+    );
+    if (displayed <= page.readState.lastReadSequence) {
+      return;
+    }
 
+    await this.reportRead(conversationId, displayed, generation, thread);
+  }
+
+  /**
+   * Marks the open thread read up to a message the reader has in front of them, once: an arrival or
+   * a scroll asks again only for something newer.
+   */
+  private async readThrough(through: number): Promise<void> {
+    const conversationId = this.selectedId();
+    if (conversationId === null || through <= Math.max(this.confirmedRead, this.readTarget)) {
+      return;
+    }
+
+    this.readTarget = through;
+    await this.reportRead(conversationId, through, this.contextGeneration, this.threadGeneration);
+  }
+
+  /**
+   * Reports the reader's own cursor and brings the thread, its row, the chip and the badge into line
+   * with the server's answer. One lane: a newer report supersedes an older one still in flight, and
+   * an answer older than what is already known never moves anything back.
+   */
+  private async reportRead(
+    conversationId: string,
+    through: number,
+    generation: number,
+    thread: number,
+  ): Promise<void> {
+    return this.scope.run('advanceRead', async (owner) => {
       try {
         await owner.wait(this.csrf.refresh());
         if (!this.owns(generation, thread)) {
@@ -1259,53 +1486,63 @@ export class Messages {
         }
 
         const readState = await owner.wait(
-          firstValueFrom(this.api.advanceConversationReadCursor(conversationId, displayed)),
+          firstValueFrom(this.api.advanceConversationReadCursor(conversationId, through)),
         );
         if (!this.owns(generation, thread)) {
           return;
         }
 
-        const hadUnread = (this.selected()?.unreadCount ?? 0) > 0;
-        if (hadUnread && readState.unreadCount === 0) {
-          // Reading is not an event the live channel carries, so the chip is told here.
-          this.counts.update((counts) =>
-            counts === null ? null : { ...counts, unread: Math.max(0, counts.unread - 1) },
-          );
-        }
-        this.pinned.update((pinned) =>
-          pinned?.id === conversationId
-            ? { ...pinned, unreadCount: readState.unreadCount }
-            : pinned,
-        );
-        this.conversationUnread.set(readState.unreadCount);
-        // The rows the cursor now covers stop being unread. Leaving the marks up would contradict the
-        // count beside them, and the server has just said authoritatively where the cursor is.
-        this.messages.update((loaded) =>
-          loaded.map((message) =>
-            message.isUnreadByCaller && message.sequence <= readState.lastReadSequence
-              ? { ...message, isUnreadByCaller: false }
-              : message,
-          ),
-        );
-        this.conversations.update((loaded) =>
-          loaded.map((conversation) =>
-            conversation.id === conversationId
-              ? {
-                  ...conversation,
-                  unreadCount: readState.unreadCount,
-                  lastReadSequence: readState.lastReadSequence,
-                  lastReadAtUtc: readState.lastReadAtUtc,
-                }
-              : conversation,
-          ),
-        );
+        this.applyReadState(conversationId, readState);
         await owner.wait(this.unreadStore.refresh());
       } catch {
         if (!owner.current) return;
         // A failed read report is not worth interrupting the reader for: the messages are on screen,
-        // and the cursor is reported again the next time the thread is opened.
+        // and the cursor is reported again on the next arrival, scroll or opening of the thread.
+        if (this.owns(generation, thread)) {
+          this.readTarget = this.confirmedRead;
+        }
       }
     });
+  }
+
+  private applyReadState(conversationId: string, readState: ConversationReadState): void {
+    if (readState.lastReadSequence < this.confirmedRead) {
+      return;
+    }
+
+    this.confirmedRead = readState.lastReadSequence;
+    const hadUnread = (this.selected()?.unreadCount ?? 0) > 0;
+    if (hadUnread && readState.unreadCount === 0) {
+      // Reading is not an event the live channel carries, so the chip is told here.
+      this.counts.update((counts) =>
+        counts === null ? null : { ...counts, unread: Math.max(0, counts.unread - 1) },
+      );
+    }
+    this.pinned.update((pinned) =>
+      pinned?.id === conversationId ? { ...pinned, unreadCount: readState.unreadCount } : pinned,
+    );
+    this.conversationUnread.set(readState.unreadCount);
+    // The rows the cursor now covers stop being unread. Leaving the marks up would contradict the
+    // count beside them, and the server has just said authoritatively where the cursor is.
+    this.messages.update((loaded) =>
+      loaded.map((message) =>
+        message.isUnreadByCaller && message.sequence <= readState.lastReadSequence
+          ? { ...message, isUnreadByCaller: false }
+          : message,
+      ),
+    );
+    this.conversations.update((loaded) =>
+      loaded.map((conversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              unreadCount: readState.unreadCount,
+              lastReadSequence: readState.lastReadSequence,
+              lastReadAtUtc: readState.lastReadAtUtc,
+            }
+          : conversation,
+      ),
+    );
   }
 
   /**
@@ -1394,7 +1631,13 @@ export class Messages {
       return;
     }
 
-    this.error.set(apiErrorMessage(error, fallback));
+    this.showError(apiErrorMessage(error, fallback));
+  }
+
+  /** A thread or command failure: it stays until the person acts again, whatever refreshes. */
+  private showError(message: string): void {
+    this.error.set(message);
+    this.errorFromList = false;
   }
 
   private ownsList(generation: number, request: number): boolean {
@@ -1443,6 +1686,8 @@ export class Messages {
     this.oldestSequence.set(null);
     this.latestSequence.set(0);
     this.conversationUnread.set(0);
+    this.confirmedRead = 0;
+    this.readTarget = 0;
     // The draft is part of the thread, not of the screen. A sentence written to one person must
     // never be sitting in a composer addressed to another, and a key retained for a command against
     // that thread must never be spent against this one.
@@ -1482,6 +1727,8 @@ export class Messages {
     this.oldestSequence.set(null);
     this.latestSequence.set(0);
     this.conversationUnread.set(0);
+    this.confirmedRead = 0;
+    this.readTarget = 0;
     this.draft.set('');
     this.editingId.set(null);
     this.editDraft.set('');
@@ -1513,13 +1760,18 @@ export class Messages {
           if (feed === undefined) return;
           feed.scrollTop = feed.scrollHeight;
           const root = this.document.scrollingElement;
-          if (root !== null && feed.scrollHeight <= feed.clientHeight + 1) {
+          if (root && feed.scrollHeight <= feed.clientHeight + 1) {
             root.scrollTop = root.scrollHeight;
           }
         },
       },
       { injector: this.injector },
     );
+  }
+
+  /** Whether the page is in front of the reader: a hidden tab reads nothing. */
+  private isShown(): boolean {
+    return this.document.visibilityState !== 'hidden';
   }
 
   /** Whether the reader is at (or near) the newest message, in whichever of the two scrolls. */
@@ -1549,6 +1801,15 @@ export class Messages {
       { injector: this.injector },
     );
   }
+}
+
+/** The server's answer when a message changed since the version a command carried (MSG-007). */
+function isStaleVersion(error: unknown): boolean {
+  return (
+    error instanceof HttpErrorResponse &&
+    error.status === 409 &&
+    (error.error as { code?: unknown } | null)?.code === 'messaging_stale_message_version'
+  );
 }
 
 /** The two things a body can be wrong about, in the same order the server reports them. */

@@ -255,6 +255,11 @@ export class Notifications {
     });
   }
 
+  /**
+   * The write itself belongs to `NotificationStore`, which outlives this page, so a notice opened
+   * through its link is marked read even though the link has already taken the reader elsewhere
+   * (audit WEB-2). This page only shows the answer while it is still here.
+   */
   protected async markRead(notification: NotificationItem): Promise<void> {
     if (notification.isRead || this.busyId() !== null) return;
     return this.scope.run('markRead', async (owner) => {
@@ -263,15 +268,8 @@ export class Notifications {
       this.busyId.set(notification.id);
       this.error.set(null);
       try {
-        await owner.wait(this.csrf.refresh());
-        if (this.contextGeneration !== generation) {
-          return;
-        }
-
-        const updated = await owner.wait(
-          firstValueFrom(this.api.markNotificationRead(notification.id)),
-        );
-        if (this.contextGeneration !== generation) {
+        const updated = await owner.wait(this.notifications.markRead(notification.id));
+        if (updated === null || this.contextGeneration !== generation) {
           return;
         }
 
@@ -282,7 +280,6 @@ export class Notifications {
             ? loaded.filter((item) => item.id !== updated.id)
             : loaded.map((item) => (item.id === updated.id ? updated : item)),
         );
-        this.notifications.decrement();
       } catch (error) {
         if (!owner.current) return;
         if (this.contextGeneration === generation) {

@@ -19,10 +19,17 @@
     <h2 id="reassign-dialog-title" class="tb-text-section-title" dir="auto" i18n>
       Reassign {{ client().firstName }}
     </h2>
-    <p class="tb-text-compact" i18n>
-      The new coach sees this client and all their history right away. The current coach loses
-      access, and their chat with the client stays readable to the client only.
-    </p>
+    @if (ownerIsCoach()) {
+      <p class="tb-text-compact" i18n>
+        The new coach sees this client and all their history right away. You still see the client as
+        the owner, but your chat with them stays readable to the client only.
+      </p>
+    } @else {
+      <p class="tb-text-compact" i18n>
+        The new coach sees this client and all their history right away. The current coach loses
+        access, and their chat with the client stays readable to the client only.
+      </p>
+    }
     <form class="reassign-form" [formGroup]="form" (ngSubmit)="reassign()" novalidate>
       <app-field label="New coach" i18n-label>
         <select appControl formControlName="coachUserId">

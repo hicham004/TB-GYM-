@@ -870,16 +870,27 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
     }
 
     /// <summary>
+    /// When the other participant's application first acknowledged an event about this message: the
+    /// earliest acknowledgement row by anybody but the sender, which is where the fact lives since
+    /// it left the message row (MSG-015, NCM-12).
+    /// </summary>
+    /// <remarks>
     /// Read directly rather than through <c>Convert.ChangeType</c>, which cannot produce a nullable
     /// <see cref="DateTimeOffset"/> and would turn "not acknowledged" into a cast failure.
-    /// </summary>
-    private async Task<DateTimeOffset?> RealtimeAcknowledgedAtAsync(Guid messageId)
+    /// </remarks>
+    private async Task<DateTimeOffset?> CounterpartAcknowledgedAtAsync(Guid messageId)
     {
         await using var connection = new NpgsqlConnection(RequiredConnection);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText =
-            """SELECT "RealtimeAcknowledgedAtUtc" FROM messaging."Messages" WHERE "Id" = @id""";
+            """
+            SELECT min(a."AcknowledgedAtUtc")
+            FROM messaging."RealtimeAcknowledgements" a
+            JOIN messaging."RealtimeEvents" e ON e."TenantId" = a."TenantId" AND e."Id" = a."RealtimeEventId"
+            JOIN messaging."Messages" m ON m."TenantId" = e."TenantId" AND m."Id" = e."MessageId"
+            WHERE m."Id" = @id AND a."AcknowledgedByUserId" <> m."SenderUserId"
+            """;
         command.Parameters.AddWithValue("id", messageId);
         await using var reader = await command.ExecuteReaderAsync();
         return await reader.ReadAsync() && !await reader.IsDBNullAsync(0)

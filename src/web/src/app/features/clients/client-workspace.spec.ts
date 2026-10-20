@@ -252,6 +252,20 @@ describe('ClientWorkspace', () => {
     expect(coach.host.textContent).not.toContain('Coached by');
   });
 
+  it('tells an owner who messages a team member’s client instead of offering a chat (COACH-13)', async () => {
+    const theirs = await render({ userId: 'coach-9' });
+    expect(theirs.host.textContent).not.toContain('Message Maya');
+    expect(theirs.host.querySelector('.messaging-note')?.textContent?.trim()).toBe(
+      'Messages go through Karim Haddad.',
+    );
+
+    // Their own client is theirs to message.
+    TestBed.resetTestingModule();
+    const mine = await render({ userId: OWNER_ID });
+    expect(mine.host.textContent).toContain('Message Maya');
+    expect(mine.host.querySelector('.messaging-note')).toBeNull();
+  });
+
   it('offers Message only while the plan includes messaging, and says so when it lacks it', async () => {
     const without = await render({ featureAccess: [decision('Messaging', false)] });
     expect(without.host.textContent).not.toContain('Message Maya');

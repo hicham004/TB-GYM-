@@ -32,7 +32,9 @@
           </div>
           <div class="header-actions">
             @if (!context.isFormer()) {
-              @if (messagingIncluded()) {
+              @if (otherCoach(); as coach) {
+                <p class="messaging-note" dir="auto" i18n>Messages go through {{ coach }}.</p>
+              } @else if (messagingIncluded()) {
                 <button
                   appButton
                   type="button"

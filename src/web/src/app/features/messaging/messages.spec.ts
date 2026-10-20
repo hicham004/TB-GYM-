@@ -153,6 +153,42 @@ function denied(reason = 'Expired'): HttpErrorResponse {
   return new HttpErrorResponse({ status: 403, error: { accessReason: reason } });
 }
 
+/** The server's answer when a command carried a version the message has since moved past. */
+function stale(): HttpErrorResponse {
+  return new HttpErrorResponse({
+    status: 409,
+    error: {
+      code: 'messaging_stale_message_version',
+      title: 'This message changed since it was read. Reload the conversation and try again.',
+    },
+  });
+}
+
+/**
+ * The thread's first page for the initial read, and `again` for the screen's one-message re-read of
+ * a message after a stale version (NCM-12), which asks for the page just above that message.
+ */
+function pages(first: MessagePage, again: () => MessagePage) {
+  return (_conversationId: string, beforeSequence?: number | null) =>
+    of(beforeSequence === null || beforeSequence === undefined ? first : again());
+}
+
+/** A thread scrolled back through history, so the newest message is out of view. */
+function scrolledBack(harness: { host: HTMLElement }): (atNewest: boolean) => void {
+  const feed = query(harness.host, '.feed');
+  let top = 0;
+  Object.defineProperty(feed, 'scrollHeight', { configurable: true, get: () => 2000 });
+  Object.defineProperty(feed, 'clientHeight', { configurable: true, get: () => 500 });
+  Object.defineProperty(feed, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: () => undefined,
+  });
+  return (atNewest) => {
+    top = atNewest ? 1500 : 0;
+  };
+}
+
 interface ApiMocks {
   listConversations: ReturnType<typeof vi.fn>;
   listConversationMessages: ReturnType<typeof vi.fn>;
@@ -641,6 +677,18 @@ describe('Messages', () => {
     expect(harness.host.querySelector('.actions')).toBeNull();
     expect(harness.host.querySelector('.options')).toBeNull();
     expect(harness.sendConversationMessage).not.toHaveBeenCalled();
+    // With nothing in it to focus, the history itself can be focused and scrolled by keyboard.
+    expect(query(harness.host, '.feed').getAttribute('tabindex')).toBe('0');
+  });
+
+  it('leaves a writable thread’s history out of the tab order, since its messages take focus', async () => {
+    const harness = await render(({ listConversations, listConversationMessages }) => {
+      listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+    });
+    await open(harness);
+
+    expect(query(harness.host, '.feed').hasAttribute('tabindex')).toBe(false);
   });
 
   it('sends a message and clears the composer', async () => {
@@ -773,34 +821,90 @@ describe('Messages', () => {
     expect(harness.host.textContent).toContain('Edited');
   });
 
-  it('reports an edit conflict and leaves the message as the server holds it', async () => {
+  it('reads a message again after a stale version and keeps the typed words when it really changed', async () => {
+    const original = message(1, {
+      body: 'original',
+      isFromCaller: true,
+      senderUserId: 'coach-1',
+      canEdit: true,
+      canDelete: true,
+      canModerate: false,
+    });
     const harness = await render(
       ({ listConversations, listConversationMessages, editConversationMessage }) => {
         listConversations.mockReturnValue(of(conversationPage([conversation()])));
-        listConversationMessages.mockReturnValue(
-          of(
+        listConversationMessages.mockImplementation(
+          pages(messagePage([original]), () =>
             messagePage([
-              message(1, {
-                body: 'original',
-                isFromCaller: true,
-                senderUserId: 'coach-1',
-                canEdit: true,
-                canModerate: false,
-              }),
+              {
+                ...original,
+                body: 'changed on the phone',
+                revisionNumber: 2,
+                editedAtUtc: '2026-09-01T09:06:00.000Z',
+                version: 7,
+              },
             ]),
           ),
         );
-        editConversationMessage.mockReturnValue(
-          throwError(
-            () =>
-              new HttpErrorResponse({
-                status: 409,
-                error: {
-                  code: 'messaging_stale_message_version',
-                  title: 'This message changed since it was read.',
-                },
-              }),
-          ),
+        editConversationMessage
+          .mockReturnValueOnce(throwError(stale))
+          .mockReturnValueOnce(
+            of({ ...original, body: 'from this screen', revisionNumber: 3, version: 8 }),
+          );
+      },
+    );
+    await open(harness);
+
+    await messageAction(harness, 'Edit your message 1');
+    await settle(harness.fixture);
+    const editor = field<HTMLTextAreaElement>(harness.host, 'Edit message');
+    editor.value = 'from this screen';
+    editor.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    press(harness.host, 'Save changes');
+    await settle(harness.fixture);
+
+    // The message really changed elsewhere, so nothing is overwritten unseen: one attempt only, the
+    // person is told, and the editor keeps what they typed.
+    expect(harness.editConversationMessage).toHaveBeenCalledTimes(1);
+    expect(harness.listConversationMessages).toHaveBeenLastCalledWith('conversation-1', 2, 1);
+    expect(query(harness.host, 'p.error[role="alert"]').textContent).toContain(
+      'This message was changed on another phone or tab while you were editing. Save again to use your words, or cancel to keep what it says now.',
+    );
+    expect(field<HTMLTextAreaElement>(harness.host, 'Edit message').value).toBe('from this screen');
+
+    // Saving again is the person's choice, against the version the server now holds.
+    press(harness.host, 'Save changes');
+    await settle(harness.fixture);
+    const [first, second] = harness.editConversationMessage.mock.calls;
+    expect(second).toEqual(['conversation-1', 'message-1', 'from this screen', 7, first[4]]);
+    expect(bodies(harness.host)).toEqual(['from this screen']);
+  });
+
+  it('retries an edit once with the version the server holds when the words are unchanged (NCM-12)', async () => {
+    const original = message(1, {
+      body: 'original',
+      isFromCaller: true,
+      senderUserId: 'coach-1',
+      canEdit: true,
+      canDelete: true,
+      canModerate: false,
+    });
+    const harness = await render(
+      ({ listConversations, listConversationMessages, editConversationMessage }) => {
+        listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        // The other side's app acknowledged it, which once moved the version and nothing else.
+        listConversationMessages.mockImplementation(
+          pages(messagePage([original]), () => messagePage([{ ...original, version: 5 }])),
+        );
+        editConversationMessage.mockReturnValueOnce(throwError(stale)).mockReturnValueOnce(
+          of({
+            ...original,
+            body: 'fixed',
+            revisionNumber: 2,
+            editedAtUtc: '2026-09-01T09:06:00.000Z',
+            version: 6,
+          }),
         );
       },
     );
@@ -809,19 +913,66 @@ describe('Messages', () => {
     await messageAction(harness, 'Edit your message 1');
     await settle(harness.fixture);
     const editor = field<HTMLTextAreaElement>(harness.host, 'Edit message');
-    editor.value = 'from a stale screen';
+    editor.value = 'fixed';
     editor.dispatchEvent(new Event('input'));
     await settle(harness.fixture);
     press(harness.host, 'Save changes');
     await settle(harness.fixture);
 
+    const [first, second] = harness.editConversationMessage.mock.calls;
+    expect(first).toEqual(['conversation-1', 'message-1', 'fixed', 1, expect.any(String)]);
+    // The same command once more: the same key, the version the server holds now.
+    expect(second).toEqual(['conversation-1', 'message-1', 'fixed', 5, first[4]]);
+    expect(harness.editConversationMessage).toHaveBeenCalledTimes(2);
+    expect(bodies(harness.host)).toEqual(['fixed']);
+    expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe('');
+    expect(harness.host.querySelector('#edit-draft')).toBeNull();
+  });
+
+  it('says so when a message being edited was removed elsewhere, and closes the editor', async () => {
+    const original = message(1, {
+      body: 'original',
+      isFromCaller: true,
+      senderUserId: 'coach-1',
+      canEdit: true,
+      canDelete: true,
+      canModerate: false,
+    });
+    const harness = await render(
+      ({ listConversations, listConversationMessages, editConversationMessage }) => {
+        listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        listConversationMessages.mockImplementation(
+          pages(messagePage([original]), () =>
+            messagePage([
+              {
+                ...original,
+                body: null,
+                isDeleted: true,
+                deletionKind: 'SenderRemoved',
+                deletedAtUtc: '2026-09-01T09:06:00.000Z',
+                canEdit: false,
+                canDelete: false,
+                version: 9,
+              },
+            ]),
+          ),
+        );
+        editConversationMessage.mockReturnValue(throwError(stale));
+      },
+    );
+    await open(harness);
+
+    await messageAction(harness, 'Edit your message 1');
+    await settle(harness.fixture);
+    press(harness.host, 'Save changes');
+    await settle(harness.fixture);
+
+    expect(harness.editConversationMessage).toHaveBeenCalledTimes(1);
     expect(query(harness.host, 'p.error[role="alert"]').textContent).toContain(
-      'changed since it was read',
+      'This message was removed on another phone or tab, so your edit wasn’t saved.',
     );
-    // The editor stays open with what the user typed; nothing pretends the edit landed.
-    expect(field<HTMLTextAreaElement>(harness.host, 'Edit message').value).toBe(
-      'from a stale screen',
-    );
+    expect(harness.host.querySelector('#edit-draft')).toBeNull();
+    expect(query(harness.host, '.feed li .removed-body').textContent).toContain('removed');
   });
 
   it('removes the sender’s own message and keeps its place with no body', async () => {
@@ -934,6 +1085,92 @@ describe('Messages', () => {
     );
     // The reason the coach typed is not left on screen for the other participant to read.
     expect(harness.host.textContent).not.toContain('Abusive language');
+  });
+
+  it('removes as coach only the words the coach read, and says when they changed (NCM-12)', async () => {
+    const theirs = message(1, { body: 'first words' });
+    const harness = await render(
+      ({ listConversations, listConversationMessages, moderateConversationMessage }) => {
+        listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        listConversationMessages.mockImplementation(
+          pages(messagePage([theirs]), () =>
+            messagePage([
+              {
+                ...theirs,
+                body: 'rewritten words',
+                revisionNumber: 2,
+                editedAtUtc: '2026-09-01T09:06:00.000Z',
+                version: 4,
+              },
+            ]),
+          ),
+        );
+        moderateConversationMessage.mockReturnValue(throwError(stale));
+      },
+    );
+    await open(harness);
+
+    await messageAction(harness, 'Remove message 1 as coach');
+    await settle(harness.fixture);
+    const reason = field<HTMLInputElement>(harness.host, 'Reason for removing this message');
+    reason.value = 'Off topic';
+    reason.dispatchEvent(new Event('input'));
+    await settle(harness.fixture);
+    press(harness.host, 'Confirm removal');
+    await settle(harness.fixture);
+
+    expect(harness.moderateConversationMessage).toHaveBeenCalledTimes(1);
+    expect(query(harness.host, 'p.error[role="alert"]').textContent).toContain(
+      'Rania Haddad changed this message after you opened it. Read it again, then confirm the removal if you still want it gone.',
+    );
+    // The new words are on screen beside the open form, which keeps the coach's reason.
+    expect(bodies(harness.host)).toEqual(['rewritten words']);
+    expect(field<HTMLInputElement>(harness.host, 'Reason for removing this message').value).toBe(
+      'Off topic',
+    );
+  });
+
+  it('takes a removal as done when the message was already removed elsewhere', async () => {
+    const mine = message(1, {
+      body: 'regrettable',
+      isFromCaller: true,
+      senderUserId: 'coach-1',
+      canEdit: true,
+      canDelete: true,
+      canModerate: false,
+    });
+    const harness = await render(
+      ({ listConversations, listConversationMessages, deleteConversationMessage }) => {
+        listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        listConversationMessages.mockImplementation(
+          pages(messagePage([mine]), () =>
+            messagePage([
+              {
+                ...mine,
+                body: null,
+                isDeleted: true,
+                deletionKind: 'SenderRemoved',
+                deletedAtUtc: '2026-09-01T09:06:00.000Z',
+                canEdit: false,
+                canDelete: false,
+                version: 3,
+              },
+            ]),
+          ),
+        );
+        deleteConversationMessage.mockReturnValue(throwError(stale));
+      },
+    );
+    await open(harness);
+
+    await messageAction(harness, 'Remove your message 1');
+    await settle(harness.fixture);
+
+    expect(harness.deleteConversationMessage).toHaveBeenCalledTimes(1);
+    expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe('');
+    expect(query(harness.host, '.feed li .removed-body').textContent).toContain(
+      'removed by its sender',
+    );
   });
 
   it('offers no moderation control to a participant the server did not grant it to', async () => {
@@ -2094,6 +2331,52 @@ describe('Messages', () => {
       expect(bodies(harness.host)).toEqual(['Message 1']);
     });
 
+    it('keeps the open thread’s row read when a live list read the server just before the cursor moved', async () => {
+      const harness = await render(
+        ({ listConversations, listConversationMessages, advanceConversationReadCursor }) => {
+          listConversations.mockReturnValue(
+            of(conversationPage([conversation()], { counts: { ...COUNTS, unread: 1 } })),
+          );
+          listConversationMessages.mockReturnValue(
+            of(
+              messagePage([message(1)], {
+                readState: readState({ lastReadSequence: 1, unreadCount: 0, latestSequence: 1 }),
+              }),
+            ),
+          );
+          advanceConversationReadCursor.mockReturnValue(
+            of(readState({ lastReadSequence: 2, unreadCount: 0, latestSequence: 2 })),
+          );
+        },
+      );
+      await open(harness);
+      harness.realtime.deliver({
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: 'event-2',
+        eventSequence: 2,
+        kind: 'MessageSent',
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(2, { isUnreadByCaller: true }),
+      });
+      await settle(harness.fixture);
+
+      // The live refresh was read before the cursor move landed and still counts message 2.
+      harness.listConversations.mockReturnValue(
+        of(
+          conversationPage([conversation({ unreadCount: 1, lastReadSequence: 1 })], {
+            counts: { ...COUNTS, unread: 2 },
+          }),
+        ),
+      );
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+
+      const row = query(harness.host, '.conversation[data-conversation-id="conversation-1"]');
+      expect(row.querySelector('.count')).toBeNull();
+      expect(chips(harness.host)).toContain('Unread 1');
+    });
+
     it('takes a read thread off the unread count', async () => {
       const harness = await render(({ listConversations, listConversationMessages }) => {
         listConversations.mockReturnValue(
@@ -2660,7 +2943,19 @@ describe('Messages', () => {
       expect(harness.listConversations.mock.calls.length).toBe(initialCalls + 1);
     });
 
-    it('never advances read state from a realtime event', async () => {
+    function arrival(sequence: number, overrides: Partial<Message> = {}) {
+      return {
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: `event-${sequence}`,
+        eventSequence: sequence,
+        kind: 'MessageSent' as const,
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(sequence, { isUnreadByCaller: true, ...overrides }),
+      };
+    }
+
+    async function openRead(configure?: (api: ApiMocks) => void): Promise<Harness> {
       const harness = await render((api) => {
         api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
         api.listConversationMessages.mockReturnValue(
@@ -2670,22 +2965,157 @@ describe('Messages', () => {
             }),
           ),
         );
+        api.advanceConversationReadCursor.mockReturnValue(
+          of(readState({ lastReadSequence: 2, unreadCount: 0, latestSequence: 2 })),
+        );
+        configure?.(api);
       });
       await open(harness);
-      const advancesAfterOpen = harness.advanceConversationReadCursor.mock.calls.length;
+      return harness;
+    }
 
-      harness.realtime.deliver({
-        tenantId: ALPHA.tenantId,
-        conversationId: 'conversation-1',
-        eventId: 'event-2',
-        eventSequence: 2,
-        kind: 'MessageSent',
-        occurredAtUtc: '2026-09-01T09:05:00.000Z',
-        message: message(2, { isUnreadByCaller: true }),
-      });
+    it('reads a message that arrives in front of the reader, and the badge and status agree (NCM-4)', async () => {
+      const harness = await openRead();
+      harness.unreadRefresh.mockClear();
+
+      harness.realtime.deliver(arrival(2));
       await settle(harness.fixture);
 
-      expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(advancesAfterOpen);
+      expect(harness.advanceConversationReadCursor).toHaveBeenLastCalledWith('conversation-1', 2);
+      expect(harness.unreadRefresh).toHaveBeenCalled();
+      expect(harness.host.querySelectorAll('.feed li.unread')).toHaveLength(0);
+      expect(query(harness.host, '.thread-unread').textContent).toContain('Nothing unread');
+      // Read as it arrived, so no "New messages" line is drawn above it.
+      expect(harness.host.querySelector('.new-divider')).toBeNull();
+    });
+
+    it('never reads the other person’s words for them in a tab that is not shown', async () => {
+      let visibility: DocumentVisibilityState = 'hidden';
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => visibility,
+      });
+      try {
+        const harness = await openRead();
+        const before = harness.advanceConversationReadCursor.mock.calls.length;
+
+        harness.realtime.deliver(arrival(2));
+        await settle(harness.fixture);
+
+        expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(before);
+        expect(query(harness.host, '.thread-unread').textContent).toContain(
+          '1 unread in this conversation',
+        );
+        expect(harness.host.querySelectorAll('.feed li.unread')).toHaveLength(1);
+
+        // Coming back to the tab with the thread at its newest message reads it.
+        visibility = 'visible';
+        document.dispatchEvent(new Event('visibilitychange'));
+        await settle(harness.fixture);
+        expect(harness.advanceConversationReadCursor).toHaveBeenLastCalledWith('conversation-1', 2);
+        expect(query(harness.host, '.thread-unread').textContent).toContain('Nothing unread');
+      } finally {
+        delete (document as { visibilityState?: unknown }).visibilityState;
+      }
+    });
+
+    it('leaves an arrival unread while the reader is back in history, and reads it once they reach it', async () => {
+      const harness = await openRead();
+      const scrollTo = scrolledBack(harness);
+      const before = harness.advanceConversationReadCursor.mock.calls.length;
+
+      harness.realtime.deliver(arrival(2));
+      await settle(harness.fixture);
+
+      expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(before);
+      expect(query(harness.host, '.thread-unread').textContent).toContain(
+        '1 unread in this conversation',
+      );
+      // It waits below where they are, under a "New messages" line.
+      expect(query(harness.host, '.new-divider').textContent).toContain('New messages');
+
+      scrollTo(true);
+      query(harness.host, '.feed').dispatchEvent(new Event('scroll'));
+      await settle(harness.fixture);
+      expect(harness.advanceConversationReadCursor).toHaveBeenLastCalledWith('conversation-1', 2);
+
+      // Scrolling on asks nothing more: it is read already.
+      const after = harness.advanceConversationReadCursor.mock.calls.length;
+      query(harness.host, '.feed').dispatchEvent(new Event('scroll'));
+      await settle(harness.fixture);
+      expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(after);
+    });
+
+    it('marks nothing read for the reader’s own message arriving from another tab', async () => {
+      const harness = await openRead();
+      const before = harness.advanceConversationReadCursor.mock.calls.length;
+
+      harness.realtime.deliver(
+        arrival(2, { isFromCaller: true, senderUserId: 'coach-1', isUnreadByCaller: false }),
+      );
+      await settle(harness.fixture);
+
+      expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(before);
+      expect(query(harness.host, '.thread-unread').textContent).toContain('Nothing unread');
+    });
+
+    it('keeps a refused send on screen through the live refresh the other person’s message causes', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+        api.sendConversationMessage.mockReturnValue(
+          throwError(
+            () =>
+              new HttpErrorResponse({
+                status: 400,
+                error: { errors: { body: ['A message can only contain ordinary text.'] } },
+              }),
+          ),
+        );
+      });
+      await open(harness);
+      const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
+      composer.value = 'odd text';
+      composer.dispatchEvent(new Event('input'));
+      await settle(harness.fixture);
+      press(harness.host, 'Send message');
+      await settle(harness.fixture);
+      const refused = 'A message can only contain ordinary text.';
+      expect(query(harness.host, 'p.error[role="alert"]').textContent).toContain(refused);
+
+      // The other person writes; the list refreshes live (VER3A-NEW-1).
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+
+      expect(harness.listConversations.mock.calls.length).toBeGreaterThan(1);
+      expect(query(harness.host, 'p.error[role="alert"]').textContent).toContain(refused);
+    });
+
+    it('keeps the list when a live refresh fails, and clears the list’s own failure when one works', async () => {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      });
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(1);
+
+      harness.listConversations.mockReturnValue(throwError(() => new Error('offline')));
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(1);
+      expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe('');
+
+      // A failed read of the list that the person asked for says so, and a later live read that
+      // works takes that sentence away, because it was about the list.
+      await goOffline(harness);
+      press(harness.host, 'Check for new messages');
+      await settle(harness.fixture);
+      expect(query(harness.host, 'p.error[role="alert"]').textContent).toContain(
+        'Conversations could not be loaded.',
+      );
+      harness.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+      expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe('');
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(1);
     });
 
     it('shows the channel state without claiming anything was lost', async () => {

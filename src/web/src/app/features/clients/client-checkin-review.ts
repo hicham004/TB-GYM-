@@ -69,7 +69,7 @@ import {
   type CheckInContext,
   type PosePhotos,
 } from './client-checkins.models';
-import { ClientWorkspaceContext } from './client-workspace.context';
+import { ClientWorkspaceContext, otherCoachName } from './client-workspace.context';
 
 type LoadState = 'loading' | 'ready' | 'denied' | 'missing' | 'error';
 type PartState = 'idle' | 'loading' | 'ready' | 'error';
@@ -299,9 +299,20 @@ export class ClientCheckInReview implements HoldsUnsavedWork {
     () => this.context.plans()?.featureAccess.find((item) => item.feature === 'Messaging') ?? null,
   );
 
-  protected readonly canReply = computed(() => this.messagingDecision()?.isAllowed ?? true);
+  /** A team member's client hears from their own coach, so the owner reviews but does not reply. */
+  private readonly otherCoach = computed(() =>
+    otherCoachName(this.context.profile(), this.auth.user()?.id ?? null),
+  );
+
+  protected readonly canReply = computed(
+    () => this.otherCoach() === null && (this.messagingDecision()?.isAllowed ?? true),
+  );
 
   protected readonly replyClosed = computed(() => {
+    const coach = this.otherCoach();
+    if (coach !== null) {
+      return $localize`Replies go through ${this.firstName()}:name:’s coach, ${coach}:coach:.`;
+    }
     const decision = this.messagingDecision();
     if (!decision || decision.isAllowed) return null;
     return decision.reason === 'NoEntitlement'

@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { TeamApi } from '../team/team-api';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { CoachClientDetails, TeamMember } from '../../core/api/api.models';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -35,6 +36,7 @@ import { Control, Field } from '../../ui/field';
 })
 export class ClientCoach {
   private readonly api = inject(TeamApi);
+  private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
@@ -50,6 +52,13 @@ export class ClientCoach {
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  /**
+   * The owner is this client's coach: they keep the record, as the owner sees every client, but their
+   * chat closes like any coach's (ADR 0026, audit COACH-13).
+   */
+  protected readonly ownerIsCoach = computed(
+    () => this.client().assignedCoachUserId === this.auth.user()?.id,
+  );
   /** Everyone the client could be moved to: the rest of the team. */
   protected readonly candidates = computed(() =>
     this.members().filter((member) => member.userId !== this.client().assignedCoachUserId),

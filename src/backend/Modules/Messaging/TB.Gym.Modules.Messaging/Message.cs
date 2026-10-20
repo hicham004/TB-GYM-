@@ -104,12 +104,6 @@ public sealed class Message : TenantEntity
     public DateTimeOffset AvailableAtUtc { get; private set; }
 
     /// <summary>
-    /// When the <b>other participant's application</b> first accepted a current safe projection of an
-    /// event about this message. Null until then, and never a claim that a person read it.
-    /// </summary>
-    public DateTimeOffset? RealtimeAcknowledgedAtUtc { get; private set; }
-
-    /// <summary>
     /// Reserved for a future external channel and null throughout this slice. Provider
     /// acknowledgement is not read state and will never be written into one.
     /// </summary>
@@ -135,44 +129,20 @@ public sealed class Message : TenantEntity
     public bool IsDeleted => DeletedAtUtc is not null;
 
     /// <summary>
-    /// What this message's delivery can currently be truthfully said to be.
-    /// </summary>
-    public MessageDeliveryState DeliveryState => RealtimeAcknowledgedAtUtc is null
-        ? MessageDeliveryState.Persisted
-        : MessageDeliveryState.RealtimeAcknowledged;
-
-    /// <summary>
-    /// Records that the counterpart's application accepted an event about this message.
+    /// What this message's delivery can truthfully be said to be, given who has acknowledged an event
+    /// about it (MSG-015).
     /// </summary>
     /// <remarks>
-    /// Written once, from the server clock, and never overwritten: the interesting instant is the
-    /// first time the other side had it, and a later acknowledgement — a reconnect, a second device,
-    /// a duplicate after a claim was reclaimed — must not move it forward and pretend delivery was
-    /// slower than it was. Delivery is at least once by design, so repetition is normal and has to be
-    /// harmless.
-    /// <para>
-    /// <paramref name="acknowledgedByUserId"/> is checked here rather than only at the call site,
-    /// because the one thing this column must never become is "my own tab got my own message back".
-    /// The sender acknowledging their own event is a real and expected acknowledgement of that event;
-    /// it is simply not evidence about the counterpart, and this returns false for it.
-    /// </para>
+    /// The fact is the append-only <see cref="MessagingRealtimeAcknowledgement"/>, never a column on
+    /// this row. Copying it here rewrote the row whose version the sender edits against, so an edit or
+    /// a removal made after the other side's application had the message was refused as stale
+    /// (NCM-12). Only somebody other than the sender counts: the sender's own second tab receiving
+    /// their own message is a real acknowledgement of that event and evidence about nobody else.
     /// </remarks>
-    /// <returns><see langword="true"/> when this call set the timestamp.</returns>
-    public bool AcknowledgeRealtimeDelivery(Guid acknowledgedByUserId, DateTimeOffset now)
-    {
-        if (acknowledgedByUserId == Guid.Empty || acknowledgedByUserId == SenderUserId)
-        {
-            return false;
-        }
-
-        if (RealtimeAcknowledgedAtUtc is not null)
-        {
-            return false;
-        }
-
-        RealtimeAcknowledgedAtUtc = now < AvailableAtUtc ? AvailableAtUtc : now;
-        return true;
-    }
+    public MessageDeliveryState DeliveryStateFor(IEnumerable<Guid> acknowledgedByUserIds) =>
+        acknowledgedByUserIds.Any(userId => userId != Guid.Empty && userId != SenderUserId)
+            ? MessageDeliveryState.RealtimeAcknowledged
+            : MessageDeliveryState.Persisted;
 
     /// <summary>
     /// Creates the message and its first, immutable revision together. There is no state in which a

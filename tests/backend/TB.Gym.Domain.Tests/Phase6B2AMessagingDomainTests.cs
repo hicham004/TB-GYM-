@@ -262,7 +262,10 @@ public sealed class Phase6B2AMessagingDomainTests
         Assert.IsNull(message.EditedAtUtc, "An unedited message has no edit instant.");
         Assert.AreEqual(Now, message.SentAtUtc);
         Assert.AreEqual(Now, message.AvailableAtUtc);
-        Assert.IsNull(message.RealtimeAcknowledgedAtUtc, "There is no realtime channel in this slice.");
+        Assert.AreEqual(
+            MessageDeliveryState.Persisted,
+            message.DeliveryStateFor([]),
+            "Nothing has acknowledged a message that was only just sent.");
         Assert.IsNull(message.ProviderAcknowledgedAtUtc, "There is no provider in this slice.");
         Assert.AreEqual(message.Id, revision.MessageId);
         Assert.AreEqual(1, revision.RevisionNumber);
@@ -782,7 +785,7 @@ public sealed class Phase6B2AMessagingDomainTests
         var message = NewMessage(out _);
         Assert.AreEqual(
             MessageDeliveryState.Persisted,
-            message.DeliveryState,
+            message.DeliveryStateFor([]),
             "A message nobody has acknowledged claims persistence and nothing else.");
     }
 

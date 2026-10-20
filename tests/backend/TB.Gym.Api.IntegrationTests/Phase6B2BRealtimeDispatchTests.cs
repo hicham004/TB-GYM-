@@ -656,7 +656,7 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
         var first = await AcknowledgeAsync(thread.Client, thread.ConversationId, sendEvent.EventSequence);
         Assert.AreEqual(1, first.Accepted);
         Assert.AreEqual(0, first.AlreadyAcknowledged);
-        var stamped = await RealtimeAcknowledgedAtAsync(sent.Id);
+        var stamped = await CounterpartAcknowledgedAtAsync(sent.Id);
         Assert.IsNotNull(stamped);
 
         // The sender now sees the second delivery state, and it says what it means.
@@ -669,7 +669,7 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
         var repeat = await AcknowledgeAsync(thread.Client, thread.ConversationId, sendEvent.EventSequence);
         Assert.AreEqual(0, repeat.Accepted);
         Assert.AreEqual(1, repeat.AlreadyAcknowledged);
-        Assert.AreEqual(stamped, await RealtimeAcknowledgedAtAsync(sent.Id), "The instant never moves.");
+        Assert.AreEqual(stamped, await CounterpartAcknowledgedAtAsync(sent.Id), "The instant never moves.");
         Assert.AreEqual(1L, await AcknowledgementCountAsync(thread.ConversationId));
     }
 
@@ -687,7 +687,7 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
 
         Assert.AreEqual(1, result.Accepted, "The sender's own tab really did accept the event.");
         Assert.IsNull(
-            await RealtimeAcknowledgedAtAsync(sent.Id),
+            await CounterpartAcknowledgedAtAsync(sent.Id),
             "But that is evidence about nobody else, so the counterpart timestamp stays null.");
         var coachView = (await GetMessagesAsync(thread.Coach, thread.ConversationId))
             .Items.Single(item => item.Id == sent.Id);
@@ -716,7 +716,7 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
             1L,
             await AcknowledgementCountAsync(thread.ConversationId),
             "A unique key makes a concurrent duplicate one durable fact rather than a race.");
-        Assert.IsNotNull(await RealtimeAcknowledgedAtAsync(sent.Id));
+        Assert.IsNotNull(await CounterpartAcknowledgedAtAsync(sent.Id));
     }
 
     [TestMethod]
@@ -766,7 +766,7 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
                 ("firstEventId", firstEvent.Id),
                 ("secondEventId", secondEvent.Id)),
             "The overlap is idempotent, but the non-overlapping event must still be committed.");
-        Assert.IsNotNull(await RealtimeAcknowledgedAtAsync(secondMessage.Id));
+        Assert.IsNotNull(await CounterpartAcknowledgedAtAsync(secondMessage.Id));
     }
 
     [TestMethod]

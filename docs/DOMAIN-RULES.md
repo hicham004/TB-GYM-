@@ -95,7 +95,10 @@ append-only coach history. Only the owner reassigns a client.
 
 **CLI-013** A Coach sees and acts only on their own clients in every module; the Owner sees every
 client. Another coach's client answers as a missing one. Chats stay private to their participants:
-after a reassignment the old coach loses the thread and the client keeps it read-only.
+after a reassignment the old coach loses the thread and the client keeps it read-only. The owner is
+no exception (audit COACH-13): a thread is live only between a client and the coach they are assigned
+to, so the owner's own thread closes the same way when they hand the client to a coach, and the owner
+starts a thread only with their own clients.
 
 **CLI-014** Removing a coach, or a coach resigning themselves, moves all their clients and pending
 client invitations to the owner in one transaction and deletes nothing. Each of those clients with
@@ -916,7 +919,9 @@ entitlement governs it. The participant set is immutable in this slice — there
 reassign, leave, invite, second coach, archive or close. At most one conversation exists per
 `(TenantId, ClientProfileId, CoachUserId)`; concurrent creation returns the same conversation rather
 than a second. A different coach opens their own thread with the same client and is never given
-access to the first. Only an Owner or Coach may create one; a client replies after a coach has.
+access to the first. Only the client's own coach may create one, an Owner included (CLI-013): the
+owner of a team member's client is answered 409 `messaging_not_clients_coach`; a client replies
+after their coach has.
 
 **MSG-003** Every read and write requires two separate things: an explicit participant row, and a
 current `ICoachingFeatureAccessService` decision for `CoachingFeature.Messaging` on the
@@ -961,7 +966,9 @@ unchanged, so clicking again after a lost response is the same command and not a
 rows; the message names which revision number is current. Only the sender may edit, only while the
 message is not removed, with optimistic concurrency and an idempotency key; an edit appends the next
 revision and retains every earlier one. There is no edit-time window. No ordinary API returns an
-earlier revision.
+earlier revision. A screen whose edit or removal meets a stale version reads the message again and
+sends once more only while it still says what the person acted on; a message that changed is shown,
+never overwritten or removed unseen (audit NCM-12).
 
 **MSG-008** Removal is one way, idempotent, and of two distinguishable kinds. `SenderRemoved` is the
 sender taking back their own message and carries no reason. `CoachModerated` is the explicit coach
@@ -976,7 +983,10 @@ delivery or provider acknowledgement. A participant advances only their own curs
 regresses. A sequence beyond the newest committed message is clamped down to it; a negative sequence
 is refused. Unread counts only messages written by the other participant, beyond the caller's cursor,
 not removed, in a conversation the caller participates in and may currently access. Sending is not
-reading, and sending does not mark anything read for anybody else.
+reading, and sending does not mark anything read for anybody else. The screen reports the cursor when
+the person has the messages in front of them: when a thread opens, and when a message arrives in the
+open thread of a shown tab while they are at its newest message; one that arrives in a hidden tab or
+below where they are reading waits until they reach it (audit NCM-4).
 
 **MSG-010** Phase 6B-2A claims only that a message was persisted and made available for authorized
 catch-up. `Delivered` and `Read` are not states a successful REST command establishes. Realtime and
@@ -1023,13 +1033,14 @@ separate facts and no code writes one from another. `Published` means the hub �
 a Redis backplane — accepted the frame; it is never called `Delivered`.
 `MessageDeliveryState.RealtimeAcknowledged` means the **other participant's application** accepted a
 current safe projection of an event about that message, live or through catch-up, and said so over
-REST; it does not mean a person saw it. The counterpart timestamp is set once, from the server clock,
-and is never moved. An acknowledgement from the sender's own tab is a real acknowledgement of that
-event and evidence about nobody else, so it never sets the counterpart timestamp. Acknowledgement
-changes neither participant's read cursor nor any unread count. `ProviderAcknowledgedAtUtc` stays null
-and a trigger refuses any attempt to set it. A deferred database assertion derives the counterpart
-timestamp from the earliest durable acknowledgement by a user other than the sender; neither a raw
-message update nor an acknowledgement without the matching timestamp can invent the fact.
+REST; it does not mean a person saw it. It is read from the append-only acknowledgement rows and is
+not stored on the message (audit NCM-12): a copy on the message row changed the version its sender
+edits and removes against, so every edit after delivery was refused as stale. An acknowledgement from
+the sender's own tab is a real acknowledgement of that event and evidence about nobody else, so only
+one by somebody other than the sender counts (`Message.DeliveryStateFor`). Acknowledgement changes
+neither the message, its version, either participant's read cursor nor any unread count.
+`ProviderAcknowledgedAtUtc` stays null and a trigger refuses any attempt to set it. Only an addressed
+recipient can acknowledge, so nothing can invent the fact.
 
 **MSG-016** Realtime delivery is claimed, leased and at least once. A dispatcher claims a publication
 row with `FOR UPDATE SKIP LOCKED`, a random claim token and an expiry, and starts a durable attempt
@@ -1941,7 +1952,7 @@ At minimum, later migrations should enforce:
 | Every conversation participant has publication state for every event                                                 | Composite participant FKs plus deferred recipient-completeness assertion                              |
 | Every realtime attempt starts as `Started`, is completed once, and belongs to the contiguous `1..AttemptCount` chain | PostgreSQL insert/update/delete guard plus deferred chain assertion                                   |
 | One application acknowledgement per addressed event and participant                                                  | Composite recipient FK plus unique `(TenantId, RealtimeEventId, AcknowledgedByUserId)`                |
-| A message counterpart timestamp equals its earliest durable counterpart acknowledgement                              | Deferred assertion on both messages and acknowledgement inserts                                       |
+| A message's counterpart delivery is only its addressed acknowledgements, never a message column                      | Composite recipient FK; `Messages` holds no realtime acknowledgement (NCM-12)                         |
 
 Database constraints complement domain validation. Friendly validation happens before save,
 and constraint violations are translated into stable API problem responses.

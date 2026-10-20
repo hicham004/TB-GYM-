@@ -199,6 +199,12 @@ public static class MessagingConflictCodes
     /// write to it again unless the client is assigned back to that coach (ADR 0026).
     /// </summary>
     public const string ConversationReadOnly = "messaging_conversation_read_only";
+
+    /// <summary>
+    /// The owner asked to start a thread with a client another coach has. A thread belongs to the
+    /// client's coach, the owner included, so the owner reassigns the client first (ADR 0026).
+    /// </summary>
+    public const string NotTheClientsCoach = "messaging_not_clients_coach";
 }
 
 public sealed record ConversationCommandResult(

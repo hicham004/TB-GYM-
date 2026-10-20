@@ -57,10 +57,48 @@ internal static class MessagingMessageProjection
             .ToDictionaryAsync(item => item.Id, item => item.Body, cancellationToken);
     }
 
+    /// <summary>
+    /// Each message's delivery state, from the append-only acknowledgement facts (MSG-015).
+    /// </summary>
+    /// <remarks>
+    /// Read here rather than stored on the message, so acknowledging never changes a message row or
+    /// the version its sender edits and removes against (NCM-12). Which acknowledgements count is the
+    /// aggregate's rule, <see cref="Message.DeliveryStateFor"/>.
+    /// </remarks>
+    public static async Task<Dictionary<Guid, MessageDeliveryState>> DeliveryStatesAsync(
+        GymDbContext dbContext,
+        IReadOnlyList<Message> messages,
+        CancellationToken cancellationToken)
+    {
+        if (messages.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = messages.Select(message => (Guid?)message.Id).Distinct().ToArray();
+        var acknowledgements = await (
+            from acknowledgement in dbContext.MessagingRealtimeAcknowledgements.AsNoTracking()
+            join realtimeEvent in dbContext.MessagingRealtimeEvents.AsNoTracking()
+                on new { acknowledgement.TenantId, acknowledgement.RealtimeEventId }
+                equals new { realtimeEvent.TenantId, RealtimeEventId = realtimeEvent.Id }
+            where ids.Contains(realtimeEvent.MessageId)
+            select new { realtimeEvent.MessageId, acknowledgement.AcknowledgedByUserId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var byMessage = acknowledgements.ToLookup(
+            item => item.MessageId!.Value,
+            item => item.AcknowledgedByUserId);
+
+        return messages
+            .DistinctBy(message => message.Id)
+            .ToDictionary(message => message.Id, message => message.DeliveryStateFor(byMessage[message.Id]));
+    }
+
     public static MessageView ToView(
         Message message,
         ConversationParticipant participant,
-        IReadOnlyDictionary<Guid, string> bodies)
+        IReadOnlyDictionary<Guid, string> bodies,
+        IReadOnlyDictionary<Guid, MessageDeliveryState> deliveries)
     {
         var isFromCaller = message.SenderUserId == participant.UserId;
         return new MessageView(
@@ -83,7 +121,7 @@ internal static class MessagingMessageProjection
             // Persisted, or acknowledged by the other participant's application. Never "delivered"
             // and never "read": one is a claim about a network nobody can make from here, and the
             // other belongs to the participant row and to nothing else.
-            message.DeliveryState,
+            deliveries.GetValueOrDefault(message.Id, MessageDeliveryState.Persisted),
             CanEdit: isFromCaller && !message.IsDeleted,
             CanDelete: isFromCaller && !message.IsDeleted,
             CanModerate: participant.CanModerate && !isFromCaller && !message.IsDeleted,
@@ -119,7 +157,8 @@ internal static class MessagingMessageProjection
         }
 
         var bodies = await CurrentBodiesAsync(dbContext, [message], cancellationToken);
-        return ToView(message, participant, bodies);
+        var deliveries = await DeliveryStatesAsync(dbContext, [message], cancellationToken);
+        return ToView(message, participant, bodies, deliveries);
     }
 
     /// <summary>The caller-safe projections of several messages in one round trip.</summary>
@@ -142,8 +181,9 @@ internal static class MessagingMessageProjection
                 message.ConversationId == participant.ConversationId)
             .ToListAsync(cancellationToken);
         var bodies = await CurrentBodiesAsync(dbContext, messages, cancellationToken);
+        var deliveries = await DeliveryStatesAsync(dbContext, messages, cancellationToken);
         return messages.ToDictionary(
             message => message.Id,
-            message => ToView(message, participant, bodies));
+            message => ToView(message, participant, bodies, deliveries));
     }
 }

@@ -3,7 +3,9 @@ import { computed, DestroyRef, effect, inject, Injectable, signal } from '@angul
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { AuthStore } from '../auth/auth.store';
+import { CsrfService } from '../security/csrf.service';
 import { TenantStore } from '../tenancy/tenant.store';
+import type { NotificationItem } from '../../features/notifications/notification.models';
 
 /**
  * The unread badge in the topbar, and the single place the count is owned.
@@ -27,6 +29,7 @@ const refreshEveryMs = 60_000;
 export class NotificationStore {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
+  private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(
     () => this.tenants.selectedMembership()?.tenantId ?? null,
@@ -87,6 +90,32 @@ export class NotificationStore {
 
       await owner.wait(this.load(++this.generation));
     });
+  }
+
+  /**
+   * Marks one notice read and takes it off the badge.
+   *
+   * Owned here rather than by the inbox (audit WEB-2): following a notice's link destroys the inbox
+   * while the antiforgery token is still on its way, and a write the page owned died with it, so the
+   * notice stayed unread. This store lives as long as the app, so the write finishes; it still
+   * belongs to the account and workspace it was asked in, and a switch before it is sent drops it.
+   * Each notice has its own lane, so marking a second one never cancels the first.
+   *
+   * @returns the notice as the server now holds it, or null when the context changed first.
+   */
+  async markRead(notificationId: string): Promise<NotificationItem | null> {
+    return this.scope.run(
+      `markRead:${notificationId}`,
+      async (owner) => {
+        await owner.wait(this.csrf.refresh());
+        const updated = await owner.wait(
+          firstValueFrom(this.api.markNotificationRead(notificationId)),
+        );
+        this.decrement();
+        return updated;
+      },
+      null,
+    );
   }
 
   /**

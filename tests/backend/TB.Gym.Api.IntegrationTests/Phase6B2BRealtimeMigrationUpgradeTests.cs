@@ -85,11 +85,17 @@ public sealed class Phase6B2BRealtimeMigrationUpgradeTests
         Assert.AreEqual(0L, await CountAsync("RealtimeAttempts"));
         Assert.AreEqual(0L, await CountAsync("RealtimeAcknowledgements"));
 
-        // No delivery claim was fabricated for messages that predate the channel.
+        // No delivery claim was fabricated for messages that predate the channel. The counterpart's
+        // delivery is the acknowledgement rows, counted above, and since NCM-12 there is no copy of
+        // it on the message to fabricate either.
         Assert.AreEqual(
             0L,
             await ScalarAsync(
-                """SELECT count(*) FROM messaging."Messages" WHERE "RealtimeAcknowledgedAtUtc" IS NOT NULL"""),
+                """
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = 'messaging' AND table_name = 'Messages'
+                  AND column_name = 'RealtimeAcknowledgedAtUtc'
+                """),
             "Nothing acknowledged these messages, so nothing may say it did.");
         Assert.AreEqual(
             0L,

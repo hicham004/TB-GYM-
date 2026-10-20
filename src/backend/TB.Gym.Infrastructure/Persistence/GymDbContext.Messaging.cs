@@ -256,14 +256,15 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_Messages_DeletionKindValue",
                     "\"DeletionKind\" IS NULL OR \"DeletionKind\" IN ('SenderRemoved', 'CoachModerated')");
-                // Delivery metadata is ordered and never precedes persistence. Both acknowledgement
-                // columns are null throughout Phase 6B-2A and are reserved for later channels.
+                // Delivery metadata is ordered and never precedes persistence. The provider column is
+                // reserved for a later channel; the counterpart's realtime acknowledgement is not a
+                // column at all but the append-only acknowledgement rows (MSG-015, NCM-12).
                 table.HasCheckConstraint(
                     "CK_Messages_Available",
                     "\"AvailableAtUtc\" >= \"SentAtUtc\"");
                 table.HasCheckConstraint(
                     "CK_Messages_Acknowledgements",
-                    "(\"RealtimeAcknowledgedAtUtc\" IS NULL OR \"RealtimeAcknowledgedAtUtc\" >= \"AvailableAtUtc\") AND (\"ProviderAcknowledgedAtUtc\" IS NULL OR \"ProviderAcknowledgedAtUtc\" >= \"AvailableAtUtc\")");
+                    "\"ProviderAcknowledgedAtUtc\" IS NULL OR \"ProviderAcknowledgedAtUtc\" >= \"AvailableAtUtc\"");
             });
             ConfigureAuditable(entity);
         });

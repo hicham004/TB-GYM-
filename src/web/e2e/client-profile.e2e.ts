@@ -383,7 +383,9 @@ for (const [width, height] of [
       'Lose 6 kg and feel strong for my wedding in December.',
     );
     await expect(page.locator('app-status-pill').first()).toHaveText('Active · 73 days left');
-    await expect(page.getByRole('button', { name: 'Message Maya' })).toBeVisible();
+    // Karim owns the workspace but Lea coaches Maya, so her messages go through Lea (COACH-13).
+    await expect(page.locator('.messaging-note')).toHaveText('Messages go through Lea Khoury.');
+    await expect(page.getByRole('button', { name: 'Message Maya' })).toHaveCount(0);
 
     // What needs the coach comes before anything else, with one filled action.
     const needs = page.locator('.needs');
@@ -486,7 +488,7 @@ for (const width of [390, 1440]) {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     await expectNoHorizontalOverflow(page);
-    await expect(page.getByRole('button', { name: 'Message Maya' })).toBeVisible();
+    await expect(page.locator('.messaging-note')).toBeVisible();
     await expect(page.locator('.needs .need')).toHaveCount(3);
   });
 }

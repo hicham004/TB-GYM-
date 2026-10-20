@@ -101,15 +101,18 @@ internal sealed class CoachClientScope(
     }
 
     /// <summary>
-    /// Whether <paramref name="staffUserId"/>, whoever is asking, may currently coach this client: the
-    /// active Owner always, an active Coach only while the client is assigned to them.
+    /// Whether <paramref name="staffUserId"/>, whoever is asking, is this client's coach now: an
+    /// active Owner or Coach the client is assigned to. The Owner is no exception.
     /// </summary>
     /// <remarks>
     /// Messaging asks this about the coach side of a conversation rather than about the caller, so a
     /// client can tell that their old coach's thread is closed and a background dispatcher, which has
-    /// no caller at all, can refuse to deliver to a coach who no longer has the client.
+    /// no caller at all, can refuse to deliver to a coach who no longer has the client. A thread
+    /// belongs to the coach who has the client, so after the owner hands a client to a coach the
+    /// owner's old thread closes exactly as a coach's does (ADR 0026, COACH-13); seeing every client
+    /// is not the same as being their coach.
     /// </remarks>
-    public Task<bool> MayCoachAsync(
+    public Task<bool> IsAssignedCoachAsync(
         Guid staffUserId,
         Guid clientProfileId,
         CancellationToken cancellationToken) =>
@@ -120,10 +123,9 @@ internal sealed class CoachClientScope(
                     membership.TenantId == tenantContext.TenantId &&
                     membership.UserId == staffUserId &&
                     membership.Status == MembershipStatus.Active &&
-                    (membership.Role == TenantRole.Owner ||
-                     (membership.Role == TenantRole.Coach &&
-                      dbContext.ClientProfiles.Any(client =>
-                          client.Id == clientProfileId &&
-                          client.AssignedCoachUserId == staffUserId))),
+                    (membership.Role == TenantRole.Owner || membership.Role == TenantRole.Coach) &&
+                    dbContext.ClientProfiles.Any(client =>
+                        client.Id == clientProfileId &&
+                        client.AssignedCoachUserId == staffUserId),
                 cancellationToken);
 }

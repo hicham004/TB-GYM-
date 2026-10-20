@@ -13,6 +13,22 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 
 /**
+ * The client's coach, when that is somebody other than the signed-in person. Only a client's own
+ * coach messages them, the owner included (ADR 0026, audit COACH-13), so the owner on a team
+ * member's client is told who does instead of being offered a chat the API would refuse.
+ */
+export function otherCoachName(
+  profile: CoachClientDetails | null,
+  signedInUserId: string | null,
+): string | null {
+  return profile !== null &&
+    signedInUserId !== null &&
+    profile.assignedCoachUserId !== signedInUserId
+    ? profile.assignedCoachName
+    : null;
+}
+
+/**
  * What every tab of one client's record shares: the client, their plans and the workspace
  * calendar, plus the page-level messages. Provided by `ClientWorkspace`, so each record gets its
  * own instance and it is gone when the coach leaves the record. The API decides everything; this

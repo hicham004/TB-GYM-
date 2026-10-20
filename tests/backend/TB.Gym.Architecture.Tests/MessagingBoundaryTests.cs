@@ -190,31 +190,31 @@ public sealed class MessagingBoundaryTests
     }
 
     /// <summary>
-    /// The two acknowledgement columns still have no public setter, and only one of them is ever
-    /// written.
+    /// The provider column still has no public setter and nothing writes it, and the counterpart's
+    /// realtime acknowledgement is not a message column at all.
     /// </summary>
     /// <remarks>
-    /// <c>RealtimeAcknowledgedAtUtc</c> is now written, but only from inside the aggregate and only
-    /// through the method that refuses a sender acknowledging their own message.
-    /// <c>ProviderAcknowledgedAtUtc</c> stays null: there is no provider channel, and a column
-    /// nothing can set is the only honest state for one.
+    /// The counterpart's delivery is the append-only acknowledgement row, read through
+    /// <see cref="Message.DeliveryStateFor"/> (MSG-015). Writing a copy onto the message rewrote the
+    /// row whose version the sender edits against, so every edit after delivery was refused as stale
+    /// (NCM-12). <c>ProviderAcknowledgedAtUtc</c> stays null: there is no provider channel, and a
+    /// column nothing can set is the only honest state for one.
     /// </remarks>
     [TestMethod]
     public void DeliveryColumnsAreWrittenOnlyByTheAggregate()
     {
-        foreach (var reserved in new[] { "RealtimeAcknowledgedAtUtc", "ProviderAcknowledgedAtUtc" })
-        {
-            var property = typeof(Message).GetProperty(reserved);
-            Assert.IsNotNull(property, $"{reserved} is part of the delivery model.");
-            Assert.IsNull(
-                property.SetMethod is { IsPublic: true } ? property : null,
-                $"{reserved} must not be publicly settable.");
-        }
+        var provider = typeof(Message).GetProperty("ProviderAcknowledgedAtUtc");
+        Assert.IsNotNull(provider, "ProviderAcknowledgedAtUtc is part of the delivery model.");
+        Assert.IsNull(
+            provider.SetMethod is { IsPublic: true } ? provider : null,
+            "ProviderAcknowledgedAtUtc must not be publicly settable.");
 
-        var acknowledge = typeof(Message).GetMethod(nameof(Message.AcknowledgeRealtimeDelivery));
+        Assert.IsNull(
+            typeof(Message).GetProperty("RealtimeAcknowledgedAtUtc"),
+            "The counterpart's acknowledgement is its own append-only row, never a copy on the message.");
         Assert.IsNotNull(
-            acknowledge,
-            "Message.AcknowledgeRealtimeDelivery is the only way the counterpart timestamp is written.");
+            typeof(Message).GetMethod(nameof(Message.DeliveryStateFor)),
+            "Message.DeliveryStateFor is the one rule for which acknowledgements count as delivery.");
 
         // No behaviour anywhere in the module may write the provider column: no phase has a provider
         // yet, and a null column is the only claim that can be substantiated. Property accessors are

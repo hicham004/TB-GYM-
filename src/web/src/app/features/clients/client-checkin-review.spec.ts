@@ -44,6 +44,8 @@ const PROFILE = {
   onboardingStatus: 'Completed',
   version: 3,
   release: null,
+  assignedCoachUserId: LEA_ID,
+  assignedCoachName: 'Lea Khoury',
 } as unknown as CoachClientDetails;
 
 type Feature = 'Training' | 'Nutrition' | 'CheckIns' | 'Messaging';
@@ -70,6 +72,8 @@ interface Options {
   detail?: CheckInResponseDetail;
   closed?: Partial<Record<Feature, string>>;
   api?: Record<string, unknown>;
+  /** Who is signed in; Lea, Maya's coach, unless a test says otherwise. */
+  userId?: string;
 }
 
 async function render(options: Options = {}) {
@@ -105,7 +109,7 @@ async function render(options: Options = {}) {
       { provide: ApiClient, useValue: api },
       { provide: CsrfService, useValue: csrf },
       { provide: UiToast, useValue: toast },
-      { provide: AuthStore, useValue: { user: signal({ id: LEA_ID }) } },
+      { provide: AuthStore, useValue: { user: signal({ id: options.userId ?? LEA_ID }) } },
       {
         provide: TenantStore,
         useValue: { selectedTenantId: signal('tenant-1'), isOwner: signal(false) },
@@ -519,6 +523,17 @@ describe('a check-in under review', () => {
       await settle(harness.fixture);
 
       expect(alertText(host)).toBe('This reply cannot be sent yet: Write your reply first.');
+      expect(api.createDirectConversation).not.toHaveBeenCalled();
+    });
+
+    it('leaves the reply to the client’s own coach when the owner reviews (COACH-13)', async () => {
+      const { host, api } = await render({ userId: 'owner-1' });
+
+      expect(host.querySelector('textarea')).toBeNull();
+      expect(textOf(host.querySelector('.reply .muted'))).toBe(
+        'Replies go through Maya’s coach, Lea Khoury.',
+      );
+      expect(primary(host)).toBe('Mark reviewed');
       expect(api.createDirectConversation).not.toHaveBeenCalled();
     });
 

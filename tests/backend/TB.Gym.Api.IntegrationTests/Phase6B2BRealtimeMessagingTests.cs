@@ -772,21 +772,44 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
         Assert.Contains("provider channel", providerClaim.MessageText, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Delivery has no column to be invented in: the message row carries none (NCM-12), and the only
+    /// way to claim it is an acknowledgement, which can only answer a recipient row that was actually
+    /// addressed.
+    /// </summary>
     [TestMethod]
     public async Task TheDatabaseRefusesInventingDeliveryWithoutItsAcknowledgementFact()
     {
         var thread = await OpenThreadAsync("invented-ack");
         var message = await SendMessageAsync(thread.Coach, thread.ConversationId, "not acknowledged");
+        var events = await EventsAsync(thread.ConversationId);
+
+        Assert.AreEqual(
+            0L,
+            await ScalarAsync<long>(
+                """
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = 'messaging' AND table_name = 'Messages'
+                  AND column_name = 'RealtimeAcknowledgedAtUtc'
+                """),
+            "The counterpart's delivery is the acknowledgement row, never a copy on the message.");
 
         var rejection = await ExpectRejectionAsync(
             """
-            UPDATE messaging."Messages"
-            SET "RealtimeAcknowledgedAtUtc" = CURRENT_TIMESTAMP
-            WHERE "Id" = @id
+            INSERT INTO messaging."RealtimeAcknowledgements"
+                ("Id", "TenantId", "ConversationId", "RealtimeEventId", "AcknowledgedByUserId",
+                 "AcknowledgedAtUtc", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES (@id, @tenantId, @conversationId, @eventId, @stranger,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """,
-            ("id", message.Id));
+            ("id", Guid.CreateVersion7()),
+            ("tenantId", thread.Workspace.TenantId),
+            ("conversationId", thread.ConversationId),
+            ("eventId", events.Single(item => item.MessageId == message.Id).Id),
+            ("stranger", Guid.CreateVersion7()));
 
-        Assert.Contains("counterpart acknowledgement", rejection.MessageText, StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(PostgresErrorCodesForeignKey, rejection.SqlState);
+        Assert.IsNull(await CounterpartAcknowledgedAtAsync(message.Id));
     }
 
     [TestMethod]
@@ -796,17 +819,19 @@ public sealed partial class Phase6B2BRealtimeMessagingTests
         var message = await SendMessageAsync(thread.Coach, thread.ConversationId, "acknowledge me");
         var events = await EventsAsync(thread.ConversationId);
         await AcknowledgeAsync(thread.Client, thread.ConversationId, events[^1].EventSequence);
-        Assert.IsNotNull(await RealtimeAcknowledgedAtAsync(message.Id));
+        var acknowledged = await CounterpartAcknowledgedAtAsync(message.Id);
+        Assert.IsNotNull(acknowledged);
 
         var rejection = await ExpectRejectionAsync(
             """
-            UPDATE messaging."Messages"
-            SET "RealtimeAcknowledgedAtUtc" = "RealtimeAcknowledgedAtUtc" + interval '1 hour'
-            WHERE "Id" = @id
+            UPDATE messaging."RealtimeAcknowledgements"
+            SET "AcknowledgedAtUtc" = "AcknowledgedAtUtc" + interval '1 hour'
+            WHERE "ConversationId" = @id
             """,
-            ("id", message.Id));
+            ("id", thread.ConversationId));
 
-        Assert.Contains("never moved", rejection.MessageText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("immutable", rejection.MessageText, StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(acknowledged, await CounterpartAcknowledgedAtAsync(message.Id));
     }
 
     private const string PostgresErrorCodesCheckViolation = "23514";

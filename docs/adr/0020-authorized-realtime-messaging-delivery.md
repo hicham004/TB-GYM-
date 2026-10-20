@@ -1,6 +1,8 @@
 # ADR 0020: Authorized Realtime Messaging Delivery v1
 
-Status: accepted, 2026-09-04
+Status: accepted, 2026-09-04; amended 2026-10-20 (audit NCM-12, NCM-14: the counterpart's
+acknowledgement is read from its rows and no longer copied onto the message, and the screen says
+offline after a few failed reconnects)
 
 ## Context
 
@@ -65,7 +67,7 @@ not a shadow message store.
 | ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Persisted                | `Message.AvailableAtUtc`                                                      | Committed and available to an authorized reader who asks                                         |
 | Published                | `RealtimeRecipients.PublishedAtUtc`                                           | The hub, and behind it possibly Redis, accepted the frame                                        |
-| Application acknowledged | `RealtimeAcknowledgements`, and once onto `Message.RealtimeAcknowledgedAtUtc` | The **other participant's application** accepted a current safe projection and said so over REST |
+| Application acknowledged | `RealtimeAcknowledgements`, read as the earliest by somebody but the sender   | The **other participant's application** accepted a current safe projection and said so over REST |
 | Read                     | `ConversationParticipant.LastReadSequence`                                    | A person looked                                                                                  |
 
 A fifth, provider acknowledgement, has no channel yet: `ProviderAcknowledgedAtUtc` stays null and a
@@ -75,9 +77,12 @@ trigger refuses any attempt to set it.
 write can be gone by the time the bytes reach it. `MessageDeliveryState` gains exactly one member,
 `RealtimeAcknowledged`, and it means the counterpart's _application_ had it — live or through
 catch-up — not that a person saw it. An acknowledgement from the sender's own second tab is a real
-acknowledgement of that event and evidence about nobody else, so the aggregate refuses to write the
-counterpart timestamp from it. The timestamp is written once, from the server clock, and a trigger
-refuses to move it.
+acknowledgement of that event and evidence about nobody else, so `Message.DeliveryStateFor` does not
+count it. Until 2026-10-20 the first counterpart acknowledgement was also copied onto
+`Message.RealtimeAcknowledgedAtUtc`; that write changed the message's row version, so within a second
+of delivery every edit, removal and coach removal answered 409 stale (audit NCM-12). The migration
+`AcknowledgementLeavesMessageVersion` dropped the copy and its deferred assertion: an acknowledgement
+now writes its own row and nothing else.
 
 Acknowledgement changes neither participant's read cursor nor any unread count. That confusion is the
 defect DOMAIN-RULES **NOT-001** has warned about since Phase 1.
@@ -232,7 +237,7 @@ Reconnect always reconciles from PostgreSQL, because Redis cannot replay a lost 
 | Only an event addressed to that participant can be acknowledged                                          | Composite FK `(TenantId, RealtimeEventId, AcknowledgedByUserId)` → `RealtimeRecipients (TenantId, RealtimeEventId, RecipientUserId)`                                                                                                                                                                                                                                   |
 | Events and acknowledgements are append-only                                                              | Trigger refusing UPDATE and DELETE                                                                                                                                                                                                                                                                                                                                     |
 | Publication state and attempts are never deleted                                                         | Trigger refusing DELETE                                                                                                                                                                                                                                                                                                                                                |
-| The counterpart-delivery instant is written once, never moved and backed by the earliest counterpart ACK | Trigger on `Messages` comparing OLD and NEW plus a deferred assertion on both messages and acknowledgement inserts                                                                                                                                                                                                                                                     |
+| The counterpart's delivery is only its acknowledgements, and an acknowledgement never changes a message  | No acknowledgement column on `Messages` since `AcknowledgementLeavesMessageVersion` (NCM-12); the append-only trigger and the recipient FK above                                                                                                                                                                                                                       |
 | No provider has acknowledged anything                                                                    | Trigger refusing a non-null `ProviderAcknowledgedAtUtc` on INSERT and UPDATE                                                                                                                                                                                                                                                                                           |
 | Every 6B-2A protection                                                                                   | Unchanged; the revision-chain, conversation-tip, removal-agreement and read-cursor triggers are re-asserted against the upgraded schema                                                                                                                                                                                                                                |
 
@@ -272,7 +277,10 @@ content can reach the browser console.
 `withAutomaticReconnect` handles reconnects with bounded jitter but deliberately does **not** retry the
 initial `start()`, so the initial attempt has its own cancellable, jittered retry: without it, a first
 attempt that failed because the API was still starting would leave the client permanently offline with
-no error anybody sees.
+no error anybody sees. The reconnect policy is the service's and never gives up, so `onclose` never
+fires while it retries; after three failed reconnects, or as soon as the browser reports it is
+offline, the state turns `offline` and the screen offers "Check for new messages" while the reconnect
+goes on (audit NCM-14).
 
 Every account, workspace and conversation change is a generation. No delayed start, reconnect callback,
 catch-up page, acknowledgement reply, timer or socket frame from an older generation may write. On an

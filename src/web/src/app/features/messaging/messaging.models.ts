@@ -334,6 +334,30 @@ export function isNewerProjection(current: Message | undefined, incoming: Messag
   return incoming.isDeleted || incoming.revisionNumber > current.revisionNumber;
 }
 
+/**
+ * The open conversation's list row, told what the open thread already knows (audit NCM-4).
+ *
+ * A live refresh of the list can be read on the server just before the reader's cursor moved, so it
+ * arrives saying a message the reader already has in front of them is unread. The thread's own
+ * confirmed cursor is newer: the row keeps it, and never more unread than the thread counts. A row
+ * already at or past that cursor is the newer answer and is kept as it is.
+ */
+export function reconcileOpenConversation(
+  row: Conversation,
+  confirmedRead: number,
+  unreadInThread: number,
+): Conversation {
+  if (row.lastReadSequence >= confirmedRead) {
+    return row;
+  }
+
+  return {
+    ...row,
+    lastReadSequence: confirmedRead,
+    unreadCount: Math.min(row.unreadCount, Math.max(0, unreadInThread)),
+  };
+}
+
 export function mapReadState(value: ContractReadState): ConversationReadState {
   return {
     conversationId: value.conversationId,

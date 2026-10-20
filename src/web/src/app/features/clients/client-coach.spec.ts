@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoachClientDetails, TeamMember } from '../../core/api/api.models';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { installDialogSupport } from '../../../testing/dialog';
@@ -49,7 +50,7 @@ class Host {
   readonly changed: CoachClientDetails[] = [];
 }
 
-async function render(team: TeamMember[]) {
+async function render(team: TeamMember[], signedIn = 'owner-1') {
   await TestBed.configureTestingModule({
     imports: [Host],
     providers: [
@@ -69,6 +70,7 @@ async function render(team: TeamMember[]) {
       },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      { provide: AuthStore, useValue: { user: signal({ id: signedIn }) } },
     ],
   }).compileComponents();
 
@@ -81,6 +83,13 @@ async function render(team: TeamMember[]) {
   };
 }
 
+/** The dialog's sentence about what reassigning does, as one line of text. */
+function dialogNote(host: HTMLElement): string {
+  return (host.querySelector('dialog .tb-text-compact')?.textContent ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 describe('ClientCoach', () => {
   beforeEach(() => {
     uninstallDialog = installDialogSupport();
@@ -89,6 +98,28 @@ describe('ClientCoach', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
     uninstallDialog();
+  });
+
+  it('tells the owner what reassigning their own client does to their chat (COACH-13)', async () => {
+    const { host, fixture } = await render([owner, coach]);
+
+    press(host, 'Reassign coach');
+    await settle(fixture);
+
+    expect(dialogNote(host)).toBe(
+      'The new coach sees this client and all their history right away. You still see the client as the owner, but your chat with them stays readable to the client only.',
+    );
+  });
+
+  it('says what the current coach loses when the client is a team member’s', async () => {
+    const { host, fixture } = await render([owner, coach], 'someone-else');
+
+    press(host, 'Reassign coach');
+    await settle(fixture);
+
+    expect(dialogNote(host)).toBe(
+      'The new coach sees this client and all their history right away. The current coach loses access, and their chat with the client stays readable to the client only.',
+    );
   });
 
   it('shows nothing to a solo owner, who has nobody to reassign a client to', async () => {

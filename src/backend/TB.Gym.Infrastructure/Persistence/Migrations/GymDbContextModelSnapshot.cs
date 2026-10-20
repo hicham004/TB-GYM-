@@ -3334,9 +3334,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ProviderAcknowledgedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTimeOffset?>("RealtimeAcknowledgedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid>("SenderUserId")
                         .HasColumnType("uuid");
 
@@ -3375,7 +3372,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Messages", "messaging", t =>
                         {
-                            t.HasCheckConstraint("CK_Messages_Acknowledgements", "(\"RealtimeAcknowledgedAtUtc\" IS NULL OR \"RealtimeAcknowledgedAtUtc\" >= \"AvailableAtUtc\") AND (\"ProviderAcknowledgedAtUtc\" IS NULL OR \"ProviderAcknowledgedAtUtc\" >= \"AvailableAtUtc\")");
+                            t.HasCheckConstraint("CK_Messages_Acknowledgements", "\"ProviderAcknowledgedAtUtc\" IS NULL OR \"ProviderAcknowledgedAtUtc\" >= \"AvailableAtUtc\"");
 
                             t.HasCheckConstraint("CK_Messages_Available", "\"AvailableAtUtc\" >= \"SentAtUtc\"");
 
