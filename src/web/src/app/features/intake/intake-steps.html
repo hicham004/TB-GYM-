@@ -44,12 +44,13 @@
         (touched)="attempt.touch($event)"
       />
 
-      @if (attempt.wasTried() && problemCount() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (refusal(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (refusal(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problemCount() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
 
       <div class="actions">
         @if (index() > 0) {

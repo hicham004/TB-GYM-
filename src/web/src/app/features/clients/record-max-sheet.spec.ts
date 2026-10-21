@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { maxView, SQUAT, BENCH, TODAY, library } from '../../../testing/client-strength-fixtures';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, formSummary, press, settle } from '../../../testing/dom';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -181,13 +181,15 @@ describe('Record a max', () => {
     const closed = vi.fn();
     fixture.componentInstance.closed.subscribe(closed);
 
+    expect(textOf(formSummary(host))).toBe('');
     chooseLift(host, SQUAT);
     fill(host, 'Weight', '100');
     await settle(fixture);
     press(host, 'Record max');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toContain('no longer in your library');
+    expect(textOf(formSummary(host))).toContain('no longer in your library');
+    expect(document.activeElement).toBe(formSummary(host));
     expect(host.querySelector<HTMLInputElement>('input[name="value"]')!.value).toBe('100');
     expect(closed).not.toHaveBeenCalled();
   });

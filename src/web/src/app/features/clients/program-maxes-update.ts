@@ -11,6 +11,7 @@ import {
   LOCALE_ID,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type {
@@ -25,6 +26,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { Skeleton } from '../../ui/skeleton';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { unitLabel } from '../training/training-program.models';
@@ -56,7 +58,7 @@ import {
  */
 @Component({
   selector: 'app-program-maxes-update',
-  imports: [Button, Checkbox, Control, Field, Skeleton],
+  imports: [Button, Checkbox, Control, Field, FormSummary, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -220,13 +222,14 @@ import {
                 (blur)="attempt.touch('reason')"
               ></textarea>
             </app-field>
-            @if (attempt.wasTried() && errors()['form']; as problem) {
-              <p class="problem-text" role="alert">{{ problem[0] }}</p>
+          }
+          <app-form-summary>
+            @if (error(); as message) {
+              {{ message }}
+            } @else if (!preview() && attempt.wasTried() && errors()['form']; as problem) {
+              {{ problem[0] }}
             }
-          }
-          @if (error(); as message) {
-            <p class="problem-text" role="alert">{{ message }}</p>
-          }
+          </app-form-summary>
           <div class="actions">
             @if (preview()) {
               <button appButton type="button" variant="text" (click)="back()" i18n>
@@ -286,14 +289,6 @@ import {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem 1rem;
-    }
-
-    .problem-text {
-      background: var(--tb-danger-soft);
-      border-radius: var(--tb-radius-control);
-      color: var(--tb-danger);
-      font-weight: 600;
-      padding: 0.625rem 0.875rem;
     }
 
     fieldset {
@@ -504,6 +499,8 @@ export class ProgramMaxesUpdate {
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  /** Where a refusal is said; `summary` is the preview's own. */
+  private readonly refusalSummary = viewChild(FormSummary);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly intent = new IntentIdempotencyKey();
 
@@ -639,11 +636,14 @@ export class ProgramMaxesUpdate {
     if (this.busy()) return;
     this.attempt.attempt();
     if (Object.keys(this.errors()).length > 0 || this.reasonProblems().length > 0) {
+      this.error.set(null);
+      // The first box marked wrong; when none is ("Change at least one training max."), the summary.
       afterNextRender(
-        () =>
-          this.host.nativeElement
-            .querySelector<HTMLElement>('[aria-invalid="true"], input')
-            ?.focus(),
+        () => {
+          const wrong = this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]');
+          if (wrong) wrong.focus();
+          else this.refusalSummary()?.focus();
+        },
         { injector: this.injector },
       );
       return;
@@ -707,6 +707,7 @@ export class ProgramMaxesUpdate {
       await this.readSuggestionsAgain();
     }
     this.error.set(programWriteError(error, fallback, this.firstName()));
+    this.refusalSummary()?.focus();
   }
 
   /**

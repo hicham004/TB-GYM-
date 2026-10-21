@@ -500,6 +500,18 @@ region is registered before anything lands in it, `tabindex="-1"` so it can take
 entering the tab order, and populated only when a submit is refused, naming everything outstanding
 at once. A refused submit moves focus to it, so the refusal is where the user already is.
 
+The kit's `<app-form-summary>` (`ui/form-summary.ts`) is that region (audit A12b, WEA-9). Empty, it is
+visually hidden but stays in the accessibility tree, never `display: none`; its `focus()` takes focus
+once the words are drawn and scrolls clear of a sheet's sticky bar. Each form in a sheet or dialog in
+clients, nutrition, training, progress and intake, the intake steps and Notification settings has one:
+the server's words first, else the form's own pointer ("Check the fields marked above."). A submit the
+form refuses itself moves focus to the first box marked wrong, whose reason is read with it, and to the
+summary only when no box is (nothing entered yet); a server refusal always moves focus to the summary.
+`SheetForm` and `EntrySheet` do this for their sheets. Load failures and side actions inside a sheet
+(a list that could not be read, a photo that cannot be used, a preview's verdict) keep their own lines.
+The invitation, product, platform, team, workspace, account and messaging forms adopt it when next
+changed.
+
 **Submit controls are not disabled by invalidity.** They are disabled only while a request is in
 flight. Phase 6A-5 shipped the opposite and Phase 6A-6 measured it in Chrome 150: with the form's
 default button disabled, pressing Enter in a field fires no `submit` event, a real mouse click on

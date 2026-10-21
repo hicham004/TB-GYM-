@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
@@ -8,7 +9,7 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { installDialogSupport } from '../../../testing/dialog';
-import { fill, press, settle, text } from '../../../testing/dom';
+import { fill, formSummary, press, settle, text } from '../../../testing/dom';
 import { TeamApi } from '../team/team-api';
 import { ClientCoach } from './client-coach';
 
@@ -158,6 +159,31 @@ describe('ClientCoach', () => {
       'coach-1',
     ]);
     expect(text(fixture)).toContain('Sam now has Cara Coach as their coach.');
+  });
+
+  it('says a refused reassignment in the dialog’s summary, which takes focus, and stays open', async () => {
+    const { fixture, host, api } = await render([owner, coach]);
+    api.reassignClientCoach.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: { title: 'The client was changed by someone else.' },
+          }),
+      ),
+    );
+
+    press(host, 'Reassign coach');
+    await settle(fixture);
+    expect(formSummary(host).textContent?.trim()).toBe('');
+    fill(host, 'New coach', 'coach-1');
+    await settle(fixture);
+    press(host, 'Reassign');
+    await settle(fixture);
+
+    expect(host.querySelector('dialog')?.open).toBe(true);
+    expect(formSummary(host).textContent?.trim()).toBe('The client was changed by someone else.');
+    expect(document.activeElement).toBe(formSummary(host));
   });
 
   it('shows the coach history its note is kept in, newest first, with each change and note (COACH-16)', async () => {

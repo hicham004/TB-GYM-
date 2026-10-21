@@ -10,7 +10,7 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
-import { fill, press, settle, type } from '../../../testing/dom';
+import { fill, formSummary, press, settle, type } from '../../../testing/dom';
 import {
   finishedProfile,
   halfwayProfile,
@@ -156,7 +156,7 @@ describe('ClientProfilePage', () => {
     expect(api['updateSelfIntake']).not.toHaveBeenCalled();
     expect(textOf(host)).toContain('Enter a date of birth: day, month and year.');
     expect(textOf(host)).toContain('Enter a height.');
-    expect(textOf(host.querySelector('[role="alert"]'))).toBe('Check the fields marked above.');
+    expect(textOf(formSummary(host))).toBe('Check the fields marked above.');
     expect(document.activeElement).toBe(host.querySelector('input.day'));
   });
 
@@ -175,7 +175,8 @@ describe('ClientProfilePage', () => {
     press(host, 'Continue');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe('Your profile was changed elsewhere.');
+    expect(textOf(formSummary(host))).toBe('Your profile was changed elsewhere.');
+    expect(document.activeElement).toBe(formSummary(host));
     expect(textOf(host.querySelector('#intake-step-heading'))).toBe('About you');
     expect((host.querySelector('input[name="heightValue"]') as HTMLInputElement).value).toBe('168');
   });

@@ -5,7 +5,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, formSummary, press, settle } from '../../../testing/dom';
 import {
   measurement,
   measurementHistory,
@@ -143,9 +143,12 @@ describe('Log measurements', () => {
     const recordMeasurement = vi.fn(() => of(measurement()));
     const { fixture, host } = await render(LogMeasurements, {}, { recordMeasurement });
 
+    expect(textOf(formSummary(host))).toBe('');
     press(host, 'Save measurements');
     await settle(fixture);
-    expect(textOf(host)).toContain('Enter at least one measurement.');
+    // Nothing is marked wrong, so the summary that asks for a number takes focus itself.
+    expect(textOf(formSummary(host))).toBe('Enter at least one measurement.');
+    expect(document.activeElement).toBe(formSummary(host));
 
     fill(host, 'Waist (cm)', '5');
     fill(host, 'Body fat (%)', '90');
@@ -179,9 +182,10 @@ describe('Log measurements', () => {
 
     expect(closed).not.toHaveBeenCalled();
     expect(changed).toHaveBeenCalledTimes(1);
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Some measurements were saved. The ones marked above were not.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(textOf(host)).toContain(
       'Hips is already recorded for Sat 10 Oct. Correct that one instead.',
     );

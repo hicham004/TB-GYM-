@@ -113,15 +113,9 @@
   gap: 1rem;
 }
 
-.problem-text {
-  background: var(--tb-danger-soft);
-  border-radius: var(--tb-radius-control);
-  color: var(--tb-danger);
-  font-weight: 600;
-  margin: 0;
-  overflow-wrap: anywhere;
-  padding: 0.625rem 0.875rem;
-  // Scrolled into view with the buttons under it, clear of a phone's tab bar pinned over the page's foot.
+// The summary scrolls into view with the buttons under it, clear of a phone's tab bar pinned over the
+// page's foot.
+app-form-summary {
   scroll-margin-block-end: calc(var(--tb-client-tabs-block-size, 0px) + 5rem);
 }
 

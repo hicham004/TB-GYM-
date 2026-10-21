@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExerciseSearchResult } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, field, fill, press, settle, tick } from '../../../testing/dom';
+import { button, field, fill, formSummary, press, settle, tick } from '../../../testing/dom';
 import {
   access,
   asset,
@@ -408,9 +408,8 @@ describe('the exercise library', () => {
       press(sheet, 'Add exercise');
       await settle(harness.fixture);
 
-      expect(textOf(sheet.querySelector('[role="alert"]'))).toContain(
-        'You already have an exercise with this name.',
-      );
+      expect(textOf(formSummary(sheet))).toContain('You already have an exercise with this name.');
+      expect(document.activeElement).toBe(formSummary(sheet));
       fill(sheet, 'Exercise name', 'Hip Thrust 2');
       await settle(harness.fixture);
       press(sheet, 'Add exercise');

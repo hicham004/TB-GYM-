@@ -18,7 +18,7 @@ import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { pastAndComingProgram } from '../../../testing/mesocycle-fixtures';
-import { press, settle } from '../../../testing/dom';
+import { formSummary, press, settle } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { ProgramEditPage } from './program-edit';
@@ -317,6 +317,31 @@ describe('editing a client’s weeks', () => {
       'Leave without applying',
     ).click();
     expect(await leave).toBe(true);
+  });
+
+  it('says a refused apply in the review sheet’s summary, which takes focus, and keeps the sheet', async () => {
+    const changed = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'program_edit_preview_changed', message: 'The preview no longer matches.' },
+    });
+    const { harness, host } = await render({
+      programApi: { applyProgramEdit: vi.fn(() => throwError(() => changed)) },
+    });
+    renameWeek3(host);
+    await settle(harness.fixture);
+    press(host, 'Review changes');
+    await settle(harness.fixture);
+
+    const sheet = await dialogNamed(harness.fixture, 'Review changes');
+    expect(textOf(formSummary(sheet))).toBe('');
+    named(sheet, 'Apply changes').click();
+    await settle(harness.fixture);
+
+    expect(dialog()).toBe(sheet);
+    expect(textOf(formSummary(sheet))).toBe(
+      'The program changed since you reviewed these changes. Review them again before applying.',
+    );
+    expect(document.activeElement).toBe(formSummary(sheet));
   });
 
   it('says a stale program needs reloading', async () => {

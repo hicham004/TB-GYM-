@@ -1,14 +1,18 @@
 import { formatDate } from '@angular/common';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   inject,
+  Injector,
   input,
   linkedSignal,
   LOCALE_ID,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -16,6 +20,7 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { ClientProgramApi } from './client-program-api';
 import type { BlockCard } from './client-program.models';
 import {
@@ -61,14 +66,6 @@ const DIALOG_STYLES = `
     font-weight: 600;
   }
 
-  .problem {
-    background: var(--tb-danger-soft);
-    border-radius: var(--tb-radius-control);
-    color: var(--tb-danger);
-    font-weight: 600;
-    padding: 0.625rem 0.875rem;
-  }
-
   .actions {
     display: flex;
     flex-wrap: wrap;
@@ -76,6 +73,14 @@ const DIALOG_STYLES = `
     justify-content: flex-end;
   }
 `;
+
+/** A refused submit: the box that is wrong takes focus once its reason is drawn. */
+function focusWrongBox(host: ElementRef<HTMLElement>, injector: Injector): void {
+  afterNextRender(
+    () => host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+    { injector },
+  );
+}
 
 // ------------------------------------------------------------------------------------------------
 
@@ -85,7 +90,7 @@ const DIALOG_STYLES = `
  */
 @Component({
   selector: 'app-program-rename',
-  imports: [Button, Control, Field],
+  imports: [Button, Control, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -106,9 +111,11 @@ const DIALOG_STYLES = `
           (blur)="attempt.touch('name')"
         />
       </app-field>
-      @if (error(); as message) {
-        <p class="problem" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Not now
@@ -133,6 +140,9 @@ export class ProgramRename {
   readonly firstName = input.required<string>();
   /** True when the program was renamed. */
   readonly closed = output<boolean>();
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
 
   protected readonly attempt = new FormAttempt();
   protected readonly busy = signal(false);
@@ -147,7 +157,11 @@ export class ProgramRename {
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     this.attempt.attempt();
-    if (this.nameProblems().length > 0) return;
+    if (this.nameProblems().length > 0) {
+      this.error.set(null);
+      focusWrongBox(this.host, this.injector);
+      return;
+    }
     const block = this.block();
     this.busy.set(true);
     this.error.set(null);
@@ -164,6 +178,7 @@ export class ProgramRename {
       this.error.set(
         programWriteError(error, $localize`The program could not be renamed.`, this.firstName()),
       );
+      this.summary().focus();
     } finally {
       this.busy.set(false);
     }
@@ -174,7 +189,7 @@ export class ProgramRename {
 
 @Component({
   selector: 'app-program-reschedule',
-  imports: [Button, Control, Field],
+  imports: [Button, Control, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -197,9 +212,11 @@ export class ProgramRename {
       @if (movedRun(); as run) {
         <p class="run" aria-live="polite">{{ run }}</p>
       }
-      @if (error(); as message) {
-        <p class="problem" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Not now
@@ -225,6 +242,9 @@ export class ProgramReschedule {
   readonly firstName = input.required<string>();
   /** True when the program was moved. */
   readonly closed = output<boolean>();
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
 
   protected readonly attempt = new FormAttempt();
   protected readonly busy = signal(false);
@@ -246,7 +266,11 @@ export class ProgramReschedule {
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     this.attempt.attempt();
-    if (this.startErrors().length > 0) return;
+    if (this.startErrors().length > 0) {
+      this.error.set(null);
+      focusWrongBox(this.host, this.injector);
+      return;
+    }
     const block = this.block();
     this.busy.set(true);
     this.error.set(null);
@@ -263,6 +287,7 @@ export class ProgramReschedule {
       this.error.set(
         programWriteError(error, $localize`The program could not be moved.`, this.firstName()),
       );
+      this.summary().focus();
     } finally {
       this.busy.set(false);
     }
@@ -273,7 +298,7 @@ export class ProgramReschedule {
 
 @Component({
   selector: 'app-program-complete',
-  imports: [Button],
+  imports: [Button, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -296,9 +321,11 @@ export class ProgramReschedule {
           </p>
         }
       }
-      @if (error(); as message) {
-        <p class="problem" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Not now
@@ -326,6 +353,7 @@ export class ProgramComplete {
   readonly firstName = input.required<string>();
   /** True when the program was closed. */
   readonly closed = output<boolean>();
+  private readonly summary = viewChild.required(FormSummary);
 
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -378,6 +406,7 @@ export class ProgramComplete {
       this.error.set(
         programWriteError(error, $localize`The program could not be closed.`, this.firstName()),
       );
+      this.summary().focus();
     } finally {
       this.busy.set(false);
     }
@@ -388,7 +417,7 @@ export class ProgramComplete {
 
 @Component({
   selector: 'app-program-cancel',
-  imports: [Button, Control, Field],
+  imports: [Button, Control, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -411,9 +440,11 @@ export class ProgramComplete {
           (blur)="attempt.touch('reason')"
         ></textarea>
       </app-field>
-      @if (error(); as message) {
-        <p class="problem" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Keep program
@@ -438,6 +469,9 @@ export class ProgramCancel {
   readonly firstName = input.required<string>();
   /** True when the program was cancelled. */
   readonly closed = output<boolean>();
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
 
   protected readonly attempt = new FormAttempt();
   protected readonly busy = signal(false);
@@ -452,7 +486,11 @@ export class ProgramCancel {
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     this.attempt.attempt();
-    if (this.reasonErrors().length > 0) return;
+    if (this.reasonErrors().length > 0) {
+      this.error.set(null);
+      focusWrongBox(this.host, this.injector);
+      return;
+    }
     const block = this.block();
     this.busy.set(true);
     this.error.set(null);
@@ -469,6 +507,7 @@ export class ProgramCancel {
       this.error.set(
         programWriteError(error, $localize`The program could not be cancelled.`, this.firstName()),
       );
+      this.summary().focus();
     } finally {
       this.busy.set(false);
     }

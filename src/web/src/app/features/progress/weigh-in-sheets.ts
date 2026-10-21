@@ -15,6 +15,7 @@ import type { MassUnit } from '../../core/units/body-units';
 import { Button } from '../../ui/button';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { EntryActions, EntrySheet, ReasonPicker, SHEET_STYLES } from './entry-sheet';
@@ -51,7 +52,7 @@ const MASS_UNITS: readonly SegmentOption[] = [
  */
 @Component({
   selector: 'app-log-weight',
-  imports: [Control, DateField, EntryActions, Field, SegmentedControl],
+  imports: [Control, DateField, EntryActions, Field, FormSummary, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -97,12 +98,13 @@ const MASS_UNITS: readonly SegmentOption[] = [
           <span class="muted" i18n>Correct that one rather than adding a second.</span>
         </p>
       }
-      @if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="taken() ? correctLabel : saveLabel"
         [busyLabel]="savingLabel"
@@ -201,7 +203,7 @@ export class LogWeight extends EntrySheet {
 /** Correct a weight that was typed wrong: the new number, and what was wrong. The old one stays in its history. */
 @Component({
   selector: 'app-correct-weight',
-  imports: [Control, EntryActions, Field, ReasonPicker, SegmentedControl],
+  imports: [Control, EntryActions, Field, FormSummary, ReasonPicker, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -244,12 +246,13 @@ export class LogWeight extends EntrySheet {
         (touched)="attempt.touch('reason')"
       />
       <p class="muted" i18n>The earlier number stays in this entry’s history.</p>
-      @if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
@@ -340,7 +343,7 @@ export class CorrectWeight extends EntrySheet {
  */
 @Component({
   selector: 'app-move-weigh-in',
-  imports: [DateField, EntryActions, ReasonPicker],
+  imports: [DateField, EntryActions, FormSummary, ReasonPicker],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -370,12 +373,13 @@ export class CorrectWeight extends EntrySheet {
         The same weight moves to that day. The entry it leaves is kept, marked as replaced, and is
         not deleted.
       </p>
-      @if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"

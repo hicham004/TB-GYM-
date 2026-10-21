@@ -1,17 +1,17 @@
 @let current = draft();
 <form class="food-form" novalidate (ngSubmit)="save()">
-  <p class="summary" role="alert" tabindex="-1" #summary>
+  <app-form-summary>
     @if (stale()) {
-      <span i18n
+      <ng-container i18n
         >Someone changed this food after you opened it. Close this sheet and open the food again to
-        see their change.</span
+        see their change.</ng-container
       >
     } @else if (saveError(); as message) {
-      <span>{{ message }}</span>
+      {{ message }}
     } @else if (attempt.wasTried() && problems().length) {
-      <span i18n>Check the boxes marked below.</span>
+      <ng-container i18n>Check the boxes marked below.</ng-container>
     }
-  </p>
+  </app-form-summary>
 
   @if (mode() === 'copy') {
     <p class="note" i18n>

@@ -13,6 +13,7 @@ import {
   OnInit,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type { ExerciseView, MediaAssetView, MuscleGroup } from '../../core/api/generated';
@@ -27,6 +28,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import {
@@ -57,7 +59,7 @@ import {
  */
 @Component({
   selector: 'app-exercise-sheet',
-  imports: [Button, Checkbox, Control, Field, Icon],
+  imports: [Button, Checkbox, Control, Field, FormSummary, Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -344,12 +346,13 @@ import {
         </fieldset>
       }
 
-      @if (attempt.wasTried() && problemCount() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problemCount() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
           Not now
@@ -548,6 +551,7 @@ export class ExerciseSheet implements OnInit {
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly summary = viewChild(FormSummary);
 
   /** The exercise being edited; null for a new one. */
   readonly exercise = input<ExerciseView | null>(null);
@@ -826,6 +830,7 @@ export class ExerciseSheet implements OnInit {
     if (this.busy() || this.uploading()) return;
     return this.scope.run('submit', async (owner) => {
       if (this.problemCount() > 0) {
+        this.error.set(null);
         this.attempt.attempt();
         afterNextRender(
           () =>
@@ -860,11 +865,13 @@ export class ExerciseSheet implements OnInit {
         const current = this.current();
         if (current && isStaleWrite(error) && (await this.readAgain(current.id, owner))) {
           this.error.set(staleExerciseMessage());
+          this.summary()?.focus();
           return;
         }
         this.error.set(
           exerciseWriteError(error, $localize`The exercise could not be saved. Try again.`),
         );
+        this.summary()?.focus();
       } finally {
         if (owner.current) {
           this.busy.set(false);

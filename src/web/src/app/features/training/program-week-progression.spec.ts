@@ -9,7 +9,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, settle } from '../../../testing/dom';
+import { fill, formSummary, settle } from '../../../testing/dom';
 import { ProgramBuilderApi } from './program-builder-api';
 import { ProgramWeekProgression } from './program-week-progression';
 import {
@@ -214,6 +214,7 @@ describe('Duplicate with progression', () => {
       'Use -50 to 50 points, with at most two decimals.',
     ]);
     expect(text('[role="alert"]')).toEqual(['Choose 1 to 12 copies.']);
+    expect(document.activeElement).toBe(formSummary(host));
   });
 
   it('shows what the server refused, in its words, and adds nothing', async () => {
@@ -232,6 +233,7 @@ describe('Duplicate with progression', () => {
     await press('Show the new weeks');
 
     expect(text('[role="alert"]')).toEqual([refusal]);
+    expect(document.activeElement).toBe(formSummary(host));
     expect(host.querySelector('.result')).toBeNull();
     expect(addButton()?.disabled).toBe(true);
   });

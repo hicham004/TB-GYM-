@@ -21,6 +21,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 
 /**
  * The owner's action to release a client from the workspace (ADR 0027).
@@ -32,7 +33,7 @@ import { Control, Field } from '../../ui/field';
  */
 @Component({
   selector: 'app-client-release',
-  imports: [ReactiveFormsModule, Button, Control, Field],
+  imports: [ReactiveFormsModule, Button, Control, Field, FormSummary],
   templateUrl: './client-release.html',
   styleUrl: './client-release.scss',
 })
@@ -45,6 +46,7 @@ export class ClientRelease {
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('releaseDialog');
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('releaseTrigger');
   private readonly reasonBox = viewChild<ElementRef<HTMLTextAreaElement>>('reasonBox');
+  private readonly summary = viewChild.required(FormSummary);
   private readonly injector = inject(Injector);
 
   readonly client = input.required<CoachClientDetails>();
@@ -106,6 +108,7 @@ export class ClientRelease {
     const problem = this.reasonProblem();
     if (problem) {
       this.form.markAllAsTouched();
+      this.error.set(null);
       this.reasonErrors.set(problem);
       afterNextRender(() => this.reasonBox()?.nativeElement.focus(), { injector: this.injector });
       return;
@@ -129,6 +132,7 @@ export class ClientRelease {
             $localize`Coaching could not be ended. Reload the page and try again.`,
           ),
         );
+        this.summary().focus();
       } finally {
         if (owner.current) this.saving.set(false);
       }

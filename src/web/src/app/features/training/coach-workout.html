@@ -110,9 +110,11 @@
             [value]="note()"
             (input)="note.set($any($event.target).value)"
           ></textarea>
-          @if (sendError(); as message) {
-            <p class="reply-error" role="alert">{{ message }}</p>
-          }
+          <app-form-summary>
+            @if (sendError(); as message) {
+              {{ message }}
+            }
+          </app-form-summary>
           <div class="reply-actions">
             <button appButton type="submit" [loading]="sending()" [disabled]="!note().trim()">
               @if (sending()) {

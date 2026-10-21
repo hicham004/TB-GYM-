@@ -38,7 +38,11 @@
         (input)="reasonTyped()"
       ></textarea>
     </app-field>
-    <p class="release-error tb-text-compact" role="alert">{{ error() }}</p>
+    <app-form-summary>
+      @if (error(); as message) {
+        {{ message }}
+      }
+    </app-form-summary>
     <div class="tb-dialog__actions">
       <button appButton variant="outlined" type="button" (click)="cancel($event)" i18n>
         Cancel

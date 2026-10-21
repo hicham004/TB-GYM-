@@ -24,7 +24,7 @@ import {
   plannedBlock,
   runningBlock,
 } from '../../../testing/client-program-fixtures';
-import { press, settle, type } from '../../../testing/dom';
+import { formSummary, press, settle, type } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ClientProgram } from './client-program';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -627,9 +627,10 @@ describe('a client’s Training', () => {
       await settle(harness.fixture);
 
       expect(dialog()).not.toBeNull();
-      expect(textOf(cancel.querySelector('[role="alert"]'))).toBe(
+      expect(textOf(formSummary(cancel))).toBe(
         'Maya has a workout open right now. Cancel the program once it is finished.',
       );
+      expect(document.activeElement).toBe(formSummary(cancel));
     });
 
     it('opens the weeks still to come in the builder’s grid', async () => {
@@ -997,6 +998,63 @@ describe('a client’s Training', () => {
           session: expect.objectContaining({ name: 'Lower A', dayOffset: 3 }),
         }),
       );
+    });
+
+    it('sends a swap with nothing chosen to the list, and says a refused swap in its summary', async () => {
+      const saved = {
+        id: 'saved-2',
+        name: 'Upper A (saved)',
+        sourceTemplateVersionId: 'version-1',
+        sourceTemplateSessionId: 'template-session-2',
+        session: {
+          id: 'template-session-2',
+          name: 'Upper A',
+          dayOffset: 0,
+          coachNotes: null,
+          exercises: [],
+        },
+      };
+      const replaceFutureTrainingSession = vi.fn(() =>
+        throwError(
+          () => new HttpErrorResponse({ status: 409, error: { code: 'concurrency_conflict' } }),
+        ),
+      );
+      const { harness, host } = await render({
+        api: {
+          getTrainingMesocycle: vi.fn(() => of(blockView())),
+          listSavedSessions: vi.fn(() => of([saved])),
+          replaceFutureTrainingSession,
+        },
+      });
+
+      all(host.querySelector('.week.current')!, 'button.session')[2].click();
+      await settle(harness.fixture);
+      const sheet = dialog()!;
+      const swap = sheet.querySelector<HTMLDetailsElement>('.swap')!;
+      swap.open = true;
+      swap.dispatchEvent(new Event('toggle'));
+      await settle(harness.fixture);
+      expect(textOf(formSummary(swap))).toBe('');
+
+      press(sheet, 'Swap session');
+      await settle(harness.fixture);
+      const select = swap.querySelector('select')!;
+      expect(textOf(swap)).toContain('Choose a saved session.');
+      expect(document.activeElement).toBe(select);
+      expect(replaceFutureTrainingSession).not.toHaveBeenCalled();
+
+      select.value = 'saved-2';
+      select.dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+      press(sheet, 'Swap session');
+      await settle(harness.fixture);
+
+      expect(replaceFutureTrainingSession).toHaveBeenCalledTimes(1);
+      expect(dialog()).toBe(sheet);
+      expect(textOf(formSummary(swap))).toBe(
+        'This program was changed somewhere else since you opened it. It has been reloaded: check it, then try again.',
+      );
+      expect(document.activeElement).toBe(formSummary(swap));
     });
 
     it('opens the session a client’s note is on when a notice links to it, once', async () => {

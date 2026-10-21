@@ -11,7 +11,7 @@ import {
   publishedPlans,
   TODAY,
 } from '../../../testing/client-nutrition-fixtures';
-import { press, settle, tick } from '../../../testing/dom';
+import { formSummary, press, settle, tick } from '../../../testing/dom';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { AssignMealPlan } from './assign-plan-sheet';
@@ -281,7 +281,7 @@ describe('Assign a meal plan', () => {
 
     expect(host.querySelector('[data-review]')).not.toBeNull();
     expect(textOf(host)).toContain('Look at the recipes first.');
-    expect(host.querySelector('.refusal')).toBeNull();
+    expect(textOf(formSummary(host))).toBe('');
     expect(closed).not.toHaveBeenCalled();
 
     // The box has to be ticked before the plan goes.
@@ -336,9 +336,10 @@ describe('Assign a meal plan', () => {
     press(host, 'Assign meal plan');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Rana already has a meal plan on some of these days. Pick a start after it ends.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(closed).not.toHaveBeenCalled();
     expect(host.querySelector<HTMLInputElement>('input[name="plan"]:checked')).not.toBeNull();
   });
@@ -353,7 +354,8 @@ describe('Assign a meal plan', () => {
     await settle(fixture);
     press(host, 'Assign meal plan');
     await settle(fixture);
-    expect(textOf(host.querySelector('.refusal'))).toBe('The plan is wrong.');
+    expect(textOf(formSummary(host))).toBe('The plan is wrong.');
+    expect(document.activeElement).toBe(formSummary(host));
   });
 
   it('reads the library again when it could not be read', async () => {

@@ -15,6 +15,7 @@ import type { TrainingLoadUnit } from '../../core/api/generated';
 import { SheetForm } from '../../core/forms/sheet-form';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 import { numberOrNull } from '../nutrition/client-nutrition.models';
@@ -41,7 +42,7 @@ const UNITS: readonly SegmentOption[] = [
  */
 @Component({
   selector: 'app-record-max',
-  imports: [Control, DateField, EntryActions, ExercisePicker, Field, SegmentedControl],
+  imports: [Control, DateField, EntryActions, ExercisePicker, Field, FormSummary, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -121,12 +122,13 @@ const UNITS: readonly SegmentOption[] = [
           (input)="note.set($any($event.target).value)"
         ></textarea>
       </app-field>
-      @if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check what is marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check what is marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"

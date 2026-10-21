@@ -7,19 +7,21 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   signal,
   TemplateRef,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { FormAttempt } from '../../core/forms/form-attempt';
 import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
@@ -27,12 +29,32 @@ import { UiConfirm } from '../../ui/confirm';
 import { SettingsFrame } from '../settings/settings-frame';
 import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
 import type { NotificationPreferences } from './notification.models';
 
 /** 24-hour `HH:mm`, which is the only shape the API accepts. */
 const localTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+type QuietHoursField = 'quietHoursStartLocal' | 'quietHoursEndLocal';
+
+/**
+ * Why each quiet-hours time cannot be saved, said under its own box (audit WEB-12): the same rules the
+ * server enforces, checked before a round trip. The server remains the authority.
+ */
+function quietHoursReasons(start: string, end: string): Partial<Record<QuietHoursField, string[]>> {
+  const reasons: Partial<Record<QuietHoursField, string[]>> = {};
+  if (!localTimePattern.test(start)) {
+    reasons.quietHoursStartLocal = [$localize`Enter when quiet hours start, such as 22:00.`];
+  }
+  if (!localTimePattern.test(end)) {
+    reasons.quietHoursEndLocal = [$localize`Enter when quiet hours end, such as 07:00.`];
+  } else if (start === end) {
+    reasons.quietHoursEndLocal = [$localize`Choose an end time that differs from the start.`];
+  }
+  return reasons;
+}
 
 /**
  * The signed-in member's own notification settings in one workspace.
@@ -58,6 +80,7 @@ const localTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
     Checkbox,
     Control,
     Field,
+    FormSummary,
     Icon,
     ReactiveFormsModule,
     RouterLink,
@@ -79,6 +102,9 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
   private readonly formBuilder = inject(FormBuilder);
   private readonly dialogs = inject(UiDialog);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
   private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
 
   protected readonly loadingLabel = $localize`Loading your notification settings…`;
@@ -117,6 +143,20 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
   );
   protected readonly isReady = computed(() => this.preferences() !== null);
   protected readonly quietHoursEnabled = signal(false);
+
+  /** When the quiet-hours reasons have earned a place under their boxes (ARCHITECTURE §8). */
+  protected readonly attempt = new FormAttempt();
+  /** The two times as typed: a signal, so the reasons under them follow every change. */
+  private readonly times = toSignal(
+    this.form.valueChanges.pipe(map(() => this.form.getRawValue())),
+    { initialValue: this.form.getRawValue() },
+  );
+  private readonly timeReasons = computed(() => {
+    if (!this.quietHoursEnabled()) return {};
+    const { quietHoursStartLocal, quietHoursEndLocal } = this.times();
+    return quietHoursReasons(quietHoursStartLocal, quietHoursEndLocal);
+  });
+  protected readonly timeProblems = computed(() => Object.keys(this.timeReasons()).length);
 
   /**
    * Whether this member's mailbox has stopped receiving email, and why in their own words.
@@ -190,6 +230,12 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
     return (await firstValueFrom(dialog.closed)) === true;
   }
 
+  /** A time's reasons once its box was left or Save was pressed; null while it shows none. */
+  protected shownTime(field: QuietHoursField): string[] | null {
+    const reasons = this.timeReasons()[field] ?? [];
+    return this.attempt.shows(field, reasons) ? reasons : null;
+  }
+
   protected onBeforeUnload(event: BeforeUnloadEvent): void {
     if (this.form.dirty) {
       event.preventDefault();
@@ -216,7 +262,17 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
       }
 
       const value = this.form.getRawValue();
-      if (value.quietHoursEnabled && !this.validateQuietHours(value)) {
+      if (value.quietHoursEnabled && this.timeProblems() > 0) {
+        // Said under the boxes and never as the server's word: the summary points at them, and the
+        // first wrong box takes focus.
+        this.error.set(null);
+        this.notice.set(null);
+        this.attempt.attempt();
+        afterNextRender(
+          () =>
+            this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+          { injector: this.injector },
+        );
         return;
       }
 
@@ -276,6 +332,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
           this.error.set(
             apiErrorMessage(error, $localize`Your notification settings could not be saved.`),
           );
+          this.summary().focus();
         }
       } finally {
         if (owner.current) {
@@ -285,36 +342,6 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
         }
       }
     });
-  }
-
-  /**
-   * The same rules the server enforces, checked before a round trip so an obvious mistake is
-   * reported next to the field rather than as a refusal. The server remains the authority.
-   */
-  private validateQuietHours(value: {
-    quietHoursStartLocal: string;
-    quietHoursEndLocal: string;
-  }): boolean {
-    this.notice.set(null);
-    if (
-      !localTimePattern.test(value.quietHoursStartLocal) ||
-      !localTimePattern.test(value.quietHoursEndLocal)
-    ) {
-      this.form.markAllAsTouched();
-      this.error.set(
-        $localize`Quiet hours need a start and an end as 24-hour times, such as 22:00.`,
-      );
-      return false;
-    }
-
-    if (value.quietHoursStartLocal === value.quietHoursEndLocal) {
-      this.error.set(
-        $localize`Quiet hours must start and end at different times. Choose an end time that differs from the start.`,
-      );
-      return false;
-    }
-
-    return true;
   }
 
   private async load(generation: number): Promise<void> {
@@ -348,6 +375,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
 
   private apply(preferences: NotificationPreferences): void {
     this.preferences.set(preferences);
+    this.attempt.reset();
     this.form.reset({
       emailServiceEnabled: preferences.emailServiceEnabled,
       quietHoursEnabled: preferences.quietHoursEnabled,
@@ -375,6 +403,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
   }
 
   private reset(): void {
+    this.attempt.reset();
     this.preferences.set(null);
     this.loading.set(false);
     this.saving.set(false);
@@ -386,6 +415,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
 
   private resetTenantState(): void {
     ++this.contextGeneration;
+    this.attempt.reset();
     this.context = null;
     this.idempotencyKey = crypto.randomUUID();
     this.submittedFingerprint = null;

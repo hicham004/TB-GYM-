@@ -7,7 +7,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type { CoachClientDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, press, settle, type } from '../../../testing/dom';
+import { fill, formSummary, press, settle, type } from '../../../testing/dom';
 import {
   coachView,
   finishedProfile,
@@ -162,9 +162,10 @@ describe('ClientIntake (the coach’s view)', () => {
     await settle(fixture);
 
     expect(dialog()).toBe(sheet);
-    expect(textOf(sheet.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(sheet))).toBe(
       'The client was changed by someone else. Reload and try again.',
     );
+    expect(document.activeElement).toBe(formSummary(sheet));
     expect((sheet.querySelector('textarea[name="goals"]') as HTMLTextAreaElement).value).toBe(
       'Compete in a powerlifting meet.',
     );

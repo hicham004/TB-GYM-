@@ -12,6 +12,7 @@ import {
   LOCALE_ID,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -32,6 +33,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
@@ -66,7 +68,7 @@ import {
  */
 @Component({
   selector: 'app-program-assign',
-  imports: [Button, Control, Field, RouterLink, SegmentedControl, Skeleton],
+  imports: [Button, Control, Field, FormSummary, RouterLink, SegmentedControl, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -313,12 +315,13 @@ import {
             }
           }
 
-          @if (attempt.wasTried() && problemCount() > 0) {
-            <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-          }
-          @if (error(); as message) {
-            <p class="problem-text" role="alert">{{ message }}</p>
-          }
+          <app-form-summary>
+            @if (error(); as message) {
+              {{ message }}
+            } @else if (attempt.wasTried() && problemCount() > 0) {
+              <ng-container i18n>Check the fields marked above.</ng-container>
+            }
+          </app-form-summary>
           <div class="actions">
             <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
               Not now
@@ -504,14 +507,6 @@ import {
       gap: 0.5rem 1rem;
     }
 
-    .problem-text {
-      background: var(--tb-danger-soft);
-      border-radius: var(--tb-radius-control);
-      color: var(--tb-danger);
-      font-weight: 600;
-      padding: 0.625rem 0.875rem;
-    }
-
     // The buttons stay in view while a long sheet scrolls under them. The sheet pads its body by
     // 1.5rem, which the bar cancels so it spans the sheet edge to edge.
     .actions {
@@ -537,6 +532,7 @@ export class ProgramAssign {
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly summary = viewChild(FormSummary);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly intent = new IntentIdempotencyKey();
   private needs: { exerciseId: string; name: string }[] = [];
@@ -893,6 +889,7 @@ export class ProgramAssign {
     if (this.busy()) return;
     this.attempt.attempt();
     if (this.problemCount() > 0) {
+      this.error.set(null);
       afterNextRender(
         () => this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
         { injector: this.injector },
@@ -916,6 +913,7 @@ export class ProgramAssign {
       this.error.set(
         programWriteError(error, $localize`The program could not be assigned.`, this.firstName()),
       );
+      this.summary()?.focus();
       // A newer best set was logged since the sheet opened: read the suggestion again (STR-014).
       if (serverCode(error) === 'training_max_suggestion_changed') await this.readPreviousAgain();
     } finally {

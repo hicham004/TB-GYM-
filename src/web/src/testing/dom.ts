@@ -172,6 +172,15 @@ export function announced(host: ParentNode): string {
     .join(' ');
 }
 
+/**
+ * A form's one summary region (`<app-form-summary>`, ARCHITECTURE §8). It is there, empty, from the
+ * form's first render, so a spec asserts what it says and whether it holds focus, never whether it
+ * has appeared; failing here means the form lost its region.
+ */
+export function formSummary(host: ParentNode): HTMLElement {
+  return query<HTMLElement>(host, 'app-form-summary');
+}
+
 /** Picks an option in a select found by selector. */
 export function choose(host: ParentNode, selector: string, value: string): HTMLSelectElement {
   return write(query<HTMLSelectElement>(host, selector), value);

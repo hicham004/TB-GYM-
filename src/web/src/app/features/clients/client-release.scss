@@ -7,12 +7,3 @@
   gap: var(--space-16);
   margin-block-start: var(--space-16);
 }
-
-.release-error {
-  color: var(--color-danger);
-  margin: 0;
-}
-
-.release-error:empty {
-  display: none;
-}

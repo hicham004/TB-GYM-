@@ -1390,6 +1390,10 @@ Tokens are theme-ready from R1, so this costs little later.
 - Built in R6.1a: `UiSheet` and `UiDialog` take `mode: 'light' | 'dark'`, which starts that mode's tokens
   on the overlay pane. A sheet over a screen that is always one mode (the workout player) then matches
   it; without the option a modal follows the person's mode.
+- Built in audit A12b: `FormSummary` (`ui/form-summary.ts`), a form's one `role="alert"` summary, in the
+  form from its first render, out of sight while empty, the tinted box when a submit is refused, and
+  focused on a server refusal. The sheet and dialog forms of clients, nutrition, training, progress and
+  intake use it, with the intake steps and Notification settings; rules in `ARCHITECTURE.md` §8.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves

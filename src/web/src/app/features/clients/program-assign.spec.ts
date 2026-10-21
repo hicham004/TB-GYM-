@@ -9,7 +9,7 @@ import type { ClientEnrollment } from '../../core/api/api.models';
 import type { TrainingMesocycleView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { field, fill, press, query, settle, tick } from '../../../testing/dom';
+import { field, fill, formSummary, press, query, settle, tick } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ProgramAssign } from './program-assign';
 
@@ -440,9 +440,10 @@ describe('Assign program', () => {
     press(host, 'Assign program');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.problem-text'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Maya logged a newer set since you looked, so the suggested max changed. Look at the new suggestion, then try again.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
     // The row is back where the sheet started, with the new suggestion one tap away.
     expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('100');
@@ -589,7 +590,7 @@ describe('Assign program', () => {
 
     expect(api['assignClientMesocycle']).not.toHaveBeenCalled();
     expect(textOf(host)).toContain('Choose a program.');
-    expect(textOf(host.querySelector('[role="alert"]'))).toBe('Check the fields marked above.');
+    expect(textOf(formSummary(host))).toBe('Check the fields marked above.');
     const program = query<HTMLSelectElement>(host, 'select');
     expect(program.getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(program);
@@ -626,7 +627,7 @@ describe('Assign program', () => {
     await settle(fixture);
     // The server could not be reached: nothing is lost, and the sheet says so.
     expect(closed).not.toHaveBeenCalled();
-    expect(textOf(host.querySelector('.problem-text'))).toBe('The program could not be assigned.');
+    expect(textOf(formSummary(host))).toBe('The program could not be assigned.');
 
     press(host, 'Assign program');
     await settle(fixture);
@@ -697,9 +698,10 @@ describe('Assign program', () => {
     press(host, 'Assign program');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.problem-text'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Maya already has Meso 1 from Mon 21 Sep 2026 to Sun 18 Oct 2026. Choose dates outside it.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(closed).not.toHaveBeenCalled();
   });
 

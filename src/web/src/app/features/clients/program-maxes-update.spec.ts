@@ -5,7 +5,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, press, query, settle, type } from '../../../testing/dom';
+import { fill, formSummary, press, query, settle, type } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ProgramMaxesUpdate } from './program-maxes-update';
 
@@ -177,7 +177,9 @@ describe('Update maxes for the coming weeks', () => {
     await settle(fixture);
 
     expect(api.previewTrainingMaxes).not.toHaveBeenCalled();
-    expect(textOf(query(host, '.problem-text'))).toBe('Change at least one training max.');
+    expect(textOf(formSummary(host))).toBe('Change at least one training max.');
+    // No box is wrong, so the summary that says what is missing takes focus.
+    expect(document.activeElement).toBe(formSummary(host));
   });
 
   it('refuses a number that is not above zero, beside the box', async () => {
@@ -367,9 +369,10 @@ describe('Update maxes for the coming weeks', () => {
 
     press(host, 'Update maxes');
     await settle(fixture);
-    expect(textOf(query(host, '.problem-text'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'The new weights changed since you looked at them. Show them again, then update.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(closed).not.toHaveBeenCalled();
 
     press(host, 'Update maxes');
@@ -425,7 +428,7 @@ describe('Update maxes for the coming weeks', () => {
     await settle(fixture);
 
     expect(closed).not.toHaveBeenCalled();
-    expect(textOf(query(host, '.problem-text'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Maya logged a newer set since you looked, so the suggested max changed. Look at the new suggestion, then try again.',
     );
     // The sheet is back on the numbers, still on the logged sets' estimate, now week 3's.
@@ -459,9 +462,10 @@ describe('Update maxes for the coming weeks', () => {
     press(host, 'Show the new weights');
     await settle(fixture);
 
-    expect(textOf(query(host, '.problem-text'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'This program changed since you opened this. Close it and open it again to see the latest, then try again.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(host.querySelector('.preview')).toBeNull();
   });
 

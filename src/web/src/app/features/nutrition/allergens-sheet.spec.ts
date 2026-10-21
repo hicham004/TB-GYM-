@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { allergens } from '../../../testing/client-nutrition-fixtures';
-import { press, settle, tick } from '../../../testing/dom';
+import { formSummary, press, settle, tick } from '../../../testing/dom';
 import type { AllergenCode } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -137,9 +137,10 @@ describe('Edit allergens', () => {
 
     expect(replaceAllergens).not.toHaveBeenCalled();
     expect(closed).not.toHaveBeenCalled();
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'The list was changed while you were editing: Eggs and milk declared now. Check the boxes and save again.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     // What was ticked is kept, and the next save goes through against the list just read.
     expect(ticked(host)).toEqual(['Milk', 'Sesame']);
     press(host, 'Save allergens');
@@ -161,9 +162,8 @@ describe('Edit allergens', () => {
     press(host, 'Save allergens');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe(
-      'The allergens could not be saved. Try again.',
-    );
+    expect(textOf(formSummary(host))).toBe('The allergens could not be saved. Try again.');
+    expect(document.activeElement).toBe(formSummary(host));
     expect(ticked(host)).toEqual(['Fish']);
     expect(closed).not.toHaveBeenCalled();
   });

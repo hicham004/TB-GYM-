@@ -208,7 +208,7 @@ test('a food of the coach’s own is saved from the sheet, and a USDA food opens
   await page.getByRole('button', { name: 'New food' }).click();
   const sheet = page.getByRole('dialog', { name: 'New food' });
   await sheet.getByRole('button', { name: 'Save food' }).click();
-  await expect(sheet.locator('.summary')).toHaveText('Check the boxes marked below.');
+  await expect(sheet.locator('app-form-summary')).toHaveText('Check the boxes marked below.');
   await expect(sheet.getByRole('textbox', { name: 'Name' })).toBeFocused();
   await sheet.getByRole('textbox', { name: 'Name' }).fill('Labneh');
   await sheet.getByRole('spinbutton', { name: 'Protein' }).fill('6');

@@ -5,7 +5,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { press, settle } from '../../../testing/dom';
+import { formSummary, press, settle } from '../../../testing/dom';
 import { mayaPhotos, photo, TODAY } from '../../../testing/progress-fixtures';
 import { AddPhotos, PhotoView } from './photo-sheets';
 import { ProgressEntriesApi } from './progress-entries-api';
@@ -185,9 +185,10 @@ describe('Add photos', () => {
       'A front photo is already saved for Sat 10 Oct. Remove it first, or choose another day.',
     );
     expect(textOf(host.querySelector('[data-slot="Side"]'))).toContain('Saved');
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Some photos were saved. The ones marked above were not.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
 
     press(host, 'Save photos');
     await settle(fixture);
@@ -283,6 +284,35 @@ describe('A photo', () => {
       version: 1,
     });
     expect(closed).toHaveBeenCalledWith(removed);
+  });
+
+  it('says why a removal was refused in the summary, which takes focus, keeping the reason', async () => {
+    const removePhoto = vi.fn(() => throwError(() => refusal(409, 'ProgressPhotoAlreadyRemoved')));
+    const { fixture, host } = await render(
+      PhotoView,
+      { tile: tile() },
+      { openPhoto: vi.fn(() => access(null)), removePhoto },
+    );
+    const stale = vi.fn();
+    fixture.componentInstance.stale.subscribe(stale);
+
+    press(host, 'Remove photo');
+    await settle(fixture);
+    expect(textOf(formSummary(host))).toBe('');
+    const label = Array.from(host.querySelectorAll('label')).find(
+      (item) => textOf(item) === 'Wrong pose',
+    )!;
+    label.querySelector<HTMLInputElement>('input')!.click();
+    await settle(fixture);
+    press(host, 'Remove photo');
+    await settle(fixture);
+
+    expect(textOf(formSummary(host))).toBe(
+      'This entry changed while it was open. The list has been read again, so try once more.',
+    );
+    expect(document.activeElement).toBe(formSummary(host));
+    expect(stale).toHaveBeenCalled();
+    expect(label.querySelector<HTMLInputElement>('input')!.checked).toBe(true);
   });
 
   it('goes back to looking at the photo on Keep it', async () => {

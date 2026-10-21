@@ -406,6 +406,38 @@ for (const width of [390, 1440]) {
   }
 }
 
+test('a quiet window that ends when it starts is refused under Until, which takes focus (WEB-12)', async ({
+  page,
+}) => {
+  const saves = await openSettings(page, 390);
+  await page.getByLabel('Hold emails during quiet hours').check();
+  const until = page.getByLabel('Until');
+  await until.fill('22:00');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+
+  await expect(until).toBeFocused();
+  await expect(until).toHaveAttribute('aria-invalid', 'true');
+  await expect(until).toHaveAccessibleDescription(
+    /Choose an end time that differs from the start\./,
+  );
+  await expect(page.getByRole('alert')).toHaveText('Check the quiet hours marked below.');
+  expect(saves).toEqual([]);
+  await page.screenshot({ path: 'test-results/a12b-quiet-hours-390.png', fullPage: true });
+
+  await until.fill('06:30');
+  await expect(until).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('alert')).toHaveText('');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Your notification settings were saved.')).toBeVisible();
+  expect(saves).toEqual([
+    expect.objectContaining({
+      quietHoursEnabled: true,
+      quietHoursStartLocal: '22:00',
+      quietHoursEndLocal: '06:30',
+    }),
+  ]);
+});
+
 test('settings reflow at 200% text on a phone, quiet hours and all', async ({ page }) => {
   await openSettings(page, 390);
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });

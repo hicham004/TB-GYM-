@@ -13,6 +13,7 @@ import {
   LOCALE_ID,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -29,6 +30,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { unitLabel } from '../training/training-program.models';
 import type { BlockCard } from './client-program.models';
 import {
@@ -57,7 +59,7 @@ import { addDays } from './client-overview.models';
  */
 @Component({
   selector: 'app-program-next-block',
-  imports: [Button, Checkbox, Control, Field],
+  imports: [Button, Checkbox, Control, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -226,9 +228,11 @@ import { addDays } from './client-overview.models';
         </section>
       }
 
-      @if (error(); as message) {
-        <p class="problem-text" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
 
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
@@ -425,6 +429,7 @@ export class ProgramNextBlock {
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly summary = viewChild(FormSummary);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
 
   readonly block = input.required<BlockCard>();
@@ -650,6 +655,7 @@ export class ProgramNextBlock {
     if (this.busy()) return;
     this.attempt.attempt();
     if (hasProgressionProblems(this.problems())) {
+      this.error.set(null);
       // The first week box or field that is wrong, in the order they are on screen.
       afterNextRender(
         () =>
@@ -680,6 +686,7 @@ export class ProgramNextBlock {
           this.firstName(),
         ),
       );
+      this.summary()?.focus();
     } finally {
       this.busy.set(false);
     }
@@ -704,6 +711,7 @@ export class ProgramNextBlock {
       this.error.set(
         programWriteError(error, $localize`The weeks could not be added.`, this.firstName()),
       );
+      this.summary()?.focus();
     } finally {
       this.busy.set(false);
     }

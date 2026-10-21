@@ -535,15 +535,15 @@
 <ng-template #previewSheet let-sheet>
   @if (preview(); as program) {
     <app-program-publish-preview [program]="program" [library]="exercises()" />
-    @if (newerVersion(); as message) {
-      <p class="preview-error" role="alert">{{ message }}</p>
-    }
-    @if (saveError(); as message) {
-      <p class="preview-error" role="alert">{{ message }}</p>
-    }
-    @if (saveProblem(); as trouble) {
-      <p class="preview-error" role="alert">{{ trouble.message }}</p>
-    }
+    <app-form-summary>
+      @if (newerVersion(); as message) {
+        {{ message }}
+      } @else if (saveError(); as message) {
+        {{ message }}
+      } @else if (saveProblem(); as trouble) {
+        {{ trouble.message }}
+      }
+    </app-form-summary>
     <div class="preview-footer">
       <button
         appButton

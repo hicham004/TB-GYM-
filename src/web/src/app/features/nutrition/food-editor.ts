@@ -24,6 +24,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { numeric } from '../training/training-builder.models';
 import { FoodApi } from './food-api';
@@ -57,7 +58,7 @@ type NumberKey =
  */
 @Component({
   selector: 'app-food-editor',
-  imports: [Button, Checkbox, Control, Field, FormsModule, SegmentedControl],
+  imports: [Button, Checkbox, Control, Field, FormSummary, FormsModule, SegmentedControl],
   templateUrl: './food-editor.html',
   styleUrl: './food-editor.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,7 +69,7 @@ export class FoodEditor {
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
+  private readonly summary = viewChild.required(FormSummary);
 
   readonly mode = input.required<FoodSheetMode>();
   /** The food to edit or copy; none for a new one. */
@@ -203,6 +204,7 @@ export class FoodEditor {
     if (this.saving()) return;
     const problems = this.problems();
     if (problems.length) {
+      this.saveError.set(null);
       this.attempt.attempt();
       if (problems.some((problem) => problem.field === 'more')) this.extrasOpen.set(true);
       this.focusFirst(problems[0].field);
@@ -241,7 +243,7 @@ export class FoodEditor {
           ),
         );
       }
-      afterNextRender(() => this.summary()?.nativeElement.focus(), { injector: this.injector });
+      this.summary().focus();
     } finally {
       this.saving.set(false);
     }

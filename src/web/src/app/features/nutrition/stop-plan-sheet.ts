@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { SheetForm } from '../../core/forms/sheet-form';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 import { dayWords } from '../progress/progress-entries.models';
 import { ClientNutritionApi } from './client-nutrition-api';
@@ -40,7 +41,7 @@ export interface StopOutcome {
  */
 @Component({
   selector: 'app-stop-meal-plan',
-  imports: [Control, EntryActions, Field],
+  imports: [Control, EntryActions, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -65,9 +66,11 @@ export interface StopOutcome {
           (blur)="attempt.touch('reason')"
         ></textarea>
       </app-field>
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="stopLabel"
         [busyLabel]="stoppingLabel"

@@ -10,6 +10,7 @@ import {
   LOCALE_ID,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -18,6 +19,7 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { REASON_LIMIT, reasonErrors, serviceWriteError } from './client-service-forms.models';
 import { shortDate, type PlanCard } from './client-service.models';
 
@@ -48,14 +50,6 @@ const DIALOG_STYLES = `
     color: var(--tb-muted);
   }
 
-  .problem {
-    background: var(--tb-danger-soft);
-    border-radius: var(--tb-radius-control);
-    color: var(--tb-danger);
-    font-weight: 600;
-    padding: 0.625rem 0.875rem;
-  }
-
   .actions {
     display: flex;
     flex-wrap: wrap;
@@ -70,7 +64,7 @@ const REASON_HELP = $localize`Kept on the record. ${REASON_LIMIT}:limit: charact
 
 @Component({
   selector: 'app-plan-status-change',
-  imports: [Button, Control, Field],
+  imports: [Button, Control, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -98,9 +92,11 @@ const REASON_HELP = $localize`Kept on the record. ${REASON_LIMIT}:limit: charact
           (blur)="attempt.touch('reason')"
         ></textarea>
       </app-field>
-      @if (error(); as message) {
-        <p class="problem" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Keep plan
@@ -125,6 +121,7 @@ export class PlanStatusChange {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly locale = inject(LOCALE_ID);
+  private readonly summary = viewChild.required(FormSummary);
 
   readonly plan = input.required<PlanCard>();
   readonly mode = input.required<'pause' | 'cancel'>();
@@ -161,6 +158,7 @@ export class PlanStatusChange {
     if (this.busy()) return;
     this.attempt.attempt();
     if (this.reasonErrors().length > 0) {
+      this.error.set(null);
       afterNextRender(() => this.host.nativeElement.querySelector('textarea')?.focus(), {
         injector: this.injector,
       });
@@ -188,6 +186,7 @@ export class PlanStatusChange {
           this.firstName(),
         ),
       );
+      this.summary().focus();
     } finally {
       this.busy.set(false);
     }
@@ -198,7 +197,7 @@ export class PlanStatusChange {
 
 @Component({
   selector: 'app-access-change',
-  imports: [Button, Control, Field],
+  imports: [Button, Control, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -231,9 +230,11 @@ export class PlanStatusChange {
           (blur)="attempt.touch('reason')"
         ></textarea>
       </app-field>
-      @if (error(); as message) {
-        <p class="problem" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
           Not now
@@ -257,6 +258,7 @@ export class AccessChange {
   private readonly csrf = inject(CsrfService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
 
   readonly client = input.required<CoachClientDetails>();
   /** The updated client when access changed, or null when the coach closed it. */
@@ -276,6 +278,7 @@ export class AccessChange {
     if (this.busy()) return;
     this.attempt.attempt();
     if (this.reasonErrors().length > 0) {
+      this.error.set(null);
       afterNextRender(() => this.host.nativeElement.querySelector('textarea')?.focus(), {
         injector: this.injector,
       });
@@ -301,6 +304,7 @@ export class AccessChange {
           client.firstName,
         ),
       );
+      this.summary().focus();
     } finally {
       this.busy.set(false);
     }

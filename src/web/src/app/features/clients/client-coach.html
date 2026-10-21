@@ -68,7 +68,11 @@
       } @else if (historyFailed()) {
         <p class="history-failed tb-text-compact" i18n>The coach history couldn’t be loaded.</p>
       }
-      <p class="reassign-error tb-text-compact" role="alert">{{ error() }}</p>
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <div class="tb-dialog__actions">
         <button appButton variant="outlined" type="button" (click)="cancel($event)" i18n>
           Cancel

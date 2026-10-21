@@ -14,6 +14,7 @@ import {
   linkedSignal,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -27,6 +28,7 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import {
   overlappingPlan,
@@ -193,14 +195,6 @@ const SHEET_STYLES = `
     font-weight: 600;
   }
 
-  .problem-text {
-    background: var(--tb-danger-soft);
-    border-radius: var(--tb-radius-control);
-    color: var(--tb-danger);
-    font-weight: 600;
-    padding: 0.625rem 0.875rem;
-  }
-
   .actions {
     background: var(--tb-surface);
     border-block-start: 1px solid var(--tb-line);
@@ -231,7 +225,7 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
 
 @Component({
   selector: 'app-plan-start',
-  imports: [Button, Control, Field, RouterLink],
+  imports: [Button, Control, Field, FormSummary, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -302,12 +296,13 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
         }
       }
 
-      @if (attempt.wasTried() && problemCount() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problemCount() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
           Not now
@@ -337,6 +332,7 @@ export class PlanStart {
   private readonly intent = new IntentIdempotencyKey();
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
 
   readonly clientId = input.required<string>();
   readonly firstName = input.required<string>();
@@ -424,6 +420,7 @@ export class PlanStart {
     if (this.busy()) return;
     return this.scope.run('submit', async (owner) => {
       if (this.problemCount() > 0) {
+        this.error.set(null);
         this.attempt.attempt();
         focusFirstProblem(this.host, this.injector);
         return;
@@ -458,6 +455,7 @@ export class PlanStart {
             this.firstName(),
           ),
         );
+        this.summary().focus();
       } finally {
         if (owner.current) {
           this.busy.set(false);
@@ -479,7 +477,7 @@ const METHODS: readonly ManualPaymentMethod[] = [
 
 @Component({
   selector: 'app-plan-payment',
-  imports: [Button, Control, Field],
+  imports: [Button, Control, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -568,12 +566,13 @@ const METHODS: readonly ManualPaymentMethod[] = [
         ></textarea>
       </app-field>
 
-      @if (attempt.wasTried() && problemCount() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problemCount() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Not now
@@ -599,6 +598,7 @@ export class PlanPayment {
   private readonly intent = new IntentIdempotencyKey();
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
 
   readonly plan = input.required<PlanCard>();
   readonly firstName = input.required<string>();
@@ -660,6 +660,7 @@ export class PlanPayment {
     if (this.busy()) return;
     return this.scope.run('submit', async (owner) => {
       if (this.problemCount() > 0) {
+        this.error.set(null);
         this.attempt.attempt();
         focusFirstProblem(this.host, this.injector);
         return;
@@ -704,6 +705,7 @@ export class PlanPayment {
             this.firstName(),
           ),
         );
+        this.summary().focus();
       } finally {
         if (owner.current) {
           this.busy.set(false);

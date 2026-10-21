@@ -12,11 +12,13 @@ import {
   linkedSignal,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import type { BodyweightUnit, ClientIntakeProfile } from '../../core/api/api.models';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { Button } from '../../ui/button';
 import type { IsoDate } from '../../ui/calendar';
+import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { IntakeFields } from './intake-fields';
 import {
@@ -36,11 +38,11 @@ import {
 /**
  * One group of answers in a sheet (R5.3b): the same boxes as the first-run step, saved on their own.
  * The weight group is the last part of setting up, so its button finishes setting up instead of saving.
- * A refusal stays in the sheet in the server's words and is scrolled into view above the sticky bar.
+ * A refusal stays in the sheet in the server's words, in the summary above the sticky bar, which takes focus.
  */
 @Component({
   selector: 'app-intake-edit',
-  imports: [Button, Icon, IntakeFields],
+  imports: [Button, FormSummary, Icon, IntakeFields],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -66,12 +68,13 @@ import {
         (touched)="attempt.touch($event)"
       />
 
-      @if (attempt.wasTried() && problemCount() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (refusal(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (refusal(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problemCount() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
           Not now
@@ -122,16 +125,6 @@ import {
       flex: none;
     }
 
-    .problem-text {
-      background: var(--tb-danger-soft);
-      border-radius: var(--tb-radius-control);
-      color: var(--tb-danger);
-      font-weight: 600;
-      padding: 0.625rem 0.875rem;
-      // Scrolled into view clear of the sticky action bar below it.
-      scroll-margin-block-end: 5rem;
-    }
-
     .actions {
       background: var(--tb-surface);
       border-block-start: 1px solid var(--tb-line);
@@ -150,6 +143,7 @@ import {
 export class IntakeEdit {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly summary = viewChild.required(FormSummary);
   private destroyed = false;
 
   readonly step = input.required<IntakeStepId>();
@@ -207,6 +201,7 @@ export class IntakeEdit {
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     if (this.problemCount() > 0) {
+      this.refusal.set(null);
       this.attempt.attempt();
       afterNextRender(
         () => this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
@@ -232,14 +227,7 @@ export class IntakeEdit {
       }
       if (outcome.message === '') return;
       this.refusal.set(outcome.message);
-      // The refusal is at the foot of the form, where the sticky action bar can cover it.
-      afterNextRender(
-        () =>
-          this.host.nativeElement
-            .querySelector<HTMLElement>('.refusal')
-            ?.scrollIntoView?.({ block: 'nearest' }),
-        { injector: this.injector },
-      );
+      this.summary().focus();
     } finally {
       this.busy.set(false);
     }

@@ -1,13 +1,17 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
+  Injector,
   input,
   LOCALE_ID,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -17,6 +21,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { sessionFromSaved, toTrainingSessionRequest } from '../training/training-builder.models';
@@ -40,7 +45,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 @Component({
   selector: 'app-program-session',
-  imports: [Button, CoachWorkout, Control, ExerciseDemo, Field, Skeleton, StatusPill],
+  imports: [Button, CoachWorkout, Control, ExerciseDemo, Field, FormSummary, Skeleton, StatusPill],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="sheet">
@@ -126,9 +131,11 @@ import { ClientWorkspaceContext } from './client-workspace.context';
                 You have no saved sessions yet. Save one from the program builder first.
               </p>
             }
-            @if (error(); as message) {
-              <p class="problem-text" role="alert">{{ message }}</p>
-            }
+            <app-form-summary>
+              @if (error(); as message) {
+                {{ message }}
+              }
+            </app-form-summary>
             <div class="actions">
               <button
                 appButton
@@ -246,14 +253,6 @@ import { ClientWorkspaceContext } from './client-workspace.context';
       gap: 0.5rem 1rem;
     }
 
-    .problem-text {
-      background: var(--tb-danger-soft);
-      border-radius: var(--tb-radius-control);
-      color: var(--tb-danger);
-      font-weight: 600;
-      padding: 0.625rem 0.875rem;
-    }
-
     .swap {
       border-block-start: 1px solid var(--tb-line);
       padding-block-start: 0.75rem;
@@ -291,6 +290,9 @@ export class ProgramSession {
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly summary = viewChild(FormSummary);
 
   readonly block = input.required<BlockCard>();
   readonly week = input.required<WeekColumn>();
@@ -380,6 +382,11 @@ export class ProgramSession {
     const saved = this.saved().find((item) => item.id === this.chosenId());
     if (!saved) {
       this.swapError.set($localize`Choose a saved session.`);
+      this.error.set(null);
+      afterNextRender(
+        () => this.host.nativeElement.querySelector<HTMLElement>('.swap select')?.focus(),
+        { injector: this.injector },
+      );
       return;
     }
     const block = this.block();
@@ -403,6 +410,7 @@ export class ProgramSession {
       this.error.set(
         programWriteError(error, $localize`The session could not be swapped.`, this.firstName()),
       );
+      this.summary()?.focus();
     } finally {
       this.busy.set(false);
     }

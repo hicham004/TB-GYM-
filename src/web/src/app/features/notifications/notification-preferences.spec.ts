@@ -9,7 +9,7 @@ import type { CurrentUser, TenantMembership } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { field, press, query, settle, tick } from '../../../testing/dom';
+import { field, formSummary, leave, press, query, settle, tick } from '../../../testing/dom';
 import type { NotificationPreferences } from './notification.models';
 import { NotificationPreferencesPage } from './notification-preferences';
 
@@ -105,6 +105,23 @@ async function render(configure?: (api: ApiMocks) => void): Promise<Harness> {
     get,
     update,
   };
+}
+
+/** What the box captioned `label` says under it, or nothing. */
+function reasonUnder(host: HTMLElement, label: string): string {
+  const box = field<HTMLInputElement>(host, label);
+  const id = (box.getAttribute('aria-describedby') ?? '')
+    .split(' ')
+    .find((part) => part.endsWith('-error'));
+  return id ? (host.querySelector(`#${id}`)?.textContent ?? '').trim() : '';
+}
+
+/** Sets a time box the way the browser's time input reports it. */
+function setTime(host: HTMLElement, label: string, value: string): HTMLInputElement {
+  const box = field<HTMLInputElement>(host, label);
+  box.value = value;
+  box.dispatchEvent(new Event('input'));
+  return box;
 }
 
 function conflict(): HttpErrorResponse {
@@ -240,20 +257,76 @@ describe('NotificationPreferencesPage', () => {
     expect(sent.quietHoursEndLocal).toBe('07:00');
   });
 
-  it('refuses a zero-length quiet window before troubling the server', async () => {
+  it('refuses a zero-length quiet window under Until, which takes focus, before troubling the server', async () => {
     const { host, fixture, update } = await render();
 
     tick(host, 'Hold emails during quiet hours');
     await settle(fixture);
-    const end = field<HTMLInputElement>(host, 'Until');
-    end.value = '22:00';
-    end.dispatchEvent(new Event('input'));
+    const end = setTime(host, 'Until', '22:00');
     await settle(fixture);
+    // Nothing is said before Save or before the box is left.
+    expect(reasonUnder(host, 'Until')).toBe('');
     press(host, 'Save settings');
     await settle(fixture);
 
     expect(update).not.toHaveBeenCalled();
-    expect(query(host, '[role="alert"]').textContent).toContain('different times');
+    // Said under the box it is about (WEB-12), and the page's summary only points at it.
+    expect(reasonUnder(host, 'Until')).toBe('Choose an end time that differs from the start.');
+    expect(end.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(end);
+    expect(formSummary(host).textContent?.trim()).toBe('Check the quiet hours marked below.');
+    expect(reasonUnder(host, 'From')).toBe('');
+
+    // Fixed, the reason goes and the next Save is sent.
+    setTime(host, 'Until', '06:00');
+    await settle(fixture);
+    expect(reasonUnder(host, 'Until')).toBe('');
+    expect(formSummary(host).textContent?.trim()).toBe('');
+    press(host, 'Save settings');
+    await settle(fixture);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('says a time box left empty is missing, under that box, once it is left', async () => {
+    const { host, fixture, update } = await render();
+
+    tick(host, 'Hold emails during quiet hours');
+    await settle(fixture);
+    const start = setTime(host, 'From', '');
+    await settle(fixture);
+    expect(reasonUnder(host, 'From')).toBe('');
+
+    leave(host, 'From');
+    await settle(fixture);
+    expect(reasonUnder(host, 'From')).toBe('Enter when quiet hours start, such as 22:00.');
+    // Leaving a box is not a refused Save: the summary stays quiet.
+    expect(formSummary(host).textContent?.trim()).toBe('');
+
+    setTime(host, 'Until', '');
+    await settle(fixture);
+    press(host, 'Save settings');
+    await settle(fixture);
+    expect(update).not.toHaveBeenCalled();
+    expect(reasonUnder(host, 'Until')).toBe('Enter when quiet hours end, such as 07:00.');
+    // The first box that is wrong takes focus.
+    expect(document.activeElement).toBe(start);
+  });
+
+  it('says nothing about the times while quiet hours are off, and sends the switch', async () => {
+    const { host, fixture, update } = await render();
+
+    tick(host, 'Hold emails during quiet hours');
+    await settle(fixture);
+    setTime(host, 'From', '');
+    await settle(fixture);
+    tick(host, 'Hold emails during quiet hours', false);
+    await settle(fixture);
+    press(host, 'Save settings');
+    await settle(fixture);
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0].quietHoursEnabled).toBe(false);
+    expect(formSummary(host).textContent?.trim()).toBe('');
   });
 
   it('keeps the unsaved choices when the save is refused', async () => {
@@ -279,6 +352,8 @@ describe('NotificationPreferencesPage', () => {
     expect(field<HTMLInputElement>(host, 'Hold emails during quiet hours').checked).toBe(true);
     expect(field<HTMLInputElement>(host, 'Until').value).toBe('06:30');
     expect(query(host, '[role="alert"]').textContent).toContain('changed by another request');
+    // The server's refusal is said in the summary, which takes focus.
+    expect(document.activeElement).toBe(formSummary(host));
     expect(query(host, '[role="status"]').textContent?.trim()).toBe('');
   });
 

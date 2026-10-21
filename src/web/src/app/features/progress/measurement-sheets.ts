@@ -16,6 +16,7 @@ import type { GirthUnit } from '../../core/units/body-units';
 import { Button } from '../../ui/button';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { EntryActions, EntrySheet, ReasonPicker, SHEET_STYLES } from './entry-sheet';
@@ -59,7 +60,7 @@ const emptyLines = <T>(value: T): Lines<T> =>
  */
 @Component({
   selector: 'app-log-measurements',
-  imports: [Control, DateField, EntryActions, Field, SegmentedControl],
+  imports: [Control, DateField, EntryActions, Field, FormSummary, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -99,14 +100,15 @@ const emptyLines = <T>(value: T): Lines<T> =>
           />
         </app-field>
       }
-      @if (attempt.wasTried() && nothingYet()) {
-        <p class="problem-text" role="alert" i18n>Enter at least one measurement.</p>
-      } @else if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && nothingYet()) {
+          <ng-container i18n>Enter at least one measurement.</ng-container>
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
@@ -242,12 +244,12 @@ export class LogMeasurements extends EntrySheet {
               ? $localize`Some measurements were saved. The ones marked above were not.`
               : $localize`Nothing was saved. The reasons are marked above.`,
           );
-          this.reveal();
+          this.focusSummary();
         }
       } catch {
         if (!owner.current) return;
         this.error.set($localize`The measurements could not be saved. Try again.`);
-        this.reveal();
+        this.focusSummary();
       } finally {
         if (owner.current) this.busy.set(false);
       }
@@ -258,7 +260,7 @@ export class LogMeasurements extends EntrySheet {
 /** Correct a measurement that was typed or taken wrong: the new number and what was wrong. */
 @Component({
   selector: 'app-correct-measurement',
-  imports: [Control, EntryActions, Field, ReasonPicker, SegmentedControl],
+  imports: [Control, EntryActions, Field, FormSummary, ReasonPicker, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -305,12 +307,13 @@ export class LogMeasurements extends EntrySheet {
         (touched)="attempt.touch('reason')"
       />
       <p class="muted" i18n>The earlier number stays in this entry’s history.</p>
-      @if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"

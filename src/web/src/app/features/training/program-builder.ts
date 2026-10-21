@@ -49,6 +49,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
 import { Control } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { UiSheet } from '../../ui/sheet';
@@ -221,6 +222,7 @@ const LEAVE_WAIT_MS = 8000;
     Checkbox,
     Control,
     ExerciseDemo,
+    FormSummary,
     FormsModule,
     Icon,
     ProgramLibrary,
@@ -266,6 +268,8 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   protected readonly historySheet = viewChild.required<TemplateRef<unknown>>('historySheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private readonly previewSheet = viewChild.required<TemplateRef<unknown>>('previewSheet');
+  /** The publish sheet's summary, where a refused publish is said. */
+  private readonly publishSummary = viewChild(FormSummary);
   private readonly progressionSheet = viewChild.required<TemplateRef<unknown>>('progressionSheet');
   private readonly setEditors = viewChildren(ProgramSetsEditor);
   private previewRef: Closable | null = null;
@@ -1136,6 +1140,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
             this.saveProblem()?.message ??
               $localize`Your latest changes could not be saved, so nothing was published. Check your connection and try again.`,
           );
+          this.publishSummary()?.focus();
           return;
         }
         const stored: StoredDraft = this.stored;
@@ -1159,6 +1164,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
       } catch (error) {
         if (!owner.current) return;
         await this.publishRefused(owner, error);
+        this.publishSummary()?.focus();
       } finally {
         if (owner.current) this.publishing.set(false);
       }

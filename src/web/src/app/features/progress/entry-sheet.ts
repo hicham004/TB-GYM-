@@ -11,6 +11,7 @@ import {
   model,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -18,6 +19,7 @@ import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenan
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import type { IsoDate } from '../../ui/calendar';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { ProgressEntriesApi } from './progress-entries-api';
 import {
   entryRefusal,
@@ -32,7 +34,8 @@ import {
  * The part every weigh-in, measurement and photo sheet shares (R5.3c): the writes belong to the
  * workspace they started in, a refusal stays on screen in words with what was typed kept, and a
  * change that happened while the sheet was open says so and asks the page to read its list again.
- * Each sheet decides what it asks for; the server decides whether it may.
+ * Each sheet decides what it asks for; the server decides whether it may. A sheet holds one
+ * `<app-form-summary>` above its actions, where a refusal is said (ARCHITECTURE §8).
  */
 @Directive()
 export abstract class EntrySheet {
@@ -41,6 +44,7 @@ export abstract class EntrySheet {
   protected readonly tenants = inject(TenantStore);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
+  private readonly summary = viewChild(FormSummary);
   /** A write started in one workspace is dropped, never sent to or answered into another (ADR 0026). */
   protected readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
 
@@ -63,21 +67,27 @@ export abstract class EntrySheet {
     return this.attempt.shows(field, messages);
   }
 
-  /** A refused submit: every message shows and the first box that is wrong takes focus. */
+  /**
+   * A refused submit: every message shows, the summary points at them in place of the server's last
+   * word, and the first box that is wrong takes focus; the summary does when no box is (nothing
+   * entered yet, say).
+   */
   protected refuse(): void {
+    this.error.set(null);
     this.attempt.attempt();
     afterNextRender(
-      () => this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+      () => {
+        const wrong = this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]');
+        if (wrong) wrong.focus();
+        else this.focusSummary();
+      },
       { injector: this.injector },
     );
   }
 
-  /** Brings a message at the foot of the sheet above the sticky bar that would cover it. */
-  protected reveal(selector = '.refusal'): void {
-    afterNextRender(
-      () => this.host.nativeElement.querySelector(selector)?.scrollIntoView?.({ block: 'nearest' }),
-      { injector: this.injector },
-    );
+  /** The server refused: its words are in the summary, which takes focus clear of the sticky bar. */
+  protected focusSummary(): void {
+    this.summary()?.focus();
   }
 
   /**
@@ -102,7 +112,7 @@ export abstract class EntrySheet {
           if (!owner.current) return false;
           this.error.set(entryRefusal(error, fallback, context));
           if (isStale(error)) this.stale.emit();
-          this.reveal();
+          this.focusSummary();
           return false;
         } finally {
           if (owner.current) this.busy.set(false);

@@ -11,17 +11,6 @@
   gap: 1rem;
 }
 
-.summary {
-  color: var(--tb-danger);
-  font-weight: 600;
-  margin: 0;
-  outline: none;
-
-  &:empty {
-    display: none;
-  }
-}
-
 .note,
 .hint {
   color: var(--tb-muted);

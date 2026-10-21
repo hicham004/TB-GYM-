@@ -21,7 +21,7 @@ import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UiToast } from '../../ui/toast';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, formSummary, press, settle } from '../../../testing/dom';
 import {
   draftSummary,
   draftView,
@@ -489,6 +489,11 @@ describe('the program builder', () => {
     expect(alerts(host)[0]).toBe(
       'Version 3 of this program was published after you started these changes. Publish yours as the newest version? Version 3 stays in Versions. Publish mine as the newest Discard mine',
     );
+    // The publish sheet says it in its own summary, which takes focus there (WEA-9).
+    expect(textOf(formSummary(sheet()))).toBe(
+      'Version 3 of this program was published after you started these changes. Publish yours as the newest version? Version 3 stays in Versions.',
+    );
+    expect(document.activeElement).toBe(formSummary(sheet()));
 
     press(sheet(), 'Publish mine as the newest');
     await settle(harness.fixture);

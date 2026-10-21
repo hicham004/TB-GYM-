@@ -1,11 +1,8 @@
 import {
-  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
   inject,
-  Injector,
   input,
   output,
   signal,
@@ -21,6 +18,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { ProgramBuilderApi } from './program-builder-api';
 import {
   copiesThatFit,
@@ -61,7 +59,7 @@ const RPE_STEPS = Array.from({ length: 9 }, (_, index) => -2 + index * 0.5);
  */
 @Component({
   selector: 'app-program-week-progression',
-  imports: [Button, Control, Field, FormsModule],
+  imports: [Button, Control, Field, FormSummary, FormsModule],
   templateUrl: './program-week-progression.html',
   styleUrl: './program-week-progression.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -75,9 +73,8 @@ export class ProgramWeekProgression {
   private readonly api = inject(ProgramBuilderApi);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
-  private readonly injector = inject(Injector);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
-  private readonly feedback = viewChild<ElementRef<HTMLElement>>('feedback');
+  private readonly summary = viewChild.required(FormSummary);
 
   protected readonly maxCopies = MAX_COPIES;
   protected readonly rpeOptions = RPE_STEPS.map((value) => ({
@@ -269,7 +266,7 @@ export class ProgramWeekProgression {
   }
 
   private focusFeedback(): void {
-    afterNextRender(() => this.feedback()?.nativeElement.focus(), { injector: this.injector });
+    this.summary().focus();
   }
 }
 

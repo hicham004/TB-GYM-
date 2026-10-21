@@ -455,9 +455,11 @@
           }
         </ul>
       }
-      @if (failure(); as trouble) {
-        <p class="preview-error" role="alert" dir="auto">{{ trouble.message }}</p>
-      }
+      <app-form-summary dir="auto">
+        @if (failure(); as trouble) {
+          {{ trouble.message }}
+        }
+      </app-form-summary>
       <div class="preview-footer">
         <button
           appButton

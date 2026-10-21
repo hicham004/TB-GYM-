@@ -19,6 +19,7 @@ import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 import { Skeleton } from '../../ui/skeleton';
 import { dayWords } from '../progress/progress-entries.models';
@@ -45,7 +46,17 @@ import { MealPlanApi } from './meal-plan-api';
  */
 @Component({
   selector: 'app-assign-meal-plan',
-  imports: [Button, Checkbox, Control, DateField, DecimalPipe, EntryActions, Field, Skeleton],
+  imports: [
+    Button,
+    Checkbox,
+    Control,
+    DateField,
+    DecimalPipe,
+    EntryActions,
+    Field,
+    FormSummary,
+    Skeleton,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -212,12 +223,13 @@ import { MealPlanApi } from './meal-plan-api';
         </div>
       }
 
-      @if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check what is marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check what is marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="reviewing() ? anywayLabel : saveLabel"
         [busyLabel]="assigningLabel"

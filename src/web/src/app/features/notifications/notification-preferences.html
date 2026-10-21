@@ -10,7 +10,13 @@
 
   <section class="preferences" aria-labelledby="preferences-heading">
     <!-- Present from first render so the live regions are registered before anything lands in them. -->
-    <p class="error" role="alert">{{ error() }}</p>
+    <app-form-summary>
+      @if (error(); as message) {
+        {{ message }}
+      } @else if (attempt.wasTried() && timeProblems() > 0) {
+        <ng-container i18n>Check the quiet hours marked below.</ng-container>
+      }
+    </app-form-summary>
     <p class="notice" role="status">{{ notice() }}</p>
 
     @if (loading() && !isReady()) {
@@ -102,20 +108,23 @@
 
             @if (quietHoursEnabled()) {
               <div class="times">
-                <app-field label="From" i18n-label>
+                <!-- A reason is said under its own box (WEB-12), once the box is left or Save pressed. -->
+                <app-field label="From" i18n-label [errors]="shownTime('quietHoursStartLocal')">
                   <input
                     type="time"
                     appControl
                     formControlName="quietHoursStartLocal"
                     aria-describedby="quietHoursZone"
+                    (blur)="attempt.touch('quietHoursStartLocal')"
                   />
                 </app-field>
-                <app-field label="Until" i18n-label>
+                <app-field label="Until" i18n-label [errors]="shownTime('quietHoursEndLocal')">
                   <input
                     type="time"
                     appControl
                     formControlName="quietHoursEndLocal"
                     aria-describedby="quietHoursZone"
+                    (blur)="attempt.touch('quietHoursEndLocal')"
                   />
                 </app-field>
               </div>

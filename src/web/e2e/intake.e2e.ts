@@ -285,7 +285,7 @@ test.describe('when the server refuses a step', () => {
     await page.getByLabel('Height', { exact: true }).fill('168');
     await page.getByRole('button', { name: 'Continue' }).click();
 
-    const refusal = page.locator('.refusal');
+    const refusal = page.locator('app-form-summary');
     await expect(refusal).toHaveText(
       'Your profile was changed elsewhere. Reload it and try again.',
     );

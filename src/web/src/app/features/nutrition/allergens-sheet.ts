@@ -14,6 +14,7 @@ import type { AllergenCode } from '../../core/api/generated';
 import { SheetForm } from '../../core/forms/sheet-form';
 import { Checkbox } from '../../ui/checkbox';
 import { Control } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 import { ClientNutritionApi } from './client-nutrition-api';
 import { allergenList, inListOrder, sameAllergens } from './client-nutrition.models';
@@ -27,7 +28,7 @@ import { ALLERGEN_LABELS } from './nutrition.models';
  */
 @Component({
   selector: 'app-edit-allergens',
-  imports: [Checkbox, Control, EntryActions],
+  imports: [Checkbox, Control, EntryActions, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -57,9 +58,11 @@ import { ALLERGEN_LABELS } from './nutrition.models';
           </app-checkbox>
         }
       </fieldset>
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
@@ -176,7 +179,7 @@ export class EditAllergens extends SheetForm {
           ? $localize`The list was changed while you were editing, and no allergen is declared now. Check the boxes and save again.`
           : $localize`The list was changed while you were editing: ${now}:list: declared now. Check the boxes and save again.`,
       );
-      this.reveal();
+      this.focusSummary();
       return;
     }
     this.closed.emit(wanted);

@@ -4,7 +4,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FoodItemView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
-import { button, fill, settle } from '../../../testing/dom';
+import { button, fill, formSummary, settle } from '../../../testing/dom';
 import { CHICKEN_FOOD, OATS_FOOD } from '../../../testing/food-fixtures';
 import { FoodApi } from './food-api';
 import { FoodEditor } from './food-editor';
@@ -47,7 +47,7 @@ describe('the food sheet', () => {
     button(host, 'Save food').click();
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.summary'))).toBe('Check the boxes marked below.');
+    expect(textOf(formSummary(host))).toBe('Check the boxes marked below.');
     expect(
       Array.from(host.querySelectorAll('.tb-field__support--error')).map((node) => textOf(node)),
     ).toEqual([
@@ -214,9 +214,10 @@ describe('the food sheet', () => {
     button(host, 'Save changes').click();
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.summary'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Someone changed this food after you opened it. Close this sheet and open the food again to see their change.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
   });
 
   it('copies a USDA food as the coach’s own, naming what USDA left out', async () => {

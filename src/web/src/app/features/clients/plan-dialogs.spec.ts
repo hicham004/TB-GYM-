@@ -6,7 +6,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type { CoachClientDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { enrollment, SERVICE_TODAY } from '../../../testing/client-service-fixtures';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, formSummary, press, settle } from '../../../testing/dom';
 import { planCard } from './client-service.models';
 import { AccessChange, PlanStatusChange } from './plan-dialogs';
 
@@ -94,14 +94,18 @@ describe('Pause or cancel a plan', () => {
       ),
     );
     const { fixture, host, closed } = await renderStatus('pause', { pauseEnrollment });
+    // The summary is in the dialog from the start, saying nothing until something is refused.
+    expect(formSummary(host).getAttribute('role')).toBe('alert');
+    expect(textOf(formSummary(host))).toBe('');
 
     fill(host, 'Why are you pausing it?', 'Travel');
     press(host, 'Pause plan');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('[role="alert"]'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'This was changed somewhere else since you opened it. The page has been reloaded: check it, then try again.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(closed).not.toHaveBeenCalled();
   });
 });
@@ -158,7 +162,31 @@ describe('Block or unblock access', () => {
     await settle(fixture);
 
     expect(textOf(host)).toContain('Say why. It is kept on the record.');
+    expect(document.activeElement).toBe(host.querySelector('textarea'));
+    expect(textOf(formSummary(host))).toBe('');
     expect(api.blockClientRelationship).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+  });
+
+  it('says a refused block in the summary, which takes focus, keeping the reason', async () => {
+    const blockClientRelationship = vi.fn(() =>
+      throwError(
+        () => new HttpErrorResponse({ status: 409, error: { code: 'concurrency_conflict' } }),
+      ),
+    );
+    const { fixture, host, closed } = await renderAccess(CLIENT, { blockClientRelationship });
+
+    fill(host, 'Reason', 'Unpaid for two months');
+    press(host, 'Block access');
+    await settle(fixture);
+
+    expect(textOf(formSummary(host))).toBe(
+      'This was changed somewhere else since you opened it. The page has been reloaded: check it, then try again.',
+    );
+    expect(document.activeElement).toBe(formSummary(host));
+    expect(host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe(
+      'Unpaid for two months',
+    );
     expect(closed).not.toHaveBeenCalled();
   });
 });

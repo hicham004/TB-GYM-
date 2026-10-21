@@ -15,6 +15,7 @@ import type { FormulaSex, OccupationActivityType } from '../../core/api/generate
 import { SheetForm } from '../../core/forms/sheet-form';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 import { ClientNutritionApi } from './client-nutrition-api';
@@ -54,7 +55,7 @@ const SEXES: readonly SegmentOption[] = [
  */
 @Component({
   selector: 'app-work-out-targets',
-  imports: [Button, Control, EntryActions, Field, SegmentedControl, TargetsResult],
+  imports: [Button, Control, EntryActions, Field, FormSummary, SegmentedControl, TargetsResult],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (result(); as made) {
@@ -332,12 +333,13 @@ const SEXES: readonly SegmentOption[] = [
           }
         </details>
 
-        @if (attempt.wasTried() && problems() > 0) {
-          <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-        }
-        @if (error(); as message) {
-          <p class="problem-text refusal" role="alert">{{ message }}</p>
-        }
+        <app-form-summary>
+          @if (error(); as message) {
+            {{ message }}
+          } @else if (attempt.wasTried() && problems() > 0) {
+            <ng-container i18n>Check the fields marked above.</ng-container>
+          }
+        </app-form-summary>
         <app-entry-actions
           [saveLabel]="saveLabel"
           [busyLabel]="workingLabel"

@@ -9,7 +9,7 @@ import {
   clientPlan,
   TODAY,
 } from '../../../testing/client-nutrition-fixtures';
-import { field, fill, press, settle } from '../../../testing/dom';
+import { field, fill, formSummary, press, settle } from '../../../testing/dom';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { AdjustMacros } from './adjust-macros-sheet';
@@ -192,7 +192,8 @@ describe('Adjust macros (INV-2)', () => {
     press(host, 'Save these macros');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe('Each macro is 0 to 1,000 grams a day.');
+    expect(textOf(formSummary(host))).toBe('Each macro is 0 to 1,000 grams a day.');
+    expect(document.activeElement).toBe(formSummary(host));
     expect(field(host, 'Carbs (g)').value).toBe('264');
     expect(recorded).toEqual([]);
   });

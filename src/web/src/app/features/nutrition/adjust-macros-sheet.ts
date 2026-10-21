@@ -15,6 +15,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { SheetForm } from '../../core/forms/sheet-form';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 import { ClientNutritionApi } from './client-nutrition-api';
 import {
@@ -41,7 +42,7 @@ import { TargetsResult } from './targets-result';
  */
 @Component({
   selector: 'app-adjust-macros',
-  imports: [Button, Control, DecimalPipe, EntryActions, Field, TargetsResult],
+  imports: [Button, Control, DecimalPipe, EntryActions, Field, FormSummary, TargetsResult],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (result(); as made) {
@@ -149,12 +150,13 @@ import { TargetsResult } from './targets-result';
           ></textarea>
         </app-field>
 
-        @if (attempt.wasTried() && problems() > 0) {
-          <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-        }
-        @if (error(); as message) {
-          <p class="problem-text refusal" role="alert">{{ message }}</p>
-        }
+        <app-form-summary>
+          @if (error(); as message) {
+            {{ message }}
+          } @else if (attempt.wasTried() && problems() > 0) {
+            <ng-container i18n>Check the fields marked above.</ng-container>
+          }
+        </app-form-summary>
         <app-entry-actions
           [saveLabel]="saveLabel"
           [busyLabel]="savingLabel"

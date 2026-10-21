@@ -21,6 +21,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { coachHistoryRows, type CoachHistoryRow } from './client-coach.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
@@ -34,7 +35,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 @Component({
   selector: 'app-client-coach',
-  imports: [ReactiveFormsModule, Button, Control, Field],
+  imports: [ReactiveFormsModule, Button, Control, Field, FormSummary],
   templateUrl: './client-coach.html',
   styleUrl: './client-coach.scss',
 })
@@ -49,6 +50,7 @@ export class ClientCoach {
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('reassignDialog');
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('reassignTrigger');
+  private readonly summary = viewChild(FormSummary);
   private loadedTenant: string | null = null;
 
   readonly client = input.required<CoachClientDetails>();
@@ -168,6 +170,7 @@ export class ClientCoach {
             $localize`The client could not be reassigned. Reload the page and try again.`,
           ),
         );
+        this.summary()?.focus();
       } finally {
         if (owner.current) this.saving.set(false);
       }

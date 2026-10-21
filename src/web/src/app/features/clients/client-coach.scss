@@ -35,8 +35,7 @@
   overflow-wrap: anywhere;
 }
 
-.coach-notice:empty,
-.reassign-error:empty {
+.coach-notice:empty {
   display: none;
 }
 
@@ -49,11 +48,6 @@
 .reassign-form {
   display: grid;
   gap: var(--space-16);
-}
-
-.reassign-error {
-  color: var(--color-danger);
-  margin: 0;
 }
 
 // The coach history (COACH-16): closed until asked for, so the dialog stays one decision.

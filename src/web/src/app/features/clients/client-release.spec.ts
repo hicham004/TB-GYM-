@@ -8,7 +8,7 @@ import type { CoachClientDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { installDialogSupport } from '../../../testing/dialog';
-import { fill, press, settle, text } from '../../../testing/dom';
+import { fill, formSummary, press, settle, text } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { ClientRelease } from './client-release';
 
@@ -170,11 +170,14 @@ describe('ClientRelease', () => {
     press(host, 'End coaching');
     await settle(fixture);
     fill(host, 'Reason', 'Moved away');
+    expect(formSummary(host).textContent?.trim()).toBe('');
     press(host, 'End coaching permanently');
     await settle(fixture);
 
     expect(host.querySelector('dialog')?.open).toBe(true);
-    expect(host.querySelector('[role="alert"]')?.textContent?.trim()).not.toBe('');
+    expect(formSummary(host).textContent?.trim()).not.toBe('');
+    // The refusal is read where the coach is: the summary takes focus.
+    expect(document.activeElement).toBe(formSummary(host));
     expect(fixture.componentInstance.done).toEqual([]);
   });
 });

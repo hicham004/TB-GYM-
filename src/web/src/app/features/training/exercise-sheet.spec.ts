@@ -8,7 +8,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantContext } from '../../core/tenancy/tenant-context';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { asset, exercise, results } from '../../../testing/exercise-fixtures';
-import { settle } from '../../../testing/dom';
+import { formSummary, settle } from '../../../testing/dom';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import { ExerciseSheet } from './exercise-sheet';
 import { mediaLine, type ExerciseValues } from './exercise-library.models';
@@ -182,6 +182,10 @@ it('reads the exercise again after a stale save, shows what was saved, and saves
   expect(sheet.error()).toBe(
     'Someone saved this exercise after you opened it. It now shows what they saved: make your change again.',
   );
+  // Said in the sheet's summary, which takes focus.
+  const summary = formSummary(fixture.nativeElement as HTMLElement);
+  expect(summary.textContent?.trim()).toBe(sheet.error());
+  expect(document.activeElement).toBe(summary);
   expect(sheet.values().name).toBe('Back Squat (paused)');
   expect(dirty.at(-1)).toBe(false);
   expect(reloaded).toHaveLength(1);

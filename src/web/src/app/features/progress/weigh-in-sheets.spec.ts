@@ -5,7 +5,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, formSummary, press, settle } from '../../../testing/dom';
 import {
   dateCorrection,
   mayaWeighIns,
@@ -167,16 +167,41 @@ describe('Log weight', () => {
     const closed = vi.fn();
     fixture.componentInstance.closed.subscribe(closed);
 
+    // The summary is there before anything is refused, so the refusal lands in a region already heard.
+    expect(formSummary(host).getAttribute('role')).toBe('alert');
+    expect(textOf(formSummary(host))).toBe('');
+
     fill(host, 'Weight', '80.2');
     await settle(fixture);
     press(host, 'Save weight');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'A weight is already logged for Sat 10 Oct. Correct that one instead.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(field(host).value).toBe('80.2');
     expect(closed).not.toHaveBeenCalled();
+  });
+
+  it('says what is marked, not the server’s last word, when the next try is refused before sending', async () => {
+    const recordWeight = vi.fn(() => throwError(() => refusal(409, 'BodyweightDateAlreadyExists')));
+    const { fixture, host } = await render(LogWeight, {}, { recordWeight });
+
+    fill(host, 'Weight', '80.2');
+    await settle(fixture);
+    press(host, 'Save weight');
+    await settle(fixture);
+    expect(textOf(formSummary(host))).toContain('A weight is already logged');
+
+    fill(host, 'Weight', '');
+    await settle(fixture);
+    press(host, 'Save weight');
+    await settle(fixture);
+
+    expect(textOf(formSummary(host))).toBe('Check the fields marked above.');
+    expect(document.activeElement?.getAttribute('name')).toBe('value');
+    expect(recordWeight).toHaveBeenCalledTimes(1);
   });
 
   it('asks the page to read its list again when the server says it changed', async () => {
@@ -191,7 +216,7 @@ describe('Log weight', () => {
     await settle(fixture);
 
     expect(stale).toHaveBeenCalled();
-    expect(textOf(host.querySelector('.refusal'))).toContain('changed while it was open');
+    expect(textOf(formSummary(host))).toContain('changed while it was open');
   });
 
   it('tells the page it holds typed work, and stops when it is emptied', async () => {
@@ -346,7 +371,7 @@ describe('Correct weight', () => {
     await settle(fixture);
 
     expect(stale).toHaveBeenCalled();
-    expect(textOf(host.querySelector('.refusal'))).toContain('changed while it was open');
+    expect(textOf(formSummary(host))).toContain('changed while it was open');
     expect(field(host).value).toBe('79.4');
   });
 });
@@ -418,9 +443,10 @@ describe('Move to the right day', () => {
     press(host, 'Move to that day');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'A weight is already logged for Tue 6 Oct. Correct that one instead.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(textOf(host)).toContain('Move to that day');
   });
 });

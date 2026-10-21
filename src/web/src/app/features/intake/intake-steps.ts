@@ -19,6 +19,7 @@ import type { BodyweightUnit, ClientIntakeProfile } from '../../core/api/api.mod
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { Button } from '../../ui/button';
 import type { IsoDate } from '../../ui/calendar';
+import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { IntakeFields } from './intake-fields';
 import {
@@ -51,7 +52,7 @@ import {
  */
 @Component({
   selector: 'app-intake-steps',
-  imports: [Button, Icon, IntakeFields],
+  imports: [Button, FormSummary, Icon, IntakeFields],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './intake-steps.html',
   styleUrl: './intake-steps.scss',
@@ -61,6 +62,7 @@ export class IntakeSteps {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly summary = viewChild.required(FormSummary);
   private readonly originalTitle = this.pageTitle.getTitle();
   private destroyed = false;
 
@@ -149,6 +151,7 @@ export class IntakeSteps {
   protected async next(): Promise<void> {
     if (this.busy()) return;
     if (this.problemCount() > 0) {
+      this.refusal.set(null);
       this.attempt.attempt();
       afterNextRender(
         () => this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
@@ -173,13 +176,7 @@ export class IntakeSteps {
       if (!outcome.ok) {
         if (outcome.message === '') return;
         this.refusal.set(outcome.message);
-        afterNextRender(
-          () =>
-            this.host.nativeElement
-              .querySelector<HTMLElement>('.refusal')
-              ?.scrollIntoView?.({ block: 'nearest' }),
-          { injector: this.injector },
-        );
+        this.summary().focus();
         return;
       }
       const after = INTAKE_STEPS[this.index() + 1];

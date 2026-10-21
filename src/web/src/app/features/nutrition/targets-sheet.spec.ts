@@ -3,7 +3,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fill, field, leave, press, settle } from '../../../testing/dom';
+import { field, fill, formSummary, leave, press, settle } from '../../../testing/dom';
 import {
   calculationRecord,
   calculationView,
@@ -250,9 +250,10 @@ describe('Work out targets', () => {
     press(host, 'Work out targets');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Protein and fat together come to more calories than the target. Lower the protein or the fat share, or raise the goal.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(field<HTMLInputElement>(host, 'Protein (grams a day)').value).toBe('600');
     expect(host.querySelector('[data-result]')).toBeNull();
     expect(closed).not.toHaveBeenCalled();

@@ -46,6 +46,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
 import { Control } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { UiSheet } from '../../ui/sheet';
@@ -201,6 +202,7 @@ interface EditFailure {
     Checkbox,
     Control,
     ExerciseDemo,
+    FormSummary,
     FormsModule,
     Icon,
     ProgramLibrary,
@@ -242,6 +244,8 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   private readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
   private readonly pickerSheet = viewChild.required<TemplateRef<unknown>>('pickerSheet');
   private readonly reviewSheet = viewChild.required<TemplateRef<unknown>>('reviewSheet');
+  /** The review sheet's summary, where a refused apply is said. */
+  private readonly applySummary = viewChild(FormSummary);
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private loadedKey: string | null = null;
   private libraryTenant: string | null = null;
@@ -810,7 +814,9 @@ export class ProgramEditPage implements HoldsUnsavedWork {
         );
         await this.router.navigate(this.trainingLink());
       } catch (error) {
-        if (owner.current) this.failure.set(this.editFailure(error));
+        if (!owner.current) return;
+        this.failure.set(this.editFailure(error));
+        this.applySummary()?.focus();
       } finally {
         if (owner.current) this.applying.set(false);
       }

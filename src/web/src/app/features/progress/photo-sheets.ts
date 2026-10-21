@@ -15,6 +15,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import type { ProgressPhotoPose } from '../../core/api/generated';
 import { Button } from '../../ui/button';
 import { DateField } from '../../ui/date-field';
+import { FormSummary } from '../../ui/form-summary';
 import { Skeleton } from '../../ui/skeleton';
 import { EntryActions, EntrySheet, ReasonPicker, SHEET_STYLES } from './entry-sheet';
 import {
@@ -55,7 +56,7 @@ const emptySlots = (): Slots => ({ Front: emptySlot, Side: emptySlot, Back: empt
  */
 @Component({
   selector: 'app-add-photos',
-  imports: [Button, DateField, EntryActions],
+  imports: [Button, DateField, EntryActions, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -126,14 +127,15 @@ const emptySlots = (): Slots => ({ Front: emptySlot, Side: emptySlot, Back: empt
           }
         </div>
       }
-      @if (attempt.wasTried() && nothingYet()) {
-        <p class="problem-text" role="alert" i18n>Choose at least one photo.</p>
-      } @else if (attempt.wasTried() && problems() > 0) {
-        <p class="problem-text" role="alert" i18n>Check what is marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text refusal" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && nothingYet()) {
+          <ng-container i18n>Choose at least one photo.</ng-container>
+        } @else if (attempt.wasTried() && problems() > 0) {
+          <ng-container i18n>Check what is marked above.</ng-container>
+        }
+      </app-form-summary>
       <app-entry-actions
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
@@ -336,12 +338,12 @@ export class AddPhotos extends EntrySheet {
               ? $localize`Some photos were saved. The ones marked above were not.`
               : $localize`Nothing was saved. The reasons are marked above.`,
           );
-          this.reveal();
+          this.focusSummary();
         }
       } catch {
         if (!owner.current) return;
         this.error.set($localize`The photos could not be saved. Try again.`);
-        this.reveal();
+        this.focusSummary();
       } finally {
         if (owner.current) this.busy.set(false);
       }
@@ -357,7 +359,7 @@ export class AddPhotos extends EntrySheet {
  */
 @Component({
   selector: 'app-photo-view',
-  imports: [Button, EntryActions, ReasonPicker, Skeleton],
+  imports: [Button, EntryActions, FormSummary, ReasonPicker, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -403,9 +405,11 @@ export class AddPhotos extends EntrySheet {
             (touched)="attempt.touch('reason')"
           />
           <p class="muted">{{ removeNote() }}</p>
-          @if (error(); as message) {
-            <p class="problem-text refusal" role="alert">{{ message }}</p>
-          }
+          <app-form-summary>
+            @if (error(); as message) {
+              {{ message }}
+            }
+          </app-form-summary>
           <app-entry-actions
             [saveLabel]="removeLabel"
             [busyLabel]="removingLabel"

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { press, settle } from '../../../testing/dom';
+import { formSummary, press, settle } from '../../../testing/dom';
 import type { CoachWorkoutDetail } from './training-read.models';
 import { CoachWorkout } from './coach-workout';
 
@@ -287,9 +287,10 @@ describe('CoachWorkout', () => {
     press(host, 'Send note');
     await settle(fixture);
 
-    expect(host.querySelector('.reply-error')?.textContent?.trim()).toBe(
+    expect(formSummary(host).textContent?.trim()).toBe(
       'This client’s training is closed now, so the note can’t be sent.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(box.value).toBe('Keep the bar closer on the way down.');
     expect(read).toHaveBeenCalledTimes(1);
   });

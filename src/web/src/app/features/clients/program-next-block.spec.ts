@@ -7,7 +7,17 @@ import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { runningBlock } from '../../../testing/client-program-fixtures';
-import { field, fill, focusedId, leave, press, query, settle, tick } from '../../../testing/dom';
+import {
+  field,
+  fill,
+  focusedId,
+  formSummary,
+  leave,
+  press,
+  query,
+  settle,
+  tick,
+} from '../../../testing/dom';
 import {
   chartSet,
   exerciseView,
@@ -391,7 +401,8 @@ describe('Build next block', () => {
     press(host, 'Add these weeks');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.body > .problem-text'))).toBe(message);
+    expect(textOf(formSummary(host))).toBe(message);
+    expect(document.activeElement).toBe(formSummary(host));
     expect(closed).not.toHaveBeenCalled();
   });
 
@@ -409,7 +420,8 @@ describe('Build next block', () => {
     press(host, 'Preview the new weeks');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.body > .problem-text'))).toBe(message);
+    expect(textOf(formSummary(host))).toBe(message);
+    expect(document.activeElement).toBe(formSummary(host));
     expect(host.querySelector('.preview')).toBeNull();
   });
 
@@ -436,7 +448,7 @@ describe('Build next block', () => {
       press(host, 'Add these weeks');
       await settle(fixture);
 
-      expect(textOf(host.querySelector('.body > .problem-text'))).toContain(said);
+      expect(textOf(formSummary(host))).toContain(said);
       expect(closed).not.toHaveBeenCalled();
       document.body.innerHTML = '';
       TestBed.resetTestingModule();
@@ -460,7 +472,7 @@ describe('Build next block', () => {
     press(host, 'Add these weeks');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.body > .problem-text'))).toContain('changed somewhere else');
+    expect(textOf(formSummary(host))).toContain('changed somewhere else');
     expect(closed).not.toHaveBeenCalled();
   });
 

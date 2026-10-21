@@ -26,18 +26,6 @@
   flex-wrap: wrap;
   gap: 0.75rem;
 }
-.problem {
-  background: var(--tb-danger-soft);
-  border-radius: var(--tb-radius-card-small);
-  color: var(--tb-ink);
-  margin: 0;
-  overflow-wrap: anywhere;
-  padding: 0.75rem;
-}
-.problem:focus-visible {
-  outline: 2px solid var(--tb-focus);
-  outline-offset: 2px;
-}
 .stale {
   background: var(--tb-surface-2);
   border-radius: var(--tb-radius-card-small);

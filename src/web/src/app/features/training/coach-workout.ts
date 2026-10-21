@@ -1,12 +1,22 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  LOCALE_ID,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { FormSummary } from '../../ui/form-summary';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusLabel } from '../../ui/status-label';
 import { firstValueFrom } from 'rxjs';
@@ -23,7 +33,7 @@ let nextReply = 0;
 
 @Component({
   selector: 'app-coach-workout',
-  imports: [Button, DatePipe, Skeleton, StatusLabel],
+  imports: [Button, DatePipe, FormSummary, Skeleton, StatusLabel],
   templateUrl: './coach-workout.html',
   styleUrl: './coach-workout.scss',
 })
@@ -49,6 +59,8 @@ export class CoachWorkout {
   protected readonly note = signal('');
   protected readonly sending = signal(false);
   protected readonly sendError = signal<string | null>(null);
+  /** Where a refused note is said; it takes focus, and what was typed stays. */
+  private readonly summary = viewChild(FormSummary);
   protected readonly replyLabel = computed(() =>
     this.clientName()
       ? $localize`Note for ${this.clientName()}:name: on this workout`
@@ -157,6 +169,7 @@ export class CoachWorkout {
               ? $localize`This client’s training is closed now, so the note can’t be sent.`
               : apiErrorMessage(error, $localize`The note could not be sent. Try again.`),
           );
+          this.summary()?.focus();
         }
       } finally {
         if (owner.current) this.sending.set(false);

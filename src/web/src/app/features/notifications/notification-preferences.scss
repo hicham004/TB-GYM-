@@ -63,14 +63,10 @@ h1 {
   color: var(--tb-muted);
 }
 
-.error {
-  color: var(--tb-danger);
-}
 .notice {
   color: var(--tb-success, var(--tb-accent-ink));
   font-weight: 600;
 }
-.error:empty,
 .notice:empty {
   display: none;
 }

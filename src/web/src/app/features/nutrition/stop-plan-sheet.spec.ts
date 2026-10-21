@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clientPlan, TODAY } from '../../../testing/client-nutrition-fixtures';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, formSummary, press, settle } from '../../../testing/dom';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ClientNutritionApi } from './client-nutrition-api';
@@ -128,7 +128,7 @@ describe('Stop a meal plan (NCM-1)', () => {
     await settle(fixture);
 
     expect(closed).toEqual([{ row: { ...RUNNING(), state: 'stopped' }, already: true }]);
-    expect(host.querySelector('.refusal')).toBeNull();
+    expect(textOf(formSummary(host))).toBe('');
   });
 
   it('asks the page to read the plan again when it changed meanwhile, keeping the reason', async () => {
@@ -139,9 +139,10 @@ describe('Stop a meal plan (NCM-1)', () => {
     press(host, 'Stop meal plan');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.refusal'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'This meal plan changed since the page read it. Close this and look at it again before you stop it.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(stale).toHaveBeenCalledTimes(1);
     expect(closed).toEqual([]);
     expect(host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Wrong dates');

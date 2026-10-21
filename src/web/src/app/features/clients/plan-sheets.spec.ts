@@ -13,7 +13,7 @@ import {
   SERVICE_TODAY,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
-import { field, fill, press, settle } from '../../../testing/dom';
+import { field, fill, formSummary, press, settle } from '../../../testing/dom';
 import { planCard } from './client-service.models';
 import { PlanPayment, PlanStart } from './plan-sheets';
 
@@ -109,7 +109,7 @@ describe('Start a plan', () => {
     await settle(fixture);
 
     expect(textOf(host)).toContain('Choose a price option.');
-    expect(textOf(host.querySelector('[role="alert"]'))).toBe('Check the fields marked above.');
+    expect(textOf(formSummary(host))).toBe('Check the fields marked above.');
     // The first thing to fix takes focus, as on Assign program.
     expect(document.activeElement).toBe(host.querySelector('input[value="o-12"]'));
     expect(api.assignProduct).not.toHaveBeenCalled();
@@ -168,9 +168,10 @@ describe('Start a plan', () => {
     press(host, 'Start plan');
     await settle(fixture);
 
-    expect(textOf(host.querySelector('.problem-text'))).toBe(
+    expect(textOf(formSummary(host))).toBe(
       'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Choose dates after it ends.',
     );
+    expect(document.activeElement).toBe(formSummary(host));
     expect(closed).not.toHaveBeenCalled();
 
     press(host, 'Start plan');
@@ -308,7 +309,8 @@ describe('Record payment', () => {
 
     press(host, 'Record payment');
     await settle(fixture);
-    expect(textOf(host.querySelector('.problem-text'))).toBe('That is more than is left to pay.');
+    expect(textOf(formSummary(host))).toBe('That is more than is left to pay.');
+    expect(document.activeElement).toBe(formSummary(host));
     expect(closed).not.toHaveBeenCalled();
 
     press(host, 'Record payment');
