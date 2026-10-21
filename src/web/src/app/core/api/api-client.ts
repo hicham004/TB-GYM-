@@ -133,8 +133,9 @@ export class ApiClient {
     return this.http.post<void>('/api/auth/logout', {});
   }
 
-  getCurrentUser(): Observable<CurrentUser> {
-    return this.http.get<CurrentUser>('/api/auth/me');
+  /** The signed-in account, or null when nobody is signed in in this browser (audit AUTH-12). */
+  getCurrentUser(): Observable<CurrentUser | null> {
+    return this.http.get<CurrentUser | null>('/api/auth/me');
   }
 
   updateOwnThemeMode(mode: CurrentUser['preferredThemeMode']): Observable<CurrentUser> {
@@ -800,12 +801,13 @@ export class ApiClient {
     return this.http.post<Phase3Contracts.RecipeSummary>('/api/nutrition/recipes', request);
   }
 
+  /** The client's own day, or null when there is nothing for that date (audit AUTH-12). */
   getMyNutritionDay(localDate?: string) {
     return this.http
-      .get<Phase3Contracts.ClientNutritionDayView>('/api/nutrition/me/day', {
+      .get<Phase3Contracts.ClientNutritionDayView | null>('/api/nutrition/me/day', {
         params: localDate ? { localDate } : {},
       })
-      .pipe(map(mapNutritionDay));
+      .pipe(map((day) => (day === null ? null : mapNutritionDay(day))));
   }
 
   /** A recipe in the caller's own plan, as the plan copied it (R4.4d). */

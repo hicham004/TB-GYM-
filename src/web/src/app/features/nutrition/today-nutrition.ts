@@ -1,6 +1,5 @@
-import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
   computed,
@@ -8,12 +7,15 @@ import {
   inject,
   signal,
   type TemplateRef,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
+import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
+import type { FeatureAccessDecision } from '../../core/api/api.models';
 import type { FoodQuantityUnit } from '../../core/api/generated';
 import { ownNutritionDenialMessage } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -45,6 +47,7 @@ export class TodayNutrition {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  private readonly access = inject(ClientAccessStore);
   private readonly calendar = inject(WorkspaceCalendar);
   private readonly sheets = inject(UiSheet);
   private readonly recipeSheet = viewChild.required<TemplateRef<unknown>>('recipeSheet');
@@ -99,10 +102,15 @@ export class TodayNutrition {
     effect(() => {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
+      // The access answer first: meals it calls closed are never asked for (see `load`).
+      const status = this.access.status();
+      if (status === 'idle' || status === 'loading') return;
       if (tenantId && tenantId !== this.loadedTenantId) {
         this.loadedTenantId = tenantId;
-        this.selectedDate.set('');
-        void this.load();
+        untracked(() => {
+          this.selectedDate.set('');
+          void this.load();
+        });
       }
     });
   }
@@ -391,10 +399,32 @@ export class TodayNutrition {
       this.denial.set(null);
       this.missing.set(false);
       try {
+        const access = this.access.decision('Nutrition');
+        if (access?.isAllowed === false) {
+          // The plan has closed meals (ended, paused or never in it): the page says why without
+          // asking for a day the client may not see (audit AUTH-12).
+          this.day.set(null);
+          this.denial.set(ownNutritionDenialMessage(access.reason));
+          return;
+        }
         const loaded = await owner.wait(
           firstValueFrom(this.api.getMyNutritionDay(dateOwner.selectedDate || undefined)),
         );
         if (!this.ownsDate(dateOwner)) return;
+        if (loaded === null) {
+          // Nothing for this date: no meal plan yet, or the plan does not reach it. When the access
+          // answer could not be read before, it is asked for now, so a closed plan still says so.
+          this.day.set(null);
+          const decision = access ?? (await this.readAccess(owner));
+          if (!this.ownsDate(dateOwner)) return;
+          if (decision?.isAllowed === false) {
+            this.denial.set(ownNutritionDenialMessage(decision.reason));
+          } else {
+            this.missing.set(true);
+          }
+          void this.calendar.resolveToday();
+          return;
+        }
         this.day.set(loaded);
         this.drafts.reconcile(loaded);
         this.bumpDrafts();
@@ -405,18 +435,6 @@ export class TodayNutrition {
         const reason = featureAccessReason(error);
         if (reason !== null) {
           this.denial.set(ownNutritionDenialMessage(reason));
-        } else if (error instanceof HttpErrorResponse && error.status === 404) {
-          try {
-            const decisions = await owner.wait(firstValueFrom(this.api.getOwnFeatureAccess()));
-            if (!this.ownsDate(dateOwner)) return;
-            const decision = decisions.find((item) => item.feature === 'Nutrition');
-            if (decision && !decision.isAllowed)
-              this.denial.set(ownNutritionDenialMessage(decision.reason));
-            else this.missing.set(true);
-          } catch {
-            if (owner.current && this.ownsDate(dateOwner)) this.missing.set(true);
-          }
-          void this.calendar.resolveToday();
         } else {
           this.error.set(apiErrorMessage(error, $localize`Your meals could not be loaded.`));
         }
@@ -426,6 +444,17 @@ export class TodayNutrition {
         }
       }
     });
+  }
+
+  /** The nutrition decision read straight from the API, or null when it cannot be read either. */
+  private async readAccess(owner: TenantOperation): Promise<FeatureAccessDecision | null> {
+    try {
+      const decisions = await owner.wait(firstValueFrom(this.api.getOwnFeatureAccess()));
+      return decisions.find((item) => item.feature === 'Nutrition') ?? null;
+    } catch (error) {
+      if (!owner.current) throw error;
+      return null;
+    }
   }
 
   /**

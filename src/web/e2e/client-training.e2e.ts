@@ -772,7 +772,7 @@ test.describe('a refused change', () => {
   // The browser logs the 400 the page was deliberately given; nothing else may be logged.
   test.use({
     allowedConsoleErrors: {
-      patterns: [/status of 401 .*\/api\/auth\/me/, /status of 400 .*\/api\/training\/mesocycles/],
+      patterns: [/status of 400 .*\/api\/training\/mesocycles/],
     },
   });
 

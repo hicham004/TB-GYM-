@@ -77,8 +77,10 @@ test('answers what a signed-out visitor’s page asks for, and leaves the rest t
   const ask = (pathname) =>
     answerAsVisitor(new URL(pathname, 'http://127.0.0.1'), response, { 'X-Robots-Tag': 'noindex' });
 
+  // Nobody is signed in, as the API says it: 200 with JSON null (audit AUTH-12).
   assert.equal(ask('/api/auth/me'), true);
-  assert.equal(answers[0].status, 401);
+  assert.equal(answers[0].status, 200);
+  assert.equal(answers[1].body, null);
   assert.equal(answers[0].headers['X-Robots-Tag'], 'noindex');
   assert.equal(ask('/api/website/settings'), true);
   assert.deepEqual(answers[3].body, { whatsAppNumber: null, analytics: { script: null } });

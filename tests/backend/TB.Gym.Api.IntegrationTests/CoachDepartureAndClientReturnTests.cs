@@ -212,8 +212,9 @@ public sealed partial class Phase3TrainingWorkflowTests
             await AssertStatusAsync(await client.GetAsync(url), HttpStatusCode.OK);
         }
 
-        // These answer by the new profile's own access (none yet), which is a 403 or 404 by design; a
-        // lookup that still matched both profiles would fail with a 500 instead.
+        // These answer by the new profile's own access (none yet), which is a 403, or nothing for the day
+        // (200 and null, AUTH-12), by design; a lookup that still matched both profiles would fail with a
+        // 500 instead.
         foreach (var url in new[] { $"/api/nutrition/me/day?localDate={TenantToday():yyyy-MM-dd}", "/api/checkins/me/assignments" })
         {
             Assert.AreNotEqual(HttpStatusCode.InternalServerError, (await client.GetAsync(url)).StatusCode, url);

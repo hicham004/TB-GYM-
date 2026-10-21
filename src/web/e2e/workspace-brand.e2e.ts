@@ -250,7 +250,7 @@ for (const width of [390, 1440]) {
 test.describe('a TB Gym screen', () => {
   test.use({
     allowedConsoleErrors: {
-      patterns: [/status of 401 .*\/api\/auth\/me/, /status of 503 .*\/api\/billing/],
+      patterns: [/status of 503 .*\/api\/billing/],
     },
   });
 

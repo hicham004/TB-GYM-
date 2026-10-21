@@ -34,7 +34,23 @@ ${STATE}
 const SHELL = `<!doctype html><html>${HEAD}<body><app-root></app-root>
 <script src="main-ABC.js" type="module"></script></body></html>`;
 
-const BUILD = { 'index.html': HOME, 'changelog/index.html': CHANGELOG, 'index.csr.html': SHELL };
+const SIGN_IN_FORM =
+  '<form class="auth-form" novalidate><input id="sign-in-email" type="email" formcontrolname="email">' +
+  '<input id="sign-in-password" type="password" formcontrolname="password">' +
+  '<button class="tb-button auth-submit" type="submit" disabled="">Sign in</button></form>';
+
+const SIGN_IN = `<!doctype html><html>${HEAD}<body><app-root ng-version="22.2.1" ngh="3"><app-sign-in>
+<h1 class="auth-title">Welcome <em>back.</em></h1>${SIGN_IN_FORM}</app-sign-in></app-root>
+<script src="main-ABC.js" type="module"></script>
+${STATE}
+</body></html>`;
+
+const BUILD = {
+  'index.html': HOME,
+  'changelog/index.html': CHANGELOG,
+  'auth/sign-in/index.html': SIGN_IN,
+  'index.csr.html': SHELL,
+};
 
 /** Writes the given files as a build output and inspects it; a null file is left missing. */
 function inspect(files, options = {}) {
@@ -128,6 +144,50 @@ test('rejects a changelog that is missing, lost its title or its dated releases'
   });
   assert.match(findings.join('\n'), /title "What changed" as its <h1>/);
   assert.match(findings.join('\n'), /no dated release/);
+});
+
+test('rejects a sign-in page that is missing, lost its title or its form, or its render mark', () => {
+  assert.match(
+    inspect({ ...BUILD, 'auth/sign-in/index.html': null }).join('\n'),
+    /auth[\\/]sign-in[\\/]index\.html is missing/,
+  );
+  const findings = inspect({
+    ...BUILD,
+    'auth/sign-in/index.html': SIGN_IN.replace('Welcome', 'Hello')
+      .replace(' id="sign-in-password"', '')
+      .replace('"tb-gym.rendered-signed-out":true,', ''),
+  });
+  assert.equal(findings.length, 3, findings.join('\n'));
+  assert.match(findings.join('\n'), /title "Welcome back\." as its <h1>/);
+  assert.match(findings.join('\n'), /sign-in form and its two fields/);
+  assert.match(findings.join('\n'), /rendered signed out/);
+});
+
+test('rejects a sign-in page that would submit natively before the app is live, or names a field', () => {
+  assert.deepEqual(
+    inspect({
+      ...BUILD,
+      'auth/sign-in/index.html': SIGN_IN.replace(' disabled=""', ''),
+    }),
+    ['auth/sign-in/index.html submits before the app is live: its button is not disabled.'],
+  );
+  assert.deepEqual(
+    inspect({
+      ...BUILD,
+      'auth/sign-in/index.html': SIGN_IN.replace(
+        'type="password"',
+        'type="password" name="password"',
+      ),
+    }),
+    ['auth/sign-in/index.html has a named field, which a native submit would put in the address.'],
+  );
+});
+
+test('rejects a shell that holds sign-in’s words', () => {
+  assert.match(
+    inspect({ ...BUILD, 'index.csr.html': SIGN_IN }).join('\n'),
+    /index\.csr\.html holds page text \("Welcome"\)/,
+  );
 });
 
 test('rejects a shell that is the homepage or the changelog, and a missing shell', () => {

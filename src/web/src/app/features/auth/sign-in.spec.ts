@@ -220,3 +220,57 @@ describe('SignIn', () => {
     );
   });
 });
+
+/**
+ * Sign-in is rendered at build time (audit UIQ-13), so on a slow connection its fields can be typed
+ * into, or filled by a password manager, before the app takes the page over.
+ */
+describe('SignIn as the pre-rendered page', () => {
+  afterEach(() => {
+    document.querySelectorAll('[data-prerendered]').forEach((element) => element.remove());
+    TestBed.resetTestingModule();
+  });
+
+  /** The page's fields as the build drew them, ahead of the app's own in the document. */
+  function prerenderedFields(email: string, password: string, remember: boolean): void {
+    const page = document.createElement('div');
+    page.setAttribute('data-prerendered', '');
+    page.innerHTML =
+      '<input id="sign-in-email" type="email"><input id="sign-in-password" type="password">' +
+      '<input id="sign-in-remember" type="checkbox">';
+    document.body.prepend(page);
+    (page.querySelector('#sign-in-email') as HTMLInputElement).value = email;
+    (page.querySelector('#sign-in-password') as HTMLInputElement).value = password;
+    (page.querySelector('#sign-in-remember') as HTMLInputElement).checked = remember;
+  }
+
+  it('starts from what was typed before the app arrived, so the first sign-in sends it', async () => {
+    prerenderedFields('maya@example.test', 'typed-early', true);
+    const { fixture, host, auth, router } = await render();
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    press(host, 'Sign in');
+    await settle(fixture);
+
+    expect(auth.login).toHaveBeenCalledWith('maya@example.test', 'typed-early', true);
+  });
+
+  it('starts empty on any later visit, when the fields are the ones it has just drawn', async () => {
+    const { fixture, host, auth } = await render();
+
+    press(host, 'Sign in');
+    await settle(fixture);
+
+    expect(auth.login).not.toHaveBeenCalled();
+    expect(query(host, '[role="alert"]').textContent).toContain('Enter your email address.');
+  });
+
+  // The build draws the button disabled until the app is live; scripts/check-prerender.mjs and the
+  // `built` Playwright project check the rendered page, where the build's render runs.
+  it('submits once the app is live', async () => {
+    const { host } = await render();
+
+    expect(button(host, 'Sign in').disabled).toBe(false);
+    expect(button(host, 'Sign in').type).toBe('submit');
+  });
+});

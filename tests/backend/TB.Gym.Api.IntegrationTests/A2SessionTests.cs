@@ -131,24 +131,24 @@ public sealed class A2SessionTests
 
         // The 8 hours slide with use, as they always did.
         Time.Advance(TimeSpan.FromHours(7));
-        Assert.AreEqual(HttpStatusCode.OK, (await MeAsync(session)).StatusCode);
+        Assert.IsTrue(await SignedInAsync(session));
         Time.Advance(TimeSpan.FromHours(7));
-        Assert.AreEqual(HttpStatusCode.OK, (await MeAsync(session)).StatusCode);
+        Assert.IsTrue(await SignedInAsync(session));
 
         // Nine hours without use end the unticked sign-in; the kept one is still there and renewed.
         Time.Advance(TimeSpan.FromHours(9));
-        Assert.AreEqual(HttpStatusCode.Unauthorized, (await MeAsync(session)).StatusCode);
+        Assert.IsFalse(await SignedInAsync(session));
         var keptAfterNight = await MeAsync(kept);
-        Assert.AreEqual(HttpStatusCode.OK, keptAfterNight.StatusCode);
+        Assert.IsTrue(await NamesAnAccountAsync(keptAfterNight));
         AssertExpiresAbout(keptAfterNight, Time.GetUtcNow().AddDays(30));
 
         // Used within its 30 days it keeps going; 30 days without use end it.
         Time.Advance(TimeSpan.FromDays(29));
-        Assert.AreEqual(HttpStatusCode.OK, (await MeAsync(kept)).StatusCode);
+        Assert.IsTrue(await SignedInAsync(kept));
         Time.Advance(TimeSpan.FromDays(29));
-        Assert.AreEqual(HttpStatusCode.OK, (await MeAsync(kept)).StatusCode);
+        Assert.IsTrue(await SignedInAsync(kept));
         Time.Advance(TimeSpan.FromDays(31));
-        Assert.AreEqual(HttpStatusCode.Unauthorized, (await MeAsync(kept)).StatusCode);
+        Assert.IsFalse(await SignedInAsync(kept));
     }
 
     [TestMethod]
@@ -171,8 +171,8 @@ public sealed class A2SessionTests
             TestContext.CancellationToken);
         Assert.AreEqual(HttpStatusCode.NoContent, changed.StatusCode, await changed.Content.ReadAsStringAsync());
         Time.Advance(TimeSpan.FromSeconds(1));
-        Assert.AreEqual(HttpStatusCode.Unauthorized, (await MeAsync(laptop)).StatusCode);
-        Assert.AreEqual(HttpStatusCode.OK, (await MeAsync(phone)).StatusCode);
+        Assert.IsFalse(await SignedInAsync(laptop));
+        Assert.IsTrue(await SignedInAsync(phone));
 
         // Sign out everywhere, from the laptop signed in again, ends both.
         Assert.AreEqual(HttpStatusCode.OK, (await SignInAsync(laptop, "a2-revoked@example.test", newPassword, rememberMe: true)).StatusCode);
@@ -181,8 +181,8 @@ public sealed class A2SessionTests
         var revoked = await laptop.PostAsync("/api/auth/sessions/revoke-all", content: null, TestContext.CancellationToken);
         Assert.AreEqual(HttpStatusCode.NoContent, revoked.StatusCode);
         Time.Advance(TimeSpan.FromSeconds(1));
-        Assert.AreEqual(HttpStatusCode.Unauthorized, (await MeAsync(phone)).StatusCode);
-        Assert.AreEqual(HttpStatusCode.Unauthorized, (await MeAsync(laptop)).StatusCode);
+        Assert.IsFalse(await SignedInAsync(phone));
+        Assert.IsFalse(await SignedInAsync(laptop));
     }
 
     // ---------- the host ----------
@@ -286,6 +286,20 @@ public sealed class A2SessionTests
 
     private Task<HttpResponseMessage> MeAsync(HttpClient client) =>
         client.GetAsync("/api/auth/me", TestContext.CancellationToken);
+
+    /// <summary>Whether the session check names an account for this client's cookie.</summary>
+    private async Task<bool> SignedInAsync(HttpClient client) => await NamesAnAccountAsync(await MeAsync(client));
+
+    /// <summary>
+    /// The session check answers 200 either way: the account, or JSON null for nobody (audit AUTH-12), which
+    /// is how an ended session reads now that a 401 no longer says it.
+    /// </summary>
+    private async Task<bool> NamesAnAccountAsync(HttpResponseMessage response)
+    {
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, "The session check answers 200, somebody or nobody.");
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.CancellationToken);
+        return body.ValueKind == JsonValueKind.Object;
+    }
 
     private static async Task RefreshCsrfAsync(HttpClient client)
     {

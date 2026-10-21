@@ -4431,13 +4431,6 @@ export type GetCurrentUserData = {
   url: '/api/auth/me';
 };
 
-export type GetCurrentUserErrors = {
-  /**
-   * Unauthorized
-   */
-  401: unknown;
-};
-
 export type GetCurrentUserResponses = {
   /**
    * OK
@@ -8496,13 +8489,6 @@ export type GetOwnNutritionDayData = {
     localDate?: string;
   };
   url: '/api/nutrition/me/day';
-};
-
-export type GetOwnNutritionDayErrors = {
-  /**
-   * Not Found
-   */
-  404: unknown;
 };
 
 export type GetOwnNutritionDayResponses = {

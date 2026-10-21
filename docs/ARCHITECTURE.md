@@ -290,6 +290,13 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   through the leave guards, and clears its own state only once the person has left (`signedOutGuard`),
   keeping the chosen workspace. Whoever keeps typed work stays with it, under a notice that offers
   Sign in. A tab back from five minutes or more hidden asks `/api/auth/me` again.
+- "Nothing here" is an answer, not an error (audit AUTH-12): the session check `GET /api/auth/me` is
+  open to anyone and answers nobody (a visitor, an ended session, a blocked account) with 200 and JSON
+  null, and a client's `GET /api/nutrition/me/day` for a date with no meal plan, or none they may see
+  now, answers the same way; the access answer (`GET /api/client-access/me`) says why. Every other
+  route still answers 401 or 403. The client's Today, Nutrition and Check-ins pages read that access
+  answer first and never ask for a feature it calls closed, which the API would refuse with a 403
+  (asking anyway only when the answer could not be read), so an ordinary page logs nothing.
 - Password lockout (five wrong passwords, fifteen minutes) and unique email are enabled; production
   requires confirmed email. A locked account answers 429 `account_locked` with the time left in
   `Retry-After`, whichever password is typed.
@@ -835,6 +842,24 @@ Plex Mono Medium and the upright Instrument Serif, are declared by `home.scss` a
 is asked for only once the page is live, since the numerals sit below the first screen).
 `check-prerender.mjs` fails a build whose homepage lost its headline, whose changelog lost its
 releases, or whose pages still link the stylesheet.
+
+Audit A11b (UIQ-13, AUTH-12, AUTH-10) adds sign-in as the third pre-rendered page
+(`auth/sign-in/index.html`, where the installed app starts), so its form is drawn before the scripts
+arrive on a slow phone. nginx (and `serve-built.mjs`) now gives all three pre-rendered documents to a
+visitor without the sign-in cookie only, by one `map` on the cookie and the address, with no-cache;
+someone signed in gets the shell at `/`, `/changelog` and `/auth/sign-in` alike, and any other
+spelling of those documents (`/index.html`, a trailing slash) is the shell too. That is what lets
+`AuthStore` skip the session check on a page that arrived pre-rendered (`PRERENDERED_FOR_VISITORS_ONLY`;
+a development build still asks, quietly, because `ng serve` renders those pages for every request).
+Sign-in's button is disabled until the app is live, so an early Enter cannot submit the page natively
+and lose the typing, and `SignIn.ngOnInit` starts the form from what the fields already hold, in the
+same pass as the form's first write, so nothing typed or filled before the app arrived is lost; its
+scripts keep full priority, as its form needs the app to send. A missing file (an address whose last
+segment has an extension, such as `/sitemap.xml`) answers 404 with the shell (`error_page`; the API's
+own 404s pass through), and the app's `**` route is a not-found page, signed out in the signed-out
+frame and signed in inside the person's shell, with a robots `noindex` while it is shown; an address
+without an extension is the app's to answer. `check-prerender.mjs` also fails a sign-in page that lost
+its form, submits before the app is live or names a field.
 
 R6.2g adds Talk to us for gyms and analytics (ADR 0037). `home-talk` is the form (name, gym, one
 field for an email address or a WhatsApp number, a line about the gym, and a hidden honeypot) between

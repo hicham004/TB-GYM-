@@ -319,7 +319,7 @@ test.describe('with no connection', () => {
   // rejection nobody handled, or an uncaught page error — still fails through the guard.
   test.use({
     allowedConsoleErrors: {
-      patterns: [/status of 401 .*\/api\/auth\/me/, /ERR_INTERNET_DISCONNECTED .*program-drafts/],
+      patterns: [/ERR_INTERNET_DISCONNECTED .*program-drafts/],
     },
   });
 

@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -199,11 +200,16 @@ public static class NutritionEndpoints
         }).WithName("ReviewAiMealDraft").Produces<AiMealDraftView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict);
 
         var client = endpoints.MapGroup("/api/nutrition/me").RequireAuthorization(AuthorizationPolicies.TenantClient).WithTags(NutritionModule.Name);
+        // A date with no meal plan, or none the client may see now, answers JSON null: "nothing here" is an
+        // answer, and a 404 was a console error for every day a client without a plan opened (AUTH-12). Why
+        // there is none is the access answer's to say (GET /api/client-access/me).
         client.MapGet("/day", async (DateOnly? localDate, INutritionApplicationService service, CancellationToken token) =>
         {
             var day = await service.GetOwnDayAsync(localDate, token);
-            return day is null ? Results.NotFound() : Results.Ok(day);
-        }).WithName("GetOwnNutritionDay").Produces<ClientNutritionDayView>().Produces(StatusCodes.Status404NotFound);
+            return day is null ? Results.Text("null", "application/json", Encoding.UTF8) : Results.Ok(day);
+        }).WithName("GetOwnNutritionDay")
+            .WithDescription("The client's nutrition day, or JSON null when there is none for that date.")
+            .Produces<ClientNutritionDayView>();
         client.MapGet("/recipes/{recipeId:guid}", async (Guid recipeId, INutritionApplicationService service, CancellationToken token) =>
         {
             var recipe = await service.GetOwnRecipeAsync(recipeId, token);

@@ -1,0 +1,11 @@
+// The signed-in page sits in the shell's content column; the visitor's in the signed-out frame.
+.not-found {
+  justify-content: center;
+  min-block-size: 60dvh;
+}
+
+.not-found__actions {
+  display: grid;
+  gap: var(--space-16);
+  justify-items: start;
+}

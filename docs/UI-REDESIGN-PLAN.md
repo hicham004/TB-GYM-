@@ -1155,6 +1155,8 @@ of the implemented R1.3 screens before production rollout.
   (4) `og:image` stays relative until go-live (LAUNCH-CHECKLIST). (5) A signed-in person who opens `/index.html`
   by name, or whose browser kept the homepage from before signing in, sees the homepage for the time the
   session check takes, then their Today; nginx's `no-cache` on `/` keeps the ordinary path clear of it.
+  Since audit A11b `/index.html` and every other spelling of a pre-rendered page is the shell, and a page
+  that arrives pre-rendered reached a visitor only, so it no longer asks who is signed in.
 - **Homepage, left for later (from R6.2b, 2026-10-12).** (1) The sign-in frame still uses the photo
   `public/images/coaching-hero.jpg` from the first homepage (2026-09-24), whose licence is not recorded
   anywhere; the rebuilt homepage no longer uses it. Record its source or replace it. (2) The Latin IBM
@@ -1164,7 +1166,8 @@ of the implemented R1.3 screens before production rollout.
   (4) The hero's picture frame is where R6.2c's video goes, poster first. (5) The phone pictures are
   one size (720 px); a 480 px variant for phones would save about 20 kB on the first paint there.
   (6) A signed-out visitor's session check still logs a 401 in the console (Lighthouse best practices
-  96, not 100); answering it quietly needs the API to say "nobody" with a 2xx, a backend change.
+  96, not 100); answering it quietly needs the API to say "nobody" with a 2xx, a backend change. Done in
+  audit A11b: the API answers nobody with 200 and null, and a pre-rendered page does not ask at all.
 - **Homepage, second round (2026-10-12).** The owner judged the R6.2b page boring, its feature cards
   unread and its CSS phone "AI-made", and the competitors more professional. Two research rounds
   followed: `docs/design/homepage-visual-research.md` (why the admired pages look premium: a real
@@ -2064,7 +2067,9 @@ limited to the coach's assigned clients.
 
 ### Signed-out and website
 - These are already the strongest part.
-- Pre-render the homepage at build time for Google and link previews (R6.2a).
+- Pre-render the homepage at build time for Google and link previews (R6.2a); sign-in too, so its form
+  is on screen before the scripts arrive (audit A11b). An unknown address gets a not-found page in the
+  signed-out frame, or in the person's own shell once signed in, never a silent trip home (A11b).
 - A homepage rebuilt as one of one, after research, with a GSAP scroll story at its heart, on the
   homepage only (R6.2b); then the premium rebuild on real device pictures of the sample demo, with
   four pinned week stages, six feature rows and a build-time `/changelog` page (R6.2f). Later, when

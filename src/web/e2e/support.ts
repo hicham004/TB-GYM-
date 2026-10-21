@@ -73,7 +73,8 @@ export async function mockSignedOut(
 ): Promise<void> {
   await mockApi(page, {
     'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
-    'GET /api/auth/me': (route) => json(route, 401, { title: 'Unauthorized' }),
+    // Nobody is signed in: the API says so with 200 and JSON null (audit AUTH-12).
+    'GET /api/auth/me': (route) => json(route, 200, null),
     // The homepage and what changed ask for these once they are live (R6.2g), and the Talk-to-us
     // form asks for its stamp when it scrolls into view.
     'GET /api/website/settings': (route) => json(route, 200, NO_WEBSITE_SETTINGS),
@@ -157,16 +158,16 @@ export { expect, json };
  * Every check runs with the browser console watched. An unexpected console error or an uncaught
  * page error fails the test that produced it, because both are defects a screenshot cannot show.
  *
- * `allowedConsoleErrors` is the explicit, per-test escape hatch, and the default list holds exactly
- * one entry: a signed-out visitor's `GET /api/auth/me` is answered 401 by the real API too, and the
- * browser logs every failed request. Pretending it succeeded would be a worse lie than allowing it.
+ * `allowedConsoleErrors` is the explicit, per-test escape hatch, and the default list is empty: a
+ * signed-out visitor's session check is answered "nobody" with a 200 by the real API (audit AUTH-12),
+ * so an ordinary page logs nothing at all.
  */
 export const test = base.extend<{
   // An object rather than a bare array: Playwright reads a two-element array as a fixture tuple.
   allowedConsoleErrors: { patterns: RegExp[] };
   consoleGuard: void;
 }>({
-  allowedConsoleErrors: [{ patterns: [/status of 401 .*\/api\/auth\/me/] }, { option: true }],
+  allowedConsoleErrors: [{ patterns: [] }, { option: true }],
   consoleGuard: [
     async ({ page, allowedConsoleErrors }, use) => {
       const problems: string[] = [];

@@ -18,6 +18,7 @@
     >
       <input
         appControl
+        id="sign-in-email"
         type="email"
         formControlName="email"
         autocomplete="username"
@@ -47,7 +48,7 @@
 
     <div class="auth-row">
       <app-checkbox label="Keep me signed in" i18n-label>
-        <input type="checkbox" appControl formControlName="rememberMe" />
+        <input type="checkbox" appControl id="sign-in-remember" formControlName="rememberMe" />
       </app-checkbox>
       <a class="auth-link" routerLink="/auth/forgot-password" i18n>Forgot password?</a>
     </div>
@@ -63,11 +64,13 @@
       }
     </p>
 
+    <!-- Disabled until the app is live, so the pre-rendered page never submits natively. -->
     <button
       appButton
       type="submit"
       size="touch"
       class="auth-submit"
+      [disabled]="!live()"
       [loading]="submitting()"
       aria-describedby="sign-in-summary"
     >

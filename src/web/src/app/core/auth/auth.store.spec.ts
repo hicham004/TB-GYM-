@@ -7,7 +7,7 @@ import { ApiClient } from '../api/api-client';
 import type { CurrentUser } from '../api/api.models';
 import { TenantStore } from '../tenancy/tenant.store';
 import { PersonalModeStore } from '../theme/personal-mode.store';
-import { AuthStore, RENDERED_SIGNED_OUT } from './auth.store';
+import { AuthStore, PRERENDERED_FOR_VISITORS_ONLY, RENDERED_SIGNED_OUT } from './auth.store';
 
 const maya: CurrentUser = {
   id: 'user-maya',
@@ -25,7 +25,7 @@ function configure(account: CurrentUser = maya) {
   const server: CurrentUser = { ...account };
   const api = {
     getCsrfToken: vi.fn(() => of({ token: 'csrf' })),
-    getCurrentUser: vi.fn(() => of({ ...server })),
+    getCurrentUser: vi.fn((): Observable<CurrentUser | null> => of({ ...server })),
     getTenants: vi.fn(() => of([])),
     logout: vi.fn(() => of(undefined)),
     updateOwnThemeMode: vi.fn((mode: CurrentUser['preferredThemeMode']) => {
@@ -233,10 +233,11 @@ describe('AuthStore personal settings', () => {
 });
 
 /**
- * The homepage is built as finished HTML (R6.2a). The build-time render has no session and no API;
- * a browser that starts from that page keeps it on screen while it asks about the session.
+ * The homepage, what changed and sign-in are built as finished HTML (R6.2a, audit UIQ-13). The
+ * build-time render has no session and no API; a browser that starts from such a page keeps it on
+ * screen, and asks about the session only where the page could reach someone signed in (AUTH-12).
  */
-describe('AuthStore and the pre-rendered homepage', () => {
+describe('AuthStore and the pre-rendered pages', () => {
   afterEach(() => {
     localStorage.clear();
     TestBed.resetTestingModule();
@@ -295,6 +296,88 @@ describe('AuthStore and the pre-rendered homepage', () => {
     const auth = TestBed.inject(AuthStore);
 
     expect(auth.loading()).toBe(true);
+  });
+
+  it('on a page that reaches only a visitor, asks the API nothing, and a check asked for later does (AUTH-12)', async () => {
+    const { api } = configure();
+    TestBed.configureTestingModule({
+      providers: [{ provide: PRERENDERED_FOR_VISITORS_ONLY, useValue: true }],
+    });
+    TestBed.inject(TransferState).set(RENDERED_SIGNED_OUT, true);
+    localStorage.setItem('tb-gym.active-tenant', 'tenant-kept');
+
+    const auth = TestBed.inject(AuthStore);
+    expect(auth.loading()).toBe(false);
+    await auth.initialize();
+
+    expect(api.getCsrfToken).not.toHaveBeenCalled();
+    expect(api.getCurrentUser).not.toHaveBeenCalled();
+    expect(auth.user()).toBeNull();
+    expect(auth.loading()).toBe(false);
+    // As after any signed-out check: no workspace is selected, and the chosen one is kept for later.
+    expect(TestBed.inject(TenantStore).selectedTenantId()).toBeNull();
+    expect(localStorage.getItem('tb-gym.active-tenant')).toBe('tenant-kept');
+
+    await auth.initialize(true);
+    expect(api.getCurrentUser).toHaveBeenCalledTimes(1);
+    expect(auth.user()?.id).toBe('user-maya');
+  });
+
+  it('the shell, with no mark, still asks where pre-rendered pages reach only visitors', async () => {
+    const { api } = configure();
+    TestBed.configureTestingModule({
+      providers: [{ provide: PRERENDERED_FOR_VISITORS_ONLY, useValue: true }],
+    });
+
+    const auth = TestBed.inject(AuthStore);
+    expect(auth.loading()).toBe(true);
+    await auth.initialize();
+
+    expect(api.getCurrentUser).toHaveBeenCalledTimes(1);
+    expect(auth.user()?.id).toBe('user-maya');
+  });
+
+  it('a development build asks behind the mark too, quietly: its server renders for everyone', async () => {
+    const { api } = configure();
+    TestBed.inject(TransferState).set(RENDERED_SIGNED_OUT, true);
+
+    expect(TestBed.inject(PRERENDERED_FOR_VISITORS_ONLY)).toBe(false);
+    const auth = TestBed.inject(AuthStore);
+    await auth.initialize();
+
+    expect(api.getCurrentUser).toHaveBeenCalledTimes(1);
+    expect(auth.user()?.id).toBe('user-maya');
+  });
+});
+
+/** The API answers "nobody is signed in" with a 200 and null, not a 401 (audit AUTH-12). */
+describe('AuthStore and the answer "nobody"', () => {
+  afterEach(() => {
+    localStorage.clear();
+    TestBed.resetTestingModule();
+  });
+
+  it('reads nobody as signed out, and asks for no workspaces', async () => {
+    const { api } = configure();
+    api.getCurrentUser.mockImplementation(() => of(null));
+
+    const auth = TestBed.inject(AuthStore);
+    await auth.initialize();
+
+    expect(auth.user()).toBeNull();
+    expect(auth.loading()).toBe(false);
+    expect(api.getTenants).not.toHaveBeenCalled();
+  });
+
+  it('tells a tab back from a long absence that nobody is signed in any more', async () => {
+    const { api } = configure();
+    const auth = TestBed.inject(AuthStore);
+    await auth.initialize();
+    expect(auth.user()?.id).toBe('user-maya');
+
+    api.getCurrentUser.mockImplementation(() => of(null));
+
+    expect(await auth.stillSignedIn()).toBe(false);
   });
 });
 

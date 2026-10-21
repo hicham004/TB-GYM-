@@ -130,7 +130,9 @@ test('a day outside the plan and a client without nutrition read friendly words'
   const farPast = await api(page, 'GET', '/api/nutrition/me/day?localDate=2025-01-15', {
     tenantId,
   });
-  expect(farPast.status).toBe(404);
+  // Nothing for that day: "nothing here" is a 200 with null, not a 404 (audit AUTH-12).
+  expect(farPast.status).toBe(200);
+  expect(farPast.body).toBeNull();
   await page.goto('/nutrition/today');
   await expect(page.getByRole('heading', { name: 'Meals for the day' })).toBeVisible();
   for (let week = 0; week < 6; week++) {

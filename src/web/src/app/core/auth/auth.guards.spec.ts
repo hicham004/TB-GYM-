@@ -9,7 +9,7 @@ import {
 } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TenantStore } from '../tenancy/tenant.store';
-import { authGuard, memberGuard, signedOutGuard } from './auth.guards';
+import { authGuard, memberGuard, sessionKnownGuard, signedOutGuard } from './auth.guards';
 import { AuthStore } from './auth.store';
 
 function configure(state: { signedIn: boolean; ended?: boolean }) {
@@ -45,6 +45,17 @@ describe('auth guards', () => {
     configure({ signedIn: true });
 
     expect(await run(authGuard)).toBe(true);
+  });
+
+  /** The not-found page draws one way for a visitor and another for someone signed in (AUTH-10). */
+  it('lets anyone onto a page for everyone, once the session has answered', async () => {
+    for (const signedIn of [true, false]) {
+      const auth = configure({ signedIn });
+
+      expect(await run(sessionKnownGuard, '/no-such-page')).toBe(true);
+      expect(auth.initialize).toHaveBeenCalledTimes(1);
+      TestBed.resetTestingModule();
+    }
   });
 
   it('sends a signed-out visitor to sign-in with the page to come back to, and no sentence', async () => {

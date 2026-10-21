@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { inlineHomeStyles } from './inline-home-styles.mjs';
+import {
+  inlineHomeStyles,
+  inlinePrerenderedDocument,
+  PRERENDERED_DOCUMENTS,
+} from './inline-home-styles.mjs';
 
 const HOME =
   '<!doctype html><html><head><title>TB Gym</title>' +
@@ -32,6 +36,21 @@ test('asks for the page’s scripts at low priority, every module script and not
   assert.match(inlined, /<link rel="modulepreload" href="chunk-GHI\.js" fetchpriority="low">/);
   assert.doesNotMatch(inlined, /<script src="[^"]+" type="module">/);
   assert.doesNotMatch(inlined, /<style>[^<]*fetchpriority/);
+});
+
+test('sign-in keeps its scripts at full priority, its form needs the app; its sheet is inline too', () => {
+  assert.ok(PRERENDERED_DOCUMENTS.includes('auth/sign-in/index.html'));
+
+  const signIn = inlinePrerenderedDocument('auth/sign-in/index.html', HOME, () => 'body{margin:0}');
+  assert.match(signIn, /<style>body\{margin:0\}<\/style>/);
+  assert.match(signIn, /<script src="main-DEF\.js" type="module">/);
+  assert.match(signIn, /<link rel="modulepreload" href="chunk-GHI\.js">/);
+  assert.doesNotMatch(signIn, /fetchpriority/);
+
+  for (const document of ['index.html', 'changelog/index.html']) {
+    const page = inlinePrerenderedDocument(document, HOME, () => 'body{margin:0}');
+    assert.match(page, /<script src="main-DEF\.js" type="module" fetchpriority="low">/, document);
+  }
 });
 
 test('inlines the unhashed sheet of a development build too', () => {

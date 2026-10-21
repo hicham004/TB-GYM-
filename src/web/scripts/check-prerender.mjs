@@ -1,12 +1,14 @@
-// Fails when the production build no longer carries the homepage, or what changed, as finished
-// HTML (UI plan R6.2a, R6.2f), or when it carries what only the private pre-launch build may
-// (R6.2h): a stand-in photograph, the placeholders folder, or a robots noindex tag.
+// Fails when the production build no longer carries the homepage, what changed or sign-in as
+// finished HTML (UI plan R6.2a, R6.2f, audit UIQ-13), or when it carries what only the private
+// pre-launch build may (R6.2h): a stand-in photograph, the placeholders folder, or a robots noindex
+// tag.
 //
-// `ng build` renders `/` ahead of time into index.html and `/changelog` into changelog/index.html,
-// and keeps the plain application shell as index.csr.html; nginx.conf serves the first two for
-// their own addresses and the shell for every other. This reads all three from the build output
-// and checks what each must and must not hold, so a build that quietly stopped pre-rendering (a
-// service touching the browser at start-up, a route change) fails here rather than on Google.
+// `ng build` renders `/` ahead of time into index.html, `/changelog` into changelog/index.html and
+// `/auth/sign-in` into auth/sign-in/index.html, and keeps the plain application shell as
+// index.csr.html; nginx.conf serves the first three to a visitor at their own addresses and the
+// shell for every other. This reads all four from the build output and checks what each must and
+// must not hold, so a build that quietly stopped pre-rendering (a service touching the browser at
+// start-up, a route change) fails here rather than on Google or a slow phone.
 // `npm run build` runs it; `node scripts/check-prerender.mjs <dir>` reads another output folder,
 // and `--private` checks a private pre-launch build the other way round (its stand-ins and its
 // noindex tag must be there).
@@ -19,6 +21,9 @@ export const HEADLINE = ['Coach both', 'sides of', 'the week.'];
 
 /** The changelog's title, as the <h1> in features/changelog/changelog.html reads. */
 export const CHANGELOG_TITLE = 'What changed';
+
+/** Sign-in's title, as the <h1> in features/auth/sign-in.html reads ("Welcome <em>back.</em>"). */
+export const SIGN_IN_TITLE = ['Welcome', 'back.'];
 
 /** The description and link-preview tags index.html declares; each must survive the render. */
 export const PREVIEW_TAGS = [
@@ -75,6 +80,7 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePrevi
   };
   const home = read('index.html');
   const changelog = read(join('changelog', 'index.html'));
+  const signIn = read(join('auth', 'sign-in', 'index.html'));
   const shell = read('index.csr.html');
 
   if (home !== null) {
@@ -114,12 +120,47 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePrevi
     findings.push(...renderedPageProblems(changelog, 'changelog/index.html', privatePreview));
   }
 
+  if (signIn !== null) {
+    const text = visibleText(signIn);
+    if (!SIGN_IN_TITLE.every((part) => text.includes(part)) || !/<h1[\s>]/.test(signIn)) {
+      findings.push(
+        `auth/sign-in/index.html does not hold the title "${SIGN_IN_TITLE.join(' ')}" as its <h1>.`,
+      );
+    }
+    if (
+      !/<form[\s>]/.test(signIn) ||
+      !/<input[^>]*\sid="sign-in-email"/.test(signIn) ||
+      !/<input[^>]*\sid="sign-in-password"/.test(signIn)
+    ) {
+      findings.push('auth/sign-in/index.html does not hold the sign-in form and its two fields.');
+    }
+    // Until the app is live, Enter or a tap must not submit natively: it would reload the page and
+    // lose what was typed. And no field may carry a name, which a native submit would put in the URL.
+    if (!/<button(?=[^>]*\bauth-submit\b)(?=[^>]*\sdisabled[\s=>])[^>]*>/.test(signIn)) {
+      findings.push(
+        'auth/sign-in/index.html submits before the app is live: its button is not disabled.',
+      );
+    }
+    if (/<input[^>]*\sname="/.test(signIn)) {
+      findings.push(
+        'auth/sign-in/index.html has a named field, which a native submit would put in the address.',
+      );
+    }
+    // The private build says noindex in the documents its home header is on; the server's header
+    // covers sign-in there (private-preview.mjs).
+    findings.push(
+      ...renderedPageProblems(signIn, 'auth/sign-in/index.html', privatePreview, {
+        robotsTagRequired: false,
+      }),
+    );
+  }
+
   if (shell !== null) {
     if (!/<app-root><\/app-root>/.test(shell)) {
       findings.push('index.csr.html is not the plain shell: <app-root> is not empty.');
     }
     const text = visibleText(shell);
-    for (const part of [...HEADLINE, CHANGELOG_TITLE]) {
+    for (const part of [...HEADLINE, CHANGELOG_TITLE, ...SIGN_IN_TITLE]) {
       if (text.includes(part)) {
         findings.push(
           `index.csr.html holds page text ("${part}"): a deep link would show that page first.`,
@@ -161,7 +202,7 @@ export function placeholderLeaks(browserDirectory) {
 }
 
 /** What every pre-rendered page must and must not carry, whatever its words. */
-function renderedPageProblems(html, name, privatePreview) {
+function renderedPageProblems(html, name, privatePreview, { robotsTagRequired = true } = {}) {
   const findings = [];
   if (!/<app-root[^>]*\sngh="/.test(html)) {
     findings.push(`${name} was not rendered by Angular: <app-root> carries no hydration mark.`);
@@ -186,7 +227,7 @@ function renderedPageProblems(html, name, privatePreview) {
   // The private build asks not to be indexed in its own document (R6.2h); the public one never does.
   const robots = metaContent(html, 'robots');
   const noindex = robots !== null && /noindex/.test(robots);
-  if (privatePreview && !noindex) {
+  if (privatePreview && !noindex && robotsTagRequired) {
     findings.push(
       `${name} carries no robots noindex tag, which the private pre-launch build must.`,
     );
@@ -243,7 +284,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     );
   } else {
     console.log(
-      `The built homepage holds its headline and preview tags, the changelog its releases, the shell holds neither, and nothing names the placeholders folder (${directory}).`,
+      `The built homepage holds its headline and preview tags, the changelog its releases, sign-in its form, the shell none of them, and nothing names the placeholders folder (${directory}).`,
     );
   }
 }

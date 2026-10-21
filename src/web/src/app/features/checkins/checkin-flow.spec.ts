@@ -12,9 +12,11 @@ import type {
   CheckInResponseView,
   SaveCheckInResponseRequest,
 } from '../../core/api/generated';
+import { ClientAccessStore } from '../../core/access/client-access.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { announced, button, focusedId, press, query, settle, type } from '../../../testing/dom';
+import { fakeClientAccess } from '../../../testing/today-fixtures';
 import type { ProgressPhotos } from '../progress/progress.models';
 import { CheckInFlow } from './checkin-flow';
 import { saveBeforeLeaving } from './checkins.routes';
@@ -157,7 +159,10 @@ function photos(poses: ('Front' | 'Side' | 'Back')[] = []): ProgressPhotos {
   } as ProgressPhotos;
 }
 
-async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}) {
+async function render(
+  api: Partial<Record<keyof ApiClient, unknown>> = {},
+  access = fakeClientAccess(),
+) {
   let version = 10;
   const selectedTenantId = signal<string | null>('tenant-1');
   const client = {
@@ -195,6 +200,7 @@ async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}) {
       ]),
       { provide: ApiClient, useValue: client },
       { provide: TenantStore, useValue: { selectedTenantId } },
+      { provide: ClientAccessStore, useValue: access },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
     ],
   });
@@ -432,14 +438,30 @@ describe('CheckInFlow', () => {
   });
 
   it('says why check-ins are closed, in the server’s own reason', async () => {
-    const { read } = await render({
-      getOwnCheckInResponse: vi.fn(() =>
-        throwError(() => new HttpErrorResponse({ status: 403, error: { accessReason: 'Paused' } })),
-      ),
-    });
+    // The plan's answer could not be read, so the check-in is asked for and the refusal says why.
+    const { read } = await render(
+      {
+        getOwnCheckInResponse: vi.fn(() =>
+          throwError(
+            () => new HttpErrorResponse({ status: 403, error: { accessReason: 'Paused' } }),
+          ),
+        ),
+      },
+      fakeClientAccess({}, 'failed'),
+    );
 
     expect(read()).toContain('Check-ins are closed');
     expect(read()).toContain('Your plan is paused, so check-ins are closed for now.');
+  });
+
+  it('says a closed plan’s reason without the reads the API would refuse (AUTH-12)', async () => {
+    const { client, read } = await render({}, fakeClientAccess({ CheckIns: 'MembershipInactive' }));
+
+    expect(client.getOwnCheckInResponse).not.toHaveBeenCalled();
+    expect(client.getMyProgressPhotos).not.toHaveBeenCalled();
+    expect(read()).toContain('Check-ins are closed');
+    expect(read()).toContain('Your coaching has ended, so check-ins are closed.');
+    expect(document.activeElement?.textContent).toContain('Check-ins are closed');
   });
 
   it('adds photos as progress photos dated by the server, and knows the ones already added', async () => {

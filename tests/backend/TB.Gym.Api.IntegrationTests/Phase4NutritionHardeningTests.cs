@@ -118,7 +118,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var otherClient = CreateClient();
         await InviteAndAcceptAsync(coach, otherClient, "p4-auth-other-client@example.test", true);
         SetTenant(otherClient, workspaceId);
-        Assert.AreEqual(HttpStatusCode.NotFound, (await otherClient.GetAsync("/api/nutrition/me/day?localDate=2026-08-22")).StatusCode);
+        // Another client's plan is never theirs: their own day has nothing in it (200 and null, AUTH-12).
+        await A11bAssertNothingHereAsync(await otherClient.GetAsync("/api/nutrition/me/day?localDate=2026-08-22"));
 
         using var foreignCoach = CreateClient();
         await RegisterCoachAsync(foreignCoach, "p4-auth-foreign@example.test", "Foreign Coach", "Foreign Nutrition");

@@ -92,20 +92,22 @@ describe('TodayAlso', () => {
     );
     TestBed.resetTestingModule();
 
-    const none = await render({ getMyNutritionDay: vi.fn(() => status(404)) });
+    // No meal plan for the day: "nothing here", a 200 with null (audit AUTH-12).
+    const none = await render({ getMyNutritionDay: vi.fn(() => of(null)) });
     expect(none.row('/nutrition/today')).toBe('Nutrition, No meal plan for today');
   });
 
   it('says why nutrition is closed, and leaves it out when it is not in the plan', async () => {
     const paused = await render(
-      { getMyNutritionDay: vi.fn(() => status(404)) },
+      { getMyNutritionDay: vi.fn(() => of(null)) },
       fakeClientAccess({ Nutrition: 'Paused' }),
     );
     expect(paused.row('/nutrition/today')).toBe('Nutrition, Your coaching plan is paused');
+    expect(paused.client.getMyNutritionDay).not.toHaveBeenCalled();
     TestBed.resetTestingModule();
 
     const outside = await render(
-      { getMyNutritionDay: vi.fn(() => status(404)) },
+      { getMyNutritionDay: vi.fn(() => of(null)) },
       fakeClientAccess({ Nutrition: 'NoEntitlement' }),
     );
     expect(outside.host.querySelector('a[href="/nutrition/today"]')).toBeNull();
@@ -214,7 +216,7 @@ describe('TodayAlso', () => {
   it('shows nothing when neither feature is in the plan', async () => {
     const { host } = await render(
       {
-        getMyNutritionDay: vi.fn(() => status(404)),
+        getMyNutritionDay: vi.fn(() => of(null)),
         listOwnCheckInAssignments: vi.fn(() => status(403)),
       },
       fakeClientAccess({ Nutrition: 'NoEntitlement', CheckIns: 'NoEntitlement' }),

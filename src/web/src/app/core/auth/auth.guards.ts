@@ -12,6 +12,15 @@ export const authGuard: CanActivateFn = async (_route, state) => {
   return auth.user() && !auth.ended() ? true : signInAfter(router, state.url, auth.ended());
 };
 
+/**
+ * For a page anyone may open that draws differently for a visitor and for someone signed in, such as
+ * the not-found page: it waits for the session's answer, so the page never shows the other one first.
+ */
+export const sessionKnownGuard: CanActivateFn = async () => {
+  await inject(AuthStore).initialize();
+  return true;
+};
+
 export const publicHomeGuard: CanMatchFn = async () => {
   const auth = inject(AuthStore);
   await auth.initialize();

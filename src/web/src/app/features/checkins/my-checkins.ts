@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import type { CheckInAssignmentListItem, CheckInResponseDetail } from '../../core/api/generated';
@@ -54,6 +55,7 @@ const SENT_PREVIEW = 3;
 export class MyCheckIns {
   private readonly api = inject(ApiClient);
   private readonly tenants = inject(TenantStore);
+  private readonly access = inject(ClientAccessStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedTenantId: string | null = null;
@@ -112,6 +114,9 @@ export class MyCheckIns {
     effect(() => {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
+      // The access answer first: check-ins it calls closed are never asked for (see `load`).
+      const status = this.access.status();
+      if (tenantId !== null && (status === 'idle' || status === 'loading')) return;
       if (tenantId === this.loadedTenantId) return;
       this.loadedTenantId = tenantId;
       untracked(() => {
@@ -152,6 +157,17 @@ export class MyCheckIns {
       this.loading.set(true);
       this.error.set(null);
       this.denial.set(null);
+      const access = this.access.decision('CheckIns');
+      if (access?.isAllowed === false) {
+        // The plan has closed check-ins (ended, paused or never in it): the page says why without
+        // asking for a list the API would refuse, a 403 in the console (audit AUTH-12). When the
+        // answer could not be read, the list is asked for and a refusal explains itself.
+        this.items.set([]);
+        this.total.set(0);
+        this.denial.set(ownCheckInDenialMessage(access.reason));
+        this.loading.set(false);
+        return;
+      }
       try {
         const page = await owner.wait(
           firstValueFrom(this.api.listOwnCheckInAssignments(0, this.pageSize)),

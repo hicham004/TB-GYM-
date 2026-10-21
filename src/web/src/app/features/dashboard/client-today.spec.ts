@@ -19,7 +19,6 @@ import { press, settle } from '../../../testing/dom';
 import { day, fakeClientAccess, TODAY, upcoming, workout } from '../../../testing/today-fixtures';
 import { ClientToday } from './client-today';
 
-const notFound = () => throwError(() => new HttpErrorResponse({ status: 404 }));
 const running: RenewalStatus = {
   planEnded: false,
   endedOn: null,
@@ -70,7 +69,8 @@ async function render(
     getOwnCoach: vi.fn(() => of({ name: 'Hicham Haddad' })),
     getMyUpcomingTraining: vi.fn(() => of(options.upcoming ?? upcoming())),
     getWorkspace: vi.fn(() => of({ currentDate: '2026-09-21' })),
-    getMyNutritionDay: vi.fn(notFound),
+    // No meal plan: "nothing here", a 200 with null (audit AUTH-12).
+    getMyNutritionDay: vi.fn(() => of(null)),
     listOwnCheckInAssignments: vi.fn(() => of({ clientProfileId: 'c', total: 0, items: [] })),
     listConversations: vi.fn(() =>
       of({

@@ -122,7 +122,7 @@ export class TodayAlso {
   }
 
   protected async retry(row: Row): Promise<void> {
-    // A nutrition 404 is only readable against the access decision, so a failed one is retried too.
+    // A day with no meals is only readable against the access decision, so a failed one is retried too.
     if (row === 'nutrition' && this.access.status() === 'failed') void this.access.load();
     await this.load(row);
     const state = row === 'nutrition' ? this.nutrition() : this.checkIn();
@@ -137,14 +137,15 @@ export class TodayAlso {
 
   private read<T>(
     lane: Row,
-    request: Observable<T>,
+    request: Observable<T | null>,
     target: WritableSignal<ReadState<T>>,
   ): Promise<void> {
     return this.scope.run(lane, async (owner) => {
       target.set({ kind: 'loading' });
       try {
         const value = await owner.wait(firstValueFrom(request));
-        target.set({ kind: 'ok', value });
+        // "Nothing here" (no meal plan that day) is an answer, not a failure (audit AUTH-12).
+        target.set(value === null ? { kind: 'missing' } : { kind: 'ok', value });
       } catch (error) {
         if (!owner.current) return;
         const status = error instanceof HttpErrorResponse ? error.status : 0;

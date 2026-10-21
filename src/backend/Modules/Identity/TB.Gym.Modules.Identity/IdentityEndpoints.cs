@@ -53,11 +53,12 @@ public static class IdentityEndpoints
             .RequireRateLimiting(RateLimitPolicies.RoutineWrite)
             .WithName("Logout")
             .Produces(StatusCodes.Status204NoContent);
+        // The session check: open to anyone, because "nobody is signed in" is an answer (AUTH-12).
         group.MapGet("/me", MeAsync)
-            .RequireAuthorization()
+            .AllowAnonymous()
             .WithName("GetCurrentUser")
-            .Produces<CurrentUserResponse>()
-            .Produces(StatusCodes.Status401Unauthorized);
+            .WithDescription("The signed-in account, or JSON null when nobody is signed in in this browser.")
+            .Produces<CurrentUserResponse>();
         group.MapPut("/me/theme", UpdateThemeModeAsync)
             .RequireAuthorization()
             .RequireRateLimiting(RateLimitPolicies.RoutineWrite)
@@ -190,13 +191,19 @@ public static class IdentityEndpoints
         return Results.NoContent();
     }
 
+    /// <summary>
+    /// Who is signed in in this browser: the account, or JSON null for nobody (audit AUTH-12). A visitor's
+    /// first page asks this, and a 401 there was a console error on every signed-out page although nothing
+    /// had failed. A session that ended, or an account the platform blocked, reads as nobody too; every
+    /// other route still answers 401 for them.
+    /// </summary>
     private static async Task<IResult> MeAsync(
         ClaimsPrincipal principal,
         UserManager<ApplicationUser> userManager)
     {
         var user = await userManager.GetUserAsync(principal);
         return user is null || user.IsPlatformBlocked
-            ? Results.Unauthorized()
+            ? Results.Text("null", "application/json", Encoding.UTF8)
             : Results.Ok(await ToResponseAsync(user, userManager));
     }
 

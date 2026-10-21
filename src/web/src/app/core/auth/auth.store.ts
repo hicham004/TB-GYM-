@@ -4,6 +4,8 @@ import {
   computed,
   inject,
   Injectable,
+  InjectionToken,
+  isDevMode,
   makeStateKey,
   PLATFORM_ID,
   signal,
@@ -17,12 +19,23 @@ import { TenantStore } from '../tenancy/tenant.store';
 import { isThemeMode, PersonalModeStore, type ThemeMode } from '../theme/personal-mode.store';
 
 /**
- * The mark the build leaves in the pre-rendered homepage (R6.2a). That document was rendered for
- * nobody, and nginx serves it only to a visitor without the sign-in cookie. A browser that starts
- * from it knows there was no session when the page was asked for, so it keeps the page on screen and
- * asks the API quietly, instead of covering the page with the launch screen while it asks.
+ * The mark the build leaves in each pre-rendered page: the homepage, what changed and sign-in (R6.2a,
+ * R6.2f, audit UIQ-13). Those documents were rendered for nobody, and a browser that starts from one
+ * keeps the page on screen instead of covering it with the launch screen.
  */
 export const RENDERED_SIGNED_OUT = makeStateKey<boolean>('tb-gym.rendered-signed-out');
+
+/**
+ * Whether a pre-rendered page reaches only a visitor without the sign-in cookie. nginx serves those
+ * documents to such a visitor alone (`nginx.conf`, and `serve-built.mjs` as it does), so a browser that
+ * starts from one has nobody to ask about and skips the session check (audit AUTH-12). The development
+ * server renders those addresses for every request, cookie or not, so a development build still asks,
+ * quietly, as before.
+ */
+export const PRERENDERED_FOR_VISITORS_ONLY = new InjectionToken<boolean>(
+  'tb-gym.prerendered-for-visitors-only',
+  { providedIn: 'root', factory: () => !isDevMode() },
+);
 
 /** The build-time render leaves the mark; a browser reads it. Nothing else ever sets it. */
 function startedSignedOut(server: boolean, transferState: TransferState): boolean {
@@ -36,13 +49,13 @@ export class AuthStore {
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly theme = inject(PersonalModeStore);
-  /** The build-time render of the homepage: no browser, no cookie, nothing to ask the API. */
+  /** The build-time render of a pre-rendered page: no browser, no cookie, nothing to ask the API. */
   private readonly server = isPlatformServer(inject(PLATFORM_ID));
   private readonly startedSignedOut = startedSignedOut(this.server, inject(TransferState));
   private readonly userState = signal<CurrentUser | null>(null);
   private readonly loadingState = signal(!this.startedSignedOut);
   private readonly endedState = signal(false);
-  /** The first session check of a page that began as the pre-rendered homepage shows no launch screen. */
+  /** The first session check of a page that began pre-rendered shows no launch screen. */
   private quietFirstLoad = this.startedSignedOut && !this.server;
   private initialization: Promise<void> | null = null;
   private sessionRequest = 0;
@@ -61,6 +74,16 @@ export class AuthStore {
   readonly weightUnit = computed<BodyweightUnit>(
     () => this.userState()?.preferredWeightUnit ?? 'Kilogram',
   );
+
+  constructor() {
+    if (this.quietFirstLoad && inject(PRERENDERED_FOR_VISITORS_ONLY)) {
+      // The page was served because the request carried no sign-in cookie, so nobody is signed in and
+      // the check would only cost a request. Signing in, and any check asked for later, go to the API.
+      this.quietFirstLoad = false;
+      this.forgetSession();
+      this.initialization = Promise.resolve();
+    }
+  }
 
   initialize(force = false): Promise<void> {
     if (!force && this.initialization) {
@@ -128,7 +151,7 @@ export class AuthStore {
 
   /**
    * Asks the API, without the launch screen, whether the browser is still signed in as the person on
-   * screen: false when it is not (a 401, or another account signed in from another tab), null when
+   * screen: false when it is not (nobody, or another account signed in from another tab), null when
    * there is no answer (offline, a server fault) or the session changed meanwhile.
    */
   async stillSignedIn(): Promise<boolean | null> {
@@ -137,7 +160,7 @@ export class AuthStore {
     const request = this.sessionRequest;
     try {
       const user = await firstValueFrom(this.api.getCurrentUser());
-      return request === this.sessionRequest ? user.id === shown.id : null;
+      return request === this.sessionRequest ? user?.id === shown.id : null;
     } catch (error) {
       if (request !== this.sessionRequest) return null;
       return error instanceof HttpErrorResponse && error.status === 401 ? false : null;
@@ -185,6 +208,10 @@ export class AuthStore {
       if (request !== this.sessionRequest) return;
       const user = await firstValueFrom(this.api.getCurrentUser());
       if (request !== this.sessionRequest) return;
+      if (user === null) {
+        this.forgetSession();
+        return;
+      }
       // Only a *different* account invalidates the persisted workspace. On a cold load there is
       // no previous user, so the stored selection is this same user's own choice and must
       // survive the refresh; `TenantStore.load` still discards an id they no longer belong to.
@@ -196,13 +223,17 @@ export class AuthStore {
       await this.tenants.load();
     } catch {
       if (request !== this.sessionRequest) return;
-      this.endedState.set(false);
-      this.userState.set(null);
-      this.theme.setMode('system');
-      // No session: most often yesterday's ran out. The workspace stays chosen for the next sign-in.
-      this.tenants.unload();
+      this.forgetSession();
     } finally {
       if (request === this.sessionRequest) this.loadingState.set(false);
     }
+  }
+
+  /** No session: most often yesterday's ran out. The workspace stays chosen for the next sign-in. */
+  private forgetSession(): void {
+    this.endedState.set(false);
+    this.userState.set(null);
+    this.theme.setMode('system');
+    this.tenants.unload();
   }
 }

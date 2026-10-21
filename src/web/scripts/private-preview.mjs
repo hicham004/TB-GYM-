@@ -30,7 +30,7 @@ import { networkInterfaces } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkPrerender } from './check-prerender.mjs';
-import { inlineHomeStyles, PRERENDERED_DOCUMENTS } from './inline-home-styles.mjs';
+import { inlinePrerenderedDocument, PRERENDERED_DOCUMENTS } from './inline-home-styles.mjs';
 import {
   API_PATHS,
   BUILD_SOURCES,
@@ -117,7 +117,8 @@ export function authorized(header, password) {
 export function answerAsVisitor(url, response, headers) {
   const answers = {
     '/api/auth/csrf': [200, { token: 'private-preview' }],
-    '/api/auth/me': [401, { title: 'Unauthorized' }],
+    // Nobody is signed in: the API answers that with JSON null (audit AUTH-12).
+    '/api/auth/me': [200, null],
     '/api/website/settings': [200, { whatsAppNumber: null, analytics: { script: null } }],
   };
   const answer = answers[url.pathname];
@@ -186,7 +187,9 @@ export function buildPrivate({ out, pictures = true }) {
     const path = join(browser, document);
     if (!existsSync(path)) continue;
     const page = readFileSync(path, 'utf8');
-    const inlined = inlineHomeStyles(page, (name) => readFileSync(join(browser, name), 'utf8'));
+    const inlined = inlinePrerenderedDocument(document, page, (name) =>
+      readFileSync(join(browser, name), 'utf8'),
+    );
     writeFileSync(path, withoutWindowPreload(inlined ?? page));
   }
   const findings = checkPrerender(browser, { privatePreview: true });

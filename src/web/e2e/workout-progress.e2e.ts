@@ -289,10 +289,7 @@ test.describe('Workout player', () => {
   // nothing, so SignalR logs its server timeout and reconnects, as it does after a phone was locked.
   test.use({
     allowedConsoleErrors: {
-      patterns: [
-        /status of 401 .*\/api\/auth\/me/,
-        /Server timeout elapsed without receiving a message from the server/,
-      ],
+      patterns: [/Server timeout elapsed without receiving a message from the server/],
     },
   });
 

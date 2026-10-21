@@ -148,7 +148,7 @@ const SCREENS: {
 // The error states log their failed request, which is the point of them.
 test.use({
   allowedConsoleErrors: {
-    patterns: [/status of 401 .*\/api\/auth\/me/, /status of (400|401|409|500)/],
+    patterns: [/status of (400|401|409|500)/],
   },
 });
 

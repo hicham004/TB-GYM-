@@ -161,13 +161,14 @@ test('a password change works and Sign out everywhere ends the other session', a
     });
     const second = await other.newPage();
     await signIn(second, CLIENT, TEMP_PASSWORD);
-    expect((await api(second, 'GET', '/api/auth/me')).status).toBe(200);
+    // The session check names the account, or answers null for nobody (audit AUTH-12).
+    expect((await api(second, 'GET', '/api/auth/me')).body).not.toBeNull();
 
     await page.locator('[data-sign-out-everywhere]').click();
     await expect(page.locator('app-confirm')).toContainText('this one too');
     await page.locator('app-confirm button', { hasText: 'Sign out everywhere' }).click();
     await page.waitForURL((url) => url.pathname.startsWith('/auth'), { timeout: 30_000 });
-    await expect.poll(async () => (await api(second, 'GET', '/api/auth/me')).status).toBe(401);
+    await expect.poll(async () => (await api(second, 'GET', '/api/auth/me')).body).toBeNull();
     await other.close();
   } finally {
     if (changed) {

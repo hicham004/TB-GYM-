@@ -17,6 +17,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom, map } from 'rxjs';
+import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import type {
@@ -100,6 +101,7 @@ export class CheckInFlow {
   private readonly csrf = inject(CsrfService);
   private readonly router = inject(Router);
   private readonly tenants = inject(TenantStore);
+  private readonly access = inject(ClientAccessStore);
   private readonly injector = inject(Injector);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly assignmentId = toSignal(
@@ -181,6 +183,9 @@ export class CheckInFlow {
       const id = this.assignmentId();
       const tenantId = this.tenants.selectedTenantId();
       const key = id === null || tenantId === null ? null : `${tenantId}:${id}`;
+      // The access answer first: check-ins it calls closed are never asked for (see `load`).
+      const status = this.access.status();
+      if (status === 'idle' || status === 'loading') return;
       if (key === null || key === this.loadedKey) return;
       this.loadedKey = key;
       untracked(() => void this.load(id!, tenantId!));
@@ -394,6 +399,14 @@ export class CheckInFlow {
       this.resetState();
       this.loadedTenantId = tenantId;
       this.discarded = false;
+      const access = this.access.decision('CheckIns');
+      if (access?.isAllowed === false) {
+        // Closed check-ins say why without the reads the API would refuse (audit AUTH-12).
+        this.denial.set(ownCheckInDenialMessage(access.reason));
+        this.phase.set('denied');
+        this.focus(() => this.pageHeading());
+        return;
+      }
       const [detail, photos, coach] = await owner.wait(
         Promise.allSettled([
           firstValueFrom(this.api.getOwnCheckInResponse(assignmentId)),

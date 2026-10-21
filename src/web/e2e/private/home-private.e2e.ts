@@ -56,8 +56,10 @@ test('every response is marked noindex, and the pages say so themselves', async 
   // Nor is the window's picture asked for ahead of a page that never draws it.
   expect(home).not.toMatch(/<link[^>]*rel="preload"[^>]*today-needs-you-dark/);
   expect(home).toMatch(/<link[^>]*rel="preload"[^>]*client-today-460\.avif/);
-  // Without an API behind it, the page still gets a visitor's answers.
-  expect((await request.get('/api/auth/me')).status()).toBe(401);
+  // Without an API behind it, the page still gets a visitor's answers: nobody, as the API says it.
+  const me = await request.get('/api/auth/me');
+  expect(me.status()).toBe(200);
+  expect(await me.json()).toBeNull();
   expect(await (await request.get('/api/website/settings')).json()).toEqual({
     whatsAppNumber: null,
     analytics: { script: null },

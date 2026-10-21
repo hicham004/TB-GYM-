@@ -3,12 +3,15 @@ import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
+import type { FeatureAccessDecision } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantContext } from '../../core/tenancy/tenant-context';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { planRecipeView } from '../../../testing/client-recipe-fixtures';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
+import { fakeClientAccess } from '../../../testing/today-fixtures';
 import type { NutritionDay, NutritionSlot } from './nutrition.models';
 import { TodayNutrition } from './today-nutrition';
 
@@ -86,6 +89,8 @@ function afterSave(): NutritionDay {
 interface RenderOptions {
   readonly selectedTenantId?: WritableSignal<string | null>;
   readonly csrfRefresh?: () => Promise<void>;
+  /** The client's plan as the access answer gives it; every feature open unless said otherwise. */
+  readonly access?: ReturnType<typeof fakeClientAccess>;
 }
 
 async function render(
@@ -138,6 +143,7 @@ async function render(
         useValue: { refresh: vi.fn(options.csrfRefresh ?? (() => Promise.resolve())) },
       },
       { provide: TenantStore, useValue: { selectedTenantId } },
+      { provide: ClientAccessStore, useValue: options.access ?? fakeClientAccess() },
     ],
   }).compileComponents();
 
@@ -494,28 +500,74 @@ describe('TodayNutrition', () => {
   });
 
   it('explains a date with no meal plan instead of an empty day', async () => {
-    const { host } = await render({
-      getMyNutritionDay: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
-    });
+    // The API answers "nothing here" with a 200 and null, never a 404 (audit AUTH-12).
+    const { host } = await render({ getMyNutritionDay: vi.fn(() => of(null)) });
 
     expect(host.textContent).toContain("Your coach hasn't set a meal plan for this day yet");
     expect(host.querySelector('.meal-card')).toBeNull();
   });
 
   it('states a refused access reason separately from an unplanned day', async () => {
-    const { host } = await render({
-      getMyNutritionDay: vi.fn(() =>
-        throwError(
-          () =>
-            new HttpErrorResponse({
-              status: 403,
-              error: { accessReason: 'PaymentRequired' },
-            }),
+    const { host } = await render(
+      {
+        getMyNutritionDay: vi.fn(() =>
+          throwError(
+            () =>
+              new HttpErrorResponse({
+                status: 403,
+                error: { accessReason: 'PaymentRequired' },
+              }),
+          ),
         ),
-      ),
-    });
+      },
+      day(),
+      { access: fakeClientAccess({}, 'failed') },
+    );
 
     expect(host.textContent).toContain('Your plan is waiting for payment');
+    expect(host.textContent).not.toContain("Your coach hasn't set a meal plan");
+  });
+
+  it('says a closed plan’s reason without asking for a day the client may not see (AUTH-12)', async () => {
+    const { host, api } = await render({}, day(), {
+      access: fakeClientAccess({ Nutrition: 'MembershipInactive' }),
+    });
+
+    expect(api.getMyNutritionDay).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Your coaching has ended, so meals are closed.');
+    expect(host.textContent).not.toContain("Your coach hasn't set a meal plan");
+  });
+
+  it('waits for the plan’s answer before it asks for the day', async () => {
+    const access = fakeClientAccess({}, 'loading');
+    const { fixture, host, api } = await render({}, day(), { access });
+
+    expect(api.getMyNutritionDay).not.toHaveBeenCalled();
+
+    access.set({});
+    await settle(fixture);
+    expect(api.getMyNutritionDay).toHaveBeenCalledTimes(1);
+    expect(host.querySelectorAll('.meal-card').length).toBeGreaterThan(0);
+  });
+
+  it('with no answer about the plan, a date with nothing asks it then, so a closed plan still says so', async () => {
+    const paused: FeatureAccessDecision = {
+      feature: 'Nutrition',
+      isAllowed: false,
+      reason: 'Paused',
+      enrollmentId: 'enrollment-1',
+      accessibleFrom: null,
+      accessibleUntilExclusive: null,
+    };
+    const getOwnFeatureAccess = vi.fn(() => of([paused]));
+    const { host } = await render(
+      { getMyNutritionDay: vi.fn(() => of(null)), getOwnFeatureAccess },
+      day(),
+      { access: fakeClientAccess({}, 'failed') },
+    );
+
+    expect(getOwnFeatureAccess).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('Your plan is paused, so meals are closed for now.');
     expect(host.textContent).not.toContain("Your coach hasn't set a meal plan");
   });
 

@@ -1,0 +1,26 @@
+@if (signedIn()) {
+  <app-empty-state
+    class="not-found"
+    [headingLevel]="1"
+    heading="This page isn’t here"
+    i18n-heading
+    description="The link may be old, or the address may have a typo."
+    i18n-description
+  >
+    <a appButton variant="outlined" routerLink="/" empty-state-action i18n>Go to Today</a>
+  </app-empty-state>
+} @else {
+  <!-- Light like the other signed-out pages, whatever the device's scheme (UIQ-9). -->
+  <app-auth-frame data-mode="light">
+    <p class="auth-eyebrow" i18n>Page not found</p>
+    <h1 class="auth-title" i18n>This page isn’t <em>here.</em></h1>
+    <p class="auth-lead" i18n>The link may be old, or the address may have a typo.</p>
+    <div class="not-found__actions">
+      <a appButton size="touch" routerLink="/" i18n>Go to the homepage</a>
+      <p class="auth-alt">
+        <span i18n>Have an account?</span>
+        <a class="auth-link" routerLink="/auth/sign-in" i18n>Sign in</a>
+      </p>
+    </div>
+  </app-auth-frame>
+}

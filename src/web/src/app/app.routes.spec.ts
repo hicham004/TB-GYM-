@@ -1,7 +1,10 @@
+import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
-import { memberGuard } from './core/auth/auth.guards';
+import { serverRoutes } from './app.routes.server';
+import { memberGuard, sessionKnownGuard } from './core/auth/auth.guards';
 import { confirmBeforeLeaving, confirmSheetLeave } from './core/forms/leave-guard';
+import { NotFound } from './features/not-found/not-found';
 
 const route = (path: string) => {
   const found = routes.find((item) => item.path === path);
@@ -31,5 +34,27 @@ describe('the app routes', () => {
 
   it('names neither kind of invitation in the title of its link', () => {
     expect(route('invite').title).toBe('Invitation | TB Gym');
+  });
+
+  // Audit AUTH-10: an unknown address says so, where it used to go home without a word.
+  it('answers any other address with the not-found page, once the session is known', async () => {
+    const last = routes.at(-1)!;
+    expect(last.path).toBe('**');
+    expect(last.redirectTo).toBeUndefined();
+    expect(last.canActivate).toContain(sessionKnownGuard);
+    expect(last.title).toBe('Page not found | TB Gym');
+    expect(await (last.loadComponent as () => Promise<unknown>)()).toBe(NotFound);
+    // The homepage's file by name is the homepage, as nginx answers it with the shell.
+    expect(route('index.html').redirectTo).toBe('');
+  });
+
+  // Audit UIQ-13: sign-in is finished HTML like the homepage and what changed; nothing else is.
+  it('renders the homepage, what changed and sign-in at build time, and every other address in the browser', () => {
+    expect(serverRoutes).toEqual([
+      { path: '', renderMode: RenderMode.Prerender },
+      { path: 'changelog', renderMode: RenderMode.Prerender },
+      { path: 'auth/sign-in', renderMode: RenderMode.Prerender },
+      { path: '**', renderMode: RenderMode.Client },
+    ]);
   });
 });

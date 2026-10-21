@@ -249,7 +249,7 @@ test('a save fetches a fresh security token first', async ({ page }) => {
 test.describe('when the account refuses a save', () => {
   test.use({
     allowedConsoleErrors: {
-      patterns: [/status of 401 .*\/api\/auth\/me/, /status of 500 .*\/api\/auth\/me\/weight-unit/],
+      patterns: [/status of 500 .*\/api\/auth\/me\/weight-unit/],
     },
   });
 
@@ -269,10 +269,7 @@ test.describe('when the account refuses a save', () => {
 test.describe('a client whose coach cannot be read', () => {
   test.use({
     allowedConsoleErrors: {
-      patterns: [
-        /status of 401 .*\/api\/auth\/me/,
-        /status of 403 .*\/api\/client-profile\/me\/coach/,
-      ],
+      patterns: [/status of 403 .*\/api\/client-profile\/me\/coach/],
     },
   });
 
@@ -487,24 +484,26 @@ test.describe('the launch screen', () => {
   // Serving the page rewritten stops Vite's development client reaching its websocket; that, and
   // nothing else, is allowed to be logged.
   test.use({
-    allowedConsoleErrors: { patterns: [/status of 401 .*\/api\/auth\/me/, /@vite\/client/] },
+    allowedConsoleErrors: { patterns: [/@vite\/client/] },
   });
 
   test('an installed app draws it from index.html until the script arrives', async ({ page }) => {
     await mockSignedOut(page);
     // The media condition cannot be emulated, so the page is served with it removed: this proves the
     // rule, the picture and the colours. That the screen is shown only when installed is the
-    // browser's own `display-mode`. The installed app starts at the sign-in page, which loads the
-    // plain shell; `/` is the homepage rendered at build time (R6.2a), whose <app-root> is never empty.
+    // browser's own `display-mode`. The installed app starts at sign-in: a visitor gets it rendered at
+    // build time (audit UIQ-13), with nothing to wait for, and someone signed in gets the plain shell,
+    // as every deep link does. The development server renders sign-in for everyone, so this opens
+    // another address the shell serves.
     await page.route('**/main.js', () => new Promise<void>(() => undefined));
-    await page.route('**/auth/sign-in', async (route) => {
+    await page.route('**/auth/register', async (route) => {
       if (route.request().resourceType() !== 'document') return route.fallback();
       const response = await route.fetch();
       const html = (await response.text()).replaceAll('(display-mode: standalone)', 'all');
       await route.fulfill({ response, body: html });
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/auth/sign-in', { waitUntil: 'commit' });
+    await page.goto('/auth/register', { waitUntil: 'commit' });
     await page.waitForSelector('app-root', { state: 'attached' });
 
     await expect

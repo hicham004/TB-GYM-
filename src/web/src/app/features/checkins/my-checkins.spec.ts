@@ -10,8 +10,10 @@ import type {
   CheckInAssignmentResponseSummary,
   CheckInResponseDetail,
 } from '../../core/api/generated';
+import { ClientAccessStore } from '../../core/access/client-access.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { announced, button, focusedId, press, settle } from '../../../testing/dom';
+import { fakeClientAccess } from '../../../testing/today-fixtures';
 import { MyCheckIns } from './my-checkins';
 
 function item(
@@ -104,7 +106,10 @@ function nextDetail(answered: number): CheckInResponseDetail {
   };
 }
 
-async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}) {
+async function render(
+  api: Partial<Record<keyof ApiClient, unknown>> = {},
+  access = fakeClientAccess(),
+) {
   const selectedTenantId = signal<string | null>('tenant-1');
   const client = {
     listOwnCheckInAssignments: vi.fn(() => page(1, item('due', '2026-09-27'))),
@@ -118,6 +123,7 @@ async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}) {
       provideRouter([]),
       { provide: ApiClient, useValue: client },
       { provide: TenantStore, useValue: { selectedTenantId } },
+      { provide: ClientAccessStore, useValue: access },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(MyCheckIns);
@@ -246,17 +252,46 @@ describe('MyCheckIns', () => {
   });
 
   it('says why check-ins are closed instead of showing an empty page', async () => {
-    const { host, read } = await render({
-      listOwnCheckInAssignments: vi.fn(() =>
-        throwError(
-          () => new HttpErrorResponse({ status: 403, error: { accessReason: 'NoEntitlement' } }),
+    // The plan's answer could not be read, so the list is asked for and the refusal explains itself.
+    const { host, read } = await render(
+      {
+        listOwnCheckInAssignments: vi.fn(() =>
+          throwError(
+            () => new HttpErrorResponse({ status: 403, error: { accessReason: 'NoEntitlement' } }),
+          ),
         ),
-      ),
-    });
+      },
+      fakeClientAccess({}, 'failed'),
+    );
 
     expect(read()).toContain('Check-ins are closed');
     expect(read()).toContain('Check-ins are not in your plan. Ask your coach.');
     expect(host.querySelector('app-empty-state')).toBeNull();
+  });
+
+  it('says a closed plan’s reason without asking for the list the API would refuse (AUTH-12)', async () => {
+    const { host, client, read } = await render(
+      {},
+      fakeClientAccess({ CheckIns: 'MembershipInactive' }),
+    );
+
+    expect(client.listOwnCheckInAssignments).not.toHaveBeenCalled();
+    expect(client.getOwnCheckInResponse).not.toHaveBeenCalled();
+    expect(read()).toContain('Check-ins are closed');
+    expect(read()).toContain('Your coaching has ended, so check-ins are closed.');
+    expect(host.querySelector('app-empty-state')).toBeNull();
+  });
+
+  it('waits for the plan’s answer before it asks for the list', async () => {
+    const access = fakeClientAccess({}, 'loading');
+    const { client, read, settle } = await render({}, access);
+
+    expect(client.listOwnCheckInAssignments).not.toHaveBeenCalled();
+
+    access.set({});
+    await settle();
+    expect(client.listOwnCheckInAssignments).toHaveBeenCalledTimes(1);
+    expect(read()).toContain('Weekly check-in');
   });
 
   it('reports a failure as one, and retries it', async () => {

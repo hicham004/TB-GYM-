@@ -62,8 +62,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.IsLessThan(TimeSpan.FromMilliseconds(1), (answer.StoppedAtUtc!.Value - RequiredTestClock.UtcNow).Duration(), "Stopped now, to the database's precision.");
         Assert.AreEqual(answer, (await ReadSliceAsync<ClientNutritionPlanSummary[]>(coach, R53dPlansUrl(mayaId))).Single(), "The list says what the stop answered.");
 
-        // Maya's day has no meal plan now, a second stop is refused, and the dates take a corrected plan.
-        await AssertStatusAsync(await maya.GetAsync(A6DayUrl(today)), HttpStatusCode.NotFound);
+        // Maya's day has no meal plan now (nothing for the day: 200 and null, AUTH-12), a second stop is
+        // refused, and the dates take a corrected plan.
+        await A11bAssertNothingHereAsync(await maya.GetAsync(A6DayUrl(today)));
         await RefreshCsrfAsync(coach);
         await A6AssertConflictAsync(
             await coach.PostAsJsonAsync(A6CancelUrl(mayaId, running.Id), new { reason = "Again", answer.Version }),

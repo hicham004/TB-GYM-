@@ -7,6 +7,7 @@ import {
   memberGuard,
   ownerGuard,
   publicHomeGuard,
+  sessionKnownGuard,
   signedOutGuard,
 } from './core/auth/auth.guards';
 import { HOUSE_BRAND, REDESIGNED } from './core/theme/redesigned-route';
@@ -247,5 +248,15 @@ export const routes: Routes = [
   },
   // Empty in production; the development build swaps in the UI lab (see dev/dev-routes.ts).
   ...devRoutes,
-  { path: '**', redirectTo: '' },
+  // The homepage's file by name (nginx answers it with the shell) is the homepage.
+  { path: 'index.html', pathMatch: 'full', redirectTo: '' },
+  {
+    // Any other address says it is not here, inside the person's own shell or the signed-out frame
+    // (audit AUTH-10), where it used to go home without a word.
+    path: '**',
+    canActivate: [sessionKnownGuard],
+    data: REDESIGNED,
+    title: $localize`Page not found | TB Gym`,
+    loadComponent: () => import('./features/not-found/not-found').then((module) => module.NotFound),
+  },
 ];
