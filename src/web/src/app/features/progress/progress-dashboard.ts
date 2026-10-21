@@ -13,8 +13,12 @@ import type {
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { previewAssetIds, type ProgressDashboard } from './progress-dashboard.models';
-import type { ProgressViewModel } from './progress.models';
+import {
+  mapProgressDashboard,
+  previewAssetIds,
+  type ProgressDashboard,
+} from './progress-dashboard.models';
+import { mapProgress, type ProgressViewModel } from './progress.models';
 import { Button } from '../../ui/button';
 import { addDays, deviceToday } from '../../ui/calendar';
 import { TrendChart } from '../../ui/trend-chart';
@@ -216,7 +220,7 @@ export class ProgressDashboardView {
           to === null
             ? null
             : subtractDays(to, this.range() === '4w' ? 28 : this.range() === 'all' ? 366 : 84);
-        const [dashboard, recentProgress, personalRecords] = await owner.wait(
+        const [dashboardView, progressView, personalRecords] = await owner.wait(
           Promise.all([
             clientId
               ? firstValueFrom(this.api.getClientProgressDashboard(clientId, from, to))
@@ -236,7 +240,8 @@ export class ProgressDashboardView {
           return;
         }
 
-        let progress = recentProgress;
+        const dashboard = mapProgressDashboard(dashboardView);
+        let progress = mapProgress(progressView);
         if (this.range() === 'all' && to !== null && from !== null) {
           const span = clientId
             ? await owner.wait(firstValueFrom(this.api.getClientBodyweightSpan(clientId)))
@@ -245,11 +250,13 @@ export class ProgressDashboardView {
           while (span.firstDate && end > span.firstDate && this.ownsLoad(key, generation)) {
             const start =
               subtractDays(end, 366) > span.firstDate ? subtractDays(end, 366) : span.firstDate;
-            const older = clientId
-              ? await owner.wait(
-                  firstValueFrom(this.api.getClientProgress(clientId, 'Kilogram', start, end)),
-                )
-              : await owner.wait(firstValueFrom(this.api.getMyProgress(unit, start, end)));
+            const older = mapProgress(
+              clientId
+                ? await owner.wait(
+                    firstValueFrom(this.api.getClientProgress(clientId, 'Kilogram', start, end)),
+                  )
+                : await owner.wait(firstValueFrom(this.api.getMyProgress(unit, start, end))),
+            );
             progress = {
               ...progress,
               from: start,

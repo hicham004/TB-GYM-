@@ -50,7 +50,11 @@ import { UiToast } from '../../ui/toast';
 import { CommandKeys } from '../messaging/command-keys';
 import { SavedRepliesSheet } from '../messaging/saved-replies';
 import { insertReply } from '../messaging/saved-replies.models';
-import { previewAssetIds, type ProgressDashboard } from '../progress/progress-dashboard.models';
+import {
+  mapProgressDashboard,
+  previewAssetIds,
+  type ProgressDashboard,
+} from '../progress/progress-dashboard.models';
 import {
   changedCount,
   checkInFacts,
@@ -490,7 +494,7 @@ export class ClientCheckInReview implements HoldsUnsavedWork {
             ),
           ),
         );
-        this.dashboard.set(dashboard);
+        this.dashboard.set(mapProgressDashboard(dashboard));
         this.dashboardState.set('ready');
       } catch {
         if (!owner.current) return;

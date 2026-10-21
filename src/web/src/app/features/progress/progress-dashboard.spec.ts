@@ -5,19 +5,16 @@ import { provideRouter } from '@angular/router';
 import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
+import type { ProgressDashboardView as ProgressDashboardContract } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, query, settle } from '../../../testing/dom';
 import { ProgressDashboardView } from './progress-dashboard';
 import { UiSheet } from '../../ui/sheet';
-import {
-  mapProgressDashboard,
-  previewAssetIds,
-  type ProgressDashboard,
-} from './progress-dashboard.models';
+import { mapProgressDashboard, previewAssetIds } from './progress-dashboard.models';
 
-function contract(overrides: Record<string, unknown> = {}): never {
+function contract(overrides: Record<string, unknown> = {}): ProgressDashboardContract {
   return {
     clientProfileId: 'client-1',
     timeZoneId: 'Asia/Beirut',
@@ -102,8 +99,24 @@ function contract(overrides: Record<string, unknown> = {}): never {
       context: null,
     },
     ...overrides,
-  } as never;
+  } as unknown as ProgressDashboardContract;
 }
+
+/** The weight read's trend, which the server always sends with it. */
+const TREND = {
+  isEstimate: true,
+  availability: 'Available',
+  methodKey: 'BodyweightTrendEwma',
+  methodVersion: '1',
+  timeConstantDays: 10,
+  warmupDays: 7,
+  minimumSampleCount: 5,
+  sampleCount: 2,
+  windowStart: '2026-06-01',
+  windowEndExclusive: '2026-08-23',
+  latestEstimateKilograms: 81.9,
+  latestDisplayEstimate: 81.9,
+};
 
 const emptySections = {
   bodyweight: {
@@ -126,14 +139,14 @@ const emptySections = {
 };
 
 async function render(
-  result: Observable<ProgressDashboard>,
+  result: Observable<ProgressDashboardContract>,
   api: Partial<ApiClient> = {},
 ): Promise<HTMLElement> {
   return (await renderWith(result, api)).host;
 }
 
 async function renderWith(
-  result: Observable<ProgressDashboard>,
+  result: Observable<ProgressDashboardContract>,
   api: Partial<ApiClient> = {},
   options: { providers?: Provider[]; clientId?: string } = {},
 ) {
@@ -173,6 +186,7 @@ async function renderWith(
                   observedDayCount: 2,
                 },
               ],
+              trend: TREND,
             } as never),
           ),
           getMyTrainingPersonalRecords: vi.fn(() =>
@@ -200,37 +214,35 @@ async function renderWith(
   };
 }
 
-function twoPreviewDashboard(): ProgressDashboard {
-  return mapProgressDashboard(
-    contract({
-      photos: {
-        poses: [
-          {
-            pose: 'Front',
-            photos: [
-              {
-                id: 'photo-1',
-                photoDate: '2026-08-22',
-                pose: 'Front',
-                mediaAssetId: 'asset-1',
-                thumbnailUrl: '/api/media/asset-1/content/thumbnail',
-              },
-              {
-                id: 'photo-2',
-                photoDate: '2026-08-21',
-                pose: 'Front',
-                mediaAssetId: 'asset-2',
-                thumbnailUrl: '/api/media/asset-2/content/thumbnail',
-              },
-            ],
-          },
-        ],
-        photoCount: '2',
-        missingThumbnailCount: '0',
-        previewPhotoCount: '2',
-      },
-    }),
-  );
+function twoPreviewDashboard(): ProgressDashboardContract {
+  return contract({
+    photos: {
+      poses: [
+        {
+          pose: 'Front',
+          photos: [
+            {
+              id: 'photo-1',
+              photoDate: '2026-08-22',
+              pose: 'Front',
+              mediaAssetId: 'asset-1',
+              thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+            },
+            {
+              id: 'photo-2',
+              photoDate: '2026-08-21',
+              pose: 'Front',
+              mediaAssetId: 'asset-2',
+              thumbnailUrl: '/api/media/asset-2/content/thumbnail',
+            },
+          ],
+        },
+      ],
+      photoCount: '2',
+      missingThumbnailCount: '0',
+      previewPhotoCount: '2',
+    },
+  });
 }
 
 describe('progress dashboard mapping', () => {
@@ -317,7 +329,7 @@ describe('ProgressDashboardView states', () => {
   });
 
   it('renders counts with their denominators and names why a section is unavailable', async () => {
-    const host = await render(of(mapProgressDashboard(contract())));
+    const host = await render(of(contract()));
     const text = host.textContent ?? '';
 
     expect(text).toContain('6 of 7');
@@ -330,19 +342,19 @@ describe('ProgressDashboardView states', () => {
   });
 
   it('ends the chart’s span on its last day, not on the window’s exclusive end (WEA-8)', async () => {
-    const host = await render(of(mapProgressDashboard(contract())));
+    const host = await render(of(contract()));
     expect(host.querySelector('.date-span')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
       '1 Jun 2026 – 22 Aug 2026',
     );
   });
 
   it('reads a client’s own weight in the unit they saved in Me, and offers it for a new weigh-in', async () => {
-    const getMyProgressDashboard = vi.fn(() =>
-      of(mapProgressDashboard(contract({ displayUnit: 'Pound' }))),
+    const getMyProgressDashboard = vi.fn(() => of(contract({ displayUnit: 'Pound' })));
+    const getMyProgress = vi.fn(() =>
+      of({ days: [], weeks: [], trend: TREND, displayUnit: 'Pound' } as never),
     );
-    const getMyProgress = vi.fn(() => of({ days: [], weeks: [], displayUnit: 'Pound' } as never));
     await renderWith(
-      of(mapProgressDashboard(contract({ displayUnit: 'Pound' }))),
+      of(contract({ displayUnit: 'Pound' })),
       {
         getMyProgressDashboard: getMyProgressDashboard as never,
         getMyProgress: getMyProgress as never,
@@ -355,12 +367,12 @@ describe('ProgressDashboardView states', () => {
   });
 
   it('keeps a coach reading a client’s progress in kilograms, whatever the coach saved', async () => {
-    const getClientProgressDashboard = vi.fn(() => of(mapProgressDashboard(contract())));
+    const getClientProgressDashboard = vi.fn(() => of(contract()));
     const getClientProgress = vi.fn(() =>
-      of({ days: [], weeks: [], displayUnit: 'Kilogram' } as never),
+      of({ days: [], weeks: [], trend: TREND, displayUnit: 'Kilogram' } as never),
     );
     await renderWith(
-      of(mapProgressDashboard(contract())),
+      of(contract()),
       {
         getClientProgressDashboard: getClientProgressDashboard as never,
         getClientProgress: getClientProgress as never,
@@ -376,7 +388,7 @@ describe('ProgressDashboardView states', () => {
   });
 
   it('renders an empty state when nothing readable was recorded', async () => {
-    const host = await render(of(mapProgressDashboard(contract(emptySections))), {
+    const host = await render(of(contract(emptySections)), {
       getMyProgress: vi.fn(() =>
         of({
           clientProfileId: 'client-1',
@@ -387,6 +399,7 @@ describe('ProgressDashboardView states', () => {
           toExclusive: '2026-08-23',
           days: [],
           weeks: [],
+          trend: TREND,
         } as never),
       ) as never,
     });
@@ -396,7 +409,7 @@ describe('ProgressDashboardView states', () => {
   });
 
   it('keeps the range switch and Log weight in one row, out of the title', async () => {
-    const host = await render(of(mapProgressDashboard(contract())));
+    const host = await render(of(contract()));
 
     const toolbar = host.querySelector('.toolbar')!;
     expect(toolbar.querySelector('.range')).not.toBeNull();
@@ -474,9 +487,10 @@ describe('ProgressDashboardView states', () => {
                 { date: '2026-08-21', observation: null, displayValue: null, trendEstimate: null },
               ],
         weeks: [],
+        trend: TREND,
       } as never),
     );
-    const { host, fixture } = await renderWith(of(mapProgressDashboard(contract())), {
+    const { host, fixture } = await renderWith(of(contract()), {
       getMyProgress: getMyProgress as never,
       getMyBodyweightSpan: vi.fn(() =>
         of({ firstDate: '2025-07-01', lastDate: '2026-08-22' }),
@@ -510,7 +524,7 @@ describe('ProgressDashboardView media grants', () => {
   });
 
   it('requests one bounded batch of grants for exactly the assets it will display', async () => {
-    const { host, createMediaAccessBatch } = await renderWith(of(mapProgressDashboard(contract())));
+    const { host, createMediaAccessBatch } = await renderWith(of(contract()));
 
     // One request, not one per tile, and only the photo that actually has a rendition.
     expect(createMediaAccessBatch).toHaveBeenCalledOnce();
@@ -535,36 +549,34 @@ describe('ProgressDashboardView media grants', () => {
 
   it('puts the older photo on the before side of the slider and the newer on the after', async () => {
     // The server sends a pose's previews oldest first (21 then 22 August).
-    const dashboard = mapProgressDashboard(
-      contract({
-        photos: {
-          poses: [
-            {
-              pose: 'Front',
-              photos: [
-                {
-                  id: 'photo-2',
-                  photoDate: '2026-08-21',
-                  pose: 'Front',
-                  mediaAssetId: 'asset-2',
-                  thumbnailUrl: '/api/media/asset-2/content/thumbnail',
-                },
-                {
-                  id: 'photo-1',
-                  photoDate: '2026-08-22',
-                  pose: 'Front',
-                  mediaAssetId: 'asset-1',
-                  thumbnailUrl: '/api/media/asset-1/content/thumbnail',
-                },
-              ],
-            },
-          ],
-          photoCount: '2',
-          missingThumbnailCount: '0',
-          previewPhotoCount: '2',
-        },
-      }),
-    );
+    const dashboard = contract({
+      photos: {
+        poses: [
+          {
+            pose: 'Front',
+            photos: [
+              {
+                id: 'photo-2',
+                photoDate: '2026-08-21',
+                pose: 'Front',
+                mediaAssetId: 'asset-2',
+                thumbnailUrl: '/api/media/asset-2/content/thumbnail',
+              },
+              {
+                id: 'photo-1',
+                photoDate: '2026-08-22',
+                pose: 'Front',
+                mediaAssetId: 'asset-1',
+                thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+              },
+            ],
+          },
+        ],
+        photoCount: '2',
+        missingThumbnailCount: '0',
+        previewPhotoCount: '2',
+      },
+    });
     const { host } = await renderWith(of(dashboard));
 
     const images = Array.from(host.querySelectorAll<HTMLImageElement>('app-photo-compare img'));
@@ -601,9 +613,7 @@ describe('ProgressDashboardView media grants', () => {
   });
 
   it('does not ask for grants when there is nothing to preview', async () => {
-    const { createMediaAccessBatch } = await renderWith(
-      of(mapProgressDashboard(contract(emptySections))),
-    );
+    const { createMediaAccessBatch } = await renderWith(of(contract(emptySections)));
 
     expect(createMediaAccessBatch).not.toHaveBeenCalled();
   });
@@ -613,7 +623,7 @@ describe('ProgressDashboardView media grants', () => {
    * figures are still worth showing, so the dashboard renders and the previews say so instead.
    */
   it('leaves previews unbound rather than requesting bytes it has no grant for', async () => {
-    const { host } = await renderWith(of(mapProgressDashboard(contract())), {
+    const { host } = await renderWith(of(contract()), {
       createMediaAccessBatch: vi.fn(() => throwError(() => new Error('denied'))) as never,
     });
 
@@ -625,32 +635,30 @@ describe('ProgressDashboardView media grants', () => {
 
   it('ignores a grant response that resolves after the workspace has reloaded', async () => {
     const oldGrant = new Subject<{ items: { assetId: string }[] }>();
-    const current = mapProgressDashboard(
-      contract({
-        photos: {
-          poses: [
-            {
-              pose: 'Side',
-              photos: [
-                {
-                  id: 'photo-current',
-                  photoDate: '2026-08-22',
-                  pose: 'Side',
-                  mediaAssetId: 'asset-current',
-                  thumbnailUrl: '/api/media/asset-current/content/thumbnail',
-                },
-              ],
-            },
-          ],
-          photoCount: '1',
-          missingThumbnailCount: '0',
-          previewPhotoCount: '1',
-        },
-      }),
-    );
+    const current = contract({
+      photos: {
+        poses: [
+          {
+            pose: 'Side',
+            photos: [
+              {
+                id: 'photo-current',
+                photoDate: '2026-08-22',
+                pose: 'Side',
+                mediaAssetId: 'asset-current',
+                thumbnailUrl: '/api/media/asset-current/content/thumbnail',
+              },
+            ],
+          },
+        ],
+        photoCount: '1',
+        missingThumbnailCount: '0',
+        previewPhotoCount: '1',
+      },
+    });
     const getDashboard = vi
       .fn()
-      .mockReturnValueOnce(of(mapProgressDashboard(contract())))
+      .mockReturnValueOnce(of(contract()))
       .mockReturnValueOnce(of(current));
     const createMediaAccessBatch = vi
       .fn()
@@ -676,31 +684,29 @@ describe('ProgressDashboardView media grants', () => {
   it('says how many photos the bounded preview left out', async () => {
     const host = await render(
       of(
-        mapProgressDashboard(
-          contract({
-            photos: {
-              poses: [
-                {
-                  pose: 'Front',
-                  photos: [
-                    {
-                      id: 'photo-1',
-                      photoDate: '2026-08-22',
-                      pose: 'Front',
-                      mediaAssetId: 'asset-1',
-                      thumbnailUrl: '/api/media/asset-1/content/thumbnail',
-                    },
-                  ],
-                },
-              ],
-              // 23 in the window, 1 previewed: the difference is stated rather than a truncated
-              // strip being presented as the whole period.
-              photoCount: '23',
-              missingThumbnailCount: '0',
-              previewPhotoCount: '1',
-            },
-          }),
-        ),
+        contract({
+          photos: {
+            poses: [
+              {
+                pose: 'Front',
+                photos: [
+                  {
+                    id: 'photo-1',
+                    photoDate: '2026-08-22',
+                    pose: 'Front',
+                    mediaAssetId: 'asset-1',
+                    thumbnailUrl: '/api/media/asset-1/content/thumbnail',
+                  },
+                ],
+              },
+            ],
+            // 23 in the window, 1 previewed: the difference is stated rather than a truncated
+            // strip being presented as the whole period.
+            photoCount: '23',
+            missingThumbnailCount: '0',
+            previewPhotoCount: '1',
+          },
+        }),
       ),
     );
 
@@ -714,7 +720,7 @@ describe('ProgressDashboardView media grants', () => {
 });
 
 describe('ProgressDashboardView logging', () => {
-  const answerRead = () => of(mapProgressDashboard(contract()));
+  const answerRead = () => of(contract());
 
   afterEach(() => TestBed.resetTestingModule());
 
@@ -761,7 +767,7 @@ describe('ProgressDashboardView logging', () => {
   it('offers the client a before and after once a pose has photos on two days (R6.1b)', async () => {
     const open = vi.fn(() => ({ close: vi.fn(), closed: new Subject<unknown>() }));
     const { fixture, host } = await renderWith(
-      of(mapProgressDashboard(contract())),
+      of(contract()),
       {},
       { providers: [{ provide: UiSheet, useValue: { open } }] },
     );
@@ -778,29 +784,27 @@ describe('ProgressDashboardView logging', () => {
   it('offers no before and after with one photo of a pose, nor to a coach', async () => {
     const single = await render(
       of(
-        mapProgressDashboard(
-          contract({
-            photos: {
-              poses: [
-                {
-                  pose: 'Front',
-                  photos: [
-                    {
-                      id: 'photo-1',
-                      photoDate: '2026-08-22',
-                      pose: 'Front',
-                      mediaAssetId: 'asset-1',
-                      thumbnailUrl: null,
-                    },
-                  ],
-                },
-              ],
-              photoCount: '1',
-              missingThumbnailCount: '1',
-              previewPhotoCount: '1',
-            },
-          }),
-        ),
+        contract({
+          photos: {
+            poses: [
+              {
+                pose: 'Front',
+                photos: [
+                  {
+                    id: 'photo-1',
+                    photoDate: '2026-08-22',
+                    pose: 'Front',
+                    mediaAssetId: 'asset-1',
+                    thumbnailUrl: null,
+                  },
+                ],
+              },
+            ],
+            photoCount: '1',
+            missingThumbnailCount: '1',
+            previewPhotoCount: '1',
+          },
+        }),
       ),
     );
     expect(single.querySelector('[data-before-after]')).toBeNull();
@@ -808,11 +812,11 @@ describe('ProgressDashboardView logging', () => {
 
     // Only the client makes one (M9); a coach reading the same photos is offered nothing.
     const { host } = await renderWith(
-      of(mapProgressDashboard(contract())),
+      of(contract()),
       {
-        getClientProgressDashboard: vi.fn(() => of(mapProgressDashboard(contract()))) as never,
+        getClientProgressDashboard: vi.fn(() => of(contract())) as never,
         getClientProgress: vi.fn(() =>
-          of({ days: [], weeks: [], displayUnit: 'Kilogram' } as never),
+          of({ days: [], weeks: [], trend: TREND, displayUnit: 'Kilogram' } as never),
         ) as never,
         getClientTrainingPersonalRecords: vi.fn(() =>
           of({ isAllowed: false, accessReason: 'Expired', items: [] } as never),

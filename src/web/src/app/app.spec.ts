@@ -202,6 +202,28 @@ describe('App', () => {
     expect(document.activeElement).toBe(main);
   });
 
+  it('lets an owner or a coach skip the sidebar and the top bar to the page (audit WEB-13)', async () => {
+    for (const role of [{ owner: true }, { coach: true }]) {
+      const { host } = await render({ signedIn: true, ...role });
+      const skip = host.querySelector<HTMLAnchorElement>('a.skip-link')!;
+      const main = host.querySelector<HTMLElement>('main')!;
+
+      // Before the sidebar, so it is the first thing a keyboard reaches.
+      expect(host.firstElementChild).toBe(skip);
+      expect(skip.textContent?.trim()).toBe('Skip to content');
+      expect(skip.compareDocumentPosition(host.querySelector('app-coach-shell')!)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(main.getAttribute('tabindex')).toBe('-1');
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+      skip.dispatchEvent(click);
+
+      expect(click.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(main);
+      TestBed.resetTestingModule();
+    }
+  });
+
   /**
    * Signed-out pages (the homepage, sign-in and the rest of /auth, invitations) draw their own
    * header, so a visitor gets no app chrome at all: no coach sidebar, no member bar, no client tabs.

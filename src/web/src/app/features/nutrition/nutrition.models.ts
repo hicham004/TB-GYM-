@@ -1,7 +1,6 @@
 import type {
   AllergenCode,
   ClientNutritionDayView as ContractClientNutritionDayView,
-  RecipePage as ContractRecipePage,
 } from '../../core/api/generated';
 
 /** The order allergens are offered in, and the names a coach reads for each stored code. */
@@ -21,25 +20,6 @@ export const ALLERGEN_LABELS: readonly { code: AllergenCode; label: string }[] =
   { code: 'Lupin', label: $localize`Lupin` },
   { code: 'Molluscs', label: $localize`Molluscs (mussels, squid)` },
 ];
-
-export interface RecipeSummary {
-  id: string;
-  versionId: string;
-  revision: number;
-  name: string;
-  status: 'Draft' | 'Published';
-  servings: number;
-  calories: number;
-  protein: number;
-  carbohydrate: number;
-  fat: number;
-  allergens: string[];
-}
-
-export interface RecipePage {
-  total: number;
-  items: RecipeSummary[];
-}
 
 export interface NutritionChoice {
   id: string;
@@ -93,25 +73,6 @@ export interface NutritionDay {
   }[];
   safetyNotice: string;
   logVersion: number | null;
-}
-
-export function mapRecipePage(value: ContractRecipePage): RecipePage {
-  return {
-    total: numeric(value.total),
-    items: value.items.map((item) => ({
-      id: item.id,
-      versionId: item.versionId,
-      revision: numeric(item.revision),
-      name: item.name,
-      status: item.status,
-      servings: numeric(item.servings),
-      calories: numeric(item.calories),
-      protein: numeric(item.proteinGrams),
-      carbohydrate: numeric(item.carbohydrateGrams),
-      fat: numeric(item.fatGrams),
-      allergens: item.declaredAllergens,
-    })),
-  };
 }
 
 export function mapNutritionDay(value: ContractClientNutritionDayView): NutritionDay {

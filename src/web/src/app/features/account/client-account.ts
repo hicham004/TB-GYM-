@@ -18,7 +18,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type { BodyweightUnit } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { SessionActions } from '../../core/auth/session-actions';
-import { tenantRoleLabel } from '../../core/i18n/display-labels';
+import { tenantRoleLabel } from '../../core/i18n/role-labels';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { isThemeMode, type ThemeMode } from '../../core/theme/personal-mode.store';

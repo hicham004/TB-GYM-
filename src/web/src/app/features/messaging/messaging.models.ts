@@ -96,6 +96,14 @@ export interface InboxQuery {
   readonly search: string;
 }
 
+/** The list's filter and search as the server reads them. */
+export function serverInboxQuery(query: InboxQuery): {
+  filter: ConversationListFilter;
+  search: string;
+} {
+  return { filter: inboxFilterParam(query.filter), search: query.search };
+}
+
 export function inboxFilterParam(filter: InboxFilter): ConversationListFilter {
   switch (filter) {
     case 'unread':

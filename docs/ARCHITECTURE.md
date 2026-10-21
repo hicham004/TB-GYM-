@@ -873,6 +873,31 @@ frame and signed in inside the person's shell, with a robots `noindex` while it 
 without an extension is the app's to answer. `check-prerender.mjs` also fails a sign-in page that lost
 its form, submits before the app is live or names a field.
 
+Audit A13a (WEB-5, UIQ-7, WEB-4, WEB-14, WEB-15, WEB-13, UIQ-23) keeps the first download under the
+`initial` budget of 520 kB, which is now a build error (510 kB warns; 501.5 kB after A13a, from 579.2).
+`ApiClient` imports nothing from a feature at run time: a read only a feature shows returns the server's
+own type, and the feature maps it with its own models (in the page, or in a feature API service such as
+`ProgressEntriesApi`), so those models and their `$localize` words load with their lazy chunk; the core
+stores map what they read themselves, and the two unread counts stay numbers. `MessagingRealtimeService`
+fetches `@microsoft/signalr` the first time a member connects: `MESSAGING_HUB_CONNECTION` may answer a
+promise, a library that cannot be fetched is retried on the initial start's backoff, a connection built
+for a workspace left meanwhile is dropped unopened, and a thread opened before it arrives keeps saying
+"connecting" rather than offline. The coach shell's role label is `core/i18n/role-labels.ts`, so the rest
+of `display-labels.ts` stays lazy. The homepage's own faces (Plex Medium, Plex Mono Medium) are asked for
+by the homepage and what changed alone (`features/home/home-faces.ts`, written into their documents by
+the build-time render; `check-prerender.mjs` fails a shell or sign-in that asks for them), and the Arabic
+faces carry a `unicode-range`, so an emoji in a message no longer fetches 72 kB. nginx decides
+`Cache-Control` with one `map` on the file that answers: a document `no-cache`, the hashed scripts and
+stylesheet a year `immutable`, anything else nginx's default (`serve-built.mjs` repeats it); `connect-src`
+is `'self'` alone, which covers the same-origin chat socket. `hero-lab.css` sits in the dev lab's folder
+and only the development build copies it. `scripts/edge-proof.ps1` runs `e2e/edge/`
+(`playwright.edge.config.ts`) against a real nginx started from `nginx.conf` and the production output,
+or against a deployment given with `-Url` such as the test copy, reading each kind of answer's headers.
+The coach shell has its own "Skip to content" link, its first tab stop: fixed, it shows over the
+sidebar's brand on a wide screen and just below the top bar on a narrow one (by the bar's published
+`--tb-topbar-block-size`), so it never covers a control. A "→" in the player, the homepage's quiet links
+and Progress turns round under right-to-left text.
+
 R6.2g adds Talk to us for gyms and analytics (ADR 0037). `home-talk` is the form (name, gym, one
 field for an email address or a WhatsApp number, a line about the gym, and a hidden honeypot) between
 the audience split and the finale; the hero's and finale's quiet links and the gym story's button

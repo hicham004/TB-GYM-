@@ -13,25 +13,34 @@ const HEAD = `<head><title>TB Gym</title>
 <meta property="og:image:alt" content="A coach.">
 <meta name="twitter:card" content="summary_large_image"></head>`;
 
+/** The homepage's own faces, which its document and the changelog's ask for (audit UIQ-7). */
+const FACES =
+  '<link rel="preload" href="/fonts/ibm-plex/IBMPlexSans-Medium.woff2" as="font" type="font/woff2" crossorigin="">' +
+  '<link rel="preload" href="/fonts/ibm-plex/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="">';
+
+/** The regular face, which every document asks for. */
+const REGULAR =
+  '<link rel="preload" href="/fonts/ibm-plex/IBMPlexSans-Regular.woff2" as="font" type="font/woff2" crossorigin>';
+
 const STATE =
   '<script id="ng-state" type="application/json">{"tb-gym.rendered-signed-out":true,"__nghData__":[]}</script>';
 
 const TALK = '<section id="talk"><form><input name="name"><button>Send</button></form></section>';
 
-const HOME = `<!doctype html><html>${HEAD}<body><app-root ng-version="22.2.1" ngh="3"><app-home>
+const HOME = `<!doctype html><html>${HEAD.replace('</head>', FACES + REGULAR + '</head>')}<body><app-root ng-version="22.2.1" ngh="3"><app-home>
 <h1 id="home-title">Coach both <br>sides of <br>the week.</h1>${TALK}</app-home></app-root>
 <script src="main-ABC.js" type="module"></script>
 ${STATE}
 </body></html>`;
 
-const CHANGELOG = `<!doctype html><html>${HEAD}<body><app-root ng-version="22.2.1" ngh="3"><app-changelog>
+const CHANGELOG = `<!doctype html><html>${HEAD.replace('</head>', FACES + REGULAR + '</head>')}<body><app-root ng-version="22.2.1" ngh="3"><app-changelog>
 <h1>What changed</h1><h2><time datetime="2026-10-13">13 Oct 2026</time></h2><ul><li>The homepage, rebuilt.</li></ul>
 </app-changelog></app-root>
 <script src="main-ABC.js" type="module"></script>
 ${STATE}
 </body></html>`;
 
-const SHELL = `<!doctype html><html>${HEAD}<body><app-root></app-root>
+const SHELL = `<!doctype html><html>${HEAD.replace('</head>', REGULAR + '</head>')}<body><app-root></app-root>
 <script src="main-ABC.js" type="module"></script></body></html>`;
 
 const SIGN_IN_FORM =
@@ -39,7 +48,7 @@ const SIGN_IN_FORM =
   '<input id="sign-in-password" type="password" formcontrolname="password">' +
   '<button class="tb-button auth-submit" type="submit" disabled="">Sign in</button></form>';
 
-const SIGN_IN = `<!doctype html><html>${HEAD}<body><app-root ng-version="22.2.1" ngh="3"><app-sign-in>
+const SIGN_IN = `<!doctype html><html>${HEAD.replace('</head>', REGULAR + '</head>')}<body><app-root ng-version="22.2.1" ngh="3"><app-sign-in>
 <h1 class="auth-title">Welcome <em>back.</em></h1>${SIGN_IN_FORM}</app-sign-in></app-root>
 <script src="main-ABC.js" type="module"></script>
 ${STATE}
@@ -213,6 +222,38 @@ test('a shell that keeps the preview tags is still plain: attribute text is not 
     }),
     [],
   );
+});
+
+test('rejects a homepage or changelog that stopped asking for the homepage’s faces, and sign-in or the shell asking for them', () => {
+  const findings = inspect({
+    ...BUILD,
+    'index.html': HOME.replace(FACES, ''),
+    'changelog/index.html': CHANGELOG.replace(
+      FACES,
+      FACES.split('<link').slice(0, 2).join('<link'),
+    ),
+    'auth/sign-in/index.html': SIGN_IN.replace(REGULAR, FACES + REGULAR),
+    'index.csr.html': SHELL.replace(REGULAR, FACES + REGULAR),
+  });
+  assert.equal(findings.length, 7, findings.join('\n'));
+  assert.equal(findings.filter((line) => line.startsWith('index.html does not ask for')).length, 2);
+  assert.match(
+    findings.join('\n'),
+    /changelog\/index\.html does not ask for \/fonts\/ibm-plex\/IBMPlexMono-Medium\.woff2/,
+  );
+  assert.equal(
+    findings.filter((line) => line.startsWith('auth/sign-in/index.html asks for')).length,
+    2,
+  );
+  assert.equal(findings.filter((line) => line.startsWith('index.csr.html asks for')).length, 2);
+});
+
+test('rejects a production output holding the hero lab’s stylesheet, which a development build may hold', () => {
+  const withLab = { ...BUILD, 'hero-lab.css': 'app-hero-lab { color: red; }' };
+  assert.deepEqual(inspect(withLab), [
+    'the output holds hero-lab.css, which only the development build may (audit WEB-15).',
+  ]);
+  assert.deepEqual(inspect(withLab, { developmentBuild: true }), []);
 });
 
 test('rejects a page that still links the global stylesheet', () => {

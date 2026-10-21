@@ -27,12 +27,16 @@ import { Button, ButtonLink } from '../../ui/button';
 import { Icon } from '../../ui/icon';
 import { StatusLabel } from '../../ui/status-label';
 import { InstallCard } from '../install/install-card';
-import { trainingReadAccessLabel, type UpcomingTraining } from '../training/training-read.models';
-import type { RenewalStatus } from './renewal.models';
+import {
+  mapUpcomingTraining,
+  trainingReadAccessLabel,
+  type UpcomingTraining,
+} from '../training/training-read.models';
+import { mapRenewalStatus, type RenewalStatus } from './renewal.models';
 import { TodayAlso } from './today-also';
 import { TodayCoachMessage } from './today-coach-message';
 import { TodayRenewal } from './today-renewal';
-import { trainingCard, type TrainingWeek } from './today.models';
+import { mapTrainingWeek, trainingCard, type TrainingWeek } from './today.models';
 
 /**
  * The client's Today: the workspace date, the one training decision for the day,
@@ -192,7 +196,7 @@ export class ClientToday {
         );
         if (generation !== this.generation) return;
         this.day.set(day);
-        this.upcoming.set(upcoming);
+        this.upcoming.set(mapUpcomingTraining(upcoming));
       } catch {
         if (!owner.current) return;
         if (generation === this.generation) {
@@ -210,7 +214,7 @@ export class ClientToday {
       this.weekFailed.set(false);
       try {
         const week = await owner.wait(firstValueFrom(this.api.getMyTrainingWeek()));
-        if (owner.current) this.week.set(week);
+        if (owner.current) this.week.set(mapTrainingWeek(week));
       } catch {
         if (owner.current) this.weekFailed.set(true);
       }
@@ -233,7 +237,9 @@ export class ClientToday {
     return this.scope.run('renewal', async (owner) => {
       this.renewalLoading.set(true);
       try {
-        this.renewal.set(await owner.wait(firstValueFrom(this.api.getOwnRenewalStatus())));
+        this.renewal.set(
+          mapRenewalStatus(await owner.wait(firstValueFrom(this.api.getOwnRenewalStatus()))),
+        );
       } catch {
         if (owner.current) this.renewal.set(null);
       } finally {

@@ -24,7 +24,11 @@ import { Avatar } from '../../ui/avatar';
 import { Button } from '../../ui/button';
 import { StatusLabel } from '../../ui/status-label';
 import { ConversationLaunch } from '../messaging/conversation-launch';
-import type { Conversation, MessagePreview } from '../messaging/messaging.models';
+import {
+  mapConversationPage,
+  type Conversation,
+  type MessagePreview,
+} from '../messaging/messaging.models';
 import { coachMessage, type ReadState, rowAccessLabel } from './today.models';
 
 /**
@@ -110,7 +114,9 @@ export class TodayCoachMessage {
     return this.scope.run('latest', async (owner) => {
       if (!quiet) this.read.set({ kind: 'loading' });
       try {
-        const page = await owner.wait(firstValueFrom(this.api.listConversations(null, null, 1)));
+        const page = mapConversationPage(
+          await owner.wait(firstValueFrom(this.api.listConversations(null, null, 1))),
+        );
         this.read.set({ kind: 'ok', value: page.items[0] ?? null });
       } catch {
         if (owner.current && (!quiet || this.read().kind === 'loading')) {

@@ -5,6 +5,7 @@ import type {
   ClientProfileOverviewView,
   CoachWeekView,
   MesocycleSummary,
+  ProgressDashboardView,
 } from '../app/core/api/generated';
 import type { ProgressDashboard } from '../app/features/progress/progress-dashboard.models';
 import { COACH_TODAY, MAYA } from './coach-today-fixtures';
@@ -205,5 +206,107 @@ export function progressDashboard(overrides: Partial<ProgressDashboard> = {}): P
     },
     isEmpty: false,
     ...overrides,
+  };
+}
+
+/** One week of weigh-ins: its first day, its mean in the display unit and the days weighed. */
+export interface DashboardWeekView {
+  readonly weekStart: string;
+  readonly displayMean: number | null;
+  readonly observedDayCount: number;
+}
+
+/** A calendar date some days on, as the server writes it. */
+function addDaysTo(date: string, days: number): string {
+  const next = new Date(`${date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+
+/**
+ * `progressDashboard()` as the server sends it (`mapProgressDashboard` turns one into the other),
+ * which the client's page reads and maps itself (audit WEB-5). Its weigh-ins can be replaced.
+ */
+export function progressDashboardView(
+  bodyweight: {
+    readonly weeks?: readonly DashboardWeekView[];
+    readonly latestDate?: string | null;
+  } = {},
+): ProgressDashboardView {
+  const view = progressDashboard();
+  const latestDate =
+    bodyweight.latestDate === undefined ? view.bodyweight.latestDate : bodyweight.latestDate;
+  return {
+    clientProfileId: view.clientProfileId,
+    timeZoneId: view.timeZoneId,
+    weekStartsOn: 'Monday',
+    from: view.from,
+    toExclusive: view.toExclusive,
+    windowDayCount: view.windowDayCount,
+    displayUnit: view.displayUnit,
+    measurementDisplayUnit: view.measurementDisplayUnit,
+    bodyweight: {
+      latest:
+        latestDate === null
+          ? null
+          : {
+              id: 'weight-latest',
+              measurementDate: latestDate,
+              valueKilograms: 71.2,
+              enteredValue: 71.2,
+              enteredUnit: 'Kilogram',
+              source: 'Client',
+              recordedByUserId: null,
+              recordedAtUtc: `${latestDate}T05:10:00Z`,
+              status: 'Active',
+              version: 1,
+            },
+      latestDisplayValue: view.bodyweight.latestDisplayValue,
+      change: null,
+      weeks: (bodyweight.weeks ?? view.bodyweight.weeks).map((week) => ({
+        weekStart: week.weekStart,
+        weekEndExclusive: addDaysTo(week.weekStart, 7),
+        meanKilograms: week.displayMean,
+        displayMean: week.displayMean,
+        observedDayCount: week.observedDayCount,
+      })),
+      trend: {
+        isEstimate: true,
+        availability: 'Available',
+        methodKey: 'BodyweightTrendEwma',
+        methodVersion: '1',
+        timeConstantDays: 10,
+        warmupDays: 7,
+        minimumSampleCount: 5,
+        sampleCount: view.bodyweight.observedDayCount,
+        windowStart: view.from,
+        windowEndExclusive: view.toExclusive,
+        latestEstimateKilograms: view.bodyweight.trendEstimate,
+        latestDisplayEstimate: view.bodyweight.trendEstimate,
+      },
+      observedDayCount: view.bodyweight.observedDayCount,
+    },
+    measurements: { measurements: [], observedDayCount: 0 },
+    photos: { poses: [], photoCount: 0, missingThumbnailCount: 0, previewPhotoCount: 0 },
+    nutrition: {
+      feature: 'Nutrition',
+      availability: 'Available',
+      reason: 'Granted',
+      context: {
+        recentFrom: WEEK_FROM,
+        recentToExclusive: '2026-10-05',
+        ...view.nutrition.context!,
+      },
+    },
+    training: {
+      feature: 'Training',
+      availability: 'Available',
+      reason: 'Granted',
+      context: {
+        recentFrom: WEEK_FROM,
+        recentToExclusive: '2026-10-05',
+        ...view.training.context!,
+      },
+    },
   };
 }

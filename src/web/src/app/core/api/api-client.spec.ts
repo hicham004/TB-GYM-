@@ -138,4 +138,39 @@ describe('ApiClient contract mapping', () => {
       ],
     });
   });
+
+  it('hands a feature read back as the server sent it, for the feature to map (audit WEB-5)', () => {
+    api.getMyTrainingWeek().subscribe((week) => {
+      expect(week.days[0].scheduled).toBe('2');
+    });
+
+    http.expectOne('/api/training/me/week').flush({
+      weekStart: '2026-08-24',
+      days: [{ date: '2026-08-24', scheduled: '2', completed: '1' }],
+    });
+  });
+
+  it('sends the list’s filter in the server’s words and leaves All out', () => {
+    api
+      .listConversations(null, null, 25, { filter: 'AwaitingReply', search: ' rania ' })
+      .subscribe();
+    const narrowed = http.expectOne((request) => request.url === '/api/messaging/conversations');
+    expect(narrowed.request.params.get('filter')).toBe('AwaitingReply');
+    expect(narrowed.request.params.get('search')).toBe('rania');
+    narrowed.flush({ items: [], hasMore: false });
+
+    api.listConversations(null, null, 25, { filter: 'All', search: '' }).subscribe();
+    const plain = http.expectOne((request) => request.url === '/api/messaging/conversations');
+    expect(plain.request.params.has('filter')).toBe(false);
+    expect(plain.request.params.has('search')).toBe(false);
+    plain.flush({ items: [], hasMore: false });
+  });
+
+  it('keeps the two unread counts numbers for the shell', () => {
+    api.getMessagingUnreadCount().subscribe((unread) => expect(unread).toBe(3));
+    api.getUnreadNotificationCount().subscribe((unread) => expect(unread).toBe(4));
+
+    http.expectOne('/api/messaging/unread-count').flush({ unread: '3' });
+    http.expectOne('/api/notifications/unread-count').flush({ unread: '4' });
+  });
 });

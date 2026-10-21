@@ -32,7 +32,7 @@ import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
-import type { NotificationPreferences } from './notification.models';
+import { mapNotificationPreferences, type NotificationPreferences } from './notification.models';
 
 /** 24-hour `HH:mm`, which is the only shape the API accepts. */
 const localTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -303,16 +303,18 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
 
         const saved = await owner.wait(
           firstValueFrom(
-            this.api.updateNotificationPreferences({
-              emailServiceEnabled: value.emailServiceEnabled,
-              quietHoursEnabled: value.quietHoursEnabled,
-              // Leftover times are not part of a disabled window. Sending them would make two requests
-              // that both mean "off" into two different commands.
-              quietHoursStartLocal: value.quietHoursEnabled ? value.quietHoursStartLocal : null,
-              quietHoursEndLocal: value.quietHoursEnabled ? value.quietHoursEndLocal : null,
-              idempotencyKey: this.idempotencyKey,
-              version: current.version,
-            }),
+            this.api
+              .updateNotificationPreferences({
+                emailServiceEnabled: value.emailServiceEnabled,
+                quietHoursEnabled: value.quietHoursEnabled,
+                // Leftover times are not part of a disabled window. Sending them would make two requests
+                // that both mean "off" into two different commands.
+                quietHoursStartLocal: value.quietHoursEnabled ? value.quietHoursStartLocal : null,
+                quietHoursEndLocal: value.quietHoursEnabled ? value.quietHoursEndLocal : null,
+                idempotencyKey: this.idempotencyKey,
+                version: current.version,
+              })
+              .pipe(map(mapNotificationPreferences)),
           ),
         );
         if (this.contextGeneration !== generation) {
@@ -349,7 +351,11 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
       this.loading.set(true);
       this.error.set(null);
       try {
-        const loaded = await owner.wait(firstValueFrom(this.api.getNotificationPreferences()));
+        const loaded = await owner.wait(
+          firstValueFrom(
+            this.api.getNotificationPreferences().pipe(map(mapNotificationPreferences)),
+          ),
+        );
         if (this.contextGeneration !== generation) {
           return;
         }

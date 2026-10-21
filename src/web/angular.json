@@ -55,8 +55,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "520kB",
-                  "maximumError": "1MB"
+                  "maximumWarning": "510kB",
+                  "maximumError": "520kB"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -89,6 +89,17 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true,
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "public"
+                },
+                {
+                  "glob": "hero-lab.css",
+                  "input": "src/app/dev/hero-lab",
+                  "output": "/"
+                }
+              ],
               "fileReplacements": [
                 {
                   "replace": "src/app/dev/dev-routes.ts",

@@ -2,58 +2,6 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import type * as Phase3Contracts from './generated';
-import {
-  mapUpcomingTraining,
-  mapCoachWorkoutDetail,
-} from '../../features/training/training-read.models';
-import { mapRenewalStatus, type RenewalStatus } from '../../features/dashboard/renewal.models';
-import { mapTrainingWeek, type TrainingWeek } from '../../features/dashboard/today.models';
-import { mapNutritionDay, mapRecipePage } from '../../features/nutrition/nutrition.models';
-import {
-  mapDateCorrection,
-  mapHistory,
-  mapMeasurement,
-  mapMeasurementHistory,
-  mapMeasurements,
-  mapObservation,
-  mapProgress,
-  mapProgressPhoto,
-  mapProgressPhotos,
-} from '../../features/progress/progress.models';
-import type { ProgressPhotoPose } from '../../features/progress/progress.models';
-import { mapProgressDashboard } from '../../features/progress/progress-dashboard.models';
-import {
-  mapNotification,
-  mapNotificationPage,
-  mapNotificationPreferences,
-  mapUnreadCount,
-} from '../../features/notifications/notification.models';
-import type {
-  NotificationItem,
-  NotificationPage,
-  NotificationPreferences,
-} from '../../features/notifications/notification.models';
-import {
-  inboxFilterParam,
-  mapConversationDetail,
-  mapConversationPage,
-  mapMessage,
-  mapMessagePage,
-  mapMessagingUnreadCount,
-  mapReadState,
-  mapRealtimeAcknowledgement,
-  mapRealtimeEventPage,
-} from '../../features/messaging/messaging.models';
-import type {
-  ConversationDetail,
-  ConversationPage,
-  ConversationReadState,
-  InboxQuery,
-  Message,
-  MessagePage,
-  RealtimeAcknowledgement,
-  RealtimeEventPage,
-} from '../../features/messaging/messaging.models';
 import type {
   ClientCommercialOverview as ContractClientCommercialOverview,
   ClientEnrollmentView as ContractClientEnrollmentView,
@@ -98,6 +46,18 @@ import {
   ChangeEnrollmentStatusRequest,
 } from './api.models';
 
+/** The conversation list's filter and search, in the server's words (the Messages page has its own). */
+export interface ConversationListQuery {
+  readonly filter: Phase3Contracts.ConversationListFilter;
+  readonly search: string;
+}
+
+/**
+ * The calls the shell and the core stores make, and reads several features share. What this file
+ * imports is in every page's first download, so it imports nothing from a feature (audit WEB-5): a
+ * read whose answer only a feature shows returns the server's own type, and the feature maps it with
+ * its own models. A new call only one screen makes belongs in that feature's own API service.
+ */
 @Injectable({ providedIn: 'root' })
 export class ApiClient {
   private readonly http = inject(HttpClient);
@@ -329,17 +289,16 @@ export class ApiClient {
   }
 
   /** Whether the signed-in client's whole plan has run out, and when they last asked to renew. */
-  getOwnRenewalStatus(): Observable<RenewalStatus> {
-    return this.http
-      .get<Phase3Contracts.RenewalStatusView>('/api/client-renewal/me')
-      .pipe(map(mapRenewalStatus));
+  getOwnRenewalStatus(): Observable<Phase3Contracts.RenewalStatusView> {
+    return this.http.get<Phase3Contracts.RenewalStatusView>('/api/client-renewal/me');
   }
 
   /** Asks the client's coach to renew; asking again inside 7 days returns the first request. */
-  requestRenewal(): Observable<RenewalStatus> {
-    return this.http
-      .post<Phase3Contracts.RenewalStatusView>('/api/client-renewal/me/requests', null)
-      .pipe(map(mapRenewalStatus));
+  requestRenewal(): Observable<Phase3Contracts.RenewalStatusView> {
+    return this.http.post<Phase3Contracts.RenewalStatusView>(
+      '/api/client-renewal/me/requests',
+      null,
+    );
   }
 
   getClientCommercialOverview(clientId: string): Observable<ClientCommercialOverview> {
@@ -719,27 +678,21 @@ export class ApiClient {
     return this.http.get<Phase3Contracts.ClientTrainingDayResult>('/api/training/me/today');
   }
 
-  getMyTrainingWeek(): Observable<TrainingWeek> {
-    return this.http
-      .get<Phase3Contracts.ClientTrainingWeekView>('/api/training/me/week')
-      .pipe(map(mapTrainingWeek));
+  getMyTrainingWeek(): Observable<Phase3Contracts.ClientTrainingWeekView> {
+    return this.http.get<Phase3Contracts.ClientTrainingWeekView>('/api/training/me/week');
   }
 
   getMyUpcomingTraining(skip = 0) {
-    return this.http
-      .get<Phase3Contracts.ClientTrainingUpcomingView>('/api/training/me/upcoming', {
-        params: { skip },
-      })
-      .pipe(map(mapUpcomingTraining));
+    return this.http.get<Phase3Contracts.ClientTrainingUpcomingView>('/api/training/me/upcoming', {
+      params: { skip },
+    });
   }
 
   getCoachWorkoutDetail(clientId: string, workoutId: string, notesSkip = 0) {
-    return this.http
-      .get<Phase3Contracts.CoachWorkoutDetailResult>(
-        `/api/training/clients/${clientId}/workouts/${workoutId}`,
-        { params: { notesSkip } },
-      )
-      .pipe(map(mapCoachWorkoutDetail));
+    return this.http.get<Phase3Contracts.CoachWorkoutDetailResult>(
+      `/api/training/clients/${clientId}/workouts/${workoutId}`,
+      { params: { notesSkip } },
+    );
   }
 
   startMyWorkout(sessionId: string): Observable<Phase3Contracts.WorkoutExecutionView> {
@@ -791,23 +744,11 @@ export class ApiClient {
     );
   }
 
-  listRecipes(query = '', skip = 0, take = 100) {
-    return this.http
-      .get<Phase3Contracts.RecipePage>('/api/nutrition/recipes', { params: { query, skip, take } })
-      .pipe(map(mapRecipePage));
-  }
-
-  createRecipe(request: Phase3Contracts.CreateRecipeRequest) {
-    return this.http.post<Phase3Contracts.RecipeSummary>('/api/nutrition/recipes', request);
-  }
-
   /** The client's own day, or null when there is nothing for that date (audit AUTH-12). */
   getMyNutritionDay(localDate?: string) {
-    return this.http
-      .get<Phase3Contracts.ClientNutritionDayView | null>('/api/nutrition/me/day', {
-        params: localDate ? { localDate } : {},
-      })
-      .pipe(map((day) => (day === null ? null : mapNutritionDay(day))));
+    return this.http.get<Phase3Contracts.ClientNutritionDayView | null>('/api/nutrition/me/day', {
+      params: localDate ? { localDate } : {},
+    });
   }
 
   /** A recipe in the caller's own plan, as the plan copied it (R4.4d). */
@@ -818,36 +759,34 @@ export class ApiClient {
   }
 
   recordMyNutritionChoice(request: Phase3Contracts.RecordNutritionChoiceRequest) {
-    return this.http
-      .put<Phase3Contracts.ClientNutritionDayView>('/api/nutrition/me/choices', request)
-      .pipe(map(mapNutritionDay));
+    return this.http.put<Phase3Contracts.ClientNutritionDayView>(
+      '/api/nutrition/me/choices',
+      request,
+    );
   }
 
   addMyNutritionCustomFood(request: Phase3Contracts.AddNutritionCustomFoodRequest) {
-    return this.http
-      .post<Phase3Contracts.ClientNutritionDayView>('/api/nutrition/me/custom-foods', request)
-      .pipe(map(mapNutritionDay));
+    return this.http.post<Phase3Contracts.ClientNutritionDayView>(
+      '/api/nutrition/me/custom-foods',
+      request,
+    );
   }
 
   reverseMyNutritionCustomFood(
     foodId: string,
     request: Phase3Contracts.ReverseNutritionCustomFoodRequest,
   ) {
-    return this.http
-      .post<Phase3Contracts.ClientNutritionDayView>(
-        `/api/nutrition/me/custom-foods/${foodId}/reverse`,
-        request,
-      )
-      .pipe(map(mapNutritionDay));
+    return this.http.post<Phase3Contracts.ClientNutritionDayView>(
+      `/api/nutrition/me/custom-foods/${foodId}/reverse`,
+      request,
+    );
   }
 
   completeMyNutritionLog(logId: string, request: Phase3Contracts.CompleteNutritionLogRequest) {
-    return this.http
-      .post<Phase3Contracts.ClientNutritionDayView>(
-        `/api/nutrition/me/logs/${logId}/complete`,
-        request,
-      )
-      .pipe(map(mapNutritionDay));
+    return this.http.post<Phase3Contracts.ClientNutritionDayView>(
+      `/api/nutrition/me/logs/${logId}/complete`,
+      request,
+    );
   }
 
   getMyProgress(
@@ -855,11 +794,9 @@ export class ApiClient {
     from: string | null = null,
     to: string | null = null,
   ) {
-    return this.http
-      .get<Phase3Contracts.ProgressView>('/api/progress/me', {
-        params: { displayUnit, ...progressWindowParams(from, to) },
-      })
-      .pipe(map(mapProgress));
+    return this.http.get<Phase3Contracts.ProgressView>('/api/progress/me', {
+      params: { displayUnit, ...progressWindowParams(from, to) },
+    });
   }
 
   getMyBodyweightSpan() {
@@ -878,35 +815,30 @@ export class ApiClient {
     from: string | null = null,
     to: string | null = null,
   ) {
-    return this.http
-      .get<Phase3Contracts.ProgressView>(`/api/progress/clients/${clientId}`, {
-        params: { displayUnit, ...progressWindowParams(from, to) },
-      })
-      .pipe(map(mapProgress));
+    return this.http.get<Phase3Contracts.ProgressView>(`/api/progress/clients/${clientId}`, {
+      params: { displayUnit, ...progressWindowParams(from, to) },
+    });
   }
 
   recordMyBodyweight(request: Phase3Contracts.RecordBodyweightRequest) {
-    return this.http
-      .post<Phase3Contracts.BodyweightObservationView>('/api/progress/me/bodyweight', request)
-      .pipe(map(mapObservation));
+    return this.http.post<Phase3Contracts.BodyweightObservationView>(
+      '/api/progress/me/bodyweight',
+      request,
+    );
   }
 
   recordClientBodyweight(clientId: string, request: Phase3Contracts.RecordBodyweightRequest) {
-    return this.http
-      .post<Phase3Contracts.BodyweightObservationView>(
-        `/api/progress/clients/${clientId}/bodyweight`,
-        request,
-      )
-      .pipe(map(mapObservation));
+    return this.http.post<Phase3Contracts.BodyweightObservationView>(
+      `/api/progress/clients/${clientId}/bodyweight`,
+      request,
+    );
   }
 
   correctMyBodyweight(observationId: string, request: Phase3Contracts.CorrectBodyweightRequest) {
-    return this.http
-      .put<Phase3Contracts.BodyweightHistoryView>(
-        `/api/progress/me/bodyweight/${observationId}`,
-        request,
-      )
-      .pipe(map(mapHistory));
+    return this.http.put<Phase3Contracts.BodyweightHistoryView>(
+      `/api/progress/me/bodyweight/${observationId}`,
+      request,
+    );
   }
 
   correctClientBodyweight(
@@ -914,24 +846,20 @@ export class ApiClient {
     observationId: string,
     request: Phase3Contracts.CorrectBodyweightRequest,
   ) {
-    return this.http
-      .put<Phase3Contracts.BodyweightHistoryView>(
-        `/api/progress/clients/${clientId}/bodyweight/${observationId}`,
-        request,
-      )
-      .pipe(map(mapHistory));
+    return this.http.put<Phase3Contracts.BodyweightHistoryView>(
+      `/api/progress/clients/${clientId}/bodyweight/${observationId}`,
+      request,
+    );
   }
 
   replaceMyBodyweightDate(
     observationId: string,
     request: Phase3Contracts.ReplaceBodyweightDateRequest,
   ) {
-    return this.http
-      .post<Phase3Contracts.BodyweightDateCorrectionView>(
-        `/api/progress/me/bodyweight/${observationId}/replace-date`,
-        request,
-      )
-      .pipe(map(mapDateCorrection));
+    return this.http.post<Phase3Contracts.BodyweightDateCorrectionView>(
+      `/api/progress/me/bodyweight/${observationId}/replace-date`,
+      request,
+    );
   }
 
   replaceClientBodyweightDate(
@@ -939,28 +867,22 @@ export class ApiClient {
     observationId: string,
     request: Phase3Contracts.ReplaceBodyweightDateRequest,
   ) {
-    return this.http
-      .post<Phase3Contracts.BodyweightDateCorrectionView>(
-        `/api/progress/clients/${clientId}/bodyweight/${observationId}/replace-date`,
-        request,
-      )
-      .pipe(map(mapDateCorrection));
+    return this.http.post<Phase3Contracts.BodyweightDateCorrectionView>(
+      `/api/progress/clients/${clientId}/bodyweight/${observationId}/replace-date`,
+      request,
+    );
   }
 
   getMyBodyweightHistory(observationId: string) {
-    return this.http
-      .get<Phase3Contracts.BodyweightHistoryView>(
-        `/api/progress/me/bodyweight/${observationId}/history`,
-      )
-      .pipe(map(mapHistory));
+    return this.http.get<Phase3Contracts.BodyweightHistoryView>(
+      `/api/progress/me/bodyweight/${observationId}/history`,
+    );
   }
 
   getClientBodyweightHistory(clientId: string, observationId: string) {
-    return this.http
-      .get<Phase3Contracts.BodyweightHistoryView>(
-        `/api/progress/clients/${clientId}/bodyweight/${observationId}/history`,
-      )
-      .pipe(map(mapHistory));
+    return this.http.get<Phase3Contracts.BodyweightHistoryView>(
+      `/api/progress/clients/${clientId}/bodyweight/${observationId}/history`,
+    );
   }
 
   /** The unit is the client's saved one; left out, the server answers in kilograms. */
@@ -969,14 +891,12 @@ export class ApiClient {
     to: string | null = null,
     displayUnit: Phase3Contracts.RecordedMassUnit | null = null,
   ) {
-    return this.http
-      .get<Phase3Contracts.ProgressDashboardView>('/api/progress/me/dashboard', {
-        params: {
-          ...progressWindowParams(from, to),
-          ...(displayUnit === null ? {} : { displayUnit }),
-        },
-      })
-      .pipe(map(mapProgressDashboard));
+    return this.http.get<Phase3Contracts.ProgressDashboardView>('/api/progress/me/dashboard', {
+      params: {
+        ...progressWindowParams(from, to),
+        ...(displayUnit === null ? {} : { displayUnit }),
+      },
+    });
   }
 
   getClientProgressDashboard(
@@ -984,56 +904,61 @@ export class ApiClient {
     from: string | null = null,
     to: string | null = null,
   ) {
-    return this.http
-      .get<Phase3Contracts.ProgressDashboardView>(`/api/progress/clients/${clientId}/dashboard`, {
+    return this.http.get<Phase3Contracts.ProgressDashboardView>(
+      `/api/progress/clients/${clientId}/dashboard`,
+      {
         params: progressWindowParams(from, to),
-      })
-      .pipe(map(mapProgressDashboard));
+      },
+    );
   }
 
   getMyProgressPhotos(from: string | null = null, to: string | null = null) {
-    return this.http
-      .get<Phase3Contracts.ProgressPhotosView>('/api/progress/me/photos', {
-        params: progressWindowParams(from, to),
-      })
-      .pipe(map(mapProgressPhotos));
+    return this.http.get<Phase3Contracts.ProgressPhotosView>('/api/progress/me/photos', {
+      params: progressWindowParams(from, to),
+    });
   }
 
   getClientProgressPhotos(clientId: string, from: string | null = null, to: string | null = null) {
-    return this.http
-      .get<Phase3Contracts.ProgressPhotosView>(`/api/progress/clients/${clientId}/photos`, {
+    return this.http.get<Phase3Contracts.ProgressPhotosView>(
+      `/api/progress/clients/${clientId}/photos`,
+      {
         params: progressWindowParams(from, to),
-      })
-      .pipe(map(mapProgressPhotos));
+      },
+    );
   }
 
-  recordMyProgressPhoto(pose: ProgressPhotoPose, photoDate: string | null, file: File) {
-    return this.http
-      .post<Phase3Contracts.ProgressPhotoView>('/api/progress/me/photos', progressPhotoBody(file), {
+  recordMyProgressPhoto(
+    pose: Phase3Contracts.ProgressPhotoPose,
+    photoDate: string | null,
+    file: File,
+  ) {
+    return this.http.post<Phase3Contracts.ProgressPhotoView>(
+      '/api/progress/me/photos',
+      progressPhotoBody(file),
+      {
         params: progressPhotoParams(pose, photoDate),
-      })
-      .pipe(map(mapProgressPhoto));
+      },
+    );
   }
 
   recordClientProgressPhoto(
     clientId: string,
-    pose: ProgressPhotoPose,
+    pose: Phase3Contracts.ProgressPhotoPose,
     photoDate: string | null,
     file: File,
   ) {
-    return this.http
-      .post<Phase3Contracts.ProgressPhotoView>(
-        `/api/progress/clients/${clientId}/photos`,
-        progressPhotoBody(file),
-        { params: progressPhotoParams(pose, photoDate) },
-      )
-      .pipe(map(mapProgressPhoto));
+    return this.http.post<Phase3Contracts.ProgressPhotoView>(
+      `/api/progress/clients/${clientId}/photos`,
+      progressPhotoBody(file),
+      { params: progressPhotoParams(pose, photoDate) },
+    );
   }
 
   removeMyProgressPhoto(photoId: string, request: Phase3Contracts.RemoveProgressPhotoRequest) {
-    return this.http
-      .post<Phase3Contracts.ProgressPhotoView>(`/api/progress/me/photos/${photoId}/remove`, request)
-      .pipe(map(mapProgressPhoto));
+    return this.http.post<Phase3Contracts.ProgressPhotoView>(
+      `/api/progress/me/photos/${photoId}/remove`,
+      request,
+    );
   }
 
   /**
@@ -1054,12 +979,10 @@ export class ApiClient {
     photoId: string,
     request: Phase3Contracts.RemoveProgressPhotoRequest,
   ) {
-    return this.http
-      .post<Phase3Contracts.ProgressPhotoView>(
-        `/api/progress/clients/${clientId}/photos/${photoId}/remove`,
-        request,
-      )
-      .pipe(map(mapProgressPhoto));
+    return this.http.post<Phase3Contracts.ProgressPhotoView>(
+      `/api/progress/clients/${clientId}/photos/${photoId}/remove`,
+      request,
+    );
   }
 
   getMyBodyMeasurements(
@@ -1067,11 +990,9 @@ export class ApiClient {
     from: string | null = null,
     to: string | null = null,
   ) {
-    return this.http
-      .get<Phase3Contracts.BodyMeasurementsView>('/api/progress/me/measurements', {
-        params: { displayUnit, ...progressWindowParams(from, to) },
-      })
-      .pipe(map(mapMeasurements));
+    return this.http.get<Phase3Contracts.BodyMeasurementsView>('/api/progress/me/measurements', {
+      params: { displayUnit, ...progressWindowParams(from, to) },
+    });
   }
 
   getClientBodyMeasurements(
@@ -1080,41 +1001,39 @@ export class ApiClient {
     from: string | null = null,
     to: string | null = null,
   ) {
-    return this.http
-      .get<Phase3Contracts.BodyMeasurementsView>(`/api/progress/clients/${clientId}/measurements`, {
+    return this.http.get<Phase3Contracts.BodyMeasurementsView>(
+      `/api/progress/clients/${clientId}/measurements`,
+      {
         params: { displayUnit, ...progressWindowParams(from, to) },
-      })
-      .pipe(map(mapMeasurements));
+      },
+    );
   }
 
   recordMyBodyMeasurement(request: Phase3Contracts.RecordBodyMeasurementRequest) {
-    return this.http
-      .post<Phase3Contracts.BodyMeasurementView>('/api/progress/me/measurements', request)
-      .pipe(map(mapMeasurement));
+    return this.http.post<Phase3Contracts.BodyMeasurementView>(
+      '/api/progress/me/measurements',
+      request,
+    );
   }
 
   recordClientBodyMeasurement(
     clientId: string,
     request: Phase3Contracts.RecordBodyMeasurementRequest,
   ) {
-    return this.http
-      .post<Phase3Contracts.BodyMeasurementView>(
-        `/api/progress/clients/${clientId}/measurements`,
-        request,
-      )
-      .pipe(map(mapMeasurement));
+    return this.http.post<Phase3Contracts.BodyMeasurementView>(
+      `/api/progress/clients/${clientId}/measurements`,
+      request,
+    );
   }
 
   correctMyBodyMeasurement(
     measurementId: string,
     request: Phase3Contracts.CorrectBodyMeasurementRequest,
   ) {
-    return this.http
-      .put<Phase3Contracts.BodyMeasurementHistoryView>(
-        `/api/progress/me/measurements/${measurementId}`,
-        request,
-      )
-      .pipe(map(mapMeasurementHistory));
+    return this.http.put<Phase3Contracts.BodyMeasurementHistoryView>(
+      `/api/progress/me/measurements/${measurementId}`,
+      request,
+    );
   }
 
   correctClientBodyMeasurement(
@@ -1122,28 +1041,22 @@ export class ApiClient {
     measurementId: string,
     request: Phase3Contracts.CorrectBodyMeasurementRequest,
   ) {
-    return this.http
-      .put<Phase3Contracts.BodyMeasurementHistoryView>(
-        `/api/progress/clients/${clientId}/measurements/${measurementId}`,
-        request,
-      )
-      .pipe(map(mapMeasurementHistory));
+    return this.http.put<Phase3Contracts.BodyMeasurementHistoryView>(
+      `/api/progress/clients/${clientId}/measurements/${measurementId}`,
+      request,
+    );
   }
 
   getMyBodyMeasurementHistory(measurementId: string) {
-    return this.http
-      .get<Phase3Contracts.BodyMeasurementHistoryView>(
-        `/api/progress/me/measurements/${measurementId}/history`,
-      )
-      .pipe(map(mapMeasurementHistory));
+    return this.http.get<Phase3Contracts.BodyMeasurementHistoryView>(
+      `/api/progress/me/measurements/${measurementId}/history`,
+    );
   }
 
   getClientBodyMeasurementHistory(clientId: string, measurementId: string) {
-    return this.http
-      .get<Phase3Contracts.BodyMeasurementHistoryView>(
-        `/api/progress/clients/${clientId}/measurements/${measurementId}/history`,
-      )
-      .pipe(map(mapMeasurementHistory));
+    return this.http.get<Phase3Contracts.BodyMeasurementHistoryView>(
+      `/api/progress/clients/${clientId}/measurements/${measurementId}/history`,
+    );
   }
 
   /** A page of the reader's own inbox, newest first; `unreadOnly` leaves out what was read. */
@@ -1152,14 +1065,12 @@ export class ApiClient {
     take = 25,
     unreadOnly = false,
     beforeId?: string,
-  ): Observable<NotificationPage> {
+  ): Observable<Phase3Contracts.NotificationPage> {
     const params: Record<string, string | number | boolean> = unreadOnly
       ? { skip, take, unread: true }
       : { skip, take };
     if (beforeId) params['beforeId'] = beforeId;
-    return this.http
-      .get<Phase3Contracts.NotificationPage>('/api/notifications', { params })
-      .pipe(map(mapNotificationPage));
+    return this.http.get<Phase3Contracts.NotificationPage>('/api/notifications', { params });
   }
 
   /** Marks every unread notice of the reader's read, in this workspace; answers the unread left. */
@@ -1172,19 +1083,20 @@ export class ApiClient {
   getUnreadNotificationCount(): Observable<number> {
     return this.http
       .get<Phase3Contracts.NotificationUnreadCount>('/api/notifications/unread-count')
-      .pipe(map(mapUnreadCount));
+      .pipe(map((result) => Number(result.unread)));
   }
 
-  markNotificationRead(notificationId: string): Observable<NotificationItem> {
-    return this.http
-      .post<Phase3Contracts.NotificationView>(`/api/notifications/${notificationId}/read`, null)
-      .pipe(map(mapNotification));
+  markNotificationRead(notificationId: string): Observable<Phase3Contracts.NotificationView> {
+    return this.http.post<Phase3Contracts.NotificationView>(
+      `/api/notifications/${notificationId}/read`,
+      null,
+    );
   }
 
-  getNotificationPreferences(): Observable<NotificationPreferences> {
-    return this.http
-      .get<Phase3Contracts.NotificationPreferenceView>('/api/notifications/preferences')
-      .pipe(map(mapNotificationPreferences));
+  getNotificationPreferences(): Observable<Phase3Contracts.NotificationPreferenceView> {
+    return this.http.get<Phase3Contracts.NotificationPreferenceView>(
+      '/api/notifications/preferences',
+    );
   }
 
   /**
@@ -1193,18 +1105,19 @@ export class ApiClient {
    */
   updateNotificationPreferences(
     request: Phase3Contracts.UpdateNotificationPreferenceRequest,
-  ): Observable<NotificationPreferences> {
-    return this.http
-      .put<Phase3Contracts.NotificationPreferenceView>('/api/notifications/preferences', request)
-      .pipe(map(mapNotificationPreferences));
+  ): Observable<Phase3Contracts.NotificationPreferenceView> {
+    return this.http.put<Phase3Contracts.NotificationPreferenceView>(
+      '/api/notifications/preferences',
+      request,
+    );
   }
 
   listConversations(
     beforeActivityAtUtc?: string | null,
     beforeConversationId?: string | null,
     take = 25,
-    query?: InboxQuery,
-  ): Observable<ConversationPage> {
+    query?: ConversationListQuery,
+  ): Observable<Phase3Contracts.ConversationPage> {
     // Both halves of the keyset cursor or neither: the API refuses one without the other, because a
     // half cursor cannot identify a position.
     const params: Record<string, string | number> =
@@ -1212,51 +1125,48 @@ export class ApiClient {
         ? { beforeActivityAtUtc, beforeConversationId, take }
         : { take };
     // The plain list sends neither, so it pages straight from the index.
-    if (query && query.filter !== 'all') params['filter'] = inboxFilterParam(query.filter);
+    if (query && query.filter !== 'All') params['filter'] = query.filter;
     const search = query?.search.trim() ?? '';
     if (search !== '') params['search'] = search;
-    return this.http
-      .get<Phase3Contracts.ConversationPage>('/api/messaging/conversations', { params })
-      .pipe(map(mapConversationPage));
+    return this.http.get<Phase3Contracts.ConversationPage>('/api/messaging/conversations', {
+      params,
+    });
   }
 
   createDirectConversation(
     clientProfileId: string,
     idempotencyKey: string,
-  ): Observable<ConversationDetail> {
-    return this.http
-      .post<Phase3Contracts.ConversationDetail>('/api/messaging/conversations', {
-        clientProfileId,
-        idempotencyKey,
-      })
-      .pipe(map(mapConversationDetail));
+  ): Observable<Phase3Contracts.ConversationDetail> {
+    return this.http.post<Phase3Contracts.ConversationDetail>('/api/messaging/conversations', {
+      clientProfileId,
+      idempotencyKey,
+    });
   }
 
   listConversationMessages(
     conversationId: string,
     beforeSequence?: number | null,
     take = 50,
-  ): Observable<MessagePage> {
+  ): Observable<Phase3Contracts.MessagePage> {
     const params: Record<string, string | number> =
       beforeSequence === null || beforeSequence === undefined ? { take } : { beforeSequence, take };
-    return this.http
-      .get<Phase3Contracts.MessagePage>(`/api/messaging/conversations/${conversationId}/messages`, {
+    return this.http.get<Phase3Contracts.MessagePage>(
+      `/api/messaging/conversations/${conversationId}/messages`,
+      {
         params,
-      })
-      .pipe(map(mapMessagePage));
+      },
+    );
   }
 
   sendConversationMessage(
     conversationId: string,
     body: string,
     idempotencyKey: string,
-  ): Observable<Message> {
-    return this.http
-      .post<Phase3Contracts.MessageView>(
-        `/api/messaging/conversations/${conversationId}/messages`,
-        { body, idempotencyKey },
-      )
-      .pipe(map(mapMessage));
+  ): Observable<Phase3Contracts.MessageView> {
+    return this.http.post<Phase3Contracts.MessageView>(
+      `/api/messaging/conversations/${conversationId}/messages`,
+      { body, idempotencyKey },
+    );
   }
 
   editConversationMessage(
@@ -1265,13 +1175,11 @@ export class ApiClient {
     body: string,
     expectedVersion: number,
     idempotencyKey: string,
-  ): Observable<Message> {
-    return this.http
-      .post<Phase3Contracts.MessageView>(
-        `/api/messaging/conversations/${conversationId}/messages/${messageId}/edit`,
-        { body, expectedVersion, idempotencyKey },
-      )
-      .pipe(map(mapMessage));
+  ): Observable<Phase3Contracts.MessageView> {
+    return this.http.post<Phase3Contracts.MessageView>(
+      `/api/messaging/conversations/${conversationId}/messages/${messageId}/edit`,
+      { body, expectedVersion, idempotencyKey },
+    );
   }
 
   deleteConversationMessage(
@@ -1279,13 +1187,11 @@ export class ApiClient {
     messageId: string,
     expectedVersion: number,
     idempotencyKey: string,
-  ): Observable<Message> {
-    return this.http
-      .post<Phase3Contracts.MessageView>(
-        `/api/messaging/conversations/${conversationId}/messages/${messageId}/delete`,
-        { expectedVersion, idempotencyKey },
-      )
-      .pipe(map(mapMessage));
+  ): Observable<Phase3Contracts.MessageView> {
+    return this.http.post<Phase3Contracts.MessageView>(
+      `/api/messaging/conversations/${conversationId}/messages/${messageId}/delete`,
+      { expectedVersion, idempotencyKey },
+    );
   }
 
   moderateConversationMessage(
@@ -1294,31 +1200,27 @@ export class ApiClient {
     reason: string,
     expectedVersion: number,
     idempotencyKey: string,
-  ): Observable<Message> {
-    return this.http
-      .post<Phase3Contracts.MessageView>(
-        `/api/messaging/conversations/${conversationId}/messages/${messageId}/moderate`,
-        { reason, expectedVersion, idempotencyKey },
-      )
-      .pipe(map(mapMessage));
+  ): Observable<Phase3Contracts.MessageView> {
+    return this.http.post<Phase3Contracts.MessageView>(
+      `/api/messaging/conversations/${conversationId}/messages/${messageId}/moderate`,
+      { reason, expectedVersion, idempotencyKey },
+    );
   }
 
   advanceConversationReadCursor(
     conversationId: string,
     throughSequence: number,
-  ): Observable<ConversationReadState> {
-    return this.http
-      .post<Phase3Contracts.ConversationReadState>(
-        `/api/messaging/conversations/${conversationId}/read`,
-        { throughSequence },
-      )
-      .pipe(map(mapReadState));
+  ): Observable<Phase3Contracts.ConversationReadState> {
+    return this.http.post<Phase3Contracts.ConversationReadState>(
+      `/api/messaging/conversations/${conversationId}/read`,
+      { throughSequence },
+    );
   }
 
   getMessagingUnreadCount(): Observable<number> {
     return this.http
       .get<Phase3Contracts.MessagingUnreadCount>('/api/messaging/unread-count')
-      .pipe(map(mapMessagingUnreadCount));
+      .pipe(map((result) => Number(result.unread)));
   }
 
   /**
@@ -1332,13 +1234,11 @@ export class ApiClient {
     conversationId: string,
     afterEventSequence: number,
     take = 100,
-  ): Observable<RealtimeEventPage> {
-    return this.http
-      .get<Phase3Contracts.RealtimeEventPage>(
-        `/api/messaging/conversations/${conversationId}/realtime-events`,
-        { params: { afterEventSequence, take } },
-      )
-      .pipe(map(mapRealtimeEventPage));
+  ): Observable<Phase3Contracts.RealtimeEventPage> {
+    return this.http.get<Phase3Contracts.RealtimeEventPage>(
+      `/api/messaging/conversations/${conversationId}/realtime-events`,
+      { params: { afterEventSequence, take } },
+    );
   }
 
   /**
@@ -1351,13 +1251,11 @@ export class ApiClient {
   acknowledgeConversationRealtimeEvents(
     conversationId: string,
     eventSequences: readonly number[],
-  ): Observable<RealtimeAcknowledgement> {
-    return this.http
-      .post<Phase3Contracts.RealtimeAcknowledgementResult>(
-        `/api/messaging/conversations/${conversationId}/realtime-acknowledgements`,
-        { eventSequences },
-      )
-      .pipe(map(mapRealtimeAcknowledgement));
+  ): Observable<Phase3Contracts.RealtimeAcknowledgementResult> {
+    return this.http.post<Phase3Contracts.RealtimeAcknowledgementResult>(
+      `/api/messaging/conversations/${conversationId}/realtime-acknowledgements`,
+      { eventSequences },
+    );
   }
 
   listCheckInForms(skip = 0, take = 100): Observable<Phase3Contracts.CheckInFormPage> {
@@ -1663,7 +1561,7 @@ function progressPhotoBody(file: File): FormData {
 }
 
 function progressPhotoParams(
-  pose: ProgressPhotoPose,
+  pose: Phase3Contracts.ProgressPhotoPose,
   photoDate: string | null,
 ): Record<string, string> {
   return photoDate === null ? { pose } : { pose, photoDate };

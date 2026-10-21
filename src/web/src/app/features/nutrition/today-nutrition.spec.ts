@@ -12,7 +12,8 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { planRecipeView } from '../../../testing/client-recipe-fixtures';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
-import type { NutritionDay, NutritionSlot } from './nutrition.models';
+import type { ClientNutritionDayView } from '../../core/api/generated';
+import { mapNutritionDay, type NutritionDay, type NutritionSlot } from './nutrition.models';
 import { TodayNutrition } from './today-nutrition';
 
 function slot(overrides: Partial<NutritionSlot> = {}): NutritionSlot {
@@ -86,6 +87,56 @@ function afterSave(): NutritionDay {
   });
 }
 
+/** A day as the server sends it, which the page maps itself (audit WEB-5). */
+function served(view: NutritionDay): ClientNutritionDayView {
+  return {
+    planId: view.planId,
+    planDayId: view.planDayId,
+    date: view.date,
+    targetCalories: view.targetCalories,
+    targetProteinGrams: view.targetProtein,
+    targetCarbohydrateGrams: view.targetCarbohydrate,
+    targetFatGrams: view.targetFat,
+    dailyLogId: view.dailyLogId,
+    dailyLogVersion: view.logVersion,
+    logStatus: view.logStatus,
+    selectedCalories: view.selectedCalories,
+    selectedProteinGrams: view.selectedProtein,
+    selectedCarbohydrateGrams: view.selectedCarbohydrate,
+    selectedFatGrams: view.selectedFat,
+    slots: view.slots.map((item) => ({
+      id: item.id,
+      name: item.name,
+      order: item.order,
+      selectedChoiceId: item.selectedChoiceId,
+      actualServings: item.actualServings,
+      loggedCalories: item.loggedCalories,
+      choices: item.choices.map((choice) => ({
+        id: choice.id,
+        recipeName: choice.recipeName,
+        recipeId: choice.recipeId,
+        recipePhotoMediaAssetId: choice.photoId,
+        servings: choice.servings,
+        calories: choice.calories,
+        proteinGrams: choice.protein,
+        carbohydrateGrams: choice.carbohydrate,
+        fatGrams: choice.fat,
+      })),
+    })),
+    customFoods: view.customFoods.map((food) => ({
+      id: food.id,
+      name: food.name,
+      amount: food.amount,
+      unit: food.unit,
+      calories: food.calories,
+      proteinGrams: food.protein,
+      carbohydrateGrams: food.carbohydrate,
+      fatGrams: food.fat,
+    })),
+    safetyNotice: view.safetyNotice,
+  };
+}
+
 interface RenderOptions {
   readonly selectedTenantId?: WritableSignal<string | null>;
   readonly csrfRefresh?: () => Promise<void>;
@@ -105,33 +156,37 @@ async function render(
       {
         provide: ApiClient,
         useValue: {
-          getMyNutritionDay: vi.fn(() => of(today)),
-          recordMyNutritionChoice: vi.fn(() => of(afterSave())),
+          getMyNutritionDay: vi.fn(() => of(served(today))),
+          recordMyNutritionChoice: vi.fn(() => of(served(afterSave()))),
           addMyNutritionCustomFood: vi.fn(() =>
             of(
-              day({
-                selectedCalories: 80,
-                selectedCarbohydrate: 21,
-                logVersion: 3,
-                customFoods: [
-                  {
-                    id: 'extra-1',
-                    name: 'Apple',
-                    amount: 150,
-                    unit: 'Gram',
-                    calories: 80,
-                    protein: 0,
-                    carbohydrate: 21,
-                    fat: 0,
-                  },
-                ],
-              }),
+              served(
+                day({
+                  selectedCalories: 80,
+                  selectedCarbohydrate: 21,
+                  logVersion: 3,
+                  customFoods: [
+                    {
+                      id: 'extra-1',
+                      name: 'Apple',
+                      amount: 150,
+                      unit: 'Gram',
+                      calories: 80,
+                      protein: 0,
+                      carbohydrate: 21,
+                      fat: 0,
+                    },
+                  ],
+                }),
+              ),
             ),
           ),
           reverseMyNutritionCustomFood: vi.fn(() =>
-            of(day({ selectedCalories: 0, logVersion: 4, customFoods: [] })),
+            of(served(day({ selectedCalories: 0, logVersion: 4, customFoods: [] }))),
           ),
-          completeMyNutritionLog: vi.fn(() => of(day({ logStatus: 'Completed', logVersion: 4 }))),
+          completeMyNutritionLog: vi.fn(() =>
+            of(served(day({ logStatus: 'Completed', logVersion: 4 }))),
+          ),
           getMyPlanRecipe: vi.fn(() =>
             of(planRecipeView({ name: 'Oats and whey', photoMediaAssetId: null })),
           ),
@@ -188,6 +243,11 @@ describe('TodayNutrition', () => {
   afterEach(() => {
     document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
+  });
+
+  it('reads a day in the server’s shape into the page’s, the shape every mock here serves', () => {
+    expect(mapNutritionDay(served(day()))).toEqual(day());
+    expect(mapNutritionDay(served(afterSave()))).toEqual(afterSave());
   });
 
   it('opens a meal’s recipe in a sheet, from the card or from the option chosen while editing', async () => {
@@ -660,9 +720,9 @@ describe('TodayNutrition', () => {
   it('ignores a date-A save that resolves after date B is displayed', async () => {
     const dateA = dateDay('2026-08-25', 'a');
     const dateB = dateDay('2026-08-26', 'b');
-    const response = new Subject<NutritionDay>();
+    const response = new Subject<ClientNutritionDayView>();
     const record = vi.fn(() => response);
-    const getDay = vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA));
+    const getDay = vi.fn((selectedDate?: string) => of(served(selectedDate ? dateB : dateA)));
     const { component, fixture } = await render(
       { getMyNutritionDay: getDay, recordMyNutritionChoice: record as never },
       dateA,
@@ -671,7 +731,7 @@ describe('TodayNutrition', () => {
     const pending = beginSave(component);
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(1));
     await changeDate(component, fixture, dateB.date);
-    response.next(dateDay(dateA.date, 'a-saved'));
+    response.next(served(dateDay(dateA.date, 'a-saved')));
     response.complete();
     await pending;
 
@@ -683,11 +743,13 @@ describe('TodayNutrition', () => {
   it('ignores a date-A save rejection after date B is displayed', async () => {
     const dateA = dateDay('2026-08-25', 'a');
     const dateB = dateDay('2026-08-26', 'b');
-    const response = new Subject<NutritionDay>();
+    const response = new Subject<ClientNutritionDayView>();
     const record = vi.fn(() => response);
     const { component, fixture } = await render(
       {
-        getMyNutritionDay: vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA)),
+        getMyNutritionDay: vi.fn((selectedDate?: string) =>
+          of(served(selectedDate ? dateB : dateA)),
+        ),
         recordMyNutritionChoice: record as never,
       },
       dateA,
@@ -707,11 +769,13 @@ describe('TodayNutrition', () => {
   it('ignores a date-A completion that resolves after date B is displayed', async () => {
     const dateA = dateDay('2026-08-25', 'a');
     const dateB = dateDay('2026-08-26', 'b');
-    const response = new Subject<NutritionDay>();
+    const response = new Subject<ClientNutritionDayView>();
     const complete = vi.fn(() => response);
     const { component, fixture } = await render(
       {
-        getMyNutritionDay: vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA)),
+        getMyNutritionDay: vi.fn((selectedDate?: string) =>
+          of(served(selectedDate ? dateB : dateA)),
+        ),
         completeMyNutritionLog: complete as never,
       },
       dateA,
@@ -720,7 +784,7 @@ describe('TodayNutrition', () => {
     const pending = component['complete']();
     await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
     await changeDate(component, fixture, dateB.date);
-    response.next(dateDay(dateA.date, 'a-completed'));
+    response.next(served(dateDay(dateA.date, 'a-completed')));
     response.complete();
     await pending;
 
@@ -737,12 +801,12 @@ describe('TodayNutrition', () => {
     const originalA = dateDay('2026-08-25', 'a-original');
     const dateB = dateDay('2026-08-26', 'b');
     const currentA = dateDay('2026-08-25', 'a-current');
-    const record = vi.fn(() => of(dateDay(originalA.date, 'a-saved')));
+    const record = vi.fn(() => of(served(dateDay(originalA.date, 'a-saved'))));
     const getDay = vi
       .fn()
-      .mockReturnValueOnce(of(originalA))
-      .mockReturnValueOnce(of(dateB))
-      .mockReturnValueOnce(of(currentA));
+      .mockReturnValueOnce(of(served(originalA)))
+      .mockReturnValueOnce(of(served(dateB)))
+      .mockReturnValueOnce(of(served(currentA)));
     const { component, fixture } = await render(
       { getMyNutritionDay: getDay, recordMyNutritionChoice: record as never },
       originalA,
@@ -762,12 +826,14 @@ describe('TodayNutrition', () => {
   it('does not let stale cleanup alter the current date save or loading state', async () => {
     const dateA = dateDay('2026-08-25', 'a', 'slot-a');
     const dateB = dateDay('2026-08-26', 'b', 'slot-b');
-    const first = new Subject<NutritionDay>();
-    const second = new Subject<NutritionDay>();
+    const first = new Subject<ClientNutritionDayView>();
+    const second = new Subject<ClientNutritionDayView>();
     const record = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
     const { component, fixture } = await render(
       {
-        getMyNutritionDay: vi.fn((selectedDate?: string) => of(selectedDate ? dateB : dateA)),
+        getMyNutritionDay: vi.fn((selectedDate?: string) =>
+          of(served(selectedDate ? dateB : dateA)),
+        ),
         recordMyNutritionChoice: record as never,
       },
       dateA,
@@ -779,7 +845,7 @@ describe('TodayNutrition', () => {
     const currentSave = beginSave(component);
     await vi.waitFor(() => expect(record).toHaveBeenCalledTimes(2));
 
-    first.next(dateDay(dateA.date, 'a-saved', 'slot-a'));
+    first.next(served(dateDay(dateA.date, 'a-saved', 'slot-a')));
     first.complete();
     await oldSave;
 
@@ -787,14 +853,14 @@ describe('TodayNutrition', () => {
     expect(component['draft']('slot-b')?.saving).toBe(true);
     expect(component['loading']()).toBe(false);
 
-    second.next(dateDay(dateB.date, 'b-saved', 'slot-b'));
+    second.next(served(dateDay(dateB.date, 'b-saved', 'slot-b')));
     second.complete();
     await currentSave;
   });
 
   it('invalidates pending date operations during tenant reset', async () => {
     const dateA = dateDay('2026-08-25', 'a');
-    const response = new Subject<NutritionDay>();
+    const response = new Subject<ClientNutritionDayView>();
     const record = vi.fn(() => response);
     const selectedTenantId = signal<string | null>('tenant-1');
     const { component, fixture } = await render(
@@ -808,7 +874,7 @@ describe('TodayNutrition', () => {
     selectedTenantId.set(null);
     TestBed.inject(TenantContext).invalidate();
     fixture.detectChanges();
-    response.next(dateDay(dateA.date, 'a-saved'));
+    response.next(served(dateDay(dateA.date, 'a-saved')));
     response.complete();
     await pending;
 

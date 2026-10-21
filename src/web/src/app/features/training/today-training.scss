@@ -119,6 +119,13 @@ summary:focus-visible {
   inline-size: 100%;
   margin-block: 1rem;
 }
+// The arrow points the way the page reads: under right-to-left text it turns round (audit UIQ-23).
+.next-mark {
+  display: inline-block;
+}
+.next-mark:dir(rtl) {
+  transform: scaleX(-1);
+}
 .workout-picker,
 .unit-choice {
   display: block;

@@ -30,7 +30,6 @@ import {
 } from '../../../testing/checkin-review-fixtures';
 import { LEA_ID } from '../../../testing/coach-today-fixtures';
 import { press, settle, type } from '../../../testing/dom';
-import { mapProgressDashboard } from '../progress/progress-dashboard.models';
 import { ClientCheckInReview } from './client-checkin-review';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
@@ -84,7 +83,7 @@ async function render(options: Options = {}) {
     listClientCheckInAssignments: vi.fn(() => of(reviewList(current))),
     compareCheckInResponses: vi.fn(() => of(comparisonOf(current, earlier))),
     getCheckInFormVersion: vi.fn(() => of(earlier.version)),
-    getClientProgressDashboard: vi.fn(() => of(mapProgressDashboard(reviewDashboard()))),
+    getClientProgressDashboard: vi.fn(() => of(reviewDashboard())),
     createMediaAccessBatch: vi.fn((ids: readonly string[]) =>
       of({ items: ids.map((assetId) => ({ assetId })) }),
     ),
@@ -343,9 +342,7 @@ describe('a check-in under review', () => {
     it('says what will appear when there are no photos', async () => {
       const { host } = await render({
         api: {
-          getClientProgressDashboard: vi.fn(() =>
-            of(mapProgressDashboard(reviewDashboard({ photos: false }))),
-          ),
+          getClientProgressDashboard: vi.fn(() => of(reviewDashboard({ photos: false }))),
         },
       });
 

@@ -65,9 +65,10 @@ public sealed partial class WebsiteBoundaryTests
         var events = Block(nginx, "location = /stats/event {");
         Assert.Contains("https://plausible.io/api/event", events, StringComparison.Ordinal);
         Assert.Contains("X-Forwarded-For $proxy_add_x_forwarded_for", events, StringComparison.Ordinal);
-        // The policy that keeps every script and connection on this origin, exactly as before R6.2g.
+        // The policy that keeps every script and connection on this origin: as R6.2g left it, with the
+        // socket held to this host too since audit A13a (WEB-14), which 'self' covers.
         Assert.Contains(
-            "add_header Content-Security-Policy \"default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:\" always;",
+            "add_header Content-Security-Policy \"default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'\" always;",
             nginx,
             StringComparison.Ordinal,
             "The CSP changed; analytics must fit inside the same-origin policy, not loosen it.");
@@ -106,7 +107,8 @@ public sealed partial class WebsiteBoundaryTests
             var location = Block(nginx, $"location = {address} {{");
             Assert.Contains("try_files $tb_gym_document =404;", location, StringComparison.Ordinal, address);
             // Chosen afresh on every visit: a copy kept from before signing in must not be shown after.
-            Assert.Contains("expires -1;", location, StringComparison.Ordinal, address);
+            // The answer is a document, which the cache map sends with no-cache (the test below).
+            Assert.DoesNotContain("add_header", location, StringComparison.Ordinal, address);
         }
 
         // Another spelling of a pre-rendered page gets the shell; a missing file is a 404 carrying the shell.
@@ -123,6 +125,39 @@ public sealed partial class WebsiteBoundaryTests
             Assert.IsLessThan(nginx.IndexOf(missingFile, StringComparison.Ordinal), nginx.IndexOf(proxied, StringComparison.Ordinal), proxied);
         }
     }
+
+    /// <summary>
+    /// How long a browser keeps each answer (audit A13a, WEB-4): a document is asked for afresh, so a release
+    /// is seen at once and a copy kept from before signing in is never shown after, and a file named by its
+    /// content's hash is kept for a year. One map decides by the file that answers, and the server sends its
+    /// value beside the security headers, so no location may replace them with an add_header of its own.
+    /// </summary>
+    [TestMethod]
+    public void NginxSendsADocumentAfreshAndAHashedFileForAYear()
+    {
+        var nginx = ReadRepositoryFile("src", "web", "nginx.conf").Replace("\r\n", "\n");
+
+        var cache = Block(nginx, "map $uri $tb_gym_cache_control {");
+        StringAssert.Matches(cache, new Regex(@"default\s+"""";"));
+        StringAssert.Matches(
+            cache,
+            new Regex(Regex.Escape(@"""~\.html$""") + @"\s+" + Regex.Escape(@"""no-cache"";")));
+        StringAssert.Matches(
+            cache,
+            new Regex(
+                Regex.Escape(@"""~^/(chunk|main|polyfills|styles)-[A-Za-z0-9_-]{8,}\.(js|css)$""") + @"\s+" +
+                Regex.Escape(@"""public, max-age=31536000, immutable"";")));
+        Assert.Contains("add_header Cache-Control $tb_gym_cache_control always;", nginx, StringComparison.Ordinal);
+        Assert.DoesNotContain("expires ", nginx, StringComparison.Ordinal, "A second Cache-Control would come from expires.");
+        foreach (Match location in LocationOpener().Matches(nginx))
+        {
+            var opener = location.Value.Trim();
+            Assert.DoesNotContain("add_header", Block(nginx, opener), StringComparison.Ordinal, opener);
+        }
+    }
+
+    [GeneratedRegex(@"^\s*location [^\n]*\{$", RegexOptions.Multiline)]
+    private static partial Regex LocationOpener();
 
     /// <summary>The text from a line that starts a brace block to its closing brace at the same indent.</summary>
     private static string Block(string text, string opener)

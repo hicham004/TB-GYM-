@@ -13,7 +13,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { firstValueFrom, type Observable } from 'rxjs';
+import { firstValueFrom, map, type Observable } from 'rxjs';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import type { CheckInAssignmentListView } from '../../core/api/generated';
@@ -21,7 +21,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Icon } from '../../ui/icon';
-import type { NutritionDay } from '../nutrition/nutrition.models';
+import { mapNutritionDay, type NutritionDay } from '../nutrition/nutrition.models';
 import { checkInRow, nutritionRow, type ReadState, rowAccessLabel } from './today.models';
 
 type Row = 'nutrition' | 'checkIns';
@@ -131,7 +131,13 @@ export class TodayAlso {
 
   private load(row: Row): Promise<void> {
     return row === 'nutrition'
-      ? this.read('nutrition', this.api.getMyNutritionDay(), this.nutritionRead)
+      ? this.read(
+          'nutrition',
+          this.api
+            .getMyNutritionDay()
+            .pipe(map((day) => (day === null ? null : mapNutritionDay(day)))),
+          this.nutritionRead,
+        )
       : this.read('checkIns', this.api.listOwnCheckInAssignments(0, 50), this.checkInRead);
   }
 

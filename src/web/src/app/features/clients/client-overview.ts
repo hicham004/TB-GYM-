@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { featureAccessReason } from '../../core/api/api-error';
 import type {
@@ -29,7 +29,10 @@ import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
 import { Sparkline } from '../../ui/sparkline';
 import { StatusPill } from '../../ui/status-pill';
-import type { ProgressDashboard } from '../progress/progress-dashboard.models';
+import {
+  mapProgressDashboard,
+  type ProgressDashboard,
+} from '../progress/progress-dashboard.models';
 import { addDays, daysBetween, weekContaining } from './client-overview.models';
 import {
   checkInCard,
@@ -257,11 +260,13 @@ export class ClientOverview {
       // One window serves both: its last seven days are exactly this week, and the weeks before it
       // carry the weight line.
       return firstValueFrom(
-        this.api.getClientProgressDashboard(
-          this.context.clientId(),
-          addDays(week.start, -7 * (WEIGHT_WEEKS - 1)),
-          week.endExclusive,
-        ),
+        this.api
+          .getClientProgressDashboard(
+            this.context.clientId(),
+            addDays(week.start, -7 * (WEIGHT_WEEKS - 1)),
+            week.endExclusive,
+          )
+          .pipe(map(mapProgressDashboard)),
       );
     });
   }

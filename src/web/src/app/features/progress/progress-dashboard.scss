@@ -168,6 +168,11 @@ summary:focus-visible {
 .delta.up {
   background: var(--tb-warm, #f2b994);
 }
+// "No change" points the way the page reads: under right-to-left text it turns round (audit UIQ-23).
+.delta-mark.level:dir(rtl) {
+  display: inline-block;
+  transform: scaleX(-1);
+}
 app-trend-chart {
   display: block;
   margin-block-start: 1.2rem;

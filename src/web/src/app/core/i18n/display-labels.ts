@@ -1,4 +1,4 @@
-import { ClientOnboardingStatus, InvitationStatus, TenantRole } from '../api/api.models';
+import { ClientOnboardingStatus, InvitationStatus } from '../api/api.models';
 import type {
   ExerciseClassification,
   ExerciseEquipment,
@@ -15,19 +15,6 @@ import type {
   TrainingSetType,
   WorkoutExecutionStatus,
 } from '../api/generated';
-
-export function tenantRoleLabel(role: TenantRole | undefined): string {
-  switch (role) {
-    case 'Owner':
-      return $localize`Owner`;
-    case 'Coach':
-      return $localize`Coach`;
-    case 'Client':
-      return $localize`Client`;
-    default:
-      return '';
-  }
-}
 
 export function onboardingStatusLabel(status: ClientOnboardingStatus): string {
   switch (status) {

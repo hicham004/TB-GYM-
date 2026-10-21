@@ -1,7 +1,9 @@
 @if (shell() === 'coach') {
   <!-- Owners and coaches: sidebar and top bar from the design system, placed on this component's
        grid beside the one <main> below. Workspace and sign-out requests come back here, so both
-       shells share one switching path and one sign-out sequence. -->
+       shells share one switching path and one sign-out sequence. The skip link comes first, so a
+       keyboard reaches the page without walking the sidebar and the top bar (audit WEB-13). -->
+  <a class="skip-link" href="#main-content" (click)="skipToContent($event)" i18n>Skip to content</a>
   <app-coach-shell (workspaceSelected)="switchWorkspace($event)" (signOut)="logout()" />
 } @else if (shell() === 'client') {
   <!-- Clients have no top bar: Today's header holds Notifications and Me, and the Me page holds
@@ -57,7 +59,7 @@
   #main
   id="main-content"
   [attr.data-mode]="contentMode()"
-  [attr.tabindex]="shell() === 'client' ? -1 : null"
+  [attr.tabindex]="shell() === 'client' || shell() === 'coach' ? -1 : null"
   [class.app-main]="shell() === 'member' || shell() === 'client'"
   [class.client-main]="shell() === 'client'"
   [class.full-screen]="shell() === 'client' && fullScreen()"

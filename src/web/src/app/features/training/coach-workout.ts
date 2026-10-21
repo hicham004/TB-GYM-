@@ -23,6 +23,7 @@ import { firstValueFrom } from 'rxjs';
 import type { ClientSetView, WorkoutNoteView } from '../../core/api/generated';
 import {
   coachWorkoutAccessLabel,
+  mapCoachWorkoutDetail,
   setActualText,
   setTargetText,
   workoutNoteTime,
@@ -99,9 +100,11 @@ export class CoachWorkout {
       this.loading.set(true);
       this.error.set(null);
       try {
-        const result = await owner.wait(
-          firstValueFrom(
-            this.api.getCoachWorkoutDetail(this.clientId(), this.workoutId(), notesSkip),
+        const result = mapCoachWorkoutDetail(
+          await owner.wait(
+            firstValueFrom(
+              this.api.getCoachWorkoutDetail(this.clientId(), this.workoutId(), notesSkip),
+            ),
           ),
         );
         if (generation !== this.generation) return;

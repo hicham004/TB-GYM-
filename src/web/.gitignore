@@ -41,6 +41,7 @@ __screenshots__/
 # Playwright output (screenshot baselines under e2e/ are tracked)
 /test-results
 /test-results-private
+/test-results-edge
 /playwright-report
 /blob-report
 # The production build the `built` Playwright project serves (scripts/serve-built.mjs)

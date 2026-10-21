@@ -22,7 +22,11 @@ import { Button } from '../../ui/button';
 import { addDays } from '../../ui/calendar';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
-import type { ProgressPhoto, ProgressPhotoPose } from '../progress/progress.models';
+import {
+  mapProgressPhotos,
+  type ProgressPhoto,
+  type ProgressPhotoPose,
+} from '../progress/progress.models';
 import {
   firstAndLatest,
   fitsPair,
@@ -242,12 +246,16 @@ export class BeforeAfterSheet {
    * two days to compare. A year with none is skipped: the server says where the earlier ones are.
    */
   private async read(owner: { wait<T>(pending: T | PromiseLike<T>): Promise<T> }): Promise<void> {
-    let window = await owner.wait(firstValueFrom(this.api.getMyProgressPhotos()));
+    let window = mapProgressPhotos(
+      await owner.wait(firstValueFrom(this.api.getMyProgressPhotos())),
+    );
     const photos = [...window.photos];
     for (let reads = 1; window.earlierDate && reads < MOST_WINDOWS; reads++) {
       const to = addDays(window.earlierDate, 1);
-      window = await owner.wait(
-        firstValueFrom(this.api.getMyProgressPhotos(addDays(to, -WINDOW_DAYS), to)),
+      window = mapProgressPhotos(
+        await owner.wait(
+          firstValueFrom(this.api.getMyProgressPhotos(addDays(to, -WINDOW_DAYS), to)),
+        ),
       );
       photos.push(...window.photos);
     }

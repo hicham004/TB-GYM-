@@ -8,6 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { preloadHomeFaces } from './home-faces';
 import { HomeFinale } from './home-finale';
 import { HomeHeader, type HeaderTone, type HomeSection } from './home-header';
 import { HomeHero } from './home-hero';
@@ -56,6 +57,7 @@ export class Home {
   protected readonly live = signal(false);
 
   constructor() {
+    preloadHomeFaces();
     this.destroyRef.onDestroy(() => this.motion.stop());
     afterNextRender(() => {
       this.live.set(true);

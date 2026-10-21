@@ -17,7 +17,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import type { FeatureAccessReason } from '../../core/api/generated';
@@ -55,9 +55,14 @@ import { insertReply } from './saved-replies.models';
 import {
   INBOX_FILTERS,
   isNewerProjection,
+  mapConversationPage,
+  mapMessage,
+  mapMessagePage,
+  mapReadState,
   mergeNewer,
   mergeOlder,
   reconcileOpenConversation,
+  serverInboxQuery,
   type Conversation,
   type ConversationReadState,
   type InboxCounts,
@@ -731,12 +736,14 @@ export class Messages {
       try {
         const page = await owner.wait(
           firstValueFrom(
-            this.api.listConversations(
-              this.nextActivityCursor(),
-              this.nextIdCursor(),
-              conversationPageSize,
-              this.query(),
-            ),
+            this.api
+              .listConversations(
+                this.nextActivityCursor(),
+                this.nextIdCursor(),
+                conversationPageSize,
+                serverInboxQuery(this.query()),
+              )
+              .pipe(map(mapConversationPage)),
           ),
         );
         if (!this.ownsList(generation, request)) {
@@ -827,7 +834,9 @@ export class Messages {
       try {
         const page = await owner.wait(
           firstValueFrom(
-            this.api.listConversationMessages(conversationId, cursor, messagePageSize),
+            this.api
+              .listConversationMessages(conversationId, cursor, messagePageSize)
+              .pipe(map(mapMessagePage)),
           ),
         );
         if (!this.ownsThread(generation, thread, request)) {
@@ -889,7 +898,11 @@ export class Messages {
         }
 
         const sent = await owner.wait(
-          firstValueFrom(this.api.sendConversationMessage(conversationId, body, idempotencyKey)),
+          firstValueFrom(
+            this.api
+              .sendConversationMessage(conversationId, body, idempotencyKey)
+              .pipe(map(mapMessage)),
+          ),
         );
         if (!this.owns(generation, thread)) {
           return;
@@ -978,13 +991,9 @@ export class Messages {
           (current) => !current.isDeleted && current.revisionNumber === message.revisionNumber,
           (version) =>
             firstValueFrom(
-              this.api.editConversationMessage(
-                conversationId,
-                message.id,
-                body,
-                version,
-                idempotencyKey,
-              ),
+              this.api
+                .editConversationMessage(conversationId, message.id, body, version, idempotencyKey)
+                .pipe(map(mapMessage)),
             ),
         );
         if (!this.owns(generation, thread)) {
@@ -1058,12 +1067,9 @@ export class Messages {
           (current) => !current.isDeleted,
           (version) =>
             firstValueFrom(
-              this.api.deleteConversationMessage(
-                conversationId,
-                message.id,
-                version,
-                idempotencyKey,
-              ),
+              this.api
+                .deleteConversationMessage(conversationId, message.id, version, idempotencyKey)
+                .pipe(map(mapMessage)),
             ),
         );
         if (!this.owns(generation, thread)) {
@@ -1160,13 +1166,15 @@ export class Messages {
           (current) => !current.isDeleted && current.revisionNumber === message.revisionNumber,
           (version) =>
             firstValueFrom(
-              this.api.moderateConversationMessage(
-                conversationId,
-                message.id,
-                reason,
-                version,
-                idempotencyKey,
-              ),
+              this.api
+                .moderateConversationMessage(
+                  conversationId,
+                  message.id,
+                  reason,
+                  version,
+                  idempotencyKey,
+                )
+                .pipe(map(mapMessage)),
             ),
         );
         if (!this.owns(generation, thread)) {
@@ -1230,7 +1238,11 @@ export class Messages {
     }
 
     const page = await owner.wait(
-      firstValueFrom(this.api.listConversationMessages(conversationId, message.sequence + 1, 1)),
+      firstValueFrom(
+        this.api
+          .listConversationMessages(conversationId, message.sequence + 1, 1)
+          .pipe(map(mapMessagePage)),
+      ),
     );
     const current = page.items.find((item) => item.id === message.id) ?? null;
     if (!owns()) {
@@ -1330,7 +1342,9 @@ export class Messages {
       try {
         const page = await owner.wait(
           firstValueFrom(
-            this.api.listConversations(null, null, conversationPageSize, this.query()),
+            this.api
+              .listConversations(null, null, conversationPageSize, serverInboxQuery(this.query()))
+              .pipe(map(mapConversationPage)),
           ),
         );
         if (!this.ownsList(generation, request)) {
@@ -1409,7 +1423,11 @@ export class Messages {
       this.deniedReason.set(null);
       try {
         const page = await owner.wait(
-          firstValueFrom(this.api.listConversationMessages(conversationId, null, messagePageSize)),
+          firstValueFrom(
+            this.api
+              .listConversationMessages(conversationId, null, messagePageSize)
+              .pipe(map(mapMessagePage)),
+          ),
         );
         if (!this.ownsThread(generation, thread, request)) {
           return;
@@ -1498,7 +1516,9 @@ export class Messages {
         }
 
         const readState = await owner.wait(
-          firstValueFrom(this.api.advanceConversationReadCursor(conversationId, through)),
+          firstValueFrom(
+            this.api.advanceConversationReadCursor(conversationId, through).pipe(map(mapReadState)),
+          ),
         );
         if (!this.owns(generation, thread)) {
           return;

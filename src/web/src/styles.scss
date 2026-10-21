@@ -35,12 +35,19 @@
   font-weight: 600;
   font-display: swap;
 }
+// Without a range the browser fetches the 72 kB Arabic file for any character the Latin face lacks, an
+// emoji in a message among them (audit UIQ-7). The range is what the file holds (Arabic, and the Latin,
+// punctuation and symbols an Arabic line uses, so its spaces and digits come from the same face) less
+// the blocks where emoji live: pictographs, symbols and dingbats, ‼, ⁉, ℹ and the keycap mark.
 @font-face {
   font-family: 'Notebook Plex Arabic';
   src: url('/fonts/ibm-plex/IBMPlexSansArabic-Regular.woff2') format('woff2');
   font-style: normal;
   font-weight: 400;
   font-display: swap;
+  unicode-range:
+    U+0000-036F, U+0600-06FF, U+0750-077F, U+0870-08FF, U+2000-203B, U+203D-2048, U+204A-20CF,
+    U+2100-2138, U+213A-21FF, U+2200-22FF, U+25CA, U+25CC, U+FB00-FB06, U+FB50-FDFF, U+FE70-FEFF;
 }
 @font-face {
   font-family: 'Notebook Plex Arabic';
@@ -48,6 +55,9 @@
   font-style: normal;
   font-weight: 600;
   font-display: swap;
+  unicode-range:
+    U+0000-036F, U+0600-06FF, U+0750-077F, U+0870-08FF, U+2000-203B, U+203D-2048, U+204A-20CF,
+    U+2100-2138, U+213A-21FF, U+2200-22FF, U+25CA, U+25CC, U+FB00-FB06, U+FB50-FDFF, U+FE70-FEFF;
 }
 app-client-today,
 app-today-training,

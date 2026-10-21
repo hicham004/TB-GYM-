@@ -1,11 +1,14 @@
 import { TenantAsyncScope } from '../tenancy/tenant-async-scope';
 import { computed, DestroyRef, effect, inject, Injectable, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { AuthStore } from '../auth/auth.store';
 import { CsrfService } from '../security/csrf.service';
 import { TenantStore } from '../tenancy/tenant.store';
-import type { NotificationItem } from '../../features/notifications/notification.models';
+import {
+  mapNotification,
+  type NotificationItem,
+} from '../../features/notifications/notification.models';
 
 /**
  * The unread badge in the topbar, and the single place the count is owned.
@@ -109,7 +112,7 @@ export class NotificationStore {
       async (owner) => {
         await owner.wait(this.csrf.refresh());
         const updated = await owner.wait(
-          firstValueFrom(this.api.markNotificationRead(notificationId)),
+          firstValueFrom(this.api.markNotificationRead(notificationId).pipe(map(mapNotification))),
         );
         this.decrement();
         return updated;

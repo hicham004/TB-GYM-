@@ -8,14 +8,16 @@ import {
   InjectionToken,
   signal,
 } from '@angular/core';
-import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api/api-client';
 import { AuthStore } from '../auth/auth.store';
 import { CsrfService } from '../security/csrf.service';
 import { TenantStore } from '../tenancy/tenant.store';
 import { TenantContext } from '../tenancy/tenant-context';
-import type { RealtimeEvent } from '../../features/messaging/messaging.models';
+import {
+  mapRealtimeEventPage,
+  type RealtimeEvent,
+} from '../../features/messaging/messaging.models';
 
 /**
  * The part of a hub connection this service uses.
@@ -39,12 +41,20 @@ export interface MessagingHubConnection {
 /**
  * Builds a connection. `nextRetryDelay` is the reconnect policy: asked with the number of reconnect
  * attempts that have failed so far, it answers how long to wait before the next one. It is the
- * service's, so the service knows when a reconnect has been failing long enough to say so.
+ * service's, so the service knows when a reconnect has been failing long enough to say so. The
+ * answer may arrive later (the real client is fetched on first use); a factory that cannot build
+ * one rejects, and the service retries as it does a failed start.
  */
 export type MessagingHubConnectionFactory = (
   url: string,
   nextRetryDelay: (previousRetryCount: number) => number,
-) => MessagingHubConnection;
+) => MessagingHubConnection | Promise<MessagingHubConnection>;
+
+/**
+ * `HubConnectionState.Connected`, spelled out: the enum lives in the client library, which this file
+ * must not import at start-up (audit WEB-5).
+ */
+const hubConnected = 'Connected';
 
 /**
  * How a hub connection is built.
@@ -53,24 +63,32 @@ export type MessagingHubConnectionFactory = (
  * relative same-origin URL, the HTTP-only cookie the browser already holds, a logging level that
  * cannot record payload content, and automatic reconnect on the service's bounded, jittered policy.
  * The policy never gives up, so the connection is never closed for good while the reader waits.
+ *
+ * The library is fetched the first time a signed-in member connects, never with the first page:
+ * the pre-rendered homepage and sign-in, and every first paint, do without its 50 kB (audit WEB-5).
  */
 export const MESSAGING_HUB_CONNECTION = new InjectionToken<MessagingHubConnectionFactory>(
   'messaging hub connection factory',
   {
     providedIn: 'root',
-    factory: () => (url: string, nextRetryDelay: (previousRetryCount: number) => number) =>
-      new HubConnectionBuilder()
-        // A relative, same-origin URL with the session cookie the browser already holds. There is no
-        // access token: the cookie is HTTP-only for a reason, and an accessTokenFactory would mean
-        // holding a credential in JavaScript that the existing session deliberately does not expose.
-        .withUrl(url, { withCredentials: true })
-        // Warnings and errors only. Information level logs every invocation and every frame, which
-        // for this hub means message projections in the browser console.
-        .configureLogging(LogLevel.Warning)
-        .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (context) => nextRetryDelay(context.previousRetryCount),
-        })
-        .build(),
+    factory: () => async (url: string, nextRetryDelay: (previousRetryCount: number) => number) => {
+      const { HubConnectionBuilder, LogLevel } = await import('@microsoft/signalr');
+      return (
+        new HubConnectionBuilder()
+          // A relative, same-origin URL with the session cookie the browser already holds. There
+          // is no access token: the cookie is HTTP-only for a reason, and an accessTokenFactory
+          // would mean holding a credential in JavaScript that the session deliberately does not
+          // expose.
+          .withUrl(url, { withCredentials: true })
+          // Warnings and errors only. Information level logs every invocation and every frame,
+          // which for this hub means message projections in the browser console.
+          .configureLogging(LogLevel.Warning)
+          .withAutomaticReconnect({
+            nextRetryDelayInMilliseconds: (context) => nextRetryDelay(context.previousRetryCount),
+          })
+          .build()
+      );
+    },
   },
 );
 
@@ -280,13 +298,44 @@ export class MessagingRealtimeService {
       return;
     }
 
-    // The workspace travels in the query string because a browser cannot put a custom header on a
-    // WebSocket. It is routing input, not authorization: the server verifies membership from
-    // PostgreSQL before the connection is usable and binds the workspace to it thereafter.
-    const connection = this.connectionFactory(
-      `/hubs/chat?tenantId=${encodeURIComponent(tenantId)}`,
-      (previousRetryCount) => this.reconnectDelay(context, previousRetryCount),
-    );
+    this.startAttempt = 0;
+    await this.open(context, tenantId);
+  }
+
+  /**
+   * Builds the connection, which fetches the client library the first time, and starts it. A build
+   * that fails (the library could not be fetched: no network, or a release renamed its file) is
+   * retried on the initial start's policy, and a connection built for a workspace the user has left
+   * meanwhile is dropped unopened.
+   */
+  private async open(context: number, tenantId: string): Promise<void> {
+    if (!this.ownsContext(context)) {
+      return;
+    }
+
+    this.connectionState.set('connecting');
+    let connection: MessagingHubConnection;
+    try {
+      // The workspace travels in the query string because a browser cannot put a custom header on a
+      // WebSocket. It is routing input, not authorization: the server verifies membership from
+      // PostgreSQL before the connection is usable and binds the workspace to it thereafter.
+      connection = await this.connectionFactory(
+        `/hubs/chat?tenantId=${encodeURIComponent(tenantId)}`,
+        (previousRetryCount) => this.reconnectDelay(context, previousRetryCount),
+      );
+    } catch {
+      if (this.ownsContext(context)) {
+        this.connectionState.set('offline');
+        this.scheduleStart(() => void this.open(context, tenantId));
+      }
+
+      return;
+    }
+
+    if (!this.ownsContext(context)) {
+      // Never started, so there is nothing to stop.
+      return;
+    }
 
     connection.on('RealtimeEvent', (event: unknown) => this.onRealtimeEvent(context, event));
     connection.on('ConversationChanged', (invalidation: unknown) =>
@@ -308,7 +357,6 @@ export class MessagingRealtimeService {
     });
 
     this.connection = connection;
-    this.startAttempt = 0;
     await this.start(context);
   }
 
@@ -351,17 +399,22 @@ export class MessagingRealtimeService {
       }
 
       this.connectionState.set('offline');
-      const delay = jitteredDelay(
-        this.startAttempt++,
-        initialStartBaseDelayMs,
-        initialStartMaximumDelayMs,
-      );
-      this.clearStartTimer();
-      this.startTimer = setTimeout(() => {
-        this.startTimer = null;
-        void this.start(context);
-      }, delay);
+      this.scheduleStart(() => void this.start(context));
     }
+  }
+
+  /** The next try at building or starting the connection, after the initial start's backoff. */
+  private scheduleStart(retry: () => void): void {
+    const delay = jitteredDelay(
+      this.startAttempt++,
+      initialStartBaseDelayMs,
+      initialStartMaximumDelayMs,
+    );
+    this.clearStartTimer();
+    this.startTimer = setTimeout(() => {
+      this.startTimer = null;
+      retry();
+    }, delay);
   }
 
   /**
@@ -391,10 +444,7 @@ export class MessagingRealtimeService {
 
   /** Back online with the socket still up: nothing was missed that the live channel will not say. */
   private onBrowserOnline(): void {
-    if (
-      this.connectionState() === 'offline' &&
-      this.connection?.state === HubConnectionState.Connected
-    ) {
+    if (this.connectionState() === 'offline' && this.connection?.state === hubConnected) {
       this.connectionState.set('connected');
     }
   }
@@ -460,12 +510,13 @@ export class MessagingRealtimeService {
       return;
     }
 
-    if (!joined) {
+    // While the connection is still being built or started it goes on saying so: `start` joins and
+    // catches up once the socket is up, or says offline if it cannot. The reader is not told they are
+    // offline for the moment a first page takes to fetch the client library.
+    if (!joined && this.connectionState() !== 'connecting') {
       // The socket is not up, or the server refused. Catch-up still runs: the REST read is
       // authorized on its own terms and is the thing that actually keeps the thread correct.
-      this.connectionState.set(
-        this.connection?.state === HubConnectionState.Connected ? 'connected' : 'offline',
-      );
+      this.connectionState.set(this.connection?.state === hubConnected ? 'connected' : 'offline');
     }
 
     await this.catchUp(conversationId, context, conversation);
@@ -473,7 +524,7 @@ export class MessagingRealtimeService {
 
   private async subscribe(conversationId: string): Promise<boolean> {
     const connection = this.connection;
-    if (connection === null || connection.state !== HubConnectionState.Connected) {
+    if (connection === null || connection.state !== hubConnected) {
       return false;
     }
 
@@ -501,11 +552,7 @@ export class MessagingRealtimeService {
     this.acknowledgementAttempt = 0;
 
     const connection = this.connection;
-    if (
-      conversationId === null ||
-      connection === null ||
-      connection.state !== HubConnectionState.Connected
-    ) {
+    if (conversationId === null || connection === null || connection.state !== hubConnected) {
       return;
     }
 
@@ -543,11 +590,13 @@ export class MessagingRealtimeService {
     let continueAfterBound = false;
     try {
       for (let page = 0; page < maximumCatchUpPages; page++) {
-        const result = await firstValueFrom(
-          this.api.listConversationRealtimeEvents(
-            conversationId,
-            this.contiguousCursor,
-            catchUpPageSize,
+        const result = mapRealtimeEventPage(
+          await firstValueFrom(
+            this.api.listConversationRealtimeEvents(
+              conversationId,
+              this.contiguousCursor,
+              catchUpPageSize,
+            ),
           ),
         );
         if (!this.owns(context, conversation) || this.conversationId !== conversationId) {

@@ -26,6 +26,7 @@ import { EmptyState } from '../../ui/empty-state';
 import { SectionNav, type SectionLink } from '../../ui/section-nav';
 import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
 import { ConversationLaunch } from '../messaging/conversation-launch';
+import { mapConversationDetail } from '../messaging/messaging.models';
 import { ClientActions, type ClientAction } from './client-actions';
 import {
   currentEnrollment,
@@ -307,8 +308,8 @@ export class ClientWorkspace {
       try {
         await owner.wait(this.csrf.refresh());
         if (tenantId !== this.tenants.selectedTenantId()) return;
-        const detail = await owner.wait(
-          firstValueFrom(this.api.createDirectConversation(this.clientId, key)),
+        const detail = mapConversationDetail(
+          await owner.wait(firstValueFrom(this.api.createDirectConversation(this.clientId, key))),
         );
         if (tenantId !== this.tenants.selectedTenantId()) return;
         this.conversationLaunch.open(tenantId, detail.conversation);

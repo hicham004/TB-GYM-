@@ -12,6 +12,7 @@ import type {
   CoachClientDetails,
   FeatureAccessDecision,
 } from '../../core/api/api.models';
+import type { ConversationDetail } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -353,11 +354,38 @@ describe('ClientWorkspace', () => {
   });
 
   it('opens a direct conversation and reuses its command key after a failed attempt', async () => {
-    const conversation = { id: 'conversation-1', clientProfileId: 'client-1' };
+    // As the server sends it; the page maps it before handing it to Messages.
+    const detail: ConversationDetail = {
+      conversation: {
+        id: 'conversation-1',
+        clientProfileId: 'client-1',
+        counterpart: { userId: 'user-maya', displayName: 'Maya Fakhoury', role: 'Client' },
+        callerRole: 'Coach',
+        canModerate: true,
+        startedAtUtc: '2026-10-01T08:00:00Z',
+        lastActivityAtUtc: '2026-10-01T08:00:00Z',
+        lastSequence: '0',
+        unreadCount: '0',
+        lastReadSequence: '0',
+        lastReadAtUtc: null,
+        isAvailable: true,
+        accessReason: 'Granted',
+        lastMessage: null,
+      },
+      readState: {
+        conversationId: 'conversation-1',
+        userId: 'coach-1',
+        role: 'Coach',
+        lastReadSequence: '0',
+        lastReadAtUtc: null,
+        unreadCount: '0',
+        latestSequence: '0',
+      },
+    };
     const create = vi
       .fn()
       .mockReturnValueOnce(throwError(() => new Error('offline')))
-      .mockReturnValueOnce(of({ conversation }));
+      .mockReturnValueOnce(of(detail));
     const { harness, host } = await render({ api: { createDirectConversation: create } });
 
     press(host, 'Message Maya');
@@ -370,7 +398,12 @@ describe('ClientWorkspace', () => {
     expect(create.mock.calls[1]).toEqual(create.mock.calls[0]);
     expect(create.mock.calls[0][0]).toBe('client-1');
     expect(TestBed.inject(Router).url).toBe('/messages');
-    expect(TestBed.inject(ConversationLaunch).take('tenant-1')).toEqual(conversation);
+    expect(TestBed.inject(ConversationLaunch).take('tenant-1')).toMatchObject({
+      id: 'conversation-1',
+      clientProfileId: 'client-1',
+      counterpart: { displayName: 'Maya Fakhoury' },
+      lastSequence: 0,
+    });
   });
 
   it('keeps the header when plans or the calendar cannot be read, and retries a failed record', async () => {

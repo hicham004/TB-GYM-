@@ -25,7 +25,18 @@ import type {
   ProgressPhotos,
   ProgressViewModel,
 } from './progress.models';
-import { mapProgressPhotoImage } from './progress.models';
+import {
+  mapDateCorrection,
+  mapHistory,
+  mapMeasurement,
+  mapMeasurementHistory,
+  mapMeasurements,
+  mapObservation,
+  mapProgress,
+  mapProgressPhoto,
+  mapProgressPhotoImage,
+  mapProgressPhotos,
+} from './progress.models';
 
 export type { MeasurementType, MeasurementUnit, RecordedMassUnit };
 
@@ -46,9 +57,11 @@ export class ProgressEntriesApi {
     from: string | null,
     to: string | null,
   ): Observable<ProgressViewModel> {
-    return clientId
-      ? this.api.getClientProgress(clientId, unit, from, to)
-      : this.api.getMyProgress(unit, from, to);
+    return (
+      clientId
+        ? this.api.getClientProgress(clientId, unit, from, to)
+        : this.api.getMyProgress(unit, from, to)
+    ).pipe(map(mapProgress));
   }
 
   /** The first and last day with a weigh-in, so "earlier" knows when there is no more. */
@@ -62,9 +75,11 @@ export class ProgressEntriesApi {
     clientId: string | null,
     request: RecordBodyweightRequest,
   ): Observable<BodyweightObservation> {
-    return clientId
-      ? this.api.recordClientBodyweight(clientId, request)
-      : this.api.recordMyBodyweight(request);
+    return (
+      clientId
+        ? this.api.recordClientBodyweight(clientId, request)
+        : this.api.recordMyBodyweight(request)
+    ).pipe(map(mapObservation));
   }
 
   correctWeight(
@@ -72,9 +87,11 @@ export class ProgressEntriesApi {
     observationId: string,
     request: CorrectBodyweightRequest,
   ): Observable<BodyweightHistory> {
-    return clientId
-      ? this.api.correctClientBodyweight(clientId, observationId, request)
-      : this.api.correctMyBodyweight(observationId, request);
+    return (
+      clientId
+        ? this.api.correctClientBodyweight(clientId, observationId, request)
+        : this.api.correctMyBodyweight(observationId, request)
+    ).pipe(map(mapHistory));
   }
 
   moveWeight(
@@ -82,15 +99,19 @@ export class ProgressEntriesApi {
     observationId: string,
     request: ReplaceBodyweightDateRequest,
   ): Observable<BodyweightDateCorrection> {
-    return clientId
-      ? this.api.replaceClientBodyweightDate(clientId, observationId, request)
-      : this.api.replaceMyBodyweightDate(observationId, request);
+    return (
+      clientId
+        ? this.api.replaceClientBodyweightDate(clientId, observationId, request)
+        : this.api.replaceMyBodyweightDate(observationId, request)
+    ).pipe(map(mapDateCorrection));
   }
 
   weightHistory(clientId: string | null, observationId: string): Observable<BodyweightHistory> {
-    return clientId
-      ? this.api.getClientBodyweightHistory(clientId, observationId)
-      : this.api.getMyBodyweightHistory(observationId);
+    return (
+      clientId
+        ? this.api.getClientBodyweightHistory(clientId, observationId)
+        : this.api.getMyBodyweightHistory(observationId)
+    ).pipe(map(mapHistory));
   }
 
   // ---- measurements ----
@@ -101,18 +122,22 @@ export class ProgressEntriesApi {
     from: string | null,
     to: string | null,
   ): Observable<BodyMeasurements> {
-    return clientId
-      ? this.api.getClientBodyMeasurements(clientId, unit, from, to)
-      : this.api.getMyBodyMeasurements(unit, from, to);
+    return (
+      clientId
+        ? this.api.getClientBodyMeasurements(clientId, unit, from, to)
+        : this.api.getMyBodyMeasurements(unit, from, to)
+    ).pipe(map(mapMeasurements));
   }
 
   recordMeasurement(
     clientId: string | null,
     request: RecordBodyMeasurementRequest,
   ): Observable<BodyMeasurement> {
-    return clientId
-      ? this.api.recordClientBodyMeasurement(clientId, request)
-      : this.api.recordMyBodyMeasurement(request);
+    return (
+      clientId
+        ? this.api.recordClientBodyMeasurement(clientId, request)
+        : this.api.recordMyBodyMeasurement(request)
+    ).pipe(map(mapMeasurement));
   }
 
   correctMeasurement(
@@ -120,18 +145,22 @@ export class ProgressEntriesApi {
     measurementId: string,
     request: CorrectBodyMeasurementRequest,
   ): Observable<BodyMeasurementHistory> {
-    return clientId
-      ? this.api.correctClientBodyMeasurement(clientId, measurementId, request)
-      : this.api.correctMyBodyMeasurement(measurementId, request);
+    return (
+      clientId
+        ? this.api.correctClientBodyMeasurement(clientId, measurementId, request)
+        : this.api.correctMyBodyMeasurement(measurementId, request)
+    ).pipe(map(mapMeasurementHistory));
   }
 
   measurementHistory(
     clientId: string | null,
     measurementId: string,
   ): Observable<BodyMeasurementHistory> {
-    return clientId
-      ? this.api.getClientBodyMeasurementHistory(clientId, measurementId)
-      : this.api.getMyBodyMeasurementHistory(measurementId);
+    return (
+      clientId
+        ? this.api.getClientBodyMeasurementHistory(clientId, measurementId)
+        : this.api.getMyBodyMeasurementHistory(measurementId)
+    ).pipe(map(mapMeasurementHistory));
   }
 
   // ---- photos ----
@@ -141,9 +170,11 @@ export class ProgressEntriesApi {
     from: string | null,
     to: string | null,
   ): Observable<ProgressPhotos> {
-    return clientId
-      ? this.api.getClientProgressPhotos(clientId, from, to)
-      : this.api.getMyProgressPhotos(from, to);
+    return (
+      clientId
+        ? this.api.getClientProgressPhotos(clientId, from, to)
+        : this.api.getMyProgressPhotos(from, to)
+    ).pipe(map(mapProgressPhotos));
   }
 
   addPhoto(
@@ -152,9 +183,11 @@ export class ProgressEntriesApi {
     photoDate: string | null,
     file: File,
   ): Observable<ProgressPhoto> {
-    return clientId
-      ? this.api.recordClientProgressPhoto(clientId, pose, photoDate, file)
-      : this.api.recordMyProgressPhoto(pose, photoDate, file);
+    return (
+      clientId
+        ? this.api.recordClientProgressPhoto(clientId, pose, photoDate, file)
+        : this.api.recordMyProgressPhoto(pose, photoDate, file)
+    ).pipe(map(mapProgressPhoto));
   }
 
   removePhoto(
@@ -162,9 +195,11 @@ export class ProgressEntriesApi {
     photoId: string,
     request: RemoveProgressPhotoRequest,
   ): Observable<ProgressPhoto> {
-    return clientId
-      ? this.api.removeClientProgressPhoto(clientId, photoId, request)
-      : this.api.removeMyProgressPhoto(photoId, request);
+    return (
+      clientId
+        ? this.api.removeClientProgressPhoto(clientId, photoId, request)
+        : this.api.removeMyProgressPhoto(photoId, request)
+    ).pipe(map(mapProgressPhoto));
   }
 
   /** One grant for one photo: the preview first, the full size only when the viewer asks for it. */

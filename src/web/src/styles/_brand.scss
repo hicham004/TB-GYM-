@@ -16,7 +16,8 @@
 
 // The homepage's own faces (UI plan R6.2f), included by home.scss alone so no other page fetches
 // them: Plex Medium for its headlines, Plex Mono Medium for its eyebrows, captions and day strip,
-// and the upright serif for its numerals. index.html preloads the first two for the first paint.
+// and the upright serif for its numerals. The homepage and what changed preload the first two for
+// the first paint (features/home/home-faces.ts); no other page asks for them.
 @mixin home-faces {
   @font-face {
     font-display: swap;

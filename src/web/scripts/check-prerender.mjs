@@ -36,6 +36,19 @@ export const PREVIEW_TAGS = [
 ];
 
 /**
+ * The homepage's own faces (features/home/home-faces.ts): the homepage and what changed draw them and
+ * ask for them with the document; sign-in and the shell every other page starts from do not, where
+ * Chrome warned they went unused (audit UIQ-7).
+ */
+export const HOME_FACES = [
+  '/fonts/ibm-plex/IBMPlexSans-Medium.woff2',
+  '/fonts/ibm-plex/IBMPlexMono-Medium.woff2',
+];
+
+/** Files only a development build carries: the hero lab's stylesheet (audit WEB-15). */
+export const DEVELOPMENT_ONLY_FILES = ['hero-lab.css'];
+
+/**
  * The folder the private pre-launch build serves its stand-in photographs from (UI plan R6.2h):
  * `src/web/placeholders/`, copied to this name in the output by the `placeholders` configuration
  * alone. A production output must neither hold it nor name it.
@@ -66,9 +79,13 @@ const DEFAULT_OUTPUT = join(
 /**
  * The problems with a build output, or none. `privatePreview` checks a private pre-launch build
  * (R6.2h): the same rules, except that its pages must carry the stand-ins and the noindex tag
- * that a production build must not.
+ * that a production build must not. `developmentBuild` checks the development build the `built`
+ * Playwright project serves, which may carry the development-only files.
  */
-export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePreview = false } = {}) {
+export function checkPrerender(
+  browserDirectory = DEFAULT_OUTPUT,
+  { privatePreview = false, developmentBuild = false } = {},
+) {
   const findings = [];
   const read = (name) => {
     const path = join(browserDirectory, name);
@@ -100,6 +117,7 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePrevi
       if (!metaContent(home, tag)) findings.push(`index.html lacks the ${tag} tag or its content.`);
     }
     findings.push(...renderedPageProblems(home, 'index.html', privatePreview));
+    findings.push(...facePreloadProblems(home, 'index.html', true));
     if (privatePreview && !STAND_IN.test(home)) {
       findings.push(
         'index.html draws no stand-in photograph: this is not the private pre-launch build.',
@@ -118,6 +136,7 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePrevi
       findings.push('changelog/index.html holds no dated release.');
     }
     findings.push(...renderedPageProblems(changelog, 'changelog/index.html', privatePreview));
+    findings.push(...facePreloadProblems(changelog, 'changelog/index.html', true));
   }
 
   if (signIn !== null) {
@@ -153,6 +172,7 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePrevi
         robotsTagRequired: false,
       }),
     );
+    findings.push(...facePreloadProblems(signIn, 'auth/sign-in/index.html', false));
   }
 
   if (shell !== null) {
@@ -167,9 +187,19 @@ export function checkPrerender(browserDirectory = DEFAULT_OUTPUT, { privatePrevi
         );
       }
     }
+    findings.push(...facePreloadProblems(shell, 'index.csr.html', false));
   }
 
   if (!privatePreview) findings.push(...placeholderLeaks(browserDirectory));
+  if (!developmentBuild) {
+    for (const file of DEVELOPMENT_ONLY_FILES) {
+      if (existsSync(join(browserDirectory, file))) {
+        findings.push(
+          `the output holds ${file}, which only the development build may (audit WEB-15).`,
+        );
+      }
+    }
+  }
 
   return findings;
 }
@@ -235,6 +265,24 @@ function renderedPageProblems(html, name, privatePreview, { robotsTagRequired = 
     findings.push(`${name} carries a robots noindex tag, which only the private build may.`);
   }
   return findings;
+}
+
+/** The fonts a document asks for with itself: its `<link rel="preload" as="font">` addresses. */
+function fontPreloads(html) {
+  return [...html.matchAll(/<link\s[^>]*>/g)]
+    .map((match) => match[0])
+    .filter((tag) => /\srel="preload"/.test(tag) && /\sas="font"/.test(tag))
+    .map((tag) => /\shref="([^"]+)"/.exec(tag)?.[1] ?? '');
+}
+
+/** Whether a document asks for the homepage's own faces exactly when it draws them. */
+function facePreloadProblems(html, name, drawsThem) {
+  const fonts = fontPreloads(html);
+  return HOME_FACES.filter((face) => fonts.includes(face) !== drawsThem).map((face) =>
+    drawsThem
+      ? `${name} does not ask for ${face} with the page: its headline would reflow when it arrives.`
+      : `${name} asks for ${face}, which only the homepage and what changed draw (audit UIQ-7).`,
+  );
 }
 
 /** Every file under a folder, deepest last. */

@@ -13,7 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
@@ -33,7 +33,7 @@ import {
   type NoticeDay,
   type NoticeTarget,
 } from './notification-inbox.models';
-import { appendPage, type NotificationItem } from './notification.models';
+import { appendPage, mapNotificationPage, type NotificationItem } from './notification.models';
 
 const pageSize = 25;
 
@@ -240,7 +240,9 @@ export class Notifications {
       try {
         const page = await owner.wait(
           firstValueFrom(
-            this.api.listNotifications(0, pageSize, this.filter() === 'unread', this.cursor),
+            this.api
+              .listNotifications(0, pageSize, this.filter() === 'unread', this.cursor)
+              .pipe(map(mapNotificationPage)),
           ),
         );
         if (!this.owns(generation, request)) {
@@ -395,7 +397,11 @@ export class Notifications {
       this.error.set(null);
       try {
         const page = await owner.wait(
-          firstValueFrom(this.api.listNotifications(0, pageSize, this.filter() === 'unread')),
+          firstValueFrom(
+            this.api
+              .listNotifications(0, pageSize, this.filter() === 'unread')
+              .pipe(map(mapNotificationPage)),
+          ),
         );
         if (!this.owns(generation, request)) {
           return;

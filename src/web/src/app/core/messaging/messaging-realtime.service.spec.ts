@@ -18,6 +18,8 @@ import {
   MessagingRealtimeService,
   offlineAfterFailedReconnects,
   type ConversationRealtimeSink,
+  type MessagingHubConnection,
+  type MessagingHubConnectionFactory,
 } from './messaging-realtime.service';
 
 // ---------- the fake connection ----------
@@ -250,7 +252,11 @@ interface Harness {
   connection: () => FakeHubConnection;
 }
 
-function build(configure?: (api: Record<string, ReturnType<typeof vi.fn>>) => void): Harness {
+function build(
+  configure?: (api: Record<string, ReturnType<typeof vi.fn>>) => void,
+  factory: MessagingHubConnectionFactory = (url, nextRetryDelay) =>
+    new FakeHubConnection(url, nextRetryDelay),
+): Harness {
   const user = signal<CurrentUser | null>(COACH);
   const membership = signal<TenantMembership | undefined>(ALPHA);
   const api = {
@@ -276,11 +282,7 @@ function build(configure?: (api: Record<string, ReturnType<typeof vi.fn>>) => vo
         provide: TenantStore,
         useValue: { selectedMembership: membership, selectedTenantId: signal(ALPHA.tenantId) },
       },
-      {
-        provide: MESSAGING_HUB_CONNECTION,
-        useValue: (url: string, nextRetryDelay: (previousRetryCount: number) => number) =>
-          new FakeHubConnection(url, nextRetryDelay),
-      },
+      { provide: MESSAGING_HUB_CONNECTION, useValue: factory },
     ],
   });
 
@@ -409,6 +411,90 @@ describe('MessagingRealtimeService', () => {
     expect(connection.stopCalls).toBeGreaterThan(0);
     expect(connection.handlers.size).toBe(0);
     expect(harness.service.state()).toBe('idle');
+  });
+
+  // ---------- the client library arrives on first use (audit WEB-5) ----------
+
+  it('builds the connection once the library has arrived, and drops one for a workspace left meanwhile', async () => {
+    const arrivals: (() => void)[] = [];
+    const harness = build(
+      undefined,
+      (url, nextRetryDelay) =>
+        new Promise<MessagingHubConnection>((resolve) =>
+          arrivals.push(() => resolve(new FakeHubConnection(url, nextRetryDelay))),
+        ),
+    );
+    await flush();
+    expect(harness.service.state()).toBe('connecting');
+    expect(FakeHubConnection.instances).toHaveLength(0);
+
+    // The workspace changes before the library arrives: the first connection is for nobody now.
+    harness.membership.set(BETA);
+    await flush();
+    arrivals[0]();
+    await flush();
+    expect(FakeHubConnection.instances[0].url).toBe(`/hubs/chat?tenantId=${ALPHA.tenantId}`);
+    expect(FakeHubConnection.instances[0].startCalls).toBe(0);
+    expect(FakeHubConnection.instances[0].handlers.size).toBe(0);
+
+    arrivals[1]();
+    await flush();
+    expect(harness.connection().url).toBe(`/hubs/chat?tenantId=${BETA.tenantId}`);
+    expect(harness.connection().startCalls).toBe(1);
+    expect(harness.service.state()).toBe('connected');
+  });
+
+  it('tries again on the initial start’s backoff when the library cannot be fetched', async () => {
+    let attempts = 0;
+    const harness = build(undefined, (url, nextRetryDelay) => {
+      attempts++;
+      return attempts === 1
+        ? Promise.reject(new TypeError('Failed to fetch dynamically imported module'))
+        : new FakeHubConnection(url, nextRetryDelay);
+    });
+    await flush();
+    expect(harness.service.state()).toBe('offline');
+    expect(FakeHubConnection.instances).toHaveLength(0);
+
+    await flush(1000);
+    expect(attempts).toBe(2);
+    expect(harness.connection().startCalls).toBe(1);
+    expect(harness.service.state()).toBe('connected');
+  });
+
+  it('says it is connecting, not offline, while a thread opens before the library arrives', async () => {
+    let arrive: () => void = () => undefined;
+    const harness = build(
+      undefined,
+      (url, nextRetryDelay) =>
+        new Promise<MessagingHubConnection>((resolve) => {
+          arrive = () => resolve(new FakeHubConnection(url, nextRetryDelay));
+        }),
+    );
+    await flush();
+
+    await harness.service.openConversation('conversation-1', 0, harness.sink);
+    // The thread is read over REST meanwhile; nothing tells the reader they are offline.
+    expect(harness.service.state()).toBe('connecting');
+    expect(harness.listRealtimeEvents).toHaveBeenCalledTimes(1);
+
+    arrive();
+    await flush();
+    expect(harness.service.state()).toBe('connected');
+    expect(harness.connection().subscribed).toEqual(['conversation-1']);
+    expect(harness.listRealtimeEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds the real client from the library fetched on first use, without starting it', async () => {
+    TestBed.configureTestingModule({});
+    // Absolute here: the library resolves a relative address against the page only in a browser.
+    const connection = await TestBed.inject(MESSAGING_HUB_CONNECTION)(
+      'http://localhost/hubs/chat?tenantId=t',
+      () => 0,
+    );
+
+    expect(connection.state).toBe('Disconnected');
+    expect(typeof connection.start).toBe('function');
   });
 
   // ---------- the initial start has its own retry policy ----------

@@ -21,13 +21,8 @@ import { button, field, press, query, settle } from '../../../testing/dom';
 import { ConversationLaunch } from './conversation-launch';
 import { SavedRepliesApi } from './saved-replies-api';
 import { messagingRoutes } from './messages.routes';
-import type {
-  Conversation,
-  ConversationPage,
-  ConversationReadState,
-  Message,
-  MessagePage,
-} from './messaging.models';
+import type { ConversationPage as ServerConversationPage } from '../../core/api/generated';
+import type { Conversation, ConversationReadState, Message, MessagePage } from './messaging.models';
 import { Messages } from './messages';
 
 const COACH: CurrentUser = {
@@ -80,12 +75,13 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
   };
 }
 
+/** A page of the list as the server sends it, its counts saying "awaiting reply"; the page maps it. */
 function conversationPage(
   items: readonly Conversation[],
-  overrides: Partial<ConversationPage> = {},
-): ConversationPage {
+  overrides: Partial<ServerConversationPage> = {},
+): ServerConversationPage {
   return {
-    items,
+    items: [...items],
     hasMore: false,
     nextBeforeActivityAtUtc: null,
     nextBeforeConversationId: null,
@@ -1433,8 +1429,8 @@ describe('Messages', () => {
    * requests deliberately out of order, oldest last.
    */
   it('discards a conversation list that resolves after the workspace has changed', async () => {
-    const stale = new Subject<ConversationPage>();
-    const fresh = new Subject<ConversationPage>();
+    const stale = new Subject<ServerConversationPage>();
+    const fresh = new Subject<ServerConversationPage>();
     const harness = await render(({ listConversations }) => {
       listConversations.mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
     });
@@ -1897,7 +1893,7 @@ describe('Messages', () => {
   // ---------- superseded loaders ----------
 
   it('does not leave Show more disabled when a manual check supersedes it', async () => {
-    const pending = new Subject<ConversationPage>();
+    const pending = new Subject<ServerConversationPage>();
     const harness = await render(({ listConversations }) => {
       listConversations
         .mockReturnValueOnce(
@@ -2234,7 +2230,7 @@ describe('Messages', () => {
   // ---------- the coach's inbox and the client beside the thread (C6, R3.5b) ----------
 
   describe('coach inbox', () => {
-    const COUNTS = { all: 5, unread: 2, waiting: 3 };
+    const COUNTS = { all: 5, unread: 2, awaitingReply: 3 };
     const waitingRow = conversation({ isAwaitingReply: true });
 
     afterEach(() => {
@@ -2280,21 +2276,21 @@ describe('Messages', () => {
 
       expect(chips(harness.host)).toEqual(['All 5', 'Unread 2', 'Waiting for reply 3']);
       expect(chip(harness.host, 'All').checked).toBe(true);
-      expect(lastQuery(harness)).toEqual({ filter: 'all', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'All', search: '' });
 
       await choose(harness, 'Waiting for reply');
       // Every conversation is searched by the server, not only the page already loaded.
       expect(harness.listConversations).toHaveBeenLastCalledWith(null, null, 25, {
-        filter: 'waiting',
+        filter: 'AwaitingReply',
         search: '',
       });
 
       await search(harness, 'rania');
-      expect(lastQuery(harness)).toEqual({ filter: 'waiting', search: 'rania' });
+      expect(lastQuery(harness)).toEqual({ filter: 'AwaitingReply', search: 'rania' });
       const calls = harness.listConversations.mock.calls.length;
       await search(harness, '');
       expect(harness.listConversations.mock.calls.length).toBe(calls + 1);
-      expect(lastQuery(harness)).toEqual({ filter: 'waiting', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'AwaitingReply', search: '' });
     });
 
     it('keeps the chip in the address, so Back returns to the same list', async () => {
@@ -2306,7 +2302,7 @@ describe('Messages', () => {
         '/messages?show=unread',
       );
 
-      expect(lastQuery(harness)).toEqual({ filter: 'unread', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'Unread', search: '' });
       expect(chip(harness.host, 'Unread').checked).toBe(true);
 
       await choose(harness, 'All');
@@ -2324,7 +2320,7 @@ describe('Messages', () => {
           ) =>
             of(
               conversationPage(
-                wanted?.filter === 'all' && wanted.search === '' ? [waitingRow] : [],
+                wanted?.filter === 'All' && wanted.search === '' ? [waitingRow] : [],
                 { counts: COUNTS },
               ),
             ),
@@ -2344,7 +2340,7 @@ describe('Messages', () => {
       );
       press(harness.host, 'Clear search');
       await settle(harness.fixture);
-      expect(lastQuery(harness)).toEqual({ filter: 'waiting', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'AwaitingReply', search: '' });
 
       press(harness.host, 'Show all conversations');
       await settle(harness.fixture);
@@ -2385,7 +2381,7 @@ describe('Messages', () => {
 
       // The list is read again and the thread no longer answers the chip.
       harness.listConversations.mockReturnValue(
-        of(conversationPage([], { counts: { ...COUNTS, waiting: 2 } })),
+        of(conversationPage([], { counts: { ...COUNTS, awaitingReply: 2 } })),
       );
       harness.realtime.invalidate();
       await settle(harness.fixture);
@@ -2549,7 +2545,7 @@ describe('Messages', () => {
       const box = query<HTMLInputElement>(harness.host, '#conversation-search');
       expect(box.value).toBe('');
       expect(document.activeElement).toBe(box);
-      expect(lastQuery(harness)).toEqual({ filter: 'all', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'All', search: '' });
     });
 
     it('drops a saved reply into the coach’s draft and sends nothing', async () => {
@@ -2592,12 +2588,12 @@ describe('Messages', () => {
         listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
       });
       await search(harness, 'rania');
-      expect(lastQuery(harness)).toEqual({ filter: 'all', search: 'rania' });
+      expect(lastQuery(harness)).toEqual({ filter: 'All', search: 'rania' });
 
       harness.membership.set(BETA);
       await settle(harness.fixture);
 
-      expect(lastQuery(harness)).toEqual({ filter: 'all', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'All', search: '' });
       expect(query<HTMLInputElement>(harness.host, '#conversation-search').value).toBe('');
     });
   });

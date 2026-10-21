@@ -49,6 +49,7 @@ import { externalVideo } from './external-video';
 import { RestTimer } from './rest-timer';
 import { nullableNumeric, numeric } from './training-builder.models';
 import {
+  mapUpcomingTraining,
   trainingReadAccessLabel,
   workoutNoteTime,
   type UpcomingTraining,
@@ -1102,13 +1103,14 @@ export class TodayTraining implements HoldsUnsavedWork {
       }
       this.clearMessages();
       try {
-        const [day, upcoming] = await owner.wait(
+        const [day, upcomingView] = await owner.wait(
           Promise.all([
             firstValueFrom(this.api.getMyTrainingToday()),
             firstValueFrom(this.api.getMyUpcomingTraining(this.upcomingSkip)),
           ]),
         );
         if (!this.ownsLoad(generation, request)) return;
+        const upcoming = mapUpcomingTraining(upcomingView);
         this.upcoming.set(upcoming);
         const allowed = day.isAllowed && upcoming.isAllowed;
         const combined = {

@@ -548,9 +548,12 @@
                 type="button"
                 class="next-button"
                 (click)="showExercise(activeExerciseIndex() + 1)"
-                i18n
               >
-                Next exercise →
+                <ng-container i18n>Next exercise</ng-container>&ngsp;<span
+                  class="next-mark"
+                  aria-hidden="true"
+                  >→</span
+                >
               </button>
             }
             @if (workout.workoutExecutionId && workout.status !== 'Completed') {

@@ -22,6 +22,8 @@ const builtPort = 4301;
 const builtFiles = /[\\/]built[\\/].*\.e2e\.ts$/;
 // The live checks (playwright.live.config.ts) need a running API, so the mocked projects skip them.
 const liveFiles = /[\\/]live[\\/].*\.e2e\.ts$/;
+// The edge checks (playwright.edge.config.ts) need a real nginx; scripts/edge-proof.ps1 runs them.
+const edgeFiles = /[\\/]edge[\\/].*\.e2e\.ts$/;
 
 export default defineConfig({
   testDir: './e2e',
@@ -46,7 +48,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: [builtFiles, liveFiles],
+      testIgnore: [builtFiles, liveFiles, edgeFiles],
       use: { ...devices['Desktop Chrome'], deviceScaleFactor: 1 },
     },
     {

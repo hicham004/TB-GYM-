@@ -44,7 +44,8 @@ items only moved, and a few gained a status note in italics.
 - [x] Enable HSTS only after all production subdomains are HTTPS-ready. *The edge sends HSTS for
   the app host only (no `includeSubDomains`, no preload), so no other subdomain is affected.*
 - [ ] Validate CSP, frame denial, `nosniff`, referrer policy, permissions policy, CORS, and
-  WebSocket headers at the real edge/CDN, not only in application tests. *GO-LIVE.md, Deploy step 4.*
+  WebSocket headers at the real edge/CDN, not only in application tests. *GO-LIVE.md, Deploy step 5;
+  `scripts/edge-proof.ps1 -Url` reads them, with each answer's cache rule, from the deployed edge.*
 
 ## Secrets and production configuration
 

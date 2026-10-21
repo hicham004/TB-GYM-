@@ -11,12 +11,12 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map, type Observable } from 'rxjs';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import type { FeatureAccessDecision } from '../../core/api/api.models';
-import type { FoodQuantityUnit } from '../../core/api/generated';
+import type { ClientNutritionDayView, FoodQuantityUnit } from '../../core/api/generated';
 import { ownNutritionDenialMessage } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -27,7 +27,7 @@ import { UiSheet } from '../../ui/sheet';
 import { addDays } from '../clients/client-overview.models';
 import { ClientRecipeSheet } from './client-recipe';
 import { NutritionChoiceDrafts } from './nutrition-choice-drafts';
-import { NutritionChoice, NutritionDay, NutritionSlot } from './nutrition.models';
+import { mapNutritionDay, NutritionChoice, NutritionDay, NutritionSlot } from './nutrition.models';
 
 /** The server grants at most this many photos a call (MED-004). */
 const PHOTO_GRANT_BATCH = 32;
@@ -35,6 +35,11 @@ const PHOTO_GRANT_BATCH = 32;
 interface NutritionDateOwner {
   readonly selectedDate: string;
   readonly generation: number;
+}
+
+/** The day a write answers with, in this page's model. */
+function dayOf(answer: Observable<ClientNutritionDayView>): Promise<NutritionDay> {
+  return firstValueFrom(answer.pipe(map(mapNutritionDay)));
 }
 
 @Component({
@@ -231,7 +236,7 @@ export class TodayNutrition {
         await owner.wait(this.csrf.refresh());
         if (!this.ownsDate(dateOwner)) return;
         const updated = await owner.wait(
-          firstValueFrom(
+          dayOf(
             this.api.addMyNutritionCustomFood({
               planDayId: day.planDayId,
               name: this.customName.trim(),
@@ -273,9 +278,7 @@ export class TodayNutrition {
         await owner.wait(this.csrf.refresh());
         if (!this.ownsDate(dateOwner)) return;
         const updated = await owner.wait(
-          firstValueFrom(
-            this.api.reverseMyNutritionCustomFood(foodId, { dailyLogVersion: day.logVersion }),
-          ),
+          dayOf(this.api.reverseMyNutritionCustomFood(foodId, { dailyLogVersion: day.logVersion })),
         );
         if (!this.ownsDate(dateOwner)) return;
         this.day.set(updated);
@@ -312,7 +315,7 @@ export class TodayNutrition {
         await owner.wait(this.csrf.refresh());
         if (!this.ownsDate(dateOwner)) return;
         const updated = await owner.wait(
-          firstValueFrom(
+          dayOf(
             this.api.recordMyNutritionChoice({
               planDayId: day.planDayId,
               planSlotId: slot.id,
@@ -368,9 +371,7 @@ export class TodayNutrition {
         await owner.wait(this.csrf.refresh());
         if (!this.ownsDate(dateOwner)) return;
         const updated = await owner.wait(
-          firstValueFrom(
-            this.api.completeMyNutritionLog(day.dailyLogId, { version: day.logVersion }),
-          ),
+          dayOf(this.api.completeMyNutritionLog(day.dailyLogId, { version: day.logVersion })),
         );
         if (!this.ownsDate(dateOwner)) return;
         this.day.set(updated);
@@ -407,9 +408,10 @@ export class TodayNutrition {
           this.denial.set(ownNutritionDenialMessage(access.reason));
           return;
         }
-        const loaded = await owner.wait(
+        const answer = await owner.wait(
           firstValueFrom(this.api.getMyNutritionDay(dateOwner.selectedDate || undefined)),
         );
+        const loaded = answer === null ? null : mapNutritionDay(answer);
         if (!this.ownsDate(dateOwner)) return;
         if (loaded === null) {
           // Nothing for this date: no meal plan yet, or the plan does not reach it. When the access

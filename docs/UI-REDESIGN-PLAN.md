@@ -438,6 +438,9 @@ of the implemented R1.3 screens before production rollout.
   player; only the API client's new read and the kit's `mode` option are in the start-up files.
   R6.1b measures 544.48 kB (+0.09 kB): the API client's one new write; the before-and-after sheet and its
   painter load with the Progress pages. `progress-dashboard.scss` is 5.36 kB against its 5 kB warning.
+  Audit A13a measures 501.48 kB (from 579.21) and makes 520 kB a build error (510 kB warns): the SignalR
+  client loads when a member connects, `ApiClient` hands feature reads back unmapped so their models load
+  with their pages, and the shell's role label left the label table (ARCHITECTURE section 8).
 - **"Need you" and "Needs attention" count differently (seen in R3.3a).** On the Atlas demo, Today
   says "10 clients need you" and Clients "8 need attention": a plan ending soon puts a client in
   Today's queue but gives them the Ending soon status, not Needs attention (CLI-018). Both are
@@ -1150,7 +1153,8 @@ of the implemented R1.3 screens before production rollout.
 - **Homepage pre-render, left for later (from R6.2a, 2026-10-12).** (1) **The initial bundle is 575 kB
   against the 520 kB warning in `angular.json`** (§4's budget): it stood at 544 kB before this step, over
   the line since R5.4c, and hydration adds 30 kB raw (10 kB compressed). Trim what the shell imports, or
-  re-set the budget on purpose; the build only warns. (2) Only the hero, the ribbon and the footer are in
+  re-set the budget on purpose; the build only warns. Closed in audit A13a: 501.48 kB, and 520 kB is an
+  error now. (2) Only the hero, the ribbon and the footer are in
   the built HTML: the sections below the fold stay `@defer (on idle)` and render in the browser, because
   putting them in the HTML needs incremental hydration, whose inline scripts the CSP refuses without a
   per-request nonce (nginx `sub_filter` on `$request_id`). Google renders the script, so it reads them;

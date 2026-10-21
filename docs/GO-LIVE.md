@@ -64,7 +64,9 @@ Without progress photos a 4 GB server is enough (about half the price; see `.env
    `tb up -d api`. The Billing page shows it with each invoice's reference; without it, the page
    can only point an owner at the support inbox and WhatsApp.
 5. **Before inviting anyone**: `curl -sI https://app.yourdomain` shows `strict-transport-security` and
-   `content-security-policy`. As a test client, upload a progress photo and see it again.
+   `content-security-policy`, and on your computer `.\scripts\edge-proof.ps1 -Url https://app.yourdomain`
+   passes (each kind of answer's cache rule, security headers and CSP). As a test client, upload a
+   progress photo and see it again.
 6. **Backup and restore drill**: run `tb exec backup backup.sh` (it ends with `done`) and check the
    file in the `tbgym-backups` bucket. Paste your key from the password manager into
    `nano /root/key.txt`, then run
@@ -122,5 +124,6 @@ and pages take 4-15 seconds instead of about one.
 2. With Docker running, load the demo workspace:
    `.\scripts\test-copy-demo.ps1 -DatabaseUrl '<External Database URL>'` (tb-gym-test-db > Connect >
    External). It replaces whatever the copy held, and prints the sign-in emails and their password.
-3. To update the copy, push to GitHub, then Manual Deploy > Deploy latest commit. To remove it,
-   delete the service and the database in Render.
+3. To update the copy, push to GitHub, then Manual Deploy > Deploy latest commit, and check its
+   edge with `.\scripts\edge-proof.ps1 -Url <the copy's link>`. To remove it, delete the service and
+   the database in Render.

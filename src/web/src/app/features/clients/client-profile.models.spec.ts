@@ -6,6 +6,7 @@ import {
   personalRecords,
   programBlock,
   progressDashboard,
+  progressDashboardView,
   record,
   weekDays,
 } from '../../../testing/client-profile-fixtures';
@@ -21,6 +22,7 @@ import {
   weightStory,
   type ProfileContext,
 } from './client-profile.models';
+import { mapProgressDashboard } from '../progress/progress-dashboard.models';
 
 const context: ProfileContext = {
   locale: 'en-US',
@@ -466,6 +468,10 @@ describe('this week', () => {
 });
 
 describe('weight', () => {
+  it('reads the window the server sends as the page’s fixture, so the two stay one window', () => {
+    expect(mapProgressDashboard(progressDashboardView())).toEqual(progressDashboard());
+  });
+
   it('shows the latest weekly average, its change on last week and the last weigh-in', () => {
     const story = weightStory(progressDashboard(), 'en-US', 8);
 

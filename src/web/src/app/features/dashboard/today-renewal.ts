@@ -7,7 +7,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
-import type { RenewalStatus } from './renewal.models';
+import { mapRenewalStatus, type RenewalStatus } from './renewal.models';
 
 /**
  * Today when the client's whole plan has run out (ADR 0029): who it was with and when it ended, and
@@ -107,7 +107,9 @@ export class TodayRenewal {
       this.error.set('');
       try {
         await owner.wait(this.csrf.refresh());
-        const status = await owner.wait(firstValueFrom(this.api.requestRenewal()));
+        const status = mapRenewalStatus(
+          await owner.wait(firstValueFrom(this.api.requestRenewal())),
+        );
         this.statusChange.emit(status);
         // The button has gone; the confirmation that replaced it takes focus.
         setTimeout(() => this.sent()?.nativeElement.focus());
@@ -117,7 +119,7 @@ export class TodayRenewal {
           // The plan is no longer over (renewed or restarted since the page loaded): show it as it is.
           try {
             this.statusChange.emit(
-              await owner.wait(firstValueFrom(this.api.getOwnRenewalStatus())),
+              mapRenewalStatus(await owner.wait(firstValueFrom(this.api.getOwnRenewalStatus()))),
             );
             return;
           } catch {

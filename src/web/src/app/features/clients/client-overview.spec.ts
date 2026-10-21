@@ -18,7 +18,7 @@ import {
   personalRecords,
   profileOverview,
   programBlock,
-  progressDashboard,
+  progressDashboardView,
   record,
 } from '../../../testing/client-profile-fixtures';
 import { attentionItem, COACH_NOW, COACH_TODAY, MAYA } from '../../../testing/coach-today-fixtures';
@@ -99,7 +99,7 @@ async function render(
   const api = {
     getClientCommercialOverview: vi.fn(() => of(commercial)),
     getClientOverview: vi.fn(() => of(profileOverview())),
-    getClientProgressDashboard: vi.fn(() => of(progressDashboard())),
+    getClientProgressDashboard: vi.fn(() => of(progressDashboardView())),
     getClientTrainingPersonalRecords: vi.fn(() => of(RECORDS)),
     listClientMesocycles: vi.fn(() => of([programBlock()])),
     listClientCheckInAssignments: vi.fn(() =>
@@ -292,8 +292,7 @@ describe('ClientOverview', () => {
   });
 
   it('says a client with no weigh-ins has none, and draws no line for a single week', async () => {
-    const none = progressDashboard();
-    none.bodyweight = { ...none.bodyweight, weeks: [], latestDate: null };
+    const none = progressDashboardView({ weeks: [], latestDate: null });
     const { host } = await render({ api: { getClientProgressDashboard: vi.fn(() => of(none)) } });
     expect(said(host)).toContain(
       'No weigh-ins in the last 8 weeks. Maya logs them from their Progress page.',
@@ -301,11 +300,9 @@ describe('ClientOverview', () => {
     expect(host.querySelector('app-sparkline')).toBeNull();
 
     TestBed.resetTestingModule();
-    const single = progressDashboard();
-    single.bodyweight = {
-      ...single.bodyweight,
+    const single = progressDashboardView({
       weeks: [{ weekStart: '2026-09-28', displayMean: 66.5, observedDayCount: 3 }],
-    };
+    });
     const lone = await render({ api: { getClientProgressDashboard: vi.fn(() => of(single)) } });
     expect(said(lone.host)).toContain('66.5 kg One week of weigh-ins so far');
     expect(lone.host.querySelector('app-sparkline')).toBeNull();

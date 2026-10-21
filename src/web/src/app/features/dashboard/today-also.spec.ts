@@ -8,18 +8,25 @@ import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import type { CheckInAssignmentListItem } from '../../core/api/generated';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import type { NutritionDay } from '../nutrition/nutrition.models';
+import type { ClientNutritionDayView } from '../../core/api/generated';
 import { press, settle } from '../../../testing/dom';
 import { fakeClientAccess, TODAY } from '../../../testing/today-fixtures';
 import { TodayAlso } from './today-also';
 
-const meals = (logStatus: NutritionDay['logStatus'], selected: (string | null)[]) =>
+/** The day as the server sends it, which the row maps itself (audit WEB-5). */
+const meals = (logStatus: ClientNutritionDayView['logStatus'], selected: (string | null)[]) =>
   ({
     logStatus,
     selectedCalories: selected.filter(Boolean).length * 400,
     targetCalories: 1950,
-    slots: selected.map((selectedChoiceId, order) => ({ id: `${order}`, selectedChoiceId })),
-  }) as NutritionDay;
+    slots: selected.map((selectedChoiceId, order) => ({
+      id: `${order}`,
+      order,
+      selectedChoiceId,
+      choices: [],
+    })),
+    customFoods: [],
+  }) as unknown as ClientNutritionDayView;
 const assignment = (dueDate: string, response: CheckInAssignmentListItem['response'] = null) =>
   ({
     assignment: { id: 'a', formTitle: 'Weekly check-in', dueDate },

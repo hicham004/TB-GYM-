@@ -159,9 +159,17 @@ $wide-still: '(min-width: #{$wide}) and (prefers-reduced-motion: reduce)';
   min-block-size: 48px;
   text-decoration: none;
 
+  // The mark points, and on a hover moves, the way the line reads: under right-to-left text it
+  // turns round (audit UIQ-23).
   .quiet__mark {
+    --quiet-turn: 1;
     display: inline-block;
+    transform: scaleX(var(--quiet-turn));
     transition: transform 250ms var(--home-ease);
+  }
+
+  .quiet__mark:dir(rtl) {
+    --quiet-turn: -1;
   }
 
   &:hover {
@@ -170,13 +178,13 @@ $wide-still: '(min-width: #{$wide}) and (prefers-reduced-motion: reduce)';
   }
 
   &:hover .quiet__mark {
-    transform: translateX(4px);
+    transform: scaleX(var(--quiet-turn)) translateX(4px);
   }
 
   @media (prefers-reduced-motion: reduce) {
     .quiet__mark,
     &:hover .quiet__mark {
-      transform: none;
+      transform: scaleX(var(--quiet-turn));
       transition: none;
     }
   }

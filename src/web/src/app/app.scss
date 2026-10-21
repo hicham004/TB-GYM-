@@ -205,7 +205,8 @@ nav,
 }
 
 // The skip link's target; focus lands on the region, which needs no ring of its own.
-.client-main:focus {
+.client-main:focus,
+.coach-main:focus {
   outline: none;
 }
 
@@ -226,4 +227,24 @@ nav,
   outline: var(--focus-ring-width) solid var(--color-accent);
   outline-offset: var(--focus-separation-gap);
   transform: none;
+}
+
+// The coach shell keeps its sidebar and top bar in view while the page scrolls, so its link is placed in
+// the viewport and shows where it covers no control (audit WEB-13): over the sidebar's brand on a wide
+// screen, and just below the top bar on a narrow one, where the bar's Menu button sits at the link's
+// place. The bar publishes its height (TOPBAR_BLOCK_SIZE), which grows with the text; until focused the
+// link waits above the screen, clear of the bar.
+:host(.coach-layout) .skip-link {
+  position: fixed;
+}
+
+@media (max-width: 1023.98px) {
+  :host(.coach-layout) .skip-link {
+    inset-block-start: calc(var(--tb-topbar-block-size, 4rem) + var(--space-8));
+    transform: translateY(calc(-100% - var(--tb-topbar-block-size, 4rem) - 2 * var(--space-8)));
+  }
+
+  :host(.coach-layout) .skip-link:focus-visible {
+    transform: none;
+  }
 }

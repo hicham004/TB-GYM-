@@ -41,8 +41,22 @@ export const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Content-Security-Policy':
-    "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:",
+    "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'",
 };
+
+/** A file the build names by its content's hash: the scripts and the global stylesheet. */
+export const HASHED_FILE = /^(chunk|main|polyfills|styles)-[A-Za-z0-9_-]{8,}\.(js|css)$/;
+
+/**
+ * nginx.conf's cache map, by the file that answers (audit WEB-4): a document afresh on every visit,
+ * a hashed file for a year, anything else with no header.
+ */
+export function cacheControlFor(file) {
+  if (file.endsWith('.html')) return 'no-cache';
+  if (HASHED_FILE.test(file.split(/[\\/]/).pop() ?? ''))
+    return 'public, max-age=31536000, immutable';
+  return null;
+}
 
 /** The content types a build output needs; nginx's own table has them all. */
 export const TYPES = {
@@ -154,7 +168,8 @@ export function createSiteServer(browserDirectory, { extraHeaders = {}, intercep
     const answer = documentFor(url.pathname, request.headers.cookie, isFile);
     const file = join(browserDirectory, answer.file);
     const headers = headersFor(file);
-    if (Object.hasOwn(PRERENDERED_PAGES, url.pathname)) headers['Cache-Control'] = 'no-cache';
+    const cacheControl = cacheControlFor(answer.file);
+    if (cacheControl !== null) headers['Cache-Control'] = cacheControl;
     response.writeHead(answer.status, headers);
     createReadStream(file).pipe(response);
   });
@@ -193,7 +208,7 @@ function buildIfStale() {
     );
     if (inlined !== null) writeFileSync(path, inlined);
   }
-  const findings = checkPrerender(browser);
+  const findings = checkPrerender(browser, { developmentBuild: true });
   if (findings.length > 0) {
     console.error(findings.join('\n'));
     process.exit(1);

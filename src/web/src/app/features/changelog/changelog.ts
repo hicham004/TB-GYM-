@@ -11,6 +11,7 @@ import changelogMarkdown from '../../../content/changelog.md';
 import { AuthStore } from '../../core/auth/auth.store';
 import { WebsiteSettingsStore } from '../../core/website/website-settings';
 import { formatChangeDate, parseChangelog } from '../home/changelog-parser';
+import { preloadHomeFaces } from '../home/home-faces';
 import { HomeHeader } from '../home/home-header';
 
 /**
@@ -34,6 +35,7 @@ export class Changelog {
   protected readonly newest = this.releases[0] ? this.date(this.releases[0].date) : null;
 
   constructor() {
+    preloadHomeFaces();
     // The website's settings (R6.2g): analytics on this page too, once the browser has it.
     const settings = inject(WebsiteSettingsStore);
     afterNextRender(() => void settings.load());
