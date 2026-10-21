@@ -1,9 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
+import { provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
@@ -19,9 +19,23 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, settle } from '../../../testing/dom';
 import { ConversationLaunch } from '../messaging/conversation-launch';
 import { ClientWorkspace } from './client-workspace';
+import { ClientWorkspaceContext } from './client-workspace.context';
 
 @Component({ selector: 'app-section-stub', template: 'section' })
 class SectionStub {}
+
+/** A tab that asks the record for this page's plans, as Service & access and the Overview do. */
+@Component({ selector: 'app-plans-tab', template: '{{ plans() }}' })
+class PlansTab {
+  private readonly context = inject(ClientWorkspaceContext);
+  protected readonly plans = signal('');
+
+  constructor() {
+    void this.context
+      .plansForPage()
+      .then((overview) => this.plans.set(`${overview.enrollments.length} plans`));
+  }
+}
 
 const OWNER_ID = 'owner-1';
 
@@ -77,6 +91,7 @@ async function render(
     userId?: string;
     isOwner?: boolean;
     api?: Record<string, unknown>;
+    sections?: Routes;
   } = {},
 ) {
   const overview: ClientCommercialOverview = {
@@ -99,7 +114,7 @@ async function render(
         {
           path: 'clients/:clientId',
           component: ClientWorkspace,
-          children: [
+          children: options.sections ?? [
             { path: '', component: SectionStub },
             { path: 'training', component: SectionStub },
           ],
@@ -173,6 +188,67 @@ describe('ClientWorkspace', () => {
     expect(host.querySelector('.header-actions .tb-button--filled')?.textContent?.trim()).toBe(
       'Message Maya',
     );
+  });
+
+  it('shows the record’s shape while it is read, said once (audit UIQ-5)', async () => {
+    const client = new Subject<CoachClientDetails>();
+    const { harness, host } = await render({ api: { getClient: vi.fn(() => client) } });
+
+    const shape = host.querySelector('.record-skeleton');
+    expect(shape?.getAttribute('role')).toBe('status');
+    expect(shape?.textContent?.trim()).toBe('Loading client…');
+    expect(host.querySelector('.panel-bones')?.getAttribute('aria-hidden')).toBe('true');
+    expect(host.querySelector('h1')).toBeNull();
+
+    client.next(PROFILE);
+    client.complete();
+    await settle(harness.fixture);
+
+    expect(host.querySelector('.record-skeleton')).toBeNull();
+    expect(host.querySelector('.panel-bones')).toBeNull();
+    expect(host.querySelector('h1')?.textContent).toContain('Maya Rahman');
+  });
+
+  it('gives a tab that opens with the record its read of the plans, and a later page a fresh one (audit UIQ-8)', async () => {
+    const { harness, host, api } = await render({
+      sections: [
+        { path: '', component: PlansTab },
+        { path: 'service', component: PlansTab },
+      ],
+    });
+    await settle(harness.fixture);
+
+    expect(host.querySelector('app-plans-tab')?.textContent).toBe('1 plans');
+    expect(api.getClientCommercialOverview).toHaveBeenCalledTimes(1);
+
+    await harness.navigateByUrl('/clients/client-1/service');
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+
+    expect(host.querySelector('app-plans-tab')?.textContent).toBe('1 plans');
+    expect(api.getClientCommercialOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the plans again for a tab when the record could not read them', async () => {
+    const getClientCommercialOverview = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new Error('refused')))
+      .mockReturnValue(
+        of({
+          clientProfileId: 'client-1',
+          isRelationshipBlocked: false,
+          featureAccess: [],
+          enrollments: [],
+        }),
+      );
+    const { harness, host } = await render({
+      api: { getClientCommercialOverview },
+      sections: [{ path: '', component: PlansTab }],
+    });
+    await settle(harness.fixture);
+
+    expect(getClientCommercialOverview).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('app-plans-tab')?.textContent).toBe('0 plans');
   });
 
   it('puts focus on the client’s name when the record opens, once', async () => {

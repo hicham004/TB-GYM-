@@ -63,6 +63,8 @@ export class ClientAccount {
   protected readonly initialsOf = initialsOf;
   protected readonly signingOut = signal(false);
   protected readonly coachName = signal<string | null>(null);
+  /** The coach's name is on its way: their card's place is kept, so the groups below do not move (audit UIQ-5). */
+  protected readonly coachLoading = signal(false);
   protected readonly preferenceError = signal<string | null>(null);
 
   protected readonly displayName = computed(() => this.auth.user()?.displayName ?? '');
@@ -106,6 +108,7 @@ export class ClientAccount {
     this.scope.onReset(() => {
       this.loadedTenantId = null;
       this.coachName.set(null);
+      this.coachLoading.set(false);
     });
     effect(() => {
       this.scope.epoch();
@@ -114,6 +117,7 @@ export class ClientAccount {
       this.loadedTenantId = tenantId;
       untracked(() => {
         this.coachName.set(null);
+        this.coachLoading.set(tenantId !== null);
         if (tenantId !== null) void this.loadCoach();
       });
     });
@@ -173,6 +177,8 @@ export class ClientAccount {
         if (owner.current) this.coachName.set(coach.name);
       } catch {
         if (owner.current) this.coachName.set(null);
+      } finally {
+        if (owner.current) this.coachLoading.set(false);
       }
     });
   }

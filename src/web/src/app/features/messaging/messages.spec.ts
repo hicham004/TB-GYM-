@@ -1214,6 +1214,35 @@ describe('Messages', () => {
     );
   });
 
+  it('reports the read cursor once when a thread opens, though it reaches its newest message first (audit UIQ-8)', async () => {
+    const harness = await render(({ listConversations, listConversationMessages }) => {
+      listConversations.mockReturnValue(of(conversationPage([conversation({ unreadCount: 2 })])));
+      listConversationMessages.mockReturnValue(
+        of(
+          messagePage([message(1), message(2)], {
+            latestSequence: 2,
+            readState: readState({ lastReadSequence: 0, unreadCount: 2, latestSequence: 2 }),
+          }),
+        ),
+      );
+    });
+    // The live channel takes its time to join, so the reader is at the newest message before the
+    // opening reports what it displayed.
+    let joined!: () => void;
+    const joining = new Promise<void>((resolve) => (joined = resolve));
+    const join = harness.realtime.openConversation.bind(harness.realtime);
+    harness.realtime.openConversation = (...args) => join(...args).then(() => joining);
+
+    await open(harness);
+    harness.host.querySelector('.feed')!.dispatchEvent(new Event('scroll'));
+    await settle(harness.fixture);
+    joined();
+    await settle(harness.fixture);
+
+    expect(harness.advanceConversationReadCursor).toHaveBeenCalledTimes(1);
+    expect(harness.advanceConversationReadCursor).toHaveBeenCalledWith('conversation-1', 2);
+  });
+
   it('does not report a read cursor that is already current', async () => {
     const harness = await render(({ listConversations, listConversationMessages }) => {
       listConversations.mockReturnValue(of(conversationPage([conversation()])));
@@ -2644,6 +2673,34 @@ describe('Messages', () => {
       expect(harness.realtime.opened).toEqual([
         { conversationId: 'conversation-1', fromEventSequence: 1 },
       ]);
+    });
+
+    it('keeps a client’s screen one thread while the list is read, so nothing jumps when it answers (audit UIQ-5)', async () => {
+      const list = new Subject<ReturnType<typeof conversationPage>>();
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(list);
+        listConversationMessages.mockReturnValue(
+          of(messagePage([message(1, { body: 'Hi Maya! Lower A today.' })])),
+        );
+      });
+      harness.membership.set({ ...ALPHA, role: 'Client' });
+      await settle(harness.fixture);
+
+      expect(query(harness.host, '.chat').classList).toContain('single');
+      expect(harness.host.querySelector('.inbox')).toBeNull();
+      expect(harness.host.textContent).not.toContain('Choose a conversation');
+      // The thread's shape, not a blank page, while the list is read.
+      expect(query(harness.host, '.chat').classList).toContain('has-thread');
+      expect(query(harness.host, '.thread .thread-skeleton').getAttribute('aria-hidden')).toBe(
+        'true',
+      );
+
+      list.next(conversationPage([withCoach]));
+      list.complete();
+      await settle(harness.fixture);
+
+      expect(query(harness.host, '.chat').classList).toContain('single');
+      expect(bodies(harness.host)).toEqual(['Hi Maya! Lower A today.']);
     });
 
     it('brings the inbox back when a client also has a former coach’s thread', async () => {

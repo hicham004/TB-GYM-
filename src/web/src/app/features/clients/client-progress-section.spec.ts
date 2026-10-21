@@ -1,5 +1,6 @@
-import { Component, input } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoachClientDetails } from '../../core/api/api.models';
 import { settle } from '../../../testing/dom';
@@ -14,6 +15,7 @@ import { ClientProgressSection } from './client-workspace-sections';
 class DashboardStub {
   readonly clientId = input<string | null>(null);
   readonly clientName = input<string | null>(null);
+  readonly answered = output<void>();
 }
 
 @Component({
@@ -69,6 +71,16 @@ describe('ClientProgressSection', () => {
     details.dispatchEvent(new Event('toggle'));
     await settle(fixture);
     expect(host.querySelector('app-progress-entries')).not.toBeNull();
+  });
+
+  it('draws the entry tools once the charts above them have answered, so they are not pushed down (audit UIQ-5)', async () => {
+    const { fixture, host } = await render();
+    expect(host.querySelector('details')?.classList).toContain('entries--waiting');
+
+    fixture.debugElement.query(By.directive(DashboardStub)).componentInstance.answered.emit();
+    await settle(fixture);
+
+    expect(host.querySelector('details')?.classList).not.toContain('entries--waiting');
   });
 
   it('offers no entry tools for a former client, whose record is read-only', async () => {

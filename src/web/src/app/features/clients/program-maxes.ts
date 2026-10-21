@@ -26,6 +26,17 @@ import { programWriteError, serverCode } from './client-program-forms.models';
 import type { BlockCard } from './client-program.models';
 import { maxCards, type MaxCard } from './program-maxes.models';
 
+/** A program's maxes read with the page's first drawing, for the version of the program they were read for. */
+export interface FirstMaxes {
+  readonly key: string;
+  readonly view: TrainingMaxesView;
+}
+
+/** The key a program's maxes are read under: its id and its version. */
+export function maxesKey(id: string, version: number): string {
+  return `${id}:${version}`;
+}
+
 /**
  * The program's training maxes, at the top right of a client's Training (P2): each lift's number, where
  * it came from and when, and the way to change them for the coming weeks. A program keeps its own
@@ -411,6 +422,11 @@ export class ProgramMaxes {
    */
   readonly reveal = input(false);
   /**
+   * The maxes the page read before drawing itself, so it is laid out once, beside them or without them,
+   * rather than moving when they arrive (audit UIQ-5). Used for the program version they were read for.
+   */
+  readonly firstRead = input<FirstMaxes | null>(null);
+  /**
    * The coach asked to change the maxes: the page opens the sheet, which shares its data. The exercise id
    * says the coach came from that lift's suggestion, which the sheet then shows worked out; null otherwise.
    */
@@ -429,19 +445,25 @@ export class ProgramMaxes {
     return view ? maxCards(view, this.firstName(), this.locale) : [];
   });
 
-  private readonly key = computed(() => `${this.block().id}:${this.block().version}`);
+  private readonly key = computed(() => maxesKey(this.block().id, this.block().version));
 
   constructor() {
     effect(() => {
       this.scope.epoch();
       const id = this.block().id;
-      this.key();
+      const key = this.key();
       // Untracked: reading and setting the view here must not make this effect run again.
       untracked(() => {
         // Another program's maxes are not shown while this one's load.
         if (this.view()?.mesocycleId !== id) {
           this.view.set(null);
           this.problem.set(null);
+        }
+        const first = this.firstRead();
+        if (first !== null && first.key === key && this.view() === null) {
+          this.view.set(first.view);
+          this.state.set('ready');
+          return;
         }
         void this.load();
       });

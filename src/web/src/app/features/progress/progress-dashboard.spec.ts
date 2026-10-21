@@ -341,6 +341,20 @@ describe('ProgressDashboardView states', () => {
     expect(text).toContain('One does not explain another');
   });
 
+  it('says when its read has answered, for what a page draws below the charts (audit UIQ-5)', async () => {
+    const result = new Subject<ProgressDashboardContract>();
+    const { fixture } = await renderWith(result);
+    const answered = vi.fn();
+    fixture.componentInstance.answered.subscribe(answered);
+    expect(answered).not.toHaveBeenCalled();
+
+    result.next(contract());
+    result.complete();
+    await settle(fixture);
+
+    expect(answered).toHaveBeenCalledTimes(1);
+  });
+
   it('ends the chart’s span on its last day, not on the window’s exclusive end (WEA-8)', async () => {
     const host = await render(of(contract()));
     expect(host.querySelector('.date-span')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(

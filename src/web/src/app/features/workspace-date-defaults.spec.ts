@@ -8,7 +8,7 @@ import type { ProductCatalog, WorkspaceDetails } from '../core/api/api.models';
 import { CsrfService } from '../core/security/csrf.service';
 import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
-import { maxPage, maxView, workspace } from '../../testing/client-strength-fixtures';
+import { maxPage, maxView } from '../../testing/client-strength-fixtures';
 import { profile } from '../../testing/client-nutrition-fixtures';
 import { fill, field, press, settle } from '../../testing/dom';
 import { ClientStrength } from './clients/client-strength';
@@ -147,6 +147,8 @@ async function render(
 /** The strength card on a client page, with one lift on record so its row opens Record a max. */
 async function renderStrength(currentDate: string) {
   const recordStrengthMax = vi.fn(() => of(maxView()));
+  // The record's own read of the workspace, which the card takes its date from (audit UIQ-8).
+  const recordWorkspace = signal<WorkspaceDetails | null>(workspaceOn(currentDate));
   const harness = await render(
     ClientStrength,
     {},
@@ -157,13 +159,13 @@ async function renderStrength(currentDate: string) {
         useValue: {
           clientId: signal('client-1'),
           profile: signal(profile()),
-          workspace: signal(workspace()),
+          workspace: recordWorkspace,
         },
       },
     ],
     { listStrengthMaxes: vi.fn(() => of(maxPage([maxView()]))), recordStrengthMax },
   );
-  return { ...harness, recordStrengthMax };
+  return { ...harness, recordStrengthMax, recordWorkspace };
 }
 
 /** Records a max from the lift's row and says which day it was sent for. */
@@ -250,11 +252,12 @@ describe('date defaults across a coach client page', () => {
 
   it('re-derives the day a max was true after the active workspace changes', async () => {
     const harness = await renderStrength('2026-09-21');
-    const { fixture, getWorkspace, tenantId } = harness;
+    const { fixture, getWorkspace, tenantId, recordWorkspace } = harness;
 
-    // The second workspace keeps its own calendar. Resetting must re-read it, not fall back to
-    // the browser and not keep the first workspace's answer.
+    // The second workspace keeps its own calendar. Resetting must take the record's new reading of
+    // it, not fall back to the browser and not keep the first workspace's answer.
     getWorkspace.mockReturnValue(of(workspaceOn('2026-09-23', 'workspace-b')));
+    recordWorkspace.set(workspaceOn('2026-09-23', 'workspace-b'));
     tenantId.set('workspace-b');
     TestBed.inject(TenantContext).invalidate();
     await settle(fixture);

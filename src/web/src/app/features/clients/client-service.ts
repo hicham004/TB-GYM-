@@ -263,9 +263,10 @@ export class ClientService extends GuardedSheets {
       const clientId = this.context.clientId();
       const former = this.context.isFormer();
       try {
+        // The plans the record read for this page when it opened here, or a fresh read (audit UIQ-8).
         const [plans, catalog, overview] = await owner.wait(
           Promise.all([
-            firstValueFrom(this.api.getClientCommercialOverview(clientId)),
+            this.context.plansForPage(),
             former
               ? Promise.resolve(null)
               : firstValueFrom(this.api.getProductCatalog()).catch(() => null),

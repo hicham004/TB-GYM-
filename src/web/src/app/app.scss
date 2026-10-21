@@ -51,6 +51,61 @@ main[data-mode] {
   z-index: 100;
 }
 
+// The frame of the shell this device last drew (shell/launch-shell.ts), empty, while the session is
+// checked: the coach's sidebar and top bar, or the client's tabs, in the shell's own places and
+// colours, so the shell and the page arrive where the frame was (audit UIQ-5).
+.frame-sidebar {
+  align-self: start;
+  background-color: var(--tb-brand);
+  block-size: 100dvh;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  inline-size: max(232px, 14.5rem);
+  inset-block-start: 0;
+  position: sticky;
+}
+
+// Each bar as the shell builds it: its padding around one row as tall as its controls.
+.frame-topbar {
+  background-color: var(--color-surface);
+  border-block-end: 1px solid var(--color-border-subtle);
+  box-sizing: border-box;
+  grid-column: 2;
+  grid-row: 1;
+  min-block-size: 64px;
+  padding-block: var(--space-12);
+}
+
+.frame-topbar::before {
+  block-size: var(--control-height-40);
+  content: '';
+  display: block;
+}
+
+.frame-tabs {
+  background-color: var(--color-surface);
+  border-block-start: 1px solid var(--color-border-subtle);
+  inset-block-end: 0;
+  padding-block: var(--space-8) calc(var(--space-8) + env(safe-area-inset-bottom));
+  position: sticky;
+}
+
+.frame-tabs::before {
+  content: '';
+  display: block;
+  min-block-size: 56px;
+}
+
+@media (max-width: 1023.98px) {
+  .frame-sidebar {
+    display: none;
+  }
+
+  .frame-topbar {
+    grid-column: 1;
+  }
+}
+
 .topbar {
   align-items: center;
   background: var(--tb-surface);

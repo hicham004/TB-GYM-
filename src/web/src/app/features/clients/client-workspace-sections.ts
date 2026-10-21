@@ -5,6 +5,7 @@ import { ProgressEntries } from '../progress/progress-entries';
 import { ClientProgram } from './client-program';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
+import { drawnTogether } from '../../ui/drawn-together';
 
 /**
  * The sections of a client's record other than the Overview. Training, Progress, Nutrition (R5.3d)
@@ -63,9 +64,14 @@ export class ClientNutritionSection {
     <app-progress-dashboard
       [clientId]="context.clientId()"
       [clientName]="context.profile()?.firstName ?? null"
+      (answered)="dashboardAnswered.set(true)"
     />
     @if (!context.isFormer()) {
-      <details class="entries" (toggle)="entriesToggled($event)">
+      <details
+        class="entries"
+        [class.entries--waiting]="!entriesDrawn()"
+        (toggle)="entriesToggled($event)"
+      >
         <summary>
           <span class="entries-title" i18n>Entries and corrections</span>
           <span class="entries-hint" i18n
@@ -86,6 +92,10 @@ export class ClientNutritionSection {
   styles: `
     :host {
       display: block;
+    }
+
+    .entries--waiting {
+      display: none;
     }
 
     .entries {
@@ -132,6 +142,12 @@ export class ClientNutritionSection {
 export class ClientProgressSection {
   protected readonly context = inject(ClientWorkspaceContext);
   protected readonly entriesOpened = signal(false);
+  protected readonly dashboardAnswered = signal(false);
+  /** The fold waits for the charts above it, which would push it down as they land (audit UIQ-5). */
+  protected readonly entriesDrawn = drawnTogether(
+    () => true,
+    () => this.dashboardAnswered(),
+  );
 
   protected entriesToggled(event: Event): void {
     if ((event.target as HTMLDetailsElement).open) this.entriesOpened.set(true);

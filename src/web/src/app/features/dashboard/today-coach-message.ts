@@ -65,6 +65,8 @@ export class TodayCoachMessage {
   protected readonly state = computed(() =>
     coachMessage(this.access.decision('Messaging'), this.read()),
   );
+  /** The read has answered, so Today can draw this card at its final height (audit UIQ-5). */
+  readonly settled = computed(() => this.state().kind !== 'loading');
   protected readonly accessLabel = rowAccessLabel;
   protected readonly initialsOf = initialsOf;
 

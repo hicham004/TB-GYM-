@@ -178,6 +178,26 @@ a.coach:focus-visible {
   transform: scaleX(-1);
 }
 
+.coach--waiting .coach-bone,
+.coach--waiting .line-bone {
+  background: rgb(255 255 255 / 18%);
+  display: block;
+}
+
+.coach--waiting .coach-bone {
+  block-size: var(--control-height-40);
+  border-radius: var(--radius-8);
+  flex: none;
+  inline-size: var(--control-height-40);
+}
+
+// The real card's two lines, the name's drawn as a bar, so the card is exactly as tall.
+.coach--waiting .line-bone {
+  border-radius: var(--radius-4);
+  inline-size: 8rem;
+  max-inline-size: 100%;
+}
+
 @media (forced-colors: active) {
   .hero,
   .coach {

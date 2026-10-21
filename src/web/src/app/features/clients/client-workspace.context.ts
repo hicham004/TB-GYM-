@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { firstValueFrom, type Observable } from 'rxjs';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { NavigationStart, Router } from '@angular/router';
+import { filter, firstValueFrom, type Observable } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type {
@@ -63,8 +64,21 @@ export class ClientWorkspaceContext {
   /** Presentation only: the API decides who may reassign or release a client. */
   readonly isOwner = this.tenants.isOwner;
 
+  /** Counts the router's navigations: each one is a new page. */
+  private page = 0;
+  /** The latest read of the plans and the page it was made for, so a tab on that page shares it. */
+  private plansRead: {
+    clientId: string;
+    page: number;
+    request: Promise<ClientCommercialOverview | null>;
+  } | null = null;
+
   constructor() {
     this.scope.onReset(() => this.reset());
+    const pages = inject(Router)
+      .events.pipe(filter((event) => event instanceof NavigationStart))
+      .subscribe(() => ++this.page);
+    inject(DestroyRef).onDestroy(() => pages.unsubscribe());
   }
 
   /** Reads the record and its header context. Plans and calendar are optional to the page. */
@@ -78,7 +92,7 @@ export class ClientWorkspaceContext {
         const [profile, plans, workspace] = await owner.wait(
           Promise.all([
             firstValueFrom(this.api.getClient(clientId)),
-            firstValueFrom(this.api.getClientCommercialOverview(clientId)).catch(() => null),
+            this.readPlans(clientId),
             firstValueFrom(this.api.getWorkspace()).catch(() => null),
           ]),
         );
@@ -100,15 +114,31 @@ export class ClientWorkspaceContext {
     });
   }
 
-  /** Re-reads the plans, for the header and the renewal prompt, after the Overview opens. */
+  /**
+   * The plans for the page on screen, read once per page (audit UIQ-8): a tab that opens with the record takes
+   * the record's own read, and a tab opened later reads them afresh, so a change made elsewhere shows. Rejects
+   * when they cannot be read.
+   */
+  async plansForPage(): Promise<ClientCommercialOverview> {
+    const clientId = this.clientId();
+    const read = this.plansRead;
+    const shared =
+      read !== null && read.clientId === clientId && read.page === this.page
+        ? await read.request
+        : null;
+    if (shared !== null) return shared;
+    const plans = await firstValueFrom(this.api.getClientCommercialOverview(clientId));
+    this.plansRead = { clientId, page: this.page, request: Promise.resolve(plans) };
+    return plans;
+  }
+
+  /** The plans for the header and the renewal prompt when the Overview opens: read again unless this page has them. */
   async refreshPlans(): Promise<void> {
     return this.scope.run('plans', async (owner) => {
       const clientId = this.clientId();
       if (!clientId) return;
       try {
-        const plans = await owner.wait(
-          firstValueFrom(this.api.getClientCommercialOverview(clientId)),
-        );
+        const plans = await owner.wait(this.plansForPage());
         if (clientId === this.clientId()) this.plans.set(plans);
       } catch {
         // The header keeps what it had; the Service & access tab reports its own failures.
@@ -120,8 +150,14 @@ export class ClientWorkspaceContext {
     this.profile.set(profile);
   }
 
+  /** The plans a change answered with: every tab sees them, and this page asks for them no more. */
   setPlans(plans: ClientCommercialOverview): void {
     this.plans.set(plans);
+    this.plansRead = {
+      clientId: this.clientId(),
+      page: this.page,
+      request: Promise.resolve(plans),
+    };
   }
 
   /**
@@ -156,7 +192,17 @@ export class ClientWorkspaceContext {
     this.notice.set(null);
   }
 
+  /** Reads the plans and keeps the read as this page's; a refusal is null, which the page can do without. */
+  private readPlans(clientId: string): Promise<ClientCommercialOverview | null> {
+    const request = firstValueFrom(this.api.getClientCommercialOverview(clientId)).catch(
+      () => null,
+    );
+    this.plansRead = { clientId, page: this.page, request };
+    return request;
+  }
+
   private reset(): void {
+    this.plansRead = null;
     this.profile.set(null);
     this.plans.set(null);
     this.workspace.set(null);

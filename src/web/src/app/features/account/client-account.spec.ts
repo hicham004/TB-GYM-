@@ -158,11 +158,15 @@ describe('ClientAccount', () => {
 
     selectedTenantId.set('tenant-alpha');
     fixture.detectChanges();
-    expect(host.querySelector('.coach')).toBeNull();
+    // Only the card's place is kept while the new coach is read (audit UIQ-5), never the old name.
+    expect(host.querySelector('.coach:not(.coach--waiting)')).toBeNull();
+    expect(host.querySelector('.coach--waiting')?.getAttribute('aria-hidden')).toBe('true');
+    expect(host.textContent).not.toContain('Lea Haddad');
     await settle(fixture);
 
     expect(api.getOwnCoach).toHaveBeenCalledTimes(2);
-    expect(host.querySelector('.coach')).not.toBeNull();
+    expect(host.querySelector('.coach:not(.coach--waiting)')).not.toBeNull();
+    expect(host.querySelector('.coach--waiting')).toBeNull();
   });
 
   it('offers no coach list to a client with one coach', async () => {

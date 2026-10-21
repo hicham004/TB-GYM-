@@ -306,6 +306,18 @@ export class Messages {
     );
   });
 
+  /** The conversation list has answered once in this workspace. */
+  private readonly listAnswered = signal(false);
+  /**
+   * The screen's layout: a client's starts as that one thread while the list is read, as it is for
+   * nearly every client, so the thread does not jump into place when the list answers (audit UIQ-5).
+   */
+  protected readonly singleLayout = computed(
+    () =>
+      this.singleThread() ||
+      (this.forClient() && !this.listAnswered() && this.conversations().length === 0),
+  );
+
   protected readonly timeline = computed(() =>
     chatTimeline(this.messages(), this.unreadFrom(), this.now(), this.locale),
   );
@@ -1402,6 +1414,7 @@ export class Messages {
         if (owner.current) {
           if (this.ownsList(generation, request)) {
             this.listLoading.set(false);
+            this.listAnswered.set(true);
           }
         }
       }
@@ -1476,10 +1489,13 @@ export class Messages {
       (highest, message) => Math.max(highest, message.sequence),
       0,
     );
-    if (displayed <= page.readState.lastReadSequence) {
+    // Asked for once (audit UIQ-8): the thread scrolling to its newest message may have asked already,
+    // and once this asks, that scroll does not ask again.
+    if (displayed <= Math.max(this.confirmedRead, this.readTarget)) {
       return;
     }
 
+    this.readTarget = displayed;
     await this.reportRead(conversationId, displayed, generation, thread);
   }
 
@@ -1753,6 +1769,7 @@ export class Messages {
     ++this.historyRequest;
     this.context = null;
     this.conversations.set([]);
+    this.listAnswered.set(false);
     this.counts.set(null);
     this.pinned.set(null);
     this.clientPanel.set(null);

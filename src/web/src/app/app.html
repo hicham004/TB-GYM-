@@ -10,11 +10,23 @@
        workspace switching and sign-out. -->
   <a class="skip-link" href="#main-content" (click)="skipToContent($event)" i18n>Skip to content</a>
 } @else if (launching()) {
-  <!-- The app is starting: the launch screen index.html draws for an installed app, held until the
-       session answers, rather than a bar saying "Checking session". -->
-  <div class="launch" role="status">
-    <span class="tb-visually-hidden" i18n>Loading <span translate="no">TB Gym</span>…</span>
-  </div>
+  @if (launchShell === 'coach') {
+    <!-- The coach shell this device last drew, empty, while the session answers: the page arrives in
+         its place rather than after a blank screen (audit UIQ-5). The client's tabs follow <main>. -->
+    <div class="frame-sidebar tb-theme" aria-hidden="true"></div>
+    <div class="frame-topbar tb-theme" aria-hidden="true"></div>
+  }
+  @if (launchShell) {
+    <span class="tb-visually-hidden" role="status" i18n
+      >Loading <span translate="no">TB Gym</span>…</span
+    >
+  } @else {
+    <!-- The app is starting: the launch screen index.html draws for an installed app, held until the
+         session answers, rather than a bar saying "Checking session". -->
+    <div class="launch" role="status">
+      <span class="tb-visually-hidden" i18n>Loading <span translate="no">TB Gym</span>…</span>
+    </div>
+  }
 } @else if (shell() === 'member') {
   <!-- An account with no workspace keeps the existing top bar, light like the pages it serves.
        Signed-out pages (the homepage, sign-in and the rest of /auth, invitations) draw their own
@@ -58,12 +70,12 @@
 <main
   #main
   id="main-content"
-  [attr.data-mode]="contentMode()"
+  [attr.data-mode]="launching() ? null : contentMode()"
   [attr.tabindex]="shell() === 'client' || shell() === 'coach' ? -1 : null"
-  [class.app-main]="shell() === 'member' || shell() === 'client'"
-  [class.client-main]="shell() === 'client'"
+  [class.app-main]="frame() === 'member' || frame() === 'client'"
+  [class.client-main]="frame() === 'client'"
   [class.full-screen]="shell() === 'client' && fullScreen()"
-  [class.coach-main]="shell() === 'coach'"
+  [class.coach-main]="frame() === 'coach'"
 >
   @if (shell() === 'coach') {
     <!-- Deferred: nothing about the first paint depends on it, and it keeps the shell's bundle small. -->
@@ -77,4 +89,7 @@
   <!-- After <main>, so the tabs come last in reading and focus order (339:2140). The workout player
        fills the screen and leads back with its own ×. -->
   <app-client-tabs />
+} @else if (launching() && launchShell === 'client') {
+  <!-- The client's tabs, empty, while the session answers (audit UIQ-5). -->
+  <div class="frame-tabs" aria-hidden="true"></div>
 }

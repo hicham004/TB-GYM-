@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
@@ -23,6 +23,7 @@ import {
 } from '../../../testing/client-profile-fixtures';
 import { attentionItem, COACH_NOW, COACH_TODAY, MAYA } from '../../../testing/coach-today-fixtures';
 import { field, press, settle } from '../../../testing/dom';
+import { DRAWN_TOGETHER_PATIENCE_MS } from '../../ui/drawn-together';
 import { ClientOverview } from './client-overview';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
@@ -251,6 +252,42 @@ describe('ClientOverview', () => {
     expect(needs.querySelectorAll('.tb-button--filled')).toHaveLength(1);
     expect(link(needs, 'Review').classList.contains('tb-button--filled')).toBe(true);
     expect(said(host)).not.toContain('Nothing needs you right now.');
+  });
+
+  describe('drawn in one frame (audit UIQ-5)', () => {
+    it('keeps the overview’s shape until every part has answered, then draws them all at once', async () => {
+      const records = new Subject<typeof RECORDS>();
+      const { fixture, host } = await render({
+        api: { getClientTrainingPersonalRecords: vi.fn(() => records) },
+      });
+
+      expect(host.querySelector('.overview > [role="status"]')?.textContent).toBe('Loading…');
+      expect(host.querySelector('section.needs')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('#needs-heading')).toBeNull();
+      expect(said(host)).not.toContain('Back Squat');
+
+      records.next(RECORDS);
+      records.complete();
+      await settle(fixture);
+
+      expect(host.querySelector('.overview > [role="status"]')).toBeNull();
+      expect(host.querySelector('#needs-heading')).not.toBeNull();
+      expect(said(host)).toContain('PR Back Squat 60 kg × 5 Mon 28 Sep');
+    });
+
+    it('stops waiting for a slow part a moment after the first has answered', async () => {
+      const { fixture, host } = await render({
+        api: { getClientTrainingPersonalRecords: vi.fn(() => new Subject()) },
+      });
+      expect(host.querySelector('#needs-heading')).toBeNull();
+
+      await new Promise((resolve) => setTimeout(resolve, DRAWN_TOGETHER_PATIENCE_MS + 50));
+      await settle(fixture);
+
+      expect(host.querySelector('#needs-heading')).not.toBeNull();
+      // The part still out keeps its own skeleton.
+      expect(host.querySelector('section.records app-skeleton')).not.toBeNull();
+    });
   });
 
   it('keeps the other cards when one read fails, and retries only that one', async () => {

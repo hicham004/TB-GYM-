@@ -24,6 +24,7 @@ import { clientCheckInDenialMessage } from '../../core/i18n/display-labels';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
+import { drawnTogether } from '../../ui/drawn-together';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
@@ -119,6 +120,23 @@ export class ClientOverview {
     notes: ['', Validators.maxLength(8000)],
   });
   protected readonly loadingLabel = $localize`Loading…`;
+
+  /** Every part's read, for drawing them together. */
+  private readonly parts = [
+    this.overview,
+    this.dashboard,
+    this.records,
+    this.checkIns,
+    this.blocks,
+  ];
+  /**
+   * The parts are drawn in one frame once all have answered, so none pushes the others down as it
+   * lands (audit UIQ-5); one still out after a moment shows its own skeleton instead of holding them.
+   */
+  protected readonly drawn = drawnTogether(
+    () => this.parts.some((part) => part().state !== 'loading'),
+    () => this.parts.every((part) => part().state !== 'loading'),
+  );
 
   protected readonly firstName = computed(() => this.profile()?.firstName ?? '');
   private readonly today = computed(() => this.context.workspace()?.currentDate ?? null);

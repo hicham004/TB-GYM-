@@ -1398,6 +1398,11 @@ Tokens are theme-ready from R1, so this costs little later.
   form from its first render, out of sight while empty, the tinted box when a submit is refused, and
   focused on a server refusal. The sheet and dialog forms of clients, nutrition, training, progress and
   intake use it, with the intake steps and Notification settings; rules in `ARCHITECTURE.md` §8.
+- Built in audit A13b: `drawnTogether` (`ui/drawn-together.ts`), so a page whose parts land separately
+  shows its skeleton until all have answered (or a part is 1.5 s late) and then draws them in one frame,
+  rather than letting each push the others down (rule 8). The client's record, its Overview and Training
+  tab, the client's Today and the Progress tab's fold use it; the launch screen draws the empty frame of the
+  shell the device last showed. Rules in `ARCHITECTURE.md` §8.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves
@@ -1452,8 +1457,9 @@ Tokens are theme-ready from R1, so this costs little later.
   "TB." icons (standard, maskable and iPhone) and a branded favicon, all made by
   `scripts/make-app-icons.mjs`. An installed app draws a launch screen from `index.html` until the
   script arrives, and the app draws the same one until the session answers, instead of a bar saying
-  "Checking session". `InstallPrompt` is created at start-up, because Chrome announces an installable
-  page once and only to a listener already there. It feeds an install card on Me and a dismissible
+  "Checking session" (since audit A13b, for a person signed in on the device before, the empty frame of
+  the shell it last showed). `InstallPrompt` is created at start-up, because Chrome announces an
+  installable page once and only to a listener already there. It feeds an install card on Me and a dismissible
   banner on Today (gone for a month after "Not now"): an Install button where Chrome offers one,
   Share-menu steps on an iPhone or iPad, nothing inside the installed app.
 - **No service worker, on purpose.** Chromium reports the page installable without one (checked with

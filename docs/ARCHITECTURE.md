@@ -898,6 +898,23 @@ sidebar's brand on a wide screen and just below the top bar on a narrow one (by 
 `--tb-topbar-block-size`), so it never covers a control. A "→" in the player, the homepage's quiet links
 and Progress turns round under right-to-left text.
 
+Audit A13b (UIQ-8, UIQ-5): one read per fact per page, and pages that arrive in place. A client's record
+reads the client, the plans and the workspace once when it opens, and a tab that opens with it takes those
+answers (`ClientWorkspaceContext.plansForPage()` and `workspace()`); a tab opened later reads the plans
+afresh, so a change made elsewhere shows. The billing banner reads `/api/billing/access` once per workspace,
+one read at a time, and again on a page change only while it says something a recorded payment would clear
+or once its answer is ten minutes old. Opening a thread reports its read cursor once. A page whose parts
+land separately draws them in one frame (`ui/drawn-together.ts`: once all have answered, or 1.5 s after the
+first while one is still out, which then shows its own skeleton), shaped like itself until then: the
+record's header and section, its Overview, its Training tab (whose maxes are read with the program), the
+Progress tab's fold, the client's Today (the week with the day's card, then the cards below). Places are
+kept while a name or a date is read (Today's date and coach, Me's coach card, the coach's Today), and a
+client's Messages starts as their one thread. `LaunchShellHint` (`shell/launch-shell.ts`) remembers on the
+device which shell was last drawn, `coach` or `client`: never a credential, it grants nothing and is
+forgotten once nobody is signed in. The launch screen draws that shell's empty frame (the sidebar and top
+bar, or the client's tabs) while the session is checked, and the app asks for the serif the signed-in pages
+greet with as soon as the shell is known, so their words do not reflow when it lands.
+
 R6.2g adds Talk to us for gyms and analytics (ADR 0037). `home-talk` is the form (name, gym, one
 field for an email address or a WhatsApp number, a line about the gym, and a hidden honeypot) between
 the audience split and the finale; the hero's and finale's quiet links and the gym story's button

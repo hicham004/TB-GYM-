@@ -73,6 +73,7 @@ async function render(options: Options = {}) {
     isFormer: signal(false),
   };
   const tenant = options.tenant ?? signal('tenant-1');
+  const calendar = { resolveToday: vi.fn(() => Promise.resolve(TODAY)) };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
@@ -80,14 +81,22 @@ async function render(options: Options = {}) {
       { provide: ClientNutritionApi, useValue: api },
       { provide: ProgressEntriesApi, useValue: progress },
       { provide: MealPlanApi, useValue: mealPlans },
-      { provide: WorkspaceCalendar, useValue: { resolveToday: () => Promise.resolve(TODAY) } },
+      { provide: WorkspaceCalendar, useValue: calendar },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: tenant } },
     ],
   });
   const fixture = TestBed.createComponent(ClientNutrition);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api, progress, context, tenant };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    api,
+    progress,
+    context,
+    tenant,
+    calendar,
+  };
 }
 
 const textOf = (element: Element | null | undefined) =>
@@ -111,6 +120,13 @@ describe('A client’s Nutrition tab', () => {
       .querySelectorAll('.cdk-overlay-container')
       .forEach((node) => node.replaceChildren());
     TestBed.resetTestingModule();
+  });
+
+  it('takes today from the workspace the record read, never asking for it again (audit UIQ-8)', async () => {
+    const { calendar, api } = await render();
+
+    expect(calendar.resolveToday).not.toHaveBeenCalled();
+    expect(api.plans).toHaveBeenCalledTimes(1);
   });
 
   it('registers dirty nutrition sheets for session exits and beforeunload and cleans up', async () => {

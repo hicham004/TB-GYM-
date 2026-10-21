@@ -157,7 +157,9 @@ export class ClientStrength extends GuardedSheets {
       if (!quiet) this.state.set('loading');
       try {
         const clientId = this.context.clientId();
-        const [today] = await owner.wait(Promise.all([this.calendar.resolveToday()]));
+        // The workspace the record read when it opened (audit UIQ-8); asked again only if that read failed.
+        const today =
+          this.context.workspace()?.currentDate ?? (await owner.wait(this.calendar.resolveToday()));
         this.today.set(today);
         const all: MaxEntry[] = [];
         let total = 0;

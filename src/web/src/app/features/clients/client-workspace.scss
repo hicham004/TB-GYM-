@@ -177,9 +177,87 @@ h1 {
   color: var(--tb-success);
 }
 
-.loading-row {
-  color: var(--tb-muted);
-  margin: 0;
+// ---------- the record's shape while it is read (audit UIQ-5) ----------
+
+.bone {
+  animation: bone-shimmer 1.4s ease-in-out infinite alternate;
+  background: var(--tb-surface-2);
+  border-radius: 6px;
+  display: block;
+  max-inline-size: 100%;
+}
+
+.face-bone {
+  block-size: 4rem;
+  border-radius: 50%;
+  flex: none;
+  inline-size: 4rem;
+}
+
+.name-bone {
+  block-size: 1.75rem;
+  inline-size: 15rem;
+}
+
+.line-bone {
+  block-size: 0.875rem;
+  inline-size: 26rem;
+}
+
+.pill-bone {
+  block-size: 1.5rem;
+  border-radius: 999px;
+  inline-size: 9rem;
+}
+
+.section-bones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding-block: 0.625rem 1.125rem;
+}
+
+.tab-bone {
+  block-size: 1rem;
+  inline-size: 4.5rem;
+}
+
+.panel-bones {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+}
+
+.heading-bone {
+  block-size: 1.25rem;
+  inline-size: 10rem;
+}
+
+.short-bone {
+  block-size: 0.875rem;
+  inline-size: 60%;
+}
+
+@keyframes bone-shimmer {
+  to {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bone {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .bone {
+    border: 1px solid CanvasText;
+  }
 }
 
 .load-error {

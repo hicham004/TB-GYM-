@@ -254,8 +254,9 @@ for (const width of [390, 1440]) {
     const requests: { method: string; path: string; body: unknown }[] = [];
     const afterPayment = plansOverview([cancelledPlan(), enrollment(), paid(unpaidRenewal())]);
     await openService(page, width, 900, {
-      // The header and the page each read the plans once; the page reads them again after paying.
-      plans: [WITH_RENEWAL, WITH_RENEWAL, afterPayment],
+      // The record reads the plans once for the header and the page (audit UIQ-8), and the page
+      // reads them again after paying.
+      plans: [WITH_RENEWAL, afterPayment],
       requests,
       extra: {
         'POST /api/commercial/enrollments/e-2/payments': (route) =>
@@ -311,7 +312,7 @@ test('renewing opens on the plan’s own price option, the day after it ends', a
 
 test('renewing preserves the earlier plan’s receipt under its own dates', async ({ page }) => {
   await openService(page, 390, 900, {
-    plans: [ENDING, ENDING, WITH_RENEWAL],
+    plans: [ENDING, WITH_RENEWAL],
     extra: {
       'POST /api/commercial/enrollments/e-1/renew': (route) => json(route, 200, unpaidRenewal()),
     },

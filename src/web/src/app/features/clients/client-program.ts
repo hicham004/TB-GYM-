@@ -56,7 +56,7 @@ import {
   ProgramRename,
   ProgramReschedule,
 } from './program-block-dialogs';
-import { ProgramMaxes } from './program-maxes';
+import { type FirstMaxes, maxesKey, ProgramMaxes } from './program-maxes';
 import { ProgramMaxesUpdate } from './program-maxes-update';
 import { ProgramNextBlock } from './program-next-block';
 import { ProgramSession } from './program-session';
@@ -111,6 +111,8 @@ export class ClientProgram {
   protected readonly context = inject(ClientWorkspaceContext);
   protected readonly read = signal<CoachClientProgramView | null>(null);
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
+  /** The shown program's maxes, read before the page first draws; the panel reads them itself after that. */
+  protected readonly maxesFirst = signal<FirstMaxes | null>(null);
   /** The program the coach picked from the list; otherwise the one the page opens on. */
   private readonly picked = signal<string | null>(null);
   /** The week a phone shows; null until one is chosen, then the program's own opening week. */
@@ -323,11 +325,16 @@ export class ClientProgram {
 
   protected load(first = false): Promise<void> {
     return this.scope.run('load', async (owner) => {
-      if (first || this.read() === null) this.state.set('loading');
+      const drawing = first || this.read() === null;
+      if (drawing) this.state.set('loading');
       try {
-        this.read.set(
-          await owner.wait(firstValueFrom(this.programApi.getProgram(this.context.clientId()))),
+        const read = await owner.wait(
+          firstValueFrom(this.programApi.getProgram(this.context.clientId())),
         );
+        // The program's maxes come with its first drawing, so the page is laid out once, with the maxes
+        // beside it or without them, instead of moving when they arrive (audit UIQ-5).
+        if (drawing) this.maxesFirst.set(await owner.wait(this.readFirstMaxes(read)));
+        this.read.set(read);
         this.state.set('ready');
       } catch {
         if (!owner.current) return;
@@ -343,7 +350,28 @@ export class ClientProgram {
     });
   }
 
+  /** The maxes of the program the page opens on; null when there is none, or they cannot be read yet. */
+  private async readFirstMaxes(read: CoachClientProgramView): Promise<FirstMaxes | null> {
+    if (!read.isAllowed) return null;
+    const picked = this.picked();
+    const id =
+      picked && read.blocks.some((block) => block.id === picked)
+        ? picked
+        : focusBlockId(read.blocks);
+    const block = read.blocks.find((item) => item.id === id);
+    if (!block) return null;
+    try {
+      const view = await firstValueFrom(this.programApi.getTrainingMaxes(block.id));
+      return { key: maxesKey(block.id, Number(block.version)), view };
+    } catch {
+      // The panel reads them itself and says so if it cannot.
+      return null;
+    }
+  }
+
   protected openBlock(id: string): void {
+    // Another program's maxes, and this one's again later, are read by the panel itself.
+    this.maxesFirst.set(null);
     this.picked.set(id);
     this.pickedWeek.set(null);
     this.focusedKey = null;
@@ -546,6 +574,7 @@ export class ClientProgram {
     this.loadedKey = null;
     this.focusedKey = null;
     this.read.set(null);
+    this.maxesFirst.set(null);
     this.state.set('loading');
     this.picked.set(null);
     this.pickedWeek.set(null);

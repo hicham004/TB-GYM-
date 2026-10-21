@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 import { ClientAccessStore } from './core/access/client-access.store';
 import { AuthStore } from './core/auth/auth.store';
@@ -120,8 +120,11 @@ async function render(
 }
 
 describe('App', () => {
+  // The shell a test draws is remembered for the next start (shell/launch-shell.ts): each test starts with none.
+  beforeEach(() => localStorage.clear());
   afterEach(() => {
     TestBed.resetTestingModule();
+    localStorage.clear();
   });
 
   it('creates the application shell', async () => {
@@ -286,6 +289,92 @@ describe('App', () => {
     await settle(fixture);
     expect(host.querySelector('.topbar')).toBeNull();
     expect(host.querySelector('main')?.classList.contains('app-main')).toBe(false);
+  });
+
+  describe('the frame of the shell this device last drew (audit UIQ-5)', () => {
+    it('draws a returning coach’s sidebar and top bar, empty, while the session answers', async () => {
+      localStorage.setItem('tb-gym.launch-shell', 'coach');
+      const { fixture, host, auth } = await render({ loading: true, owner: true });
+
+      expect(host.classList).toContain('coach-layout');
+      expect(host.querySelector('.frame-sidebar')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('.frame-topbar')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('[role="status"]')?.textContent).toContain('Loading TB Gym');
+      expect(host.querySelector('.launch')).toBeNull();
+      expect(host.querySelector('main')?.classList).toContain('coach-main');
+      // The page area takes the person's mode with the frame, never a light page between dark bars.
+      expect(host.querySelector('main')?.hasAttribute('data-mode')).toBe(false);
+
+      auth.user.set(OWNER);
+      auth.loading.set(false);
+      await settle(fixture);
+
+      // The shell takes the frame's places: the page keeps its own.
+      expect(host.querySelector('.frame-sidebar')).toBeNull();
+      expect(host.querySelector('.frame-topbar')).toBeNull();
+      expect(host.querySelector('app-coach-shell')).not.toBeNull();
+      expect(host.querySelector('main')?.classList).toContain('coach-main');
+    });
+
+    it('draws a returning client’s tabs, empty, after the page', async () => {
+      localStorage.setItem('tb-gym.launch-shell', 'client');
+      const { fixture, host, auth } = await render({ loading: true, client: true });
+
+      expect(host.classList).toContain('client-layout');
+      expect(host.querySelector('main + .frame-tabs')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('.frame-sidebar')).toBeNull();
+      expect(host.querySelector('main')?.classList).toContain('client-main');
+
+      auth.user.set(OWNER);
+      auth.loading.set(false);
+      await settle(fixture);
+
+      expect(host.querySelector('.frame-tabs')).toBeNull();
+      expect(host.querySelector('main + app-client-tabs')).not.toBeNull();
+    });
+
+    it('remembers the shell drawn for the next start, and forgets it once nobody is signed in', async () => {
+      const { fixture, auth } = await render({ signedIn: true, owner: true });
+      expect(localStorage.getItem('tb-gym.launch-shell')).toBe('coach');
+
+      auth.user.set(null);
+      await settle(fixture);
+
+      expect(localStorage.getItem('tb-gym.launch-shell')).toBeNull();
+    });
+
+    it('asks for the serif the signed-in pages greet with as soon as the shell is known, once', async () => {
+      const load = vi.fn().mockResolvedValue([]);
+      Object.defineProperty(document, 'fonts', { configurable: true, value: { load } });
+      try {
+        localStorage.setItem('tb-gym.launch-shell', 'client');
+        const { fixture, auth } = await render({ loading: true, client: true });
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(load).toHaveBeenCalledWith('1em "TB Home Serif"');
+
+        auth.user.set(OWNER);
+        auth.loading.set(false);
+        await settle(fixture);
+        expect(load).toHaveBeenCalledTimes(1);
+
+        TestBed.resetTestingModule();
+        localStorage.clear();
+        await render();
+        // A visitor's pages never asked for it.
+        expect(load).toHaveBeenCalledTimes(1);
+      } finally {
+        delete (document as { fonts?: unknown }).fonts;
+      }
+    });
+
+    it('draws the plain launch screen when this device remembers no shell, or something else', async () => {
+      localStorage.setItem('tb-gym.launch-shell', 'admin');
+      const { host } = await render({ loading: true, owner: true });
+
+      expect(host.querySelector('.launch')).not.toBeNull();
+      expect(host.querySelector('.frame-sidebar')).toBeNull();
+      expect(host.classList).not.toContain('coach-layout');
+    });
   });
 
   it('hands over from the launch screen to the shell when the session answers', async () => {

@@ -58,6 +58,24 @@
 
         <app-section-nav class="sections" label="Client sections" i18n-label [links]="sections()" />
       </div>
+    } @else if (context.loading()) {
+      <!-- The record's shape while it is read, said once, never a bare line (audit UIQ-5). -->
+      <div class="identity-card record-skeleton" role="status">
+        <span class="tb-visually-hidden" i18n>Loading client…</span>
+        <div class="identity" aria-hidden="true">
+          <span class="bone face-bone"></span>
+          <span class="who">
+            <span class="bone name-bone"></span>
+            <span class="bone line-bone"></span>
+            <span class="bone pill-bone"></span>
+          </span>
+        </div>
+        <span class="sections section-bones" aria-hidden="true">
+          @for (bone of sectionBones; track bone) {
+            <span class="bone tab-bone"></span>
+          }
+        </span>
+      </div>
     }
 
     <p class="page-error" role="alert">{{ context.error() }}</p>
@@ -65,7 +83,12 @@
   </header>
 
   @if (context.loading() && !profile()) {
-    <p class="loading-row" role="status" i18n>Loading client…</p>
+    <div class="panel-bones" aria-hidden="true">
+      <span class="bone heading-bone"></span>
+      <span class="bone line-bone"></span>
+      <span class="bone line-bone"></span>
+      <span class="bone short-bone"></span>
+    </div>
   } @else if (context.missing()) {
     <!-- A 404: an old link, or a client this coach does not coach (ADR 0026). Retry can never help. -->
     <app-empty-state

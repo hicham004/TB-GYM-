@@ -30,7 +30,12 @@ type Api = Partial<
   >
 >;
 
-async function render(api: Api = {}, tenant = signal('tenant-1')) {
+async function render(
+  api: Api = {},
+  tenant = signal('tenant-1'),
+  recordWorkspace: ReturnType<typeof workspace> | null = workspace(),
+) {
+  const calendar = { resolveToday: vi.fn(() => Promise.resolve(TODAY)) };
   const calls: Api = {
     listStrengthMaxes: vi.fn(() => of(maxPage(mayaMaxes()))),
     recordStrengthMax: vi.fn(() => of(maxView({ id: 'new', value: 100, program: null }))),
@@ -46,17 +51,17 @@ async function render(api: Api = {}, tenant = signal('tenant-1')) {
         useValue: {
           clientId: signal('client-1'),
           profile: signal(profile()),
-          workspace: signal(workspace()),
+          workspace: signal(recordWorkspace),
         },
       },
-      { provide: WorkspaceCalendar, useValue: { resolveToday: () => Promise.resolve(TODAY) } },
+      { provide: WorkspaceCalendar, useValue: calendar },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: tenant } },
     ],
   });
   const fixture = TestBed.createComponent(ClientStrength);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, calls };
+  return { fixture, host: fixture.nativeElement as HTMLElement, calls, calendar };
 }
 
 const textOf = (element: Element | null | undefined) =>
@@ -85,6 +90,16 @@ describe('A client’s strength history', () => {
     const { calls } = await render();
     expect(calls.listStrengthMaxes).toHaveBeenCalledTimes(1);
     expect(calls.listStrengthMaxes).toHaveBeenCalledWith('client-1', undefined, 0, 100, true);
+  });
+
+  it('takes today from the workspace the record read, and asks for it only if that read failed (audit UIQ-8)', async () => {
+    const { calendar } = await render();
+    expect(calendar.resolveToday).not.toHaveBeenCalled();
+
+    TestBed.resetTestingModule();
+    const { calendar: fallback, calls } = await render({}, signal('tenant-1'), null);
+    expect(fallback.resolveToday).toHaveBeenCalledTimes(1);
+    expect(calls.listStrengthMaxes).toHaveBeenCalledTimes(1);
   });
 
   it('shows each lift once: its training max, how it moved, and the tested max beside it', async () => {

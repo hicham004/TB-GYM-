@@ -227,7 +227,8 @@ export class ClientNutrition {
       try {
         const [today, allergens, calculations, plans] = await owner.wait(
           Promise.all([
-            this.calendar.resolveToday(),
+            // The workspace the record read when it opened (audit UIQ-8); asked again only if that read failed.
+            this.context.workspace()?.currentDate ?? this.calendar.resolveToday(),
             firstValueFrom(this.api.allergens(clientId)),
             firstValueFrom(this.api.calculations(clientId, 5)),
             firstValueFrom(this.api.plans(clientId)),

@@ -1,6 +1,16 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  LOCALE_ID,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -63,6 +73,12 @@ export class ProgressDashboardView {
   protected readonly range = signal<'4w' | '12w' | 'all'>('12w');
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** The read has answered, so what sits below can be drawn without being pushed down (audit UIQ-5). */
+  private readonly settled = computed(
+    () => !this.loading() && (this.dashboard() !== null || this.error() !== null),
+  );
+  /** Says each time a read has answered, for a page that draws something below the charts. */
+  readonly answered = output<void>();
   protected readonly coachMode = computed(() => this.clientId() !== null);
   /** The client logging their own weight; a coach records through the entries page. */
   protected readonly audience = computed<Audience>(() => ({
@@ -139,6 +155,9 @@ export class ProgressDashboardView {
   }
 
   constructor() {
+    effect(() => {
+      if (this.settled()) untracked(() => this.answered.emit());
+    });
     this.scope.onReset(() => this.resetTenantState());
     effect(() => {
       this.scope.epoch();

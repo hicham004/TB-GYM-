@@ -24,6 +24,7 @@ import { countDisplay } from '../../shell/coach-navigation';
 import { initialsOf } from '../../shell/initials';
 import { Avatar } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
+import { drawnTogether } from '../../ui/drawn-together';
 import { Icon } from '../../ui/icon';
 import { StatusLabel } from '../../ui/status-label';
 import { InstallCard } from '../install/install-card';
@@ -42,7 +43,10 @@ import { mapTrainingWeek, trainingCard, type TrainingWeek } from './today.models
  * The client's Today: the workspace date, the one training decision for the day,
  * the other things due today and the coach's latest message. Each part reads and retries on its
  * own, so one failure never hides another, and a reply from a workspace the client has just left
- * is dropped. The date is always the workspace's, never the browser's.
+ * is dropped. The date is always the workspace's, never the browser's. The week and the day's card
+ * are drawn together once both have answered, and the cards below them once they have too, so no
+ * part pushes another down as it lands (audit UIQ-5); a part still out after a moment no longer
+ * holds the rest.
  */
 @Component({
   selector: 'app-client-today',
@@ -73,11 +77,17 @@ export class ClientToday {
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly trainingHeading = viewChild<ElementRef<HTMLElement>>('trainingHeading');
+  private readonly also = viewChild(TodayAlso);
+  private readonly coachMessage = viewChild(TodayCoachMessage);
   private generation = 0;
 
   protected readonly day = signal<ClientTrainingDayResult | null>(null);
   protected readonly week = signal<TrainingWeek | null>(null);
   protected readonly coachName = signal<string | null>(null);
+  /** The coach's name is on its way: their place in the header is kept, so the heading does not rewrap. */
+  protected readonly coachLoading = signal(true);
+  /** The day's training has answered once in this workspace; a Retry later keeps the page drawn. */
+  private readonly trainingAnswered = signal(false);
   protected readonly weekFailed = signal(false);
   protected readonly upcoming = signal<UpcomingTraining | null>(null);
   protected readonly loading = signal(true);
@@ -128,6 +138,25 @@ export class ClientToday {
     () => this.access.decision('Messaging')?.isAllowed ?? false,
   );
 
+  /** The week and the day's card, drawn in one frame once both have answered. */
+  protected readonly coreDrawn = drawnTogether(
+    () => this.trainingAnswered(),
+    () =>
+      this.trainingAnswered() &&
+      !this.trainingLoading() &&
+      (this.week() !== null || this.weekFailed()),
+  );
+  /** Also today and the coach's message, drawn below once they and everything above have answered. */
+  protected readonly belowDrawn = drawnTogether(
+    () => this.coreDrawn(),
+    () =>
+      this.coreDrawn() &&
+      (this.also()?.settled() ?? false) &&
+      (this.coachMessage()?.settled() ?? false),
+  );
+  /** The seven days of the week's shape while it is read. */
+  protected readonly weekBones = [1, 2, 3, 4, 5, 6, 7];
+
   protected readonly displayName = computed(() => this.auth.user()?.displayName ?? '');
   protected readonly firstName = computed(() => this.displayName().trim().split(/\s+/)[0] ?? '');
   protected readonly weekProgress = computed(() => {
@@ -158,6 +187,8 @@ export class ClientToday {
       this.day.set(null);
       this.week.set(null);
       this.coachName.set(null);
+      this.coachLoading.set(true);
+      this.trainingAnswered.set(false);
       this.weekFailed.set(false);
       this.upcoming.set(null);
       this.workspaceDate.set(null);
@@ -204,7 +235,10 @@ export class ClientToday {
           void this.loadWorkspaceDate(generation);
         }
       } finally {
-        if (owner.current && generation === this.generation) this.loading.set(false);
+        if (owner.current && generation === this.generation) {
+          this.loading.set(false);
+          this.trainingAnswered.set(true);
+        }
       }
     });
   }
@@ -228,6 +262,8 @@ export class ClientToday {
         if (owner.current) this.coachName.set(coach.name);
       } catch {
         if (owner.current) this.coachName.set(null);
+      } finally {
+        if (owner.current) this.coachLoading.set(false);
       }
     });
   }
@@ -268,6 +304,8 @@ export class ClientToday {
     this.day.set(null);
     this.week.set(null);
     this.coachName.set(null);
+    this.coachLoading.set(true);
+    this.trainingAnswered.set(false);
     this.weekFailed.set(false);
     this.upcoming.set(null);
     this.workspaceDate.set(null);

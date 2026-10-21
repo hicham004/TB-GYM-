@@ -1,9 +1,8 @@
 <section class="coach-today" aria-labelledby="coach-today-heading">
   <header class="top">
     <div class="greeting">
-      @if (today(); as view) {
-        <p class="date">{{ view.dateLabel }}</p>
-      }
+      <!-- The date's line is kept while it is read, so the greeting never moves (audit UIQ-5). -->
+      <p class="date">{{ today()?.dateLabel }}</p>
       <h1 id="coach-today-heading" #heading tabindex="-1">
         @switch (today()?.partOfDay) {
           @case ('morning') {
@@ -37,16 +36,19 @@
         }
       }
     </div>
-    <div class="top-actions">
-      <a appButton variant="outlined" routerLink="/clients">
-        <app-icon name="clients" />
-        <span i18n>Find a client</span>
-      </a>
-      <a appButton variant="outlined" routerLink="/invitations">
-        <app-icon name="plus" />
-        <span i18n>Invite client</span>
-      </a>
-    </div>
+    <!-- Drawn with the read's answer, beside or under the line it brings, so they never move. -->
+    @if (!loading() || today()) {
+      <div class="top-actions">
+        <a appButton variant="outlined" routerLink="/clients">
+          <app-icon name="clients" />
+          <span i18n>Find a client</span>
+        </a>
+        <a appButton variant="outlined" routerLink="/invitations">
+          <app-icon name="plus" />
+          <span i18n>Invite client</span>
+        </a>
+      </div>
+    }
   </header>
 
   @if (today(); as view) {

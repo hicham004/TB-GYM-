@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError, type Observable } from 'rxjs';
+import { of, Subject, throwError, type Observable } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
@@ -736,6 +736,26 @@ describe('a client’s Training', () => {
       expect(textOf(panel.querySelector('.name'))).toBe('Back squat');
       expect(textOf(panel.querySelector('.value'))).toBe('100 kg');
       expect(panel.closest('.top')).not.toBeNull();
+    });
+
+    it('reads them once, before the page first draws, so it is laid out once (audit UIQ-5, UIQ-8)', async () => {
+      const answer = new Subject<typeof maxes>();
+      const { harness, host, programApi } = await render({
+        programApi: { getTrainingMaxes: vi.fn(() => answer) },
+      });
+
+      // The program has answered; the page keeps its loading shape until its maxes have too.
+      expect(host.querySelector('.program [aria-busy="true"]')).not.toBeNull();
+      expect(host.querySelector('app-program-maxes')).toBeNull();
+
+      answer.next(maxes);
+      answer.complete();
+      await settle(harness.fixture);
+
+      const panel = host.querySelector('app-program-maxes')!;
+      expect(panel.hasAttribute('data-filled')).toBe(true);
+      expect(panel.querySelector('[aria-busy="true"]')).toBeNull();
+      expect(programApi.getTrainingMaxes).toHaveBeenCalledTimes(1);
     });
 
     it('leaves the page at full width for a program that works out no weight from a max', async () => {

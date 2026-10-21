@@ -381,7 +381,8 @@ describe('ClientToday', () => {
       },
     });
 
-    expect(host.querySelector('.today-date')).toBeNull();
+    // The date's line stays, empty, so the heading never moves (audit UIQ-5).
+    expect(host.querySelector('.today-date')?.textContent?.trim()).toBe('');
     expect(host.querySelector('h1')?.textContent?.trim()).toBe('Today, Maya.');
   });
 
@@ -391,6 +392,90 @@ describe('ClientToday', () => {
     expect(api.getWorkspace).not.toHaveBeenCalled();
     expect(TODAY).toBe('2026-09-20');
   });
+  describe('drawn without parts pushing each other (audit UIQ-5)', () => {
+    const WEEK = {
+      isAllowed: true,
+      accessReason: 'Granted',
+      localDate: '2026-09-21',
+      weekStart: '2026-09-21',
+      days: [0, 1, 2, 3, 4, 5, 6].map((offset) => ({
+        date: `2026-09-${21 + offset}`,
+        scheduled: offset === 0 ? 1 : 0,
+        completed: 0,
+      })),
+    };
+
+    it('keeps the coach’s place while their name is read, so the heading beside it does not rewrap', async () => {
+      const coach = new Subject<{ name: string }>();
+      const { fixture, host } = await render({ api: { getOwnCoach: vi.fn(() => coach) } });
+
+      expect(host.querySelector('.today-coach--waiting')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('.today-coach:not(.today-coach--waiting)')).toBeNull();
+
+      coach.next({ name: 'Hicham Haddad' });
+      coach.complete();
+      await settle(fixture);
+
+      expect(host.querySelector('.today-coach--waiting')).toBeNull();
+      expect(host.querySelector('.today-coach')?.textContent).toContain('Hicham Haddad');
+    });
+
+    it('draws the week and the day’s card together, once both have answered', async () => {
+      const week = new Subject<typeof WEEK>();
+      const { fixture, host } = await render({ api: { getMyTrainingWeek: vi.fn(() => week) } });
+
+      const waiting = host.querySelector('.today-waiting');
+      expect(waiting?.getAttribute('role')).toBe('status');
+      expect(waiting?.textContent).toContain('Loading your workout…');
+      expect(host.querySelector('section.today-week')).toBeNull();
+      expect(host.querySelector('#today-training-heading')).toBeNull();
+
+      week.next(WEEK);
+      week.complete();
+      await settle(fixture);
+
+      expect(host.querySelector('.today-waiting')).toBeNull();
+      expect(host.querySelector('section.today-week')).not.toBeNull();
+      expect(host.querySelector('#today-training-heading')).not.toBeNull();
+    });
+
+    it('holds Also today and the coach’s message until they have answered too', async () => {
+      const latest = new Subject<unknown>();
+      const { fixture, host } = await render({ api: { listConversations: vi.fn(() => latest) } });
+
+      expect(host.querySelector('#today-training-heading')).not.toBeNull();
+      expect(host.querySelector('.today-below')?.classList).toContain('today-below--waiting');
+
+      latest.next({
+        items: [],
+        hasMore: false,
+        nextBeforeActivityAtUtc: null,
+        nextBeforeConversationId: null,
+      });
+      latest.complete();
+      await settle(fixture);
+
+      expect(host.querySelector('.today-below')?.classList).not.toContain('today-below--waiting');
+    });
+
+    it('keeps the page drawn while a Retry reads the day again', async () => {
+      const today = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => new Error()))
+        .mockReturnValueOnce(new Subject());
+      const { fixture, host } = await render({ api: { getMyTrainingToday: today } });
+      expect(host.querySelector('section.today-week')).not.toBeNull();
+
+      press(host, 'Retry');
+      await settle(fixture);
+
+      // Only the card says it is loading; the week stays where it was.
+      expect(host.querySelector('.today-waiting')).toBeNull();
+      expect(host.querySelector('section.today-week')).not.toBeNull();
+      expect(host.querySelector('.today-card .today-skeleton')).not.toBeNull();
+    });
+  });
+
   describe('when the whole plan has run out', () => {
     const expired = () => day([], false, 'Expired');
     const statusText = (host: HTMLElement) =>

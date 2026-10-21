@@ -23,11 +23,13 @@
   min-inline-size: 0;
 }
 
+// Its line is kept while the date is read, so the heading below never moves.
 .today-date {
   color: var(--color-text-secondary);
   font-size: var(--text-metadata-size);
   line-height: var(--text-metadata-line-height);
   margin: 0;
+  min-block-size: var(--text-metadata-line-height);
 }
 
 h1 {
@@ -215,8 +217,70 @@ h1:focus {
   background: var(--color-surface-subtle);
 }
 
+// ---------- the shape Today keeps while it is read (audit UIQ-5) ----------
+
+.today-waiting {
+  display: grid;
+  gap: 1.5rem;
+}
+
+// The week's own layout with nothing in it, so it is exactly as tall as the week it stands for.
+.today-week--waiting .today-week-top strong {
+  background: var(--color-surface-subtle);
+  border-radius: var(--radius-4);
+  inline-size: 6rem;
+}
+
+.today-card--waiting {
+  min-block-size: 17rem;
+}
+
+.today-coach--waiting .coach-bone {
+  background: var(--color-surface-subtle);
+  block-size: var(--control-height-48);
+  border-radius: var(--radius-8);
+  flex: none;
+  inline-size: var(--control-height-48);
+}
+
+.today-coach--waiting .name-bone {
+  background: var(--color-surface-subtle);
+  block-size: 0.75rem;
+  border-radius: var(--radius-4);
+  display: block;
+  inline-size: 5rem;
+}
+
+.today-waiting,
+.today-coach--waiting {
+  animation: today-shimmer 1.4s ease-in-out infinite alternate;
+}
+
+// Also today and the coach's message wait until everything above them has answered.
+.today-below {
+  display: contents;
+}
+
+.today-below--waiting {
+  display: none;
+}
+
+@keyframes today-shimmer {
+  to {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .today-waiting,
+  .today-coach--waiting {
+    animation: none;
+  }
+}
+
 @media (max-width: 430px) {
-  .today {
+  .today,
+  .today-waiting {
     gap: 1.25rem;
   }
   .today-week-ring {

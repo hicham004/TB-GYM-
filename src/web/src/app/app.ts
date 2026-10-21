@@ -21,6 +21,7 @@ import { WorkspaceBrandStore } from './core/theme/workspace-brand.store';
 import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
 import { CoachShell } from './shell/coach-shell';
+import { LaunchShellHint } from './shell/launch-shell';
 import { Button } from './ui/button';
 import { RouteHeadingFocus } from './core/forms/route-heading-focus';
 
@@ -51,8 +52,8 @@ export type ShellKind = 'coach' | 'client' | 'member' | 'public' | 'pending';
   templateUrl: './app.html',
   styleUrl: './app.scss',
   host: {
-    '[class.coach-layout]': "shell() === 'coach'",
-    '[class.client-layout]': "shell() === 'client'",
+    '[class.coach-layout]': "frame() === 'coach'",
+    '[class.client-layout]': "frame() === 'client'",
   },
 })
 export class App implements OnInit {
@@ -64,6 +65,7 @@ export class App implements OnInit {
   protected readonly auth = inject(AuthStore);
   protected readonly tenants = inject(TenantStore);
   private readonly brand = inject(WorkspaceBrandStore);
+  private readonly launchHint = inject(LaunchShellHint);
   protected readonly menuOpen = signal(false);
 
   protected readonly shell = computed<ShellKind>(() => {
@@ -86,6 +88,17 @@ export class App implements OnInit {
    */
   private readonly launched = signal(false);
   protected readonly launching = computed(() => this.shell() === 'pending' && !this.launched());
+
+  /** The shell this device last drew for a signed-in person, whose frame the launch screen draws. */
+  protected readonly launchShell = this.launchHint.remembered;
+  private serifRequested = false;
+  /**
+   * The layout drawn now: the shell's, or while the app starts, the frame of the one this device
+   * remembers, so the shell and the page arrive where their frame was (audit UIQ-5).
+   */
+  protected readonly frame = computed<ShellKind>(() =>
+    this.launching() && this.launchShell !== null ? this.launchShell : this.shell(),
+  );
 
   private readonly redesigned = toSignal(
     this.router.events.pipe(
@@ -115,7 +128,8 @@ export class App implements OnInit {
 
   /**
    * The page keeps the light tokens whatever the person's mode until its screen is rebuilt on
-   * brand v2 (REDESIGNED); the shells around it follow the mode.
+   * brand v2 (REDESIGNED); the shells around it follow the mode. While the app starts the page area
+   * takes none, so a launch frame is drawn in the person's mode throughout.
    */
   protected readonly contentMode = computed(() => (this.redesigned() ? null : 'light'));
 
@@ -123,6 +137,23 @@ export class App implements OnInit {
     inject(RouteHeadingFocus);
     effect(() => {
       if (this.shell() !== 'pending') this.launched.set(true);
+    });
+    // The next start draws this shell's frame; signed out, or with no workspace, it draws none.
+    effect(() => {
+      const shell = this.shell();
+      if (shell === 'coach' || shell === 'client') this.launchHint.remember(shell);
+      else if (shell !== 'pending') this.launchHint.remember(null);
+    });
+    // The serif the signed-in pages greet with and title in, asked for as soon as a coach's or a
+    // client's shell is known, so it is there when the first page draws and that page's words do not
+    // reflow when it lands (audit UIQ-5).
+    effect(() => {
+      const frame = this.frame();
+      if ((frame === 'coach' || frame === 'client') && !this.serifRequested) {
+        this.serifRequested = true;
+        const fonts = (this.document as Partial<Document>).fonts;
+        void fonts?.load('1em "TB Home Serif"').catch(() => undefined);
+      }
     });
     effect(() => this.brand.useHouseBrand(this.houseBrand()));
   }

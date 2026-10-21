@@ -69,6 +69,21 @@ describe('CoachToday', () => {
     expect(host.querySelector('a[href="/clients"]')?.textContent).toContain('Find a client');
   });
 
+  it('keeps the date’s line while Today is read, and draws its buttons with the answer (audit UIQ-5)', async () => {
+    const answer = new Subject<unknown>();
+    const { fixture, host } = await render(() => answer);
+
+    expect(host.querySelector('.date')?.textContent?.trim()).toBe('');
+    expect(host.querySelector('.top-actions')).toBeNull();
+
+    answer.next(coachTodayView());
+    answer.complete();
+    await settle(fixture);
+
+    expect(host.querySelector('.date')?.textContent).toContain('Thursday 1 October');
+    expect(host.querySelector('.top-actions a[href="/clients"]')).not.toBeNull();
+  });
+
   it('shows three tiles with their context and the faces waiting', async () => {
     const { host } = await render();
 

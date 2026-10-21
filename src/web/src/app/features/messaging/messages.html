@@ -1,7 +1,7 @@
 <div
   class="chat tb-theme"
-  [class.has-thread]="selectedId() !== null"
-  [class.single]="singleThread()"
+  [class.has-thread]="selectedId() !== null || singleLayout()"
+  [class.single]="singleLayout()"
   [class.for-client]="forClient()"
   [class.no-conversations]="listIsEmpty()"
   [class.with-panel]="isCoachSide()"
@@ -65,7 +65,7 @@
     }
   </div>
 
-  @if (!singleThread()) {
+  @if (!singleLayout()) {
     <nav class="inbox" #inbox aria-label="Conversations" i18n-aria-label>
       @if (showToolbar()) {
         <app-inbox-toolbar
@@ -441,10 +441,15 @@
           />
         }
       }
-    } @else {
+    } @else if (!singleLayout()) {
       <div class="placeholder">
         <p class="placeholder-title" i18n>Choose a conversation</p>
         <p i18n>Pick someone from the list to read and reply.</p>
+      </div>
+    } @else {
+      <!-- A client's one thread, drawn as its shape while the list is read. -->
+      <div class="thread-skeleton" aria-hidden="true">
+        <span></span><span class="mine"></span><span></span>
       </div>
     }
   </section>

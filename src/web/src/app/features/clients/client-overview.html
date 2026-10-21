@@ -47,6 +47,51 @@
         </div>
       </section>
       <ng-container [ngTemplateOutlet]="notes" />
+    } @else if (!drawn()) {
+      <!-- The overview's shape until every part has answered, then drawn in one frame (audit UIQ-5). -->
+      <span class="tb-visually-hidden" role="status">{{ loadingLabel }}</span>
+      <section class="panel needs" aria-hidden="true">
+        <header class="panel-head">
+          <h2 i18n>Needs you</h2>
+        </header>
+        <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="3" /></div>
+      </section>
+      <div class="grid" aria-hidden="true">
+        <div class="main">
+          <section class="panel week">
+            <header class="panel-head">
+              <h2 i18n>This week</h2>
+            </header>
+            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="4" /></div>
+          </section>
+          <section class="panel weight">
+            <header class="panel-head">
+              <h2 i18n>Weight</h2>
+            </header>
+            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="3" /></div>
+          </section>
+          <section class="panel records">
+            <header class="panel-head">
+              <h2 i18n>Strength records</h2>
+            </header>
+            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="3" /></div>
+          </section>
+        </div>
+        <div class="rail">
+          <section class="panel checkin">
+            <header class="panel-head">
+              <h2 i18n>Check-in</h2>
+            </header>
+            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="2" /></div>
+          </section>
+          <section class="panel notes">
+            <header class="panel-head">
+              <h2 i18n>Coach notes</h2>
+            </header>
+            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="2" /></div>
+          </section>
+        </div>
+      </div>
     } @else {
       <!-- What needs the coach: the same read as Today and Clients, so the three always agree. -->
       <section class="panel needs" aria-labelledby="needs-heading">

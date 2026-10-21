@@ -33,6 +33,15 @@
           />
         </div>
       }
+    } @else if (coachLoading()) {
+      <!-- The coach's card while their name is read, so the groups below do not move. -->
+      <div class="coach coach--waiting" aria-hidden="true">
+        <span class="coach-bone"></span>
+        <span class="coach-text">
+          <span class="coach-label">&nbsp;</span>
+          <strong class="line-bone">&nbsp;</strong>
+        </span>
+      </div>
     }
   </section>
 

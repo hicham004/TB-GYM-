@@ -94,6 +94,8 @@ export class ClientWorkspace {
   protected readonly startingConversation = signal(false);
   /** The breadcrumb's last item until the record has loaded. */
   protected readonly clientLabel = $localize`Client`;
+  /** The section links' places in the record's shape while it is read. */
+  protected readonly sectionBones = [1, 2, 3, 4, 5, 6];
   protected readonly actionsLabel = $localize`Actions`;
 
   protected readonly fullName = computed(() => {

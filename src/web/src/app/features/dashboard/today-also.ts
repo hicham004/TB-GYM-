@@ -76,6 +76,10 @@ export class TodayAlso {
   protected readonly visible = computed(
     () => this.nutrition().kind !== 'hidden' || this.checkIn().kind !== 'hidden',
   );
+  /** Both rows have answered, so Today can draw this card at its final height (audit UIQ-5). */
+  readonly settled = computed(
+    () => this.nutrition().kind !== 'loading' && this.checkIn().kind !== 'loading',
+  );
   protected readonly accessLabel = rowAccessLabel;
 
   /** One polite message for whichever rows could not load; never assertive. */
