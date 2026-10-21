@@ -143,7 +143,9 @@ change, the weeks named by number, and checked again before delivery. (1) The no
 day: NOT-006 keeps dates out of notice wording, and a note can come days after the workout, so
 "Tuesday's" could mislead. It says "Your coach left a note on a workout" and opens that workout.
 (2) The coach is told of a client's note too ("Maya Rahman left a note on a workout", opening that
-session on the client's Training). TrueCoach emails the coach on a workout comment, Trainerize's feed
+session on the client's Training). Since audit A12 (2026-10-21, UIQ-21) a note's notice names the workout
+as it was named when it started ("Maya Rahman left a note on Lower A"), still with no day and never the
+note's text, so weeks of notes are told apart; the coach's inbox folds days older than yesterday. TrueCoach emails the coach on a workout comment, Trainerize's feed
 notifies trainers of client comments, and QuickCoach notifies on client feedback; Coach Today lists
 finished workouts but not notes, so a client's "my knee hurt" would otherwise wait unseen. Finished
 workouts, check-ins and weigh-ins still make no notice: Coach Today is their feed, and a notice for

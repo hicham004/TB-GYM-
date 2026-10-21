@@ -14,12 +14,14 @@ namespace TB.Gym.Infrastructure.Application;
 /// and queues the notices just before it saves. Which weeks changed is read from the change tracker,
 /// so any command that edits a week's sessions, exercises, sets, name or dates counts, without each
 /// command describing its own changes. A week shared before its day says nothing: the client sees it
-/// on that day, as every week arrives. Weeks are tracked by identity, since an edit can move them.
+/// on that day, as every week arrives. Weeks are compared by number, as the client knows them (audit
+/// BEA-5): an edit that moves a week builds it as a new row, and a week number the client could open
+/// before is never newly shared, whatever row holds it now; it is updated when what it holds changed.
 /// </remarks>
 internal sealed partial class TrainingApplicationService
 {
-    /// <summary>The weeks of <paramref name="mesocycle"/> its client can open now.</summary>
-    private HashSet<Guid> ClientVisibleWeeks(TrainingMesocycle mesocycle)
+    /// <summary>The week numbers of <paramref name="mesocycle"/> its client can open now.</summary>
+    private HashSet<int> ClientVisibleWeeks(TrainingMesocycle mesocycle)
     {
         var now = clock.UtcNow;
         return mesocycle.Weeks
@@ -30,18 +32,18 @@ internal sealed partial class TrainingApplicationService
                 now,
                 mesocycle.RevealAllWeeks,
                 week.IsPublished).IsVisible)
-            .Select(week => week.Id)
+            .Select(week => week.WeekNumber)
             .ToHashSet();
     }
 
     /// <summary>
-    /// Queues "shared" for weeks the client can open now and could not before, and "updated" for weeks
-    /// they could open before and still can whose content changed. Call it after the change and before
-    /// saving, with what <see cref="ClientVisibleWeeks"/> said before the change.
+    /// Queues "shared" for week numbers the client can open now and could not before, and "updated" for
+    /// week numbers they could open before and still can whose content changed. Call it after the change
+    /// and before saving, with what <see cref="ClientVisibleWeeks"/> said before the change.
     /// </summary>
     private async Task QueueClientWeekNoticesAsync(
         TrainingMesocycle mesocycle,
-        HashSet<Guid> visibleBefore,
+        HashSet<int> visibleBefore,
         CancellationToken cancellationToken)
     {
         if (mesocycle.Status is MesocycleStatus.Cancelled or MesocycleStatus.Completed)
@@ -50,10 +52,17 @@ internal sealed partial class TrainingApplicationService
         }
 
         var visibleNow = ClientVisibleWeeks(mesocycle);
-        var changed = ChangedWeekIds();
-        var weeks = mesocycle.Weeks.ToDictionary(week => week.Id, week => week.WeekNumber);
-        var shared = visibleNow.Where(id => !visibleBefore.Contains(id)).Select(id => weeks[id]).ToArray();
-        var updated = visibleNow.Where(id => visibleBefore.Contains(id) && changed.Contains(id)).Select(id => weeks[id]).ToArray();
+        var changedRows = ChangedWeekIds();
+        // The number each changed row stands at now; a row taken out leaves its number to whatever replaced it.
+        var changed = mesocycle.Weeks
+            .Where(week => changedRows.Contains(week.Id))
+            .Select(week => week.WeekNumber)
+            .ToHashSet();
+        var shared = visibleNow.Where(number => !visibleBefore.Contains(number)).Order().ToArray();
+        var updated = visibleNow
+            .Where(number => visibleBefore.Contains(number) && changed.Contains(number))
+            .Order()
+            .ToArray();
         if (shared.Length == 0 && updated.Length == 0)
         {
             return;

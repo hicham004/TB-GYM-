@@ -13,9 +13,10 @@ import {
 } from './support';
 
 /**
- * Notifications (R5.1c) in a real browser, for a coach and a client: the inbox in days, the unread
- * filter, Mark all as read, where each notice leads, and the rebuilt settings with its leave warning.
- * Every API call is a per-test mock; guards, interceptors and stores run unchanged.
+ * Notifications (R5.1c) in a real browser, for a coach and a client: the inbox in days, days older than
+ * yesterday folded under their heading (audit UIQ-21), the unread filter, Mark all as read, where each
+ * notice leads (every plan and team notice too, audit COACH-12), and the rebuilt settings with its leave
+ * warning. Every API call is a per-test mock; guards, interceptors and stores run unchanged.
  */
 const ATLAS_CLIENT = {
   ...OWNER_MEMBERSHIP,
@@ -76,7 +77,7 @@ function coachInbox(): Notice[] {
     notice(
       'c1',
       'ClientWorkoutNote',
-      'Maya Rahman left a note on a workout',
+      'Maya Rahman left a note on Lower A',
       "Open the workout on the client's Training to read it.",
       at(0, 9, 41),
       false,
@@ -94,15 +95,15 @@ function coachInbox(): Notice[] {
     notice(
       'c3',
       'ClientLeft',
-      'A client left the workspace',
-      'A client has left this workspace. The owner keeps their record, read-only, under Former clients.',
+      'Hadi Saleh left your coaching space',
+      'Their record is kept, read-only, under Former clients.',
       at(1, 18, 20),
       true,
     ),
     notice(
       'c4',
       'ClientWorkoutNote',
-      'Rami Tabet left a note on a workout',
+      'Rami Tabet left a note on Upper B',
       "Open the workout on the client's Training to read it.",
       at(3, 7, 15),
       true,
@@ -112,7 +113,7 @@ function coachInbox(): Notice[] {
       'c5',
       'CoachResigned',
       'A coach left your team',
-      'A coach resigned from this workspace. Their clients and pending client invitations are now assigned to you, and you can reassign them from Clients.',
+      'Their clients and client invitations are yours now. You can reassign them from Clients.',
       at(12, 10, 0),
       true,
     ),
@@ -133,7 +134,7 @@ function clientInbox(): Notice[] {
     notice(
       'm2',
       'CoachWorkoutNote',
-      'Your coach left a note on a workout',
+      'Your coach left a note on Lower A',
       'Open the workout to read it.',
       at(0, 7, 55),
       false,
@@ -159,8 +160,8 @@ function clientInbox(): Notice[] {
     notice(
       'm5',
       'EnrollmentEndingSoon',
-      'Your service is ending soon',
-      'Your current coaching service is approaching its end date. Open your workspace to see what happens next.',
+      'Your plan ends soon',
+      "If you'd like to keep going, ask your coach to renew it.",
       at(20, 9, 0),
       true,
     ),
@@ -254,7 +255,15 @@ for (const width of [390, 1440]) {
       page,
     }) => {
       await openInbox(page, 'coach', width, dark);
-      await expect(page.locator('.day-title')).toHaveText(['Today', 'Yesterday', /day$/, /\d/]);
+      // Today and Yesterday stand open; an older day is folded under its heading, saying what it holds.
+      await expect(page.locator('.day-title')).toHaveText([
+        'Today',
+        'Yesterday',
+        /day, 1 notification$/,
+        /\d.*, 1 notification$/,
+      ]);
+      await expect(page.locator('.day-toggle')).toHaveCount(2);
+      await expect(page.getByRole('link', { name: /Rami Tabet left a note/ })).toBeHidden();
       await expect(page.locator('.lede')).toHaveText('2 unread');
       await expect(page.locator('.rows li.unread')).toHaveCount(2);
       // The client's note opens that client's Training at the session it is on.
@@ -262,9 +271,15 @@ for (const width of [390, 1440]) {
         'href',
         '/clients/maya/training?session=session-1',
       );
-      await expect(page.getByRole('link', { name: /A client left the workspace/ })).toHaveAttribute(
+      await expect(
+        page.getByRole('link', { name: /Hadi Saleh left your coaching space/ }),
+      ).toHaveAttribute('href', '/clients/former');
+      // Opening a folded day shows its notices, and its coach notice leads to Clients.
+      await page.locator('.day-toggle').last().click();
+      await expect(page.locator('.day-toggle').last()).toHaveAttribute('aria-expanded', 'true');
+      await expect(page.getByRole('link', { name: /A coach left your team/ })).toHaveAttribute(
         'href',
-        '/clients/former',
+        '/clients',
       );
       await expectNoHorizontalOverflow(page);
       await axe(page);
@@ -283,10 +298,13 @@ for (const width of [390, 1440]) {
         '/training/program?week=4',
       );
       await expect(
-        page.getByRole('link', { name: /Your coach left a note on a workout/ }),
+        page.getByRole('link', { name: /Your coach left a note on Lower A/ }),
       ).toHaveAttribute('href', '/training/program?workout=workout-3');
-      // A plan notice has nowhere better to go, and is already read, so it is not a control.
-      await expect(page.locator('.rows li').last().locator('a, button')).toHaveCount(0);
+      // A plan notice opens the client's Today, once its folded day is opened (audit COACH-12, UIQ-21).
+      const ended = page.getByRole('link', { name: /Your plan ends soon/ });
+      await expect(ended).toBeHidden();
+      await page.locator('.day-toggle').last().click();
+      await expect(ended).toHaveAttribute('href', '/');
       await expectNoHorizontalOverflow(page);
       await axe(page);
       await page.screenshot({

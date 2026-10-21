@@ -29,17 +29,21 @@ public sealed record NotificationTemplate(string Key, int Version, string Cultur
 /// coach with many clients could not act on "a client asked". Its title carries
 /// <see cref="ClientNameToken"/>, which the dispatcher replaces with the client's current name as
 /// plain text when the in-app row is written. It is in-app only, so the name never reaches email.
-/// A client's note on a workout names the client the same way (R5.1c).
+/// A client's note on a workout names the client the same way (R5.1c), and so does a client leaving,
+/// to the owner and the coach it tells (audit COACH-12), who could not otherwise learn who left.
 /// </para>
 /// <para>
 /// A second exception, decided for ADR 0036: a notice about weeks of a client's program names those
 /// weeks ("week 3", "weeks 3 to 6") through <see cref="WeeksToken"/>. The words come from this class
-/// and the payload carries only the numbers. Training notices are in-app only.
+/// and the payload carries only the numbers. Training notices are in-app only. A note's notice names
+/// the workout it is on through <see cref="WorkoutToken"/>, the name the workout kept when it started,
+/// read when the row is written (audit UIQ-21); never the note's text.
 /// </para>
 /// <para>
-/// Only culture <c>en</c> and template version 1 exist. Arabic and any other locale are deferred:
-/// the versioned key is here so a later wording change publishes version 2 and leaves every
-/// already-delivered snapshot exactly as it was read.
+/// Only culture <c>en</c> exists; Arabic and any other locale are deferred. Each template carries its
+/// own version: a wording change publishes the next version of that template alone and leaves every
+/// already-delivered snapshot exactly as it was read. Version 2 is the glossary pass of audit COACH-12
+/// (the plan and team notices in the screens' words, and the note notices naming the workout).
 /// </para>
 /// </remarks>
 public static class NotificationTemplateCatalog
@@ -47,112 +51,127 @@ public static class NotificationTemplateCatalog
     /// <summary>The only culture with published templates in this slice.</summary>
     public const string DefaultCulture = "en";
 
-    public const int CurrentVersion = 1;
-
-    /// <summary>Where a named template takes the client's name: RenewalRequested and ClientWorkoutNote.</summary>
+    /// <summary>Where a named template takes the client's name: RenewalRequested, ClientLeft and ClientWorkoutNote.</summary>
     public const string ClientNameToken = "{client}";
 
     /// <summary>Where a week notice takes the weeks it is about (ADR 0036): numbers only, worded here.</summary>
     public const string WeeksToken = "{weeks}";
 
+    /// <summary>Where a note's notice takes the name of the workout it is on (audit UIQ-21).</summary>
+    public const string WorkoutToken = "{workout}";
+
     /// <summary>A client's name is cut to this many characters in a title.</summary>
     private const int MaximumNameLength = 120;
+
+    /// <summary>
+    /// A workout's name is cut to this many characters in a title, so a long client name and a long
+    /// workout name together stay inside the 200-character column.
+    /// </summary>
+    private const int MaximumWorkoutNameLength = 60;
 
     /// <summary>More scattered weeks than this are counted ("6 weeks") rather than listed.</summary>
     private const int MaximumListedWeeks = 4;
 
-    private static readonly Dictionary<CommercialNotificationKind, NotificationTemplate> EnglishV1 = new()
+    private const int FirstVersion = 1;
+
+    /// <summary>The glossary pass of audit COACH-12 and UIQ-21 (2026-10-21).</summary>
+    private const int GlossaryVersion = 2;
+
+    private static readonly Dictionary<CommercialNotificationKind, NotificationTemplate> English = new()
     {
+        // The plan notices go to the client and open their Today, which says where the plan stands.
         [CommercialNotificationKind.PaymentRequired] = new NotificationTemplate(
             "commercial.payment-required",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            "Payment required",
-            "Your coaching access starts once payment for your new service has been received. Open your workspace for the details."),
+            "Your new plan is waiting for payment",
+            "It starts once your coach has your payment."),
         [CommercialNotificationKind.EnrollmentActivated] = new NotificationTemplate(
             "commercial.enrollment-activated",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            "Coaching access activated",
-            "Your coaching access is now active. Open your workspace to get started."),
+            "Your plan has started",
+            "Open Today to see what your coach has set up for you."),
         [CommercialNotificationKind.EnrollmentEndingSoon] = new NotificationTemplate(
             "commercial.enrollment-ending-soon",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            "Your service is ending soon",
-            "Your current coaching service is approaching its end date. Open your workspace to see what happens next."),
+            "Your plan ends soon",
+            "If you'd like to keep going, ask your coach to renew it."),
         [CommercialNotificationKind.EnrollmentExpired] = new NotificationTemplate(
             "commercial.enrollment-expired",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            "Your service has ended",
-            "Your coaching service period has ended. Open your workspace to see your options."),
+            "Your plan has ended",
+            "If you'd like to keep going, ask your coach to renew it."),
         // Careful wording: a renewal may still be awaiting payment, so this must not imply that paid
-        // or active access already exists. It says only that a renewal was created.
+        // or active access already exists. It says only that the next plan was set up.
         [CommercialNotificationKind.EnrollmentRenewed] = new NotificationTemplate(
             "commercial.enrollment-renewed",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            "A renewal was created",
-            "A renewal of your coaching service has been created. Open your workspace to see its status."),
+            "Your coach set up your next plan",
+            "It follows on from this one. Open Today to see where your plan stands."),
+        // To the client, naming nobody (CLI-014): the owner has them until they are reassigned.
         [CommercialNotificationKind.CoachDeparted] = new NotificationTemplate(
             "workspace.coach-departed",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
             "Your coach has changed",
-            "Your coach is no longer with this workspace. The workspace will assign you a new coach."),
-        // To staff. Which client left is on the Former clients list, behind the owner's sign-in.
+            "Your coach has left. Another coach looks after you now, and your plan and history stay as they are."),
+        // To the owner and the client's coach, naming the client: a coach cannot open Former clients
+        // to find out who left.
         [CommercialNotificationKind.ClientLeft] = new NotificationTemplate(
             "workspace.client-left",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            "A client left the workspace",
-            "A client has left this workspace. The owner keeps their record, read-only, under Former clients."),
-        // To the owner. Names nobody, like the others; the clients are already on the owner's list.
+            $"{ClientNameToken} left your coaching space",
+            "Their record is kept, read-only, under Former clients."),
+        // To the owner. Names nobody, like the coach-departure notice; the clients are on the owner's list.
         [CommercialNotificationKind.CoachResigned] = new NotificationTemplate(
             "workspace.coach-resigned",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
             "A coach left your team",
-            "A coach resigned from this workspace. Their clients and pending client invitations are now assigned to you, and you can reassign them from Clients."),
+            "Their clients and client invitations are yours now. You can reassign them from Clients."),
         // To the client's coach, naming the client (ADR 0029); the inbox links to the client's page.
         [CommercialNotificationKind.RenewalRequested] = new NotificationTemplate(
             "workspace.renewal-requested",
-            CurrentVersion,
+            FirstVersion,
             DefaultCulture,
             $"{ClientNameToken} asked to renew",
             "This client's coaching plan has ended. Open the client's page to set up a renewal."),
         // The training notices (ADR 0036, R5.1c). Each opens the program or the workout it is about.
         [CommercialNotificationKind.ProgramAssigned] = new NotificationTemplate(
             "training.program-assigned",
-            CurrentVersion,
+            FirstVersion,
             DefaultCulture,
             "Your coach set up a new program",
             "Open Training to see your program and its first workouts."),
         [CommercialNotificationKind.WeeksShared] = new NotificationTemplate(
             "training.weeks-shared",
-            CurrentVersion,
+            FirstVersion,
             DefaultCulture,
             $"Your coach shared {WeeksToken}",
             "Open Training to see the workouts."),
         [CommercialNotificationKind.WeeksChanged] = new NotificationTemplate(
             "training.weeks-changed",
-            CurrentVersion,
+            FirstVersion,
             DefaultCulture,
             $"Your coach updated {WeeksToken}",
             "Open Training to see your workouts as they are now."),
-        // Never the note's text, which can be about an injury; the workout it is on says it.
+        // The workout's name, never the note's text, which can be about an injury.
         [CommercialNotificationKind.CoachWorkoutNote] = new NotificationTemplate(
             "training.coach-workout-note",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            "Your coach left a note on a workout",
+            $"Your coach left a note on {WorkoutToken}",
             "Open the workout to read it."),
         [CommercialNotificationKind.ClientWorkoutNote] = new NotificationTemplate(
             "training.client-workout-note",
-            CurrentVersion,
+            GlossaryVersion,
             DefaultCulture,
-            $"{ClientNameToken} left a note on a workout",
+            $"{ClientNameToken} left a note on {WorkoutToken}",
             "Open the workout on the client's Training to read it."),
     };
 
@@ -160,15 +179,73 @@ public static class NotificationTemplateCatalog
     /// Puts a client's name into a named template's title. The name is data, inserted as plain text
     /// and shortened, never interpreted; a template without the token is returned unchanged.
     /// </summary>
-    public static NotificationTemplate NameClient(NotificationTemplate template, string clientName)
+    public static NotificationTemplate NameClient(NotificationTemplate template, string clientName) =>
+        Fill(template, ShortClientName(clientName), null);
+
+    /// <summary>
+    /// Puts the name of the workout a note is on into a note notice's title, as plain text and
+    /// shortened with an ellipsis; a workout with no name reads "a workout". A template without the
+    /// token is returned unchanged.
+    /// </summary>
+    public static NotificationTemplate NameWorkout(NotificationTemplate template, string? workoutName) =>
+        Fill(template, null, ShortWorkoutName(workoutName));
+
+    /// <summary>
+    /// Both names at once, in one pass over the template's own words, so a client called "{workout}"
+    /// or a workout called "{client}" is written out as typed rather than filled in.
+    /// </summary>
+    public static NotificationTemplate NameClientAndWorkout(
+        NotificationTemplate template,
+        string clientName,
+        string? workoutName) =>
+        Fill(template, ShortClientName(clientName), ShortWorkoutName(workoutName));
+
+    private static string ShortClientName(string clientName)
     {
         var name = clientName.Trim();
-        if (name.Length > MaximumNameLength)
+        return name.Length > MaximumNameLength ? name[..MaximumNameLength] : name;
+    }
+
+    private static string ShortWorkoutName(string? workoutName)
+    {
+        var name = (workoutName ?? string.Empty).Trim();
+        if (name.Length == 0)
         {
-            name = name[..MaximumNameLength];
+            return "a workout";
         }
 
-        return template with { Title = template.Title.Replace(ClientNameToken, name, StringComparison.Ordinal) };
+        return name.Length > MaximumWorkoutNameLength
+            ? string.Concat(name.AsSpan(0, MaximumWorkoutNameLength - 1).TrimEnd(), "…")
+            : name;
+    }
+
+    /// <summary>Replaces the tokens of the template's title only; what a name holds is never read for tokens.</summary>
+    private static NotificationTemplate Fill(NotificationTemplate template, string? clientName, string? workoutName)
+    {
+        var title = template.Title;
+        var filled = new System.Text.StringBuilder(title.Length + 64);
+        var index = 0;
+        while (index < title.Length)
+        {
+            var rest = title.AsSpan(index);
+            if (clientName is not null && rest.StartsWith(ClientNameToken, StringComparison.Ordinal))
+            {
+                filled.Append(clientName);
+                index += ClientNameToken.Length;
+            }
+            else if (workoutName is not null && rest.StartsWith(WorkoutToken, StringComparison.Ordinal))
+            {
+                filled.Append(workoutName);
+                index += WorkoutToken.Length;
+            }
+            else
+            {
+                filled.Append(title[index]);
+                index++;
+            }
+        }
+
+        return template with { Title = filled.ToString() };
     }
 
     /// <summary>
@@ -230,11 +307,11 @@ public static class NotificationTemplateCatalog
             return false;
         }
 
-        return EnglishV1.TryGetValue(kind, out template!);
+        return English.TryGetValue(kind, out template!);
     }
 
     /// <summary>Every published template, for tests and for documentation of the allowlist.</summary>
-    public static IReadOnlyCollection<NotificationTemplate> Published => EnglishV1.Values;
+    public static IReadOnlyCollection<NotificationTemplate> Published => English.Values;
 
     /// <summary>
     /// The one wording an email may carry in this phase.
@@ -254,7 +331,7 @@ public static class NotificationTemplateCatalog
     /// </remarks>
     public static NotificationTemplate ServiceEmailV1 { get; } = new(
         "notification.service-email",
-        CurrentVersion,
+        FirstVersion,
         DefaultCulture,
         "You have a new TB Gym notification",
         """

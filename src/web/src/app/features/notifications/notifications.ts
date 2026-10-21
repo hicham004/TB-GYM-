@@ -26,9 +26,11 @@ import { Icon } from '../../ui/icon';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import {
+  dayCount,
   groupByDay,
   noticeIcon,
   noticeTarget,
+  type NoticeDay,
   type NoticeTarget,
 } from './notification-inbox.models';
 import { appendPage, type NotificationItem } from './notification.models';
@@ -110,6 +112,8 @@ export class Notifications {
     () => !this.loading() && this.error() === null && this.loadedCount() === 0,
   );
   protected readonly days = computed(() => groupByDay(this.items(), this.readAt(), this.locale));
+  /** The older days the reader opened; the rest stay folded under their heading (audit UIQ-21). */
+  private readonly openedDays = signal<ReadonlySet<string>>(new Set<string>());
   protected readonly summary = computed(() => {
     const unread = this.unread();
     return unread === 0
@@ -154,6 +158,31 @@ export class Notifications {
 
   protected icon(item: NotificationItem) {
     return noticeIcon(item.kind);
+  }
+
+  /**
+   * In All, Today, Yesterday and the newest day listed stand open, so the page never opens on folds
+   * alone, and an older day opens when the reader asks, which a long history of notes needs. Unread is
+   * what is waiting, which the reader asked to see, so none of it is folded.
+   */
+  protected folds(day: NoticeDay, first: boolean): boolean {
+    return this.filter() === 'all' && !day.recent && !first;
+  }
+
+  protected isOpen(day: NoticeDay, first: boolean): boolean {
+    return !this.folds(day, first) || this.openedDays().has(day.key);
+  }
+
+  protected toggleDay(key: string): void {
+    this.openedDays.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }
+
+  protected dayCount(day: NoticeDay): string {
+    return dayCount(day);
   }
 
   protected setFilter(value: string): void {
@@ -412,6 +441,7 @@ export class Notifications {
 
   private reset(): void {
     ++this.listGeneration;
+    this.openedDays.set(new Set<string>());
     this.cursor = undefined;
     this.readIds.clear();
     this.items.set([]);

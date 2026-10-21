@@ -60,9 +60,10 @@
               [zoneId]="current.timeZoneId"
               (zoneIdChange)="set({ timeZoneId: $event })"
             >
+              <!-- What really follows it (audit LOST-14): there are no check-in or workout reminders. -->
               <p class="quiet" i18n>
-                Days in programs, check-ins and plans start and end at midnight here, and reminders
-                follow this clock.
+                Days in programs, check-ins and plans start and end at midnight here. Plan notices,
+                such as a plan ending soon, and everyone’s quiet hours follow this clock too.
               </p>
             </app-time-zone-field>
             <app-segmented-control

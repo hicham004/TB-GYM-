@@ -167,7 +167,10 @@ public enum CommercialNotificationKind
     /// <summary>To a client: their coach resigned or was removed, and a new one will be assigned.</summary>
     CoachDeparted = 6,
 
-    /// <summary>To the owner and the client's coach: a client left the workspace.</summary>
+    /// <summary>
+    /// To the owner and the client's coach: a client left the workspace. The title names the client,
+    /// read when it is delivered (audit COACH-12), since a coach cannot open Former clients.
+    /// </summary>
     ClientLeft = 7,
 
     /// <summary>To the owner: a coach resigned, and their clients are now the owner's.</summary>
@@ -175,7 +178,7 @@ public enum CommercialNotificationKind
 
     /// <summary>
     /// To a client's coach: the client asked to renew a plan that has run out (ADR 0029). In-app only,
-    /// and the one notice whose title names someone: the client, resolved when it is delivered.
+    /// and its title names the client, resolved when it is delivered.
     /// </summary>
     RenewalRequested = 9,
 
@@ -190,12 +193,15 @@ public enum CommercialNotificationKind
     /// <summary>To a client: their coach changed weeks they could already see. The title names the weeks.</summary>
     WeeksChanged = 12,
 
-    /// <summary>To a client: their coach left a note on one of their workouts. Never the note's text.</summary>
+    /// <summary>
+    /// To a client: their coach left a note on one of their workouts. The title names the workout, read
+    /// when it is delivered (audit UIQ-21); never the note's text.
+    /// </summary>
     CoachWorkoutNote = 13,
 
     /// <summary>
-    /// To a client's coach: the client left a note on a workout. The title names the client, read when
-    /// it is delivered, as for a renewal request; never the note's text.
+    /// To a client's coach: the client left a note on a workout. The title names the client and the
+    /// workout, read when it is delivered, as for a renewal request; never the note's text.
     /// </summary>
     ClientWorkoutNote = 14,
 }

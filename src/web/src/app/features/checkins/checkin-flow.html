@@ -291,8 +291,19 @@
                   <h2 id="step-heading" class="step-title" tabindex="-1" #stepHeading i18n>
                     Add this week's photos
                   </h2>
-                  <p class="step-help" i18n>
-                    They go straight to your progress photos. Only you and your coach can see them.
+                  <!-- The owner sees every client's photos too (CLI-013, audit LOST-3), as the intake says. -->
+                  <p class="step-help">
+                    @if (spaceName(); as space) {
+                      <ng-container i18n
+                        >They go straight to your progress photos. Only you, your coach and the
+                        owner of {{ space }} can see them.</ng-container
+                      >
+                    } @else {
+                      <ng-container i18n
+                        >They go straight to your progress photos. Only you, your coach and the
+                        owner of your coaching space can see them.</ng-container
+                      >
+                    }
                   </p>
                   <ul class="poses">
                     @for (pose of poses; track pose) {

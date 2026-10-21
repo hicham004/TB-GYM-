@@ -981,7 +981,10 @@ provider-specific reconciliation, never exactly-once.
 Templates are a code-owned, versioned allowlist: no Razor, no HTML, no database-authored markup, no
 user-influenced format string, and no client name, price, currency, product, date, identifier or
 payload content in any wording. The rendered title and body are snapshotted onto the notification, so
-a later template version never rewrites what somebody was already told.
+a later template version never rewrites what somebody was already told. The named exceptions are
+NOT-006's: a client's name or a workout's name, read by the dispatcher when it writes the in-app row
+and filled into the title as plain text in one pass, never kept in the payload. Each template carries
+its own version (audit A12 published version 2 of the plan, team and note notices).
 
 Retry is the named `notification-exponential-v1` policy. With the default maximum of six, failures
 after attempts 1–5 wait 1m, 5m, 15m, 1h and 6h, and attempt 6 dead-letters. A configured maximum from

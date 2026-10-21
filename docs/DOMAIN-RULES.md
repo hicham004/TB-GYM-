@@ -117,7 +117,8 @@ When a coach resigns, the owner is told in-app, naming nobody. The owner cannot 
 membership ends at once; their running and future plans, programs and meal plans are cancelled
 (payments kept, no refund; a program with a workout in progress stays as it is); they move to the
 owner. A released client is emailed once without the workspace, coach or reason named; when a client
-leaves, the owner and their coach are told in-app instead. The record is kept read-only for the owner
+leaves, the owner and their coach are told in-app instead, naming the client (audit COACH-12), since a
+coach cannot open Former clients to learn who left. The record is kept read-only for the owner
 under Former clients, marked released or left: every change answers 409 `client_released`. There is
 no undo, and a former client is not an active client. See `docs/adr/0027-release-client.md`.
 
@@ -371,7 +372,9 @@ Since P4 the coach writes a workout note from the session sheet of the client's 
 client's finished-workout history carries every note on each workout, so a coach's note reaches the
 client after the workout's day. Since C3 (2026-10-15) the client's set view carries the coach's note
 on that set (the prescription's before the workout starts, the snapshot after), shown under the
-set's target, and the coach's view of the workout shows it too.
+set's target, and the coach's view of the workout shows it too. Staff write a note only while their
+read of that workout is open (audit BEA-8): the note asks `ICoachingFeatureAccessService` as the
+coach's workout read does, so a paused or blocked client's workout answers 403 and keeps no note.
 
 **TRN-010** Prescription modification is explicit: `Locked` or `CoachApprovedSwap`. A main
 lift is always `Locked`. A permitted client swap must use an alternative captured at assignment,
@@ -1257,9 +1260,16 @@ notification, so a later template version never rewrites what somebody was alrea
 notice must not imply paid or active access, because a renewal may still be awaiting payment. One
 exception (ADR 0029): a client's renewal request names that client in the coach's in-app title,
 read when the row is written and never kept in the payload; that notice is never emailed. A client's
-note on a workout names the client to their coach the same way (R5.1c), and a week notice names the
-weeks by number ("week 3", "weeks 3 to 6", "6 weeks" when more than four are scattered), worded by the
-catalogue from the numbers the payload holds (ADR 0036, NOT-035).
+note on a workout names the client to their coach the same way (R5.1c), and so does a client leaving,
+to the owner and the coach it tells (audit COACH-12); a week notice names the weeks by number ("week
+3", "weeks 3 to 6", "6 weeks" when more than four are scattered), worded by the catalogue from the
+numbers the payload holds (ADR 0036, NOT-035); and a note's notice names the workout as the workout was
+named when it started, read when the row is written and cut to 60 characters, never the note's text
+(audit UIQ-21). A name is filled in as plain text in one pass, so no name reaches another's token.
+Each template carries its own version: the glossary pass of audit COACH-12 (2026-10-21) published
+version 2 of the plan, team and note notices in the screens' words, and every notice leads somewhere
+(a client's plan or coach leaving to their Today, a client leaving to Former clients for the owner and
+Clients for a coach, a coach leaving to Clients).
 
 **NOT-007** A notification belongs to one recipient in one workspace. Only that recipient may list
 or mark it, and workspace membership alone — including the owner's — grants no access to another
@@ -1576,7 +1586,9 @@ now. A client hears of a new program when it is assigned; of weeks shared when a
 them open weeks they could not before (a week shared before its day says nothing: it opens on its day,
 as every week does); of weeks updated when a coach's change touches weeks they could already open and
 still can (a week's sessions, exercises, sets, name or dates; sharing alone is not a change); and of a
-coach's note on one of their workouts. A coach hears of a client's note on a workout, if they are still
+coach's note on one of their workouts. Weeks are compared by the numbers the client knows them by
+(audit BEA-5): an edit that moves a week builds it as a new row, so a number the client could open
+before is updated when what it holds changed, never shared again. A coach hears of a client's note on a workout, if they are still
 that client's coach. One change makes at most one "shared" and one "updated" notice, keyed by the
 change; a note's notice is keyed by the note. The payload holds identifiers and week numbers only,
 never a note's text, a weight or a date. Before delivery the dispatcher checks again: the client still

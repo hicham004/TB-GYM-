@@ -776,6 +776,10 @@ of the implemented R1.3 screens before production rollout.
   is read on a timer, not pushed: the notification Worker has no realtime hub; (f) on the live demo every
   coach note reads the same in the client's inbox ("Your coach left a note on a workout"): Claude recommends
   naming the session ("on Upper B"), an owner decision because NOT-006 keeps typed text out of wording.
+  Since audit A12 (2026-10-21, the owner's approved Batch 12): (c) the plan notices speak of "your plan"
+  and open the client's Today, and every team notice leads somewhere; (f) a note's notice names the
+  workout ("on Upper B"), never the note's text, and under All the days older than yesterday fold under
+  their heading with what they hold ("Thursday, 3 notifications, 1 unread"); Unread folds nothing.
   The demo now delivers its notices as it is built and has everyone read them three days before today, so
   only recent ones are new; checked live with the Worker running (a coach's note and a shared week each
   reached the client in seconds and opened the right place).

@@ -22,7 +22,13 @@ async function render<T>(component: Type<T>, inputs: Record<string, unknown>, ap
     providers: [
       { provide: ProgressEntriesApi, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      {
+        provide: TenantStore,
+        useValue: {
+          selectedTenantId: signal('tenant-1'),
+          selectedMembership: signal({ tenantName: 'Atlas Performance' }),
+        },
+      },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(component);
@@ -76,8 +82,9 @@ describe('Add photos', () => {
       'Side',
       'Back',
     ]);
+    // The owner sees them too (CLI-013, audit LOST-3), named as the intake names them.
     expect(textOf(host.querySelector('p.muted'))).toBe(
-      'Your coach can see these photos. If you remove one later, it disappears from their view.',
+      'Your coach and the owner of Atlas Performance can see these photos. If you remove one later, it disappears from their view.',
     );
   });
 

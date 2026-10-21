@@ -208,7 +208,8 @@ that a renewal was created, because a renewal may still be awaiting payment and 
 access.
 
 Culture `en` and template version 1 are the only published wordings. Arabic and any other locale are
-deferred. The rendered title and body are snapshotted onto the notification: a later template change
+deferred. (Since audit A12, 2026-10-21, each template carries its own version: the plan, team and note
+notices are at version 2, in the screens' words, under NOT-006.) The rendered title and body are snapshotted onto the notification: a later template change
 publishes a new version and never rewrites what somebody was already told, which is the same
 immutability rule a published check-in version has.
 

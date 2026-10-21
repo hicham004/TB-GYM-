@@ -86,10 +86,29 @@
       />
     }
   } @else if (items().length > 0) {
-    @for (day of days(); track day.key) {
+    @for (day of days(); track day.key; let first = $first) {
       <section class="day" [attr.aria-labelledby]="'day-' + day.key">
-        <h2 class="day-title" [id]="'day-' + day.key">{{ day.heading }}</h2>
-        <ul class="rows" role="list">
+        @if (folds(day, first)) {
+          <!-- An older day stands folded under its heading, with what it holds (audit UIQ-21). -->
+          <h2 class="day-title" [id]="'day-' + day.key">
+            <button
+              type="button"
+              class="day-toggle"
+              [attr.aria-expanded]="isOpen(day, first)"
+              [attr.aria-controls]="'day-rows-' + day.key"
+              (click)="toggleDay(day.key)"
+            >
+              <span class="day-name">{{ day.heading }}</span>
+              <span class="day-count"
+                ><span class="tb-visually-hidden">, </span>{{ dayCount(day) }}</span
+              >
+              <app-icon name="chevron-down" class="day-chevron" />
+            </button>
+          </h2>
+        } @else {
+          <h2 class="day-title" [id]="'day-' + day.key">{{ day.heading }}</h2>
+        }
+        <ul class="rows" role="list" [id]="'day-rows-' + day.key" [hidden]="!isOpen(day, first)">
           @for (item of day.items; track item.id) {
             <li [class.unread]="!item.isRead">
               @if (target(item); as link) {

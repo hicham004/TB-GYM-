@@ -16,7 +16,8 @@ Business rules, decided by the product owner on 2026-09-23 and 2026-09-24:
 - **The owner releases a client**, with a reason, against the client version they saw.
 - **A client can leave on their own**, with an optional reason. It has the same effect as a release
   and is recorded as "left by client" instead of "released by owner". The owner and the client's
-  coach are told in-app; the client, who did it, is not emailed.
+  coach are told in-app, naming the client since audit A12 (a coach cannot open Former clients); the
+  client, who did it, is not emailed.
 - **Access ends immediately.** The client's membership becomes `Removed`; their account keeps
   working for any other workspace. They can no longer see anything in this one, including their own
   history.

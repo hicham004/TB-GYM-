@@ -147,7 +147,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         await R51cSweepAsync();
         var toCoach = (await R51cInboxAsync(coach, scenario.WorkspaceId)).Items
             .Single(item => item.Kind == nameof(CommercialNotificationKind.ClientWorkoutNote));
-        Assert.AreEqual("Training Client left a note on a workout", toCoach.Title);
+        // The workout is named as it was when it started (audit UIQ-21), never the note.
+        Assert.AreEqual("Training Client left a note on Squat day 1", toCoach.Title);
         Assert.AreEqual(scenario.ClientId, toCoach.ClientProfileId);
         Assert.AreEqual(day.Workouts.Single().SessionId, toCoach.SessionId);
         Assert.AreEqual(execution.Id, toCoach.WorkoutExecutionId);
@@ -162,7 +163,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         await R51cSweepAsync();
         var toClient = (await R51cInboxAsync(client)).Items
             .Single(item => item.Kind == nameof(CommercialNotificationKind.CoachWorkoutNote));
-        Assert.AreEqual("Your coach left a note on a workout", toClient.Title);
+        Assert.AreEqual("Your coach left a note on Squat day 1", toClient.Title);
         Assert.AreEqual(execution.Id, toClient.WorkoutExecutionId);
         Assert.IsNull(toClient.ClientProfileId);
         Assert.DoesNotContain("Ease", toClient.Title + toClient.Body, StringComparison.OrdinalIgnoreCase);

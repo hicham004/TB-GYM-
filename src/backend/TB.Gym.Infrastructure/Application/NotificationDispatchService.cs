@@ -659,7 +659,7 @@ internal sealed class NotificationDispatchService(
         var client = await context.ClientProfiles
             .AsNoTracking()
             .Where(profile => profile.Id == payload.ClientProfileId)
-            .Select(profile => new { profile.UserId, profile.ReleasedAtUtc })
+            .Select(profile => new { profile.UserId, profile.ReleasedAtUtc, profile.FirstName, profile.LastName })
             .SingleOrDefaultAsync(cancellationToken);
         if (client is null)
         {
@@ -706,6 +706,16 @@ internal sealed class NotificationDispatchService(
             {
                 return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
             }
+
+            // Names the client who left (audit COACH-12), read now, so the payload holds no name.
+            if (delivery.Channel != NotificationChannel.InApp)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
+            }
+
+            return NotificationTemplateCatalog.TryResolve(item.Kind, audience.Culture, out var named)
+                ? Eligibility.InApp(NotificationTemplateCatalog.NameClient(named, $"{client.FirstName} {client.LastName}"))
+                : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
         }
 
         return InAppOnly(item, delivery, audience.Culture);
@@ -869,14 +879,23 @@ internal sealed class NotificationDispatchService(
             return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
         }
 
-        if (isNote && !await context.WorkoutExecutions.AsNoTracking().AnyAsync(
-                execution => execution.Id == item.AggregateId &&
+        // A note's notice names its workout as the workout itself was named when it started (audit UIQ-21).
+        string? workoutName = null;
+        if (isNote)
+        {
+            var workout = await context.WorkoutExecutions.AsNoTracking()
+                .Where(execution => execution.Id == item.AggregateId &&
                     execution.MesocycleId == payload.MesocycleId &&
                     execution.TrainingSessionId == payload.SessionId &&
-                    execution.ClientProfileId == payload.ClientProfileId,
-                cancellationToken))
-        {
-            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+                    execution.ClientProfileId == payload.ClientProfileId)
+                .Select(execution => new { execution.SessionNameSnapshot })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (workout is null)
+            {
+                return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+            }
+
+            workoutName = workout.SessionNameSnapshot;
         }
 
         if (client.ReleasedAtUtc is not null || mesocycle.Status == TB.Gym.Modules.Training.MesocycleStatus.Cancelled)
@@ -902,7 +921,8 @@ internal sealed class NotificationDispatchService(
             }
 
             return NotificationTemplateCatalog.TryResolve(item.Kind, audience.Culture, out var named)
-                ? Eligibility.InApp(NotificationTemplateCatalog.NameClient(named, $"{client.FirstName} {client.LastName}"))
+                ? Eligibility.InApp(NotificationTemplateCatalog.NameClientAndWorkout(
+                    named, $"{client.FirstName} {client.LastName}", workoutName))
                 : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
         }
 
@@ -933,7 +953,7 @@ internal sealed class NotificationDispatchService(
 
         if (!isWeeks)
         {
-            return Eligibility.InApp(template);
+            return Eligibility.InApp(isNote ? NotificationTemplateCatalog.NameWorkout(template, workoutName) : template);
         }
 
         // Only weeks the client can still open are named; a week unshared since is left out.

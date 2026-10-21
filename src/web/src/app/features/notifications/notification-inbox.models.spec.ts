@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupByDay, noticeIcon, noticeTarget } from './notification-inbox.models';
+import { dayCount, groupByDay, noticeIcon, noticeTarget } from './notification-inbox.models';
 import type { NotificationItem } from './notification.models';
 
 function notice(
@@ -49,6 +49,22 @@ describe('groupByDay', () => {
       '30 December 2025',
     ]);
     expect(days[0].items.map((item) => item.id)).toEqual(['a', 'b']);
+    // Today and Yesterday stand open; an older day folds until the reader opens it (audit UIQ-21).
+    expect(days.map((day) => day.recent)).toEqual([true, true, false, false, false]);
+  });
+
+  it('says what a folded day holds, and how many of them are unread', () => {
+    const at = new Date(2026, 9, 5, 12, 0);
+    const [one] = groupByDay([notice('a', at, { isRead: true })], now, 'en-GB');
+    expect(dayCount(one)).toBe('1 notification');
+    const [three] = groupByDay(
+      [notice('a', at), notice('b', at, { isRead: true }), notice('c', at, { isRead: true })],
+      now,
+      'en-GB',
+    );
+    expect(dayCount(three)).toBe('3 notifications, 1 unread');
+    const [two] = groupByDay([notice('a', at), notice('b', at)], now, 'en-GB');
+    expect(dayCount(two)).toBe('2 notifications, 2 unread');
   });
 
   it('gives each day a stable key and keeps the order it was given', () => {
@@ -105,12 +121,36 @@ describe('noticeTarget', () => {
     expect(noticeTarget(notice('k', at, { kind: 'ClientWorkoutNote' }), false)).toBeNull();
   });
 
-  it('opens Former clients for the owner only, and a plan notice nowhere', () => {
+  it('opens Former clients for the owner, and a coach’s own clients for a coach', () => {
     expect(noticeTarget(notice('l', at, { kind: 'ClientLeft' }), true)).toEqual({
       commands: ['/clients/former'],
     });
-    expect(noticeTarget(notice('l', at, { kind: 'ClientLeft' }), false)).toBeNull();
-    expect(noticeTarget(notice('x', at), true)).toBeNull();
+    expect(noticeTarget(notice('l', at, { kind: 'ClientLeft' }), false)).toEqual({
+      commands: ['/clients'],
+    });
+    expect(noticeTarget(notice('r', at, { kind: 'CoachResigned' }), true)).toEqual({
+      commands: ['/clients'],
+    });
+  });
+
+  it('opens every plan notice, and a coach leaving, on the client’s Today (audit COACH-12)', () => {
+    for (const kind of [
+      'PaymentRequired',
+      'EnrollmentActivated',
+      'EnrollmentEndingSoon',
+      'EnrollmentExpired',
+      'EnrollmentRenewed',
+      'CoachDeparted',
+    ] as const) {
+      expect(noticeTarget(notice(kind, at, { kind }), false)).toEqual({ commands: ['/'] });
+    }
+  });
+
+  it('opens nothing only for a notice whose own target is missing', () => {
+    expect(noticeTarget(notice('r', at, { kind: 'RenewalRequested' }), true)).toBeNull();
+    expect(
+      noticeTarget(notice('r', at, { kind: 'RenewalRequested', clientProfileId: 'c-1' }), true),
+    ).toEqual({ commands: ['/clients', 'c-1', 'service'] });
   });
 });
 

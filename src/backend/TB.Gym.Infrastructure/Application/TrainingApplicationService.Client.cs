@@ -546,6 +546,14 @@ internal sealed partial class TrainingApplicationService
             return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
         }
 
+        // Staff write on the workout only while they may read it (audit BEA-8): the same shared access
+        // decision as the coach's workout page, so a paused or blocked client's workout takes no note.
+        if (authorRole == WorkoutNoteAuthorRole.Coach &&
+            !(await GetCoachTrainingAccessAsync(execution.ClientProfileId, cancellationToken)).IsAllowed)
+        {
+            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
+        }
+
         if (request.ExercisePerformanceId is { } performanceId &&
             execution.Exercises.All(item => item.Id != performanceId))
         {

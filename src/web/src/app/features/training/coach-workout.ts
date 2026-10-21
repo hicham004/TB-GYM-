@@ -1,5 +1,6 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, effect, inject, input, LOCALE_ID, signal } from '@angular/core';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
@@ -149,8 +150,12 @@ export class CoachWorkout {
         await this.load();
       } catch (error) {
         if (owner.current) {
+          // A plan paused or blocked since the page opened refuses the note (audit BEA-8); what was
+          // typed stays, since trying again cannot work until the plan opens.
           this.sendError.set(
-            apiErrorMessage(error, $localize`The note could not be sent. Try again.`),
+            error instanceof HttpErrorResponse && error.status === 403
+              ? $localize`This client’s training is closed now, so the note can’t be sent.`
+              : apiErrorMessage(error, $localize`The note could not be sent. Try again.`),
           );
         }
       } finally {

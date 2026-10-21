@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
@@ -258,6 +259,39 @@ describe('CoachWorkout', () => {
     });
     expect(read).toHaveBeenCalledTimes(2);
     expect(box.value).toBe('');
+  });
+
+  it('says a note on a workout whose training closed meanwhile cannot be sent, and keeps it', async () => {
+    const read = vi.fn(() => of(workoutDetail(null)));
+    const addWorkoutNote = vi.fn(() =>
+      throwError(() => new HttpErrorResponse({ status: 403, statusText: 'Forbidden' })),
+    );
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: read, addWorkoutNote } },
+        { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+
+    const box = host.querySelector('textarea')!;
+    box.value = 'Keep the bar closer on the way down.';
+    box.dispatchEvent(new Event('input'));
+    await settle(fixture);
+    press(host, 'Send note');
+    await settle(fixture);
+
+    expect(host.querySelector('.reply-error')?.textContent?.trim()).toBe(
+      'This client’s training is closed now, so the note can’t be sent.',
+    );
+    expect(box.value).toBe('Keep the bar closer on the way down.');
+    expect(read).toHaveBeenCalledTimes(1);
   });
 
   it('offers no note on a former client’s record', async () => {

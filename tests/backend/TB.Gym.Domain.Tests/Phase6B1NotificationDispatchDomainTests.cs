@@ -495,7 +495,7 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             template);
 
         Assert.AreEqual(template.Key, notification.TemplateKey);
-        Assert.AreEqual(1, notification.TemplateVersion);
+        Assert.AreEqual(template.Version, notification.TemplateVersion);
         Assert.AreEqual("en", notification.Culture);
         Assert.AreEqual(template.Title, notification.Title);
         Assert.AreEqual(template.Body, notification.Body);
@@ -552,22 +552,32 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             Assert.IsTrue(
                 NotificationTemplateCatalog.TryResolve(kind, "en", out var template),
                 $"{kind} has no published English template.");
-            Assert.AreEqual(1, template.Version);
+            Assert.IsTrue(template.Version is 1 or 2, $"{kind} is at version {template.Version}.");
             Assert.AreEqual("en", template.Culture);
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Title));
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Body));
-            // No format placeholder, except the two allowed in a title: the client's name in a renewal
-            // request (ADR 0029) or a client's workout note, and the week numbers of a week notice
-            // (ADR 0036). Everything else is fixed text, so nothing a coach types or a payload carries
-            // can reach the wording, and the body never names anyone.
-            var title = kind switch
+            // No format placeholder, except the ones allowed in a title: the client's name in a renewal
+            // request (ADR 0029), a client's workout note or a client leaving, the week numbers of a week
+            // notice (ADR 0036), and the workout a note is on (audit UIQ-21). Everything else is fixed
+            // text, so nothing a coach types or a payload carries can reach the wording, and the body
+            // never names anyone.
+            var title = template.Title;
+            if (kind is CommercialNotificationKind.RenewalRequested or CommercialNotificationKind.ClientWorkoutNote or
+                CommercialNotificationKind.ClientLeft)
             {
-                CommercialNotificationKind.RenewalRequested or CommercialNotificationKind.ClientWorkoutNote =>
-                    template.Title.Replace(NotificationTemplateCatalog.ClientNameToken, string.Empty, StringComparison.Ordinal),
-                CommercialNotificationKind.WeeksShared or CommercialNotificationKind.WeeksChanged =>
-                    template.Title.Replace(NotificationTemplateCatalog.WeeksToken, string.Empty, StringComparison.Ordinal),
-                _ => template.Title,
-            };
+                title = title.Replace(NotificationTemplateCatalog.ClientNameToken, string.Empty, StringComparison.Ordinal);
+            }
+
+            if (kind is CommercialNotificationKind.WeeksShared or CommercialNotificationKind.WeeksChanged)
+            {
+                title = title.Replace(NotificationTemplateCatalog.WeeksToken, string.Empty, StringComparison.Ordinal);
+            }
+
+            if (kind is CommercialNotificationKind.CoachWorkoutNote or CommercialNotificationKind.ClientWorkoutNote)
+            {
+                title = title.Replace(NotificationTemplateCatalog.WorkoutToken, string.Empty, StringComparison.Ordinal);
+            }
+
             Assert.DoesNotContain("{", title + template.Body);
 
             foreach (var term in forbidden)

@@ -199,7 +199,13 @@ async function render(
         { path: '**', component: Elsewhere },
       ]),
       { provide: ApiClient, useValue: client },
-      { provide: TenantStore, useValue: { selectedTenantId } },
+      {
+        provide: TenantStore,
+        useValue: {
+          selectedTenantId,
+          selectedMembership: signal({ tenantName: 'Atlas Performance' }),
+        },
+      },
       { provide: ClientAccessStore, useValue: access },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
     ],
@@ -481,6 +487,10 @@ describe('CheckInFlow', () => {
 
     press(host, 'Edit: progress photos');
     await settle();
+    // Who sees them, the owner included (CLI-013, audit LOST-3).
+    expect(query(host, '.step-help').textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'They go straight to your progress photos. Only you, your coach and the owner of Atlas Performance can see them.',
+    );
     const [front, side, back] = Array.from(host.querySelectorAll<HTMLInputElement>('.pose-input'));
     expect(front.disabled).toBe(true);
     expect(read()).toContain('Added today');

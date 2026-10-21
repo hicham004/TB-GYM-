@@ -711,7 +711,7 @@ public sealed class Phase6B3ANotificationChannelDomainTests
         var template = NotificationTemplateCatalog.ServiceEmailV1;
         var text = template.Title + " " + template.Body;
 
-        Assert.AreEqual(NotificationTemplateCatalog.CurrentVersion, template.Version);
+        Assert.AreEqual(1, template.Version);
         Assert.AreEqual(NotificationTemplateCatalog.DefaultCulture, template.Culture);
         Assert.Contains("TB Gym", text);
         Assert.Contains("Sign in", text, StringComparison.OrdinalIgnoreCase);

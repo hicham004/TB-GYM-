@@ -422,7 +422,11 @@ internal sealed partial class DemoWorkspaceGenerator
                 var replied = await As<ITrainingApplicationService, TrainingCommandResult>(
                     CoachOf(state),
                     (service, token) => service.AddWorkoutNoteAsync(execution.Id, new AddWorkoutNoteRequest(null, reply), token));
-                Require(replied.Status == TrainingCommandStatus.Success, $"{label}: coach reply", replied);
+                // A plan paused or ended overnight takes no note from the coach (audit BEA-8), so none is left.
+                Require(
+                    replied.Status is TrainingCommandStatus.Success or TrainingCommandStatus.Forbidden,
+                    $"{label}: coach reply",
+                    replied);
             });
         }
     }

@@ -61,12 +61,17 @@ public sealed class R51cTrainingNoticeDomainTests
     }
 
     [TestMethod]
-    public void AClientsWorkoutNoteNamesTheClientAndNeverTheNote()
+    public void AClientsWorkoutNoteNamesTheClientAndTheWorkoutAndNeverTheNote()
     {
         Assert.IsTrue(NotificationTemplateCatalog.TryResolve(CommercialNotificationKind.ClientWorkoutNote, "en", out var template));
-        Assert.AreEqual("Maya Rahman left a note on a workout", NotificationTemplateCatalog.NameClient(template, "Maya Rahman").Title);
+        Assert.AreEqual(
+            "Maya Rahman left a note on Lower A",
+            NotificationTemplateCatalog.NameClientAndWorkout(template, "Maya Rahman", " Lower A ").Title);
         Assert.IsTrue(NotificationTemplateCatalog.TryResolve(CommercialNotificationKind.CoachWorkoutNote, "en", out var coach));
-        Assert.DoesNotContain("{", coach.Title + coach.Body);
+        var named = NotificationTemplateCatalog.NameWorkout(coach, "Upper B");
+        Assert.AreEqual("Your coach left a note on Upper B", named.Title);
+        Assert.AreEqual(coach.Body, named.Body);
+        Assert.DoesNotContain("{", named.Title + named.Body);
     }
 
     [TestMethod]

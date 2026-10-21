@@ -119,6 +119,53 @@ h1 {
   padding-inline: var(--space-4);
   text-transform: uppercase;
 }
+// A folded older day: its name, what it holds and a chevron, the whole line one target.
+.day-toggle {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  font: inherit;
+  gap: var(--space-4) var(--space-8);
+  inline-size: calc(100% + 2 * var(--space-4));
+  letter-spacing: inherit;
+  margin-inline: calc(-1 * var(--space-4));
+  min-block-size: 2.75rem;
+  padding: var(--space-8) var(--space-4);
+  text-align: start;
+  text-transform: inherit;
+  touch-action: manipulation;
+}
+.day-toggle:hover {
+  background: var(--tb-surface-2);
+}
+.day-toggle:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--tb-focus);
+  outline-offset: 2px;
+}
+.day-count {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.day-chevron {
+  margin-inline-start: auto;
+  transition: transform 160ms ease;
+}
+.day-toggle[aria-expanded='true'] .day-chevron {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .day-chevron {
+    transition: none;
+  }
+}
 .rows {
   background: var(--tb-surface);
   border: 1px solid var(--tb-line);

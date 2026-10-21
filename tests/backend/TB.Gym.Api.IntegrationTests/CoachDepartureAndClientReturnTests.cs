@@ -54,13 +54,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         var inbox = await RequiredJsonAsync<DepartureInbox>(await client.GetAsync("/api/notifications"));
         var told = inbox.Items.Single(item => item.Kind == "CoachDeparted");
         Assert.AreEqual("Your coach has changed", told.Title);
-        StringAssert.Contains(told.Body, "assign you a new coach");
+        StringAssert.Contains(told.Body, "Another coach looks after you now");
 
         // The owner is told too, once, without the coach being named.
         var ownerInbox = await RequiredJsonAsync<DepartureInbox>(await owner.GetAsync("/api/notifications"));
         var resignedNotice = ownerInbox.Items.Single(item => item.Kind == "CoachResigned");
         Assert.AreEqual("A coach left your team", resignedNotice.Title);
-        StringAssert.Contains(resignedNotice.Body, "now assigned to you");
+        StringAssert.Contains(resignedNotice.Body, "are yours now");
         Assert.DoesNotContain("Rhea", resignedNotice.Body);
         Assert.IsFalse(inbox.Items.Any(item => item.Kind == "CoachResigned"), "Only the owner hears of a resignation.");
 
@@ -165,12 +165,13 @@ public sealed partial class Phase3TrainingWorkflowTests
             await owner.PutAsJsonAsync($"/api/clients/{clientId}/coach-notes", new { notes = "x", version = details.Version }),
             HttpStatusCode.Conflict);
 
-        // The owner and the coach are told in-app; the client, who did it, is not emailed.
+        // The owner and the coach are told in-app, naming the client (audit COACH-12); the client, who did
+        // it, is not emailed.
         await SweepDepartureNotificationsAsync();
         foreach (var staff in new[] { owner, coach })
         {
             var inbox = await RequiredJsonAsync<DepartureInbox>(await staff.GetAsync("/api/notifications"));
-            Assert.AreEqual("A client left the workspace", inbox.Items.Single(item => item.Kind == "ClientLeft").Title);
+            Assert.AreEqual("Training Client left your coaching space", inbox.Items.Single(item => item.Kind == "ClientLeft").Title);
         }
 
         Assert.AreEqual(

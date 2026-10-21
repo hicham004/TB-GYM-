@@ -251,22 +251,19 @@ test('a client leaves on their own and the owner is told in-app', async ({ brows
   const row = ownerPage.locator('.clients li.client-row', { hasText: `${firstName} Leaver` });
   await expect(row).toContainText('Left by client');
   await expect(row.locator('.reason')).toHaveText('Moving abroad');
-  // The Worker delivers the in-app notice within a few seconds.
+  // The Worker delivers the in-app notice within a few seconds, naming who left (audit COACH-12).
   await expect
     .poll(
       async () => {
-        const result = await api<{ items?: { kind: string }[] } | { kind: string }[]>(
-          ownerPage,
-          'GET',
-          '/api/notifications',
-          { tenantId },
-        );
+        const result = await api<
+          { items?: { kind: string; title: string }[] } | { kind: string; title: string }[]
+        >(ownerPage, 'GET', '/api/notifications', { tenantId });
         const items = Array.isArray(result.body) ? result.body : (result.body.items ?? []);
-        return items.some((item) => item.kind === 'ClientLeft');
+        return items.find((item) => item.kind === 'ClientLeft')?.title ?? null;
       },
       { timeout: 30_000 },
     )
-    .toBe(true);
+    .toBe(`${firstName} Leaver left your coaching space`);
   const write = await api(ownerPage, 'PUT', `/api/clients/${clientId}/coach-notes`, {
     tenantId,
     body: { coachNotes: 'x', version: 1 },

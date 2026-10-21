@@ -48,6 +48,7 @@ function moments(steps: number): string {
   return new Date(Date.now() - steps * 10_000).toISOString();
 }
 
+/** A notice whose own target is missing, so it opens nothing: the rows that are buttons, or nothing at all. */
 function item(
   id: string,
   createdAtUtc: string,
@@ -56,9 +57,9 @@ function item(
 ): NotificationItem {
   return {
     id,
-    kind: 'PaymentRequired',
+    kind: 'RenewalRequested',
     title,
-    body: 'Open your workspace for the details.',
+    body: 'Open the client’s page to set up a renewal.',
     createdAtUtc,
     readAtUtc: isRead ? '2026-08-31T09:00:00.000Z' : null,
     isRead,
@@ -291,6 +292,102 @@ describe('Notifications', () => {
     expect(host.textContent).not.toContain('Refresh');
   });
 
+  it('folds a day older than yesterday under its heading, saying what it holds (audit UIQ-21)', async () => {
+    const daysAgo = (days: number, steps = 0) =>
+      new Date(Date.now() - days * 86_400_000 - steps * 10_000).toISOString();
+    const { host, fixture } = await render(({ list }) => {
+      list.mockReturnValue(
+        of(
+          page(
+            5,
+            3,
+            item('t1', moments(1), false, 'Today’s notice'),
+            item('y1', daysAgo(1), true, 'Yesterday’s notice'),
+            item('o1', daysAgo(3), false, 'Older unread notice'),
+            item('o2', daysAgo(3, 1), true, 'Older read notice'),
+            item('w1', daysAgo(10), false, 'Week-old notice'),
+          ),
+        ),
+      );
+    });
+
+    // Today and Yesterday stand open, as plain headings; the older days are folded buttons.
+    const headings = Array.from(host.querySelectorAll<HTMLElement>('.day-title'));
+    expect(headings.slice(0, 2).map((heading) => heading.textContent?.trim())).toEqual([
+      'Today',
+      'Yesterday',
+    ]);
+    expect(headings.slice(0, 2).every((heading) => !heading.querySelector('button'))).toBe(true);
+    const toggles = Array.from(host.querySelectorAll<HTMLButtonElement>('.day-toggle'));
+    expect(toggles).toHaveLength(2);
+    expect(toggles.map((toggle) => toggle.getAttribute('aria-expanded'))).toEqual([
+      'false',
+      'false',
+    ]);
+    expect(toggles[0].querySelector('.day-count')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      ', 2 notifications, 1 unread',
+    );
+    expect(toggles[1].querySelector('.day-count')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      ', 1 notification, 1 unread',
+    );
+    const older = query<HTMLUListElement>(host, `#${toggles[0].getAttribute('aria-controls')}`);
+    expect(older.hidden).toBe(true);
+    expect(rowTitles(host)).toContain('Older unread notice');
+
+    // Opening one day leaves the other folded; it folds again on a second tap.
+    toggles[0].click();
+    await settle(fixture);
+    expect(toggles[0].getAttribute('aria-expanded')).toBe('true');
+    expect(older.hidden).toBe(false);
+    expect(toggles[1].getAttribute('aria-expanded')).toBe('false');
+    toggles[0].click();
+    await settle(fixture);
+    expect(older.hidden).toBe(true);
+  });
+
+  it('folds nothing under Unread, which lists what is waiting', async () => {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    const harness = await render(({ list, unreadCount }) => {
+      unreadCount.mockReturnValue(of(2));
+      list.mockImplementation((_skip: number, _take: number, unreadOnly: boolean) =>
+        of(
+          unreadOnly
+            ? page(2, 2, item('t1', moments(1), false, 'Today’s notice'), item('o1', daysAgo(6)))
+            : page(
+                3,
+                2,
+                item('t1', moments(1), false, 'Today’s notice'),
+                item('r1', daysAgo(3), true),
+                item('o1', daysAgo(6)),
+              ),
+        ),
+      );
+    });
+    expect(harness.host.querySelectorAll('.day-toggle')).toHaveLength(2);
+
+    query<HTMLInputElement>(harness.host, 'input[type="radio"][value="unread"]').click();
+    await settle(harness.fixture);
+
+    expect(harness.host.querySelector('.day-toggle')).toBeNull();
+    expect(
+      Array.from(harness.host.querySelectorAll<HTMLUListElement>('.rows')).every(
+        (rows) => !rows.hidden,
+      ),
+    ).toBe(true);
+    expect(rowTitles(harness.host)).toEqual(['Today’s notice', 'Notification o1']);
+  });
+
+  it('opens the newest day listed even when it is older than yesterday', async () => {
+    const { host } = await render(({ list }) => {
+      list.mockReturnValue(
+        of(page(1, 1, item('o1', new Date(Date.now() - 5 * 86_400_000).toISOString()))),
+      );
+    });
+
+    expect(host.querySelector('.day-toggle')).toBeNull();
+    expect(query<HTMLUListElement>(host, '.rows').hidden).toBe(false);
+  });
+
   it('opens each notice where it leads, and offers a button for one with nowhere to go', async () => {
     const at = moments(0.5);
     const notices: NotificationItem[] = [
@@ -305,18 +402,21 @@ describe('Notifications', () => {
         weekNumber: 3,
       },
       {
-        ...item('c1', at, false, 'Your coach left a note on a workout'),
+        ...item('c1', at, false, 'Your coach left a note on Lower A'),
         kind: 'CoachWorkoutNote',
         workoutExecutionId: 'workout-1',
       },
       {
-        ...item('k1', at, false, 'Maya Rahman left a note on a workout'),
+        ...item('k1', at, false, 'Maya Rahman left a note on Lower A'),
         kind: 'ClientWorkoutNote',
         clientProfileId: 'client-maya',
         sessionId: 'session-1',
       },
       { ...item('p1', at, false, 'Your coach set up a new program'), kind: 'ProgramAssigned' },
-      { ...item('l1', at, false, 'A client left the workspace'), kind: 'ClientLeft' },
+      { ...item('l1', at, false, 'Maya Rahman left your coaching space'), kind: 'ClientLeft' },
+      { ...item('e1', at, false, 'Your plan has ended'), kind: 'EnrollmentExpired' },
+      { ...item('d1', at, false, 'Your coach has changed'), kind: 'CoachDeparted' },
+      { ...item('t1', at, false, 'A coach left your team'), kind: 'CoachResigned' },
       item('n1', at),
     ];
     const { host } = await render(({ list }) => {
@@ -326,13 +426,17 @@ describe('Notifications', () => {
     const href = (title: string) => row(host, title).querySelector('a.row')?.getAttribute('href');
     expect(href('Maya Rahman asked to renew')).toBe('/clients/client-maya/service');
     expect(href('Your coach updated week 3')).toBe('/training/program?week=3');
-    expect(href('Your coach left a note on a workout')).toBe('/training/program?workout=workout-1');
-    expect(href('Maya Rahman left a note on a workout')).toBe(
+    expect(href('Your coach left a note on Lower A')).toBe('/training/program?workout=workout-1');
+    expect(href('Maya Rahman left a note on Lower A')).toBe(
       '/clients/client-maya/training?session=session-1',
     );
     expect(href('Your coach set up a new program')).toBe('/training/program');
-    // A coach is told a client left but has no list to open; a plan notice has nowhere better to go.
-    expect(href('A client left the workspace')).toBeUndefined();
+    // Every plan and team notice leads somewhere (audit COACH-12): a coach's own clients when a client
+    // left, the client's Today for their plan or their coach, Clients when a coach left the team.
+    expect(href('Maya Rahman left your coaching space')).toBe('/clients');
+    expect(href('Your plan has ended')).toBe('/');
+    expect(href('Your coach has changed')).toBe('/');
+    expect(href('A coach left your team')).toBe('/clients');
     expect(row(host, 'Notification n1').querySelector('button.row')?.textContent).toContain(
       'mark as read',
     );
@@ -344,7 +448,7 @@ describe('Notifications', () => {
         list.mockReturnValue(
           of(
             page(1, 1, {
-              ...item('l1', moments(1), false, 'A client left the workspace'),
+              ...item('l1', moments(1), false, 'Maya Rahman left your coaching space'),
               kind: 'ClientLeft',
             }),
           ),

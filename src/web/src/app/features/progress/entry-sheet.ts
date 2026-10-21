@@ -38,7 +38,7 @@ import {
 export abstract class EntrySheet {
   protected readonly entries = inject(ProgressEntriesApi);
   protected readonly csrf = inject(CsrfService);
-  private readonly tenants = inject(TenantStore);
+  protected readonly tenants = inject(TenantStore);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   /** A write started in one workspace is dropped, never sent to or answered into another (ADR 0026). */

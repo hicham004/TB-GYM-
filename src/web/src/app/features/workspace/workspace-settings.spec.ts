@@ -100,6 +100,11 @@ describe('Settings › Name and region', () => {
     expect(textOf(host.querySelector('h1'))).toBe('Name and region');
     expect(field(host, 'Coaching space name').value).toBe('Atlas Performance');
     expect(textOf(host.querySelector('[data-zone] strong'))).toBe('Beirut, Asia');
+    // Only what really follows the zone: no check-in or workout reminders exist (audit LOST-14).
+    expect(host.textContent?.replace(/\s+/g, ' ')).toContain(
+      'Days in programs, check-ins and plans start and end at midnight here. Plan notices, such as a plan ending soon, and everyone’s quiet hours follow this clock too.',
+    );
+    expect(host.textContent).not.toContain('reminders');
     expect(field(host, 'Monday').checked).toBe(true);
     expect(field(host, 'US dollar').checked).toBe(true);
     expect(textOf(host.querySelector('[data-currency-line]'))).toBe(

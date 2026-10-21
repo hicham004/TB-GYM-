@@ -121,6 +121,9 @@ export class CheckInFlow {
   protected readonly photos = signal<Record<ProgressPhotoPose, PhotoSlot>>(emptySlots());
   protected readonly photoNotice = signal('');
   protected readonly coachName = signal<string | null>(null);
+  protected readonly spaceName = computed(
+    () => this.tenants.selectedMembership()?.tenantName ?? '',
+  );
   protected readonly saveState = signal<SaveState>('idle');
   protected readonly loadError = signal<string | null>(null);
   protected readonly denial = signal<string | null>(null);
