@@ -69,9 +69,9 @@ import {
   exerciseSummary,
   findSession,
   insertSavedSession,
-  libraryExercise,
   type LibraryExercise,
   MAX_WEEKS,
+  programLibraryIds,
   removeExercise,
   removeSession,
   removeWeek,
@@ -81,7 +81,8 @@ import {
 } from '../training/program-builder.models';
 import { ExerciseDemo } from '../training/exercise-demo';
 import { readLibraryOpen, writeLibraryOpen } from '../training/builder-preferences';
-import { type LibraryThumbs, ProgramLibrary } from '../training/program-library';
+import { ProgramLibrary } from '../training/program-library';
+import { ProgramLibrarySource } from '../training/program-library-source';
 import { ProgramSessionEditor } from '../training/program-session-editor';
 import { ProgramSetsEditor } from '../training/program-sets-editor';
 import {
@@ -89,7 +90,6 @@ import {
   type DraftSession,
   type DraftWeek,
   emptyProgram,
-  numeric,
   type ProgramDraft,
 } from '../training/training-builder.models';
 import { programWriteError } from './client-program-forms.models';
@@ -275,14 +275,16 @@ export class ProgramEditPage implements HoldsUnsavedWork {
     weeks: ProgramEditWeekRequest[];
   } | null>(null);
 
-  protected readonly exercises = signal<LibraryExercise[]>([]);
-  protected readonly libraryState = signal<'loading' | 'ready' | 'error'>('loading');
-  protected readonly saved = signal<SavedSessionView[]>([]);
-  protected readonly thumbs = signal<LibraryThumbs>(new Map());
+  /** The library's first page, searches, saved sessions and the program's own lifts (WEA-14). */
+  protected readonly library = new ProgramLibrarySource(this.api, this.scope, () =>
+    this.freshToken(),
+  );
+  /** Every exercise the page has read: the session sheet names lifts and swaps from these. */
+  protected readonly knownExercises = computed(() => [...this.library.known().values()]);
   protected readonly libraryOpen = signal(readLibraryOpen());
-  /** Each library exercise's demos, so a grid row can offer Watch demo (P4). */
+  /** Each known exercise's demos, so a grid row can offer Watch demo (P4). */
   private readonly libraryMedia = computed(
-    () => new Map(this.exercises().map((item) => [item.id, item.mediaIds] as const)),
+    () => new Map([...this.library.known()].map(([id, item]) => [id, item.mediaIds] as const)),
   );
   protected readonly phoneWeek = signal<string | null>(null);
   protected readonly editing = signal<SessionRef | null>(null);
@@ -413,6 +415,13 @@ export class ProgramEditPage implements HoldsUnsavedWork {
         untracked(() => void this.loadLibrary());
       }
     });
+    // The program's own lifts and swaps are read by id, once the first page has told what it holds,
+    // so the sheets never need the whole library.
+    effect(() => {
+      if (this.state() !== 'ready' || this.library.state() !== 'ready') return;
+      const ids = programLibraryIds(this.draft());
+      untracked(() => void this.library.ensure(ids));
+    });
   }
 
   // ---------- reading ----------
@@ -473,62 +482,9 @@ export class ProgramEditPage implements HoldsUnsavedWork {
     this.revision.update((value) => value + 1);
   }
 
-  protected async loadLibrary(): Promise<void> {
-    return this.scope.run('library', async (owner) => {
-      this.libraryState.set('loading');
-      try {
-        const [first, saved] = await owner.wait(
-          Promise.all([
-            firstValueFrom(this.api.searchExercises({})),
-            firstValueFrom(this.api.listSavedSessions()),
-          ]),
-        );
-        const items = [...first.items];
-        const total = numeric(first.total);
-        while (items.length < Math.min(total, 1000)) {
-          const page = await owner.wait(
-            firstValueFrom(this.api.searchExercises({ skip: items.length })),
-          );
-          if (page.items.length === 0) break;
-          items.push(...page.items);
-        }
-        const library = items
-          .filter((item) => !item.isArchived)
-          .map(libraryExercise)
-          .sort((a, b) => a.name.localeCompare(b.name, this.locale));
-        this.exercises.set(library);
-        this.saved.set(saved);
-        this.libraryState.set('ready');
-        void this.loadThumbs(library);
-      } catch {
-        if (owner.current) this.libraryState.set('error');
-      }
-    });
-  }
-
-  private async loadThumbs(library: readonly LibraryExercise[]): Promise<void> {
-    const ids = [...new Set(library.flatMap((item) => (item.mediaId ? [item.mediaId] : [])))].slice(
-      0,
-      96,
-    );
-    if (ids.length === 0) return;
-    return this.scope.run('thumbs', async (owner) => {
-      try {
-        await owner.wait(this.freshToken());
-        const thumbs = new Map<string, string>();
-        for (let start = 0; start < ids.length; start += 32) {
-          const batch = await owner.wait(
-            firstValueFrom(this.api.createMediaAccessBatch(ids.slice(start, start + 32))),
-          );
-          for (const item of batch.items) {
-            if (item.kind === 'Image') thumbs.set(item.assetId, item.thumbnailUrl ?? item.url);
-          }
-        }
-        this.thumbs.set(thumbs);
-      } catch {
-        // The tiles keep their initials.
-      }
-    });
+  /** The library's first page and the saved sessions; the rest is read as the coach asks for it. */
+  protected loadLibrary(): Promise<void> {
+    return this.library.load();
   }
 
   // ---------- changing the grid ----------

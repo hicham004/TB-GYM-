@@ -168,7 +168,9 @@ describe('the exercise library', () => {
 
   it('searches swaps on the server and retains an off-page selection across another search', async () => {
     const saved = exercise('Squat', {
-      alternatives: [{ exerciseId: 'far-away', exerciseName: 'Selected swap', note: null }],
+      alternatives: [
+        { exerciseId: 'far-away', exerciseName: 'Selected swap', note: null, isArchived: false },
+      ],
     });
     // A library of 40, so the swaps get a search box; the selected swap is on none of these pages.
     const firstPage = [

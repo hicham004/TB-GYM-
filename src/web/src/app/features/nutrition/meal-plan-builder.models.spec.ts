@@ -23,7 +23,6 @@ import {
   draftPlanCard,
   duplicateDay,
   emptyPlan,
-  filterRecipes,
   macroSplit,
   MAX_DAYS,
   MAX_MEALS_PER_DAY,
@@ -364,18 +363,6 @@ describe('meal-plan builder models', () => {
         [8, 9],
       ]);
       expect(weeks.map((week) => week.key)).toEqual(['week-1', 'week-2']);
-    });
-
-    it('finds recipes by every word typed, in any order, accents aside', () => {
-      const recipes = [oats, chicken, { ...lentils, name: 'Soupe de lentilles épicée' }];
-
-      expect(filterRecipes(recipes, 'rice chicken').map((recipe) => recipe.name)).toEqual([
-        'Chicken & rice',
-      ]);
-      expect(filterRecipes(recipes, 'EPICEE').map((recipe) => recipe.versionId)).toEqual([
-        'lentils-v1',
-      ]);
-      expect(filterRecipes(recipes, '  ')).toHaveLength(3);
     });
   });
 

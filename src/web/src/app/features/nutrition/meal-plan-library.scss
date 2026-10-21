@@ -97,6 +97,10 @@
   text-align: start;
   touch-action: pan-y;
   user-select: none;
+  // A long library's rows out of view are laid out only when reached (WEA-14). On the row itself,
+  // not its list item, so a picked row's focus ring is never clipped.
+  contain-intrinsic-size: auto 4.5rem;
+  content-visibility: auto;
 }
 
 .lib-item:hover {
@@ -193,6 +197,11 @@
 .note p {
   color: var(--tb-ink);
   margin: 0;
+}
+
+.more {
+  display: flex;
+  justify-content: center;
 }
 
 .link {

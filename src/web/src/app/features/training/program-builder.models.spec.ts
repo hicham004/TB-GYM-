@@ -14,12 +14,15 @@ import {
   exerciseSummary,
   setSummary,
   setIssue,
-  filterLibrary,
   gridColumns,
+  groupPatterns,
   libraryChips,
   libraryExercise,
   type LibraryExercise,
+  libraryFilterKey,
+  libraryNames,
   moveWeek,
+  programLibraryIds,
   draftCard,
   programCard,
   removeWeek,
@@ -50,7 +53,9 @@ function exerciseView(overrides: Partial<ExerciseView> = {}): ExerciseView {
     isArchived: false,
     muscles: [{ muscle: 'Quadriceps', role: 'Primary' }],
     tags: ['competition'],
-    alternatives: [{ exerciseId: 'safety-bar', exerciseName: 'Safety-bar squat', note: null }],
+    alternatives: [
+      { exerciseId: 'safety-bar', exerciseName: 'Safety-bar squat', note: null, isArchived: false },
+    ],
     mediaAssetIds: [],
     version: 1,
     ...overrides,
@@ -387,31 +392,83 @@ describe('program builder save checks', () => {
 });
 
 describe('program builder library', () => {
-  it('describes an exercise and finds it ignoring case and accents', () => {
+  it('describes an exercise with its swaps and demos', () => {
     expect(squat).toMatchObject({
       detail: 'Barbell · Squat',
       group: 'squat',
       initials: 'BS',
       mediaId: null,
+      alternatives: [{ id: 'safety-bar', name: 'Safety-bar squat', isArchived: false }],
     });
     expect(row.mediaId).toBe('media-1');
     // Every demo stays, in order, for the grid's Watch demo (P4).
-    expect(row.mediaIds[0]).toBe('media-1');
+    expect(row.mediaIds).toEqual(['media-1', 'media-2']);
     expect(squat.mediaIds).toEqual([]);
-
-    const presse = libraryExercise(exerciseView({ id: 'press', name: 'Développé couché' }));
-    const items = [squat, row, presse];
-    expect(filterLibrary(items, 'DEVELOPPE', 'all').map((item) => item.id)).toEqual(['press']);
-    expect(filterLibrary(items, 'dumbbell', 'all').map((item) => item.id)).toEqual(['row']);
-    expect(filterLibrary(items, '', 'pull').map((item) => item.id)).toEqual(['row']);
   });
 
-  it('offers a chip only for the movements the library has', () => {
-    expect(libraryChips([squat, row]).map((chip) => `${chip.label} ${chip.count}`)).toEqual([
-      'All 2',
-      'Squat 1',
-      'Pull 1',
+  it('offers a chip only for the movements the library has, from the server counts', () => {
+    const chips = libraryChips([
+      { pattern: 'Squat', count: 4 },
+      { pattern: 'HorizontalPull', count: '2' },
+      { pattern: 'VerticalPull', count: 1 },
     ]);
+    expect(chips.map((chip) => `${chip.label} ${chip.count}`)).toEqual([
+      'All 7',
+      'Squat 4',
+      'Pull 3',
+    ]);
+    expect(libraryChips([]).map((chip) => chip.value)).toEqual(['all']);
+  });
+
+  it('asks the server for every pattern of a chip', () => {
+    expect(groupPatterns('push')).toEqual(['HorizontalPush', 'VerticalPush']);
+    expect(groupPatterns('other')).toEqual([
+      'Carry',
+      'Rotation',
+      'Locomotion',
+      'Mobility',
+      'Other',
+    ]);
+    expect(groupPatterns('single')).toEqual(['Isolation']);
+  });
+
+  it('names the lifts a program needs read by id: its own and their approved swaps', () => {
+    const draft = program();
+    draft.weeks[0].sessions[0].exercises[1].approvedAlternativeExerciseIds = ['cable-row'];
+    draft.weeks[1].sessions[0].exercises.push(emptyExercise(''));
+
+    expect(programLibraryIds(draft).sort()).toEqual(['cable-row', 'row', 'squat']);
+  });
+
+  it('names a swap from the lift that offers it, and an archived one not at all', () => {
+    const front = libraryExercise(
+      exerciseView({
+        id: 'front',
+        name: 'Front squat',
+        alternatives: [
+          {
+            exerciseId: 'safety-bar',
+            exerciseName: 'Safety-bar squat',
+            note: null,
+            isArchived: false,
+          },
+          { exerciseId: 'old-squat', exerciseName: 'Old squat', note: null, isArchived: true },
+        ],
+      }),
+    );
+    const names = libraryNames([front, squat, row]);
+    expect(names.get('safety-bar')).toBe('Safety-bar squat');
+    expect(names.has('old-squat')).toBe(false);
+    expect([names.get('squat'), names.get('row')]).toEqual(['Back squat', 'Chest-supported row']);
+  });
+
+  it('reads two filters the server answers alike as one search', () => {
+    expect(libraryFilterKey({ query: ' Bench  Press ', group: 'all' })).toBe(
+      libraryFilterKey({ query: 'bench press', group: 'all' }),
+    );
+    expect(libraryFilterKey({ query: '', group: 'all' })).not.toBe(
+      libraryFilterKey({ query: '', group: 'push' }),
+    );
   });
 });
 

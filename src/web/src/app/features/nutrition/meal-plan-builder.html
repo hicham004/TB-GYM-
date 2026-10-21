@@ -226,8 +226,7 @@
             </div>
             <app-meal-plan-library
               mode="drag"
-              [recipes]="recipes()"
-              [state]="libraryState()"
+              [source]="library"
               [connectedTo]="dropIds()"
               (retry)="loadLibrary()"
             />
@@ -495,8 +494,7 @@
   <div class="picker">
     <app-meal-plan-library
       mode="pick"
-      [recipes]="recipes()"
-      [state]="libraryState()"
+      [source]="library"
       [added]="pickedAlready()"
       (pickRecipe)="pickRecipe($event)"
       (retry)="loadLibrary()"

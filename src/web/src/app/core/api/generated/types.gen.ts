@@ -1732,6 +1732,7 @@ export type ExerciseAlternativeView = {
   exerciseId: string;
   exerciseName: string;
   note: null | string;
+  isArchived: boolean;
 };
 
 export type ExerciseClassification = 'Strength' | 'General' | 'Mobility' | 'Conditioning';
@@ -1782,6 +1783,11 @@ export type ExerciseMuscleView = {
   role: MuscleRole;
 };
 
+export type ExercisePatternCount = {
+  pattern: MovementPattern;
+  count: number | string;
+};
+
 export type ExercisePrescriptionRequest = {
   exerciseId: string;
   position: number | string;
@@ -1808,6 +1814,7 @@ export type ExercisePrescriptionView = {
 export type ExerciseSearchResult = {
   total: number | string;
   items: Array<ExerciseView>;
+  patterns: Array<ExercisePatternCount>;
 };
 
 export type ExerciseView = {
@@ -5899,16 +5906,27 @@ export type SearchExercisesData = {
   query?: {
     query?: string;
     equipment?: ExerciseEquipment;
-    movementPattern?: MovementPattern;
+    movementPattern?: Array<MovementPattern>;
     muscle?: MuscleGroup;
     classification?: ExerciseClassification;
     tag?: string;
     includeArchived?: boolean;
+    ids?: Array<string>;
+    patterns?: boolean;
     skip?: number | string;
     take?: number | string;
   };
   url: '/api/exercises';
 };
+
+export type SearchExercisesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type SearchExercisesError = SearchExercisesErrors[keyof SearchExercisesErrors];
 
 export type SearchExercisesResponses = {
   /**

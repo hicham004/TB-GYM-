@@ -60,8 +60,8 @@
       <input
         type="search"
         [value]="search()"
-        (input)="search.set($any($event.target).value)"
-        placeholder="Search exercises…"
+        (input)="typed($any($event.target).value)"
+        placeholder="Search by name or tag…"
         i18n-placeholder
         autocomplete="off"
         aria-label="Search exercises"
@@ -81,7 +81,7 @@
               [name]="mode() + '-library-group'"
               [value]="chip.value"
               [checked]="group() === chip.value"
-              (change)="group.set(chip.value)"
+              (change)="chose(chip.value)"
             />
             <span>{{ chip.label }}</span>
           </label>
@@ -103,12 +103,19 @@
       </div>
     }
     @default {
-      @if (exercises().length === 0) {
+      @if (list.failed()) {
+        <div class="note">
+          <p role="alert" i18n>Your exercises could not be loaded.</p>
+          <button appButton type="button" variant="outlined" (click)="list.retry()" i18n>
+            Try again
+          </button>
+        </div>
+      } @else if (empty()) {
         <div class="note">
           <p i18n>Your exercise library is empty. Add the exercises you program, once.</p>
           <a class="link" routerLink="/training/exercises" i18n>Add exercises</a>
         </div>
-      } @else if (shown().length === 0) {
+      } @else if (shown().length === 0 && !list.searching()) {
         <div class="note">
           <p role="status">{{ noMatch() }}</p>
           <button appButton type="button" variant="text" (click)="clear()" i18n>
@@ -124,6 +131,7 @@
           cdkDropListSortingDisabled
           [cdkDropListConnectedTo]="connectedTo()"
           [cdkDropListEnterPredicate]="never"
+          [attr.aria-busy]="list.searching() || null"
         >
           @for (exercise of shown(); track exercise.id) {
             <li
@@ -155,8 +163,22 @@
             </li>
           }
         </ul>
+        @if (list.hasMore()) {
+          <div class="more">
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="list.loadingMore()"
+              (click)="more()"
+              i18n
+            >
+              Show more exercises
+            </button>
+          </div>
+        }
       } @else {
-        <ul class="items" role="list">
+        <ul class="items" role="list" [attr.aria-busy]="list.searching() || null">
           @for (exercise of shown(); track exercise.id) {
             <li>
               <button
@@ -193,6 +215,20 @@
             </li>
           }
         </ul>
+        @if (list.hasMore()) {
+          <div class="more">
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="list.loadingMore()"
+              (click)="more()"
+              i18n
+            >
+              Show more exercises
+            </button>
+          </div>
+        }
       }
     }
   }

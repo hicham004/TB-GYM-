@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 import { trainingSetTypeLabel } from '../../core/i18n/display-labels';
 import { Icon } from '../../ui/icon';
 import { SegmentedControl } from '../../ui/segmented-control';
-import { setSummary, type LibraryExercise } from './program-builder.models';
+import { libraryNames, setSummary, type LibraryExercise } from './program-builder.models';
 import type { DraftExercise, ProgramDraft } from './training-builder.models';
 
 /** A read-only look at the client's prescriptions, without inventing dates or calculated loads. */
@@ -33,7 +33,7 @@ export class ProgramPublishPreview {
   protected readonly typeLabel = trainingSetTypeLabel;
 
   protected swaps(exercise: DraftExercise): string {
-    const names = new Map(this.library().map((item) => [item.id, item.name]));
+    const names = libraryNames(this.library());
     return exercise.approvedAlternativeExerciseIds
       .map((id) => names.get(id) ?? $localize`An approved exercise`)
       .join(', ');

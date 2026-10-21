@@ -6,7 +6,12 @@ import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { ProgramSetsEditor } from './program-sets-editor';
-import { DAYS, exerciseSummary, type LibraryExercise } from './program-builder.models';
+import {
+  DAYS,
+  exerciseSummary,
+  type LibraryExercise,
+  libraryNames,
+} from './program-builder.models';
 import {
   type DraftExercise,
   type DraftSession,
@@ -61,9 +66,7 @@ export class ProgramSessionEditor {
   }));
   protected readonly summary = exerciseSummary;
 
-  private readonly names = computed(
-    () => new Map(this.library().map((exercise) => [exercise.id, exercise.name])),
-  );
+  private readonly names = computed(() => libraryNames(this.library()));
 
   protected day(): string {
     return String(this.session().dayOffset);
@@ -81,7 +84,9 @@ export class ProgramSessionEditor {
   /** The swaps a coach can approve: the library's alternatives plus any approved before. */
   protected swapOptions(exercise: DraftExercise): { id: string; name: string }[] {
     const fromLibrary =
-      this.library().find((item) => item.id === exercise.exerciseId)?.alternativeIds ?? [];
+      this.library()
+        .find((item) => item.id === exercise.exerciseId)
+        ?.alternatives.map((item) => item.id) ?? [];
     const ids = [...new Set([...fromLibrary, ...exercise.approvedAlternativeExerciseIds])].filter(
       (id) => id !== exercise.exerciseId,
     );

@@ -166,6 +166,47 @@ describe('ApiClient contract mapping', () => {
     plain.flush({ items: [], hasMore: false });
   });
 
+  it('sends a library page’s chip, ids and size the way the server reads them (audit WEA-14)', () => {
+    api
+      .searchExercises({
+        query: 'press',
+        movementPatterns: ['HorizontalPush', 'VerticalPush'],
+        skip: 48,
+        take: 48,
+      })
+      .subscribe();
+    const chip = http.expectOne((request) => request.url === '/api/exercises');
+    expect(chip.request.params.getAll('movementPattern')).toEqual([
+      'HorizontalPush',
+      'VerticalPush',
+    ]);
+    expect(chip.request.params.get('query')).toBe('press');
+    expect([chip.request.params.get('skip'), chip.request.params.get('take')]).toEqual([
+      '48',
+      '48',
+    ]);
+    expect(chip.request.params.has('ids')).toBe(false);
+    chip.flush({ total: 0, items: [], patterns: [] });
+
+    api.searchExercises({ ids: ['squat', 'row'], query: '' }).subscribe();
+    const own = http.expectOne((request) => request.url === '/api/exercises');
+    expect(own.request.params.getAll('ids')).toEqual(['squat', 'row']);
+    expect([own.request.params.get('skip'), own.request.params.get('take')]).toEqual(['0', '100']);
+    expect(own.request.params.has('query')).toBe(false);
+    expect(own.request.params.has('movementPattern')).toBe(false);
+    expect(own.request.params.has('patterns')).toBe(false);
+    own.flush({ total: 0, items: [], patterns: [] });
+
+    // A builder's first page asks for the counts its chips are drawn from.
+    api.searchExercises({ take: 48, patterns: true }).subscribe();
+    const first = http.expectOne((request) => request.url === '/api/exercises');
+    expect([first.request.params.get('take'), first.request.params.get('patterns')]).toEqual([
+      '48',
+      'true',
+    ]);
+    first.flush({ total: 0, items: [], patterns: [] });
+  });
+
   it('keeps the two unread counts numbers for the shell', () => {
     api.getMessagingUnreadCount().subscribe((unread) => expect(unread).toBe(3));
     api.getUnreadNotificationCount().subscribe((unread) => expect(unread).toBe(4));

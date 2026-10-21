@@ -45,8 +45,9 @@ export const PULL_UP = exercise('Pull-up', {
   muscles: [{ muscle: 'Back', role: 'Primary' }],
 });
 
+/** A search's answer; the Exercises page never asks for the counts per pattern (WEA-14). */
 export function results(items: ExerciseView[], total = items.length): ExerciseSearchResult {
-  return { items, total };
+  return { items, total, patterns: [] };
 }
 
 export function access(overrides: Partial<MediaAccessView>): MediaAccessView {

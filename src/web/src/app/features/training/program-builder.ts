@@ -79,11 +79,11 @@ import {
   gridColumns,
   insertProgression,
   insertSavedSession,
-  libraryExercise,
   type LibraryExercise,
   moveWeek,
   outsideChartCount,
   programFormula,
+  programLibraryIds,
   removeExercise,
   removeSession,
   removeWeek,
@@ -97,7 +97,8 @@ import {
   withProgramFormula,
 } from './program-builder.models';
 import { readFolds, readLibraryOpen, writeFolds, writeLibraryOpen } from './builder-preferences';
-import { type LibraryThumbs, ProgramLibrary } from './program-library';
+import { ProgramLibrary } from './program-library';
+import { ProgramLibrarySource } from './program-library-source';
 import { ProgramSessionEditor } from './program-session-editor';
 import { ProgramSetsEditor } from './program-sets-editor';
 import { ProgramPublishPreview } from './program-publish-preview';
@@ -316,16 +317,18 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     inject(PROGRAM_AUTOSAVE_TIMING),
   );
 
-  protected readonly exercises = signal<LibraryExercise[]>([]);
-  protected readonly libraryState = signal<'loading' | 'ready' | 'error'>('loading');
-  protected readonly saved = signal<SavedSessionView[]>([]);
-  protected readonly thumbs = signal<LibraryThumbs>(new Map());
+  /** The library's first page, searches, saved sessions and the program's own lifts (WEA-14). */
+  protected readonly library = new ProgramLibrarySource(this.api, this.scope, () =>
+    this.freshToken(),
+  );
+  /** Every exercise the page has read: the sheets name lifts and swaps from these. */
+  protected readonly knownExercises = computed(() => [...this.library.known().values()]);
   protected readonly libraryOpen = signal(readLibraryOpen());
   /** The weeks folded to their head line, by key; kept per program by position (R6.3). */
   protected readonly folded = signal<ReadonlySet<string>>(new Set());
-  /** Each library exercise's demos, so a grid row can offer Watch demo (P4). */
+  /** Each known exercise's demos, so a grid row can offer Watch demo (P4). */
   private readonly libraryMedia = computed(
-    () => new Map(this.exercises().map((item) => [item.id, item.mediaIds] as const)),
+    () => new Map([...this.library.known()].map(([id, item]) => [id, item.mediaIds] as const)),
   );
   /** The week a phone shows; null until one is chosen, then the first. */
   protected readonly phoneWeek = signal<string | null>(null);
@@ -526,6 +529,13 @@ export class ProgramBuilder implements HoldsUnsavedWork {
         untracked(() => void this.loadLibrary());
       }
     });
+    // The program's own lifts and swaps are read by id, once the first page has told what it holds,
+    // so the sheets never need the whole library.
+    effect(() => {
+      if (this.library.state() !== 'ready') return;
+      const ids = programLibraryIds(this.draft());
+      untracked(() => void this.library.ensure(ids));
+    });
     effect(() => {
       this.scope.epoch();
       const tenant = this.tenants.selectedTenantId();
@@ -624,67 +634,9 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     void this.loadProgram(this.templateId(), this.requestedVersion(), this.requestedDraft(), false);
   }
 
-  protected async loadLibrary(): Promise<void> {
-    return this.scope.run('library', async (owner) => {
-      this.libraryState.set('loading');
-      try {
-        const [first, saved] = await owner.wait(
-          Promise.all([
-            firstValueFrom(this.api.searchExercises({})),
-            firstValueFrom(this.api.listSavedSessions()),
-          ]),
-        );
-        // A page holds 100; a big library is read to the end, up to a thousand exercises.
-        const items = [...first.items];
-        const total = numeric(first.total);
-        while (items.length < Math.min(total, 1000)) {
-          const page = await owner.wait(
-            firstValueFrom(this.api.searchExercises({ skip: items.length })),
-          );
-          if (page.items.length === 0) break;
-          items.push(...page.items);
-        }
-        const library = items
-          .filter((item) => !item.isArchived)
-          .map(libraryExercise)
-          .sort((a, b) => a.name.localeCompare(b.name, this.locale));
-        this.exercises.set(library);
-        this.saved.set(saved);
-        this.libraryState.set('ready');
-        void this.loadThumbs(library);
-      } catch {
-        if (owner.current) this.libraryState.set('error');
-      }
-    });
-  }
-
-  /**
-   * Pictures for the library's tiles: one grant per exercise's first media, 32 to a request. A
-   * video or a refused grant keeps the tile's initials.
-   */
-  private async loadThumbs(library: readonly LibraryExercise[]): Promise<void> {
-    const ids = [...new Set(library.flatMap((item) => (item.mediaId ? [item.mediaId] : [])))].slice(
-      0,
-      96,
-    );
-    if (ids.length === 0) return;
-    return this.scope.run('thumbs', async (owner) => {
-      try {
-        await owner.wait(this.freshToken());
-        const thumbs = new Map<string, string>();
-        for (let start = 0; start < ids.length; start += 32) {
-          const batch = await owner.wait(
-            firstValueFrom(this.api.createMediaAccessBatch(ids.slice(start, start + 32))),
-          );
-          for (const item of batch.items) {
-            if (item.kind === 'Image') thumbs.set(item.assetId, item.thumbnailUrl ?? item.url);
-          }
-        }
-        this.thumbs.set(thumbs);
-      } catch {
-        // The tiles keep their initials.
-      }
-    });
+  /** The library's first page and the saved sessions; the rest is read as the coach asks for it. */
+  protected loadLibrary(): Promise<void> {
+    return this.library.load();
   }
 
   // ---------- changing the program ----------
@@ -1341,7 +1293,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
             sourceTemplateSessionId: sourceId,
           }),
         );
-        this.saved.set(await owner.wait(firstValueFrom(this.api.listSavedSessions())));
+        this.library.saved.set(await owner.wait(firstValueFrom(this.api.listSavedSessions())));
         this.toast.show($localize`${session.name.trim()}:session: is in your saved sessions.`, {
           tone: 'success',
         });
@@ -1649,10 +1601,6 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     this.publishing.set(false);
     this.problem.set(null);
     this.saveError.set(null);
-    this.exercises.set([]);
-    this.saved.set([]);
-    this.thumbs.set(new Map());
-    this.libraryState.set('loading');
     this.editing.set(null);
     this.picking.set(null);
   }

@@ -4,7 +4,7 @@
     <input
       type="search"
       [value]="search()"
-      (input)="search.set($any($event.target).value)"
+      (input)="typed($any($event.target).value)"
       placeholder="Search recipes…"
       i18n-placeholder
       autocomplete="off"
@@ -28,7 +28,14 @@
     </div>
   }
   @default {
-    @if (recipes().length === 0) {
+    @if (list.failed()) {
+      <div class="note">
+        <p role="alert" i18n>Your recipes could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="list.retry()" i18n>
+          Try again
+        </button>
+      </div>
+    } @else if (empty()) {
       <div class="note">
         <p i18n>
           No published recipes yet. A meal plan is made of recipes: add yours once, then use them in
@@ -36,10 +43,10 @@
         </p>
         <a class="link" routerLink="/nutrition/recipes/new" i18n>Add recipes</a>
       </div>
-    } @else if (rows().length === 0) {
+    } @else if (rows().length === 0 && !list.searching()) {
       <div class="note">
         <p role="status">{{ noMatch() }}</p>
-        <button appButton type="button" variant="text" (click)="search.set('')" i18n>
+        <button appButton type="button" variant="text" (click)="clear()" i18n>
           Show all recipes
         </button>
       </div>
@@ -52,6 +59,7 @@
         cdkDropListSortingDisabled
         [cdkDropListConnectedTo]="connectedTo()"
         [cdkDropListEnterPredicate]="never"
+        [attr.aria-busy]="list.searching() || null"
       >
         @for (row of rows(); track row.recipe.versionId) {
           <li
@@ -80,8 +88,22 @@
           </li>
         }
       </ul>
+      @if (list.hasMore()) {
+        <div class="more">
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            [loading]="list.loadingMore()"
+            (click)="more()"
+            i18n
+          >
+            Show more recipes
+          </button>
+        </div>
+      }
     } @else {
-      <ul class="items" role="list">
+      <ul class="items" role="list" [attr.aria-busy]="list.searching() || null">
         @for (row of rows(); track row.recipe.versionId) {
           <li>
             <button
@@ -108,6 +130,20 @@
           </li>
         }
       </ul>
+      @if (list.hasMore()) {
+        <div class="more">
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            [loading]="list.loadingMore()"
+            (click)="more()"
+            i18n
+          >
+            Show more recipes
+          </button>
+        </div>
+      }
     }
   }
 }

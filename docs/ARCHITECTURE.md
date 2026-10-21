@@ -645,6 +645,16 @@ shape and `CoachAttentionPolicy` (CLI-018), Training owns `TrainingAttentionPoli
 read is one set-based query over every client in scope, about 22 commands for a whole Coach Today.
 To decide every client's access at once, `ICoachingFeatureAccessService` gained `EvaluateManyAsync`;
 `EvaluateAllAsync` and `EvaluateAsync` are now a batch of one, so all features share one decision path.
+Since audit A13c (BEB-2) the feed's records, and the client page's last workout, read the history once,
+grouped by the database: each client's heaviest load per lift, exact rep count and unit among the workouts
+finished before the earliest shown workout began, the shown ones left out by id. Beside it come the shown
+workouts' own sets and the sets of workouts finished between the earliest and the latest shown start (the
+feed's own week, longer only while a shown workout had been started weeks before it finished), so each
+workout is still compared with exactly the workouts finished before it began, itself left out, by the same
+`WorkoutPersonalRecordRule`, whatever a clock stamped. The rows read grow with the feed, never with a client's
+history, and there is no date floor (records are all-time, ADR 0031). On a copy with two years of the demo's
+training (28,864 logged sets) Coach Today answered in about 80–110 ms against 105–235 ms before. The client's
+own history and finish summary still read the earlier sets themselves.
 
 R3.2 draws Coach Today from that read with no other call. `ApiClient.getCoachToday` returns the
 generated contract, and `coach-today.models.ts` turns it into sentences and links inside the lazy
@@ -914,6 +924,25 @@ device which shell was last drawn, `coach` or `client`: never a credential, it g
 forgotten once nobody is signed in. The launch screen draws that shell's empty frame (the sidebar and top
 bar, or the client's tabs) while the session is checked, and the app asks for the serif the signed-in pages
 greet with as soon as the shell is known, so their words do not reflow when it lands.
+
+Audit A13c (WEA-14): the program builder, Edit weeks and the meal-plan builder never read their library
+whole. Each reads its first page (48, by name) once a visit, shared by the panel beside the grid and the add
+sheet (`ProgramLibrarySource`, `RecipeLibrarySource`); a search goes to the server once the typing pauses for
+250 ms (a search the server reads alike, such as one with a trailing space, is not sent again), a movement
+chip asks for its patterns (`movementPattern` repeated), Show more brings the next page from where the
+server's rows end, with that page's total, and only the newest answer is drawn, the rows before it kept
+meanwhile (`ui/paged-search.ts`); once the last page is in, focus moves to the first row it brought. The first
+page asks the exercise search for the library's count per pattern (`patterns=true`), so the chips still offer
+only groups it has. The program's own lifts and the swaps approved for them are read by id (`ids`, a hundred
+a request) once the first page is in, and each exercise names the swaps it offers (`isArchived` marks one
+archived, which a sheet calls an archived exercise as before), so names, swaps and Watch demo need nothing
+more; a by-id read that fails is the panel's error, and its Try again reads them again. Every exercise or
+recipe read on the visit stays known, so a meal keeps its macros whatever is searched next. Pictures are
+granted for the rows each page brings, 32 a request and at most 96 a visit (each grant is a cookie), and a row
+carries `content-visibility: auto`. Names come in ICU root order (`und-x-icu`, `NameOrder`) on every server,
+since the alpine image's own collation sorts by byte. The builders' old in-browser search also matched
+equipment, pattern and muscle words and ignored accents; the server's finds every word, in any order, in an
+exercise's name or a tag or a recipe's name (LIB-003).
 
 R6.2g adds Talk to us for gyms and analytics (ADR 0037). `home-talk` is the form (name, gym, one
 field for an email address or a WhatsApp number, a line about the gym, and a hidden honeypot) between

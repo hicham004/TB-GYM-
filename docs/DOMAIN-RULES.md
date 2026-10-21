@@ -1926,6 +1926,11 @@ cannot leak one coach's private library into another tenant.
 media in one save. Rows the save adds are written as new: before, a second video or a new muscle made the
 save answer `concurrency_conflict`, because the database was asked to update rows that did not exist yet.
 
+**LIB-003** Searching the exercise or recipe library finds every word typed, in any order and any case, up to
+the first eight words: an exercise by its name or a tag, a recipe by its name (audit A13c). Accents count and
+equipment, pattern and muscle words are not searched. The Exercises page, the strength picker and the builders
+all ask the server, a page at a time in natural order of name; the builders' chips ask for a movement group.
+
 ## 9. Theme and gamification
 
 **GAM-001** A tenant can choose a standard theme, uploaded assets, or generated assets. Media

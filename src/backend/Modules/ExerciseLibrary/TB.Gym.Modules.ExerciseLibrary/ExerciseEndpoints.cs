@@ -15,19 +15,32 @@ public static class ExerciseEndpoints
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
             .WithTags(ExerciseLibraryModule.Name);
 
+        // movementPattern and ids repeat: ?movementPattern=HorizontalPush&movementPattern=VerticalPush;
+        // patterns=true adds the library's count per pattern.
         group.MapGet("/", async (
             string? query,
             ExerciseEquipment? equipment,
-            MovementPattern? movementPattern,
+            MovementPattern[]? movementPattern,
             MuscleGroup? muscle,
             ExerciseClassification? classification,
             string? tag,
             bool? includeArchived,
+            Guid[]? ids,
+            bool? patterns,
             int? skip,
             int? take,
             IExerciseLibraryApplicationService service,
             CancellationToken cancellationToken) =>
-            Results.Ok(await service.SearchAsync(
+        {
+            if (ids is { Length: > ExerciseSearchRequest.MaximumIds })
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["ids"] = [$"Ask for at most {ExerciseSearchRequest.MaximumIds} exercises at once."],
+                });
+            }
+
+            return Results.Ok(await service.SearchAsync(
                 new ExerciseSearchRequest(
                     query,
                     equipment,
@@ -37,10 +50,14 @@ public static class ExerciseEndpoints
                     tag,
                     includeArchived ?? false,
                     skip ?? 0,
-                    take is null or 0 ? 50 : take.Value),
-                cancellationToken)))
+                    take is null or 0 ? 50 : take.Value,
+                    ids,
+                    patterns ?? false),
+                cancellationToken));
+        })
             .WithName("SearchExercises")
-            .Produces<ExerciseSearchResult>();
+            .Produces<ExerciseSearchResult>()
+            .ProducesValidationProblem();
 
         group.MapGet("/{exerciseId:guid}", async (
             Guid exerciseId,

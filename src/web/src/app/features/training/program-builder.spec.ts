@@ -20,14 +20,17 @@ import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { UiToast } from '../../ui/toast';
 import { fill, formSummary, press, settle } from '../../../testing/dom';
 import {
   draftSummary,
   draftView,
+  exercise,
   LIBRARY,
   prescription,
   saveView,
+  searchLibrary,
   sessionView,
   setView,
   templateSummary,
@@ -96,7 +99,7 @@ async function render(options: Options = {}) {
     getProgramTemplateVersion: vi.fn((id: string) =>
       of(options.versions?.[id] ?? versionView({ id })),
     ),
-    searchExercises: vi.fn(() => of({ items: LIBRARY, total: LIBRARY.length })),
+    searchExercises: vi.fn(searchLibrary()),
     listSavedSessions: vi.fn(() => of([])),
     createMediaAccessBatch: vi.fn(() =>
       of({
@@ -148,6 +151,7 @@ async function render(options: Options = {}) {
       { provide: UiToast, useValue: toast },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
       { provide: PROGRAM_AUTOSAVE_TIMING, useValue: options.timing ?? AT_ONCE },
+      { provide: LIBRARY_SEARCH_PAUSE, useValue: 0 },
     ],
   });
   const harness = await RouterTestingHarness.create();
@@ -308,14 +312,123 @@ describe('the program builder', () => {
     expect(textOf(rows[0].querySelector('.tile'))).toBe('BS');
     expect(all(library, '.chip').map(textOf)).toEqual(['All', 'Squat', 'Hinge', 'Push', 'Pull']);
 
+    // The first page came with the counts the chips need; nothing else of the library was read.
+    expect(api.searchExercises.mock.calls.map(([query]) => query)).toEqual([
+      { take: 48, patterns: true },
+    ]);
+
+    // A search and a chip are asked of the server, each in the server's words.
     fill(library, 'Search exercises', 'GOBLET');
     await settle(harness.fixture);
     expect(all(library, '.lib-item .name').map(textOf)).toEqual(['Goblet squat']);
+    expect(api.searchExercises).toHaveBeenLastCalledWith({
+      query: 'GOBLET',
+      movementPatterns: undefined,
+      skip: 0,
+      take: 48,
+    });
 
     fill(library, 'Search exercises', '');
+    await settle(harness.fixture);
+    expect(all(library, '.lib-item')).toHaveLength(5);
     library.querySelector<HTMLInputElement>('.chip input[value="pull"]')!.click();
     await settle(harness.fixture);
     expect(all(library, '.lib-item .name').map(textOf)).toEqual(['Chest-supported row']);
+    expect(api.searchExercises).toHaveBeenLastCalledWith({
+      query: undefined,
+      movementPatterns: ['HorizontalPull', 'VerticalPull'],
+      skip: 0,
+      take: 48,
+    });
+    // A clear box with every movement is the first page again, read once.
+    expect(api.searchExercises).toHaveBeenCalledTimes(3);
+    expect(all(library, '.more')).toHaveLength(0);
+  });
+
+  it('reads one page of a big library, the next on Show more, and the program’s own lifts by id (WEA-14)', async () => {
+    // Fifty-five lifts sort before the program's own, so the first page of 48 holds none of them.
+    const accessories = Array.from({ length: 55 }, (_, index) =>
+      exercise(`accessory-${index + 1}`, `Accessory ${String(index + 1).padStart(2, '0')}`, {
+        mediaAssetIds: index < 40 ? [`media-${index + 1}`] : [],
+      }),
+    );
+    const own = LIBRARY.map((item) =>
+      item.id === 'rdl'
+        ? {
+            ...item,
+            mediaAssetIds: ['media-rdl'],
+            alternatives: [
+              { exerciseId: 'goblet', exerciseName: 'Goblet squat', note: null, isArchived: false },
+            ],
+          }
+        : item,
+    );
+    const granted = (ids: readonly string[]) =>
+      of({
+        items: ids.map((assetId) => ({
+          assetId,
+          kind: 'Image',
+          source: 'Upload',
+          contentType: 'image/webp',
+          url: `/media/${assetId}.webp`,
+          expiresAtUtc: '2026-10-21T12:00:00Z',
+          downloadAllowed: false,
+        })),
+      });
+    const swappable = versionView();
+    for (const week of swappable.weeks) {
+      week.sessions[0].exercises[1] = {
+        ...week.sessions[0].exercises[1],
+        modificationPolicy: 'CoachApprovedSwap',
+      };
+    }
+    const { host, harness, api } = await render({
+      api: {
+        searchExercises: vi.fn(searchLibrary([...accessories, ...own])),
+        createMediaAccessBatch: vi.fn(granted),
+      },
+      versions: { 'version-2': swappable },
+    });
+
+    // The program's lifts were read by id in one request; the swaps they offer come named with them.
+    const asked = api.searchExercises.mock.calls.map(([query]) => query);
+    expect(asked[0]).toEqual({ take: 48, patterns: true });
+    expect(asked.slice(1)).toEqual([{ ids: ['squat', 'rdl', 'bench'], take: 100 }]);
+    // So the grid offers the deadlift's demo, though the library panel never showed it.
+    expect(named(all(host, 'section.week')[0], 'Watch the Romanian deadlift demo')).toBeTruthy();
+
+    named(host, 'Exercises').click();
+    await settle(harness.fixture);
+    const library = host.querySelector<HTMLElement>('app-program-library')!;
+    expect(all(library, '.lib-item')).toHaveLength(48);
+    // Pictures for the page's rows only, 32 to a request.
+    const grants = api.createMediaAccessBatch.mock.calls as unknown as [readonly string[]][];
+    expect(grants.map(([ids]) => ids.length)).toEqual([32, 8]);
+
+    named(library, 'Show more exercises').click();
+    await settle(harness.fixture);
+    expect(api.searchExercises).toHaveBeenLastCalledWith({
+      query: undefined,
+      movementPatterns: undefined,
+      skip: 48,
+      take: 48,
+    });
+    const names = all(library, '.lib-item .name').map(textOf);
+    expect(names).toHaveLength(60);
+    expect(names.slice(-5)).toEqual([
+      'Back squat',
+      'Bench press',
+      'Chest-supported row',
+      'Goblet squat',
+      'Romanian deadlift',
+    ]);
+    expect(all(library, '.more')).toHaveLength(0);
+    expect(api.searchExercises).toHaveBeenCalledTimes(3);
+
+    // The session sheet names the deadlift's swap from what was read by id.
+    named(all(host, 'section.week')[0], 'Lower A').click();
+    await settle(harness.fixture);
+    expect(textOf(sheet().querySelector('.swaps'))).toContain('Goblet squat');
   });
 
   it('keeps a change as the coach’s own draft, then saves later changes from the version it read', async () => {

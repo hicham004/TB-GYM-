@@ -39,11 +39,15 @@ export class MealPlanApi {
     return this.http.get<MealPlanVersionView>(`/api/nutrition/meal-plan-versions/${versionId}`);
   }
 
-  /** Recipes a plan may hold: each at its newest published version, a page at a time. */
-  listPublishedRecipes(skip: number): Observable<RecipePage> {
-    return this.http.get<RecipePage>('/api/nutrition/recipes', {
-      params: new HttpParams().set('published', true).set('skip', skip).set('take', 100),
-    });
+  /**
+   * Recipes a plan may hold, each at its newest published version, a page at a time by name; every word of
+   * `query` is found in each (WEA-14).
+   */
+  listPublishedRecipes(query: string, skip: number, take: number): Observable<RecipePage> {
+    let params = new HttpParams().set('published', true).set('skip', skip).set('take', take);
+    const text = query.trim();
+    if (text) params = params.set('query', text);
+    return this.http.get<RecipePage>('/api/nutrition/recipes', { params });
   }
 
   /** The caller's own drafts, newest change first: new plans and changes to saved ones. */

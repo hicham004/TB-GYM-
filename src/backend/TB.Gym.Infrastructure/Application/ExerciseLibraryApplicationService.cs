@@ -26,17 +26,23 @@ internal sealed class ExerciseLibraryApplicationService(
     {
         var take = Math.Clamp(request.Take, 1, 100);
         var skip = Math.Max(request.Skip, 0);
-        var query = dbContext.Exercises
+        var library = dbContext.Exercises
             .AsNoTracking()
+            .Where(item => request.IncludeArchived || !item.IsArchived);
+        var query = library
             .Include(item => item.Muscles)
             .Include(item => item.Tags)
             .Include(item => item.Alternatives)
             .Include(item => item.Media)
-            .Where(item => request.IncludeArchived || !item.IsArchived);
+            .AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(request.Query))
+        if (request.Ids is { Count: > 0 } ids)
         {
-            var pattern = LikePattern.Containing(request.Query);
+            query = query.Where(item => ids.Contains(item.Id));
+        }
+
+        foreach (var pattern in LikePattern.EachWord(request.Query))
+        {
             query = query.Where(item =>
                 EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter) ||
                 item.Tags.Any(tag => EF.Functions.ILike(tag.Value, pattern, LikePattern.EscapeCharacter)));
@@ -47,9 +53,9 @@ internal sealed class ExerciseLibraryApplicationService(
             query = query.Where(item => item.Equipment == equipment);
         }
 
-        if (request.MovementPattern is { } movementPattern)
+        if (request.MovementPatterns is { Count: > 0 } movementPatterns)
         {
-            query = query.Where(item => item.MovementPattern == movementPattern);
+            query = query.Where(item => movementPatterns.Contains(item.MovementPattern));
         }
 
         if (request.Classification is { } classification)
@@ -70,12 +76,22 @@ internal sealed class ExerciseLibraryApplicationService(
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
-            .OrderBy(item => item.Name)
+            .OrderBy(item => EF.Functions.Collate(item.Name, NameOrder.Collation))
+            .ThenBy(item => item.Id)
             .Skip(skip)
             .Take(take)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
-        return new ExerciseSearchResult(total, await ToViewsAsync(items, cancellationToken));
+        var patterns = request.IncludePatterns
+            ? await library
+                .GroupBy(item => item.MovementPattern)
+                .Select(group => new ExercisePatternCount(group.Key, group.Count()))
+                .ToListAsync(cancellationToken)
+            : [];
+        return new ExerciseSearchResult(
+            total,
+            await ToViewsAsync(items, cancellationToken),
+            [.. patterns.OrderBy(item => item.Pattern)]);
     }
 
     public async Task<ExerciseView?> GetAsync(Guid exerciseId, CancellationToken cancellationToken)
@@ -272,10 +288,10 @@ internal sealed class ExerciseLibraryApplicationService(
             .Distinct()
             .ToArray();
         var names = alternativeIds.Length == 0
-            ? new Dictionary<Guid, string>()
+            ? new Dictionary<Guid, (string Name, bool IsArchived)>()
             : await dbContext.Exercises.AsNoTracking()
                 .Where(item => alternativeIds.Contains(item.Id))
-                .ToDictionaryAsync(item => item.Id, item => item.Name, cancellationToken);
+                .ToDictionaryAsync(item => item.Id, item => (item.Name, item.IsArchived), cancellationToken);
 
         return exercises.Select(item => new ExerciseView(
             item.Id,
@@ -288,10 +304,9 @@ internal sealed class ExerciseLibraryApplicationService(
             item.Muscles.OrderBy(link => link.Role).ThenBy(link => link.Muscle)
                 .Select(link => new ExerciseMuscleView(link.Muscle, link.Role)).ToArray(),
             item.Tags.OrderBy(link => link.Value).Select(link => link.Value).ToArray(),
-            item.Alternatives.Select(link => new ExerciseAlternativeView(
-                link.AlternativeExerciseId,
-                names.GetValueOrDefault(link.AlternativeExerciseId, "Unavailable exercise"),
-                link.Note)).ToArray(),
+            item.Alternatives.Select(link => names.TryGetValue(link.AlternativeExerciseId, out var alternative)
+                ? new ExerciseAlternativeView(link.AlternativeExerciseId, alternative.Name, link.Note, alternative.IsArchived)
+                : new ExerciseAlternativeView(link.AlternativeExerciseId, "Unavailable exercise", link.Note, true)).ToArray(),
             item.Media.OrderBy(link => link.DisplayOrder).Select(link => link.MediaAssetId).ToArray(),
             item.Version)).ToArray();
     }

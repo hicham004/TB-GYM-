@@ -1403,6 +1403,11 @@ Tokens are theme-ready from R1, so this costs little later.
   rather than letting each push the others down (rule 8). The client's record, its Overview and Training
   tab, the client's Today and the Progress tab's fold use it; the launch screen draws the empty frame of the
   shell the device last showed. Rules in `ARCHITECTURE.md` §8.
+- Built in audit A13c: `PagedSearch` (`ui/paged-search.ts`), a library list searched and paged on the
+  server: the first page the screen read once, a search once the typing pauses for 250 ms (a chip at once),
+  the rows before it kept until the newest answer lands, and Show more. The program builder's, Edit weeks'
+  and the meal-plan builder's libraries use it, with "Search by name or tag…" as the exercise box's hint, as
+  on the Exercises page. Rules in `ARCHITECTURE.md` §8.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves

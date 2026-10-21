@@ -130,7 +130,7 @@ export function exercise(
 
 export function library(names: readonly (readonly [string, string])[]): ExerciseSearchResult {
   const items = names.map(([id, name]) => exercise(id, name));
-  return { total: items.length, items };
+  return { total: items.length, items, patterns: [] };
 }
 
 export function performance(

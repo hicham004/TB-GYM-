@@ -1,3 +1,4 @@
+import { type Observable, of } from 'rxjs';
 import type {
   MealPlanDraftContent,
   MealPlanDraftSaveView,
@@ -6,6 +7,7 @@ import type {
   MealPlanTemplateDetail,
   MealPlanTemplateSummary,
   MealPlanVersionView,
+  RecipePage,
   RecipeSummary,
 } from '../app/core/api/generated';
 
@@ -54,6 +56,20 @@ export const LENTILS = recipe({
   declaredAllergens: [],
 });
 export const RECIPES = [CHICKEN, LENTILS, OATS];
+
+/**
+ * The published recipes as the server pages them (WEA-14): every word of the query in the name, by name,
+ * one page from `skip`.
+ */
+export function searchRecipes(library: readonly RecipeSummary[] = RECIPES) {
+  return (query = '', skip = 0, take = 100): Observable<RecipePage> => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const found = library
+      .filter((item) => words.every((word) => item.name.toLowerCase().includes(word)))
+      .sort((a, b) => a.name.localeCompare(b.name, 'en'));
+    return of({ total: found.length, skip, take, items: found.slice(skip, skip + take) });
+  };
+}
 
 export function planDetail(
   overrides: Partial<MealPlanTemplateDetail> = {},

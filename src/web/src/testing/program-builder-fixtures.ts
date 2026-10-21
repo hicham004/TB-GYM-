@@ -1,6 +1,9 @@
+import { type Observable, of } from 'rxjs';
 import type {
   ExercisePrescriptionView,
+  ExerciseSearchResult,
   ExerciseView,
+  MovementPattern,
   ProgramDraftSaveView,
   ProgramDraftSummary,
   ProgramDraftView,
@@ -261,9 +264,79 @@ export function exercise(
   };
 }
 
+/** What a builder asks `ApiClient.searchExercises` for. */
+export interface LibraryQuery {
+  query?: string;
+  movementPatterns?: readonly MovementPattern[];
+  ids?: readonly string[];
+  includeArchived?: boolean;
+  patterns?: boolean;
+  skip?: number;
+  take?: number;
+}
+
+/**
+ * `GET /api/exercises` as the server answers it (WEA-14): archived exercises only when asked for, the ids
+ * and patterns asked for, every word in the name or a tag, by name, one page from `skip`, and, when asked
+ * for, the library's count under each pattern whatever else was asked.
+ */
+export function libraryPage(
+  library: readonly ExerciseView[],
+  query: LibraryQuery = {},
+): ExerciseSearchResult {
+  const shown = library.filter((item) => query.includeArchived || !item.isArchived);
+  const words = (query.query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+  const found = shown
+    .filter((item) => !query.ids?.length || query.ids.includes(item.id))
+    .filter(
+      (item) =>
+        !query.movementPatterns?.length || query.movementPatterns.includes(item.movementPattern),
+    )
+    .filter((item) =>
+      words.every(
+        (word) =>
+          item.name.toLowerCase().includes(word) ||
+          item.tags.some((tag) => tag.toLowerCase().includes(word)),
+      ),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name, 'en'));
+  const counts = new Map<MovementPattern, number>();
+  for (const item of shown) {
+    counts.set(item.movementPattern, (counts.get(item.movementPattern) ?? 0) + 1);
+  }
+  const skip = query.skip ?? 0;
+  return {
+    total: found.length,
+    items: found.slice(skip, skip + (query.take ?? 100)),
+    patterns: query.patterns ? [...counts].map(([pattern, count]) => ({ pattern, count })) : [],
+  };
+}
+
+/** The same, for a spec that stubs `ApiClient.searchExercises`. */
+export function searchLibrary(library: readonly ExerciseView[] = LIBRARY) {
+  return (query: LibraryQuery = {}): Observable<ExerciseSearchResult> =>
+    of(libraryPage(library, query));
+}
+
+/** What a request to `GET /api/exercises` asks for, read from its address, for the Playwright mocks. */
+export function libraryQueryOf(address: string): LibraryQuery {
+  const params = new URL(address).searchParams;
+  return {
+    query: params.get('query') ?? undefined,
+    movementPatterns: params.getAll('movementPattern') as MovementPattern[],
+    ids: params.getAll('ids'),
+    includeArchived: params.get('includeArchived') === 'true',
+    patterns: params.get('patterns') === 'true',
+    skip: Number(params.get('skip') ?? 0),
+    take: Number(params.get('take') ?? 50),
+  };
+}
+
 export const LIBRARY: ExerciseView[] = [
   exercise('squat', 'Back squat', {
-    alternatives: [{ exerciseId: 'goblet', exerciseName: 'Goblet squat', note: null }],
+    alternatives: [
+      { exerciseId: 'goblet', exerciseName: 'Goblet squat', note: null, isArchived: false },
+    ],
   }),
   exercise('goblet', 'Goblet squat', { equipment: 'Dumbbell' }),
   exercise('rdl', 'Romanian deadlift', { movementPattern: 'Hinge' }),

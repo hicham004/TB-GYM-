@@ -396,9 +396,8 @@ internal sealed partial class NutritionApplicationService(
     public async Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, CancellationToken cancellationToken)
     {
         var source = dbContext.Recipes.AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(query))
+        foreach (var pattern in LikePattern.EachWord(query))
         {
-            var pattern = LikePattern.Containing(query);
             source = source.Where(item => EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter));
         }
 
@@ -408,7 +407,9 @@ internal sealed partial class NutritionApplicationService(
         }
 
         var total = await source.CountAsync(cancellationToken);
-        var recipes = await source.OrderBy(item => item.Name).Skip(skip).Take(take)
+        var recipes = await source
+            .OrderBy(item => EF.Functions.Collate(item.Name, NameOrder.Collation)).ThenBy(item => item.Id)
+            .Skip(skip).Take(take)
             .Include(item => item.Versions).ThenInclude(item => item.Allergens)
             .AsSplitQuery().ToListAsync(cancellationToken);
         return new RecipePage(total, skip, take, recipes.Select(recipe =>

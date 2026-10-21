@@ -32,6 +32,13 @@ internal sealed class CoachOverviewReader(
     ICoachingFeatureAccessService featureAccessService)
     : ICoachOverviewService
 {
+    /// <summary>Names the three record reads in the SQL they send, for logs and for the test that counts their rows.</summary>
+    internal const string RecordSetsTag = "Coach overview: the sets of the workouts shown";
+
+    internal const string EarlierBestTag = "Coach overview: each client's best loads before the workouts shown";
+
+    internal const string RecentSetsTag = "Coach overview: the sets finished while the workouts shown began";
+
     public async Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken)
     {
         var scope = await LoadScopeAsync(null, cancellationToken);
@@ -774,6 +781,14 @@ internal sealed class CoachOverviewReader(
     /// The records each workout set (TRN-019), against that client's workouts finished before it
     /// started: the same comparison the client's own history makes.
     /// </summary>
+    /// <remarks>
+    /// The history is read once, grouped by the database: each client's heaviest load at each lift, rep
+    /// count and unit among the workouts finished before the earliest workout shown began. Only the sets of
+    /// workouts finished since then, up to the latest start shown (the feed's own week), are read one by
+    /// one, so each workout is compared with exactly the workouts finished before it began, itself left
+    /// out. The rows read grow with the feed, never with a client's history (BEB-2), and there is no date
+    /// floor: a record is the best ever lifted (ADR 0031).
+    /// </remarks>
     private async Task<ILookup<Guid, CoachActivityRecordView>> ReadRecordsAsync(
         IReadOnlyList<FinishedWorkout> workouts,
         CancellationToken cancellationToken)
@@ -798,11 +813,18 @@ internal sealed class CoachOverviewReader(
                 Set = new PerformedSet(set.Id, exercise.ActualExerciseId, set.ActualRepetitions,
                     set.ActualLoad, set.ActualLoadUnit, true),
             })
+            .TagWith(RecordSetsTag)
             .ToListAsync(cancellationToken);
+        if (sets.Count == 0)
+        {
+            return Empty<CoachActivityRecordView>();
+        }
+
         var clientIds = workouts.Select(item => item.ClientProfileId).Distinct().ToArray();
         var exerciseIds = sets.Select(item => item.Set.ExerciseId).Distinct().ToArray();
+        var earliestStart = workouts.Min(item => item.StartedAtUtc);
         var latestStart = workouts.Max(item => item.StartedAtUtc);
-        var earlier = await (
+        var finished =
             from set in dbContext.WorkoutSetPerformances.AsNoTracking()
             join exercise in dbContext.WorkoutExercisePerformances.AsNoTracking()
                 on new { set.TenantId, Id = set.WorkoutExercisePerformanceId }
@@ -812,7 +834,7 @@ internal sealed class CoachOverviewReader(
                 equals new { workout.TenantId, workout.Id }
             where clientIds.Contains(workout.ClientProfileId) &&
                   workout.Status == WorkoutExecutionStatus.Completed &&
-                  workout.CompletedAtUtc <= latestStart &&
+                  workout.CompletedAtUtc != null &&
                   exerciseIds.Contains(exercise.ActualExerciseId) &&
                   set.IsCompleted && set.ActualRepetitions != null &&
                   set.ActualLoad != null && set.ActualLoadUnit != null
@@ -821,23 +843,52 @@ internal sealed class CoachOverviewReader(
                 WorkoutId = workout.Id,
                 workout.ClientProfileId,
                 CompletedAtUtc = workout.CompletedAtUtc!.Value,
-                Set = new PerformedSet(set.Id, exercise.ActualExerciseId, set.ActualRepetitions,
-                    set.ActualLoad, set.ActualLoadUnit, true),
+                ExerciseId = exercise.ActualExerciseId,
+                Repetitions = set.ActualRepetitions!.Value,
+                Load = set.ActualLoad!.Value,
+                Unit = set.ActualLoadUnit!.Value,
+            };
+        // The workouts shown are left out by id, and read with the sets since, so the comparison stays exact
+        // even if a clock stepped back and stamped one as finished before it began.
+        var before = await finished
+            .Where(item => item.CompletedAtUtc < earliestStart && !workoutIds.Contains(item.WorkoutId))
+            .GroupBy(item => new { item.ClientProfileId, item.ExerciseId, item.Repetitions, item.Unit })
+            .Select(best => new
+            {
+                best.Key.ClientProfileId,
+                best.Key.ExerciseId,
+                best.Key.Repetitions,
+                best.Key.Unit,
+                Load = best.Max(item => item.Load),
             })
+            .TagWith(EarlierBestTag)
+            .ToListAsync(cancellationToken);
+        var since = await finished
+            .Where(item => (item.CompletedAtUtc >= earliestStart && item.CompletedAtUtc <= latestStart) ||
+                           workoutIds.Contains(item.WorkoutId))
+            .TagWith(RecentSetsTag)
             .ToListAsync(cancellationToken);
 
         var setsByWorkout = sets.ToLookup(item => item.WorkoutExecutionId);
+        var beforeByClient = before.ToLookup(item => item.ClientProfileId);
         return workouts
             .SelectMany(workout =>
             {
+                var earlierBest = beforeByClient[workout.ClientProfileId].ToDictionary(
+                    item => new PersonalRecordKey(item.ExerciseId, item.Repetitions, item.Unit),
+                    item => item.Load);
+                foreach (var item in since.Where(item => item.ClientProfileId == workout.ClientProfileId &&
+                                                         item.WorkoutId != workout.Id &&
+                                                         item.CompletedAtUtc <= workout.StartedAtUtc))
+                {
+                    var key = new PersonalRecordKey(item.ExerciseId, item.Repetitions, item.Unit);
+                    earlierBest[key] = earlierBest.TryGetValue(key, out var best)
+                        ? Math.Max(best, item.Load)
+                        : item.Load;
+                }
+
                 var own = setsByWorkout[workout.Id].ToArray();
-                var recordIds = WorkoutPersonalRecordRule.RecordSetIds(
-                    own.Select(item => item.Set),
-                    earlier
-                        .Where(item => item.ClientProfileId == workout.ClientProfileId &&
-                                       item.WorkoutId != workout.Id &&
-                                       item.CompletedAtUtc <= workout.StartedAtUtc)
-                        .Select(item => item.Set))
+                var recordIds = WorkoutPersonalRecordRule.RecordSetIds(own.Select(item => item.Set), earlierBest)
                     .ToHashSet();
                 return own
                     .Where(item => recordIds.Contains(item.Set.SetId))

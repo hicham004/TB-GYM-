@@ -221,7 +221,7 @@ function renumberWeeks(draft: ProgramDraft): void {
 /** A new exercise from the library, with the swaps the library approves for it. */
 export function prescriptionFor(exercise: LibraryExercise): DraftExercise {
   const prescription = emptyExercise(exercise.id, false, exercise.name);
-  prescription.approvedAlternativeExerciseIds = [...exercise.alternativeIds];
+  prescription.approvedAlternativeExerciseIds = exercise.alternatives.map((item) => item.id);
   return prescription;
 }
 
@@ -833,13 +833,12 @@ export interface LibraryExercise {
   group: Exclude<LibraryGroup, 'all'>;
   /** Up to two letters for the tile when there is no picture. */
   initials: string;
-  alternativeIds: string[];
+  /** The swaps the library offers for it, as named when read, archived ones flagged. */
+  alternatives: readonly LibraryAlternative[];
   /** The first picture or video the coach attached, if any. */
   mediaId: string | null;
   /** Every picture and video attached, in order: the demos a coach can watch on the grid (P4). */
   mediaIds: readonly string[];
-  /** Name, equipment, pattern, muscles and tags, folded for search. */
-  searchText: string;
 }
 
 const GROUP_OF: Record<MovementPattern, Exclude<LibraryGroup, 'all'>> = {
@@ -870,9 +869,22 @@ export function groupLabel(group: LibraryGroup): string {
   return labels[group];
 }
 
-/** Lower case without accents, so "presse" finds "Pressé" and "RDL" finds "rdl". */
-export function fold(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
+/** The movement patterns a chip asks the server for (WEA-14). */
+export interface LibraryAlternative {
+  id: string;
+  name: string;
+  isArchived: boolean;
+}
+
+/** What the server reads of a library list's filter: two that ask the same are one search (WEA-14). */
+export function libraryFilterKey(filter: { query: string; group: LibraryGroup }): string {
+  return `${filter.group}|${filter.query.trim().toLocaleLowerCase().split(/\s+/).join(' ')}`;
+}
+
+export function groupPatterns(group: Exclude<LibraryGroup, 'all'>): MovementPattern[] {
+  return (Object.keys(GROUP_OF) as MovementPattern[]).filter(
+    (pattern) => GROUP_OF[pattern] === group,
+  );
 }
 
 export function libraryExercise(view: ExerciseView): LibraryExercise {
@@ -888,12 +900,13 @@ export function libraryExercise(view: ExerciseView): LibraryExercise {
       .slice(0, 2)
       .map((word) => word[0]?.toLocaleUpperCase() ?? '')
       .join(''),
-    alternativeIds: view.alternatives.map((item) => item.exerciseId),
+    alternatives: view.alternatives.map((item) => ({
+      id: item.exerciseId,
+      name: item.exerciseName,
+      isArchived: item.isArchived,
+    })),
     mediaId: view.mediaAssetIds[0] ?? null,
     mediaIds: [...view.mediaAssetIds],
-    searchText: fold(
-      [view.name, equipment, pattern, ...view.tags, ...view.muscles.map((m) => m.muscle)].join(' '),
-    ),
   };
 }
 
@@ -903,8 +916,13 @@ export interface LibraryChip {
   count: number;
 }
 
-/** "All" and then only the groups the library has, so no chip leads to nothing. */
-export function libraryChips(items: readonly LibraryExercise[]): LibraryChip[] {
+/**
+ * "All" and then only the groups the library has, so no chip leads to nothing, from the server's count of
+ * the library's exercises under each pattern (the builder never reads the whole library, WEA-14).
+ */
+export function libraryChips(
+  patterns: readonly { pattern: MovementPattern; count: number | string }[],
+): LibraryChip[] {
   const order: Exclude<LibraryGroup, 'all'>[] = [
     'squat',
     'hinge',
@@ -913,29 +931,50 @@ export function libraryChips(items: readonly LibraryExercise[]): LibraryChip[] {
     'single',
     'other',
   ];
+  const counts = new Map<LibraryGroup, number>();
+  for (const item of patterns) {
+    const group = GROUP_OF[item.pattern];
+    if (group) counts.set(group, (counts.get(group) ?? 0) + numeric(item.count));
+  }
+  const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
   return [
-    { value: 'all' as LibraryGroup, label: groupLabel('all'), count: items.length },
+    { value: 'all' as LibraryGroup, label: groupLabel('all'), count: total },
     ...order
       .map((group) => ({
         value: group as LibraryGroup,
         label: groupLabel(group),
-        count: items.filter((item) => item.group === group).length,
+        count: counts.get(group) ?? 0,
       }))
       .filter((chip) => chip.count > 0),
   ];
 }
 
-export function filterLibrary(
-  items: readonly LibraryExercise[],
-  search: string,
-  group: LibraryGroup,
-): LibraryExercise[] {
-  const words = fold(search).split(/\s+/).filter(Boolean);
-  return items.filter(
-    (item) =>
-      (group === 'all' || item.group === group) &&
-      words.every((word) => item.searchText.includes(word)),
-  );
+/**
+ * The library entries a program needs beyond the pages the coach browsed: every lift it holds and the swaps
+ * approved for it. The swaps the library offers come named with each lift, so names, swaps and demos never
+ * depend on the whole library (WEA-14).
+ */
+export function programLibraryIds(draft: ProgramDraft): string[] {
+  const ids = new Set<string>();
+  for (const exercise of draft.weeks.flatMap((week) => week.sessions).flatMap((s) => s.exercises)) {
+    if (!exercise.exerciseId) continue;
+    ids.add(exercise.exerciseId);
+    for (const id of exercise.approvedAlternativeExerciseIds) ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
+ * Every exercise name the page has read: its exercises', and the swaps they offer unless archived, which a
+ * sheet then calls an archived exercise as it did when the whole library was read.
+ */
+export function libraryNames(exercises: readonly LibraryExercise[]): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const alternative of exercises.flatMap((exercise) => exercise.alternatives)) {
+    if (!alternative.isArchived) names.set(alternative.id, alternative.name);
+  }
+  for (const exercise of exercises) names.set(exercise.id, exercise.name);
+  return names;
 }
 
 // ---------- the program list ----------

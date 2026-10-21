@@ -18,6 +18,7 @@ import type {
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { UiToast } from '../../ui/toast';
 import { field, fill, settle } from '../../../testing/dom';
 import {
@@ -32,6 +33,7 @@ import {
   recipe,
   RECIPES,
   saveView,
+  searchRecipes,
   versionView,
 } from '../../../testing/meal-plan-fixtures';
 import type { AutosaveTiming } from '../training/program-autosave';
@@ -62,10 +64,7 @@ async function render(options: Options = {}) {
   const api = {
     getPlan: vi.fn(options.getPlan ?? (() => of(planDetail()))),
     getVersion: vi.fn(options.getVersion ?? (() => of(versionView()))),
-    listPublishedRecipes: vi.fn(() => {
-      const items = options.library ?? RECIPES;
-      return of({ total: items.length, skip: 0, take: 100, items });
-    }),
+    listPublishedRecipes: vi.fn(searchRecipes(options.library ?? RECIPES)),
     listDrafts: vi.fn(() => of([])),
     getDraft: vi.fn(options.getDraft ?? (() => of(draftView()))),
     createDraft: vi.fn<(request: CreateMealPlanDraftRequest) => Observable<MealPlanDraftSaveView>>(
@@ -95,6 +94,7 @@ async function render(options: Options = {}) {
       { provide: UiToast, useValue: toast },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
       { provide: MEAL_PLAN_AUTOSAVE_TIMING, useValue: options.timing ?? AT_ONCE },
+      { provide: LIBRARY_SEARCH_PAUSE, useValue: 0 },
     ],
   });
   const harness = await RouterTestingHarness.create();
@@ -181,8 +181,8 @@ describe('the meal-plan builder', () => {
     expect((all(host, '.save-buttons button')[1] as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('lists the published recipes beside the grid, per serving, and searches them', async () => {
-    const { host, harness } = await render();
+  it('lists the published recipes beside the grid, per serving, and searches them on the server', async () => {
+    const { host, harness, api } = await render();
 
     const library = host.querySelector('app-meal-plan-library')!;
     expect(all(library, '.lib-item .name').map(textOf)).toEqual([
@@ -193,9 +193,66 @@ describe('the meal-plan builder', () => {
     expect(textOf(all(library, '.lib-item')[1].querySelector('.detail'))).toBe(
       '300 kcal a serving',
     );
+    expect(api.listPublishedRecipes.mock.calls).toEqual([['', 0, 48]]);
     fill(library, 'Search recipes', 'oats');
     await settle(harness.fixture);
     expect(all(library, '.lib-item .name').map(textOf)).toEqual(['Overnight oats']);
+    expect(api.listPublishedRecipes).toHaveBeenLastCalledWith('oats', 0, 48);
+
+    fill(library, 'Search recipes', 'pizza');
+    await settle(harness.fixture);
+    expect(textOf(library.querySelector('[role="status"]'))).toBe('No recipe matches “pizza”.');
+    named(library, 'Show all recipes').click();
+    await settle(harness.fixture);
+    expect(all(library, '.lib-item')).toHaveLength(3);
+    expect(api.listPublishedRecipes).toHaveBeenCalledTimes(3);
+  });
+
+  it('reads a page of a big library, and keeps a recipe found by a search in the plan’s totals (WEA-14)', async () => {
+    // Fifty salads sort first, so the first page of 48 holds none of the plan's own recipes.
+    const salads = Array.from({ length: 50 }, (_, index) =>
+      recipe({
+        id: `recipe-salad-${index + 1}`,
+        versionId: `salad-${index + 1}-v1`,
+        name: `A salad ${String(index + 1).padStart(2, '0')}`,
+        calories: 200,
+      }),
+    );
+    const chili = recipe({
+      id: 'recipe-chili',
+      versionId: 'chili-v1',
+      name: 'Turkey chili',
+      calories: 500,
+      proteinGrams: 45,
+      carbohydrateGrams: 40,
+      fatGrams: 15,
+      declaredAllergens: [],
+    });
+    const { host, harness, api } = await render({ library: [...salads, ...RECIPES, chili] });
+
+    const library = host.querySelector('app-meal-plan-library')!;
+    expect(all(library, '.lib-item')).toHaveLength(48);
+    named(library, 'Show more recipes').click();
+    await settle(harness.fixture);
+    expect(api.listPublishedRecipes).toHaveBeenLastCalledWith('', 48, 48);
+    expect(all(library, '.lib-item')).toHaveLength(54);
+    expect(all(library, '.more')).toHaveLength(0);
+
+    // The sheet's own search finds the chili, which goes into day 2.
+    named(host, 'Add a meal to day 2').click();
+    const picker = await dialogNamed(harness.fixture, 'Add a meal to day 2');
+    fill(picker, 'Search recipes', 'chili');
+    await settle(harness.fixture);
+    named(picker, 'Add Turkey chili').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(textOf(days(host)[1].querySelector('.day-kcal'))).toBe('1,100 kcal');
+
+    // Another search beside the grid changes the list, never the day's total.
+    fill(library, 'Search recipes', 'lentil');
+    await settle(harness.fixture);
+    expect(all(library, '.lib-item .name').map(textOf)).toEqual(['Lentil soup']);
+    expect(textOf(days(host)[1].querySelector('.day-kcal'))).toBe('1,100 kcal');
   });
 
   it('keeps a change to the targets as the coach’s draft of this plan', async () => {

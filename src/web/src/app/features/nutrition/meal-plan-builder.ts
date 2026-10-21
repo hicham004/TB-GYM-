@@ -109,6 +109,7 @@ import {
   weeksOf,
 } from './meal-plan-builder.models';
 import { MealPlanLibrary } from './meal-plan-library';
+import { RecipeLibrarySource } from './meal-plan-library-source';
 import { MealPlanMealEditor } from './meal-plan-meal-editor';
 
 /** The builder's autosave timing; a spec provides its own to save at once or to hold saves back. */
@@ -297,17 +298,19 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     inject(MEAL_PLAN_AUTOSAVE_TIMING),
   );
 
-  /** The library's published recipes, each at its newest published version. */
-  protected readonly recipes = signal<PlanRecipe[]>([]);
+  /** The published recipes' first page, searches and every recipe read since (WEA-14). */
+  protected readonly library = new RecipeLibrarySource(this.api, this.scope);
   /** The recipes the opened draft or version names, in whatever state they are now. */
   private readonly planRecipes = signal<PlanRecipe[]>([]);
-  protected readonly book = computed(() => recipeBook(this.planRecipes(), this.recipes()));
+  /** A recipe picked from any page keeps its calories and macros, whatever is searched next. */
+  protected readonly book = computed(() =>
+    recipeBook(this.planRecipes(), [...this.library.known().values()]),
+  );
   /** Recipes in the plan published again since they were added (R4.4d); never changed unasked. */
   protected readonly updates = computed(() => {
     this.revision();
     return newerRecipes(this.plan(), this.book());
   });
-  protected readonly libraryState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly libraryOpen = signal(true);
   /** The week a phone shows; null until one is chosen, then the first. */
   protected readonly phoneWeek = signal<string | null>(null);
@@ -601,29 +604,9 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     void this.loadPlan(this.planId(), this.requestedVersion(), this.requestedDraft(), false);
   }
 
-  protected async loadLibrary(): Promise<void> {
-    return this.scope.run('library', async (owner) => {
-      this.libraryState.set('loading');
-      try {
-        // A page holds 100; a big library is read to the end, up to a thousand recipes.
-        const first = await owner.wait(firstValueFrom(this.api.listPublishedRecipes(0)));
-        const items = [...first.items];
-        const total = numeric(first.total);
-        while (items.length < Math.min(total, 1000)) {
-          const page = await owner.wait(
-            firstValueFrom(this.api.listPublishedRecipes(items.length)),
-          );
-          if (page.items.length === 0) break;
-          items.push(...page.items);
-        }
-        this.recipes.set(
-          items.map(planRecipe).sort((a, b) => a.name.localeCompare(b.name, this.locale)),
-        );
-        this.libraryState.set('ready');
-      } catch {
-        if (owner.current) this.libraryState.set('error');
-      }
-    });
+  /** The first page of published recipes; the rest is read as the coach asks for it. */
+  protected loadLibrary(): Promise<void> {
+    return this.library.load();
   }
 
   // ---------- changing the plan ----------
@@ -1429,8 +1412,6 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     this.publishing.set(false);
     this.problem.set(null);
     this.saveError.set(null);
-    this.recipes.set([]);
-    this.libraryState.set('loading');
     this.editing.set(null);
     this.picking.set(null);
   }

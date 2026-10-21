@@ -1776,7 +1776,8 @@ function editOptions(requests?: { method: string; path: string; body: unknown }[
     extra: {
       [`GET /api/training/mesocycles/${BLOCK}`]: (route: Route) =>
         json(route, 200, editableBlock()),
-      'GET /api/exercises': (route: Route) => json(route, 200, { items: [], total: 0 }),
+      'GET /api/exercises': (route: Route) =>
+        json(route, 200, { items: [], total: 0, patterns: [] }),
       'GET /api/training/saved-sessions': (route: Route) => json(route, 200, []),
       'POST /api/media/access': (route: Route) => json(route, 200, { items: [] }),
       [`POST /api/training/mesocycles/${BLOCK}/edit/preview`]: (route: Route) =>

@@ -11,6 +11,8 @@ import type {
 import {
   draftSummary,
   LIBRARY,
+  libraryPage,
+  libraryQueryOf,
   saveView,
   templateSummary,
   versionView,
@@ -101,8 +103,9 @@ async function openBuilder(
         json(route, 200, templateSummary()),
       'GET /api/training/template-versions/version-2': (route: Route) =>
         json(route, 200, options.program ?? versionView()),
+      // The library pages and searches on the server (WEA-14): the first page, a search, a chip, by id.
       'GET /api/exercises': (route: Route) =>
-        json(route, 200, { items: LIBRARY, total: LIBRARY.length }),
+        json(route, 200, libraryPage(LIBRARY, libraryQueryOf(route.request().url()))),
       'GET /api/training/saved-sessions': (route: Route) => json(route, 200, []),
       'POST /api/media/access': (route: Route) => json(route, 200, { items: [] }),
       'POST /api/training/week-progression/preview': (route: Route) => {

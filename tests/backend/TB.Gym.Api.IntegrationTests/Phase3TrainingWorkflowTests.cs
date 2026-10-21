@@ -968,6 +968,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     {
         private readonly Lock sync = new();
         private readonly List<string> commands = [];
+        private readonly List<(string Text, int Reads)> readers = [];
 
         public int Count
         {
@@ -996,7 +997,34 @@ public sealed partial class Phase3TrainingWorkflowTests
             lock (sync)
             {
                 commands.Clear();
+                readers.Clear();
             }
+        }
+
+        /// <summary>
+        /// The commands whose SQL carries <paramref name="tag"/> (EF's <c>TagWith</c>) and the reads their
+        /// readers made, which is one more than the rows they returned.
+        /// </summary>
+        public (int Commands, int Reads) ReadsTagged(string tag)
+        {
+            lock (sync)
+            {
+                var tagged = readers.Where(item => item.Text.Contains(tag, StringComparison.Ordinal)).ToArray();
+                return (tagged.Length, tagged.Sum(item => item.Reads));
+            }
+        }
+
+        public override InterceptionResult DataReaderDisposing(
+            DbCommand command,
+            DataReaderDisposingEventData eventData,
+            InterceptionResult result)
+        {
+            lock (sync)
+            {
+                readers.Add((command.CommandText, eventData.ReadCount));
+            }
+
+            return result;
         }
 
         public override InterceptionResult<DbDataReader> ReaderExecuting(

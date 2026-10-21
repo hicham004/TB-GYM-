@@ -397,19 +397,30 @@ export class ApiClient {
   searchExercises(query: {
     query?: string;
     equipment?: Phase3Contracts.ExerciseEquipment;
-    movementPattern?: Phase3Contracts.MovementPattern;
+    /** Any of these patterns (a builder's chip); sent as `movementPattern` once each. */
+    movementPatterns?: readonly Phase3Contracts.MovementPattern[];
     classification?: Phase3Contracts.ExerciseClassification;
     tag?: string;
     includeArchived?: boolean;
+    /** Only these exercises, at most 100: a program's own lifts. */
+    ids?: readonly string[];
+    /** Adds the library's count per movement pattern, which a builder's chips are drawn from. */
+    patterns?: boolean;
     skip?: number;
+    take?: number;
   }): Observable<Phase3Contracts.ExerciseSearchResult> {
     // 100 is the most the server returns (it clamps `take` to 1-100); asking for more only made the
     // request claim a page size it never received. Callers compare `items.length` with `total`.
-    const parameters = Object.fromEntries(
-      Object.entries({ skip: 0, ...query, take: 100 }).filter(
-        ([, value]) => value !== undefined && value !== '',
-      ),
-    );
+    const { movementPatterns, ids, take, ...rest } = query;
+    const parameters: Record<string, string | number | boolean | readonly string[]> = {
+      skip: 0,
+      take: take ?? 100,
+    };
+    for (const [key, value] of Object.entries(rest)) {
+      if (value !== undefined && value !== '') parameters[key] = value;
+    }
+    if (movementPatterns?.length) parameters['movementPattern'] = movementPatterns;
+    if (ids?.length) parameters['ids'] = ids;
     return this.http.get<Phase3Contracts.ExerciseSearchResult>('/api/exercises', {
       params: parameters,
     });

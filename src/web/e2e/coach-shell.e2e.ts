@@ -97,7 +97,7 @@ test('the selected destination is marked as the section when another page of it 
 }) => {
   await mockSession(page, {
     extra: {
-      'GET /api/exercises': (route) => json(route, 200, { total: 0, items: [] }),
+      'GET /api/exercises': (route) => json(route, 200, { total: 0, items: [], patterns: [] }),
       'GET /api/media': (route) => json(route, 200, { total: 0, skip: 0, take: 100, items: [] }),
     },
   });

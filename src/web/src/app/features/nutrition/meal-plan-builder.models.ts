@@ -700,21 +700,6 @@ export function weeksOf(plan: MealPlanModel): WeekOfDays[] {
   return weeks;
 }
 
-export function filterRecipes(recipes: readonly PlanRecipe[], search: string): PlanRecipe[] {
-  const words = fold(search)
-    .split(/\s+/)
-    .filter((word) => word.length > 0);
-  if (words.length === 0) return [...recipes];
-  return recipes.filter((recipe) => {
-    const name = fold(recipe.name);
-    return words.every((word) => name.includes(word));
-  });
-}
-
-function fold(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
-}
-
 // ---------- words and numbers ----------
 
 export function kcalText(calories: number, locale: string): string {

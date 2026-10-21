@@ -103,10 +103,7 @@
             </div>
             <app-program-library
               mode="drag"
-              [exercises]="exercises()"
-              [saved]="saved()"
-              [thumbs]="thumbs()"
-              [state]="libraryState()"
+              [source]="library"
               [connectedTo]="dropIds()"
               (retry)="loadLibrary()"
             />
@@ -361,7 +358,7 @@
     <app-program-session-editor
       [session]="session"
       [weekNumber]="editingWeekNumber()"
-      [library]="exercises()"
+      [library]="knownExercises()"
       [revision]="revision()"
       (edited)="touched()"
       (addExercise)="addToEditing()"
@@ -378,10 +375,7 @@
   <div class="picker">
     <app-program-library
       mode="pick"
-      [exercises]="exercises()"
-      [saved]="saved()"
-      [thumbs]="thumbs()"
-      [state]="libraryState()"
+      [source]="library"
       [offerSaved]="picking()?.kind === 'day'"
       [added]="addedInSheet()"
       (pickExercise)="pickExercise($event)"

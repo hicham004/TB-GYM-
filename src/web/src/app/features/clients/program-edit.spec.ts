@@ -17,7 +17,9 @@ import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { pastAndComingProgram } from '../../../testing/mesocycle-fixtures';
+import { exercise, searchLibrary } from '../../../testing/program-builder-fixtures';
 import { formSummary, press, settle } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -63,6 +65,8 @@ function preview(overrides: Partial<ProgramEditPreviewView> = {}): ProgramEditPr
 
 interface Options {
   mesocycle?: TrainingMesocycleView;
+  /** The exercise library the server holds; empty unless given. */
+  library?: Parameters<typeof searchLibrary>[0];
   read?: CoachClientProgramView;
   programApi?: Record<string, unknown>;
 }
@@ -71,7 +75,7 @@ async function render(options: Options = {}) {
   const mesocycle = options.mesocycle ?? pastAndComingProgram();
   const api = {
     getTrainingMesocycle: vi.fn(() => of(mesocycle)),
-    searchExercises: vi.fn(() => of({ items: [], total: 0 })),
+    searchExercises: vi.fn(searchLibrary(options.library ?? [])),
     listSavedSessions: vi.fn(() => of([])),
     createMediaAccessBatch: vi.fn(() => of({ items: [] })),
   };
@@ -103,6 +107,7 @@ async function render(options: Options = {}) {
         provide: TenantStore,
         useValue: { selectedTenantId: signal('tenant-1'), isOwner: signal(true) },
       },
+      { provide: LIBRARY_SEARCH_PAUSE, useValue: 0 },
     ],
   });
   const context = TestBed.inject(ClientWorkspaceContext);
@@ -171,6 +176,35 @@ describe('editing a client’s weeks', () => {
     await settle(harness.fixture);
     expect(host.querySelector('app-program-library')).not.toBeNull();
     expect(localStorage.getItem('tb.program-library')).toBe('open');
+  });
+
+  it('reads the program’s own lifts by id, so a row offers its demo without the whole library (WEA-14)', async () => {
+    const accessories = Array.from({ length: 48 }, (_, index) =>
+      exercise(`accessory-${index + 1}`, `Accessory ${String(index + 1).padStart(2, '0')}`),
+    );
+    const { host, harness, api } = await render({
+      library: [
+        ...accessories,
+        exercise('w3-mon-squat-exercise', 'Back squat', { mediaAssetIds: ['media-squat'] }),
+      ],
+    });
+    // The library is read once the program is, and the program's own lifts once the library is.
+    await settle(harness.fixture);
+
+    expect(api.searchExercises.mock.calls.map(([query]) => query)).toEqual([
+      { take: 48, patterns: true },
+      {
+        ids: [
+          'w2-wed-squat-exercise',
+          'w2-fri-squat-exercise',
+          'w3-mon-squat-exercise',
+          'w3-wed-squat-exercise',
+          'w3-fri-squat-exercise',
+        ],
+        take: 100,
+      },
+    ]);
+    expect(host.querySelectorAll('button[aria-label="Watch the Back squat demo"]')).toHaveLength(1);
   });
 
   it('shows the sessions still to come beside the locked ones, with nothing to review yet', async () => {

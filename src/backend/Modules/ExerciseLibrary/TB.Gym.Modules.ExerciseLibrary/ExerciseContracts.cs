@@ -19,18 +19,39 @@ public interface IExerciseLibraryApplicationService
         CancellationToken cancellationToken);
 }
 
+/// <param name="MovementPatterns">Any of these patterns; none asks for every pattern.</param>
+/// <param name="Ids">
+/// Only these exercises, at most <see cref="MaximumIds"/>: a program's own lifts, read without the rest of the
+/// library. None asks for every exercise.
+/// </param>
+/// <param name="IncludePatterns">Whether the answer counts the library's exercises per pattern.</param>
 public sealed record ExerciseSearchRequest(
     string? Query = null,
     ExerciseEquipment? Equipment = null,
-    MovementPattern? MovementPattern = null,
+    IReadOnlyList<MovementPattern>? MovementPatterns = null,
     MuscleGroup? Muscle = null,
     ExerciseClassification? Classification = null,
     string? Tag = null,
     bool IncludeArchived = false,
     int Skip = 0,
-    int Take = 50);
+    int Take = 50,
+    IReadOnlyList<Guid>? Ids = null,
+    bool IncludePatterns = false)
+{
+    public const int MaximumIds = 100;
+}
 
-public sealed record ExerciseSearchResult(int Total, IReadOnlyList<ExerciseView> Items);
+/// <param name="Patterns">
+/// When asked for, how many exercises the library holds under each movement pattern it has, archived ones only
+/// when asked for too, whatever the other filters: the chips a builder's library can offer without reading the
+/// whole library. Empty when not asked for.
+/// </param>
+public sealed record ExerciseSearchResult(
+    int Total,
+    IReadOnlyList<ExerciseView> Items,
+    IReadOnlyList<ExercisePatternCount> Patterns);
+
+public sealed record ExercisePatternCount(MovementPattern Pattern, int Count);
 
 public sealed record ExerciseView(
     Guid Id,
@@ -48,7 +69,8 @@ public sealed record ExerciseView(
 
 public sealed record ExerciseMuscleView(MuscleGroup Muscle, MuscleRole Role);
 
-public sealed record ExerciseAlternativeView(Guid ExerciseId, string ExerciseName, string? Note);
+/// <param name="IsArchived">The alternative was archived, so a builder offers it under no name of its own.</param>
+public sealed record ExerciseAlternativeView(Guid ExerciseId, string ExerciseName, string? Note, bool IsArchived);
 
 public sealed record CreateExerciseRequest(
     string Name,
