@@ -14,6 +14,7 @@ the lid open). Windows asks for nothing: the task runs as you, already signed in
 .EXAMPLE
 .\scripts\start-plan-runner.ps1                 # every Open row (up to 40 steps), after other chats are 20 min quiet
 .\scripts\start-plan-runner.ps1 -MaxSteps 2 -NoNewStepAfter 08:00
+.\scripts\start-plan-runner.ps1 -ResumeSession <id>   # first carry on with the chat a weekly limit stopped
 .\scripts\start-plan-runner.ps1 -Status         # task state and the last log lines
 .\scripts\start-plan-runner.ps1 -Stop           # the runner ends after the current step
 #>
@@ -23,6 +24,8 @@ param(
     [string]$Plan = 'audit',
     # A clock time such as 08:00: no step starts after its next occurrence (empty: run on; the owner, 2026-10-19).
     [string]$NoNewStepAfter = '',
+    # The session id of the chat a limit stopped (runner.log names it); its work is still in the tree.
+    [string]$ResumeSession = '',
     [int]$MaxSteps = 40,
     [switch]$Status,
     [switch]$Stop
@@ -75,10 +78,11 @@ if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Aut
 if (Test-Path $stopFile) { Remove-Item $stopFile -Force }
 
 Write-Host '--- what the runner would do now ---'
-& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter
+& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter -ResumeSession $ResumeSession
 
 $arguments = '-NoExit -ExecutionPolicy Bypass -File "{0}" -Plan {1} -WaitForIdle -MaxSteps {2}' -f $runner, $Plan, $MaxSteps
 if ($NoNewStepAfter) { $arguments += ' -NoNewStepAfter {0}' -f $NoNewStepAfter }
+if ($ResumeSession) { $arguments += ' -ResumeSession {0}' -f $ResumeSession }
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $root
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -Priority 4 `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd

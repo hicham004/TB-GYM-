@@ -26,11 +26,16 @@ row Done, when artifacts\plan-runner\STOP exists, or, with -NoNewStepAfter, befo
 that would start after that clock time. Logs, each chat's report and summary.md go to
 artifacts\plan-runner\ (git-ignored).
 
+A step a weekly limit stopped leaves its work uncommitted in the tree. -ResumeSession with
+that chat's session id (runner.log names it) makes the first step resume the same chat,
+with its context, instead of refusing to start on the changed tree.
+
 .EXAMPLE
 .\scripts\plan-runner.ps1 -DryRun       # what would run next; starts nothing
 .\scripts\plan-runner.ps1 -SelfTest     # one tiny chat per model outside the repo: model, effort, deny rule
 .\scripts\plan-runner.ps1 -WaitForIdle  # wait until other chats are finished, then run
 .\scripts\plan-runner.ps1 -WaitForIdle -NoNewStepAfter 08:00   # a night run that leaves the morning free
+.\scripts\plan-runner.ps1 -WaitForIdle -ResumeSession <id>     # carry on with the step a limit stopped
 #>
 [CmdletBinding()]
 param(
@@ -38,6 +43,8 @@ param(
     [string]$Plan = 'audit',
     # A clock time such as 08:00: no step starts after its next occurrence (empty: no limit).
     [string]$NoNewStepAfter = '',
+    # The session id of a chat a limit stopped: the first step resumes it, its changes still in the tree.
+    [string]$ResumeSession = '',
     [int]$MaxSteps = 3,
     [double]$StepHours = 8,
     [int]$IdleMinutes = 20,
@@ -158,6 +165,8 @@ How an unattended run works:
 $stepPrompt = $planPrompts[$Plan] + "`n" + $sharedRules
 
 $resumePrompt = 'The run stopped ({0}). Carry on with step {1} from where you stopped. The unattended-run rules in the first message still apply.'
+# For -ResumeSession: hours may have passed since the chat stopped, and its runner has exited.
+$stoppedResumePrompt = 'A usage limit stopped this chat and ended that run of the runner. The limit has reset and a new run resumes you now, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
 
 function Write-Note([string]$Message) {
     $line = '{0:yyyy-MM-dd HH:mm}  {1}' -f (Get-Date), $Message
@@ -301,9 +310,9 @@ function Get-RecentChats {
         }
 }
 
-function Get-StartBlocker([bool]$CheckChats) {
+function Get-StartBlocker([bool]$CheckChats, [bool]$AllowChanges = $false) {
     $changes = @(Get-TrackedChanges)
-    if ($changes.Count -gt 0) {
+    if ($changes.Count -gt 0 -and -not $AllowChanges) {
         return ('{0} tracked files are changed and not committed (first: {1})' -f $changes.Count, $changes[0].Substring(3))
     }
     if ($CheckChats) {
@@ -508,7 +517,7 @@ function Get-UsageText($Run) {
     return (@($parts) -join ', ')
 }
 
-function Invoke-Step($Row) {
+function Invoke-Step($Row, [string]$ResumeId = '') {
     $started = Get-Date
     $name = 'Plan runner ' + $Row.Id
     $base = Join-Path $logDir ('{0:yyyyMMdd-HHmm}-{1}' -f $started, ($Row.Id -replace '[^A-Za-z0-9.]', '_'))
@@ -517,9 +526,14 @@ function Invoke-Step($Row) {
     $branchBefore = @(Invoke-Git rev-parse --abbrev-ref HEAD)[0]
     $untrackedBefore = @(Get-Untracked)
     $stepModel = Get-RowModel $Row.Id
-    Write-Note ('Starting {0} in a new chat ({1}, effort {2}). Log: {3}' -f $Row.Id, $stepModel, $effort, $log)
+    $prompt = $stepPrompt.Replace('<<ROW>>', $Row.Id)
+    if ($ResumeId) {
+        $prompt = $stoppedResumePrompt -f $Row.Id
+        Write-Note ('Resuming chat {0} for {1} ({2}, effort {3}). Log: {4}' -f $ResumeId, $Row.Id, $stepModel, $effort, $log)
+    }
+    else { Write-Note ('Starting {0} in a new chat ({1}, effort {2}). Log: {3}' -f $Row.Id, $stepModel, $effort, $log) }
 
-    $run = Invoke-Chat -Prompt $stepPrompt.Replace('<<ROW>>', $Row.Id) -Name $name -WorkDir $repositoryRoot -LogPath $log -ChatModel $stepModel
+    $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ChatModel $stepModel -ResumeId $ResumeId
     $fallbackNotes = New-Object System.Collections.Generic.List[string]
     $waits = 0
     while ((Test-Retryable $run) -and $waits -lt $MaxLimitWaits -and -not (Test-Path $stopFile)) {
@@ -643,13 +657,14 @@ function Show-DryRun {
     foreach ($chat in @(Get-RecentChats)) {
         Write-Note ('Active in the last {0} min: "{1}" ({2}), {3} min ago' -f $IdleMinutes, $chat.Title, $chat.Id, $chat.Minutes)
     }
-    $blocker = Get-StartBlocker $true
+    $blocker = Get-StartBlocker $true ([bool]$ResumeSession)
     if ($blocker) { Write-Note ('Would not start now: ' + $blocker) }
     else { Write-Note 'Nothing blocks a start now.' }
     $row = Get-NextRow
     $problem = Get-RowProblem $row
     if ($problem) { Write-Note ('Next row: ' + $problem) }
     else { Write-Note ('Next row: {0} on {1}, {2}' -f $row.Id, (Get-RowModel $row.Id), (Get-ShortText $row.What 120)) }
+    if ($ResumeSession) { Write-Note ('The first step resumes chat {0}, with the {1} tracked changes in the tree.' -f $ResumeSession, @(Get-TrackedChanges).Count) }
 }
 
 if ($SelfTest) {
@@ -677,7 +692,10 @@ try {
             Write-Note 'Found the STOP file: stopping before the next step.'
             break
         }
-        $blocker = Get-StartBlocker ($steps -eq 0 -and -not $Force)
+        # A resumed first step finds its own uncommitted work in the tree.
+        $resumeId = ''
+        if ($ResumeSession -and $steps -eq 0) { $resumeId = $ResumeSession }
+        $blocker = Get-StartBlocker ($steps -eq 0 -and -not $Force) ([bool]$resumeId)
         if ($blocker) {
             if (-not $WaitForIdle) { Write-Note ('Not starting: ' + $blocker); break }
             if ($blocker -ne $lastBlocker) { Write-Note ('Waiting: ' + $blocker) }
@@ -691,7 +709,7 @@ try {
         if ($steps -ge $MaxSteps) { Write-Note ('Stopping after {0} steps (-MaxSteps). Next is {1}.' -f $steps, $row.Id); break }
         if ($stepCutoff -and (Get-Date) -gt $stepCutoff) { Write-Note ('Stopping: it is past {0:HH:mm} (-NoNewStepAfter). Next is {1}.' -f $stepCutoff, $row.Id); break }
         $steps++
-        if (-not (Invoke-Step $row)) { Write-Note ('Stopped. Read {0}' -f $summaryPath); break }
+        if (-not (Invoke-Step $row $resumeId)) { Write-Note ('Stopped. Read {0}' -f $summaryPath); break }
     }
 }
 finally {
