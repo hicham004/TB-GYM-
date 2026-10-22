@@ -8,6 +8,7 @@ export type AcceptClientInvitationRequest = {
   token: string;
   displayName: null | string;
   password: null | string;
+  legalDocumentIds?: null | Array<string>;
 };
 
 export type AcceptLegalDocumentRequest = {
@@ -2017,6 +2018,8 @@ export type LeaveWorkspaceRequest = {
   version: number | string;
 };
 
+export type LegalAudience = 'Owner' | 'Coach' | 'Client';
+
 export type LegalConsentAcceptanceView = {
   id: string;
   documentVersionId: string;
@@ -2027,7 +2030,46 @@ export type LegalConsentAcceptanceView = {
 
 export type LegalConsentContext = 'Platform' | 'Workspace';
 
+export type LegalDocumentAdminView = {
+  id: string;
+  kind: LegalDocumentKind;
+  version: string;
+  culture: string;
+  context: LegalConsentContext;
+  acceptanceStatement: string;
+  contentUri: string;
+  contentSha256: string;
+  characterCount: number | string;
+  publishedAtUtc: null | string;
+  retiredAtUtc: null | string;
+  acceptanceCount: number | string;
+};
+
 export type LegalDocumentKind = 'TermsOfService' | 'PrivacyPolicy' | 'HealthIntakeConsent';
+
+export type LegalDocumentText = {
+  id: string;
+  kind: LegalDocumentKind;
+  version: string;
+  culture: string;
+  context: LegalConsentContext;
+  content: string;
+  acceptanceStatement: string;
+  contentSha256: string;
+  publishedAtUtc: string;
+  retiredAtUtc: null | string;
+};
+
+export type LegalDocumentToAccept = {
+  id: string;
+  kind: LegalDocumentKind;
+  version: string;
+  culture: string;
+  context: LegalConsentContext;
+  acceptanceStatement: string;
+  contentUri: string;
+  publishedAtUtc: string;
+};
 
 export type LegalDocumentView = {
   id: string;
@@ -2933,6 +2975,17 @@ export type PublicInvitationDetails = {
   kind?: InvitationKind;
 };
 
+export type PublishLegalDocumentRequest = {
+  kind: LegalDocumentKind;
+  culture: string;
+  context: LegalConsentContext;
+  version: string;
+  content: string;
+  acceptanceStatement: string;
+  reviewed: boolean;
+  replacesVersionId: null | string;
+};
+
 export type PublishMealPlanDraftRequest = {
   version: number | string;
   replaceNewer: boolean;
@@ -3136,6 +3189,7 @@ export type RegisterCoachRequest = {
   defaultCulture?: string;
   defaultCurrencyCode?: string;
   weekStartsOn?: DayOfWeek;
+  legalDocumentIds?: null | Array<string>;
 };
 
 export type RegisterExternalMediaRequest = {
@@ -4636,6 +4690,61 @@ export type ListCurrentLegalDocumentsResponses = {
 export type ListCurrentLegalDocumentsResponse =
   ListCurrentLegalDocumentsResponses[keyof ListCurrentLegalDocumentsResponses];
 
+export type ListLegalDocumentsToAcceptData = {
+  body?: never;
+  path?: never;
+  query: {
+    audience: LegalAudience;
+  };
+  url: '/api/legal/documents/to-accept';
+};
+
+export type ListLegalDocumentsToAcceptErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type ListLegalDocumentsToAcceptError =
+  ListLegalDocumentsToAcceptErrors[keyof ListLegalDocumentsToAcceptErrors];
+
+export type ListLegalDocumentsToAcceptResponses = {
+  /**
+   * OK
+   */
+  200: Array<LegalDocumentToAccept>;
+};
+
+export type ListLegalDocumentsToAcceptResponse =
+  ListLegalDocumentsToAcceptResponses[keyof ListLegalDocumentsToAcceptResponses];
+
+export type GetPublishedLegalDocumentData = {
+  body?: never;
+  path: {
+    documentVersionId: string;
+  };
+  query?: never;
+  url: '/api/legal/documents/{documentVersionId}';
+};
+
+export type GetPublishedLegalDocumentErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetPublishedLegalDocumentResponses = {
+  /**
+   * OK
+   */
+  200: LegalDocumentText;
+};
+
+export type GetPublishedLegalDocumentResponse =
+  GetPublishedLegalDocumentResponses[keyof GetPublishedLegalDocumentResponses];
+
 export type AcceptLegalDocumentData = {
   body: AcceptLegalDocumentRequest;
   path?: never;
@@ -4669,6 +4778,54 @@ export type AcceptLegalDocumentResponses = {
 
 export type AcceptLegalDocumentResponse =
   AcceptLegalDocumentResponses[keyof AcceptLegalDocumentResponses];
+
+export type ListLegalDocumentVersionsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/legal-documents';
+};
+
+export type ListLegalDocumentVersionsResponses = {
+  /**
+   * OK
+   */
+  200: Array<LegalDocumentAdminView>;
+};
+
+export type ListLegalDocumentVersionsResponse =
+  ListLegalDocumentVersionsResponses[keyof ListLegalDocumentVersionsResponses];
+
+export type PublishLegalDocumentVersionData = {
+  body: PublishLegalDocumentRequest;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/legal-documents';
+};
+
+export type PublishLegalDocumentVersionErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PublishLegalDocumentVersionError =
+  PublishLegalDocumentVersionErrors[keyof PublishLegalDocumentVersionErrors];
+
+export type PublishLegalDocumentVersionResponses = {
+  /**
+   * OK
+   */
+  200: LegalDocumentAdminView;
+};
+
+export type PublishLegalDocumentVersionResponse =
+  PublishLegalDocumentVersionResponses[keyof PublishLegalDocumentVersionResponses];
 
 export type ListTeamMembersData = {
   body?: never;

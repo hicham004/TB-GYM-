@@ -161,10 +161,15 @@ public sealed record ResendClientInvitationRequest(Guid IdempotencyKey, uint Ver
 /// <summary>A revocation, with the same optimistic-concurrency requirement and for the same reason.</summary>
 public sealed record RevokeClientInvitationRequest(uint Version);
 
+/// <param name="LegalDocumentIds">
+/// The legal documents in force the person ticked (CLI-010, audit INV-3): those of the platform they have
+/// not accepted yet and those of this coaching space. None is needed while none is published.
+/// </param>
 public sealed record AcceptClientInvitationRequest(
     string Token,
     string? DisplayName,
-    string? Password);
+    string? Password,
+    IReadOnlyList<Guid>? LegalDocumentIds = null);
 
 public sealed record InvitationSummary(
     Guid Id,
@@ -278,6 +283,8 @@ public enum InvitationAcceptanceStatus
     InvalidOrExpired = 4,
     Invalid = 6,
     Conflict = 7,
+    /// <summary>A legal document in force was not named, or one named has since been replaced.</summary>
+    LegalAcceptanceRequired = 8,
 }
 
 public sealed class InvitationsModule : IModuleMarker

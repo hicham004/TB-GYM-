@@ -13,6 +13,13 @@ internal static class DatabaseConstraintNames
         "IX_ProductOffers_ActiveDurationCurrency";
 
     /// <summary>
+    /// One version of a legal document per language is in force (CLI-010). Publishes are serialized by an
+    /// advisory lock, so this guards a write made past the application.
+    /// </summary>
+    public const string OneCurrentLegalDocumentVersion =
+        "UX_LegalDocumentVersions_Current";
+
+    /// <summary>
     /// The name the <c>TR_CoachingProducts_ActiveName</c> trigger reports when a new, renamed or restored plan
     /// would share its name with another plan for sale (BILL-7). Plans that shared one before keep it.
     /// </summary>

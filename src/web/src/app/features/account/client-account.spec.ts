@@ -202,13 +202,17 @@ describe('ClientAccount', () => {
     expect(session.signOut).toHaveBeenCalledTimes(1);
   });
 
-  it('links platform billing only for a platform admin', async () => {
+  it('links platform billing and the legal documents only for a platform admin', async () => {
     const admin = await render({ roles: ['PlatformAdmin'] });
     expect(admin.host.querySelector('a[href="/admin/billing"]')).not.toBeNull();
+    expect(admin.host.querySelector('a[href="/admin/legal"]')?.textContent?.trim()).toBe(
+      'Legal documents',
+    );
     TestBed.resetTestingModule();
 
     const client = await render();
     expect(client.host.querySelector('a[href="/admin/billing"]')).toBeNull();
+    expect(client.host.querySelector('a[href="/admin/legal"]')).toBeNull();
   });
 });
 

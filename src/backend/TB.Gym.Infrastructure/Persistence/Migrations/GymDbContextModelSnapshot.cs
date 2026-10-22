@@ -1871,6 +1871,15 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AcceptanceStatement")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("ContentSha256")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1937,14 +1946,25 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Kind", "Culture", "PublishedAtUtc", "RetiredAtUtc");
+                    b.HasIndex("Kind", "Culture")
+                        .IsUnique()
+                        .HasDatabaseName("UX_LegalDocumentVersions_Current")
+                        .HasFilter("\"PublishedAtUtc\" IS NOT NULL AND \"RetiredAtUtc\" IS NULL");
 
-                    b.HasIndex("Kind", "VersionLabel", "Culture", "Context")
+                    b.HasIndex("Kind", "VersionLabel", "Culture")
                         .IsUnique();
+
+                    b.HasIndex("Kind", "Culture", "PublishedAtUtc", "RetiredAtUtc");
 
                     b.ToTable("LegalDocumentVersions", "identity", t =>
                         {
                             t.HasCheckConstraint("CK_LegalDocumentVersions_ContentHash", "\"ContentSha256\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_LegalDocumentVersions_HashMatchesContent", "\"ContentSha256\" = encode(sha256(convert_to(\"Content\", 'UTF8')), 'hex')");
+
+                            t.HasCheckConstraint("CK_LegalDocumentVersions_PublishedReviewed", "\"PublishedAtUtc\" IS NULL OR \"ReviewStatus\" = 'Approved'");
+
+                            t.HasCheckConstraint("CK_LegalDocumentVersions_RetiredAfterPublished", "\"RetiredAtUtc\" IS NULL OR (\"PublishedAtUtc\" IS NOT NULL AND \"RetiredAtUtc\" >= \"PublishedAtUtc\")");
                         });
                 });
 

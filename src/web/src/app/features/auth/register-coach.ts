@@ -28,6 +28,9 @@ import { Control, Field } from '../../ui/field';
 import { PasswordReveal } from '../../ui/password-reveal';
 import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
 import { TimeZoneField } from '../../ui/time-zone-field';
+import { LegalAcceptance } from '../legal/legal-acceptance';
+import { LegalApi } from '../legal/legal-api';
+import { LEGAL_ACCEPTANCE_REQUIRED, LegalChoices } from '../legal/legal.models';
 import { AuthFrame } from './auth-frame';
 import { emailReasons, newPasswordReasons, requiredReason } from './auth-reasons';
 
@@ -42,6 +45,7 @@ const FALLBACK_TIME_ZONE = 'Asia/Beirut';
     ButtonLink,
     Control,
     Field,
+    LegalAcceptance,
     PasswordReveal,
     ReactiveFormsModule,
     RouterLink,
@@ -53,6 +57,7 @@ const FALLBACK_TIME_ZONE = 'Asia/Beirut';
 })
 export class RegisterCoach {
   private readonly api = inject(ApiClient);
+  private readonly legalApi = inject(LegalApi);
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly locale = inject(LOCALE_ID);
@@ -65,6 +70,8 @@ export class RegisterCoach {
   /** The email already has an account (audit AUTH-9): the answer offers signing in or a reset. */
   protected readonly emailTaken = signal(false);
   protected readonly registration = signal<RegistrationResponse | null>(null);
+  /** The legal documents in force for a new owner (audit INV-3), none while none is published. */
+  protected readonly legal = new LegalChoices(() => this.legalApi.toAccept('Owner'));
   protected readonly form = this.formBuilder.nonNullable.group({
     displayName: ['', [Validators.required, Validators.maxLength(200)]],
     email: ['', [Validators.required, Validators.email]],
@@ -122,6 +129,10 @@ export class RegisterCoach {
     return currencyReasons(this.currencyChoice(), this.otherCurrency());
   }
 
+  constructor() {
+    void this.legal.load();
+  }
+
   protected formReasons(): string[] {
     return [
       ...this.displayNameReasons(),
@@ -130,6 +141,7 @@ export class RegisterCoach {
       ...this.passwordReasons(),
       ...this.confirmPasswordReasons(),
       ...this.currencyReasons(),
+      ...this.legal.missing(),
     ];
   }
 
@@ -138,7 +150,7 @@ export class RegisterCoach {
   }
 
   protected async submit(): Promise<void> {
-    if (this.form.invalid || this.currencyReasons().length > 0) {
+    if (this.form.invalid || this.currencyReasons().length > 0 || this.legal.missing().length > 0) {
       this.form.markAllAsTouched();
       this.attempt.attempt();
       this.summary()?.nativeElement.focus();
@@ -171,14 +183,20 @@ export class RegisterCoach {
             defaultCulture: 'en-LB',
             defaultCurrencyCode: chosenCurrency(this.currencyChoice(), this.otherCurrency()),
             weekStartsOn: 'Monday',
+            legalDocumentIds: this.legal.ids(),
           }),
         ),
       );
     } catch (error) {
-      this.emailTaken.set(
-        error instanceof HttpErrorResponse && error.error?.code === 'email_already_registered',
-      );
-      this.error.set(apiErrorMessage(error, $localize`Your coach account could not be created.`));
+      const code = error instanceof HttpErrorResponse ? error.error?.code : null;
+      this.emailTaken.set(code === 'email_already_registered');
+      if (code === LEGAL_ACCEPTANCE_REQUIRED) {
+        // A document was published or replaced while the page was open: show the ones in force now.
+        this.error.set(await this.legal.refused());
+        this.summary()?.nativeElement.focus();
+      } else {
+        this.error.set(apiErrorMessage(error, $localize`Your coach account could not be created.`));
+      }
     } finally {
       this.submitting.set(false);
     }

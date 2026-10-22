@@ -1,5 +1,6 @@
 using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.Clients;
+using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Nutrition;
@@ -70,10 +71,11 @@ internal sealed partial class DemoWorkspaceGenerator
     private async Task JoinAsync(DemoClientState state, int index)
     {
         var client = state.Client;
+        var legalDocuments = await LegalDocumentsAsync(LegalAudience.Client);
         var accepted = await As<IInvitationApplicationService, InvitationAcceptanceResult>(
             DemoActor.Anonymous,
             (service, token) => service.AcceptAsync(
-                new AcceptClientInvitationRequest(state.InvitationToken!, client.DisplayName, password),
+                new AcceptClientInvitationRequest(state.InvitationToken!, client.DisplayName, password, legalDocuments),
                 token));
         Require(
             accepted.Status == InvitationAcceptanceStatus.Accepted && accepted.ClientProfileId is not null,

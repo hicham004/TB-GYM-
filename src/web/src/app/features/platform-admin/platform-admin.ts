@@ -17,7 +17,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { CsrfService } from '../../core/security/csrf.service';
 import { initialsOf } from '../../shell/initials';
 import { Avatar, type AvatarPresentation } from '../../ui/avatar';
-import { Button } from '../../ui/button';
+import { Button, ButtonLink } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
 import { EmptyState } from '../../ui/empty-state';
@@ -85,6 +85,7 @@ interface SpaceRow {
   imports: [
     Avatar,
     Button,
+    ButtonLink,
     EmptyState,
     Icon,
     PlatformPlan,

@@ -36,7 +36,8 @@ internal sealed class InvitationApplicationService(
     ICurrentUser currentUser,
     ITenantContext tenantContext,
     IMutableTenantContext mutableTenantContext,
-    CoachClientScope coachClientScope)
+    CoachClientScope coachClientScope,
+    LegalAcceptanceGate legal)
     : IInvitationApplicationService
 {
     private static readonly TimeSpan InvitationLifetime = TimeSpan.FromDays(7);
@@ -708,6 +709,10 @@ internal sealed class InvitationApplicationService(
             var existingAccount = await userManager.FindByEmailAsync(invitation.Email);
             ApplicationUser user;
             var createdUser = false;
+            // The legal documents in force for this person, recorded with the membership they join with
+            // (CLI-010, audit INV-3): the platform's they have not accepted yet and this workspace's.
+            var audience = invitation.Kind == InvitationKind.Coach ? LegalAudience.Coach : LegalAudience.Client;
+            IReadOnlyList<CurrentLegalDocument>? acceptances;
             if (currentUser.UserId is { } currentUserId)
             {
                 user = await userManager.FindByIdAsync(currentUserId.ToString())
@@ -715,6 +720,17 @@ internal sealed class InvitationApplicationService(
                 if (!string.Equals(user.NormalizedEmail, invitation.NormalizedEmail, StringComparison.Ordinal))
                 {
                     return AcceptanceOutcome.From(InvitationAcceptanceStatus.WrongSignedInAccount);
+                }
+
+                acceptances = await legal.CheckAsync(
+                    audience,
+                    user.Id,
+                    invitation.TenantId,
+                    request.LegalDocumentIds,
+                    cancellationToken);
+                if (acceptances is null)
+                {
+                    return AcceptanceOutcome.From(InvitationAcceptanceStatus.LegalAcceptanceRequired);
                 }
             }
             else if (existingAccount is not null)
@@ -733,6 +749,18 @@ internal sealed class InvitationApplicationService(
                                 ["password"] = ["A password is required for a new account."],
                             }),
                         null);
+                }
+
+                // Asked before the account exists, so a refusal leaves nothing behind.
+                acceptances = await legal.CheckAsync(
+                    audience,
+                    existingUserId: null,
+                    invitation.TenantId,
+                    request.LegalDocumentIds,
+                    cancellationToken);
+                if (acceptances is null)
+                {
+                    return AcceptanceOutcome.From(InvitationAcceptanceStatus.LegalAcceptanceRequired);
                 }
 
                 var tenant = await dbContext.Tenants.AsNoTracking().SingleAsync(
@@ -855,6 +883,8 @@ internal sealed class InvitationApplicationService(
                     [nameof(ClientProfile.UserId), nameof(ClientProfile.Email)]));
                 clientProfileId = profile.Id;
             }
+
+            legal.Record(acceptances, user.Id, invitation.TenantId, now);
 
             // Single-use, and concurrency-safe through two independent guards: the invitation row's
             // own optimistic concurrency refuses a second Pending -> Accepted transition, and the

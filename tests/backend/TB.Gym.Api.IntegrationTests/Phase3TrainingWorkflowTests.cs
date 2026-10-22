@@ -523,7 +523,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         HttpClient client,
         string email,
         string displayName,
-        string workspaceName)
+        string workspaceName,
+        Guid[]? legalDocumentIds = null)
     {
         await RefreshCsrfAsync(client);
         var response = await client.PostAsJsonAsync("/api/auth/register/coach", new
@@ -536,6 +537,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             defaultCulture = "en-LB",
             defaultCurrencyCode = "USD",
             weekStartsOn = "Monday",
+            legalDocumentIds,
         });
         await AssertStatusAsync(response, HttpStatusCode.Accepted);
         var registration = await RequiredJsonAsync<Registration>(response);
@@ -561,7 +563,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         HttpClient coach,
         HttpClient client,
         string email,
-        bool newAccount)
+        bool newAccount,
+        Guid[]? legalDocumentIds = null)
     {
         await RefreshCsrfAsync(coach);
         var response = await coach.PostAsJsonAsync("/api/invitations", new
@@ -581,6 +584,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             token,
             displayName = newAccount ? "Training Client" : null,
             password = newAccount ? Password : null,
+            legalDocumentIds,
         });
         await AssertStatusAsync(acceptance, HttpStatusCode.OK);
         var accepted = await RequiredJsonAsync<InvitationAcceptance>(acceptance);

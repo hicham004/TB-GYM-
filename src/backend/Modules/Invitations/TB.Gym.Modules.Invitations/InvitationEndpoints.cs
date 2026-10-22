@@ -201,6 +201,12 @@ public static class InvitationEndpoints
                     statusCode: StatusCodes.Status410Gone),
                 InvitationAcceptanceStatus.Invalid => Results.ValidationProblem(
                     result.Errors ?? new Dictionary<string, string[]>()),
+                // The Identity module's code (CLI-010, audit INV-3): the page reads the documents again.
+                InvitationAcceptanceStatus.LegalAcceptanceRequired => Results.Conflict(new
+                {
+                    code = "legal_acceptance_required",
+                    message = "Read and accept the documents shown before you continue. They may have changed since the page opened.",
+                }),
                 _ => Results.Conflict(new
                 {
                     code = "invitation_conflict",

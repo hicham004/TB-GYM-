@@ -1,5 +1,14 @@
 import type { Page } from '@playwright/test';
-import { ACCOUNTS, api, expect, requireLive, signIn, test, uniqueEmail } from './support';
+import {
+  ACCOUNTS,
+  api,
+  expect,
+  legalDocumentIds,
+  requireLive,
+  signIn,
+  test,
+  uniqueEmail,
+} from './support';
 
 /**
  * Sign-in and password recovery against the real API: a wrong password is answered in plain
@@ -31,6 +40,7 @@ async function confirmedCoach(page: Page, prefix: string): Promise<string> {
         defaultCulture: 'en-LB',
         defaultCurrencyCode: 'USD',
         weekStartsOn: 'Monday',
+        legalDocumentIds: await legalDocumentIds(page, 'Owner'),
       },
     },
   );

@@ -19,8 +19,8 @@ import { defineConfig, devices } from '@playwright/test';
  * fixed noon among them, the device's day is the workspace's tomorrow: a screen that reads a day from
  * the device where the workspace's belongs fails there for an instant in that window, and in `chromium`'s
  * UTC for one from 21:00 UTC. It compares no pixels, and leaves out what reads no workspace day: the
- * kit's labs, the homepage, the private build, and Messages and Notifications, whose days are the
- * reader's own by design.
+ * kit's labs, the homepage, the private build, and Messages, Notifications and the legal documents,
+ * whose days are the reader's own by design.
  *
  * Screenshot baselines are environment-dependent: the file name carries the browser and platform
  * (`-chromium-win32.png`). Never accept a new or changed baseline without looking at it. The pictures
@@ -35,8 +35,9 @@ const liveFiles = /[\\/]live[\\/].*\.e2e\.ts$/;
 const edgeFiles = /[\\/]edge[\\/].*\.e2e\.ts$/;
 // The private build's checks need its own server (npm run e2e:private).
 const privateFiles = /[\\/]private[\\/].*\.e2e\.ts$/;
-// Screens with no workspace day, or whose days are the reader's own (chat-timeline.ts, the inbox).
-const noWorkspaceDay = /[\\/](ui-lab|hero-lab|home|messages|notifications)\.e2e\.ts$/;
+// Screens with no workspace day, or whose days are the reader's own (chat-timeline.ts, the inbox, a
+// platform legal document).
+const noWorkspaceDay = /[\\/](ui-lab|hero-lab|home|messages|notifications|legal)\.e2e\.ts$/;
 
 export default defineConfig({
   testDir: './e2e',

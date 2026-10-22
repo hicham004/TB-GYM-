@@ -1,5 +1,6 @@
 import {
   ACCOUNTS,
+  acceptLegalDocuments,
   api,
   expect,
   memberships,
@@ -105,6 +106,7 @@ test('a plan is sold, part paid, fully paid and protected against double taps an
   await client.getByLabel('Display name').fill('Buyer Spec');
   await client.getByLabel('Password', { exact: true }).fill('Buyer-Spec-2026!');
   await client.getByLabel('Confirm password').fill('Buyer-Spec-2026!');
+  await acceptLegalDocuments(client);
   await client.getByRole('button', { name: 'Create account and join' }).click();
   await expect(client).toHaveURL(/\/profile/, { timeout: 30_000 });
   const me = await api<{ id: string }>(client, 'GET', '/api/client-profile/me', { tenantId });

@@ -7,7 +7,9 @@ import type {
   ContactKind,
   ContactRequestAdminView,
   InvoiceRunOutcome,
+  LegalDocumentAdminView,
   PricePlanView,
+  PublishLegalDocumentRequest,
   PublishPricePlanRequest,
 } from '../../core/api/generated';
 import { toNumber } from '../../core/api/api-client';
@@ -19,6 +21,11 @@ import {
   toAdminWorkspaceDetail,
   toPricePlan,
 } from '../billing/billing.models';
+import {
+  type LegalVersion,
+  type PublishLegalRequest,
+  toLegalVersion,
+} from './legal-documents.models';
 
 export interface InvoiceRun {
   periodStart: string;
@@ -149,5 +156,30 @@ export class PlatformAdminApi {
 
   revokeDiscount(discountId: string): Observable<unknown> {
     return this.http.post(`/api/platform-admin/discounts/${discountId}/revoke`, null);
+  }
+
+  /** Every version of the legal documents, in force or replaced, with how often each was accepted. */
+  getLegalDocuments(): Observable<LegalVersion[]> {
+    return this.http
+      .get<LegalDocumentAdminView[]>('/api/platform-admin/legal-documents')
+      .pipe(map((items) => items.map(toLegalVersion)));
+  }
+
+  /** Stops asking for a version published by mistake; its words and acceptances stay. */
+  withdrawLegalDocument(id: string): Observable<LegalVersion> {
+    return this.http
+      .post<LegalDocumentAdminView>(
+        `/api/platform-admin/legal-documents/${encodeURIComponent(id)}/withdraw`,
+        null,
+      )
+      .pipe(map(toLegalVersion));
+  }
+
+  /** Publishes reviewed text at once (audit INV-3); it replaces the version in force the admin saw. */
+  publishLegalDocument(request: PublishLegalRequest): Observable<LegalVersion> {
+    const body: PublishLegalDocumentRequest = request;
+    return this.http
+      .post<LegalDocumentAdminView>('/api/platform-admin/legal-documents', body)
+      .pipe(map(toLegalVersion));
   }
 }

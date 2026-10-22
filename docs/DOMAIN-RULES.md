@@ -92,6 +92,21 @@ append-only and identifies the exact document, user, accepted UTC instant, and w
 context where applicable. TB Gym must not seed invented legal wording or allow an unreviewed
 draft to become an accepted production document. Current-document resolution verifies the
 requested workspace membership; acceptance in one workspace never satisfies another.
+Since audit A16a (INV-3) a version holds its own text and the sentence beside the box a person ticks, both
+entered by the platform admin from a qualified review and published, after one more question, with the
+admin's statement that the review happened; the database checks that the stored SHA-256 is the text's, keeps
+a version's words and its publishing and retiring dates as first written, and allows one version in force
+per document, whoever accepts it (moving a document between "once per person" and "in each coaching space"
+publishes a version that replaces it), with a version name used once per document. Only English is
+published for now: a translation published apart from its English could lag behind it and still count.
+Publishing names the version in force it replaces, so one published meanwhile is never replaced unseen; a
+version published by mistake can be withdrawn, so nobody is asked for it, its acceptances and words kept.
+Terms of Service and the Privacy Policy are asked of everyone, the health intake consent of clients only; a
+platform document once per person, a workspace one in each space joined. Registration and an invitation's
+acceptance are refused (409 `legal_acceptance_required`) until every document in force for the person is
+named, and the acceptances are recorded in the same transaction as the account or membership; joins and
+publishes are serialized by one advisory lock, so nobody joins on a version replaced in between. Members
+who joined before a version was published are not asked yet.
 
 **CLI-011** The owner invites coaches by email; accepting creates an active Coach membership (or
 reactivates a removed coach's). Only the owner manages coach invitations and removes coaches, and a

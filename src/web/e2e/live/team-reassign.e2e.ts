@@ -2,6 +2,7 @@ import type { Browser, Page } from '@playwright/test';
 import {
   ACCOUNTS,
   LIVE_URL,
+  acceptLegalDocuments,
   api,
   expect,
   memberships,
@@ -90,6 +91,7 @@ async function newClient(
   await page.getByLabel('Display name').fill(name);
   await page.getByLabel('Password', { exact: true }).fill('Team-Client-2026!');
   await page.getByLabel('Confirm password').fill('Team-Client-2026!');
+  await acceptLegalDocuments(page);
   await page.getByRole('button', { name: 'Create account and join' }).click();
   await expect(page).toHaveURL(/\/profile/, { timeout: 30_000 });
   const me = await api<{ id: string }>(page, 'GET', '/api/client-profile/me', { tenantId });
@@ -163,6 +165,7 @@ async function newCoach(
   await page.getByLabel('Display name').fill(name);
   await page.getByLabel('Password', { exact: true }).fill('Team-Coach-2026!');
   await page.getByLabel('Confirm password').fill('Team-Coach-2026!');
+  await acceptLegalDocuments(page);
   await page.getByRole('button', { name: 'Create account and join' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText(firstName, {
     timeout: 30_000,

@@ -1,0 +1,148 @@
+<div class="page">
+  <a class="back" routerLink="/admin/billing" data-back>
+    <app-icon name="chevron-left" />
+    <span i18n>Platform billing</span>
+  </a>
+  <header class="top">
+    <div class="intro">
+      <h1 #heading tabindex="-1" i18n>Legal documents</h1>
+      <p class="lede" i18n>
+        What people accept when they create a coaching space or accept an invitation. TB Gym writes
+        none of these words: publish only text a qualified reviewer approved. A published version
+        never changes; publishing another replaces it.
+      </p>
+    </div>
+    @if (state() === 'ready') {
+      <button appButton type="button" (click)="openPublish(null)" data-publish i18n>
+        Publish a version
+      </button>
+    }
+  </header>
+
+  <p class="note" i18n>
+    People are asked when they create a coaching space or accept an invitation. Anyone who joined
+    before a version was published is not asked to accept it yet.
+  </p>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>The legal documents couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @for (group of groups(); track group.kind) {
+        <section
+          class="panel"
+          [attr.aria-labelledby]="'legal-' + group.kind"
+          [attr.data-legal-kind]="group.kind"
+        >
+          <div class="panel-head">
+            <h2 [id]="'legal-' + group.kind">{{ group.name }}</h2>
+            <p class="quiet">{{ group.audience }}</p>
+          </div>
+          @if (group.current.length === 0) {
+            <p class="quiet" data-unpublished i18n>Not published. Nobody is asked to accept it.</p>
+          } @else {
+            <ul class="versions" role="list">
+              @for (version of group.current; track version.id) {
+                <li class="version" [attr.data-version]="version.id">
+                  <div class="what">
+                    <strong i18n>Version {{ version.version }}</strong>
+                    <app-status-pill label="In force" i18n-label tone="success" />
+                  </div>
+                  <p class="quiet">
+                    {{ version.contextName }} · {{ inForce(version) }} · {{ accepted(version) }}
+                  </p>
+                  <p class="statement" [attr.lang]="version.culture" dir="auto">
+                    “{{ version.statement }}”
+                  </p>
+                  <div class="actions">
+                    <a appButton variant="text" [routerLink]="version.link" i18n
+                      >Read<span class="tb-visually-hidden">
+                        version {{ version.version }} of the {{ version.name }}</span
+                      ></a
+                    >
+                    <button
+                      appButton
+                      type="button"
+                      variant="outlined"
+                      (click)="openPublish(version)"
+                      i18n
+                    >
+                      Publish a new version<span class="tb-visually-hidden">
+                        of the {{ version.name }}</span
+                      >
+                    </button>
+                    <button
+                      appButton
+                      type="button"
+                      variant="text"
+                      [loading]="working() === version.id"
+                      (click)="withdraw(version)"
+                      data-withdraw
+                      i18n
+                    >
+                      Stop asking<span class="tb-visually-hidden">
+                        for version {{ version.version }} of the {{ version.name }}</span
+                      >
+                    </button>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+          @if (group.earlier.length > 0) {
+            <details class="earlier">
+              <summary i18n>Earlier versions ({{ group.earlier.length }})</summary>
+              <ul role="list">
+                @for (version of group.earlier; track version.id) {
+                  <li [attr.data-version]="version.id">
+                    <strong i18n>Version {{ version.version }}</strong
+                    >&ngsp;
+                    <span class="quiet"
+                      >{{ version.contextName }} · {{ inForce(version) }} ·
+                      {{ accepted(version) }}</span
+                    >&ngsp;
+                    <a class="read" [routerLink]="version.link" i18n
+                      >Read<span class="tb-visually-hidden">
+                        version {{ version.version }} of the {{ version.name }}</span
+                      ></a
+                    >
+                  </li>
+                }
+              </ul>
+            </details>
+          }
+        </section>
+      }
+    }
+  }
+</div>
+
+<ng-template #publishSheet let-sheet>
+  <app-legal-publish
+    [start]="publishStart()"
+    [versions]="versions()"
+    (dirtyChange)="setDirty($event)"
+    (changedMeanwhile)="load()"
+    (closed)="finish(sheet, $event)"
+  />
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

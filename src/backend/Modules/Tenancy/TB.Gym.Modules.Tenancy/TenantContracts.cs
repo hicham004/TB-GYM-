@@ -41,6 +41,10 @@ public sealed record TenantMembershipSummary(
     string? AccentColor = null,
     Guid? LogoAssetId = null);
 
+/// <param name="LegalDocumentIds">
+/// The legal documents in force the new owner ticked (CLI-010, audit INV-3); none is needed while none is
+/// published. They are recorded with the account, for the platform and for the new coaching space.
+/// </param>
 public sealed record RegisterCoachRequest(
     string DisplayName,
     string Email,
@@ -49,7 +53,8 @@ public sealed record RegisterCoachRequest(
     string TimeZoneId = "Asia/Beirut",
     string DefaultCulture = "en-LB",
     string DefaultCurrencyCode = "USD",
-    DayOfWeek WeekStartsOn = DayOfWeek.Monday);
+    DayOfWeek WeekStartsOn = DayOfWeek.Monday,
+    IReadOnlyList<Guid>? LegalDocumentIds = null);
 
 public sealed record WorkspaceRegistrationResult(
     WorkspaceRegistrationStatus Status,
@@ -73,6 +78,8 @@ public enum WorkspaceRegistrationStatus
     EmailAlreadyRegistered = 2,
     Invalid = 3,
     Conflict = 4,
+    /// <summary>A legal document in force was not named, or one named has since been replaced.</summary>
+    LegalAcceptanceRequired = 5,
 }
 
 /// <summary>

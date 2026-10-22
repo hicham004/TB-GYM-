@@ -367,7 +367,14 @@ idempotently; seats come from `tenancy."MembershipStatusChanges"` and client pau
 
 Legal document versions are global identity records, while a workspace consent acceptance is
 contextual. Listing current documents accepts an optional workspace context, verifies active
-membership, and never treats acceptance in Workspace A as acceptance in Workspace B.
+membership, and never treats acceptance in Workspace A as acceptance in Workspace B. The platform admin
+publishes and withdraws versions under `/api/platform-admin/legal-documents` (audit A16a); anyone reads one
+at `GET /api/legal/documents/{id}` and what a new owner, coach or client must accept at
+`GET /api/legal/documents/to-accept`. Registration (Tenancy) and an invitation's acceptance (Invitations)
+carry the ticked version ids and check them through `LegalAcceptanceGate` in Infrastructure, inside their
+own transaction, so neither module references Identity. The gate holds a transaction advisory lock shared
+from the check to the join's commit, and publishing and withdrawing hold it alone, so a join never checks
+documents a publish is about to replace.
 
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.

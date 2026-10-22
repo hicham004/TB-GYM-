@@ -7,17 +7,20 @@
         an invoice’s exact total, and nothing is ever deleted.
       </p>
     </div>
-    <button
-      appButton
-      type="button"
-      variant="outlined"
-      [loading]="busy()"
-      (click)="issueInvoices()"
-      data-issue
-      i18n
-    >
-      Issue last month’s invoices
-    </button>
+    <div class="top-actions">
+      <a appButton variant="text" routerLink="/admin/legal" data-legal i18n>Legal documents</a>
+      <button
+        appButton
+        type="button"
+        variant="outlined"
+        [loading]="busy()"
+        (click)="issueInvoices()"
+        data-issue
+        i18n
+      >
+        Issue last month’s invoices
+      </button>
+    </div>
   </header>
 
   @switch (state()) {

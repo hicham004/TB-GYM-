@@ -973,6 +973,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");
         RejectAppendOnlyMutations<ClientCoachAssignment>("Client coach assignment history is append-only.");
         RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");
+        RejectLegalDocumentWordChanges();
         RejectAppendOnlyMutations<StrengthMaxRecord>("Strength max history is append-only.");
         RejectAppendOnlyMutations<MesocycleWorkingMaxSnapshot>("Working-max snapshots are append-only.");
         RejectAppendOnlyMutations<WorkingMaxUpdate>("Training max updates are append-only.");
@@ -1434,6 +1435,32 @@ public sealed partial class GymDbContext(
             {
                 throw new InvalidOperationException(
                     "Enrollment coverage is append-only; cancelling its plan only releases the overlap lock.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A legal document version's words are what people accepted (CLI-010): once stored, only its publishing
+    /// and its retiring are written, and a published version is never deleted. The trigger is the guarantee;
+    /// this names the mistake in the code path that made it.
+    /// </summary>
+    private void RejectLegalDocumentWordChanges()
+    {
+        foreach (var entry in ChangeTracker.Entries<LegalDocumentVersion>())
+        {
+            if ((entry.State == EntityState.Deleted &&
+                 entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(LegalDocumentVersion.PublishedAtUtc)) is not null) ||
+                (entry.State == EntityState.Modified &&
+                 entry.Properties.Any(property =>
+                     property.IsModified &&
+                     property.Metadata.Name is not (nameof(LegalDocumentVersion.PublishedAtUtc)
+                         or nameof(LegalDocumentVersion.RetiredAtUtc)
+                         or nameof(LegalDocumentVersion.ReviewStatus)
+                         or nameof(LegalDocumentVersion.UpdatedAtUtc)
+                         or nameof(LegalDocumentVersion.UpdatedByUserId)))))
+            {
+                throw new InvalidOperationException(
+                    "A legal document version's words never change and a published version is kept; publish a new version.");
             }
         }
     }

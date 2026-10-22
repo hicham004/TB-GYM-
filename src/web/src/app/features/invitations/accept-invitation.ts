@@ -24,6 +24,9 @@ import { InvitationHandoff } from '../../core/security/invitation-handoff';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { AuthFrame } from '../auth/auth-frame';
 import { newPasswordReasons, requiredReason } from '../auth/auth-reasons';
+import { LegalAcceptance } from '../legal/legal-acceptance';
+import { LegalApi } from '../legal/legal-api';
+import { LEGAL_ACCEPTANCE_REQUIRED, LegalChoices } from '../legal/legal.models';
 import { Button, ButtonLink } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { PasswordReveal } from '../../ui/password-reveal';
@@ -36,6 +39,7 @@ import { PasswordReveal } from '../../ui/password-reveal';
     ButtonLink,
     Control,
     Field,
+    LegalAcceptance,
     PasswordReveal,
     ReactiveFormsModule,
     RouterLink,
@@ -49,6 +53,7 @@ export class AcceptInvitation implements OnInit {
   private readonly csrf = inject(CsrfService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly handoff = inject(InvitationHandoff);
+  private readonly legalApi = inject(LegalApi);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scrubber = inject(ActionTokenScrubber);
@@ -83,6 +88,13 @@ export class AcceptInvitation implements OnInit {
     const invitedEmail = this.invitation()?.email;
     return !!userEmail && !!invitedEmail && userEmail.toLowerCase() === invitedEmail.toLowerCase();
   });
+  /**
+   * The legal documents in force this person has not accepted (audit INV-3): a client is asked for the
+   * health intake consent too, a coach is not. None while none is published.
+   */
+  protected readonly legal = new LegalChoices(() =>
+    this.legalApi.toAccept(this.invitation()?.kind === 'Coach' ? 'Coach' : 'Client'),
+  );
   protected readonly accountForm = this.formBuilder.nonNullable.group({
     displayName: ['', [Validators.required, Validators.maxLength(200)]],
     password: ['', [Validators.required, Validators.minLength(12)]],
@@ -128,6 +140,8 @@ export class AcceptInvitation implements OnInit {
         // A terminal invitation has no usable credential left. Remove it from both the address bar
         // and this history entry as soon as the server establishes that fact.
         await this.scrubber.scrub(this.route);
+      } else {
+        await this.legal.load();
       }
     } catch (error) {
       // Only a server answer that the link is *gone* may spend it. A rate limit, a restarting API
@@ -171,6 +185,7 @@ export class AcceptInvitation implements OnInit {
       ...this.displayNameReasons(),
       ...this.passwordReasons(),
       ...this.confirmPasswordReasons(),
+      ...this.legal.missing(),
     ];
   }
 
@@ -181,7 +196,7 @@ export class AcceptInvitation implements OnInit {
     }
 
     const createsAccount = !invitation.requiresExistingAccountSignIn && !this.signedInUser();
-    if (createsAccount && this.accountForm.invalid) {
+    if ((createsAccount && this.accountForm.invalid) || this.legal.missing().length > 0) {
       this.accountForm.markAllAsTouched();
       this.attempt.attempt();
       this.summary()?.nativeElement.focus();
@@ -207,6 +222,7 @@ export class AcceptInvitation implements OnInit {
           this.token(),
           createsAccount ? value.displayName : null,
           createsAccount ? value.password : null,
+          this.legal.ids(),
         ),
       );
       // Acceptance is single-use, so the token in the address bar is now spent. Clearing it before
@@ -222,10 +238,15 @@ export class AcceptInvitation implements OnInit {
         this.error.set($localize`Sign in with the invited email before accepting.`);
       } else if (code === 'wrong_signed_in_account') {
         this.error.set($localize`Sign out and use the account matching the invited email.`);
+      } else if (code === LEGAL_ACCEPTANCE_REQUIRED) {
+        // A document was published or replaced while the page was open: show the ones in force now.
+        // Only the boxes are asked again, so the passwords typed stay.
+        this.error.set(await this.legal.refused());
+        this.summary()?.nativeElement.focus();
       } else {
         this.error.set(apiErrorMessage(error, $localize`The invitation could not be accepted.`));
       }
-      if (createsAccount) {
+      if (createsAccount && code !== LEGAL_ACCEPTANCE_REQUIRED) {
         this.clearCredentials();
       }
       if (error instanceof HttpErrorResponse && error.status === 410) {

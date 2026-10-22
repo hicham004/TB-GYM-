@@ -2,6 +2,7 @@ import type { Browser, Page } from '@playwright/test';
 import {
   ACCOUNTS,
   LIVE_URL,
+  acceptLegalDocuments,
   api,
   expect,
   memberships,
@@ -65,6 +66,7 @@ async function join(
   await guest.getByLabel('Display name').fill(`${firstName} ${lastName}`);
   await guest.getByLabel('Password', { exact: true }).fill(password);
   await guest.getByLabel('Confirm password').fill(password);
+  await acceptLegalDocuments(guest);
   await guest.getByRole('button', { name: 'Create account and join' }).click();
   await expect(guest).toHaveURL(/\/profile/, { timeout: 30_000 });
   const me = await api<Profile>(guest, 'GET', '/api/client-profile/me', { tenantId });
@@ -196,6 +198,7 @@ test('the owner ends coaching: read-only record, no access, invited back as a ne
   await expect(backPage.getByText(`Accept this invitation using ${email}.`)).toBeVisible({
     timeout: 30_000,
   });
+  await acceptLegalDocuments(backPage);
   await backPage.getByRole('button', { name: 'Accept invitation' }).click();
   await expect(backPage).toHaveURL(/\/profile/, { timeout: 30_000 });
   const fresh = await api<Profile>(backPage, 'GET', '/api/client-profile/me', { tenantId });

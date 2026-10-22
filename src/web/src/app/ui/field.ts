@@ -61,12 +61,19 @@ export class Control {
   readonly density = input<FieldDensity>();
   /** The consumer's own descriptions, kept alongside the field's help or error. */
   readonly ariaDescribedby = input<string | null>(null, { alias: 'aria-describedby' });
+  /**
+   * Marks a control that no `<app-field>` holds as wrong while its own reason shows, such as a checkbox
+   * whose reason sits under it; pass that reason's id through `aria-describedby`.
+   */
+  readonly markInvalid = input(false);
 
   readonly controlId = computed(() => this.id() || this.generatedId);
   protected readonly resolvedDensity = computed(
     () => this.density() ?? this.field?.density() ?? 'standard',
   );
-  protected readonly invalid = computed(() => this.field?.showsError() ?? false);
+  protected readonly invalid = computed(
+    () => (this.field?.showsError() ?? false) || this.markInvalid(),
+  );
   protected readonly describedBy = computed(() =>
     mergeIdLists(this.field?.descriptionId(), this.ariaDescribedby()),
   );

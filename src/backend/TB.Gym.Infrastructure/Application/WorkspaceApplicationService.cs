@@ -16,6 +16,7 @@ internal sealed class WorkspaceApplicationService(
     GymDbContext dbContext,
     UserManager<ApplicationUser> userManager,
     IAccountActionMailScheduler accountActionMail,
+    LegalAcceptanceGate legal,
     IClock clock,
     ITenantContext tenantContext)
     : IWorkspaceApplicationService
@@ -71,22 +72,44 @@ internal sealed class WorkspaceApplicationService(
         };
 
         var strategy = dbContext.Database.CreateExecutionStrategy();
-        var identityResult = await strategy.ExecuteAsync(async () =>
+        var (identityResult, legalMissing) = await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            // Every legal document in force for a new owner, for the platform and for this new space, must be
+            // ticked (CLI-010, audit INV-3); with none published nothing is asked. Checked inside the
+            // transaction, so a version published meanwhile waits for this commit or is checked here.
+            var acceptances = await legal.CheckAsync(
+                LegalAudience.Owner,
+                existingUserId: null,
+                tenant.Id,
+                request.LegalDocumentIds,
+                cancellationToken);
+            if (acceptances is null)
+            {
+                return (IdentityResult.Success, true);
+            }
+
             var createUserResult = await userManager.CreateAsync(user, request.Password);
             if (!createUserResult.Succeeded)
             {
-                return createUserResult;
+                return (createUserResult, false);
             }
 
             dbContext.Tenants.Add(tenant);
             dbContext.TenantMemberships.Add(
                 TenantMembership.Create(tenant.Id, user.Id, TenantRole.Owner));
+            legal.Record(acceptances, user.Id, tenant.Id, now);
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return IdentityResult.Success;
+            return (IdentityResult.Success, false);
         });
+
+        if (legalMissing)
+        {
+            return new WorkspaceRegistrationResult(
+                WorkspaceRegistrationStatus.LegalAcceptanceRequired,
+                normalizedEmail);
+        }
 
         if (!identityResult.Succeeded)
         {

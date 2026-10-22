@@ -42,6 +42,18 @@ import { Control, Field } from './field';
       >
         <input type="checkbox" appControl formControlName="mainLift" />
       </app-checkbox>
+      <app-checkbox label="I tick this box">
+        <input
+          type="checkbox"
+          appControl
+          formControlName="ticked"
+          [markInvalid]="tickReason()"
+          [aria-describedby]="tickReason() ? 'tick-reason' : null"
+        />
+      </app-checkbox>
+      @if (tickReason()) {
+        <p id="tick-reason">Tick this box to continue.</p>
+      }
     </form>
     <p id="equipment-note">Chosen by the coach</p>
     <app-field label="Nickname">
@@ -56,7 +68,9 @@ class Host {
     equipment: new FormControl('', { nonNullable: true }),
     search: new FormControl('', { nonNullable: true }),
     mainLift: new FormControl(false, { nonNullable: true }),
+    ticked: new FormControl(false, { nonNullable: true }),
   });
+  readonly tickReason = signal(false);
   readonly nameErrors = signal<string[] | null>(null);
   readonly extraDescription = signal<string | null>(null);
   nickname = '';
@@ -218,5 +232,22 @@ describe('app-checkbox', () => {
     tick(host, label, false);
     await settle(fixture);
     expect(component.form.controls.mainLift.value).toBe(false);
+  });
+
+  /** A box no field holds is marked wrong for exactly as long as its own reason shows (audit A16a). */
+  it('marks a box invalid while its own reason shows under it', async () => {
+    const { fixture, host, component } = await render();
+    const box = field(host, 'I tick this box');
+    expect(box.getAttribute('aria-invalid')).toBeNull();
+    expect(box.getAttribute('aria-describedby')).toBeNull();
+
+    component.tickReason.set(true);
+    await settle(fixture);
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    expect(box.getAttribute('aria-describedby')).toBe('tick-reason');
+
+    component.tickReason.set(false);
+    await settle(fixture);
+    expect(box.getAttribute('aria-invalid')).toBeNull();
   });
 });

@@ -1946,6 +1946,17 @@ limited to the coach's assigned clients.
   reference and note on a paid one, a voided one struck through and linked to its replacement), this month so far
   line by line, and its discounts (running, starts later, ended, revoked) with Grant a discount and Revoke after
   asking. Closing a sheet that holds typed work asks first.
+- Built in audit A16a (INV-3, CLI-010): the platform admin's **Legal documents** (`/admin/legal`, from Platform
+  billing and the account menu): each document (Terms of Service, Privacy Policy, Health intake consent) with
+  who is asked, its version in force (Once per person or In each coaching space), how often it was accepted
+  and its sentence, Earlier versions closed, Stop asking (after a question) for one published by mistake, and
+  Publish a version, a sheet taking the reviewed text, the sentence people tick and the admin's tick that a
+  qualified reviewer approved both, with a preview, the version it replaces and one more question before it
+  is published for good; TB Gym adds no words of its own, and English is the one language for now. A version
+  is read at `/legal/:id`, open to anyone in the website's frame (inside the shell once signed in), its line
+  breaks and indents as published. Registration and an invitation show a Legal documents block, one box per
+  document in force with the version's own sentence and a link that opens its text in a new tab, only once
+  one is published.
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an

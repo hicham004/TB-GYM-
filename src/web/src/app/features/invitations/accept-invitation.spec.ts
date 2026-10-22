@@ -15,7 +15,17 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { ActionTokenScrubber } from '../../core/security/action-token.service';
 import { InvitationHandoff } from '../../core/security/invitation-handoff';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, field as labeledField, fill, press, query, settle } from '../../../testing/dom';
+import {
+  button,
+  field as labeledField,
+  fill,
+  press,
+  query,
+  settle,
+  tick,
+} from '../../../testing/dom';
+import { LegalApi } from '../legal/legal-api';
+import type { LegalToAccept } from '../legal/legal.models';
 import { AcceptInvitation } from './accept-invitation';
 
 const TOKEN = 'invitation-token-1';
@@ -33,6 +43,22 @@ function invitation(overrides: Partial<PublicInvitation> = {}): PublicInvitation
     ...overrides,
   };
 }
+
+/** A published version as the to-accept read gives it; the words are placeholders, not legal text. */
+function legalDocument(id: string, kind: LegalToAccept['kind'], name: string): LegalToAccept {
+  return {
+    id,
+    kind,
+    name,
+    version: '1',
+    statement: `Placeholder sentence for the ${name}.`,
+    culture: 'en',
+    link: `/legal/${id}`,
+  };
+}
+
+const TERMS = legalDocument('terms-1', 'TermsOfService', 'Terms of Service');
+const HEALTH = legalDocument('health-1', 'HealthIntakeConsent', 'Health intake consent');
 
 const ACCEPTED: InvitationAcceptance = {
   tenantId: 'tenant-1',
@@ -62,6 +88,7 @@ async function render(
     /** A token the invitation handed over before its "Sign in to accept" (WEB-10). */
     heldToken?: string;
     api?: Partial<ApiClient>;
+    legal?: Partial<LegalApi>;
   } = {},
 ) {
   const token = options.token ?? TOKEN;
@@ -96,6 +123,8 @@ async function render(
           }),
         },
       },
+      // Nothing is published unless a test says so, as on a server with no document yet.
+      { provide: LegalApi, useValue: { toAccept: vi.fn(() => of([])), ...options.legal } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: ActionTokenScrubber, useValue: scrubber },
       { provide: TenantStore, useValue: { load: vi.fn(() => Promise.resolve()) } },
@@ -109,6 +138,7 @@ async function render(
     fixture,
     host: fixture.nativeElement as HTMLElement,
     api: TestBed.inject(ApiClient),
+    legal: TestBed.inject(LegalApi),
     auth: TestBed.inject(AuthStore),
     tenants: TestBed.inject(TenantStore),
     router: TestBed.inject(Router),
@@ -142,7 +172,12 @@ describe('AcceptInvitation', () => {
     press(host, 'Create account and join');
     await settle(fixture);
 
-    expect(api.acceptInvitation).toHaveBeenCalledWith(TOKEN, 'Rana H.', 'correct-horse-battery');
+    expect(api.acceptInvitation).toHaveBeenCalledWith(
+      TOKEN,
+      'Rana H.',
+      'correct-horse-battery',
+      [],
+    );
     // The workspace the invitation belongs to becomes the active one, not whatever was last used.
     expect(tenants.load).toHaveBeenCalledWith('tenant-1');
     expect(navigate).toHaveBeenCalledWith('/profile');
@@ -173,6 +208,7 @@ describe('AcceptInvitation', () => {
       TOKEN,
       'Rana Haddad',
       'correct-horse-battery',
+      [],
     );
     expect(tenants.load).toHaveBeenCalledWith('tenant-1');
     expect(navigate).toHaveBeenCalledWith('/');
@@ -222,7 +258,7 @@ describe('AcceptInvitation', () => {
     press(host, 'Accept invitation');
     await settle(fixture);
 
-    expect(api.acceptInvitation).toHaveBeenCalledWith(TOKEN, null, null);
+    expect(api.acceptInvitation).toHaveBeenCalledWith(TOKEN, null, null, []);
   });
 
   /**
@@ -463,7 +499,165 @@ describe('AcceptInvitation', () => {
       'Sign out and use the account matching the invited email.',
     );
   });
+
+  /**
+   * Audit INV-3: a client creating their account ticks each document in force for a client, the health
+   * intake consent among them, before joining; the server is sent what was ticked.
+   */
+  it('asks a new client to tick each document in force and sends the ones ticked', async () => {
+    const { fixture, host, api, legal, router } = await render({
+      legal: { toAccept: vi.fn(() => of([TERMS, HEALTH])) },
+    });
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    expect(legal.toAccept).toHaveBeenCalledWith('Client');
+    expect(host.querySelector('form fieldset[data-legal]')).not.toBeNull();
+    expect(query<HTMLAnchorElement>(host, '#legal-read-health-1').getAttribute('href')).toBe(
+      '/legal/health-1',
+    );
+
+    fill(host, 'Password', 'correct-horse-battery');
+    fill(host, 'Confirm password', 'correct-horse-battery');
+    await settle(fixture);
+    press(host, 'Create account and join');
+    await settle(fixture);
+
+    expect(api.acceptInvitation).not.toHaveBeenCalled();
+    const summary = query(host, '#invitation-summary');
+    expect(summary.textContent).toContain('Tick the box for the Terms of Service.');
+    expect(summary.textContent).toContain('Tick the box for the Health intake consent.');
+    expect(document.activeElement).toBe(summary);
+
+    tick(host, 'Placeholder sentence for the Terms of Service.');
+    tick(host, 'Placeholder sentence for the Health intake consent.');
+    await settle(fixture);
+    press(host, 'Create account and join');
+    await settle(fixture);
+    expect(api.acceptInvitation).toHaveBeenCalledWith(
+      TOKEN,
+      'Rana Haddad',
+      'correct-horse-battery',
+      ['terms-1', 'health-1'],
+    );
+  });
+
+  /** A coach joining a team is asked what applies to a coach: the server leaves the health consent out. */
+  it('asks for the documents of a coach on a coach invitation', async () => {
+    const { legal } = await render({
+      invitation: invitation({ kind: 'Coach' }),
+      legal: { toAccept: vi.fn(() => of([TERMS])) },
+    });
+
+    expect(legal.toAccept).toHaveBeenCalledWith('Coach');
+  });
+
+  /** Signed in, the person ticks beside Accept invitation; nothing goes out until every box is ticked. */
+  it('asks a signed-in person to tick what they have not accepted before joining', async () => {
+    const { fixture, host, api, router } = await render({
+      signedInAs: user('rana@example.test'),
+      legal: { toAccept: vi.fn(() => of([HEALTH])) },
+    });
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    press(host, 'Accept invitation');
+    await settle(fixture);
+
+    expect(api.acceptInvitation).not.toHaveBeenCalled();
+    const summary = query(host, '#invitation-accept-summary');
+    expect(summary.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      "You can't join yet: Tick the box for the Health intake consent.",
+    );
+    expect(document.activeElement).toBe(summary);
+    expect(button(host, 'Accept invitation').getAttribute('aria-describedby')).toBe(
+      'invitation-accept-summary',
+    );
+    expect(textOf(query(host, '#legal-reason-health-1'))).toBe('Tick this box to continue.');
+
+    tick(host, 'Placeholder sentence for the Health intake consent.');
+    await settle(fixture);
+    press(host, 'Accept invitation');
+    await settle(fixture);
+    expect(api.acceptInvitation).toHaveBeenCalledWith(TOKEN, null, null, ['health-1']);
+  });
+
+  /**
+   * A version published or replaced while the page was open: the server refuses, and the page shows the
+   * documents in force now, with the sentence that says why and focus on it.
+   */
+  it('reads the documents again when the server says they changed', async () => {
+    const replaced = legalDocument('terms-2', 'TermsOfService', 'Terms of Service');
+    const reads = [[TERMS], [replaced]];
+    const toAccept = vi.fn(() => of(reads[Math.min(toAccept.mock.calls.length - 1, 1)]));
+    const changed = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'legal_acceptance_required', message: 'Server wording' },
+    });
+    const { fixture, host, api } = await render({
+      signedInAs: user('rana@example.test'),
+      api: { acceptInvitation: vi.fn(() => throwError(() => changed)) },
+      legal: { toAccept },
+    });
+
+    tick(host, 'Placeholder sentence for the Terms of Service.');
+    await settle(fixture);
+    press(host, 'Accept invitation');
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(api.acceptInvitation).toHaveBeenCalledWith(TOKEN, null, null, ['terms-1']);
+    expect(toAccept).toHaveBeenCalledTimes(2);
+    const summary = query(host, '#invitation-accept-summary');
+    expect(textOf(summary)).toBe(
+      'The documents to accept changed while this page was open. Read them again below and tick each box.',
+    );
+    expect(document.activeElement).toBe(summary);
+    expect(labeledField(host, 'Placeholder sentence for the Terms of Service.').id).toBe(
+      'legal-terms-2',
+    );
+    expect(labeledField(host, 'Placeholder sentence for the Terms of Service.').checked).toBe(
+      false,
+    );
+  });
+
+  /** An invitation that is no longer waiting asks for nothing. */
+  it('reads no documents for an invitation that is not waiting', async () => {
+    const { legal, host } = await render({ invitation: invitation({ status: 'Accepted' }) });
+
+    expect(legal.toAccept).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-legal]')).toBeNull();
+  });
+
+  /** Only the boxes are asked again after a refusal for the documents, so the passwords typed stay. */
+  it('keeps the passwords when only the documents changed', async () => {
+    const changed = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'legal_acceptance_required', message: 'Server wording' },
+    });
+    const { fixture, host } = await render({
+      api: { acceptInvitation: vi.fn(() => throwError(() => changed)) },
+      legal: { toAccept: vi.fn(() => of([TERMS])) },
+    });
+
+    fill(host, 'Password', 'correct-horse-battery');
+    fill(host, 'Confirm password', 'correct-horse-battery');
+    tick(host, 'Placeholder sentence for the Terms of Service.');
+    await settle(fixture);
+    press(host, 'Create account and join');
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(query(host, '#invitation-summary').textContent).toContain(
+      'The documents to accept changed while this page was open.',
+    );
+    expect(passwords(host).map((input) => input.value)).toEqual([
+      'correct-horse-battery',
+      'correct-horse-battery',
+    ]);
+  });
 });
+
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
 /** The display-name control, addressed without assuming which binding fills it. */
 function field(host: HTMLElement): HTMLInputElement {

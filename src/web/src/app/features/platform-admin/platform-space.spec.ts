@@ -27,6 +27,9 @@ async function render(
     voidInvoice: vi.fn(() => of({})),
     grantDiscount: vi.fn(() => of({})),
     revokeDiscount: vi.fn(() => of({})),
+    getLegalDocuments: vi.fn(),
+    publishLegalDocument: vi.fn(),
+    withdrawLegalDocument: vi.fn(),
     ...overrides,
   };
   TestBed.configureTestingModule({

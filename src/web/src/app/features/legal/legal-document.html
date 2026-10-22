@@ -1,0 +1,63 @@
+<div class="legal-page tb-theme" [class.legal-page--embedded]="signedIn()">
+  @if (!signedIn()) {
+    <a class="skip-link" href="#legal-content" (click)="skipToContent($event)" i18n
+      >Skip to content</a
+    >
+    <app-home-header />
+  }
+  <div #content id="legal-content" class="legal-page__inner" tabindex="-1">
+    @switch (state()) {
+      @case ('loading') {
+        <p class="legal-page__quiet" role="status" i18n>Loading the document…</p>
+      }
+      @case ('missing') {
+        <p class="legal-page__eyebrow" i18n>Legal document</p>
+        <h1 class="legal-page__title" i18n>This document isn’t available</h1>
+        <p class="legal-page__lead" i18n>
+          Its link may be mistyped, or the document was never published. The documents in force are
+          linked where you are asked to accept them.
+        </p>
+        <a class="legal-page__back" routerLink="/" i18n>Go to the homepage</a>
+      }
+      @case ('error') {
+        <p class="legal-page__eyebrow" i18n>Legal document</p>
+        <h1 class="legal-page__title" i18n>The document couldn’t be loaded</h1>
+        <p class="legal-page__lead" i18n>Check your connection, then try again.</p>
+        <button type="button" class="legal-page__retry" (click)="load()" i18n>Try again</button>
+      }
+      @default {
+        @if (document(); as legal) {
+          <header class="legal-page__head">
+            <p class="legal-page__eyebrow" i18n>Version {{ legal.version }}</p>
+            <h1 class="legal-page__title">{{ legal.name }}</h1>
+            <p class="legal-page__lead" data-legal-when>{{ when() }}</p>
+          </header>
+          <article class="legal-page__text" [attr.lang]="legal.culture" dir="auto" data-legal-text>
+            @for (paragraph of legal.paragraphs; track $index) {
+              <p>{{ paragraph }}</p>
+            }
+          </article>
+          <dl class="legal-page__facts">
+            <div>
+              <dt i18n>People accept it by ticking</dt>
+              <dd [attr.lang]="legal.culture" dir="auto">“{{ legal.statement }}”</dd>
+            </div>
+            <div>
+              <dt i18n>Fingerprint (SHA-256)</dt>
+              <dd class="legal-page__hash" translate="no">{{ legal.fingerprint }}</dd>
+            </div>
+          </dl>
+        }
+      }
+    }
+  </div>
+  @if (!signedIn()) {
+    <footer class="legal-page__foot">
+      <span i18n><span translate="no">TB Gym</span> · Beirut</span>
+      <nav aria-label="Footer" i18n-aria-label>
+        <a routerLink="/" i18n>Home</a>
+        <a routerLink="/auth/sign-in" i18n>Sign in</a>
+      </nav>
+    </footer>
+  }
+</div>

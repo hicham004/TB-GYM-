@@ -55,6 +55,9 @@ async function render<T extends SheetOutputs>(
     voidInvoice: vi.fn(() => of({})),
     grantDiscount: vi.fn(() => of({})),
     revokeDiscount: vi.fn(),
+    getLegalDocuments: vi.fn(),
+    publishLegalDocument: vi.fn(),
+    withdrawLegalDocument: vi.fn(),
     ...overrides,
   };
   const csrf = { refresh: vi.fn(refresh) };

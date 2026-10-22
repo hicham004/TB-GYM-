@@ -1,6 +1,7 @@
 import {
   ACCOUNTS,
   LIVE_URL,
+  acceptLegalDocuments,
   api,
   expect,
   memberships,
@@ -211,6 +212,7 @@ test('the client joins, resumes the steps after a reload, and Lea finishes the s
   await client.getByLabel('Display name').fill(fullName);
   await client.getByLabel('Password', { exact: true }).fill(password);
   await client.getByLabel('Confirm password').fill(password);
+  await acceptLegalDocuments(client);
   await client.getByRole('button', { name: 'Create account and join' }).click();
   await expect(client).toHaveURL(/\/profile/, { timeout: 30_000 });
   await expect(

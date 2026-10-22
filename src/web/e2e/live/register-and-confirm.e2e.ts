@@ -1,4 +1,4 @@
-import { expect, requireLive, signIn, test, uniqueEmail } from './support';
+import { acceptLegalDocuments, expect, requireLive, signIn, test, uniqueEmail } from './support';
 
 /**
  * Coach registration end to end against the real API: the time zone is found by city and the
@@ -40,6 +40,7 @@ test('a coach registers in a zone and currency they pick, confirms, signs in and
   const registered = page.waitForResponse((response) =>
     response.url().includes('/api/auth/register/coach'),
   );
+  await acceptLegalDocuments(page);
   await page.getByRole('button', { name: 'Create coach account' }).click();
   const response = await registered;
   expect(response.status()).toBe(202);

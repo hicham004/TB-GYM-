@@ -172,9 +172,20 @@ test.describe('security and tenancy (live)', () => {
         const anonymousToken = (
           (await (await inviteeContext.get('/api/auth/csrf')).json()) as { token: string }
         ).token;
+        // The legal documents in force for a client, none on a fresh demo (audit INV-3).
+        const legalDocumentIds = (
+          (await (
+            await inviteeContext.get('/api/legal/documents/to-accept?audience=Client')
+          ).json()) as { id: string }[]
+        ).map((document) => document.id);
         const accept = await inviteeContext.post('/api/invitations/accept', {
           headers: { 'X-XSRF-TOKEN': anonymousToken },
-          data: { token, displayName: 'Released Probe', password: 'Released-Probe-2026!' },
+          data: {
+            token,
+            displayName: 'Released Probe',
+            password: 'Released-Probe-2026!',
+            legalDocumentIds,
+          },
         });
         expect([200, 201, 204]).toContain(accept.status());
       } finally {

@@ -7,6 +7,8 @@ import { ApiClient } from '../../core/api/api-client';
 import type { RegistrationResponse } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
 import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
+import { LegalApi } from '../legal/legal-api';
+import type { LegalToAccept } from '../legal/legal.models';
 import { RegisterCoach } from './register-coach';
 
 const REGISTERED: RegistrationResponse = {
@@ -22,7 +24,23 @@ function deviceZone(timeZone: string) {
   } as Intl.ResolvedDateTimeFormatOptions);
 }
 
-async function render(api: Partial<ApiClient> = {}) {
+/** A published version as the to-accept read gives it; the words are placeholders, not legal text. */
+function legalDocument(id: string, kind: LegalToAccept['kind'], name: string): LegalToAccept {
+  return {
+    id,
+    kind,
+    name,
+    version: '2026-11',
+    statement: `Placeholder sentence for the ${name}.`,
+    culture: 'en',
+    link: `/legal/${id}`,
+  };
+}
+
+const TERMS = legalDocument('terms-1', 'TermsOfService', 'Terms of Service');
+const PRIVACY = legalDocument('privacy-1', 'PrivacyPolicy', 'Privacy Policy');
+
+async function render(api: Partial<ApiClient> = {}, legal: Partial<LegalApi> = {}) {
   await TestBed.configureTestingModule({
     imports: [RegisterCoach],
     providers: [
@@ -31,13 +49,20 @@ async function render(api: Partial<ApiClient> = {}) {
         provide: ApiClient,
         useValue: { registerCoach: vi.fn(() => of(REGISTERED)), ...api },
       },
+      // Nothing is published unless a test says so, as on a server with no document yet.
+      { provide: LegalApi, useValue: { toAccept: vi.fn(() => of([])), ...legal } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(RegisterCoach);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api: TestBed.inject(ApiClient) };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    api: TestBed.inject(ApiClient),
+    legal: TestBed.inject(LegalApi),
+  };
 }
 
 /** Fills every field the form requires, so a test can vary one of them without repeating the rest. */
@@ -94,6 +119,7 @@ describe('RegisterCoach', () => {
       defaultCulture: 'en-LB',
       defaultCurrencyCode: 'LBP',
       weekStartsOn: 'Monday',
+      legalDocumentIds: [],
     });
   });
 
@@ -369,5 +395,155 @@ describe('RegisterCoach', () => {
     expect(query(host, '[role="alert"]').textContent?.trim()).toBe(
       'Too many attempts from this network. Try again in a minute.',
     );
+  });
+
+  /** Audit INV-3: with nothing published, registration asks nothing, as before. */
+  it('asks a new owner for no document while none is published', async () => {
+    const { fixture, host, api, legal } = await render();
+
+    expect(legal.toAccept).toHaveBeenCalledWith('Owner');
+    expect(host.querySelector('[data-legal]')).toBeNull();
+    fillRegistration(host);
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+    expect(api.registerCoach).toHaveBeenCalledWith(
+      expect.objectContaining({ legalDocumentIds: [] }),
+    );
+  });
+
+  /**
+   * Audit INV-3: once the platform admin publishes, a new owner ticks a box per document, its sentence
+   * the version's own, with the text a link away in a new tab; the server is sent what was ticked.
+   */
+  it('asks a new owner to tick each document in force and sends the ones ticked', async () => {
+    const { fixture, host, api } = await render(
+      {},
+      { toAccept: vi.fn(() => of([TERMS, PRIVACY])) },
+    );
+
+    const fieldset = query(host, 'fieldset[data-legal]');
+    expect(textOf(fieldset.querySelector('legend'))).toBe('Legal documents');
+    const read = query<HTMLAnchorElement>(host, '#legal-read-terms-1');
+    expect(read.getAttribute('href')).toBe('/legal/terms-1');
+    expect(read.target).toBe('_blank');
+    expect(read.rel).toBe('noopener');
+    expect(textOf(read)).toBe('Read the Terms of Service (version 2026-11), opens in a new tab');
+
+    fillRegistration(host);
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+
+    // Nothing goes out while a box is unticked, and each says so under it and in the summary.
+    expect(api.registerCoach).not.toHaveBeenCalled();
+    const summary = query(host, '[role="alert"]');
+    expect(summary.textContent).toContain('Tick the box for the Terms of Service.');
+    expect(summary.textContent).toContain('Tick the box for the Privacy Policy.');
+    expect(document.activeElement).toBe(summary);
+    const terms = field(host, 'Placeholder sentence for the Terms of Service.');
+    expect(terms.getAttribute('aria-describedby')).toBe('legal-reason-terms-1 legal-read-terms-1');
+    expect(textOf(query(host, '#legal-reason-terms-1'))).toBe('Tick this box to continue.');
+
+    tick(host, 'Placeholder sentence for the Terms of Service.');
+    await settle(fixture);
+    expect(host.querySelector('#legal-reason-terms-1')).toBeNull();
+    expect(summary.textContent).not.toContain('Tick the box for the Terms of Service.');
+    press(host, 'Create coach account');
+    await settle(fixture);
+    expect(api.registerCoach).not.toHaveBeenCalled();
+
+    tick(host, 'Placeholder sentence for the Privacy Policy.');
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+    expect(api.registerCoach).toHaveBeenCalledWith(
+      expect.objectContaining({ legalDocumentIds: ['terms-1', 'privacy-1'] }),
+    );
+  });
+
+  /**
+   * A version published or replaced while the page was open: the server refuses, and the page shows the
+   * documents in force now, a replaced one unticked, with what was typed kept.
+   */
+  it('reads the documents again when the server says they changed, keeping what was typed', async () => {
+    const replaced = legalDocument('terms-2', 'TermsOfService', 'Terms of Service');
+    const reads = [[TERMS], [replaced, PRIVACY]];
+    const toAccept = vi.fn(() => of(reads[Math.min(toAccept.mock.calls.length - 1, 1)]));
+    const changed = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'legal_acceptance_required', message: 'Server wording' },
+    });
+    const { fixture, host, api } = await render(
+      { registerCoach: vi.fn(() => throwError(() => changed)) },
+      { toAccept },
+    );
+
+    fillRegistration(host);
+    tick(host, 'Placeholder sentence for the Terms of Service.');
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(api.registerCoach).toHaveBeenCalledWith(
+      expect.objectContaining({ legalDocumentIds: ['terms-1'] }),
+    );
+    expect(toAccept).toHaveBeenCalledTimes(2);
+    const summary = query(host, '[role="alert"]');
+    expect(textOf(summary)).toBe(
+      'The documents to accept changed while this page was open. Read them again below and tick each box.',
+    );
+    expect(document.activeElement).toBe(summary);
+    expect(field(host, 'Placeholder sentence for the Terms of Service.').checked).toBe(false);
+    expect(field(host, 'Placeholder sentence for the Privacy Policy.').checked).toBe(false);
+    expect(host.querySelector('#legal-read-terms-2')).not.toBeNull();
+    expect(field(host, 'Your name').value).toBe('Tarek Bou');
+  });
+
+  /** A read that fails asks nothing; the server still refuses a registration that leaves one out. */
+  it('lets the server decide when the documents could not be read', async () => {
+    const { fixture, host, api } = await render(
+      {},
+      { toAccept: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 0 }))) },
+    );
+
+    expect(host.querySelector('[data-legal]')).toBeNull();
+    fillRegistration(host);
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+    expect(api.registerCoach).toHaveBeenCalledWith(
+      expect.objectContaining({ legalDocumentIds: [] }),
+    );
+  });
+
+  /** The server asked for a document and the page could not read them again: it says so, not "below". */
+  it('says the documents could not be loaded when the read after a refusal fails', async () => {
+    let read = 0;
+    const toAccept = vi.fn(() =>
+      read++ === 0 ? of([TERMS]) : throwError(() => new HttpErrorResponse({ status: 502 })),
+    );
+    const changed = new HttpErrorResponse({
+      status: 409,
+      error: { code: 'legal_acceptance_required', message: 'Server wording' },
+    });
+    const { fixture, host } = await render(
+      { registerCoach: vi.fn(() => throwError(() => changed)) },
+      { toAccept },
+    );
+
+    fillRegistration(host);
+    tick(host, 'Placeholder sentence for the Terms of Service.');
+    await settle(fixture);
+    press(host, 'Create coach account');
+    await settle(fixture);
+    await settle(fixture);
+
+    const summary = query(host, '[role="alert"]');
+    expect(textOf(summary)).toBe(
+      'The documents to accept couldn’t be loaded. Check your connection, then try again.',
+    );
+    expect(document.activeElement).toBe(summary);
   });
 });

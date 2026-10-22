@@ -163,6 +163,15 @@
           </app-password-reveal>
         </app-field>
 
+        @if (legal.documents().length > 0) {
+          <app-legal-acceptance
+            [documents]="legal.documents()"
+            [accepted]="legal.accepted()"
+            [showReasons]="attempt.wasTried()"
+            (toggled)="legal.toggle($event)"
+          />
+        }
+
         <p id="invitation-summary" class="auth-summary" role="alert" tabindex="-1" #summary>
           @if (attempt.wasTried() && formReasons().length > 0) {
             <span i18n>Your account can't be created yet:</span>
@@ -192,8 +201,22 @@
     } @else {
       <div class="auth-stack">
         <p i18n>Accept this invitation using {{ signedInUser()?.email }}.</p>
-        <p class="auth-summary" role="alert">
-          @if (error()) {
+        @if (legal.documents().length > 0) {
+          <app-legal-acceptance
+            [documents]="legal.documents()"
+            [accepted]="legal.accepted()"
+            [showReasons]="attempt.wasTried()"
+            (toggled)="legal.toggle($event)"
+          />
+        }
+        <p id="invitation-accept-summary" class="auth-summary" role="alert" tabindex="-1" #summary>
+          @if (attempt.wasTried() && legal.missing().length > 0) {
+            <!-- The spaces inside the spans keep the sentences apart when they are read aloud. -->
+            <span i18n>You can't join yet: </span>
+            @for (reason of legal.missing(); track reason) {
+              <span>{{ reason }} </span>
+            }
+          } @else if (error()) {
             <span>{{ error() }}</span>
           }
         </p>
@@ -203,6 +226,7 @@
           size="touch"
           class="auth-submit"
           [loading]="submitting()"
+          aria-describedby="invitation-accept-summary"
           (click)="accept()"
         >
           @if (submitting()) {

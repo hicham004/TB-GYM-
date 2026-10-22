@@ -8,10 +8,67 @@ namespace TB.Gym.Infrastructure.Application;
 
 internal sealed class LegalConsentApplicationService(
     GymDbContext dbContext,
+    LegalAcceptanceGate gate,
     IClock clock,
     ICurrentUser currentUser)
     : ILegalConsentApplicationService
 {
+    public async Task<IReadOnlyList<LegalDocumentToAccept>> ListToAcceptAsync(
+        LegalAudience audience,
+        CancellationToken cancellationToken)
+    {
+        var current = await gate.CurrentAsync(cancellationToken);
+        if (current.Count == 0)
+        {
+            return [];
+        }
+
+        // A signed-in person is not asked again for a platform document they accepted. A workspace one is
+        // shown again to someone rejoining it, since this read names no workspace; ticking it again
+        // records nothing new. A new owner always registers a new account, so their session counts for
+        // nothing there.
+        var accepted = audience == LegalAudience.Owner
+            ? new HashSet<Guid>()
+            : await gate.AcceptedAsync(currentUser.UserId, null, cancellationToken);
+        var shown = LegalAcceptanceRule.ToShow(current, audience, accepted).Select(item => item.Id).ToArray();
+        var documents = await dbContext.LegalDocumentVersions
+            .AsNoTracking()
+            .Where(item => shown.Contains(item.Id))
+            .Select(item => new LegalDocumentToAccept(
+                item.Id,
+                item.Kind,
+                item.VersionLabel,
+                item.Culture,
+                item.Context,
+                item.AcceptanceStatement,
+                item.ContentUri,
+                item.PublishedAtUtc!.Value))
+            .ToListAsync(cancellationToken);
+        return documents.OrderBy(item => Array.IndexOf(shown, item.Id)).ToArray();
+    }
+
+    public async Task<LegalDocumentText?> GetPublishedAsync(
+        Guid documentVersionId,
+        CancellationToken cancellationToken) =>
+        await dbContext.LegalDocumentVersions
+            .AsNoTracking()
+            .Where(item =>
+                item.Id == documentVersionId &&
+                item.ReviewStatus == LegalReviewStatus.Approved &&
+                item.PublishedAtUtc != null)
+            .Select(item => new LegalDocumentText(
+                item.Id,
+                item.Kind,
+                item.VersionLabel,
+                item.Culture,
+                item.Context,
+                item.Content,
+                item.AcceptanceStatement,
+                item.ContentSha256,
+                item.PublishedAtUtc!.Value,
+                item.RetiredAtUtc))
+            .SingleOrDefaultAsync(cancellationToken);
+
     public async Task<IReadOnlyList<LegalDocumentView>> ListCurrentAsync(
         Guid? workspaceId,
         CancellationToken cancellationToken)
@@ -37,6 +94,17 @@ internal sealed class LegalConsentApplicationService(
                 (item.Context == LegalConsentContext.Platform || includeWorkspaceDocuments))
             .OrderBy(item => item.Kind)
             .ThenBy(item => item.Culture)
+            .Select(item => new
+            {
+                item.Id,
+                item.Kind,
+                item.VersionLabel,
+                item.Culture,
+                item.Context,
+                item.ContentUri,
+                item.ContentSha256,
+                item.PublishedAtUtc,
+            })
             .ToListAsync(cancellationToken);
         var acceptances = await dbContext.LegalConsentAcceptances
             .AsNoTracking()

@@ -39,6 +39,9 @@ async function render(
     voidInvoice: vi.fn(),
     grantDiscount: vi.fn(),
     revokeDiscount: vi.fn(),
+    getLegalDocuments: vi.fn(),
+    publishLegalDocument: vi.fn(),
+    withdrawLegalDocument: vi.fn(),
     ...overrides,
   };
   TestBed.configureTestingModule({

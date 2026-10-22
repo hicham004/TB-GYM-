@@ -141,6 +141,7 @@ internal sealed partial class DemoWorkspaceGenerator
 
     private async Task OpenWorkspaceAsync()
     {
+        var legalDocuments = await LegalDocumentsAsync(LegalAudience.Owner);
         var result = await As<IWorkspaceApplicationService, WorkspaceRegistrationResult>(
             DemoActor.Anonymous,
             (service, token) => service.RegisterCoachAsync(
@@ -152,7 +153,8 @@ internal sealed partial class DemoWorkspaceGenerator
                     TimeZoneId,
                     "en-LB",
                     Currency,
-                    DayOfWeek.Monday),
+                    DayOfWeek.Monday,
+                    legalDocuments),
                 token));
         Require(result.Status == WorkspaceRegistrationStatus.Created, "open the workspace", result);
 
@@ -341,10 +343,11 @@ internal sealed partial class DemoWorkspaceGenerator
         var link = InvitationToken(invitation);
         timeline.At(acceptAt, $"{coach.FirstName} joins the team", async () =>
         {
+            var legalDocuments = await LegalDocumentsAsync(LegalAudience.Coach);
             var accepted = await As<IInvitationApplicationService, InvitationAcceptanceResult>(
                 DemoActor.Anonymous,
                 (service, token) => service.AcceptAsync(
-                    new AcceptClientInvitationRequest(link, coach.DisplayName, password),
+                    new AcceptClientInvitationRequest(link, coach.DisplayName, password, legalDocuments),
                     token));
             Require(accepted.Status == InvitationAcceptanceStatus.Accepted, $"{coach.FirstName} accepts", accepted);
             staffUserIds[coach.Key] = await FindUserIdAsync(coach.Email);
@@ -371,6 +374,18 @@ internal sealed partial class DemoWorkspaceGenerator
     private DemoActor OwnerActor => StaffActor(people.Owner.Key);
 
     private DemoActor StaffActor(string key) => new(staffUserIds[key], tenantId);
+
+    /// <summary>
+    /// The legal documents in force for someone joining as <paramref name="audience"/> (CLI-010): the demo's
+    /// people are made up, so they accept whatever is published in this database, none in a fresh one.
+    /// </summary>
+    private async Task<IReadOnlyList<Guid>> LegalDocumentsAsync(LegalAudience audience)
+    {
+        var documents = await As<ILegalConsentApplicationService, IReadOnlyList<LegalDocumentToAccept>>(
+            DemoActor.Anonymous,
+            (service, token) => service.ListToAcceptAsync(audience, token));
+        return documents.Select(document => document.Id).ToArray();
+    }
 
     private Task<TResult> As<TService, TResult>(
         DemoActor actor,

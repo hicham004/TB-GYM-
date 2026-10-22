@@ -1015,7 +1015,9 @@ experience point traces to one authoritative event.
 Dependencies: validated core product.
 
 - Coach onboarding, SaaS plans/quotas, tenant billing, admin support workflow,
-  data export/deletion, and production legal-document publication/consent enforcement.
+  data export/deletion, and production legal-document publication/consent enforcement (publishing and
+  the acceptance step at registration and invitation built in audit A16a; asking members who joined
+  before a version was published is still to come).
 - Production secret management, managed PostgreSQL backups/PITR, object lifecycle, TLS,
   WAF/rate limits, observability, alerting, runbooks, and disaster-recovery exercises.
 - Load/security/accessibility testing and independent review of authentication,

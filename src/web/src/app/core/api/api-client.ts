@@ -181,15 +181,18 @@ export class ApiClient {
     return this.http.get<PublicInvitation>(`/api/invitations/public/${encodeURIComponent(token)}`);
   }
 
+  /** `legalDocumentIds`: the legal documents in force the person ticked (audit INV-3). */
   acceptInvitation(
     token: string,
     displayName: string | null,
     password: string | null,
+    legalDocumentIds: readonly string[] = [],
   ): Observable<InvitationAcceptance> {
     return this.http.post<InvitationAcceptance>('/api/invitations/accept', {
       token,
       displayName,
       password,
+      legalDocumentIds,
     });
   }
 

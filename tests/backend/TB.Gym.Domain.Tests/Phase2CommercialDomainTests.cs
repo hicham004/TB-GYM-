@@ -241,10 +241,10 @@ public sealed class Phase2CommercialDomainTests
         var document = LegalDocumentVersion.CreateDraft(
             LegalDocumentKind.PrivacyPolicy,
             "2026-08",
-            "en-LB",
+            "en",
             LegalConsentContext.Workspace,
-            "/legal/privacy/2026-08",
-            new string('a', 64));
+            "The reviewed text.",
+            "The reviewed sentence.");
         Assert.AreEqual(LegalReviewStatus.RequiresProfessionalReview, document.ReviewStatus);
 
         document.ApproveAndPublish(Now);

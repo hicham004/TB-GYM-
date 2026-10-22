@@ -170,6 +170,15 @@
         <p class="auth-hint" i18n>Emails and invitations go out in English for now.</p>
       </fieldset>
 
+      @if (legal.documents().length > 0) {
+        <app-legal-acceptance
+          [documents]="legal.documents()"
+          [accepted]="legal.accepted()"
+          [showReasons]="attempt.wasTried()"
+          (toggled)="legal.toggle($event)"
+        />
+      }
+
       <p id="register-summary" class="auth-summary" role="alert" tabindex="-1" #summary>
         @if (attempt.wasTried() && formReasons().length > 0) {
           <span i18n>Your coaching space can't be created yet:</span>

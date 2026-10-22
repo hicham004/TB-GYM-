@@ -1,0 +1,169 @@
+@use '../home/home-shared' as *;
+
+@include home-faces;
+
+// A published legal document, in the website's look like What changed: one readable column, the
+// text exactly as published, and its facts below it.
+
+:host {
+  display: block;
+}
+
+.legal-page {
+  @include palette;
+  -webkit-font-smoothing: antialiased;
+  background: var(--home-cream);
+  color: var(--home-ink);
+  font-family:
+    'Notebook Plex',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  min-block-size: 100vh;
+}
+
+.legal-page--embedded {
+  background: transparent;
+  min-block-size: 0;
+}
+
+.legal-page a {
+  color: inherit;
+}
+
+.skip-link {
+  background: var(--home-lime);
+  color: var(--home-ink);
+  font-weight: 500;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  padding: 10px 16px;
+  position: fixed;
+  transform: translateY(-160%);
+  z-index: 60;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.legal-page__inner {
+  @include wrap;
+  max-inline-size: 760px;
+  padding-block: clamp(48px, 7vw, 96px) clamp(64px, 8vw, 120px);
+}
+
+.legal-page__inner:focus {
+  outline: none;
+}
+
+.legal-page--embedded .legal-page__inner {
+  padding-block: 0 48px;
+  padding-inline: 0;
+}
+
+.legal-page__eyebrow {
+  @include eyebrow;
+  color: var(--home-muted);
+}
+
+.legal-page__title {
+  @include display(clamp(2.25rem, 4.2vw, 3.5rem));
+  margin-block-end: 18px;
+  overflow-wrap: anywhere;
+}
+
+.legal-page__lead {
+  @include lead;
+  color: var(--home-muted);
+  margin-block-end: clamp(32px, 4vw, 48px);
+  max-inline-size: 52ch;
+}
+
+.legal-page__quiet {
+  color: var(--home-muted);
+}
+
+.legal-page__text {
+  border-block-start: 1px solid var(--home-line);
+  display: grid;
+  gap: 1.1em;
+  padding-block: 28px 8px;
+}
+
+.legal-page__text p {
+  line-height: 1.65;
+  margin: 0;
+  max-inline-size: 70ch;
+  overflow-wrap: anywhere;
+  // Line breaks, spaces and indents inside a paragraph are kept as they were published.
+  white-space: pre-wrap;
+}
+
+.legal-page__facts {
+  border-block-start: 1px solid var(--home-line);
+  display: grid;
+  gap: 16px;
+  margin: 32px 0 0;
+  padding-block-start: 24px;
+}
+
+.legal-page__facts div {
+  display: grid;
+  gap: 4px;
+}
+
+.legal-page__facts dt {
+  @include mono;
+  color: var(--home-muted);
+  font-size: 0.78rem;
+}
+
+.legal-page__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+// The fingerprint as it is stored: lower-case hex, never set in capitals like the labels.
+.legal-page__hash {
+  @include mono;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.legal-page__back,
+.legal-page__retry {
+  @include pill;
+  @include pill-forest;
+}
+
+.legal-page__retry {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.legal-page__foot {
+  @include wrap;
+  align-items: center;
+  border-block-start: 1px solid var(--home-line);
+  color: var(--home-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.86rem;
+  gap: 12px 28px;
+  justify-content: space-between;
+  max-inline-size: 760px;
+  padding-block: 24px 40px;
+}
+
+.legal-page__foot nav {
+  display: flex;
+  gap: 24px;
+}
+
+.legal-page__foot a {
+  text-underline-offset: 4px;
+}

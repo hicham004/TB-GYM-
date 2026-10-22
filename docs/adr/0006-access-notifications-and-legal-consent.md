@@ -48,6 +48,8 @@ accepted.
   locked.
 - Notification scheduling is durable and idempotent, but Phase 2 does not claim delivery.
 - Final Terms, Privacy Policy, health consent, and Lebanon-specific obligations remain launch
-  blockers until professional review.
+  blockers until professional review. Since audit A16a (2026-10-22) the platform admin publishes
+  reviewed text and its acceptance sentence in the app, and registration and invitation acceptance
+  ask for every version in force (CLI-010); the words themselves still wait for that review.
 - Sensitive health/payment details are excluded from outbox payloads and logs, consistent
   with the [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html).

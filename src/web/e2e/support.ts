@@ -79,6 +79,8 @@ export async function mockSignedOut(
     // form asks for its stamp when it scrolls into view.
     'GET /api/website/settings': (route) => json(route, 200, NO_WEBSITE_SETTINGS),
     'GET /api/website/contact-form': (route) => json(route, 200, { stamp: 'e2e-stamp' }),
+    // Registration and an invitation ask what to accept (audit INV-3): nothing is published here.
+    'GET /api/legal/documents/to-accept': (route) => json(route, 200, []),
     ...extra,
   });
 }
@@ -139,6 +141,8 @@ export async function mockSession(
         utcTime: '2026-10-19T09:00:00Z',
         emailAvailable: true,
       }),
+    // An invitation opened while signed in asks what to accept (audit INV-3): nothing is published here.
+    'GET /api/legal/documents/to-accept': (route) => json(route, 200, []),
     ...hubHandlers,
     ...(options.extra ?? {}),
   });

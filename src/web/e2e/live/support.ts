@@ -33,6 +33,29 @@ export const ACCOUNTS = {
 export const test = base;
 export { expect };
 
+/**
+ * Ticks every legal document the page asks for (audit INV-3), as the person joining would. A fresh demo has
+ * none published, so there is nothing to tick there.
+ */
+export async function acceptLegalDocuments(page: Page): Promise<void> {
+  for (const box of await page.locator('fieldset[data-legal] input[type="checkbox"]').all()) {
+    await box.check();
+  }
+}
+
+/** The legal documents in force someone joining as `audience` names in a request made past the page. */
+export async function legalDocumentIds(
+  page: Page,
+  audience: 'Owner' | 'Coach' | 'Client',
+): Promise<string[]> {
+  const answer = await api<{ id: string }[]>(
+    page,
+    'GET',
+    `/api/legal/documents/to-accept?audience=${audience}`,
+  );
+  return answer.body.map((document) => document.id);
+}
+
 /** Skips the whole file unless the live origin is configured. Call it at the top of a spec. */
 export function requireLive(): void {
   base.skip(

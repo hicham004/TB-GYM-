@@ -616,7 +616,12 @@ public sealed partial class Phase3TrainingWorkflowTests
     // ---------- team helpers ----------
 
     /// <summary>The owner invites a coach; a new account accepts. Returns the coach's user id.</summary>
-    private static async Task<Guid> JoinAsCoachAsync(HttpClient owner, HttpClient coach, string email, string displayName)
+    private static async Task<Guid> JoinAsCoachAsync(
+        HttpClient owner,
+        HttpClient coach,
+        string email,
+        string displayName,
+        Guid[]? legalDocumentIds = null)
     {
         await RefreshCsrfAsync(owner);
         var created = await owner.PostAsJsonAsync(
@@ -627,7 +632,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(coach);
         var accepted = await coach.PostAsJsonAsync(
             "/api/invitations/accept",
-            new { token = QueryValue(invitation.DevelopmentActionUrl!, "token"), displayName, password = Password });
+            new
+            {
+                token = QueryValue(invitation.DevelopmentActionUrl!, "token"),
+                displayName,
+                password = Password,
+                legalDocumentIds,
+            });
         await AssertStatusAsync(accepted, HttpStatusCode.OK);
         var acceptance = await RequiredJsonAsync<TeamAcceptance>(accepted);
         Assert.AreEqual("Coach", acceptance.Kind);

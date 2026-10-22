@@ -43,6 +43,14 @@ export const routes: Routes = [
       import('./features/changelog/changelog').then((module) => module.Changelog),
   },
   {
+    // A published legal document (audit INV-3), linked from registration and an invitation, open to
+    // anyone signed in or not; its own name becomes the title once it is read.
+    path: 'legal/:documentId',
+    title: $localize`Legal document | TB Gym`,
+    loadComponent: () =>
+      import('./features/legal/legal-document').then((module) => module.LegalDocument),
+  },
+  {
     path: '',
     pathMatch: 'full',
     canActivate: [authGuard],
@@ -230,6 +238,17 @@ export const routes: Routes = [
     title: $localize`Platform billing | TB Gym`,
     loadComponent: () =>
       import('./features/platform-admin/platform-admin').then((module) => module.PlatformAdmin),
+  },
+  {
+    // The legal documents people accept to join (audit INV-3), published by the platform admin from
+    // reviewed text; its Publish a version sheet asks before Browser Back drops what was typed.
+    path: 'admin/legal',
+    canActivate: [authGuard, platformAdminGuard],
+    canDeactivate: [confirmSheetLeave],
+    data: { ...HOUSE_BRAND, ...REDESIGNED },
+    title: $localize`Legal documents | TB Gym`,
+    loadComponent: () =>
+      import('./features/platform-admin/legal-documents').then((module) => module.LegalDocuments),
   },
   {
     path: 'admin/billing/:tenantId',
