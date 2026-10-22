@@ -83,7 +83,8 @@ const COACH_SHOTS = [
     path: '/messages',
     steps: [{ click: { text: 'Maya F.' } }, { wait: 1500 }],
   },
-  { name: 'coach-checkins', path: '/checkins/clients' },
+  // The check-in forms library (audit A14b); a client's check-ins are on their record now.
+  { name: 'coach-checkins', path: '/checkins/forms' },
 ];
 
 const OWNER_SHOTS = [

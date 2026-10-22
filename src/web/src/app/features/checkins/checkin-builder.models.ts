@@ -18,6 +18,8 @@ export const CHECK_IN_LIMITS = {
   maximumOptions: 30,
   maximumScalePositions: 100,
   scaleDecimals: 3,
+  minimumScaleValue: -1_000_000,
+  maximumScaleValue: 1_000_000,
 } as const;
 
 export interface OptionDraft {
@@ -65,7 +67,6 @@ export interface DraftValidation {
 export const FORM_LEVEL = 'form';
 
 export interface AssignmentDraft {
-  clientProfileId: string;
   formVersionId: string;
   dueDate: string;
 }
@@ -161,15 +162,9 @@ export function validateDraft(draft: FormDraft): DraftValidation {
     byField[field] = [...(byField[field] ?? []), message];
   };
 
-  if (draft.title.trim().length === 0) {
-    add('title', $localize`A title is required.`);
-  } else if (draft.title.trim().length > CHECK_IN_LIMITS.titleLength) {
-    add('title', $localize`The title is too long.`);
-  }
-
-  if (draft.description.trim().length > CHECK_IN_LIMITS.descriptionLength) {
-    add('description', $localize`The description is too long.`);
-  }
+  const names = nameIssues(draft.title, draft.description);
+  names.title.forEach((message) => add('title', message));
+  names.description.forEach((message) => add('description', message));
 
   if (draft.questions.length === 0) {
     add(FORM_LEVEL, $localize`Add at least one question.`);
@@ -194,92 +189,180 @@ export function validateDraft(draft: FormDraft): DraftValidation {
   };
 }
 
-function validateQuestion(question: QuestionDraft): string[] {
-  const errors: string[] = [];
-  if (question.prompt.trim().length === 0) {
-    errors.push($localize`A question needs a prompt.`);
-  } else if (question.prompt.trim().length > CHECK_IN_LIMITS.promptLength) {
-    errors.push($localize`The prompt is too long.`);
+/**
+ * What is wrong with one question, said under the box it is about (audit A14b): the question itself,
+ * its hint, the choices as a group or one choice, and each number of a scale. Every message names the
+ * fix in a coach's words. The server checks the same rules again.
+ */
+export interface QuestionIssues {
+  readonly prompt: string[];
+  readonly hint: string[];
+  /** How many choices there are. */
+  readonly choices: string[];
+  /** One choice's own problem, by its key: empty, too long, or the same as an earlier one. */
+  readonly choice: Readonly<Record<string, string[]>>;
+  readonly lowest: string[];
+  readonly highest: string[];
+  readonly step: string[];
+}
+
+export function questionIssues(question: QuestionDraft): QuestionIssues {
+  const issues = {
+    prompt: [] as string[],
+    hint: [] as string[],
+    choices: [] as string[],
+    choice: {} as Record<string, string[]>,
+    lowest: [] as string[],
+    highest: [] as string[],
+    step: [] as string[],
+  };
+  const prompt = question.prompt.trim();
+  if (prompt.length === 0) {
+    issues.prompt.push($localize`Write the question.`);
+  } else if (prompt.length > CHECK_IN_LIMITS.promptLength) {
+    issues.prompt.push($localize`Keep the question under 500 characters.`);
   }
 
   if (question.helpText.trim().length > CHECK_IN_LIMITS.helpTextLength) {
-    errors.push($localize`The help text is too long.`);
+    issues.hint.push($localize`Keep the hint under 1,000 characters.`);
   }
 
   if (isChoice(question.questionType)) {
-    errors.push(...validateOptions(question.options));
-    return errors;
+    choiceIssues(question.options, issues);
+  } else if (question.questionType === 'NumericScale') {
+    scaleIssues(question, issues);
   }
 
-  if (question.questionType !== 'NumericScale') {
-    return errors;
+  return issues;
+}
+
+function choiceIssues(
+  options: readonly OptionDraft[],
+  issues: { choices: string[]; choice: Record<string, string[]> },
+): void {
+  if (options.length < CHECK_IN_LIMITS.minimumOptions) {
+    issues.choices.push($localize`Give at least two choices.`);
+  } else if (options.length > CHECK_IN_LIMITS.maximumOptions) {
+    issues.choices.push($localize`Keep it to 30 choices or fewer.`);
   }
 
-  const { scaleMinimum: minimum, scaleMaximum: maximum, scaleStep: step } = question;
-  if (minimum === null || maximum === null || step === null) {
-    errors.push($localize`A scale needs a minimum, a maximum and a step.`);
-    return errors;
+  const seen = new Set<string>();
+  for (const option of options) {
+    const label = option.label.trim();
+    // The server compares choices ignoring case by each letter's own mapping (OrdinalIgnoreCase); the
+    // browser's language must not change the answer (Turkish lowercases "I" to "ı").
+    const comparable = label.toUpperCase();
+    const reasons: string[] = [];
+    if (label.length === 0) {
+      reasons.push($localize`Write this choice, or remove it.`);
+    } else if (label.length > CHECK_IN_LIMITS.optionLabelLength) {
+      reasons.push($localize`Keep this choice under 200 characters.`);
+    } else if (seen.has(comparable)) {
+      reasons.push($localize`An earlier choice says the same.`);
+    }
+    if (label.length > 0) seen.add(comparable);
+    if (reasons.length > 0) issues.choice[option.key] = reasons;
   }
+}
 
-  if (minimum >= maximum) {
-    errors.push($localize`The scale minimum must be below its maximum.`);
+function scaleIssues(
+  question: QuestionDraft,
+  issues: { lowest: string[]; highest: string[]; step: string[] },
+): void {
+  const { scaleMinimum: lowest, scaleMaximum: highest, scaleStep: step } = question;
+  if (lowest === null) issues.lowest.push($localize`Enter the lowest number.`);
+  if (highest === null) issues.highest.push($localize`Enter the highest number.`);
+  if (step === null) issues.step.push($localize`Enter the step.`);
+  // The server keeps three decimal places and numbers within a million either way (CheckInForm).
+  for (const [value, list] of [
+    [lowest, issues.lowest],
+    [highest, issues.highest],
+    [step, issues.step],
+  ] as const) {
+    if (value === null) continue;
+    if (!hasAtMostDecimals(value, CHECK_IN_LIMITS.scaleDecimals)) {
+      list.push($localize`Use at most 3 decimal places.`);
+    } else if (
+      value < CHECK_IN_LIMITS.minimumScaleValue ||
+      value > CHECK_IN_LIMITS.maximumScaleValue
+    ) {
+      list.push($localize`Keep it between -1,000,000 and 1,000,000.`);
+    }
+  }
+  if (lowest === null || highest === null || step === null) return;
+  if (issues.lowest.length + issues.highest.length + issues.step.length > 0) return;
+
+  if (lowest >= highest) {
+    issues.highest.push($localize`Make it more than the lowest number.`);
   }
 
   if (step <= 0) {
-    errors.push($localize`The scale step must be greater than zero.`);
-  }
-
-  if (minimum < maximum && step > 0) {
-    if (!stepDividesRange(minimum, maximum, step)) {
-      errors.push($localize`The step must divide the range exactly, ending on the maximum.`);
-    } else if ((maximum - minimum) / step > CHECK_IN_LIMITS.maximumScalePositions) {
-      errors.push($localize`A scale cannot have more than 100 steps.`);
+    issues.step.push($localize`The step must be more than 0.`);
+  } else if (lowest < highest) {
+    if (!stepDividesRange(lowest, highest, step)) {
+      issues.step.push(
+        $localize`Counting from ${lowest}:lowest: in steps of ${step}:step: never lands on ${highest}:highest:.`,
+      );
+    } else if ((highest - lowest) / step > CHECK_IN_LIMITS.maximumScalePositions) {
+      issues.step.push($localize`That is more than 100 steps. Use a bigger step.`);
     }
   }
-
-  return errors;
 }
 
-function validateOptions(options: readonly OptionDraft[]): string[] {
-  const errors: string[] = [];
-  if (options.length < CHECK_IN_LIMITS.minimumOptions) {
-    errors.push($localize`A choice question needs at least two options.`);
-  }
+/** Whether a number is written with at most `places` decimal places, as the server stores it. */
+function hasAtMostDecimals(value: number, places: number): boolean {
+  const scaled = value * 10 ** places;
+  return Math.abs(scaled - Math.round(scaled)) < 1e-6;
+}
 
-  if (options.length > CHECK_IN_LIMITS.maximumOptions) {
-    errors.push($localize`A choice question cannot have more than 30 options.`);
-  }
+/**
+ * A form's name and description, the same rule wherever they are typed: the new form's page and the
+ * Name and description sheet.
+ */
+export function nameIssues(
+  title: string,
+  description: string,
+): Record<'title' | 'description', string[]> {
+  const name = title.trim();
+  return {
+    title:
+      name.length === 0
+        ? [$localize`Give the form a name.`]
+        : name.length > CHECK_IN_LIMITS.titleLength
+          ? [$localize`The name is too long.`]
+          : [],
+    description:
+      description.trim().length > CHECK_IN_LIMITS.descriptionLength
+        ? [$localize`The description is too long.`]
+        : [],
+  };
+}
 
-  if (options.some((option) => option.label.trim().length === 0)) {
-    errors.push($localize`Every option needs a label.`);
-  }
-
-  if (options.some((option) => option.label.trim().length > CHECK_IN_LIMITS.optionLabelLength)) {
-    errors.push($localize`An option label is too long.`);
-  }
-
-  const labels = options
-    .map((option) => option.label.trim().toLocaleLowerCase())
-    .filter((label) => label.length > 0);
-  if (new Set(labels).size !== labels.length) {
-    errors.push($localize`Options must be distinct.`);
-  }
-
-  return errors;
+/** Every reason one question has, in the order its boxes are laid out. */
+function validateQuestion(question: QuestionDraft): string[] {
+  const issues = questionIssues(question);
+  return [
+    ...issues.prompt,
+    ...issues.hint,
+    ...issues.choices,
+    ...question.options.flatMap((option) => issues.choice[option.key] ?? []),
+    ...issues.lowest,
+    ...issues.highest,
+    ...issues.step,
+  ];
 }
 
 export interface AssignmentValidation {
-  /** Every outstanding reason, in field order: what a refused submit names in its summary. */
+  /** Every outstanding reason, in field order. */
   errors: string[];
   byField: Record<string, string[]>;
   isValid: boolean;
 }
 
 /**
- * A due date already past in the workspace's own calendar asks for something undeliverable.
- *
- * The client is validated but keyed as form-level: it is chosen from the list beside the form, not
- * from a control inside it, so there is nothing for the user to leave and no field to describe.
+ * What the Assign a check-in sheet needs (audit A14b): a published form, and a due date that is not
+ * already past in the workspace's own calendar, which would ask for something undeliverable. The
+ * client is the record the sheet was opened on.
  */
 export function validateAssignment(
   draft: AssignmentDraft,
@@ -290,21 +373,17 @@ export function validateAssignment(
     byField[field] = [...(byField[field] ?? []), message];
   };
 
-  if (draft.clientProfileId.length === 0) {
-    add(FORM_LEVEL, $localize`Choose a client.`);
-  }
-
   if (draft.formVersionId.length === 0) {
-    add('formVersionId', $localize`Choose a published version to assign.`);
+    add('formVersionId', $localize`Choose the form to send.`);
   }
 
   if (draft.dueDate.length === 0) {
-    add('dueDate', $localize`Choose a due date.`);
+    add('dueDate', $localize`Choose the day it is due.`);
   } else if (draft.dueDate < workspaceToday) {
-    add('dueDate', $localize`The due date cannot be in the past.`);
+    add('dueDate', $localize`Choose today or a later day.`);
   }
 
-  const errors = [FORM_LEVEL, 'formVersionId', 'dueDate'].flatMap((field) => byField[field] ?? []);
+  const errors = ['formVersionId', 'dueDate'].flatMap((field) => byField[field] ?? []);
   return { errors, byField, isValid: errors.length === 0 };
 }
 
@@ -390,11 +469,6 @@ export function statusLabel(status: 'Draft' | 'Published'): string {
   return status === 'Published' ? $localize`Published` : $localize`Draft`;
 }
 
-export function versionCountText(count: number | string): string {
-  const total = Number(count);
-  return total === 1 ? $localize`1 version` : $localize`${total}:count: versions`;
-}
-
 export function questionCountText(count: number | string): string {
   const total = Number(count);
   return total === 1 ? $localize`1 question` : $localize`${total}:count: questions`;
@@ -402,16 +476,4 @@ export function questionCountText(count: number | string): string {
 
 export function versionLabel(number: number | string | null): string {
   return $localize`Version ${Number(number)}:number:`;
-}
-
-/** A client's answers are a draft they are still writing, then submitted, then reviewed by a coach. */
-export function responseStatusLabel(status: 'Draft' | 'Submitted' | 'Reviewed'): string {
-  switch (status) {
-    case 'Draft':
-      return $localize`In progress`;
-    case 'Submitted':
-      return $localize`Submitted`;
-    case 'Reviewed':
-      return $localize`Reviewed`;
-  }
 }

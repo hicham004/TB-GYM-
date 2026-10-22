@@ -1,500 +1,121 @@
-<section class="checkins">
-  <!-- The two pages of the Check-ins section; the sidebar links to this one. Links, not tabs. -->
-  <app-section-nav class="section-links" label="Check-in sections" i18n-label [links]="sections" />
-
-  <header class="page-head">
-    <h1 #heading tabindex="-1" i18n>Check-in forms</h1>
-    <button appButton type="button" (click)="startNewForm()" i18n>New form</button>
+<section class="forms" aria-labelledby="forms-heading">
+  <header class="top">
+    <div class="intro">
+      <h1 id="forms-heading" #heading tabindex="-1" i18n>Check-in forms</h1>
+      <p class="lede">
+        @if (summary(); as line) {
+          <span dir="auto">{{ line }}</span
+          >.&ngsp;
+        }
+        <span i18n
+          >Write the questions once, then assign the form from a client’s Check-ins tab.</span
+        >
+      </p>
+    </div>
+    <a appButton routerLink="/checkins/forms/new">
+      <app-icon name="plus" />
+      <span i18n>New form</span>
+    </a>
   </header>
 
-  @if (error(); as message) {
-    <p class="problem" role="alert">{{ message }}</p>
-  }
-  @if (notice(); as message) {
-    <p class="note" role="status">{{ message }}</p>
-  }
-
-  <div class="split">
-    <article class="panel library">
-      <h2 i18n>Library</h2>
-      @if (loading() && forms().length === 0) {
-        <p class="empty" i18n>Loading check-in forms…</p>
-      } @else if (forms().length === 0) {
-        <p class="empty" i18n>No check-in forms yet.</p>
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>Your check-in forms could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (cards().length === 0 && archived().length === 0) {
+        <app-empty-state
+          class="panel"
+          heading="No check-in forms yet"
+          description="Your clients answer a few questions each week: energy, sleep, how the plan went. Start from a weekly check-in, change any word you like, then assign it from a client’s Check-ins tab."
+          i18n-heading
+          i18n-description
+        >
+          <a appButton empty-state-action routerLink="/checkins/forms/new" [queryParams]="starter">
+            <span i18n>Start with a weekly check-in</span>
+          </a>
+        </app-empty-state>
       } @else {
-        <ul class="form-list">
-          @for (form of forms(); track form.id) {
-            <li>
-              <button appButton type="button" variant="text" (click)="openForm(form.id)">
-                {{ form.title }}
-              </button>
-              <app-status-label
-                [label]="statusLabel(form.status)"
-                [tone]="form.status === 'Published' ? 'success' : 'neutral'"
-              />
-              @if (form.isArchived) {
-                <app-status-label label="Archived" i18n-label />
-              }
-              <span class="detail">{{ versionCount(form.currentVersionNumber) }}</span>
-            </li>
-          }
-        </ul>
-      }
-    </article>
-
-    <article class="panel builder">
-      @if (selected(); as details) {
-        <h2>
-          {{ details.form.title }}
-          @if (isArchived()) {
-            <app-status-label label="Archived" i18n-label />
-          }
-        </h2>
-        @if (details.form.description) {
-          <p class="detail">{{ details.form.description }}</p>
-        }
-
-        <!-- The title and description belong to the lineage rather than to a version, so they are
-             changed here and saved against the form's own concurrency token. -->
-        @if (renaming()) {
-          <form class="builder-form" (ngSubmit)="renameForm()">
-            <app-field label="Title" i18n-label>
-              <input
-                appControl
-                type="text"
-                id="rename-title"
-                name="renameTitle"
-                [ngModel]="renameTitle()"
-                (ngModelChange)="setRenameTitle($event)"
-                [maxlength]="limits.titleLength"
-                required
-              />
-            </app-field>
-            <app-field label="Description" i18n-label>
-              <textarea
-                appControl
-                id="rename-description"
-                name="renameDescription"
-                rows="2"
-                [ngModel]="renameDescription()"
-                (ngModelChange)="setRenameDescription($event)"
-                [maxlength]="limits.descriptionLength"
-              ></textarea>
-            </app-field>
-            <div class="actions">
-              <button appButton type="submit" [loading]="saving()" i18n>Save details</button>
-              <button appButton type="button" variant="text" (click)="cancelRename()" i18n>
-                Cancel
-              </button>
-            </div>
-          </form>
-        } @else {
-          <div class="actions">
-            @if (!isArchived()) {
-              <button appButton type="button" variant="outlined" (click)="startRename()" i18n>
-                Edit details
-              </button>
-              <button
-                appButton
-                type="button"
-                variant="text"
-                class="danger"
-                [loading]="saving()"
-                (click)="archiveForm()"
-                i18n
-              >
-                Archive
-              </button>
-            } @else {
-              <button
-                appButton
-                type="button"
-                variant="outlined"
-                [loading]="saving()"
-                (click)="restoreForm()"
-                i18n
-              >
-                Restore
-              </button>
-            }
-          </div>
-        }
-
-        @if (isArchived()) {
-          <p class="hint" i18n>
-            This form is archived. It cannot be edited, published or assigned until it is restored.
-            Everything already assigned from it is untouched.
+        @if (cards().length === 0 && !hasMore()) {
+          <p class="panel pad all-archived" i18n>
+            Every form is archived. Write a new one, or open an archived form below to restore it.
           </p>
-        }
-
-        <ul class="versions">
-          @for (version of details.versions; track version.id) {
-            <li>
-              <span class="version-name" i18n>Version {{ version.versionNumber }}</span>
-              <app-status-label
-                [label]="statusLabel(version.status)"
-                [tone]="version.status === 'Published' ? 'success' : 'neutral'"
-              />
-              <span class="detail">{{ questionCount(version.questionCount) }}</span>
-              <!-- An archived lineage offers reading only. The server refuses each of these too;
-                   the screen simply stops offering an action that would be refused. -->
-              @if (isArchived()) {
-                <button
-                  appButton
-                  type="button"
-                  variant="text"
-                  (click)="editVersion(version.id)"
-                  i18n
-                >
-                  View
-                </button>
-              } @else if (version.status === 'Draft') {
-                <button
-                  appButton
-                  type="button"
-                  variant="text"
-                  (click)="editVersion(version.id)"
-                  i18n
-                >
-                  Edit
-                </button>
-                <button
-                  appButton
-                  type="button"
-                  variant="outlined"
-                  [loading]="saving()"
-                  (click)="publish(version.id, +version.version)"
-                  i18n
-                >
-                  Publish
-                </button>
-              } @else {
-                <button
-                  appButton
-                  type="button"
-                  variant="text"
-                  (click)="editVersion(version.id)"
-                  i18n
-                >
-                  View
-                </button>
-                @if (!openDraft() && latestPublished() === version.id) {
-                  <button
-                    appButton
-                    type="button"
-                    variant="outlined"
-                    [loading]="saving()"
-                    (click)="deriveDraft(version.id)"
-                    i18n
-                  >
-                    New draft from this
-                  </button>
-                }
-              }
-            </li>
-          }
-        </ul>
-        <p class="hint" i18n>
-          Publishing freezes a version permanently. To change published wording, create a new draft
-          from it — every question keeps its identity, so answers stay comparable across versions.
-        </p>
-      } @else if (!creating()) {
-        <p class="empty" i18n>Select a form to see its versions, or create a new one.</p>
-      }
-
-      @if (creating() || editingVersion(); as _) {
-        @let version = editingVersion();
-        @let readOnly = version !== null && (version.status !== 'Draft' || isArchived());
-
-        <form class="builder-form" (ngSubmit)="save()">
-          <h3>
-            @if (creating()) {
-              <ng-container i18n>New check-in form</ng-container>
-            } @else if (readOnly) {
-              <ng-container i18n>Version {{ version!.versionNumber }} (read-only)</ng-container>
-            } @else {
-              <ng-container i18n>Editing draft version {{ version!.versionNumber }}</ng-container>
-            }
-          </h3>
-
-          @if (creating()) {
-            @let titleReasons = formFieldErrors('title');
-            @let descriptionReasons = formFieldErrors('description');
-
-            <app-field
-              label="Title"
-              i18n-label
-              [errors]="attempt.shows('title', titleReasons) ? titleReasons : null"
-            >
-              <input
-                appControl
-                type="text"
-                id="builder-title"
-                name="title"
-                [ngModel]="draft().title"
-                (ngModelChange)="setTitle($event)"
-                (blur)="attempt.touch('title')"
-                [maxlength]="limits.titleLength"
-                required
-              />
-            </app-field>
-
-            <app-field
-              label="Description"
-              i18n-label
-              [errors]="
-                attempt.shows('description', descriptionReasons) ? descriptionReasons : null
-              "
-            >
-              <textarea
-                appControl
-                id="builder-description"
-                name="description"
-                rows="2"
-                [ngModel]="draft().description"
-                (ngModelChange)="setDescription($event)"
-                (blur)="attempt.touch('description')"
-                [maxlength]="limits.descriptionLength"
-              ></textarea>
-            </app-field>
-          }
-
-          <!-- Reasons belonging to the draft as a whole rather than to any one control. Nothing can
-               be blurred to earn these, so only a refused submit reveals them. -->
-          @let structuralReasons = formFieldErrors('form');
-          @if (attempt.wasTried() && structuralReasons.length > 0) {
-            <p class="field-reason" id="builder-form-reason">
-              @for (message of structuralReasons; track message) {
-                <span>{{ message }}</span>
-              }
-            </p>
-          }
-
-          <ol class="questions">
-            @for (question of draft().questions; track question.key; let index = $index) {
-              <li class="question">
-                <div class="question-head">
-                  <app-field label="Kind of question" i18n-label class="question-type">
-                    <select
-                      appControl
-                      [name]="'type-' + question.key"
-                      [ngModel]="question.questionType"
-                      (ngModelChange)="changeQuestionType(index, $event)"
-                      [disabled]="readOnly"
-                    >
-                      @for (type of questionTypes; track type) {
-                        <option [value]="type">{{ typeLabel(type) }}</option>
-                      }
-                    </select>
-                  </app-field>
-                  @if (!readOnly) {
-                    <div class="question-actions">
-                      <button
-                        appButton
-                        type="button"
-                        variant="text"
-                        (click)="moveQuestion(index, -1)"
-                        i18n
-                      >
-                        Up
-                      </button>
-                      <button
-                        appButton
-                        type="button"
-                        variant="text"
-                        (click)="moveQuestion(index, 1)"
-                        i18n
-                      >
-                        Down
-                      </button>
-                      <button
-                        appButton
-                        type="button"
-                        variant="text"
-                        class="danger"
-                        (click)="removeQuestion(index)"
-                        i18n
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  }
-                </div>
-
-                @let questionReasons = questionErrors(question);
-
-                <app-field
-                  label="Prompt"
-                  i18n-label
-                  [errors]="
-                    attempt.shows(questionField(question), questionReasons) ? questionReasons : null
-                  "
-                >
-                  <input
-                    appControl
-                    type="text"
-                    [id]="'q-' + question.key"
-                    [name]="'prompt-' + question.key"
-                    [ngModel]="question.prompt"
-                    (ngModelChange)="setPrompt(index, $event)"
-                    (blur)="attempt.touch(questionField(question))"
-                    [maxlength]="limits.promptLength"
-                    [disabled]="readOnly"
-                  />
-                </app-field>
-
-                <app-checkbox label="Required" i18n-label>
-                  <input
-                    appControl
-                    type="checkbox"
-                    [name]="'required-' + question.key"
-                    [ngModel]="question.isRequired"
-                    (ngModelChange)="setRequired(index, $event)"
-                    [disabled]="readOnly"
-                  />
-                </app-checkbox>
-
-                @if (isChoice(question.questionType)) {
-                  <ul class="options">
-                    @for (option of question.options; track option.key; let optionIndex = $index) {
-                      <li>
-                        <app-field
-                          label="Option {{ optionIndex + 1 }}"
-                          i18n-label
-                          [hideLabel]="true"
-                        >
-                          <input
-                            appControl
-                            type="text"
-                            [name]="'option-' + option.key"
-                            [ngModel]="option.label"
-                            (ngModelChange)="setOptionLabel(index, optionIndex, $event)"
-                            [maxlength]="limits.optionLabelLength"
-                            [disabled]="readOnly"
-                          />
-                        </app-field>
-                        @if (!readOnly) {
-                          <button
-                            appButton
-                            type="button"
-                            variant="text"
-                            class="danger"
-                            (click)="removeOption(index, optionIndex)"
-                            i18n
-                          >
-                            Remove
-                          </button>
-                        }
-                      </li>
-                    }
-                  </ul>
-                  @if (!readOnly) {
-                    <div class="actions">
-                      <button
-                        appButton
-                        type="button"
-                        variant="outlined"
-                        (click)="addOption(index)"
-                        i18n
-                      >
-                        Add option
-                      </button>
-                    </div>
-                  }
-                }
-
-                @if (question.questionType === 'NumericScale') {
-                  <div class="scale">
-                    <app-field label="Minimum" i18n-label>
-                      <input
-                        appControl
-                        type="number"
-                        [name]="'min-' + question.key"
-                        [ngModel]="question.scaleMinimum"
-                        (ngModelChange)="setScale(index, 'scaleMinimum', $event)"
-                        [disabled]="readOnly"
-                      />
-                    </app-field>
-                    <app-field label="Maximum" i18n-label>
-                      <input
-                        appControl
-                        type="number"
-                        [name]="'max-' + question.key"
-                        [ngModel]="question.scaleMaximum"
-                        (ngModelChange)="setScale(index, 'scaleMaximum', $event)"
-                        [disabled]="readOnly"
-                      />
-                    </app-field>
-                    <app-field label="Step" i18n-label>
-                      <input
-                        appControl
-                        type="number"
-                        [name]="'step-' + question.key"
-                        [ngModel]="question.scaleStep"
-                        (ngModelChange)="setScale(index, 'scaleStep', $event)"
-                        [disabled]="readOnly"
-                      />
-                    </app-field>
-                  </div>
-                }
+        } @else {
+          <ul class="cards" role="list">
+            @for (card of cards(); track card.id) {
+              <li class="card">
+                <ng-container
+                  [ngTemplateOutlet]="cardBody"
+                  [ngTemplateOutletContext]="{ $implicit: card }"
+                />
               </li>
             }
-          </ol>
-
-          @if (!readOnly) {
-            <!-- The one assertive region on this form: present from the start so the live region is
-                 registered, empty until a save is actually refused. `tabindex="-1"` so the refusal
-                 can take focus without entering the tab order. -->
-            <p class="problem summary" id="builder-summary" role="alert" tabindex="-1" #summary>
-              @if (attempt.wasTried() && outstanding().length > 0) {
-                <ng-container i18n>This draft cannot be saved yet:</ng-container>
-                @for (message of outstanding(); track $index) {
-                  <span>{{ message }}</span>
-                }
+          </ul>
+        }
+        @if (hasMore()) {
+          <div class="more">
+            @if (moreFailed()) {
+              <p role="alert" i18n>More check-in forms could not be loaded.</p>
+            }
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="loadingMore()"
+              (click)="loadMore()"
+              i18n
+            >
+              Show more forms
+            </button>
+          </div>
+        }
+        @if (archived().length > 0) {
+          <details class="archived">
+            <summary>
+              <span i18n>Archived ({{ archived().length }})</span>
+              <app-icon name="chevron-down" />
+            </summary>
+            <ul class="cards" role="list">
+              @for (card of archived(); track card.id) {
+                <li class="card off">
+                  <ng-container
+                    [ngTemplateOutlet]="cardBody"
+                    [ngTemplateOutletContext]="{ $implicit: card }"
+                  />
+                </li>
               }
-            </p>
-
-            <div class="actions">
-              <button appButton type="button" variant="outlined" (click)="addQuestion()" i18n>
-                Add question
-              </button>
-              <!-- Busy while the request is in flight, never disabled for an invalid form: a
-                   disabled control cannot take focus to announce why it is refusing. -->
-              <button
-                appButton
-                type="submit"
-                aria-describedby="builder-summary"
-                [loading]="saving()"
-                i18n
-              >
-                Save draft
-              </button>
-              <button appButton type="button" variant="text" (click)="cancelEditing()" i18n>
-                Cancel
-              </button>
-            </div>
-          } @else {
-            <p class="hint" i18n>
-              This version is read-only. Restore an archived form, or create a draft from a
-              published version, before changing it.
-            </p>
-            <div class="actions">
-              <button appButton type="button" variant="outlined" (click)="cancelEditing()" i18n>
-                Close
-              </button>
-            </div>
-          }
-        </form>
+            </ul>
+          </details>
+        }
       }
-    </article>
-  </div>
+    }
+  }
 </section>
 
-<ng-template #leaveDialog let-dialog>
-  <app-confirm
-    [message]="leaveMessage"
-    [confirmLabel]="leaveLabel"
-    [cancelLabel]="stayLabel"
-    (answer)="dialog.close($event)"
-  />
+<ng-template #cardBody let-card>
+  <div class="card-top">
+    <app-status-pill [label]="card.status" [tone]="card.tone" />
+    <span class="count">{{ card.questions }}</span>
+  </div>
+  <h2 class="card-name" dir="auto">
+    <!-- The whole card is the link (a stretched link), named by the form. -->
+    <a class="stretched" [routerLink]="card.link">{{ card.title }}</a>
+  </h2>
+  @if (card.description; as description) {
+    <p class="card-description" dir="auto">{{ description }}</p>
+  }
+  <p class="card-meta">
+    @if (card.note; as note) {
+      <span class="note">{{ note }}</span>
+    }
+    <span>{{ card.line }}</span>
+  </p>
 </ng-template>

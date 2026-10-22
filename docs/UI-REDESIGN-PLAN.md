@@ -529,9 +529,8 @@ of the implemented R1.3 screens before production rollout.
   - The leave confirmation (`UiConfirm`, `confirmBeforeLeaving`, `UnsavedWork`) is ready for the other
     editors that still lose work on navigation: the coach note, Brand and C7 (the intake since R5.3b).
 - **Check-in review, left for later (from R4.3).**
-  - Assigning a check-in still happens on the Client check-ins page (`/checkins/clients`), which since
-    R5.3e is on the kit but keeps its own way to read and compare. An Assign sheet on the client's Check-ins
-    would let that screen go; C5 never specified assigning.
+  - Done in audit A14b: assigning moved from the Client check-ins page (`/checkins/clients`, now gone)
+    to a sheet on the client's Check-ins (C5).
   - After Mark reviewed the coach goes back by hand. A "next check-in to review" step, from Today's
     queue, would make a Monday of reviews faster.
   - The reply in the chat carries no link back to the check-in it answers.
@@ -1427,8 +1426,8 @@ Tokens are theme-ready from R1, so this costs little later.
   - `TimeInput` (`ui/time-input.ts`): a time typed on the 24-hour clock with a number pad. "2200",
     "7.30" and "10pm" become 22:00, 07:30 and 22:00 as soon as the box commits them (Enter, a change
     or leaving it), in any script's digits.
-  - `npm run lint:styles` refuses a `<select>` and a date or time `<input>` in a template. The two
-    coach check-in pages, which A14b rebuilds, keep theirs until then.
+  - `npm run lint:styles` refuses a `<select>` and a date or time `<input>` in any template; since
+    audit A14b rebuilt the two coach check-in pages, nothing is excused.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves
@@ -1761,7 +1760,7 @@ limited to the coach's assigned clients.
   - A client's **Check-ins** section lists what needs review first, then what is not sent yet ("Due
     Tue 6 Oct", Overdue, Started), then what was reviewed ("Sent Wed 23 Sep · 1 day late · reviewed
     Thu 24 Sep"). A sent check-in opens its review; an unsent one has nothing to read (CHK-013). Assign
-    a check-in still opens the older check-in screen.
+    a check-in opens a sheet here since audit A14b (below).
   - The review (`/clients/:clientId/checkins/:assignmentId`) keeps the client's header. Today's
     Review, the Overview's Check-in card, Needs you and the feed open it straight away when they name
     one check-in.
@@ -1788,6 +1787,20 @@ limited to the coach's assigned clients.
     mode. Screenshots on the Atlas demo: `docs/design/r43-*.png`. The demo has no progress photos,
     so the slider is shown by the mocked Playwright run, with placeholder pictures:
     `docs/design/r43-photos-mocked-1440.png`.
+- Built in audit A14b (AUTH-8, the 2026-10-11 review's U3), the last two old-shaped coach pages:
+  - **Check-in forms** (`/checkins/forms`) is a card list like Programs: a line counting the forms and
+    those ready to assign, New form, and a card per form (Ready to assign or Draft, its questions, its
+    description, "Published Mon 5 Oct" or "Changes not published yet"); archived forms wait behind a
+    closed fold. An empty library is invited to "Start with a weekly check-in", the demo's six
+    questions, which the coach changes before anything is saved.
+  - A form opens on its own page (`/checkins/forms/:formId`, `new`), a centred column: the version
+    clients are sent reads as text with Change the questions; a draft is written question by question
+    (the kit's select for the kind of answer, the hint the client reads, choices and a scale whose
+    reasons sit under the box they are about), with Save as draft and Publish in a bar kept at the foot
+    of the screen. The More menu holds Name and description and Versions (each sheet) and Archive form.
+  - **Assign a check-in** on a client's Check-ins opens a sheet: a published form (the only one chosen
+    for the coach) and the day it is due on the workspace's calendar. With none ready it says to publish
+    a draft, or to write a first form. The Client check-ins page is gone, its address redirected.
 
 **C6. Messages**
 - Job: "It's a chat."

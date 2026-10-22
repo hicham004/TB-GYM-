@@ -36,7 +36,9 @@ internal sealed class CheckInApplicationService(
                 version.Id,
                 version.FormId,
                 version.VersionNumber,
-                version.Status))
+                version.Status,
+                version.Questions.Count,
+                version.PublishedAtUtc))
             .ToArrayAsync(cancellationToken);
         return new CheckInFormPage(
             total,
@@ -702,7 +704,13 @@ internal sealed class CheckInApplicationService(
                 version.Version))
             .ToArrayAsync(cancellationToken);
         var shapes = versions
-            .Select(version => new VersionShape(version.Id, form.Id, version.VersionNumber, version.Status))
+            .Select(version => new VersionShape(
+                version.Id,
+                form.Id,
+                version.VersionNumber,
+                version.Status,
+                version.QuestionCount,
+                version.PublishedAtUtc))
             .ToArray();
         return new CheckInFormDetails(ToSummary(form, shapes), versions);
     }
@@ -715,6 +723,8 @@ internal sealed class CheckInApplicationService(
             .OrderByDescending(version => version.VersionNumber)
             .FirstOrDefault();
         var draft = owned.SingleOrDefault(version => version.Status == CheckInFormVersionStatus.Draft);
+        // The card counts what a client is assigned now; a form never published counts its draft.
+        var counted = latestPublished ?? draft;
         return new CheckInFormSummary(
             form.Id,
             form.Title,
@@ -725,6 +735,8 @@ internal sealed class CheckInApplicationService(
             draft?.Id,
             latestPublished?.Id,
             latestPublished?.VersionNumber,
+            counted?.QuestionCount ?? 0,
+            latestPublished?.PublishedAtUtc,
             form.Version);
     }
 
@@ -802,7 +814,9 @@ internal sealed class CheckInApplicationService(
         Guid Id,
         Guid FormId,
         int VersionNumber,
-        CheckInFormVersionStatus Status);
+        CheckInFormVersionStatus Status,
+        int QuestionCount,
+        DateTimeOffset? PublishedAtUtc);
 
     private sealed record ResponseStatusRow(
         Guid Id,

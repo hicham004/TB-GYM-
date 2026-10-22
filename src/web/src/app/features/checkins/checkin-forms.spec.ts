@@ -1,607 +1,256 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { of, throwError, type Observable } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
-import type {
-  CheckInFormDetails,
-  CheckInFormVersionView,
-  CheckInFormVersionStatus,
-} from '../../core/api/generated';
-import { CsrfService } from '../../core/security/csrf.service';
+import type { CheckInFormPage, CheckInFormSummary } from '../../core/api/generated';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import {
-  announced,
-  focusedId,
-  leave,
-  leaveAt,
-  press,
-  query,
-  fill,
-  settle as settleDom,
-} from '../../../testing/dom';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
+import { press, settle } from '../../../testing/dom';
 import { CheckInForms } from './checkin-forms';
-import { UiDialog } from '../../ui/dialog';
-import { UnsavedWork } from '../../core/forms/unsaved-work';
 
-const QUESTION_KEY = 'a'.repeat(32);
-
-function version(
-  id: string,
-  versionNumber: number,
-  status: CheckInFormVersionStatus,
-): CheckInFormVersionView {
+function form(overrides: Partial<CheckInFormSummary> = {}): CheckInFormSummary {
   return {
-    id,
-    formId: 'form-1',
-    formTitle: 'Weekly check-in',
-    formDescription: null,
-    versionNumber,
-    status,
-    derivedFromVersionId: null,
-    publishedAtUtc: status === 'Published' ? '2026-08-22T09:00:00Z' : null,
-    publishedByUserId: status === 'Published' ? 'coach-1' : null,
-    version: 3,
-    questions: [
-      {
-        id: 'question-1',
-        questionKey: QUESTION_KEY,
-        order: 1,
-        questionType: 'ShortText',
-        prompt: 'How is your body feeling?',
-        helpText: null,
-        isRequired: true,
-        scaleMinimum: null,
-        scaleMaximum: null,
-        scaleStep: null,
-        options: [],
-      },
-    ],
+    id: 'form-1',
+    title: 'Weekly check-in',
+    description: 'Takes two minutes.',
+    status: 'Published',
+    isArchived: false,
+    currentVersionNumber: 1,
+    draftVersionId: null,
+    latestPublishedVersionId: 'version-1',
+    latestPublishedVersionNumber: 1,
+    questionCount: 6,
+    latestPublishedAtUtc: '2026-10-21T22:30:00Z',
+    version: 2,
+    ...overrides,
   };
 }
 
-function details(...versions: CheckInFormVersionView[]): CheckInFormDetails {
-  return archivedDetails(false, ...versions);
-}
+const DRAFT = {
+  status: 'Draft',
+  latestPublishedVersionId: null,
+  latestPublishedVersionNumber: null,
+  latestPublishedAtUtc: null,
+  draftVersionId: 'version-9',
+} as const;
 
-function archivedDetails(
-  isArchived: boolean,
-  ...versions: CheckInFormVersionView[]
-): CheckInFormDetails {
-  const published = versions.filter((item) => item.status === 'Published');
-  const latest = published.at(-1) ?? null;
-  return {
-    form: {
-      id: 'form-1',
-      title: 'Weekly check-in',
-      description: null,
-      status: latest === null ? 'Draft' : 'Published',
-      isArchived,
-      currentVersionNumber: versions.length,
-      draftVersionId: versions.find((item) => item.status === 'Draft')?.id ?? null,
-      latestPublishedVersionId: latest?.id ?? null,
-      latestPublishedVersionNumber: latest?.versionNumber ?? null,
-      version: 2,
-    },
-    versions: versions.map((item) => ({
-      id: item.id,
-      versionNumber: item.versionNumber,
-      status: item.status,
-      derivedFromVersionId: item.derivedFromVersionId,
-      publishedAtUtc: item.publishedAtUtc,
-      publishedByUserId: item.publishedByUserId,
-      questionCount: item.questions.length,
-      version: item.version,
-    })),
-  };
-}
-
-/**
- * ngModel writes its value to the DOM through the forms pipeline rather than synchronously, so a
- * single change-detection pass is not enough to observe a rendered value or a disabled control.
- */
-async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }) {
-  fixture.detectChanges();
-  await fixture.whenStable();
-  await new Promise((resolve) => setTimeout(resolve));
-  fixture.detectChanges();
-  await fixture.whenStable();
-  fixture.detectChanges();
-}
-
-interface Harness {
-  canLeave(): Promise<boolean>;
-  openForm(formId: string): Promise<void>;
-  editVersion(versionId: string): Promise<void>;
-  startNewForm(): void;
-  addQuestion(): void;
-  setPrompt(index: number, prompt: string): void;
-  setTitle(title: string): void;
-  validation(): { isValid: boolean };
-  startRename(): void;
-  deriveDraft(sourceVersionId: string): Promise<void>;
-  publish(versionId: string, version: number): Promise<void>;
-}
-
-async function render(api: Partial<ApiClient> = {}) {
-  await TestBed.configureTestingModule({
-    imports: [CheckInForms],
-    providers: [
-      provideRouter([]),
-      {
-        provide: ApiClient,
-        useValue: {
-          listCheckInForms: vi.fn(() =>
-            of({ total: 1, items: [details(version('v1', 1, 'Draft')).form] }),
-          ),
-          ...api,
-        },
-      },
-      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
-      { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
-    ],
-  }).compileComponents();
-
-  const fixture = TestBed.createComponent(CheckInForms);
-  await settle(fixture);
-  return {
-    fixture,
-    host: fixture.nativeElement as HTMLElement,
-    component: fixture.componentInstance as unknown as Harness,
-  };
-}
-
-/** Every button caption on screen, in order, so a test can assert on what is offered. */
-function captions(host: ParentNode): string[] {
-  return Array.from(host.querySelectorAll('button')).map((item) =>
-    (item.textContent ?? '').replace(/\s+/g, ' ').trim(),
-  );
-}
-
-describe('CheckInForms', () => {
-  afterEach(() => {
-    TestBed.resetTestingModule();
-  });
-
-  it('leaves an untouched form freely, but protects typed work on navigation and refresh', async () => {
-    const { fixture, host, component } = await render();
-    const open = vi
-      .spyOn(TestBed.inject(UiDialog), 'open')
-      .mockReturnValue({ closed: of(false) } as never);
-    component.startNewForm();
-    await settle(fixture);
-    expect(await component.canLeave()).toBe(true);
-    fill(host, 'Title', 'Weekly recovery');
-    await settle(fixture);
-    expect(await TestBed.inject(UnsavedWork).confirmLeave()).toBe(false);
-    expect(open).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ closeOnNavigation: false }),
-    );
-    expect(host.querySelector<HTMLInputElement>('#builder-title')?.value).toBe('Weekly recovery');
-    const refresh = new Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(refresh);
-    expect(refresh.defaultPrevented).toBe(true);
-    open.mockReturnValue({ closed: of(true) } as never);
-    expect(await component.canLeave()).toBe(true);
-  });
-
-  it('keeps a changed draft when another form is opened and the coach chooses Stay', async () => {
-    const getCheckInForm = vi.fn(() => of(details(version('v1', 1, 'Draft'))));
-    const { fixture, host, component } = await render({ getCheckInForm });
-    vi.spyOn(TestBed.inject(UiDialog), 'open').mockReturnValue({ closed: of(false) } as never);
-    component.startNewForm();
-    await settle(fixture);
-    fill(host, 'Title', 'Weekly recovery');
-    await settle(fixture);
-    await component.openForm('form-1');
-    expect(getCheckInForm).not.toHaveBeenCalled();
-    expect(host.querySelector<HTMLInputElement>('#builder-title')?.value).toBe('Weekly recovery');
-  });
-
-  it('treats an unchanged saved draft as clean and a changed question as unsaved work', async () => {
-    const draft = version('v1', 1, 'Draft');
-    const { component } = await render({
-      getCheckInForm: vi.fn(() => of(details(draft))),
-      getCheckInFormVersion: vi.fn(() => of(draft)),
-    });
-    vi.spyOn(TestBed.inject(UiDialog), 'open').mockReturnValue({ closed: of(false) } as never);
-    await component.openForm('form-1');
-    await component.editVersion('v1');
-    expect(await component.canLeave()).toBe(true);
-    component.setPrompt(0, 'How did you sleep?');
-    expect(await component.canLeave()).toBe(false);
-    component.setPrompt(0, 'How is your body feeling?');
-    expect(await component.canLeave()).toBe(true);
-  });
-
-  it('lists the library and asks for a selection first', async () => {
-    const { host } = await render();
-
-    expect(host.textContent).toContain('Weekly check-in');
-    expect(host.textContent).toContain('Select a form to see its versions');
-  });
-
-  for (const action of ['derive', 'publish'] as const) {
-    it(`asks once before ${action} discards an unsaved form title`, async () => {
-      const published = version('v1', 1, 'Published');
-      const draft = version('v2', 2, 'Draft');
-      const deriveCheckInDraft = vi.fn(() => of(draft));
-      const publishCheckInVersion = vi.fn(() => of(published));
-      const { fixture, host, component } = await render({
-        getCheckInForm: vi.fn(() =>
-          of(details(published, ...(action === 'publish' ? [draft] : []))),
-        ),
-        deriveCheckInDraft: deriveCheckInDraft as never,
-        publishCheckInVersion: publishCheckInVersion as never,
-      });
-      await component.openForm('form-1');
-      component.startRename();
-      await settle(fixture);
-      fill(host, 'Title', 'Unsaved title');
-      await settle(fixture);
-      const open = vi
-        .spyOn(TestBed.inject(UiDialog), 'open')
-        .mockReturnValue({ closed: of(true) } as never);
-      if (action === 'derive') await component.deriveDraft('v1');
-      else await component.publish('v2', 3);
-      await settle(fixture);
-      expect(open).toHaveBeenCalledTimes(1);
-      expect(
-        action === 'derive' ? deriveCheckInDraft : publishCheckInVersion,
-      ).toHaveBeenCalledTimes(1);
-      expect(host.querySelector('#rename-title')).toBeNull();
-      expect(await component.canLeave()).toBe(true);
-    });
-  }
-
-  it('offers publish on a draft and a new draft only from the latest published version', async () => {
-    const draft = version('v2', 2, 'Draft');
-    const published = version('v1', 1, 'Published');
-    const { fixture, host, component } = await render({
-      getCheckInForm: vi.fn(() => of(details(published, draft))),
-    });
-
-    await component.openForm('form-1');
-    fixture.detectChanges();
-
-    const text = host.textContent ?? '';
-    expect(text).toContain('Publish');
-    // A draft is already open, so deriving another is not offered: only one may exist.
-    expect(text).not.toContain('New draft from this');
-
-    expect(text).toContain('Publishing freezes a version permanently');
-  });
-
-  /**
-   * An archived lineage is closed server-side: saving a draft, publishing, deriving and assigning
-   * are all refused. The screen must not offer an action it knows will be refused — that is a dead
-   * control with an error message behind it, which is the defect this pass is closing elsewhere.
-   */
-  it('offers no editing action on an archived form', async () => {
-    const draft = version('v2', 2, 'Draft');
-    const published = version('v1', 1, 'Published');
-    const { fixture, host, component } = await render({
-      getCheckInForm: vi.fn(() => of(archivedDetails(true, published, draft))),
-      getCheckInFormVersion: vi.fn((_formId, versionId) =>
-        of(versionId === draft.id ? draft : published),
-      ) as never,
-      restoreCheckInForm: vi.fn(() => of(details(published, draft))) as never,
-    });
-
-    await component.openForm('form-1');
-    await settle(fixture);
-
-    expect(host.textContent).toContain('This form is archived.');
-    // Asserted on the controls themselves: the standing hint about publishing is prose that stays
-    // whatever the lineage's state, and a text search would match it and pass for the wrong reason.
-    expect(captions(host)).toEqual(['New form', 'Weekly check-in', 'Restore', 'View', 'View']);
-
-    // The second View is the archived draft. It is readable, but its draft status must not reopen
-    // editing while the lineage is archived.
-    const viewButtons = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(
-      (button) => button.textContent?.trim() === 'View',
-    );
-    viewButtons[1].click();
-    await settle(fixture);
-
-    expect(host.textContent).toContain('Version 2 (read-only)');
-    expect(
-      [
-        ...host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-          '.builder-form input, .builder-form textarea, .builder-form select',
-        ),
-      ].every((control) => control.disabled),
-    ).toBe(true);
-    expect(captions(host)).not.toContain('Save draft');
-    expect(captions(host)).not.toContain('Add question');
-
-    press(host, 'Close');
-    press(host, 'Restore');
-    await settle(fixture);
-    await component.editVersion(draft.id);
-    await settle(fixture);
-
-    expect(host.textContent).toContain('Editing draft version 2');
-    expect(
-      [
-        ...host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-          '.builder-form input, .builder-form textarea, .builder-form select',
-        ),
-      ].every((control) => !control.disabled),
-    ).toBe(true);
-    expect(captions(host)).toContain('Save draft');
-  });
-
-  it('archives through the API and reflects the closed lineage', async () => {
-    const published = version('v1', 1, 'Published');
-    const archiveCheckInForm = vi.fn(() => of(archivedDetails(true, published)));
-    const { fixture, host, component } = await render({
-      getCheckInForm: vi.fn(() => of(details(published))),
-      archiveCheckInForm: archiveCheckInForm as never,
-    });
-
-    await component.openForm('form-1');
-    await settle(fixture);
-
-    press(host, 'Archive');
-    await settle(fixture);
-
-    expect(archiveCheckInForm).toHaveBeenCalledWith('form-1', 2);
-    expect(host.textContent).toContain('This form is archived.');
-    expect(host.textContent).not.toContain('New draft from this');
-  });
-
-  /**
-   * The title and description belong to the lineage, so they are saved against the form's own
-   * concurrency token through the rename operation, not folded into a draft save that carries the
-   * version's token.
-   */
-  it('persists an edited title and description through the rename operation', async () => {
-    const published = version('v1', 1, 'Published');
-    const renamed = details(published);
-    renamed.form.title = 'Fortnightly check-in';
-    renamed.form.description = 'Every other Monday.';
-    const renameCheckInForm = vi.fn(() => of(renamed));
-    const { fixture, host, component } = await render({
-      getCheckInForm: vi.fn(() => of(details(published))),
-      renameCheckInForm: renameCheckInForm as never,
-    });
-
-    await component.openForm('form-1');
-    await settle(fixture);
-
-    press(host, 'Edit details');
-    await settle(fixture);
-
-    fill(host, 'Title', 'Fortnightly check-in');
-    fill(host, 'Description', 'Every other Monday.');
-    await settle(fixture);
-
-    press(host, 'Save details');
-    await settle(fixture);
-
-    expect(renameCheckInForm).toHaveBeenCalledWith('form-1', {
-      title: 'Fortnightly check-in',
-      description: 'Every other Monday.',
-      version: 2,
-    });
-    // And the saved values are what the screen shows afterwards.
-    expect(host.textContent).toContain('Fortnightly check-in');
-    expect(host.textContent).toContain('Every other Monday.');
-  });
-
-  it('offers a new draft once the lineage has no open draft', async () => {
-    const published = version('v1', 1, 'Published');
-    const { fixture, host, component } = await render({
-      getCheckInForm: vi.fn(() => of(details(published))),
-    });
-
-    await component.openForm('form-1');
-    await settle(fixture);
-
-    expect(host.textContent).toContain('New draft from this');
-  });
-
-  it('renders a published version read-only, with no save and no editable prompt', async () => {
-    const published = version('v1', 1, 'Published');
-    const { fixture, host, component } = await render({
-      getCheckInForm: vi.fn(() => of(details(published))),
-      getCheckInFormVersion: vi.fn(() => of(published)),
-    });
-
-    await component.openForm('form-1');
-    await component.editVersion('v1');
-    await settle(fixture);
-
-    expect(host.textContent).toContain('Version 1 (read-only)');
-    expect(host.textContent).toContain('This version is read-only.');
-    expect(host.querySelector('button[type="submit"]')).toBeNull();
-    expect(host.querySelector<HTMLInputElement>('input[type="text"]')?.disabled).toBe(true);
-  });
-
-  it('keeps a draft editable and blocks saving until it is valid', async () => {
-    const draft = version('v2', 2, 'Draft');
-    const { fixture, host, component } = await render({
-      getCheckInForm: vi.fn(() => of(details(draft))),
-      getCheckInFormVersion: vi.fn(() => of(draft)),
-    });
-
-    await component.openForm('form-1');
-    await component.editVersion('v2');
-    await settle(fixture);
-
-    expect(component.validation().isValid).toBe(true);
-    // The button stays operable throughout: it is the attempt that gets refused, not the control
-    // that goes mute. Only an in-flight request disables it.
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
-
-    // A question without a prompt is not saveable.
-    component.addQuestion();
-    await settle(fixture);
-    expect(component.validation().isValid).toBe(false);
-    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
-
-    component.setPrompt(1, 'Anything else?');
-    await settle(fixture);
-    expect(component.validation().isValid).toBe(true);
-  });
-
-  it('requires a title on a brand new form', async () => {
-    const { fixture, component } = await render();
-
-    component.startNewForm();
-    component.setPrompt(0, 'How is your body feeling?');
-    await settle(fixture);
-    expect(component.validation().isValid).toBe(false);
-
-    component.setTitle('Weekly check-in');
-    await settle(fixture);
-    expect(component.validation().isValid).toBe(true);
-  });
+const page = (items: CheckInFormSummary[], total = items.length): CheckInFormPage => ({
+  items,
+  total,
 });
 
-/** The reason rendered against one control, found by the id that control points at. */
-function reasonAt(host: HTMLElement, id: string): string {
-  return (host.querySelector(`#${id}-error`)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+async function render(list: (skip: number) => Observable<CheckInFormPage>) {
+  const api = { listCheckInForms: vi.fn((skip = 0) => list(skip)) };
+  TestBed.configureTestingModule({
+    providers: [
+      provideRouter([{ path: 'checkins/forms', component: CheckInForms }]),
+      { provide: ApiClient, useValue: api },
+      { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      {
+        // Beirut's clock: 22:30 UTC on the 21st is the 22nd in the workspace.
+        provide: WorkspaceCalendar,
+        useValue: {
+          today: signal('2026-10-22'),
+          timeZone: signal('Asia/Beirut'),
+          resolveToday: () => Promise.resolve('2026-10-22'),
+        },
+      },
+    ],
+  });
+  const harness = await RouterTestingHarness.create();
+  await harness.navigateByUrl('/checkins/forms', CheckInForms);
+  await settle(harness.fixture);
+  return { harness, host: harness.routeNativeElement as HTMLElement, api };
 }
 
-/**
- * The id of the nth question's prompt input, so a question can be addressed without knowing its
- * local key. Addressed by id rather than by name because `[name]` on an `ngModel` control binds the
- * directive's own input and never reaches the DOM at all.
- */
-function questionId(host: HTMLElement, index: number): string {
-  return Array.from(host.querySelectorAll<HTMLInputElement>('input[id^="q-"]'))[index].id;
-}
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-/**
- * The builder under the ratified validation convention. Two of the four in-scope sites live here:
- * the form-level reasons above the question list, and the per-question reasons under each question.
- */
-describe('CheckInForms validation display', () => {
-  afterEach(() => {
-    TestBed.resetTestingModule();
+const cardParts = (cards: ParentNode) =>
+  Array.from(cards.querySelectorAll('.card')).map((card) =>
+    [
+      'app-status-pill',
+      '.count',
+      '.card-name',
+      '.card-description',
+      '.note',
+      '.card-meta > span:last-child',
+    ].map((part) => textOf(card.querySelector(part))),
+  );
+
+describe('Check-in forms (audit A14b)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('shows each form as a card that opens it, archived ones folded away', async () => {
+    const { host } = await render(() =>
+      of(
+        page([
+          form(),
+          form({
+            id: 'form-2',
+            title: 'Monthly review',
+            description: null,
+            ...DRAFT,
+            questionCount: 3,
+          }),
+          form({ id: 'form-3', title: 'Old intake', isArchived: true }),
+          form({ id: 'form-4', title: 'Recovery', draftVersionId: 'version-5', questionCount: 4 }),
+        ]),
+      ),
+    );
+
+    expect(textOf(host.querySelector('h1'))).toBe('Check-in forms');
+    expect(textOf(host.querySelector('.lede'))).toBe(
+      '3 forms, 2 ready to assign. Write the questions once, then assign the form from a client’s Check-ins tab.',
+    );
+    expect(cardParts(host.querySelector('.forms > .cards')!)).toEqual([
+      [
+        'Ready to assign',
+        '6 questions',
+        'Weekly check-in',
+        'Takes two minutes.',
+        '',
+        'Published Thu 22 Oct',
+      ],
+      ['Draft', '3 questions', 'Monthly review', '', '', 'Publish it to assign it to clients'],
+      [
+        'Ready to assign',
+        '4 questions',
+        'Recovery',
+        'Takes two minutes.',
+        'Changes not published yet',
+        'Published Thu 22 Oct',
+      ],
+    ]);
+    // The whole card is one link, named by the form, to the form's own page.
+    expect(
+      Array.from(host.querySelectorAll<HTMLAnchorElement>('.forms > .cards a.stretched')).map(
+        (link) => [textOf(link), link.getAttribute('href')],
+      ),
+    ).toEqual([
+      ['Weekly check-in', '/checkins/forms/form-1'],
+      ['Monthly review', '/checkins/forms/form-2'],
+      ['Recovery', '/checkins/forms/form-4'],
+    ]);
+    const archived = host.querySelector<HTMLDetailsElement>('details.archived')!;
+    expect(archived.open).toBe(false);
+    expect(textOf(archived.querySelector('summary'))).toBe('Archived (1)');
+    expect(cardParts(archived)).toEqual([
+      ['Archived', '6 questions', 'Old intake', 'Takes two minutes.', '', 'Published Thu 22 Oct'],
+    ]);
+    // New form is the page's one action.
+    expect(host.querySelector('a[href="/checkins/forms/new"]')?.textContent).toContain('New form');
   });
 
-  async function newForm() {
-    const rendered = await render();
-    rendered.component.startNewForm();
-    await settleDom(rendered.fixture);
-    return rendered;
-  }
+  it('invites an empty library to start from a weekly check-in', async () => {
+    const { host } = await render(() => of(page([])));
 
-  it('announces nothing and shows no reason on a form nobody has touched', async () => {
-    const { host } = await newForm();
-
-    expect(announced(host)).toBe('');
-    expect(host.textContent).not.toContain('A title is required.');
-    expect(host.textContent).not.toContain('A question needs a prompt.');
+    expect(textOf(host.querySelector('app-empty-state h2'))).toBe('No check-in forms yet');
+    expect(textOf(host.querySelector('app-empty-state p'))).toContain(
+      'Start from a weekly check-in, change any word you like, then assign it from a client’s Check-ins tab.',
+    );
+    const start = host.querySelector<HTMLAnchorElement>('app-empty-state a')!;
+    expect([textOf(start), start.getAttribute('href')]).toEqual([
+      'Start with a weekly check-in',
+      '/checkins/forms/new?start=weekly',
+    ]);
+    expect(textOf(host.querySelector('.lede'))).toBe(
+      'Write the questions once, then assign the form from a client’s Check-ins tab.',
+    );
   });
 
-  it('reveals the title’s reason when the title is left, and only the title’s', async () => {
-    const { fixture, host } = await newForm();
+  it('says every form is archived rather than inviting a first one', async () => {
+    const { host } = await render(() => of(page([form({ isArchived: true })])));
 
-    leave(host, 'Title');
-    await settleDom(fixture);
-
-    expect(reasonAt(host, 'builder-title')).toContain('A title is required.');
-    expect(host.textContent).not.toContain('A question needs a prompt.');
-    expect(announced(host)).toBe('');
+    expect(host.querySelector('app-empty-state')).toBeNull();
+    expect(textOf(host.querySelector('.all-archived'))).toBe(
+      'Every form is archived. Write a new one, or open an archived form below to restore it.',
+    );
+    expect(host.querySelector('details.archived')).not.toBeNull();
   });
 
-  it('reveals one question’s reason when that question is left, and not its neighbour’s', async () => {
-    const { fixture, host } = await newForm();
+  it('says the forms could not be loaded, and reads them again on Try again', async () => {
+    let reads = 0;
+    const { host, harness, api } = await render(() =>
+      ++reads === 1 ? throwError(() => new HttpErrorResponse({ status: 500 })) : of(page([form()])),
+    );
 
-    press(host, 'Add question');
-    await settleDom(fixture);
+    expect(textOf(host.querySelector('[role="alert"]'))).toBe(
+      'Your check-in forms could not be loaded.',
+    );
+    press(host, 'Try again');
+    await settle(harness.fixture);
 
-    const first = questionId(host, 0);
-    const second = questionId(host, 1);
-    leaveAt(host, `#${first}`);
-    await settleDom(fixture);
-
-    expect(reasonAt(host, first)).toContain('A question needs a prompt.');
-    expect(reasonAt(host, second)).toBe('');
-    expect(announced(host)).toBe('');
+    expect(api.listCheckInForms).toHaveBeenCalledTimes(2);
+    expect(cardParts(host.querySelector('.forms > .cards')!).length).toBe(1);
   });
 
-  it('names every outstanding reason at once when a blocked submit is attempted', async () => {
-    const { fixture, host } = await newForm();
+  it('shows more forms past the first page, never one twice', async () => {
+    const first = Array.from({ length: 100 }, (_, index) =>
+      form({ id: `form-${index}`, title: `Form ${String(index).padStart(3, '0')}` }),
+    );
+    const { host, harness, api } = await render((skip) =>
+      skip === 0
+        ? of(page(first, 102))
+        : of(page([first[99], form({ id: 'form-100' }), form({ id: 'form-101' })], 102)),
+    );
 
-    press(host, 'Save draft');
-    await settleDom(fixture);
+    // Part of a long library says no count yet: the server's total counts archived forms too.
+    expect(textOf(host.querySelector('.lede'))).toBe(
+      'Write the questions once, then assign the form from a client’s Check-ins tab.',
+    );
+    press(host, 'Show more forms');
+    await settle(harness.fixture);
 
-    const summary = announced(host);
-    expect(summary).toContain('A title is required.');
-    expect(summary).toContain('A question needs a prompt.');
-    expect(reasonAt(host, 'builder-title')).toContain('A title is required.');
-    expect(reasonAt(host, questionId(host, 0))).toContain('A question needs a prompt.');
+    expect(api.listCheckInForms).toHaveBeenLastCalledWith(100, 100);
+    expect(host.querySelectorAll('.forms > .cards .card').length).toBe(102);
+    expect(
+      Array.from(host.querySelectorAll('button')).some((button) =>
+        /Show more/.test(button.textContent ?? ''),
+      ),
+    ).toBe(false);
+    // Show more went with the last page: focus moved to the first form it brought.
+    expect(document.activeElement?.getAttribute('href')).toBe('/checkins/forms/form-100');
+    expect(textOf(host.querySelector('.lede'))).toContain('102 forms, 102 ready to assign.');
   });
 
-  it('clears a corrected field’s reason and leaves the question’s standing', async () => {
-    const { fixture, host } = await newForm();
+  it('pages by the rows the server sent, so a form renamed between reads never stalls Show more', async () => {
+    const first = Array.from({ length: 100 }, (_, index) =>
+      form({ id: `form-${index}`, title: `Form ${String(index).padStart(3, '0')}` }),
+    );
+    // A teammate created a form sorting first: the second page starts with a row already shown.
+    const { host, harness, api } = await render((skip) =>
+      skip === 0 ? of(page(first, 102)) : of(page([first[99], form({ id: 'form-101' })], 102)),
+    );
 
-    press(host, 'Save draft');
-    await settleDom(fixture);
+    press(host, 'Show more forms');
+    await settle(harness.fixture);
 
-    fill(host, 'Title', 'Weekly check-in');
-    await settleDom(fixture);
-
-    expect(reasonAt(host, 'builder-title')).toBe('');
-    expect(reasonAt(host, questionId(host, 0))).toContain('A question needs a prompt.');
+    expect(api.listCheckInForms).toHaveBeenCalledTimes(2);
+    expect(host.querySelectorAll('.forms > .cards .card').length).toBe(101);
+    expect(
+      Array.from(host.querySelectorAll('button')).some((button) =>
+        /Show more/.test(button.textContent ?? ''),
+      ),
+    ).toBe(false);
   });
 
-  it('carries aria-invalid and aria-describedby exactly while the reason is showing', async () => {
-    const { fixture, host } = await newForm();
-    const control = () => query<HTMLInputElement>(host, 'input[name="title"]');
+  it('says every form is archived only once every page is read', async () => {
+    const archived = Array.from({ length: 100 }, (_, index) =>
+      form({ id: `form-${index}`, title: `Archived ${index}`, isArchived: true }),
+    );
+    const { host, harness } = await render((skip) =>
+      skip === 0 ? of(page(archived, 101)) : of(page([form({ id: 'form-active' })], 101)),
+    );
 
-    expect(control().getAttribute('aria-invalid')).toBeNull();
-    expect(control().getAttribute('aria-describedby')).toBeNull();
-
-    leave(host, 'Title');
-    await settleDom(fixture);
-
-    expect(control().getAttribute('aria-invalid')).toBe('true');
-    expect(control().getAttribute('aria-describedby')).toBe('builder-title-error');
-
-    fill(host, 'Title', 'Weekly check-in');
-    await settleDom(fixture);
-
-    expect(control().getAttribute('aria-invalid')).toBeNull();
-    expect(control().getAttribute('aria-describedby')).toBeNull();
-  });
-
-  it('keeps the submit control operable while the draft is invalid', async () => {
-    const { host } = await newForm();
-    const submit = query<HTMLButtonElement>(host, 'form.builder-form button[type="submit"]');
-
-    expect(submit.disabled).toBe(false);
-    expect(submit.getAttribute('aria-describedby')).toBe('builder-summary');
-  });
-
-  it('moves focus to the summary when a save is refused', async () => {
-    const { fixture, host } = await newForm();
-
-    press(host, 'Save draft');
-    await settleDom(fixture);
-
-    expect(focusedId()).toBe('builder-summary');
-  });
-
-  it('does not reach the API when a refused save is attempted', async () => {
-    const createCheckInForm = vi.fn(() => of(details(version('v1', 1, 'Draft'))));
-    const { fixture, host, component } = await render({
-      createCheckInForm: createCheckInForm as never,
-    });
-    component.startNewForm();
-    await settleDom(fixture);
-
-    press(host, 'Save draft');
-    await settleDom(fixture);
-
-    expect(createCheckInForm).not.toHaveBeenCalled();
-    expect(announced(host)).toContain('A title is required.');
+    expect(host.querySelector('.all-archived')).toBeNull();
+    press(host, 'Show more forms');
+    await settle(harness.fixture);
+    expect(host.querySelectorAll('.forms > .cards .card').length).toBe(1);
+    expect(host.querySelector('.all-archived')).toBeNull();
   });
 });

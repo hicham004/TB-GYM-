@@ -59,7 +59,9 @@ export const clientRoutes: Routes = [
         loadComponent: () => sections().then((module) => module.ClientNutritionSection),
       },
       {
+        // Assign a check-in opens a sheet here (audit A14b): leaving with something chosen asks first.
         path: 'checkins',
+        canDeactivate: [confirmSheetLeave],
         title: $localize`Client check-ins | TB Gym`,
         data: REDESIGNED,
         loadComponent: () => import('./client-checkins').then((module) => module.ClientCheckIns),

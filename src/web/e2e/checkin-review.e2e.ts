@@ -10,6 +10,7 @@ import {
   REVIEW_CLIENT_ID,
 } from '../src/testing/checkin-review-fixtures';
 import { COACH_NOW, LEA_ID } from '../src/testing/coach-today-fixtures';
+import { chooseDay, kitDateField, kitSelect } from './kit-controls';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -401,6 +402,85 @@ for (const width of [390, 1440]) {
 
     await expectNoHorizontalOverflow(page);
     await expect(page.getByRole('button', { name: 'Mark reviewed' })).toBeVisible();
+  });
+}
+
+/** The published form the coach's library holds, for the Assign sheet (audit A14b). */
+const readyForm = {
+  id: 'form-1',
+  title: 'Weekly check-in',
+  description: 'Takes two minutes.',
+  status: 'Published',
+  isArchived: false,
+  currentVersionNumber: 2,
+  draftVersionId: null,
+  latestPublishedVersionId: 'version-2',
+  latestPublishedVersionNumber: 2,
+  questionCount: 6,
+  latestPublishedAtUtc: '2026-09-14T09:00:00Z',
+  version: 3,
+};
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`a check-in is assigned from a sheet on the client’s Check-ins at ${width}px`, async ({
+    page,
+  }) => {
+    const sent: unknown[] = [];
+    await openReview(page, width, height, {
+      path: `/clients/${ID}/checkins`,
+      extra: {
+        'GET /api/checkins/forms': (route) =>
+          json(route, 200, {
+            total: 2,
+            items: [
+              readyForm,
+              {
+                ...readyForm,
+                id: 'form-2',
+                title: 'Monthly review',
+                status: 'Draft',
+                latestPublishedVersionId: null,
+                latestPublishedVersionNumber: null,
+                latestPublishedAtUtc: null,
+                draftVersionId: 'version-9',
+              },
+            ],
+          }),
+        [`POST /api/checkins/clients/${ID}/assignments`]: (route) => {
+          sent.push(route.request().postDataJSON());
+          return json(route, 200, { assignment: { id: 'assignment-new' }, version: {} });
+        },
+      },
+    });
+
+    await page.getByRole('button', { name: 'Assign a check-in' }).first().click();
+    const sheet = page.getByRole('dialog', { name: 'Assign a check-in to Maya' });
+    await expect(sheet).toBeVisible();
+    // The only published form is chosen for the coach; the draft is not offered.
+    await expect(kitSelect(sheet, 'Check-in form').locator('.value')).toHaveText('Weekly check-in');
+    await kitSelect(sheet, 'Check-in form').locator('button.trigger').click();
+    await expect(sheet.locator('[role="option"] .option-label')).toHaveText(['Weekly check-in']);
+    await expect(sheet.locator('[role="option"] .option-hint')).toHaveText([
+      '6 questions · published Mon 14 Sep',
+    ]);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeVisible();
+    // No picker the browser draws, anywhere in the sheet.
+    await expect(sheet.locator('select, input[type="date"]')).toHaveCount(0);
+    await kitDateField(sheet, 'Due').locator('button.trigger').click();
+    await axe(page);
+    await chooseDay(sheet, 'Due', '2026-10-05');
+    await expect(kitDateField(sheet, 'Due').locator('.value')).toHaveText('Mon, Oct 5, 2026');
+    await page.screenshot({ path: `test-results/a14b-assign-${width}.png` });
+
+    await sheet.getByRole('button', { name: 'Assign check-in' }).click();
+    await expect(sheet).toBeHidden();
+    expect(sent).toEqual([{ formVersionId: 'version-2', dueDate: '2026-10-05' }]);
+    await expect(page.getByText('Check-in assigned. Maya finds it under Check-ins.')).toBeVisible();
+    await axe(page);
   });
 }
 

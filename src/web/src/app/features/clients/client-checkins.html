@@ -7,15 +7,10 @@
         <h2 i18n>Check-ins</h2>
         <p class="muted" i18n>Answers come in here. Open one to read it beside the last.</p>
       </div>
-      @if (state() !== 'denied') {
-        <a
-          appButton
-          variant="outlined"
-          routerLink="/checkins/clients"
-          [queryParams]="assignParams()"
-          i18n
-          >Assign a check-in</a
-        >
+      @if (canAssign()) {
+        <button #headAssign appButton type="button" variant="outlined" (click)="assign()" i18n>
+          Assign a check-in
+        </button>
       }
     </header>
 
@@ -59,14 +54,9 @@
               i18n-heading
               [description]="emptyDescription()"
             >
-              <a
-                empty-state-action
-                appButton
-                routerLink="/checkins/clients"
-                [queryParams]="assignParams()"
-                i18n
-                >Assign a check-in</a
-              >
+              <button empty-state-action appButton type="button" (click)="assign()" i18n>
+                Assign a check-in
+              </button>
             </app-empty-state>
           </section>
         } @else if (groups(); as group) {
@@ -160,4 +150,30 @@
       </li>
     }
   </ul>
+</ng-template>
+
+<ng-template #assignSheet let-sheet>
+  <app-assign-checkin
+    [clientId]="context.clientId()"
+    [firstName]="firstName()"
+    [today]="today()"
+    [firstDay]="firstDay()"
+    [locale]="locale"
+    [timeZone]="timeZone()"
+    (dirtyChange)="dirty = $event"
+    (write)="writeForm($event, sheet)"
+    (denied)="closedWhileOpen($event, sheet)"
+    (closed)="assigned($event, sheet)"
+  />
+</ng-template>
+
+<ng-template #confirmTemplate let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
 </ng-template>

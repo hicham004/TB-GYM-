@@ -1,10 +1,12 @@
+import { chooseDay, chooseOption } from '../kit-controls';
 import { ACCOUNTS, api, expect, memberships, requireLive, LIVE_URL, signIn, test } from './support';
 
 /**
- * A check-in end to end: Lea publishes a new form (unique title, so a rerun never collides), assigns it to
- * Nour due today, Nour answers it on a phone and sends it, and Lea reviews it from Nour's record. The
- * server rules proved on the way: a due date before today is refused (ADR 0017), a submitted check-in
- * moves Draft -> Submitted -> Reviewed one way and a second review is refused (CHK-005, CHK-009).
+ * A check-in end to end: Lea writes and publishes a new form on its own page (unique title, so a rerun
+ * never collides), assigns it to Nour due today from Nour's Check-ins tab (audit A14b), Nour answers it on
+ * a phone and sends it, and Lea reviews it from Nour's record. The server rules proved on the way: a due
+ * date before today is refused (ADR 0017), a submitted check-in moves Draft -> Submitted -> Reviewed one
+ * way and a second review is refused (CHK-005, CHK-009).
  */
 requireLive();
 
@@ -77,56 +79,59 @@ test.describe('check-in review live', () => {
     expect(client, 'Nour Hamdan is one of Lea’s demo clients').toBeDefined();
     const clientId = client!.id;
 
-    // The form: a short answer and a 1-10 scale in steps of 1, published straight away.
-    const created = await api<FormDetail>(lea, 'POST', '/api/checkins/forms', {
+    // The form, written on its own page (audit A14b): a short answer and a 1-10 scale, published.
+    await lea.goto('/checkins/forms/new');
+    await lea.getByLabel('Name', { exact: true }).fill(title);
+    await lea.getByLabel('Description (optional)').fill('Made by the live check-in spec.');
+    const first = lea.locator('.question').first();
+    await first.getByLabel('Question', { exact: true }).fill('How did training feel this week?');
+    await lea.getByRole('button', { name: 'Add a question' }).click();
+    const second = lea.locator('.question').nth(1);
+    await second.getByLabel('Question', { exact: true }).fill('Energy, 1 to 10');
+    await chooseOption(second, 'Kind of answer', 'Number scale');
+    await expect(second.getByLabel('Highest')).toHaveValue('10');
+    await lea.getByRole('button', { name: 'Publish', exact: true }).click();
+    await expect(lea).toHaveURL(/\/checkins\/forms\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expect(lea.getByRole('button', { name: 'Change the questions' })).toBeVisible({
+      timeout: 20_000,
+    });
+    const formId = new URL(lea.url()).pathname.split('/').pop()!;
+    const created = await api<FormDetail>(lea, 'GET', `/api/checkins/forms/${formId}`, {
       tenantId,
-      body: {
-        title,
-        description: 'Made by the live check-in spec.',
-        questions: [
-          {
-            questionType: 'ShortText',
-            prompt: 'How did training feel this week?',
-            isRequired: true,
-          },
-          {
-            questionType: 'NumericScale',
-            prompt: 'Energy, 1 to 10',
-            isRequired: true,
-            scaleMinimum: 1,
-            scaleMaximum: 10,
-            scaleStep: 1,
-          },
-        ],
-      },
     });
     expect(created.status, JSON.stringify(created.body)).toBe(200);
-    const formId = created.body.form.id;
-    const draft = created.body.versions.find((version) => version.status === 'Draft')!;
-    const published = await api<FormVersionView>(
-      lea,
-      'POST',
-      `/api/checkins/forms/${formId}/versions/${draft.id}/publish`,
-      { tenantId, body: { version: draft.version } },
-    );
-    expect(published.status, JSON.stringify(published.body)).toBe(200);
-    expect(published.body.status).toBe('Published');
-    const formVersionId = published.body.id;
+    const published = created.body.versions.find((version) => version.status === 'Published');
+    expect(published, 'the form was published').toBeDefined();
+    const formVersionId = published!.id;
 
-    // A due date before today is refused; today is accepted.
+    // A due date before today is refused by the server; the sheet never offers one.
     const past = await api(lea, 'POST', `/api/checkins/clients/${clientId}/assignments`, {
       tenantId,
       body: { formVersionId, dueDate: daysAgo(today, 1) },
     });
     expect(past.status).toBe(400);
-    const assigned = await api<{ assignment: { id: string } }>(
+
+    // Lea assigns it from Nour's Check-ins tab, due today (audit A14b).
+    await lea.goto(`/clients/${clientId}/checkins`);
+    await lea.getByRole('button', { name: 'Assign a check-in' }).first().click();
+    const sheet = lea.getByRole('dialog', { name: 'Assign a check-in to Nour' });
+    await expect(sheet).toBeVisible();
+    await chooseOption(sheet, 'Check-in form', title);
+    await chooseDay(sheet, 'Due', today);
+    await sheet.getByRole('button', { name: 'Assign check-in' }).click();
+    await expect(sheet).toBeHidden({ timeout: 20_000 });
+    await expect(lea.locator('section[aria-labelledby="open-heading"]')).toContainText(title, {
+      timeout: 20_000,
+    });
+    const listed = await api<{ items: { assignment: { id: string; formTitle: string } }[] }>(
       lea,
-      'POST',
+      'GET',
       `/api/checkins/clients/${clientId}/assignments`,
-      { tenantId, body: { formVersionId, dueDate: today } },
+      { tenantId },
     );
-    expect(assigned.status, JSON.stringify(assigned.body)).toBe(200);
-    const assignmentId = assigned.body.assignment.id;
+    expect(listed.status).toBe(200);
+    const assignmentId = listed.body.items.find((item) => item.assignment.formTitle === title)!
+      .assignment.id;
 
     // Nour answers it on her phone and sends it.
     await signIn(nour, ACCOUNTS.nour);

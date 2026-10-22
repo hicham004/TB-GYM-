@@ -1,0 +1,454 @@
+<div class="page">
+  <a class="back" routerLink="/checkins/forms">
+    <app-icon class="back-icon" name="chevron-right" />
+    <span i18n>All check-in forms</span>
+  </a>
+
+  @switch (state()) {
+    @case ('loading') {
+      <h1 class="tb-visually-hidden" #heading tabindex="-1">{{ pageTitle() }}</h1>
+      <div class="card pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('missing') {
+      <div class="card pad stack">
+        <h1 class="missing-title" #heading tabindex="-1" i18n>This check-in form isn’t here</h1>
+        <p i18n>
+          It may have been opened from an old link, or it belongs to another coaching space.
+        </p>
+        <a appButton routerLink="/checkins/forms" i18n>Back to your check-in forms</a>
+      </div>
+    }
+    @case ('error') {
+      <div class="card pad load-failed">
+        <h1 class="tb-visually-hidden" #heading tabindex="-1">{{ pageTitle() }}</h1>
+        <p role="alert" i18n>The check-in form could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="retry()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      <header class="identity">
+        <div class="names">
+          <h1 #heading tabindex="-1" dir="auto">{{ pageTitle() }}</h1>
+          @if (!isNew() && details()?.form?.description; as description) {
+            <p class="description" dir="auto">{{ description }}</p>
+          }
+          <p class="standing">
+            @if (standing(); as standing) {
+              <app-status-pill [label]="standing.label" [tone]="standing.tone" />&ngsp;<span>{{
+                standing.note
+              }}</span>
+            } @else {
+              <app-status-pill label="New" i18n-label />&ngsp;<span i18n
+                >Clients aren’t sent it until you publish it.</span
+              >
+            }
+          </p>
+        </div>
+        <div class="actions">
+          @if (moreItems().length > 0) {
+            <!-- Closed while a change is being saved, so no sheet opens over a page about to change. -->
+            <app-menu
+              label="More for this form"
+              i18n-label
+              icon="more"
+              [items]="moreItems()"
+              [disabled]="busy() !== null"
+              (chosen)="chosen($event)"
+            />
+          }
+          @if (isArchived()) {
+            <button appButton type="button" [loading]="busy() === 'restore'" (click)="restore()">
+              @if (busy() === 'restore') {
+                <span i18n>Restoring…</span>
+              } @else {
+                <span i18n>Restore form</span>
+              }
+            </button>
+          } @else if (!editable()) {
+            <button
+              appButton
+              type="button"
+              [loading]="busy() === 'change'"
+              (click)="changeQuestions()"
+            >
+              @if (busy() === 'change') {
+                <span i18n>Opening…</span>
+              } @else {
+                <span i18n>Change the questions</span>
+              }
+            </button>
+          }
+        </div>
+      </header>
+
+      @if (problem(); as message) {
+        <div class="problem" role="alert">
+          <p>{{ message }}</p>
+          @if (stale()) {
+            <button appButton type="button" variant="outlined" (click)="reloadForm()" i18n>
+              Reload the form
+            </button>
+          }
+        </div>
+      }
+
+      @if (editable()) {
+        <!-- While a save is on its way the boxes wait; the bar's buttons keep focus and say so. -->
+        <div class="editor">
+          @if (isNew()) {
+            <section class="card" aria-labelledby="about-heading" [attr.inert]="busy() ? '' : null">
+              <h2 id="about-heading" class="card-title" i18n>About this form</h2>
+              <app-field
+                label="Name"
+                i18n-label
+                [errors]="due('title', validation().byField['title'])"
+              >
+                <input
+                  appControl
+                  id="form-title"
+                  type="text"
+                  autocomplete="off"
+                  dir="auto"
+                  placeholder="Weekly check-in"
+                  i18n-placeholder
+                  [attr.maxlength]="limits.titleLength"
+                  [value]="draft().title"
+                  (input)="setTitle($any($event.target).value)"
+                  (blur)="attempt.touch('title')"
+                />
+              </app-field>
+              <app-field
+                label="Description (optional)"
+                i18n-label
+                help="Clients read it above the first question."
+                i18n-help
+                [errors]="due('description', validation().byField['description'])"
+              >
+                <textarea
+                  appControl
+                  id="form-description"
+                  rows="2"
+                  dir="auto"
+                  [attr.maxlength]="limits.descriptionLength"
+                  [value]="draft().description"
+                  (input)="setDescription($any($event.target).value)"
+                  (blur)="attempt.touch('description')"
+                ></textarea>
+              </app-field>
+            </section>
+          }
+
+          <section
+            class="questions-part"
+            aria-labelledby="questions-heading"
+            [attr.inert]="busy() ? '' : null"
+          >
+            <h2 id="questions-heading" class="part-title">
+              <ng-container i18n>Questions</ng-container>&ngsp;<span class="count">{{
+                draft().questions.length
+              }}</span>
+            </h2>
+            <ol class="questions" role="list">
+              @for (question of draft().questions; track question.key; let index = $index) {
+                @let reasons = issues().get(question.key);
+                <li class="card question" [attr.aria-labelledby]="'q-head-' + question.key">
+                  <div class="question-head">
+                    <h3 class="question-number" [id]="'q-head-' + question.key" i18n>
+                      Question {{ index + 1 }}
+                    </h3>
+                    <app-menu
+                      [id]="'q-menu-' + question.key"
+                      label="More for question {{ index + 1 }}"
+                      i18n-label
+                      icon="more"
+                      [items]="questionMenu(index)"
+                      (chosen)="questionAction($event, index)"
+                    />
+                  </div>
+
+                  <app-field
+                    label="Question"
+                    i18n-label
+                    [errors]="due('prompt:' + question.key, reasons?.prompt)"
+                  >
+                    <input
+                      appControl
+                      type="text"
+                      autocomplete="off"
+                      dir="auto"
+                      [id]="'q-' + question.key"
+                      [attr.maxlength]="limits.promptLength"
+                      [value]="question.prompt"
+                      (input)="setPrompt(index, $any($event.target).value)"
+                      (blur)="attempt.touch('prompt:' + question.key)"
+                    />
+                  </app-field>
+
+                  <div class="question-row">
+                    <app-select
+                      class="kind"
+                      [label]="kindLabel"
+                      [options]="kinds"
+                      [value]="question.questionType"
+                      (valueChange)="changeQuestionType(index, $event)"
+                    />
+                    <app-checkbox label="An answer is needed" i18n-label class="required">
+                      <input
+                        appControl
+                        type="checkbox"
+                        [checked]="question.isRequired"
+                        (change)="setRequired(index, $any($event.target).checked)"
+                      />
+                    </app-checkbox>
+                  </div>
+
+                  @if (isChoice(question.questionType)) {
+                    <fieldset class="group">
+                      <legend i18n>Choices</legend>
+                      <ol class="choices" role="list">
+                        @for (option of question.options; track option.key; let choice = $index) {
+                          <li class="choice">
+                            <app-field
+                              label="Choice {{ choice + 1 }}"
+                              i18n-label
+                              [hideLabel]="true"
+                              [errors]="due('choice:' + option.key, reasons?.choice?.[option.key])"
+                            >
+                              <input
+                                appControl
+                                type="text"
+                                autocomplete="off"
+                                dir="auto"
+                                [id]="'choice-' + option.key"
+                                [attr.maxlength]="limits.optionLabelLength"
+                                [value]="option.label"
+                                (input)="setChoice(index, choice, $any($event.target).value)"
+                                (blur)="leaveChoice(question, option.key)"
+                              />
+                            </app-field>
+                            <button
+                              type="button"
+                              class="tb-icon-button remove"
+                              [attr.aria-label]="removeChoiceLabel(index, choice)"
+                              (click)="removeChoice(index, choice)"
+                            >
+                              <app-icon name="close" />
+                            </button>
+                          </li>
+                        }
+                      </ol>
+                      @if (due('choices:' + question.key, reasons?.choices); as messages) {
+                        <p class="reason" [id]="'choices-reason-' + question.key">
+                          @for (message of messages; track $index) {
+                            <span>{{ message }}</span>
+                          }
+                        </p>
+                      }
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        class="add-choice"
+                        [id]="'add-choice-' + question.key"
+                        [attr.aria-describedby]="
+                          due('choices:' + question.key, reasons?.choices)
+                            ? 'choices-reason-' + question.key
+                            : null
+                        "
+                        (click)="addChoice(index)"
+                      >
+                        <app-icon name="plus" />
+                        <span i18n>Add a choice</span>
+                      </button>
+                    </fieldset>
+                  }
+
+                  @if (question.questionType === 'NumericScale') {
+                    <fieldset class="group">
+                      <legend i18n>The scale</legend>
+                      <div class="scale">
+                        <app-field
+                          label="Lowest"
+                          i18n-label
+                          [errors]="due('lowest:' + question.key, reasons?.lowest)"
+                        >
+                          <!-- No inputmode: a phone's decimal pad has no minus key, and a scale may
+                               start below zero. ngModel keeps a "-" typed on the way to "-5". -->
+                          <input
+                            appControl
+                            type="number"
+                            [ngModel]="question.scaleMinimum"
+                            (ngModelChange)="setScale(index, 'scaleMinimum', $event)"
+                            (blur)="attempt.touch('lowest:' + question.key)"
+                          />
+                        </app-field>
+                        <app-field
+                          label="Highest"
+                          i18n-label
+                          [errors]="due('highest:' + question.key, reasons?.highest)"
+                        >
+                          <input
+                            appControl
+                            type="number"
+                            [ngModel]="question.scaleMaximum"
+                            (ngModelChange)="setScale(index, 'scaleMaximum', $event)"
+                            (blur)="attempt.touch('highest:' + question.key)"
+                          />
+                        </app-field>
+                        <app-field
+                          label="In steps of"
+                          i18n-label
+                          [errors]="due('step:' + question.key, reasons?.step)"
+                        >
+                          <input
+                            appControl
+                            type="number"
+                            inputmode="decimal"
+                            [ngModel]="question.scaleStep"
+                            (ngModelChange)="setScale(index, 'scaleStep', $event)"
+                            (blur)="attempt.touch('step:' + question.key)"
+                          />
+                        </app-field>
+                      </div>
+                    </fieldset>
+                  }
+
+                  <app-field
+                    label="Hint for your client (optional)"
+                    i18n-label
+                    [help]="hintHelp(question)"
+                    [errors]="due('hint:' + question.key, reasons?.hint)"
+                  >
+                    <input
+                      appControl
+                      type="text"
+                      autocomplete="off"
+                      dir="auto"
+                      [attr.maxlength]="limits.helpTextLength"
+                      [value]="question.helpText"
+                      (input)="setHint(index, $any($event.target).value)"
+                      (blur)="attempt.touch('hint:' + question.key)"
+                    />
+                  </app-field>
+                </li>
+              }
+            </ol>
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              id="add-question"
+              class="add-question"
+              (click)="addQuestion()"
+            >
+              <app-icon name="plus" />
+              <span i18n>Add a question</span>
+            </button>
+          </section>
+
+          <app-form-summary>
+            @if (error(); as message) {
+              {{ message }}
+            } @else if (attempt.wasTried() && !validation().isValid) {
+              @for (reason of unmarked(); track $index) {
+                <span class="summary-line">{{ reason }}</span>
+              }
+              @if (markedCount() > 0) {
+                <span class="summary-line" i18n>Check what is marked above.</span>
+              }
+            }
+          </app-form-summary>
+
+          @if (stale()) {
+            <div class="stale">
+              <button appButton type="button" variant="outlined" (click)="reloadForm()" i18n>
+                Reload the form
+              </button>
+            </div>
+          }
+
+          <!-- One place to save from, kept in view while a long form scrolls. -->
+          <div class="foot">
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="busy() === 'save'"
+              [disabled]="busy() === 'publish'"
+              (click)="saveDraft()"
+            >
+              @if (busy() === 'save') {
+                <span i18n>Saving…</span>
+              } @else {
+                <span i18n>Save as draft</span>
+              }
+            </button>
+            <button
+              appButton
+              type="button"
+              [loading]="busy() === 'publish'"
+              [disabled]="busy() === 'save'"
+              (click)="publish()"
+            >
+              @if (busy() === 'publish') {
+                <span i18n>Publishing…</span>
+              } @else {
+                {{ publishLabel() }}
+              }
+            </button>
+          </div>
+        </div>
+      } @else {
+        <section class="questions-part" aria-labelledby="questions-heading">
+          <h2 id="questions-heading" class="part-title">
+            <ng-container i18n>Questions</ng-container>&ngsp;<span class="count">{{
+              questionsRead().length
+            }}</span>
+          </h2>
+          <ol class="questions" role="list">
+            @for (question of questionsRead(); track question.id; let index = $index) {
+              <li class="card question read">
+                <p class="read-prompt" dir="auto">
+                  <span class="number">{{ index + 1 }}.</span>&ngsp;<span>{{
+                    question.prompt
+                  }}</span>
+                </p>
+                <p class="muted">{{ facts(question) }}</p>
+                @if (question.helpText) {
+                  <p class="muted hint" dir="auto">{{ question.helpText }}</p>
+                }
+                @if (question.options.length > 0) {
+                  <ul class="read-choices" role="list">
+                    @for (choice of choicesOf(question); track $index) {
+                      <li dir="auto">{{ choice }}</li>
+                    }
+                  </ul>
+                }
+              </li>
+            }
+          </ol>
+        </section>
+      }
+
+      @if (details(); as form) {
+        <app-checkin-form-sheets
+          [details]="form"
+          [clock]="clock()"
+          (renamed)="renamed($event)"
+          (stale)="renameStale()"
+        />
+      }
+    }
+  }
+</div>
+
+<ng-template #lossDialog let-dialog>
+  <app-confirm
+    [message]="question().message"
+    [confirmLabel]="question().confirm"
+    [cancelLabel]="question().cancel"
+    (answer)="dialog.close($event)"
+  />
+</ng-template>

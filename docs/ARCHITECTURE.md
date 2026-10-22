@@ -767,8 +767,8 @@ R5.3f removes the pre-foundation global classes and colour aliases. `npm run lin
 Angular's actual template and style metadata (including shared style constants) and rejects old
 colour names, unsupported former global classes and browser-default buttons; its fixtures test refusals.
 Since audit A14a it also rejects a picker the browser draws: a `<select>`, or an `<input>` of type date,
-time, datetime-local, month or week. The coach's two check-in pages are excepted by name until A14b
-rebuilds them.
+time, datetime-local, month or week. Since audit A14b rebuilt the coach's two check-in pages, no
+template is excused.
 Check-in drafts and exercise sheets join `UnsavedWork`; a sheet can keep itself open on Browser Back
 until its leave guard answers. `RouteHeadingFocus` supplies a heading focus fallback after navigation
 or a delayed read, preserves deliberate field/dialog focus, and leaves filters, anchors and router scroll alone.
@@ -1522,11 +1522,15 @@ answer. Comparison stores nothing, aligns by `QuestionKey`, carries each side's 
 reports a one-sided question explicitly rather than as an empty answer. No answer is interpreted:
 there is no score, rating, adherence measure or trend over check-in content.
 
-The Angular surface is three lazy routes under `/checkins`: the coach's form builder (`forms`), the
-coach's client view for assigning, reviewing and comparing (`clients`), and the client's own
-answering screen (`me`). The builder renders a published version read-only and offers a derived
-draft instead of an edit; the answering screen saves an incomplete draft freely and blocks only
-submission. Every rule it enforces is a duplicate of a server rule, never the only copy.
+The Angular surface under `/checkins` is the coach's form library (`forms`, cards since audit A14b),
+each form on its own page (`forms/:formId`, `forms/new`), and the client's own answering screen
+(`me`). A form's page renders the version clients are sent as read-only text and offers a derived
+draft ("Change the questions") instead of an edit; Publish saves what is typed first, each write on
+its own token, and the name and description are renamed in a sheet on the form's own token. The
+answering screen saves an incomplete draft freely and blocks only submission. Every rule the screens
+enforce is a duplicate of a server rule, never the only copy. The library's one read
+(`GET /api/checkins/forms`) carries each form's question count (the version clients are sent, else
+the draft) and when it was last published, for the cards and the assign sheet.
 
 A refused read is rendered from the `accessReason` the 403 carries, in the audience's own words,
 and it replaces the list it was refused rather than sitting above an empty one — a client who may
@@ -1551,8 +1555,9 @@ one; the screen marks a row whose two answers differ, as equality only (CHK-010)
 progress photos beside it come from the progress dashboard for the 12 weeks up to the day it was
 sent, shown by their own dates because no file belongs to a check-in (ADR 0016). The reply is an
 ordinary message in the coach's conversation with the client, sent before the review when both are
-asked. `/checkins/clients` keeps assigning, and its older way to read and compare, until assigning
-moves into the record.
+asked. Since audit A14b assigning is in the record too: Assign a check-in on that list opens a sheet
+(a published form and a due date on the workspace's calendar), and the old `/checkins/clients` page
+is gone; its address redirects to the client's Check-ins it named, or to Clients.
 
 See ADR 0017 for authoring and ADR 0016 for responses.
 

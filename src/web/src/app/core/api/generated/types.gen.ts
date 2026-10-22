@@ -550,6 +550,8 @@ export type CheckInFormSummary = {
   draftVersionId: null | string;
   latestPublishedVersionId: null | string;
   latestPublishedVersionNumber: null | number | string;
+  questionCount: number | string;
+  latestPublishedAtUtc: null | string;
   version: number | string;
 };
 

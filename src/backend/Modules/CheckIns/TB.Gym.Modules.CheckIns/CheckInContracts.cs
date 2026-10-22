@@ -136,6 +136,12 @@ public sealed record CheckInFormVersionSummary(
     int QuestionCount,
     uint Version);
 
+/// <summary>One form of the library, as its card and the assign sheet show it.</summary>
+/// <param name="QuestionCount">
+/// The questions of the latest published version, the one a client is assigned now; of the open draft
+/// when nothing is published yet.
+/// </param>
+/// <param name="LatestPublishedAtUtc">When the latest published version was published; null before the first.</param>
 public sealed record CheckInFormSummary(
     Guid Id,
     string Title,
@@ -146,6 +152,8 @@ public sealed record CheckInFormSummary(
     Guid? DraftVersionId,
     Guid? LatestPublishedVersionId,
     int? LatestPublishedVersionNumber,
+    int QuestionCount,
+    DateTimeOffset? LatestPublishedAtUtc,
     uint Version);
 
 public sealed record CheckInFormPage(long Total, IReadOnlyList<CheckInFormSummary> Items);

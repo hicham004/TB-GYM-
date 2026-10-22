@@ -5,7 +5,8 @@ import type { ComponentFixture } from '@angular/core/testing';
  *
  * A spec that calls component methods proves the method works. It cannot prove the screen works,
  * because nothing in it depends on the template being wired to that method at all. Phase 6A-3 paid
- * for that distinction: `checkin-clients` computed its assign-form errors from a plain field, so
+ * for that distinction: `checkin-clients` (the old Client check-ins page, gone since audit A14b)
+ * computed its assign-form errors from a plain field, so
  * the computed never re-evaluated, Assign stayed disabled however the form was filled in, and 88
  * green tests reported nothing because not one of them touched a control.
  *

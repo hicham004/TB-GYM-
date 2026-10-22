@@ -29,7 +29,7 @@ const COACH_ROUTES = [
   '/nutrition/recipes',
   '/nutrition/foods',
   '/checkins/forms',
-  '/checkins/clients',
+  '/checkins/forms/new',
   '/messages',
   '/notifications',
   '/notifications/settings',
@@ -86,7 +86,7 @@ async function sweep(page: Page, routes: string[]): Promise<string[]> {
   return failures;
 }
 
-/** The coach's first client and the owner's first program and meal plan, for the routes that need ids. */
+/** The coach's first client, the first program, meal plan and check-in form, for the routes that need ids. */
 async function coachRoutes(page: Page): Promise<string[]> {
   const [membership] = await memberships(page);
   const tenantId = membership.tenantId;
@@ -96,6 +96,9 @@ async function coachRoutes(page: Page): Promise<string[]> {
     tenantId,
   });
   const plans = await api<{ id: string }[]>(page, 'GET', '/api/nutrition/meal-plans', {
+    tenantId,
+  });
+  const forms = await api<{ items: { id: string }[] }>(page, 'GET', '/api/checkins/forms', {
     tenantId,
   });
   const routes = [...COACH_ROUTES];
@@ -115,6 +118,9 @@ async function coachRoutes(page: Page): Promise<string[]> {
     routes.push(`/training/programs/${templates.body[0].id}`);
   }
   if (plans.status === 200 && plans.body[0]) routes.push(`/nutrition/plans/${plans.body[0].id}`);
+  // A check-in form's own page (audit A14b), where the old Client check-ins page was swept.
+  const form = forms.status === 200 ? forms.body.items[0]?.id : undefined;
+  if (form) routes.push(`/checkins/forms/${form}`);
   return routes;
 }
 

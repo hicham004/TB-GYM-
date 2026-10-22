@@ -18,7 +18,6 @@ const ROUTES = [
   'nutrition/plans',
   'nutrition/foods',
   'checkins/forms',
-  'checkins/clients',
   'messages',
   'products',
   'workspace',

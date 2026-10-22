@@ -58,8 +58,14 @@ export abstract class GuardedSheets {
   protected abstract confirmDialog(): TemplateRef<unknown>;
 
   async canLeave(): Promise<boolean> {
+    const discarding = this.dirty;
     const allowed = await this.canClose();
-    if (allowed) this.dirty = false;
+    if (allowed) {
+      this.dirty = false;
+      // Its work was given up: the sheet goes too, so a page that then answers Stay never keeps a
+      // sheet open with typed work it no longer guards.
+      if (discarding) this.openedSheet?.close();
+    }
     return allowed;
   }
 

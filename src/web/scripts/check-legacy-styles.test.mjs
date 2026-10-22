@@ -114,12 +114,13 @@ test('finds a picker however its tag and type are written, never a type it canno
   assert.match(findings[4], /<input type="date">/);
 });
 
-test('only the two check-in pages audit A14b rebuilds keep their pickers until then', () => {
+test('excuses no template, the check-in pages audit A14b rebuilt included', () => {
   const findings = inspect({
     'app/features/checkins/checkin-forms.ts': `@Component({ templateUrl: './checkin-forms.html' }) class Forms {}`,
     'app/features/checkins/checkin-forms.html': '<select><option>Text</option></select>',
-    'app/features/checkins/other.ts': `@Component({ template: '<select></select>' }) class Other {}`,
+    'app/features/checkins/checkin-form.ts': `@Component({ template: '<input type="date">' }) class Form {}`,
   });
-  assert.equal(findings.length, 1);
-  assert.match(findings[0], /checkins\/other\.ts/);
+  assert.equal(findings.length, 2);
+  assert.ok(findings.some((finding) => /checkin-forms\.html:1 {2}<select>/.test(finding)));
+  assert.ok(findings.some((finding) => /checkin-form\.ts:1 {2}<input type="date">/.test(finding)));
 });

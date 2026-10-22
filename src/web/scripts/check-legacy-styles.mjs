@@ -80,15 +80,6 @@ const FORMER_GLOBAL_CLASSES = [
  */
 const PROTOTYPE_PORTS = ['app/dev/hero-lab/'];
 
-/**
- * Templates audit A14b rebuilds, the two coach check-in pages, keep their selects until then. A14b
- * removes this list's entries; nothing else belongs in it.
- */
-const PICKERS_UNTIL_REBUILT = [
-  'app/features/checkins/checkin-clients.html',
-  'app/features/checkins/checkin-forms.html',
-];
-
 const BROWSER_PICKER_KINDS = ['date', 'time', 'datetime-local', 'month', 'week'];
 // A type written out, bound to a string or interpolated, in any case: type="date", TYPE='Date',
 // [type]="'date'", [attr.type]="'time'", type="{{ 'week' }}". A bound expression stays unknown.
@@ -295,22 +286,20 @@ export function checkLegacyStyles(sourceRoot = root) {
       const markup = template.text.replace(/<!--[\s\S]*?-->/g, (match) =>
         match.replace(/[^\n]/g, ' '),
       );
-      if (!PICKERS_UNTIL_REBUILT.includes(name(template.file))) {
-        for (const tag of openingTags(markup, 'select'))
+      for (const tag of openingTags(markup, 'select'))
+        report(
+          template.file,
+          template.offset + lineOf(template.text, tag.index),
+          "<select> is drawn by the browser: use the kit's select (app-select)",
+        );
+      for (const tag of openingTags(markup, 'input')) {
+        const kind = browserPickerKind(tag.text);
+        if (kind)
           report(
             template.file,
             template.offset + lineOf(template.text, tag.index),
-            "<select> is drawn by the browser: use the kit's select (app-select)",
+            `<input type="${kind}"> is drawn by the browser: use the kit's date field, date input or time input`,
           );
-        for (const tag of openingTags(markup, 'input')) {
-          const kind = browserPickerKind(tag.text);
-          if (kind)
-            report(
-              template.file,
-              template.offset + lineOf(template.text, tag.index),
-              `<input type="${kind}"> is drawn by the browser: use the kit's date field, date input or time input`,
-            );
-        }
       }
       const stylesButtons = /(^|[\s,>+~])button(?![-\w])/m.test(rules);
       for (const tag of openingTags(markup, 'button')) {
