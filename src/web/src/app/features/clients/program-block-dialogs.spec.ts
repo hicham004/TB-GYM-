@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { programBlock, programWeek } from '../../../testing/client-program-fixtures';
-import { fill, formSummary, press, settle } from '../../../testing/dom';
+import { chooseDay, chosenDay, fill, formSummary, press, settle } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { blockCard, type ProgramContext } from './client-program.models';
 import {
@@ -171,18 +171,14 @@ describe('the program dialogs’ summary (WEA-9)', () => {
     expect(document.activeElement).toBe(formSummary(host));
   });
 
-  it('Reschedule: no date takes focus to the date; a refusal is said in the summary', async () => {
+  // The calendar always holds a day (there is no way to empty it), so the date's own reason,
+  // "Choose the new start date.", is left to its rule's test.
+  it('Reschedule: starts on the program’s own first day; a refusal is said in the summary', async () => {
     const rescheduleMesocycle = refused();
     const { fixture, host } = await open(ProgramReschedule, { api: { rescheduleMesocycle } });
 
-    fill(host, 'New start date', '');
-    press(host, 'Reschedule');
-    await settle(fixture);
-    expect(textOf(host)).toContain('Choose the new start date.');
-    expect(document.activeElement).toBe(host.querySelector('input'));
-    expect(rescheduleMesocycle).not.toHaveBeenCalled();
-
-    fill(host, 'New start date', '2026-10-12');
+    expect(await chosenDay(fixture, host, 'New start date')).toBe('2026-09-14');
+    await chooseDay(fixture, host, 'New start date', '2026-10-12');
     press(host, 'Reschedule');
     await settle(fixture);
     expect(textOf(formSummary(host))).toBe(reloaded);

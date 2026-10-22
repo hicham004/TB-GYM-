@@ -24,13 +24,15 @@
         (ngModelChange)="copies.set(numberFrom($event))"
       />
     </app-field>
-    <app-field label="RPE a week" i18n-label density="compact" [help]="help().rpe">
-      <select appControl name="rpe" [ngModel]="rpe()" (ngModelChange)="rpe.set(numberFrom($event))">
-        @for (option of rpeOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-        }
-      </select>
-    </app-field>
+    <app-select
+      label="RPE a week"
+      i18n-label
+      density="compact"
+      [help]="help().rpe"
+      [options]="rpeOptions"
+      [value]="'' + rpe()"
+      (valueChange)="rpe.set(numberFrom($event))"
+    />
     <app-field
       label="Reps a week"
       i18n-label

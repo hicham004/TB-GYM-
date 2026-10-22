@@ -7,7 +7,7 @@
     </p>
   </header>
 
-  @if (loading()) {
+  @if (!drawn()) {
     <div class="hero hero-skeleton">
       <app-skeleton label="Loading your check-ins" i18n-label [lines]="3" />
     </div>
@@ -31,6 +31,12 @@
             <span i18n
               >From <span dir="auto">{{ coach }}</span></span
             >
+          </p>
+        } @else if (!cardRead()) {
+          <!-- The coach's place while their name is read, so the card does not grow when it lands. -->
+          <p class="hero-from hero-waiting" aria-hidden="true">
+            <span class="avatar-bone"></span>
+            <span class="line-bone"></span>
           </p>
         }
         <p class="hero-kicker">
@@ -66,6 +72,11 @@
               <span [style.inline-size.%]="size.percent"></span>
             </div>
           }
+        } @else if (!cardRead()) {
+          <!-- The count's place while it is read. -->
+          <p class="hero-meta hero-waiting" aria-hidden="true">
+            <span class="line-bone"></span>
+          </p>
         }
         <a
           appButton

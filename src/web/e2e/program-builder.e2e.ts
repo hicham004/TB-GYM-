@@ -174,8 +174,12 @@ async function axe(page: Page, options: { menuOpen?: boolean } = {}) {
   ).toEqual([]);
 }
 
-/** A drag the way a hand makes it: press, move past the CDK's threshold, travel, settle, release. */
-async function drag(page: Page, from: Locator, to: Locator) {
+/**
+ * A drag the way a hand makes it: press, move past the CDK's threshold, travel, settle, release. It
+ * lands at `at` of the target's height (the middle unless told), since the middle of a row is where
+ * the list decides between before and after it by a pixel.
+ */
+async function drag(page: Page, from: Locator, to: Locator, at = 0.5) {
   const start = await from.boundingBox();
   const end = await to.boundingBox();
   if (!start || !end) throw new Error('Both ends of the drag must be on screen.');
@@ -184,8 +188,9 @@ async function drag(page: Page, from: Locator, to: Locator) {
   await page.mouse.move(start.x + start.width / 2 + 8, start.y + start.height / 2 + 8, {
     steps: 4,
   });
-  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 16 });
-  await page.mouse.move(end.x + end.width / 2 + 1, end.y + end.height / 2 + 1, { steps: 2 });
+  const landing = end.y + end.height * at;
+  await page.mouse.move(end.x + end.width / 2, landing, { steps: 16 });
+  await page.mouse.move(end.x + end.width / 2 + 1, landing + 1, { steps: 2 });
   await page.mouse.up();
 }
 
@@ -240,11 +245,13 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
   await page.getByRole('button', { name: 'Exercises' }).click();
   await expect(page.locator('app-program-library')).toBeVisible();
 
-  // An exercise from the library onto the second row of Lower A, then reorder it by its grip.
+  // An exercise from the library onto the top of the second row of Lower A, which puts it there,
+  // then reorder it by its grip.
   await drag(
     page,
     page.locator('app-program-library .lib-item', { hasText: 'Goblet squat' }),
-    lower.locator('.exercise-row').nth(1).locator('.exercise-heading'),
+    lower.locator('.exercise-row').nth(1),
+    0.25,
   );
   await expect(lower.locator('.exercise-name')).toHaveText([
     /Back squat/,

@@ -7,6 +7,9 @@
 //    used without its own rule is drawn as plain text.
 // 3. No default button: every <button> is the kit's (`appButton`, `appIconButton`), or has a matching
 //    class, attribute or element selector in its component's actual styles.
+// 4. No picker the browser draws (plan §2 rule 8, audit A14a): no <select>, and no <input> of type
+//    date, time, datetime-local, month or week. The kit's select, date field, date input and time
+//    input take their place.
 //
 // It reads the source as text on purpose: no compiler, no browser, and a fast answer in `npm run lint`.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -77,6 +80,32 @@ const FORMER_GLOBAL_CLASSES = [
  */
 const PROTOTYPE_PORTS = ['app/dev/hero-lab/'];
 
+/**
+ * Templates audit A14b rebuilds, the two coach check-in pages, keep their selects until then. A14b
+ * removes this list's entries; nothing else belongs in it.
+ */
+const PICKERS_UNTIL_REBUILT = [
+  'app/features/checkins/checkin-clients.html',
+  'app/features/checkins/checkin-forms.html',
+];
+
+const BROWSER_PICKER_KINDS = ['date', 'time', 'datetime-local', 'month', 'week'];
+// A type written out, bound to a string or interpolated, in any case: type="date", TYPE='Date',
+// [type]="'date'", [attr.type]="'time'", type="{{ 'week' }}". A bound expression stays unknown.
+const TYPE_ATTRIBUTE = /\s(?:\[(?:attr\.)?type\]|type)\s*=\s*(["'])(.*?)\1/gi;
+
+/** The picker an <input> tag's type draws, or null when it draws none or cannot be known. */
+function browserPickerKind(tagText) {
+  for (const match of tagText.matchAll(TYPE_ATTRIBUTE)) {
+    const value = match[2]
+      .replace(/^\s*(?:\{\{)?\s*['"]?/, '')
+      .replace(/['"]?\s*(?:\}\})?\s*$/, '')
+      .toLowerCase();
+    if (BROWSER_PICKER_KINDS.includes(value)) return value;
+  }
+  return null;
+}
+
 function* walk(directory) {
   for (const name of readdirSync(directory)) {
     const path = join(directory, name);
@@ -95,7 +124,8 @@ function lineOf(text, index) {
 
 /** The opening tags named `tag` in a template, read with quotes so `=>` inside a binding is safe. */
 function* openingTags(text, tag) {
-  const start = new RegExp(`<${tag}(?=[\\s>/])`, 'g');
+  // Angular reads tag names in any case, so <SELECT> is a select too.
+  const start = new RegExp(`<${tag}(?=[\\s>/])`, 'gi');
   for (let match = start.exec(text); match; match = start.exec(text)) {
     let quote = null;
     let end = match.index;
@@ -262,11 +292,28 @@ export function checkLegacyStyles(sourceRoot = root) {
             `class "${token}" was styled by the old global stylesheet and this component does not style it`,
           );
       }
+      const markup = template.text.replace(/<!--[\s\S]*?-->/g, (match) =>
+        match.replace(/[^\n]/g, ' '),
+      );
+      if (!PICKERS_UNTIL_REBUILT.includes(name(template.file))) {
+        for (const tag of openingTags(markup, 'select'))
+          report(
+            template.file,
+            template.offset + lineOf(template.text, tag.index),
+            "<select> is drawn by the browser: use the kit's select (app-select)",
+          );
+        for (const tag of openingTags(markup, 'input')) {
+          const kind = browserPickerKind(tag.text);
+          if (kind)
+            report(
+              template.file,
+              template.offset + lineOf(template.text, tag.index),
+              `<input type="${kind}"> is drawn by the browser: use the kit's date field, date input or time input`,
+            );
+        }
+      }
       const stylesButtons = /(^|[\s,>+~])button(?![-\w])/m.test(rules);
-      for (const tag of openingTags(
-        template.text.replace(/<!--[\s\S]*?-->/g, (match) => match.replace(/[^\n]/g, ' ')),
-        'button',
-      )) {
+      for (const tag of openingTags(markup, 'button')) {
         const kit = /\s(appButton|appIconButton)(?=[\s=>])/.test(tag.text);
         const styled = [...classTokens(tag.text)].some(stylesClass);
         const attributeStyled = /\sngTab(?=[\s=>])/.test(tag.text) && /\[ngTab\]/.test(rules);
@@ -289,5 +336,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       `${findings.length} legacy styling problem(s):\n${findings.map((line) => `  ${line}`).join('\n')}`,
     );
     process.exitCode = 1;
-  } else console.log('No legacy colour names, former global classes or default buttons.');
+  } else
+    console.log(
+      'No legacy colour names, former global classes, default buttons or browser-drawn pickers.',
+    );
 }

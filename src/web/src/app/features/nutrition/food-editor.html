@@ -54,13 +54,13 @@
         (blur)="attempt.touch('amount')"
       />
     </app-field>
-    <app-field label="Unit" i18n-label>
-      <select appControl name="unit" [ngModel]="current.unit" (ngModelChange)="setUnit($event)">
-        <option value="Gram" i18n>grams (g)</option>
-        <option value="Millilitre" i18n>millilitres (ml)</option>
-        <option value="Serving" i18n>servings</option>
-      </select>
-    </app-field>
+    <app-select
+      label="Unit"
+      i18n-label
+      [options]="unitOptions"
+      [value]="current.unit"
+      (valueChange)="setUnit($any($event))"
+    />
   </div>
 
   <div class="basis">

@@ -8,7 +8,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantContext } from '../../core/tenancy/tenant-context';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { asset, exercise, results } from '../../../testing/exercise-fixtures';
-import { formSummary, settle } from '../../../testing/dom';
+import { chooseOption, formSummary, settle } from '../../../testing/dom';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import { ExerciseSheet } from './exercise-sheet';
 import { mediaLine, type ExerciseValues } from './exercise-library.models';
@@ -195,6 +195,27 @@ it('reads the exercise again after a stale save, shows what was saved, and saves
   sheet.set({ name: 'Back Squat, high bar' });
   await sheet.submit();
   expect(api.update).toHaveBeenCalledWith('ex-squat', expect.objectContaining({ version: 4 }));
+});
+
+it('takes its type and main muscle from their lists, the main muscle leaving the secondaries', async () => {
+  const { fixture, sheet, api } = await render();
+  const host = fixture.nativeElement as HTMLElement;
+  sheet.set({ secondaryMuscles: ['Hamstrings', 'Glutes'] } as Partial<ExerciseValues>);
+  await settle(fixture);
+
+  await chooseOption(fixture, host, 'Type', 'Conditioning');
+  await chooseOption(fixture, host, 'Main muscle', 'Hamstrings');
+  await sheet.submit();
+
+  expect(api.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      classification: 'Conditioning',
+      muscles: [
+        { muscle: 'Hamstrings', role: 'Primary' },
+        { muscle: 'Glutes', role: 'Secondary' },
+      ],
+    }),
+  );
 });
 
 it('names each video link by its address, so two links on one exercise read apart (TRAIN-7)', () => {

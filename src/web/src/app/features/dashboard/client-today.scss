@@ -14,12 +14,15 @@
 .today-header {
   align-items: center;
   display: flex;
+  // At large text sizes the coach, the bell and Me move under the greeting rather than squeeze it.
+  flex-wrap: wrap;
   gap: var(--space-12);
   justify-content: space-between;
   min-block-size: var(--control-height-48);
 }
 
 .today-title {
+  flex: 1 1 6rem;
   min-inline-size: 0;
 }
 
@@ -32,13 +35,24 @@
   min-block-size: var(--text-metadata-line-height);
 }
 
+// The greeting is a moment (plan §3): the interface's face, with the name in the serif, as the
+// prototype's "Morning, Maya." and the coach's Today have it.
 h1 {
   margin: 0;
-  font-family: 'TB Home Serif', Georgia, serif;
-  font-size: clamp(2rem, 5vw, 3.25rem);
-  font-weight: 400;
-  letter-spacing: -0.04em;
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.05;
+  // A long first name breaks rather than push the page sideways.
+  overflow-wrap: break-word;
+}
+
+// The coach's Today sets the name the same way (coach-today.scss).
+h1 .serif {
+  font-family: var(--tb-font-serif);
+  font-size: 1.12em;
+  font-style: italic;
+  font-weight: 400;
 }
 
 // Focused on arrival for screen readers; the heading is not a control, so no ring is drawn.

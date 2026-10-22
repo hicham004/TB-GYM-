@@ -8,7 +8,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExerciseSearchResult } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, field, fill, formSummary, press, settle, tick } from '../../../testing/dom';
+import {
+  button,
+  chooseOption,
+  field,
+  fill,
+  formSummary,
+  press,
+  selectShows,
+  settle,
+  tick,
+} from '../../../testing/dom';
 import {
   access,
   asset,
@@ -349,9 +359,11 @@ describe('the exercise library', () => {
       const sheet = dialog()!;
       expect(textOf(sheet.querySelector('h2'))).toBe('New exercise');
       // A new exercise starts as what the coach was looking at.
-      expect(sheet.querySelector<HTMLSelectElement>('select[name="muscle"]')!.value).toBe('Glutes');
+      expect(selectShows(sheet, 'Main muscle')).toBe('Glutes');
 
       fill(sheet, 'Exercise name', ' Hip Thrust ');
+      await chooseOption(harness.fixture, sheet, 'Movement pattern', 'Hinge');
+      await chooseOption(harness.fixture, sheet, 'Equipment', 'Barbell');
       fill(sheet, 'Video link (optional)', 'https://youtu.be/dQw4w9WgXcQ?si=share');
       await settle(harness.fixture);
       expect(sheet.textContent).toContain('YouTube video found.');
@@ -366,6 +378,8 @@ describe('the exercise library', () => {
       expect(api.create).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Hip Thrust',
+          movementPattern: 'Hinge',
+          equipment: 'Barbell',
           muscles: [{ muscle: 'Glutes', role: 'Primary' }],
           mediaAssetIds: ['m-link'],
         }),

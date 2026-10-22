@@ -26,6 +26,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
+import { UiSelect, type SelectOption } from '../../ui/select';
 import { numeric } from '../training/training-builder.models';
 import { FoodApi } from './food-api';
 import {
@@ -58,7 +59,7 @@ type NumberKey =
  */
 @Component({
   selector: 'app-food-editor',
-  imports: [Button, Checkbox, Control, Field, FormSummary, FormsModule, SegmentedControl],
+  imports: [Button, Checkbox, Control, Field, FormSummary, FormsModule, SegmentedControl, UiSelect],
   templateUrl: './food-editor.html',
   styleUrl: './food-editor.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -129,6 +130,11 @@ export class FoodEditor {
   });
 
   protected readonly allergens = ALLERGEN_LABELS;
+  protected readonly unitOptions: readonly SelectOption[] = [
+    { value: 'Gram', label: $localize`grams (g)` },
+    { value: 'Millilitre', label: $localize`millilitres (ml)` },
+    { value: 'Serving', label: $localize`servings` },
+  ];
   protected readonly basisOptions: readonly SegmentOption[] = [
     { value: 'Raw', label: $localize`Raw` },
     { value: 'Cooked', label: $localize`Cooked` },

@@ -27,6 +27,7 @@ import {
   setView,
   weekView,
 } from '../src/testing/mesocycle-fixtures';
+import { chooseDay, chooseOption } from './kit-controls';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -702,13 +703,11 @@ test('Assign program opens from the address, asks for a training max, and sends 
   await expect(sheet.getByLabel('Program', { exact: true })).toBeFocused();
   expect(requests).toEqual([]);
 
-  await sheet
-    .getByLabel('Program', { exact: true })
-    .selectOption({ label: 'Lean & Strong · Phase 3 · 6 weeks' });
+  await chooseOption(sheet, 'Program', 'Lean & Strong · Phase 3 · 6 weeks');
   // The back squat is worked out from a training max, which starts from the one recorded.
   await expect(sheet.getByLabel('Back Squat', { exact: true })).toHaveValue('70');
   await expect(sheet.getByText('Your recorded training max')).toBeVisible();
-  await sheet.getByLabel('Start date', { exact: true }).fill('2026-10-26');
+  await chooseDay(sheet, 'Start date', '2026-10-26');
   await expect(sheet.locator('.run')).toHaveText('Runs Mon 26 Oct – Sun 6 Dec');
   await axe(page);
   await page.screenshot({ path: 'test-results/r34a-training-assign-1440.png' });
@@ -918,9 +917,7 @@ for (const [width, height, mode] of [
     });
 
     const sheet = page.getByRole('dialog', { name: 'Assign program' });
-    await sheet
-      .getByLabel('Program', { exact: true })
-      .selectOption({ label: 'Lean & Strong · Phase 3 · 6 weeks' });
+    await chooseOption(sheet, 'Program', 'Lean & Strong · Phase 3 · 6 weeks');
     // The 70 kg recorded on 14 Sep is older than where Strength Base left the squat.
     const squat = sheet.getByLabel('Back Squat', { exact: true });
     await expect(squat).toHaveValue('80');
@@ -940,7 +937,7 @@ for (const [width, height, mode] of [
       sheet.getByText('Estimated from Strength Base’s logged sets: 70 kg for 5 reps at RPE 8'),
     ).toBeVisible();
     await expect(sheet.locator('.suggested')).toHaveCount(0);
-    await sheet.getByLabel('Start date', { exact: true }).fill('2026-10-26');
+    await chooseDay(sheet, 'Start date', '2026-10-26');
     await sheet.getByRole('button', { name: 'Assign program' }).click();
     await expect(sheet).toHaveCount(0);
     expect(requests[0]).toMatchObject({
@@ -1410,9 +1407,7 @@ test('Assign program can name the program and work a max out from week 1’s wei
   });
 
   const sheet = page.getByRole('dialog', { name: 'Assign program' });
-  await sheet
-    .getByLabel('Program', { exact: true })
-    .selectOption({ label: 'Lean & Strong · Phase 3 · 6 weeks' });
+  await chooseOption(sheet, 'Program', 'Lean & Strong · Phase 3 · 6 weeks');
   await expect(sheet.getByLabel('Program name (optional)')).toHaveAttribute(
     'placeholder',
     'Lean & Strong · Phase 3',
@@ -1432,7 +1427,7 @@ test('Assign program can name the program and work a max out from week 1’s wei
   await axe(page);
   await page.screenshot({ path: 'test-results/p2-assign-weekone-1440.png', fullPage: true });
 
-  await sheet.getByLabel('Start date', { exact: true }).fill('2026-10-26');
+  await chooseDay(sheet, 'Start date', '2026-10-26');
   await sheet.getByRole('button', { name: 'Assign program', exact: true }).click();
   await expect(sheet).toHaveCount(0);
   const assign = requests.find(
@@ -1528,7 +1523,7 @@ test.describe('program date conflicts', () => {
         },
       });
       const sheet = page.getByRole('dialog', { name: 'Assign program' });
-      await sheet.getByLabel('Program', { exact: true }).selectOption('version-1');
+      await chooseOption(sheet, 'Program', 'Lean & Strong · Phase 3 · 6 weeks');
       await sheet.getByRole('button', { name: 'Assign program', exact: true }).click();
       await expect(sheet.getByRole('alert')).toHaveText(message);
       await expect(sheet).toBeVisible();

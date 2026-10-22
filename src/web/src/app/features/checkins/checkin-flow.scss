@@ -83,10 +83,10 @@ p {
 }
 .step-title {
   text-wrap: balance;
-  font-family: var(--tb-font-serif);
-  font-size: clamp(1.9rem, 6vw, 2.6rem);
-  font-weight: 400;
-  line-height: 1.12;
+  font-size: clamp(1.6rem, 6vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 .step-help {
@@ -293,10 +293,10 @@ p {
   gap: var(--space-8);
 }
 .sent-head h1 {
-  font-family: var(--tb-font-serif);
-  font-size: clamp(2rem, 7vw, 2.8rem);
-  font-weight: 400;
-  line-height: 1.1;
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
   overflow-wrap: anywhere;
 }
 .pills {

@@ -19,6 +19,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { UiSelect, type SelectOption } from '../../ui/select';
 import { ProgramBuilderApi } from './program-builder-api';
 import {
   copiesThatFit,
@@ -59,7 +60,7 @@ const RPE_STEPS = Array.from({ length: 9 }, (_, index) => -2 + index * 0.5);
  */
 @Component({
   selector: 'app-program-week-progression',
-  imports: [Button, Control, Field, FormSummary, FormsModule],
+  imports: [Button, Control, Field, FormSummary, FormsModule, UiSelect],
   templateUrl: './program-week-progression.html',
   styleUrl: './program-week-progression.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -77,8 +78,8 @@ export class ProgramWeekProgression {
   private readonly summary = viewChild.required(FormSummary);
 
   protected readonly maxCopies = MAX_COPIES;
-  protected readonly rpeOptions = RPE_STEPS.map((value) => ({
-    value,
+  protected readonly rpeOptions: SelectOption[] = RPE_STEPS.map((value) => ({
+    value: String(value),
     label:
       value === 0
         ? $localize`No change`

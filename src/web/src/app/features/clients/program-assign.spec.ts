@@ -9,7 +9,20 @@ import type { ClientEnrollment } from '../../core/api/api.models';
 import type { TrainingMesocycleView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { field, fill, formSummary, press, query, settle, tick } from '../../../testing/dom';
+import {
+  chooseDay,
+  chooseOption,
+  field,
+  fill,
+  formSummary,
+  press,
+  query,
+  selectField,
+  selectOptionsOf,
+  selectShows,
+  settle,
+  tick,
+} from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ProgramAssign } from './program-assign';
 
@@ -236,11 +249,10 @@ describe('Assign program', () => {
   });
 
   it('offers each program once at its newest version, with the plan it goes under', async () => {
-    const { host } = await render();
+    const { fixture, host } = await render();
 
-    const options = Array.from(query<HTMLSelectElement>(host, 'select').options).map(textOf);
-    expect(options).toEqual([
-      'Choose a program…',
+    expect(selectShows(host, 'Program')).toBe('Choose a program…');
+    expect(await selectOptionsOf(fixture, host, 'Program')).toEqual([
       'Full Body Reset · 6 weeks',
       'Hypertrophy · 8 weeks',
     ]);
@@ -249,13 +261,13 @@ describe('Assign program', () => {
     expect(textOf(host.querySelector('.plan-line span:last-child'))).toBe(
       'Online Coaching · 12 weeks · 1 Sep – 23 Nov 2026',
     );
-    expect(host.querySelectorAll('select')).toHaveLength(1);
+    expect(host.querySelectorAll('app-select')).toHaveLength(1);
   });
 
   it('starts today, and keeps the settings most coaches never touch on one line', async () => {
     const { host } = await render();
 
-    expect(query<HTMLInputElement>(host, 'input[type="date"]').value).toBe('2026-10-01');
+    expect(textOf(query(host, 'app-date-field .value'))).toBe('Thu, Oct 1, 2026');
     expect(textOf(host.querySelector('.loads-title'))).toBe('Load settings');
     expect(textOf(host.querySelector('.loads-now'))).toBe('kg · rounded to the nearest 2.5');
     expect(host.querySelector<HTMLDetailsElement>('.loads')?.open).toBe(false);
@@ -264,11 +276,11 @@ describe('Assign program', () => {
   it('starts on the day a plan that has not begun starts', async () => {
     const { host } = await render({ enrollments: [plan({ startDate: '2026-10-12' })] });
 
-    expect(query<HTMLInputElement>(host, 'input[type="date"]').value).toBe('2026-10-12');
+    expect(textOf(query(host, 'app-date-field .value'))).toBe('Mon, Oct 12, 2026');
   });
 
   it('asks which plan when there are several that include training', async () => {
-    const { host } = await render({
+    const { fixture, host } = await render({
       enrollments: [
         plan(),
         plan({
@@ -280,22 +292,44 @@ describe('Assign program', () => {
       ],
     });
 
-    const selects = host.querySelectorAll('select');
-    expect(selects).toHaveLength(2);
-    expect(Array.from(selects[0].options).map(textOf)).toEqual([
-      'Choose a plan…',
+    expect(host.querySelectorAll('app-select')).toHaveLength(2);
+    expect(await selectOptionsOf(fixture, host, 'Plan')).toEqual([
       'Online Coaching · 12 weeks · 1 Sep – 23 Nov 2026',
       'Online Coaching · 12 weeks · 24 Nov – 15 Feb 2027',
     ]);
     // The one running today is chosen already.
-    expect(selects[0].value).toBe('enrollment-1');
+    expect(selectShows(host, 'Plan')).toBe('Online Coaching · 12 weeks · 1 Sep – 23 Nov 2026');
+  });
+
+  it('puts the program under the plan chosen from the list', async () => {
+    const { fixture, host, api } = await render({
+      enrollments: [
+        plan(),
+        plan({
+          id: 'enrollment-2',
+          startDate: '2026-11-24',
+          endDateExclusive: '2027-02-16',
+          lastActiveDate: '2027-02-15',
+        }),
+      ],
+    });
+
+    await chooseOption(fixture, host, 'Plan', 'Online Coaching · 12 weeks · 24 Nov – 15 Feb 2027');
+    await chooseOption(fixture, host, 'Program', 'Hypertrophy · 8 weeks');
+    await chooseDay(fixture, host, 'Start date', '2026-11-24');
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    expect(api['assignClientMesocycle']).toHaveBeenCalledWith(
+      'client-1',
+      expect.objectContaining({ enrollmentId: 'enrollment-2', startDate: '2026-11-24' }),
+    );
   });
 
   it('asks for the training max of each exercise worked out from one, starting from the recorded max', async () => {
     const { fixture, host, api } = await render();
 
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     expect(api['getProgramTemplateVersion']).toHaveBeenCalledWith('fbr-2');
     // Recorded maxes only: a program's max in the history has no id the server takes as a saved max.
@@ -325,8 +359,7 @@ describe('Assign program', () => {
       },
       programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     expect(programApi['getPreviousMaxes']).toHaveBeenCalledWith('client-1');
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
@@ -356,8 +389,7 @@ describe('Assign program', () => {
       },
       programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
     expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('100');
@@ -370,8 +402,7 @@ describe('Assign program', () => {
     const { fixture, host, api } = await render({
       programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
     expect(textOf(fieldset.querySelector('.suggested p'))).toBe(
@@ -403,8 +434,7 @@ describe('Assign program', () => {
     const { fixture, host } = await render({
       programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
     tick(host, 'lb');
     await settle(fixture);
 
@@ -432,8 +462,7 @@ describe('Assign program', () => {
       api: { assignClientMesocycle: vi.fn(() => throwError(() => changed)) },
       programApi: { getPreviousMaxes },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
     press(host, 'Use 110.97 kg');
     await settle(fixture);
 
@@ -452,8 +481,7 @@ describe('Assign program', () => {
 
   it('names the program the coach assigns, or keeps its own name when left empty (P2)', async () => {
     const { fixture, host, api } = await render();
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     const name = query<HTMLInputElement>(host, 'input[type="text"]');
     expect(name.getAttribute('placeholder')).toBe('Full Body Reset');
@@ -478,8 +506,7 @@ describe('Assign program', () => {
 
   it('works a max out from the weight of week 1’s first set, and says how it was worked out (P2)', async () => {
     const { fixture, host, api, programApi } = await render({ version: chartVersion });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     // The coach can type a max, or choose to work it out from week 1: it names the set it reads.
     tick(host, 'From week 1’s weight');
@@ -519,8 +546,7 @@ describe('Assign program', () => {
 
   it('asks for that weight when week 1’s weight is chosen, and forgets what was worked out when it changes', async () => {
     const { fixture, host, api } = await render({ version: chartVersion });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
     tick(host, 'From week 1’s weight');
     await settle(fixture);
 
@@ -546,16 +572,14 @@ describe('Assign program', () => {
 
   it('offers no week 1 choice for a lift whose week 1 has nothing the chart covers (P2)', async () => {
     const { fixture, host } = await render();
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     expect(host.querySelector('fieldset.maxes app-segmented-control')).toBeNull();
   });
 
   it('never carries a max across kilograms and pounds', async () => {
     const { fixture, host } = await render();
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     tick(host, 'lb');
     await settle(fixture);
@@ -567,14 +591,12 @@ describe('Assign program', () => {
 
   it('says where the program would run, and warns when that is past the end of the plan', async () => {
     const { fixture, host } = await render();
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     expect(textOf(host.querySelector('.run'))).toBe('Runs Thu 1 Oct – Wed 11 Nov');
     expect(host.querySelector('.warn-text')).toBeNull();
 
-    fill(host, 'Start date', '2026-10-20');
-    await settle(fixture);
+    await chooseDay(fixture, host, 'Start date', '2026-10-20');
 
     expect(textOf(host.querySelector('.run'))).toBe('Runs Tue 20 Oct – Mon 30 Nov');
     expect(textOf(host.querySelector('.warn-text'))).toBe(
@@ -591,7 +613,7 @@ describe('Assign program', () => {
     expect(api['assignClientMesocycle']).not.toHaveBeenCalled();
     expect(textOf(host)).toContain('Choose a program.');
     expect(textOf(formSummary(host))).toBe('Check the fields marked above.');
-    const program = query<HTMLSelectElement>(host, 'select');
+    const program = query<HTMLButtonElement>(selectField(host, 'Program'), 'button.trigger');
     expect(program.getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(program);
   });
@@ -600,8 +622,7 @@ describe('Assign program', () => {
     const { fixture, host, api } = await render({
       api: { listStrengthMaxes: vi.fn(() => of({ total: 0, items: [] })) },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     press(host, 'Assign program');
     await settle(fixture);
@@ -620,8 +641,7 @@ describe('Assign program', () => {
           .mockReturnValue(of(assigned)),
       },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     press(host, 'Assign program');
     await settle(fixture);
@@ -665,8 +685,7 @@ describe('Assign program', () => {
           .mockReturnValue(of(assigned)),
       },
     });
-    fill(host, 'Program', 'fbr-2');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
     press(host, 'Assign program');
     await settle(fixture);
 
@@ -692,8 +711,7 @@ describe('Assign program', () => {
     const { fixture, host, closed } = await render({
       api: { assignClientMesocycle: vi.fn(() => throwError(() => overlap)) },
     });
-    fill(host, 'Program', 'hyp-1');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Program', 'Hypertrophy · 8 weeks');
 
     press(host, 'Assign program');
     await settle(fixture);
@@ -745,9 +763,7 @@ describe('Assign program', () => {
     await settle(fixture);
 
     expect(first).toHaveBeenLastCalledWith(3);
-    expect(Array.from(query<HTMLSelectElement>(host, 'select').options).map(textOf)).toContain(
-      'Zone 2 Base · 3 weeks',
-    );
+    expect(await selectOptionsOf(fixture, host, 'Program')).toContain('Zone 2 Base · 3 weeks');
   });
 
   it('can be closed without assigning', async () => {

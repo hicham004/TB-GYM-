@@ -19,9 +19,12 @@ import { ApiClient } from '../../core/api/api-client';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
+import { isoWeekdayOfName } from '../../ui/calendar';
+import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { ClientProgramApi } from './client-program-api';
+import { ClientWorkspaceContext } from './client-workspace.context';
 import type { BlockCard } from './client-program.models';
 import {
   CANCEL_REASON_LIMIT,
@@ -189,7 +192,7 @@ export class ProgramRename {
 
 @Component({
   selector: 'app-program-reschedule',
-  imports: [Button, Control, Field, FormSummary],
+  imports: [Button, DateField, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -197,18 +200,15 @@ export class ProgramRename {
         Every week of {{ block().name }} moves with it. Nothing has been started, so no workout
         changes date.
       </p>
-      <app-field
+      <app-date-field
         [label]="startLabel"
         [errors]="attempt.shows('startDate', startErrors()) ? startErrors() : null"
-      >
-        <input
-          appControl
-          type="date"
-          [value]="startDate()"
-          (input)="startDate.set($any($event.target).value)"
-          (blur)="attempt.touch('startDate')"
-        />
-      </app-field>
+        [today]="today()"
+        [firstDay]="firstDay()"
+        [value]="startDate()"
+        (valueChange)="startDate.set($event)"
+        (touched)="attempt.touch('startDate')"
+      />
       @if (movedRun(); as run) {
         <p class="run" aria-live="polite">{{ run }}</p>
       }
@@ -240,6 +240,13 @@ export class ProgramReschedule {
 
   readonly block = input.required<BlockCard>();
   readonly firstName = input.required<string>();
+  /** The workspace's own date, which the calendar marks as today; the device's when not given. */
+  readonly today = input<string | null>(null);
+  private readonly record = inject(ClientWorkspaceContext, { optional: true });
+  /** The workspace's week start, as the record's other calendars have it; the locale's without one. */
+  protected readonly firstDay = computed(() =>
+    isoWeekdayOfName(this.record?.workspace()?.weekStartsOn),
+  );
   /** True when the program was moved. */
   readonly closed = output<boolean>();
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);

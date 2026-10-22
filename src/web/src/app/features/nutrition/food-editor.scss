@@ -121,10 +121,12 @@ legend {
   justify-content: flex-end;
 }
 
-// A focused box stays above the sticky footer.
-input,
-select {
+// A focused box stays above the sticky footer, the kit select's button as well (it reads the property).
+input {
   scroll-margin-block-end: 9rem;
+}
+app-select {
+  --tb-field-scroll-margin-end: 9rem;
 }
 
 @container (max-width: 18rem) {

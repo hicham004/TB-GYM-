@@ -85,3 +85,41 @@ test('the prototype lab exemption never permits a legacy variable', () => {
   assert.equal(findings.length, 1);
   assert.match(findings[0], /pre-brand-v2/);
 });
+
+test('rejects the pickers the browser draws, never the kit, a text box or a commented example', () => {
+  const findings = inspect({
+    'page.ts': `@Component({ template: \`<select name="unit"><option>g</option></select>
+      <input type="date"><input type='time'><input class="x" type="datetime-local">
+      <input type="text" appTimeInput><input type="number"><app-select label="Unit" />
+      <!-- <select></select> <input type="date"> -->\` }) class Page {}`,
+  });
+  assert.equal(findings.length, 4);
+  assert.match(findings[0], /page\.ts:1 {2}<select>/);
+  assert.match(findings[1], /page\.ts:2 {2}<input type="date">/);
+  assert.match(findings[2], /<input type="time">/);
+  assert.match(findings[3], /<input type="datetime-local">/);
+});
+
+test('finds a picker however its tag and type are written, never a type it cannot know', () => {
+  const findings = inspect({
+    'page.ts': `@Component({ template: \`<SELECT></SELECT>
+      <input [type]="'date'"><input [attr.type]="'time'"><input type="{{ 'week' }}">
+      <input TYPE="Date"><input [type]="kind"><input [type]="single ? 'radio' : 'checkbox'">\` }) class Page {}`,
+  });
+  assert.equal(findings.length, 5);
+  assert.match(findings[0], /<select>/);
+  assert.match(findings[1], /<input type="date">/);
+  assert.match(findings[2], /<input type="time">/);
+  assert.match(findings[3], /<input type="week">/);
+  assert.match(findings[4], /<input type="date">/);
+});
+
+test('only the two check-in pages audit A14b rebuilds keep their pickers until then', () => {
+  const findings = inspect({
+    'app/features/checkins/checkin-forms.ts': `@Component({ templateUrl: './checkin-forms.html' }) class Forms {}`,
+    'app/features/checkins/checkin-forms.html': '<select><option>Text</option></select>',
+    'app/features/checkins/other.ts': `@Component({ template: '<select></select>' }) class Other {}`,
+  });
+  assert.equal(findings.length, 1);
+  assert.match(findings[0], /checkins\/other\.ts/);
+});

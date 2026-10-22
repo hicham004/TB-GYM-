@@ -344,7 +344,7 @@ of the implemented R1.3 screens before production rollout.
   - **Type and accent.** Today, Check-in and other pages use small italic serif titles; the
     prototype uses bold sans headings, lime for done days, ticked sets and the active tab, and a
     coach pill with a face. R2.5b's Training page follows the prototype, so it can serve as the
-    comparison.
+    comparison. The titles were settled in audit A14a (§3).
 - **Doing a missed session later (from R2.5b).** The API lets a client start a past session while
   its block is active, but no screen offers it: the Training page marks it missed. Offering it is an
   owner decision (TRN-020). Built in audit A9 (2026-10-20, the owner's decision of 2026-10-19): "Do it
@@ -1114,7 +1114,8 @@ of the implemented R1.3 screens before production rollout.
     running one. Its card is offered only on the summary of a last workout that finished every
     session; a list of past programs would offer the rest;
   - (e) `progress-dashboard.scss` names `'Instrument Serif'` too, so Progress's serif moment still falls
-    back to Georgia;
+    back to Georgia (fixed in audit A14a, 2026-10-21: Progress's title is a page title, so it is bold
+    IBM Plex Sans, §3);
   - (f) the player's clock keeps counting on the finish summary (fixed in audit A4, 2026-10-20: it shows
     the time the workout took, TRN-015);
   - (g) `R25bHistoryListsFinishedWorkoutsNewestFirstWithTheRecordsEachSet` fails like R34a's when a run
@@ -1286,6 +1287,15 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
   Serif is kept for *moments* only: greetings, summaries, empty-state headlines. All metrics use
   tabular numerals. There is one type scale, with big confident display numbers for metrics
   (weights, streaks, compliance).
+  - Settled in audit A14a (the owner's word of 2026-10-19). Every page title is IBM Plex Sans at
+    600, the bold the build loads, at its siblings' size: a client's page `clamp(1.95rem, 7vw,
+    2.4rem)`, a coach's `clamp(1.75rem, 4cqi, 2.125rem)`. A hero card's title and a check-in's
+    question are bold sans too.
+  - A moment sets its key word in the italic serif, as the prototype's "Morning, *Maya.*" does:
+    Today's greeting for client and coach, "All caught up. *Nice.*" and a finished workout. A
+    summary (a check-in sent) or an empty state's headline may stand in the serif whole.
+  - The root font is IBM Plex Sans, so no page falls back to the device's own face; before A14a it
+    named Inter, which nothing loads.
 - **Shape and depth.** 12–16 px card radius, 10 px controls, two elevation levels and a 4 px
   spacing grid. Coach tables get a compact density.
 - **Light and dark.** Every screen works in both. The workout player is always dark (gyms are dim,
@@ -1408,6 +1418,17 @@ Tokens are theme-ready from R1, so this costs little later.
   the rows before it kept until the newest answer lands, and Show more. The program builder's, Edit weeks'
   and the meal-plan builder's libraries use it, with "Search by name or tag…" as the exercise box's hint, as
   on the Exercises page. Rules in `ARCHITECTURE.md` §8.
+- Built in audit A14a: the kit's select and time, so no screen draws a browser picker (§2 rule 8).
+  - `UiSelect` (`ui/select.ts`): a field whose button names the choice and opens the options as a
+    list in the page's flow, as `DateField` opens its calendar, so a sheet never clips it. It takes
+    the W3C select-only combobox's keys, typed letters included on the closed button, and binds as a
+    signal or a form control. A press outside closes it. With nothing to choose it stays focusable,
+    marked unavailable, so a refused form can still bring focus to its reason.
+  - `TimeInput` (`ui/time-input.ts`): a time typed on the 24-hour clock with a number pad. "2200",
+    "7.30" and "10pm" become 22:00, 07:30 and 22:00 as soon as the box commits them (Enter, a change
+    or leaving it), in any script's digits.
+  - `npm run lint:styles` refuses a `<select>` and a date or time `<input>` in a template. The two
+    coach check-in pages, which A14b rebuilds, keep theirs until then.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves

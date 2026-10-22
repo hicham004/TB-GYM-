@@ -36,6 +36,7 @@ import { UiDialog } from '../../ui/dialog';
 import { Icon } from '../../ui/icon';
 import { ProgressRing } from '../../ui/progress-ring';
 import { SegmentedControl } from '../../ui/segmented-control';
+import { UiSelect } from '../../ui/select';
 import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { Sparkline } from '../../ui/sparkline';
@@ -43,6 +44,7 @@ import { StatTile } from '../../ui/stat-tile';
 import { StatusLabel } from '../../ui/status-label';
 import { StatusPill } from '../../ui/status-pill';
 import { UiTabPane, UiTabs } from '../../ui/tabs';
+import { TimeInput } from '../../ui/time-input';
 import { UiToast } from '../../ui/toast';
 import {
   ARABIC,
@@ -88,6 +90,8 @@ export const LAB_SAVE_DELAY_MS = 1200;
     StatTile,
     StatusLabel,
     StatusPill,
+    TimeInput,
+    UiSelect,
     UiTabPane,
     UiTabs,
   ],
@@ -110,7 +114,11 @@ export class UiLab {
   protected readonly classifications = CLASSIFICATION_OPTIONS;
   protected readonly edgeOptions = EDGE_OPTIONS;
   protected readonly equipment = EQUIPMENT_OPTIONS;
-  protected readonly setTypes = SET_TYPE_OPTIONS;
+  protected readonly setTypes = SET_TYPE_OPTIONS.map((value) => ({ value, label: value }));
+  protected readonly arabicEquipmentOptions = ARABIC.equipmentOptions.map((value) => ({
+    value,
+    label: value,
+  }));
   protected readonly statuses = STATUS_SAMPLES;
   protected readonly demoPeople = [
     { name: 'Maya Rahman', initials: 'MR' },
@@ -183,6 +191,7 @@ export class UiLab {
     validators: [Validators.required],
   });
   protected readonly arabicEquipment = new FormControl('', { nonNullable: true });
+  protected readonly reminderTime = new FormControl('07:30', { nonNullable: true });
   protected readonly arabicTempo = new FormControl('3-1-1-0', { nonNullable: true });
   protected readonly arabicIncludeArchived = new FormControl(false, { nonNullable: true });
   protected readonly arabicMainLift = new FormControl(true, { nonNullable: true });

@@ -27,9 +27,13 @@ import type {
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
+import { isoWeekdayOfName } from '../../ui/calendar';
+import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { selectOptions, UiSelect } from '../../ui/select';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
+import { ClientWorkspaceContext } from './client-workspace.context';
 import {
   overlappingPlan,
   paymentErrors,
@@ -225,7 +229,7 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
 
 @Component({
   selector: 'app-plan-start',
-  imports: [Button, Control, Field, FormSummary, RouterLink],
+  imports: [Button, DateField, FormSummary, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -273,18 +277,15 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
           <p id="plan-offer-error" class="warn-text">{{ errors()['offerId'][0] }}</p>
         }
 
-        <app-field
+        <app-date-field
           [label]="startLabel"
           [errors]="shows('startDate') ? errors()['startDate'] : null"
-        >
-          <input
-            appControl
-            type="date"
-            [value]="startDate()"
-            (input)="startDate.set($any($event.target).value); dirtyChange.emit(true)"
-            (blur)="attempt.touch('startDate')"
-          />
-        </app-field>
+          [today]="today()"
+          [firstDay]="firstDay()"
+          [value]="startDate()"
+          (valueChange)="startDate.set($event); dirtyChange.emit(true)"
+          (touched)="attempt.touch('startDate')"
+        />
         @if (run(); as text) {
           <p class="run" aria-live="polite">{{ text }}</p>
         }
@@ -324,6 +325,11 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
   styles: SHEET_STYLES,
 })
 export class PlanStart {
+  private readonly record = inject(ClientWorkspaceContext, { optional: true });
+  /** The workspace's week start, as the record's other calendars have it; the locale's without one. */
+  protected readonly firstDay = computed(() =>
+    isoWeekdayOfName(this.record?.workspace()?.weekStartsOn),
+  );
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
@@ -477,7 +483,7 @@ const METHODS: readonly ManualPaymentMethod[] = [
 
 @Component({
   selector: 'app-plan-payment',
-  imports: [Button, Control, Field, FormSummary],
+  imports: [Button, Control, DateField, Field, FormSummary, UiSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -511,34 +517,23 @@ const METHODS: readonly ManualPaymentMethod[] = [
         <p class="muted" dir="auto" aria-live="polite">{{ text }}</p>
       }
 
-      <app-field
+      <app-date-field
         [label]="receivedLabel"
         [errors]="shows('receivedOn') ? errors()['receivedOn'] : null"
-      >
-        <input
-          appControl
-          name="received-on"
-          type="date"
-          [max]="today()"
-          [value]="receivedOn()"
-          (input)="receivedOn.set($any($event.target).value); dirtyChange.emit(true)"
-          (blur)="attempt.touch('receivedOn')"
-        />
-      </app-field>
+        [today]="today()"
+        [firstDay]="firstDay()"
+        [max]="today()"
+        [value]="receivedOn()"
+        (valueChange)="receivedOn.set($event); dirtyChange.emit(true)"
+        (touched)="attempt.touch('receivedOn')"
+      />
 
-      <app-field [label]="methodLabel">
-        <select
-          appControl
-          name="method"
-          (change)="method.set($any($event.target).value); dirtyChange.emit(true)"
-        >
-          @for (option of methods; track option) {
-            <option [value]="option" [selected]="option === method()">
-              {{ methodName(option) }}
-            </option>
-          }
-        </select>
-      </app-field>
+      <app-select
+        [label]="methodLabel"
+        [options]="methods"
+        [value]="method()"
+        (valueChange)="method.set($any($event)); dirtyChange.emit(true)"
+      />
 
       <app-field [label]="referenceLabel" [help]="referenceHelp">
         <input
@@ -590,6 +585,11 @@ const METHODS: readonly ManualPaymentMethod[] = [
   styles: SHEET_STYLES,
 })
 export class PlanPayment {
+  private readonly record = inject(ClientWorkspaceContext, { optional: true });
+  /** The workspace's week start, as the record's other calendars have it; the locale's without one. */
+  protected readonly firstDay = computed(() =>
+    isoWeekdayOfName(this.record?.workspace()?.weekStartsOn),
+  );
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
@@ -608,8 +608,7 @@ export class PlanPayment {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
-  protected readonly methods = METHODS;
-  protected readonly methodName = paymentMethodLabel;
+  protected readonly methods = selectOptions(METHODS, paymentMethodLabel);
   protected readonly amountLabel = $localize`Amount received`;
   protected readonly receivedLabel = $localize`Received on`;
   protected readonly methodLabel = $localize`How it was paid`;

@@ -9,6 +9,7 @@ import {
   unpaidRenewal,
 } from '../src/testing/client-service-fixtures';
 import { COACH_NOW, LEA_ID, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
+import { chooseDay, chooseOption, kitDateField } from './kit-controls';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -272,7 +273,7 @@ for (const width of [390, 1440]) {
     await expect(sheet).toContainText(
       'This pays the plan in full. Maya gets access from Tue 13 Oct.',
     );
-    await sheet.getByLabel('How it was paid').selectOption('MobileWallet');
+    await chooseOption(sheet, 'How it was paid', 'Mobile wallet');
     await sheet.getByLabel('Reference (optional)').fill('WH-2290');
     await axe(page);
     await page.screenshot({ path: `test-results/r34b-payment-${width}.png` });
@@ -304,7 +305,9 @@ test('renewing opens on the plan’s own price option, the day after it ends', a
   const sheet = page.getByRole('dialog', { name: 'Renew plan' });
   await expect(sheet).toBeVisible();
   await expect(sheet.locator('input[value="o-12"]')).toBeChecked();
-  await expect(sheet.getByLabel('First day')).toHaveValue('2026-10-13');
+  await expect(kitDateField(sheet, 'First day').locator('button.trigger')).toHaveText(
+    'Tue, Oct 13, 2026',
+  );
   await expect(sheet.locator('.run')).toHaveText('Runs Tue 13 Oct 2026 – Mon 4 Jan 2027');
   await axe(page);
   await page.screenshot({ path: 'test-results/r34b-renew-1440.png' });
@@ -394,7 +397,7 @@ test.describe('plan date conflicts', () => {
       });
       await page.locator('.hero-actions > button', { hasText: 'Renew plan' }).click();
       const sheet = page.getByRole('dialog', { name: 'Renew plan' });
-      await sheet.getByLabel('First day').fill('2026-10-12');
+      await chooseDay(sheet, 'First day', '2026-10-12');
       await sheet.getByRole('button', { name: 'Renew plan', exact: true }).click();
       await expect(sheet.getByRole('alert')).toHaveText(message);
       await expect(sheet).toBeVisible();

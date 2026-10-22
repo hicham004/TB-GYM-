@@ -7,9 +7,13 @@
           {{ date + 'T12:00:00' | date: 'EEEE d MMMM' }}
         }
       </p>
-      <h1 #heading tabindex="-1" class="tb-text-section-title" i18n>
-        Today, <span dir="auto">{{ firstName() }}</span
-        >.
+      <!-- The name is isolated in its own direction; the full stop stays outside it, in the line's. -->
+      <h1 #heading tabindex="-1" i18n>
+        Today,
+        <span class="serif"
+          ><span dir="auto">{{ firstName() }}</span
+          >.</span
+        >
       </h1>
     </div>
     <div class="today-actions">

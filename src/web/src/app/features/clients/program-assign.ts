@@ -32,13 +32,17 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { isoWeekdayOfName } from '../../ui/calendar';
+import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
+import { UiSelect, type SelectOption } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { unitLabel } from '../training/training-program.models';
 import { ClientProgramApi } from './client-program-api';
+import { ClientWorkspaceContext } from './client-workspace.context';
 import {
   assignmentErrors,
   assignmentRequest,
@@ -68,7 +72,17 @@ import {
  */
 @Component({
   selector: 'app-program-assign',
-  imports: [Button, Control, Field, FormSummary, RouterLink, SegmentedControl, Skeleton],
+  imports: [
+    Button,
+    Control,
+    DateField,
+    Field,
+    FormSummary,
+    RouterLink,
+    SegmentedControl,
+    Skeleton,
+    UiSelect,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -92,23 +106,15 @@ import {
             </p>
           } @else {
             @if (plans().length > 1) {
-              <app-field
+              <app-select
                 [label]="planLabel"
+                [placeholder]="planPlaceholder"
+                [options]="planOptions()"
+                [value]="enrollmentId()"
                 [errors]="shows('enrollmentId') ? errors()['enrollmentId'] : null"
-              >
-                <select
-                  appControl
-                  (change)="choosePlan($any($event.target).value)"
-                  (blur)="attempt.touch('enrollmentId')"
-                >
-                  <option value="" i18n>Choose a plan…</option>
-                  @for (plan of plans(); track plan.id) {
-                    <option [value]="plan.id" [selected]="plan.id === enrollmentId()">
-                      {{ plan.label }}
-                    </option>
-                  }
-                </select>
-              </app-field>
+                (valueChange)="choosePlan($event)"
+                (touched)="attempt.touch('enrollmentId')"
+              />
             } @else {
               <p class="plan-line">
                 <span class="plan-caption" i18n>Plan</span>
@@ -116,26 +122,15 @@ import {
               </p>
             }
 
-            <app-field
+            <app-select
               [label]="programLabel"
+              [placeholder]="programPlaceholder"
+              [options]="programOptions()"
+              [value]="versionId()"
               [errors]="shows('templateVersionId') ? errors()['templateVersionId'] : null"
-            >
-              <select
-                appControl
-                (change)="chooseProgram($any($event.target).value)"
-                (blur)="attempt.touch('templateVersionId')"
-              >
-                <option value="" i18n>Choose a program…</option>
-                @for (program of programs(); track program.versionId) {
-                  <option
-                    [value]="program.versionId"
-                    [selected]="program.versionId === versionId()"
-                  >
-                    {{ program.label }}
-                  </option>
-                }
-              </select>
-            </app-field>
+              (valueChange)="chooseProgram($event)"
+              (touched)="attempt.touch('templateVersionId')"
+            />
             @if (templates().length < templateTotal()) {
               <button
                 appButton
@@ -157,18 +152,15 @@ import {
               </p>
             }
 
-            <app-field
+            <app-date-field
               [label]="startLabel"
               [errors]="shows('startDate') ? errors()['startDate'] : null"
-            >
-              <input
-                appControl
-                type="date"
-                [value]="startDate()"
-                (input)="startDate.set($any($event.target).value)"
-                (blur)="attempt.touch('startDate')"
-              />
-            </app-field>
+              [today]="today()"
+              [firstDay]="firstDay()"
+              [value]="startDate()"
+              (valueChange)="startDate.set($event)"
+              (touched)="attempt.touch('startDate')"
+            />
             @if (run(); as summary) {
               <p class="run" [class.warn]="summary.pastPlanEnd" aria-live="polite">
                 {{ summary.text }}
@@ -535,6 +527,7 @@ export class ProgramAssign {
   private readonly summary = viewChild(FormSummary);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly intent = new IntentIdempotencyKey();
+  private readonly record = inject(ClientWorkspaceContext, { optional: true });
   private needs: { exerciseId: string; name: string }[] = [];
 
   readonly clientId = input.required<string>();
@@ -548,7 +541,9 @@ export class ProgramAssign {
   protected readonly attempt = new FormAttempt();
   protected readonly loadingLabel = $localize`Loading…`;
   protected readonly planLabel = $localize`Plan`;
+  protected readonly planPlaceholder = $localize`Choose a plan…`;
   protected readonly programLabel = $localize`Program`;
+  protected readonly programPlaceholder = $localize`Choose a program…`;
   protected readonly startLabel = $localize`Start date`;
   protected readonly unitText = $localize`Unit`;
   protected readonly roundingText = $localize`Rounding`;
@@ -596,8 +591,18 @@ export class ProgramAssign {
   /** The server's words for each lift worked out from week 1's weight, by exercise (STR-011). */
   protected readonly estimates = signal<Record<string, string>>({});
 
+  /** The workspace's week start, as the record's other calendars have it; the locale's without one. */
+  protected readonly firstDay = computed(() =>
+    isoWeekdayOfName(this.record?.workspace()?.weekStartsOn),
+  );
   protected readonly plans = computed(() => planChoices(this.enrollments(), this.locale));
   protected readonly programs = computed(() => programChoices(this.templates()));
+  protected readonly planOptions = computed<SelectOption[]>(() =>
+    this.plans().map((plan) => ({ value: plan.id, label: plan.label })),
+  );
+  protected readonly programOptions = computed<SelectOption[]>(() =>
+    this.programs().map((program) => ({ value: program.versionId, label: program.label })),
+  );
 
   private readonly values = computed<AssignmentValues>(() => ({
     enrollmentId: this.enrollmentId(),

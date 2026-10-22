@@ -10,7 +10,17 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantContext } from '../../core/tenancy/tenant-context';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { planRecipeView } from '../../../testing/client-recipe-fixtures';
-import { button, field, fill, press, query, settle } from '../../../testing/dom';
+import {
+  button,
+  chooseOption,
+  field,
+  fill,
+  press,
+  query,
+  selectField,
+  selectShows,
+  settle,
+} from '../../../testing/dom';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
 import type { ClientNutritionDayView } from '../../core/api/generated';
 import { mapNutritionDay, type NutritionDay, type NutritionSlot } from './nutrition.models';
@@ -360,10 +370,10 @@ describe('TodayNutrition', () => {
     expect(button(host, 'Ate as planned').disabled).toBe(false);
 
     // The second choice, deliberately: the draft opens on the first one, so picking that would be
-    // indistinguishable from a select whose change never reached the draft at all.
+    // indistinguishable from a choice that never reached the draft at all.
     press(host, 'Swap or adjust');
     await settle(fixture);
-    fill(host, 'What did you eat?', 'choice-2');
+    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
     fill(host, 'Actual servings', '1.5');
     await settle(fixture);
 
@@ -389,7 +399,7 @@ describe('TodayNutrition', () => {
 
     press(host, 'Swap or adjust');
     await settle(fixture);
-    fill(host, 'What did you eat?', 'choice-2');
+    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
     await settle(fixture);
 
     expect(field(host, 'Actual servings').value).toBe('1');
@@ -400,7 +410,7 @@ describe('TodayNutrition', () => {
 
     press(host, 'Swap or adjust');
     await settle(fixture);
-    fill(host, 'What did you eat?', 'choice-2');
+    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
     fill(host, 'Actual servings', '0');
     await settle(fixture);
     press(host, 'Save meal');
@@ -430,7 +440,7 @@ describe('TodayNutrition', () => {
 
     press(host, 'Swap or adjust');
     await settle(fixture);
-    fill(host, 'What did you eat?', 'choice-2');
+    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
     await settle(fixture);
     press(host, 'Complete day');
     await settle(fixture);
@@ -444,7 +454,7 @@ describe('TodayNutrition', () => {
   it('renders a completed day read-only', async () => {
     const { host } = await render({}, day({ logStatus: 'Completed' }));
 
-    expect(() => field<HTMLSelectElement>(host, 'What did you eat?')).toThrow();
+    expect(() => selectField(host, 'What did you eat?')).toThrow();
     expect(() => button(host, 'Ate as planned')).toThrow();
     expect(() => button(host, 'Complete day')).toThrow();
     expect(host.textContent).toContain('Day completed');
@@ -541,8 +551,8 @@ describe('TodayNutrition', () => {
     await settle(fixture);
     press(cards[1], 'Swap or adjust');
     await settle(fixture);
-    fill(cards[0], 'What did you eat?', 'choice-2');
-    fill(cards[1], 'What did you eat?', 'choice-2');
+    await chooseOption(fixture, cards[0], 'What did you eat?', 'Eggs and toast · 480 kcal');
+    await chooseOption(fixture, cards[1], 'What did you eat?', 'Eggs and toast · 480 kcal');
     fill(cards[1], 'Actual servings', '2');
     await settle(fixture);
 
@@ -555,7 +565,7 @@ describe('TodayNutrition', () => {
     );
     // The second meal's untouched edits survive the first meal's failure.
     const second = host.querySelectorAll('.meal-card')[1];
-    expect(field<HTMLSelectElement>(second, 'What did you eat?').value).toBe('choice-2');
+    expect(selectShows(second, 'What did you eat?')).toBe('Eggs and toast · 480 kcal');
     expect(field(second, 'Actual servings').value).toBe('2');
   });
 
@@ -662,6 +672,7 @@ describe('TodayNutrition', () => {
     const { fixture, host, api } = await render();
     press(host, 'Add food');
     await settle(fixture);
+    expect(selectShows(host, 'Unit')).toBe('g');
     fill(host, 'Food name', 'Apple');
     fill(host, 'Amount eaten', '150');
     fill(host, 'Calories (kcal)', '80');
@@ -686,6 +697,26 @@ describe('TodayNutrition', () => {
     expect(host.textContent).toContain('Apple');
     expect(host.textContent).toContain('0 of 1 planned meals logged');
     expect(host.textContent).toContain('80 / 2,400 kcal');
+  });
+
+  it('logs an extra food in the unit chosen, a serving among them', async () => {
+    const { fixture, host, api } = await render();
+    press(host, 'Add food');
+    await settle(fixture);
+    fill(host, 'Food name', 'Protein bar');
+    fill(host, 'Amount eaten', '1');
+    await chooseOption(fixture, host, 'Unit', 'servings');
+    fill(host, 'Calories (kcal)', '200');
+    fill(host, 'Protein (g)', '20');
+    fill(host, 'Carbs (g)', '22');
+    fill(host, 'Fat (g)', '7');
+    await settle(fixture);
+    press(host, 'Log extra food');
+    await settle(fixture);
+
+    expect(api.addMyNutritionCustomFood).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Protein bar', amount: 1, unit: 'Serving' }),
+    );
   });
 
   it('removes a mistaken extra food from the visible day totals', async () => {

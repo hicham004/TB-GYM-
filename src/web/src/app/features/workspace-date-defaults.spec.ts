@@ -10,7 +10,7 @@ import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
 import { maxPage, maxView } from '../../testing/client-strength-fixtures';
 import { profile } from '../../testing/client-nutrition-fixtures';
-import { fill, field, press, settle } from '../../testing/dom';
+import { chosenDay, dateField, fill, press, settle } from '../../testing/dom';
 import { ClientStrength } from './clients/client-strength';
 import { ClientWorkspaceContext } from './clients/client-workspace.context';
 import { ProgramAssign } from './clients/program-assign';
@@ -202,7 +202,7 @@ describe('date defaults across a coach client page', () => {
   for (const currentDate of workspaceDates) {
     describe(`with the workspace on ${currentDate}`, () => {
       it('defaults the program start date to the workspace date the page was given', async () => {
-        const { host } = await render(
+        const { fixture, host } = await render(
           ProgramAssign,
           {
             clientId: 'client-1',
@@ -213,7 +213,7 @@ describe('date defaults across a coach client page', () => {
           currentDate,
         );
 
-        expect(field(host, 'Start date').value).toBe(currentDate);
+        expect(await chosenDay(fixture, host, 'Start date')).toBe(currentDate);
       });
 
       it('defaults the day a max was true to the workspace date', async () => {
@@ -223,13 +223,13 @@ describe('date defaults across a coach client page', () => {
       });
 
       it('defaults a new plan’s first day to the workspace date the page was given', async () => {
-        const { host } = await render(
+        const { fixture, host } = await render(
           PlanStart,
           { clientId: 'client-1', firstName: 'Rana', today: currentDate, catalog, plans: [] },
           currentDate,
         );
 
-        expect(field(host, 'First day').value).toBe(currentDate);
+        expect(await chosenDay(fixture, host, 'First day')).toBe(currentDate);
       });
 
       it('defaults a payment’s day and its upper bound to the workspace date', async () => {
@@ -238,15 +238,61 @@ describe('date defaults across a coach client page', () => {
           today: currentDate,
           firstName: 'Rana',
         });
-        const { host } = await render(
+        const { fixture, host } = await render(
           PlanPayment,
           { plan, firstName: 'Rana', today: currentDate },
           currentDate,
         );
 
-        expect(field(host, 'Received on').value).toBe(currentDate);
-        expect(field(host, 'Received on').max).toBe(currentDate);
+        expect(await chosenDay(fixture, host, 'Received on')).toBe(currentDate);
+        // The calendar offers no day after it: a payment is never dated in the future.
+        const days = Array.from(
+          dateField(host, 'Received on').querySelectorAll<HTMLElement>('button.day'),
+        );
+        const disabled = (day: HTMLElement) => day.getAttribute('aria-disabled') === 'true';
+        expect(days.filter((day) => day.dataset['date']! > currentDate).every(disabled)).toBe(true);
+        expect(days.some((day) => day.dataset['date']! > currentDate)).toBe(true);
+        expect(disabled(days.find((day) => day.dataset['date'] === currentDate)!)).toBe(false);
       });
+    });
+  }
+
+  // A record whose workspace starts its weeks on Sunday: the program and plan calendars (audit A14a)
+  // follow it, as Record a max does, rather than the locale's Monday.
+  for (const [name, component, inputs, label] of [
+    [
+      'Assign program',
+      ProgramAssign,
+      { clientId: 'client-1', firstName: 'Rana', enrollments: [trainingPlan] },
+      'Start date',
+    ],
+    [
+      'Start a plan',
+      PlanStart,
+      { clientId: 'client-1', firstName: 'Rana', catalog, plans: [] },
+      'First day',
+    ],
+  ] as const) {
+    it(`starts ${name}'s calendar weeks on the workspace's day`, async () => {
+      const { fixture, host } = await render(
+        component,
+        { ...inputs, today: '2026-09-21' },
+        '2026-09-21',
+        [
+          {
+            provide: ClientWorkspaceContext,
+            useValue: {
+              workspace: signal({ ...workspaceOn('2026-09-21'), weekStartsOn: 'Sunday' }),
+            },
+          },
+        ],
+      );
+
+      await chosenDay(fixture, host, label);
+      const days = Array.from(dateField(host, label).querySelectorAll('th')).map((cell) =>
+        cell.getAttribute('abbr'),
+      );
+      expect(days[0]).toBe('Sunday');
     });
   }
 

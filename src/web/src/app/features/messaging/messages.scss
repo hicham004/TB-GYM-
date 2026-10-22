@@ -37,13 +37,19 @@ h2:focus {
   margin-inline: auto;
   max-inline-size: 72rem;
 }
+// A page title in the interface's face, as on every other page (plan §3, audit A14a): the coach's
+// size beside the coach's pages, the client's beside theirs.
 .chat-title {
-  font-family: var(--tb-font-serif);
-  font-size: clamp(2.2rem, 8vw, 3rem);
-  font-weight: 400;
+  font-size: clamp(1.75rem, 4cqi, 2.125rem);
+  font-weight: 600;
   grid-area: title;
-  line-height: 1;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   margin-block-end: var(--space-12);
+}
+.chat.for-client .chat-title {
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  line-height: 1.05;
 }
 .chat.single .chat-title {
   @include hidden;

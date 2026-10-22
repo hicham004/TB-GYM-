@@ -389,24 +389,23 @@
         </app-field>
 
         @let equipmentMessages = equipmentReasons();
-        <app-field
+        <app-select
           label="Equipment"
+          placeholder="Choose equipment…"
+          [options]="equipment"
+          formControlName="equipment"
           [errors]="attempt.shows('equipment', equipmentMessages) ? equipmentMessages : null"
-        >
-          <select appControl formControlName="equipment" (blur)="attempt.touch('equipment')">
-            <option value="">Choose equipment…</option>
-            @for (option of equipment; track option.value) {
-              <option [value]="option.value">{{ option.label }}</option>
-            }
-          </select>
-        </app-field>
+          (touched)="attempt.touch('equipment')"
+        />
 
-        <app-field label="Classification">
-          <select appControl formControlName="classification">
-            @for (option of classifications; track option.value) {
-              <option [value]="option.value">{{ option.label }}</option>
-            }
-          </select>
+        <app-select
+          label="Classification"
+          [options]="classifications"
+          formControlName="classification"
+        />
+
+        <app-field label="Reminder time" help="On the 24-hour clock, such as 22:00 or 2200.">
+          <input appControl appTimeInput type="text" [formControl]="reminderTime" />
         </app-field>
 
         <app-field
@@ -500,13 +499,7 @@
           [formControl]="restSeconds"
         />
       </app-field>
-      <app-field label="Set type" density="compact">
-        <select appControl [formControl]="setType">
-          @for (option of setTypes; track option) {
-            <option [value]="option">{{ option }}</option>
-          }
-        </select>
-      </app-field>
+      <app-select label="Set type" density="compact" [options]="setTypes" [formControl]="setType" />
       <app-field label="Tempo" density="compact">
         <input
           appControl
@@ -599,14 +592,12 @@
       <app-field [label]="arabic.nameLabel" [help]="arabic.nameHelp" [errors]="arabicNameMessages">
         <input appControl type="text" dir="auto" [formControl]="arabicName" />
       </app-field>
-      <app-field [label]="arabic.equipmentLabel">
-        <select appControl [formControl]="arabicEquipment">
-          <option value="">{{ arabic.equipmentPlaceholder }}</option>
-          @for (option of arabic.equipmentOptions; track option) {
-            <option [value]="option">{{ option }}</option>
-          }
-        </select>
-      </app-field>
+      <app-select
+        [label]="arabic.equipmentLabel"
+        [placeholder]="arabic.equipmentPlaceholder"
+        [options]="arabicEquipmentOptions"
+        [formControl]="arabicEquipment"
+      />
       <app-field [label]="arabic.tempoLabel">
         <input
           appControl

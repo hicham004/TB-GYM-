@@ -9,7 +9,7 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, formSummary, settle } from '../../../testing/dom';
+import { chooseOption, fill, formSummary, settle } from '../../../testing/dom';
 import { ProgramBuilderApi } from './program-builder-api';
 import { ProgramWeekProgression } from './program-week-progression';
 import {
@@ -135,7 +135,7 @@ describe('Duplicate with progression', () => {
     const { fixture, host, api, csrf, added, press, text, addButton } = await render();
 
     fill(host, 'Copies', '2');
-    fill(host, 'RPE a week', '1');
+    await chooseOption(fixture, host, 'RPE a week', '+1 a week');
     fill(host, 'Reps a week', '1');
     await settle(fixture);
     await press('Show the new weeks');

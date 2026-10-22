@@ -424,7 +424,11 @@ test('a quiet window that ends when it starts is refused under Until, which take
   expect(saves).toEqual([]);
   await page.screenshot({ path: 'test-results/a12b-quiet-hours-390.png', fullPage: true });
 
-  await until.fill('06:30');
+  // A typed box on the 24-hour clock, never the browser's picker (audit A14a): "630" reads as 06:30.
+  await expect(until).toHaveAttribute('type', 'text');
+  await until.fill('630');
+  await until.press('Tab');
+  await expect(until).toHaveValue('06:30');
   await expect(until).not.toHaveAttribute('aria-invalid', 'true');
   await expect(page.getByRole('alert')).toHaveText('');
   await page.getByRole('button', { name: 'Save settings' }).click();

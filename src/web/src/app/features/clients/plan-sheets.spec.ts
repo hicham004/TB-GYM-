@@ -13,7 +13,16 @@ import {
   SERVICE_TODAY,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
-import { field, fill, formSummary, press, settle } from '../../../testing/dom';
+import {
+  chooseDay,
+  chooseOption,
+  chosenDay,
+  field,
+  fill,
+  formSummary,
+  press,
+  settle,
+} from '../../../testing/dom';
 import { planCard } from './client-service.models';
 import { PlanPayment, PlanStart } from './plan-sheets';
 
@@ -97,8 +106,7 @@ describe('Start a plan', () => {
     );
     expect(textOf(host)).toContain('Maya can use it once USD 120 is paid.');
 
-    fill(host, 'First day', '2026-10-13');
-    await settle(fixture);
+    await chooseDay(fixture, host, 'First day', '2026-10-13');
     expect(host.querySelector('[role="status"]')).toBeNull();
   });
 
@@ -135,7 +143,7 @@ describe('Start a plan', () => {
       'Online Coaching · 4 weeks',
     ]);
     expect(host.querySelector<HTMLInputElement>('input[value="o-12"]')!.checked).toBe(true);
-    expect(field(host, 'First day').value).toBe('2026-10-13');
+    expect(await chosenDay(fixture, host, 'First day')).toBe('2026-10-13');
     expect(textOf(host.querySelector('.run'))).toBe('Runs Tue 13 Oct 2026 – Mon 4 Jan 2027');
 
     press(host, 'Renew plan');
@@ -235,7 +243,7 @@ describe('Record payment', () => {
     expect(field(host, 'Amount received').value).toBe('180');
     expect(textOf(host)).toContain('USD 180 left to pay. Part payments are fine.');
     expect(textOf(host)).toContain('This pays the plan in full. Maya gets access from Tue 13 Oct.');
-    fill(host, 'How it was paid', 'MobileWallet');
+    await chooseOption(fixture, host, 'How it was paid', 'Mobile wallet');
     fill(host, 'Reference (optional)', ' WH-2290 ');
     press(host, 'Record payment');
     await settle(fixture);
@@ -256,7 +264,7 @@ describe('Record payment', () => {
   it('sends an earlier day as the day, never an instant built from the browser’s clock', async () => {
     const { fixture, host, api } = await renderPayment();
 
-    fill(host, 'Received on', '2026-09-28');
+    await chooseDay(fixture, host, 'Received on', '2026-09-28');
     press(host, 'Record payment');
     await settle(fixture);
 

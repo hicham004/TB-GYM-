@@ -4,7 +4,6 @@ import {
   Component,
   computed,
   effect,
-  ElementRef,
   inject,
   Injector,
   input,
@@ -20,8 +19,8 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
-import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { UiSelect, type SelectOption } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { sessionFromSaved, toTrainingSessionRequest } from '../training/training-builder.models';
@@ -45,7 +44,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 @Component({
   selector: 'app-program-session',
-  imports: [Button, CoachWorkout, Control, ExerciseDemo, Field, FormSummary, Skeleton, StatusPill],
+  imports: [Button, CoachWorkout, ExerciseDemo, FormSummary, Skeleton, StatusPill, UiSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="sheet">
@@ -116,16 +115,13 @@ import { ClientWorkspaceContext } from './client-workspace.context';
               Replace it with one of your saved sessions. It stays on {{ session().day }}: only this
               session changes, and the rest of the program stays as it is.
             </p>
-            <app-field [label]="savedLabel" [errors]="swapError() ? [swapError()!] : null">
-              <select appControl (change)="chosenId.set($any($event.target).value)">
-                <option value="" i18n>Choose a saved session…</option>
-                @for (saved of saved(); track saved.id) {
-                  <option [value]="saved.id" [selected]="saved.id === chosenId()">
-                    {{ saved.name }}
-                  </option>
-                }
-              </select>
-            </app-field>
+            <app-select
+              [label]="savedLabel"
+              [placeholder]="savedPlaceholder"
+              [options]="savedOptions()"
+              [errors]="swapError() ? [swapError()!] : null"
+              [(value)]="chosenId"
+            />
             @if (savedLoaded() && saved().length === 0) {
               <p class="muted" i18n>
                 You have no saved sessions yet. Save one from the program builder first.
@@ -290,7 +286,6 @@ export class ProgramSession {
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly summary = viewChild(FormSummary);
 
@@ -306,6 +301,7 @@ export class ProgramSession {
 
   protected readonly loadingLabel = $localize`Loading the session…`;
   protected readonly savedLabel = $localize`Saved session`;
+  protected readonly savedPlaceholder = $localize`Choose a saved session…`;
   protected readonly load = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly view = signal<TrainingMesocycleView | null>(null);
   protected readonly saved = signal<SavedSessionView[]>([]);
@@ -314,6 +310,10 @@ export class ProgramSession {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly swapError = signal<string | null>(null);
+  protected readonly savedOptions = computed<SelectOption[]>(() =>
+    this.saved().map((saved) => ({ value: saved.id, label: saved.name })),
+  );
+  private readonly savedField = viewChild(UiSelect);
 
   protected readonly tone = computed(() => markTone(this.session().mark));
   /** A former client's record is read-only (ADR 0027), so it takes no new note. */
@@ -383,10 +383,7 @@ export class ProgramSession {
     if (!saved) {
       this.swapError.set($localize`Choose a saved session.`);
       this.error.set(null);
-      afterNextRender(
-        () => this.host.nativeElement.querySelector<HTMLElement>('.swap select')?.focus(),
-        { injector: this.injector },
-      );
+      afterNextRender(() => this.savedField()?.focus(), { injector: this.injector });
       return;
     }
     const block = this.block();

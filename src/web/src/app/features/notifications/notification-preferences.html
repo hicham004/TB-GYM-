@@ -111,8 +111,9 @@
                 <!-- A reason is said under its own box (WEB-12), once the box is left or Save pressed. -->
                 <app-field label="From" i18n-label [errors]="shownTime('quietHoursStartLocal')">
                   <input
-                    type="time"
+                    type="text"
                     appControl
+                    appTimeInput
                     formControlName="quietHoursStartLocal"
                     aria-describedby="quietHoursZone"
                     (blur)="attempt.touch('quietHoursStartLocal')"
@@ -120,8 +121,9 @@
                 </app-field>
                 <app-field label="Until" i18n-label [errors]="shownTime('quietHoursEndLocal')">
                   <input
-                    type="time"
+                    type="text"
                     appControl
+                    appTimeInput
                     formControlName="quietHoursEndLocal"
                     aria-describedby="quietHoursZone"
                     (blur)="attempt.touch('quietHoursEndLocal')"
@@ -131,8 +133,8 @@
               <!-- The zone is stated rather than assumed: these are workspace times, and a member
                  abroad would otherwise read them as their own. -->
               <p id="quietHoursZone" class="hint" i18n>
-                {{ timeZoneId() }} time. A window may run past midnight, and it ends at the "until"
-                time.
+                {{ timeZoneId() }} time, on the 24-hour clock. A window may run past midnight, and
+                it ends at the "until" time.
               </p>
             }
           </div>

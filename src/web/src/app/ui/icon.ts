@@ -36,6 +36,8 @@ const GLYPHS = {
   },
   // Icon/Chevron down 234:485 (the same stroke `.tb-select` draws as its background image)
   'chevron-down': { size: 20, path: 'M6 8L10 12L14 8' },
+  // The chosen option's tick in the kit's select (audit A14a), the checkbox's stroke on the 20px grid.
+  check: { size: 20, path: 'M5 10.5L8.5 14L15 6.5' },
   // Show/hide password. Drawn in code on the masters' 20px, 1.5px-stroke grid; not in Figma yet.
   eye: {
     size: 20,

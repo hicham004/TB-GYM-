@@ -4,7 +4,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FoodItemView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
-import { button, fill, formSummary, settle } from '../../../testing/dom';
+import { button, chooseOption, fill, formSummary, settle } from '../../../testing/dom';
 import { CHICKEN_FOOD, OATS_FOOD } from '../../../testing/food-fixtures';
 import { FoodApi } from './food-api';
 import { FoodEditor } from './food-editor';
@@ -177,6 +177,18 @@ describe('the food sheet', () => {
     expect(host.querySelector<HTMLDetailsElement>('details')!.open).toBe(true);
     expect(textOf(host.querySelector('details .tb-field__support--error'))).toBe(
       'Fibre and sugar alcohols are part of the carbs, so together they can’t be more than the carbs.',
+    );
+  });
+
+  it('saves the unit chosen from its list as what the amounts are measured in', async () => {
+    const { fixture, host, api } = await render('edit', OATS_FOOD);
+    await chooseOption(fixture, host, 'Unit', 'millilitres (ml)');
+    button(host, 'Save changes').click();
+    await settle(fixture);
+
+    expect(api.addVersion).toHaveBeenCalledWith(
+      'food-oats',
+      expect.objectContaining({ basisUnit: 'Millilitre' }),
     );
   });
 

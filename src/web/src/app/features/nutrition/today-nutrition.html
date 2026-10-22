@@ -206,20 +206,15 @@
               }
               @if (isEditing(slot.id)) {
                 <div class="meal-editor">
-                  <label
-                    ><span i18n>What did you eat?</span>
-                    <select
-                      [ngModel]="entry.choiceId"
-                      (ngModelChange)="updateChoice(slot.id, $event)"
-                      [disabled]="plan.logStatus === 'Completed' || entry.saving"
-                    >
-                      @for (choice of slot.choices; track choice.id) {
-                        <option [value]="choice.id">
-                          {{ choice.recipeName }} · {{ choice.calories | number: '1.0-0' }} kcal
-                        </option>
-                      }
-                    </select>
-                  </label>
+                  <app-select
+                    label="What did you eat?"
+                    i18n-label
+                    size="touch"
+                    [options]="choiceOptions().get(slot.id) ?? []"
+                    [value]="entry.choiceId ?? ''"
+                    [disabled]="plan.logStatus === 'Completed' || entry.saving"
+                    (valueChange)="updateChoice(slot.id, $event)"
+                  />
                   @if (draftChoice(slot, entry.choiceId)?.recipeId) {
                     <button
                       type="button"
@@ -362,14 +357,14 @@
                 step="any"
                 required
             /></label>
-            <label
-              ><span i18n>Unit</span
-              ><select name="unit" [(ngModel)]="customUnit">
-                <option value="Gram" i18n>g</option>
-                <option value="Millilitre" i18n>ml</option>
-                <option value="Serving" i18n>servings</option>
-              </select></label
-            >
+            <app-select
+              label="Unit"
+              i18n-label
+              size="touch"
+              [options]="unitOptions"
+              [value]="customUnit"
+              (valueChange)="customUnit = $any($event)"
+            />
             <label
               ><span i18n>Calories (kcal)</span
               ><input

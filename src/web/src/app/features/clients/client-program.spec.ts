@@ -24,7 +24,17 @@ import {
   plannedBlock,
   runningBlock,
 } from '../../../testing/client-program-fixtures';
-import { formSummary, press, settle, type } from '../../../testing/dom';
+import {
+  chooseDay,
+  chooseOption,
+  chosenDay,
+  formSummary,
+  press,
+  query,
+  selectField,
+  settle,
+  type,
+} from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ClientProgram } from './client-program';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -656,12 +666,9 @@ describe('a client’s Training', () => {
       await settle(harness.fixture);
 
       const move = dialog()!;
-      const date = move.querySelector<HTMLInputElement>('input[type="date"]')!;
-      expect(date.value).toBe('2026-10-26');
+      expect(await chosenDay(harness.fixture, move, 'New start date')).toBe('2026-10-26');
       expect(textOf(move)).toContain('Runs Mon 26 Oct – Sun 8 Nov');
-      date.value = '2026-11-02';
-      date.dispatchEvent(new Event('input'));
-      await settle(harness.fixture);
+      await chooseDay(harness.fixture, move, 'New start date', '2026-11-02');
       expect(textOf(move)).toContain('Runs Mon 2 Nov – Sun 15 Nov');
       press(move, 'Reschedule');
       await settle(harness.fixture);
@@ -1004,10 +1011,7 @@ describe('a client’s Training', () => {
       swap.dispatchEvent(new Event('toggle'));
       await settle(harness.fixture);
       expect(textOf(swap)).toContain('It stays on Thu 1 Oct');
-      const select = swap.querySelector('select')!;
-      select.value = 'saved-1';
-      select.dispatchEvent(new Event('change'));
-      await settle(harness.fixture);
+      await chooseOption(harness.fixture, swap, 'Saved session', 'Lower A (saved)');
       press(sheet, 'Swap session');
       await settle(harness.fixture);
 
@@ -1058,14 +1062,13 @@ describe('a client’s Training', () => {
 
       press(sheet, 'Swap session');
       await settle(harness.fixture);
-      const select = swap.querySelector('select')!;
+      const select = query<HTMLButtonElement>(selectField(swap, 'Saved session'), 'button.trigger');
       expect(textOf(swap)).toContain('Choose a saved session.');
       expect(document.activeElement).toBe(select);
+      expect(select.getAttribute('aria-invalid')).toBe('true');
       expect(replaceFutureTrainingSession).not.toHaveBeenCalled();
 
-      select.value = 'saved-2';
-      select.dispatchEvent(new Event('change'));
-      await settle(harness.fixture);
+      await chooseOption(harness.fixture, swap, 'Saved session', 'Upper A (saved)');
       press(sheet, 'Swap session');
       await settle(harness.fixture);
 

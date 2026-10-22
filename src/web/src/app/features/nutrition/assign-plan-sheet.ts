@@ -18,9 +18,10 @@ import { SheetForm } from '../../core/forms/sheet-form';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { DateField } from '../../ui/date-field';
-import { Control, Field } from '../../ui/field';
+import { Control } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
+import { UiSelect, type SelectOption } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
 import { dayWords } from '../progress/progress-entries.models';
 import { ClientNutritionApi } from './client-nutrition-api';
@@ -53,9 +54,9 @@ import { MealPlanApi } from './meal-plan-api';
     DateField,
     DecimalPipe,
     EntryActions,
-    Field,
     FormSummary,
     Skeleton,
+    UiSelect,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -135,20 +136,12 @@ import { MealPlanApi } from './meal-plan-api';
             }
           </p>
           @if (calculations().length > 1) {
-            <app-field [label]="targetsLabel">
-              <select
-                appControl
-                name="targets"
-                [value]="pickedId() ?? ''"
-                (change)="pickedId.set($any($event.target).value)"
-              >
-                @for (item of calculations(); track item.id) {
-                  <option [value]="item.id" [selected]="item.id === pickedId()">
-                    {{ workedWords(item) }}
-                  </option>
-                }
-              </select>
-            </app-field>
+            <app-select
+              [label]="targetsLabel"
+              [options]="targetOptions()"
+              [value]="pickedId() ?? ''"
+              (valueChange)="pickedId.set($event)"
+            />
           }
           <button appButton type="button" variant="text" (click)="workOut.emit()" data-again i18n>
             Work out new targets first
@@ -172,20 +165,12 @@ import { MealPlanApi } from './meal-plan-api';
       <fieldset class="group">
         <legend i18n>When</legend>
         @if (covers().length > 1) {
-          <app-field [label]="coverLabel">
-            <select
-              appControl
-              name="cover"
-              [value]="coverId() ?? ''"
-              (change)="coverId.set($any($event.target).value)"
-            >
-              @for (item of covers(); track item.id) {
-                <option [value]="item.id" [selected]="item.id === coverId()">
-                  {{ coverWords(item) }}
-                </option>
-              }
-            </select>
-          </app-field>
+          <app-select
+            [label]="coverLabel"
+            [options]="coverOptions()"
+            [value]="coverId() ?? ''"
+            (valueChange)="coverId.set($event)"
+          />
         } @else if (cover(); as only) {
           <p class="muted" data-cover>{{ coverWords(only) }}</p>
         }
@@ -397,6 +382,12 @@ export class AssignMealPlan extends SheetForm implements OnInit {
   );
   protected readonly cover = computed(
     () => this.covers().find((item) => item.id === this.coverId()) ?? null,
+  );
+  protected readonly targetOptions = computed<SelectOption[]>(() =>
+    this.calculations().map((item) => ({ value: item.id, label: this.workedWords(item) })),
+  );
+  protected readonly coverOptions = computed<SelectOption[]>(() =>
+    this.covers().map((item) => ({ value: item.id, label: this.coverWords(item) })),
   );
   protected readonly declaredWords = computed(() => allergenList(this.declared()));
   protected readonly pickedOn = computed(() => {

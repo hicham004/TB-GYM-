@@ -10,6 +10,7 @@ import {
   test,
   uniqueEmail,
 } from './support';
+import { chooseOption } from '../kit-controls';
 
 /**
  * Team, live (full audit, October 2026; ADR 0026): the owner invites a coach who joins in a signed-out
@@ -214,7 +215,7 @@ async function reassign(
   await owner.goto(`/clients/${clientId}/service`);
   await owner.getByRole('button', { name: 'Reassign coach' }).click();
   const dialog = owner.locator('dialog[open]').last();
-  await dialog.locator('select').selectOption({ label: coachName });
+  await chooseOption(dialog, 'New coach', coachName);
   await dialog.getByLabel(/Note/).fill(note);
   await dialog.getByRole('button', { name: 'Reassign', exact: true }).click();
   await expect(owner.locator('.coach-notice')).toHaveText(

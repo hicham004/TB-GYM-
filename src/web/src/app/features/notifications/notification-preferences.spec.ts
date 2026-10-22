@@ -257,6 +257,46 @@ describe('NotificationPreferencesPage', () => {
     expect(sent.quietHoursEndLocal).toBe('07:00');
   });
 
+  it('takes the times as typed on a number pad and sends them as the 24-hour clock writes them', async () => {
+    const { host, fixture, update } = await render();
+
+    tick(host, 'Hold emails during quiet hours');
+    await settle(fixture);
+    const from = setTime(host, 'From', '2230');
+    leave(host, 'From');
+    const until = setTime(host, 'Until', '6.15');
+    leave(host, 'Until');
+    await settle(fixture);
+    // Never the browser's own time picker: a typed box, tidied once it is left (audit A14a).
+    expect(from.type).toBe('text');
+    expect(from.value).toBe('22:30');
+    expect(until.value).toBe('06:15');
+    expect(reasonUnder(host, 'From')).toBe('');
+    expect(reasonUnder(host, 'Until')).toBe('');
+
+    press(host, 'Save settings');
+    await settle(fixture);
+    const sent = update.mock.calls[0][0];
+    expect(sent.quietHoursStartLocal).toBe('22:30');
+    expect(sent.quietHoursEndLocal).toBe('06:15');
+  });
+
+  it('says a time it cannot read under its box, in the 24-hour words', async () => {
+    const { host, fixture, update } = await render();
+
+    tick(host, 'Hold emails during quiet hours');
+    await settle(fixture);
+    const from = setTime(host, 'From', '25:00');
+    leave(host, 'From');
+    await settle(fixture);
+
+    expect(from.value).toBe('25:00');
+    expect(reasonUnder(host, 'From')).toBe('Enter when quiet hours start, such as 22:00.');
+    press(host, 'Save settings');
+    await settle(fixture);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('refuses a zero-length quiet window under Until, which takes focus, before troubling the server', async () => {
     const { host, fixture, update } = await render();
 

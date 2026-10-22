@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { ACCOUNTS, expect, requireLive, signIn, test } from './support';
+import { chooseOption } from '../kit-controls';
 
 /**
  * The program builder against the real API (C4, ADR 0033, TRN-024, TRN-025): Karim builds a program from a
@@ -92,7 +93,7 @@ test('a coach drags, prescribes, copies with a progression and publishes', async
   await page.getByRole('button', { name: 'Duplicate with progression…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Duplicate with progression' });
   await dialog.getByRole('spinbutton', { name: 'Copies' }).fill('2');
-  await dialog.locator('select[name=rpe]').selectOption('0.5');
+  await chooseOption(dialog, 'RPE a week', '+0.5 a week');
   await dialog.getByRole('button', { name: 'Show the new weeks' }).click();
   await expect(
     dialog.getByRole('heading', { name: '2 new weeks after week 1', level: 3 }),

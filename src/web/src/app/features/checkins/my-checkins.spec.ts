@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
@@ -14,6 +14,7 @@ import { ClientAccessStore } from '../../core/access/client-access.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { announced, button, focusedId, press, settle } from '../../../testing/dom';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
+import { DRAWN_TOGETHER_PATIENCE_MS } from '../../ui/drawn-together';
 import { MyCheckIns } from './my-checkins';
 
 function item(
@@ -158,6 +159,65 @@ describe('MyCheckIns', () => {
     expect(read()).not.toContain('v2');
     expect(focusedId()).toBe('');
     expect(document.activeElement?.tagName).toBe('H1');
+  });
+
+  it('holds the card until its coach and size have answered, then draws it in one go', async () => {
+    const coach = new Subject<{ name: string }>();
+    const { host, read, settle } = await render({ getOwnCoach: vi.fn(() => coach) });
+
+    // The list is in, but the coach's line would push the card down as it lands (audit A14a).
+    expect(host.querySelector('.hero-skeleton')).not.toBeNull();
+    expect(host.querySelector('a.hero-action')).toBeNull();
+
+    coach.next({ name: 'Lea Haddad' });
+    coach.complete();
+    await settle();
+
+    expect(host.querySelector('.hero-skeleton')).toBeNull();
+    expect(read()).toContain('From Lea Haddad');
+    expect(read()).toContain('4 questions');
+    expect(host.querySelector('a.hero-action')?.textContent?.trim()).toBe('Start check-in');
+  });
+
+  it('draws the card once the coach is 1.5 s late, keeping the late lines in place until they land', async () => {
+    // The patience is timed on a fake clock that still moves, so the page's own waits run.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const coach = new Subject<{ name: string }>();
+      const { host, read, settle } = await render({ getOwnCoach: vi.fn(() => coach) });
+      expect(host.querySelector('.hero-skeleton')).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(DRAWN_TOGETHER_PATIENCE_MS);
+      await settle();
+      // The card and its one action are there; its two niceties are still out, their places kept.
+      expect(host.querySelector('.hero-skeleton')).toBeNull();
+      expect(host.querySelector('a.hero-action')?.textContent?.trim()).toBe('Start check-in');
+      expect(read()).not.toContain('From Lea Haddad');
+      const waiting = host.querySelectorAll('.hero-waiting');
+      expect(waiting).toHaveLength(2);
+      expect(waiting[0].classList).toContain('hero-from');
+      expect(waiting[1].classList).toContain('hero-meta');
+      expect(waiting[0].getAttribute('aria-hidden')).toBe('true');
+
+      coach.next({ name: 'Lea Haddad' });
+      coach.complete();
+      await settle();
+      expect(read()).toContain('From Lea Haddad');
+      expect(read()).toContain('4 questions');
+      expect(host.querySelectorAll('.hero-waiting')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('draws at once when nothing is open, with no card to wait for', async () => {
+    const coach = vi.fn(() => of({ name: 'Lea Haddad' }));
+    const { host } = await render({
+      listOwnCheckInAssignments: vi.fn(() => page(0)),
+      getOwnCoach: coach,
+    });
+    expect(host.querySelector('.hero-skeleton')).toBeNull();
+    expect(coach).not.toHaveBeenCalled();
   });
 
   it('continues a started check-in and shows how far it got', async () => {

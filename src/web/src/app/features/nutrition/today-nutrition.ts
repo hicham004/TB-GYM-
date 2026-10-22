@@ -1,10 +1,11 @@
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe, formatNumber } from '@angular/common';
 import {
   Component,
   computed,
   effect,
   inject,
+  LOCALE_ID,
   signal,
   type TemplateRef,
   untracked,
@@ -23,6 +24,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Icon } from '../../ui/icon';
 import { ProgressRing } from '../../ui/progress-ring';
+import { UiSelect, type SelectOption } from '../../ui/select';
 import { UiSheet } from '../../ui/sheet';
 import { addDays } from '../clients/client-overview.models';
 import { ClientRecipeSheet } from './client-recipe';
@@ -44,7 +46,7 @@ function dayOf(answer: Observable<ClientNutritionDayView>): Promise<NutritionDay
 
 @Component({
   selector: 'app-today-nutrition',
-  imports: [ClientRecipeSheet, DatePipe, DecimalPipe, FormsModule, Icon, ProgressRing],
+  imports: [ClientRecipeSheet, DatePipe, DecimalPipe, FormsModule, Icon, ProgressRing, UiSelect],
   templateUrl: './today-nutrition.html',
   styleUrl: './today-nutrition.scss',
 })
@@ -54,6 +56,7 @@ export class TodayNutrition {
   private readonly tenants = inject(TenantStore);
   private readonly access = inject(ClientAccessStore);
   private readonly calendar = inject(WorkspaceCalendar);
+  private readonly locale = inject(LOCALE_ID);
   private readonly sheets = inject(UiSheet);
   private readonly recipeSheet = viewChild.required<TemplateRef<unknown>>('recipeSheet');
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
@@ -90,6 +93,25 @@ export class TodayNutrition {
   protected readonly loggedCount = computed(
     () => this.day()?.slots.filter((slot) => slot.selectedChoiceId !== null).length ?? 0,
   );
+  /** Each meal's options as the select lists them: the recipe and its calories, by meal. */
+  protected readonly choiceOptions = computed(() => {
+    const options = new Map<string, SelectOption[]>();
+    for (const slot of this.day()?.slots ?? []) {
+      options.set(
+        slot.id,
+        slot.choices.map((choice) => ({
+          value: choice.id,
+          label: $localize`${choice.recipeName}:recipe: · ${formatNumber(choice.calories, this.locale, '1.0-0')}:calories: kcal`,
+        })),
+      );
+    }
+    return options;
+  });
+  protected readonly unitOptions: SelectOption[] = [
+    { value: 'Gram', label: $localize`g` },
+    { value: 'Millilitre', label: $localize`ml` },
+    { value: 'Serving', label: $localize`servings` },
+  ];
   protected readonly caloriesLabel = $localize`Calories`;
   protected readonly proteinLabel = $localize`Protein`;
   protected readonly carbsLabel = $localize`Carbs`;

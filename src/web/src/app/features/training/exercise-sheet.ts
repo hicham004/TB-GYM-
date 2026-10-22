@@ -30,6 +30,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
+import { selectOptions, UiSelect } from '../../ui/select';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import {
   EQUIPMENT,
@@ -59,7 +60,7 @@ import {
  */
 @Component({
   selector: 'app-exercise-sheet',
-  imports: [Button, Checkbox, Control, Field, FormSummary, Icon],
+  imports: [Button, Checkbox, Control, Field, FormSummary, Icon, UiSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -96,50 +97,30 @@ import {
       </app-field>
 
       <div class="grid">
-        <app-field [label]="typeLabel">
-          <select
-            appControl
-            name="type"
-            (change)="set({ classification: $any($event.target).value })"
-          >
-            @for (item of types; track item) {
-              <option [value]="item" [selected]="item === values().classification">
-                {{ typeName(item) }}
-              </option>
-            }
-          </select>
-        </app-field>
-        <app-field [label]="muscleLabel">
-          <select appControl name="muscle" (change)="setPrimary($any($event.target).value)">
-            @for (item of muscles; track item) {
-              <option [value]="item" [selected]="item === values().primaryMuscle">
-                {{ muscleName(item) }}
-              </option>
-            }
-          </select>
-        </app-field>
-        <app-field [label]="patternLabel">
-          <select appControl name="pattern" (change)="set({ pattern: $any($event.target).value })">
-            @for (item of patterns; track item) {
-              <option [value]="item" [selected]="item === values().pattern">
-                {{ patternName(item) }}
-              </option>
-            }
-          </select>
-        </app-field>
-        <app-field [label]="equipmentLabel">
-          <select
-            appControl
-            name="equipment"
-            (change)="set({ equipment: $any($event.target).value })"
-          >
-            @for (item of equipment; track item) {
-              <option [value]="item" [selected]="item === values().equipment">
-                {{ equipmentName(item) }}
-              </option>
-            }
-          </select>
-        </app-field>
+        <app-select
+          [label]="typeLabel"
+          [options]="typeOptions"
+          [value]="values().classification"
+          (valueChange)="set({ classification: $any($event) })"
+        />
+        <app-select
+          [label]="muscleLabel"
+          [options]="muscleOptions"
+          [value]="values().primaryMuscle"
+          (valueChange)="setPrimary($any($event))"
+        />
+        <app-select
+          [label]="patternLabel"
+          [options]="patternOptions"
+          [value]="values().pattern"
+          (valueChange)="set({ pattern: $any($event) })"
+        />
+        <app-select
+          [label]="equipmentLabel"
+          [options]="equipmentOptions"
+          [value]="values().equipment"
+          (valueChange)="set({ equipment: $any($event) })"
+        />
       </div>
 
       @if (!detailsOpen()) {
@@ -538,7 +519,6 @@ import {
     }
 
     input,
-    select,
     textarea {
       scroll-margin-block-end: 5rem;
     }
@@ -566,14 +546,12 @@ export class ExerciseSheet implements OnInit {
   protected readonly attempt = new FormAttempt();
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly types = TYPES;
+  protected readonly typeOptions = selectOptions(TYPES, exerciseClassificationLabel);
+  protected readonly muscleOptions = selectOptions(MUSCLES, muscleGroupLabel);
+  protected readonly patternOptions = selectOptions(PATTERNS, movementPatternLabel);
+  protected readonly equipmentOptions = selectOptions(EQUIPMENT, exerciseEquipmentLabel);
   protected readonly muscles = MUSCLES;
-  protected readonly patterns = PATTERNS;
-  protected readonly equipment = EQUIPMENT;
-  protected readonly typeName = exerciseClassificationLabel;
   protected readonly muscleName = muscleGroupLabel;
-  protected readonly patternName = movementPatternLabel;
-  protected readonly equipmentName = exerciseEquipmentLabel;
   protected readonly line = mediaLine;
 
   protected readonly nameLabel = $localize`Exercise name`;

@@ -33,10 +33,10 @@ h1:focus {
   text-transform: uppercase;
 }
 h1 {
-  font-family: var(--tb-font-serif);
-  font-size: clamp(2.7rem, 9vw, 4.2rem);
-  font-weight: 400;
-  line-height: 1;
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 .page-lede {
   color: var(--tb-muted);
@@ -90,10 +90,10 @@ h1 {
 }
 .hero h2 {
   text-wrap: balance;
-  font-family: var(--tb-font-serif);
-  font-size: clamp(2.1rem, 7vw, 3rem);
-  font-weight: 400;
-  line-height: 1.05;
+  font-size: clamp(1.6rem, 6vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
   overflow-wrap: anywhere;
 }
 .hero-note {
@@ -104,6 +104,38 @@ h1 {
 .hero-meta {
   color: var(--tb-on-brand-soft);
   font-weight: 600;
+}
+// A line still being read keeps its place on the card (the coach's face and name, the count), as
+// Today keeps its coach's.
+.hero-waiting {
+  animation: hero-shimmer 1.4s ease-in-out infinite alternate;
+  min-block-size: 1.5rem;
+}
+.avatar-bone,
+.line-bone {
+  background: color-mix(in srgb, var(--tb-on-brand) 18%, transparent);
+  display: block;
+  flex: none;
+}
+.avatar-bone {
+  block-size: 36px;
+  border-radius: 50%;
+  inline-size: 36px;
+}
+.line-bone {
+  block-size: 0.75rem;
+  border-radius: var(--radius-4);
+  inline-size: 7rem;
+}
+@keyframes hero-shimmer {
+  to {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-waiting {
+    animation: none;
+  }
 }
 .hero-progress {
   background: color-mix(in srgb, var(--tb-on-brand) 20%, transparent);

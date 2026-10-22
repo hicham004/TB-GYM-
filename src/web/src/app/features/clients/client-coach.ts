@@ -22,6 +22,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { UiSelect, type SelectOption } from '../../ui/select';
 import { coachHistoryRows, type CoachHistoryRow } from './client-coach.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
@@ -35,7 +36,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 @Component({
   selector: 'app-client-coach',
-  imports: [ReactiveFormsModule, Button, Control, Field, FormSummary],
+  imports: [ReactiveFormsModule, Button, Control, Field, FormSummary, UiSelect],
   templateUrl: './client-coach.html',
   styleUrl: './client-coach.scss',
 })
@@ -73,6 +74,9 @@ export class ClientCoach {
   /** Everyone the client could be moved to: the rest of the team. */
   protected readonly candidates = computed(() =>
     this.members().filter((member) => member.userId !== this.client().assignedCoachUserId),
+  );
+  protected readonly coachOptions = computed<SelectOption[]>(() =>
+    this.candidates().map((member) => ({ value: member.userId, label: member.displayName })),
   );
   protected readonly form = this.formBuilder.nonNullable.group({
     coachUserId: ['', Validators.required],

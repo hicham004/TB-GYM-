@@ -766,6 +766,9 @@ the kit in light, dark and RTL before any redesigned screen adopts it.
 R5.3f removes the pre-foundation global classes and colour aliases. `npm run lint:styles` reads
 Angular's actual template and style metadata (including shared style constants) and rejects old
 colour names, unsupported former global classes and browser-default buttons; its fixtures test refusals.
+Since audit A14a it also rejects a picker the browser draws: a `<select>`, or an `<input>` of type date,
+time, datetime-local, month or week. The coach's two check-in pages are excepted by name until A14b
+rebuilds them.
 Check-in drafts and exercise sheets join `UnsavedWork`; a sheet can keep itself open on Browser Back
 until its leave guard answers. `RouteHeadingFocus` supplies a heading focus fallback after navigation
 or a delayed read, preserves deliberate field/dialog focus, and leaves filters, anchors and router scroll alone.
@@ -943,6 +946,21 @@ carries `content-visibility: auto`. Names come in ICU root order (`und-x-icu`, `
 since the alpine image's own collation sorts by byte. The builders' old in-browser search also matched
 equipment, pattern and muscle words and ignored accents; the server's finds every word, in any order, in an
 exercise's name or a tag or a recipe's name (LIB-003).
+
+Audit A14a (TRAIN-5, VER3B-NEW-1, UIQ-19): no screen draws a browser picker.
+- A list to choose from is the kit's `UiSelect` (`ui/select.ts`): its button names the choice and opens the
+  options in the page's flow, so a sheet never clips them. It takes the W3C select-only combobox's keys and
+  binds either with `[(value)]` or as a form control (it is a `ControlValueAccessor`), not both. A press
+  outside closes it; a press on its own button or label keeps focus where it is, since WebKit focuses no
+  button. An empty list leaves it focusable and marked unavailable.
+- A day is `DateField`, given the workspace's week start where the page has it. A time is `TimeInput`
+  (`ui/time-input.ts`), a text box on the 24-hour clock that tidies what it can read to `HH:MM` on Enter, on
+  change and when it is left (before a form submits or commits on blur), and keeps what it cannot, so the
+  page's reason can say why.
+- Specs drive them as a person does (`chooseOption`, `chooseDay` and `chosenDay` in `src/testing/dom.ts`,
+  and in `e2e/kit-controls.ts` for Playwright).
+- The root font is the loaded IBM Plex Sans (`--font-sans`), and page titles follow UI plan §3: bold sans,
+  with Instrument Serif for moments only.
 
 R6.2g adds Talk to us for gyms and analytics (ADR 0037). `home-talk` is the form (name, gym, one
 field for an email address or a WhatsApp number, a line about the gym, and a hidden honeypot) between

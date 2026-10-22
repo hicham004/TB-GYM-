@@ -144,9 +144,9 @@ export class App implements OnInit {
       if (shell === 'coach' || shell === 'client') this.launchHint.remember(shell);
       else if (shell !== 'pending') this.launchHint.remember(null);
     });
-    // The serif the signed-in pages greet with and title in, asked for as soon as a coach's or a
-    // client's shell is known, so it is there when the first page draws and that page's words do not
-    // reflow when it lands (audit UIQ-5).
+    // The serif the signed-in pages greet with (the name in Today's greeting, plan §3), asked for as
+    // soon as a coach's or a client's shell is known, so it is there when the first page draws and
+    // that page's words do not reflow when it lands (audit UIQ-5).
     effect(() => {
       const frame = this.frame();
       if ((frame === 'coach' || frame === 'client') && !this.serifRequested) {

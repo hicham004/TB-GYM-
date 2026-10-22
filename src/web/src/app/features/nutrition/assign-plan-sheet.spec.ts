@@ -11,7 +11,15 @@ import {
   publishedPlans,
   TODAY,
 } from '../../../testing/client-nutrition-fixtures';
-import { formSummary, press, settle, tick } from '../../../testing/dom';
+import {
+  chooseOption,
+  formSummary,
+  press,
+  selectOptionsOf,
+  selectShows,
+  settle,
+  tick,
+} from '../../../testing/dom';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { AssignMealPlan } from './assign-plan-sheet';
@@ -144,30 +152,29 @@ describe('Assign a meal plan', () => {
   });
 
   it('carries the newest targets, offers the earlier ones, and runs from today under their plan', async () => {
-    const { host } = await render();
+    const { fixture, host } = await render();
 
     expect(textOf(host.querySelector('[data-targets]'))).toBe(
       '2,155 calories a day 140 g protein · 264 g carbs · 60 g fat, worked out Fri 9 Oct',
     );
-    expect(host.querySelectorAll('select[name="targets"] option').length).toBe(2);
+    expect(await selectOptionsOf(fixture, host, 'Use the targets from')).toHaveLength(2);
     expect(textOf(host.querySelector('[data-cover]'))).toBe(
       'Online Coaching, Tue 21 Jul – Wed 28 Oct',
     );
   });
 
   it('names the coach’s own macros as theirs in the targets it carries (INV-2)', async () => {
-    const { host } = await render({
+    const { fixture, host } = await render({
       calculations: [mapWorkedOut(adjustedRecord()), mapWorkedOut(calculationRecord())],
     });
 
     expect(textOf(host.querySelector('[data-targets]'))).toBe(
       '2,060 calories a day 150 g protein · 230 g carbs · 60 g fat, your macros set today',
     );
-    expect(
-      Array.from(host.querySelectorAll('select[name="targets"] option')).map((option) =>
-        textOf(option),
-      ),
-    ).toEqual(['today, your macros, 2,060 calories a day', 'Fri 9 Oct, 2,155 calories a day']);
+    expect(await selectOptionsOf(fixture, host, 'Use the targets from')).toEqual([
+      'today, your macros, 2,060 calories a day',
+      'Fri 9 Oct, 2,155 calories a day',
+    ]);
   });
 
   it('sends the meal plan, the targets, the plan it sits under and the day', async () => {
@@ -193,6 +200,23 @@ describe('Assign a meal plan', () => {
     });
     expect(closed).toHaveBeenCalledTimes(1);
     expect(closed.mock.calls[0][0]).toMatchObject({ id: 'cplan-9', name: 'Spring cut' });
+  });
+
+  it('carries the earlier targets the coach picks from the list', async () => {
+    const assign = vi.fn(() => of(clientPlan({ id: 'cplan-9' })));
+    const { fixture, host } = await render({}, { assign });
+    const [, earlier] = await selectOptionsOf(fixture, host, 'Use the targets from');
+
+    await chooseOption(fixture, host, 'Use the targets from', earlier);
+    choosePlan(host, 'Spring cut');
+    await settle(fixture);
+    press(host, 'Assign meal plan');
+    await settle(fixture);
+
+    expect(assign).toHaveBeenCalledWith(
+      'client-1',
+      expect.objectContaining({ calculationSnapshotId: 'calc-1' }),
+    );
   });
 
   it('asks for a plan before sending anything', async () => {
@@ -379,14 +403,23 @@ describe('Assign a meal plan', () => {
     const assign = vi.fn(() => of(clientPlan()));
     const { fixture, host } = await render({ covers }, { assign });
 
-    expect(host.querySelectorAll('select[name="cover"] option').length).toBe(2);
+    expect(await selectOptionsOf(fixture, host, 'Under which plan')).toHaveLength(2);
+    expect(selectShows(host, 'Under which plan')).toBe('Online Coaching, Tue 21 Jul – Wed 28 Oct');
+    await chooseOption(
+      fixture,
+      host,
+      'Under which plan',
+      'Nutrition add-on, Tue 13 Oct – Mon 30 Nov',
+    );
     choosePlan(host, 'Lean bulk');
     await settle(fixture);
+    // The add-on starts on the 13th, so the meal plan does too.
+    await chooseDay(fixture, host, '2026-10-13');
     press(host, 'Assign meal plan');
     await settle(fixture);
     expect(assign).toHaveBeenCalledWith(
       'client-1',
-      expect.objectContaining({ enrollmentId: 'e-1' }),
+      expect.objectContaining({ enrollmentId: 'e-2', startDate: '2026-10-13' }),
     );
   });
 

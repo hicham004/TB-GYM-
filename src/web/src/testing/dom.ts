@@ -86,7 +86,6 @@ export function field<T extends Control = HTMLInputElement>(host: ParentNode, la
     if (control === null) {
       throw new Error(`The field labelled "${label}" has no control in it.`);
     }
-
     return control;
   }
 
@@ -111,8 +110,23 @@ export function field<T extends Control = HTMLInputElement>(host: ParentNode, la
  * value and the spec ends up asserting against a form the user never actually changed.
  */
 function write<T extends Control>(control: T, value: string): T {
+  notKitButton(control);
   control.value = value;
   control.dispatchEvent(new Event(control instanceof HTMLSelectElement ? 'change' : 'input'));
+  return control;
+}
+
+/**
+ * The kit's select and date field label their button (`field` finds it by its caption): there is no
+ * value to write into it nor a box to leave, so a spec that tries is told to choose instead of
+ * silently doing nothing.
+ */
+function notKitButton<T extends Element>(control: T): T {
+  if (control instanceof HTMLButtonElement) {
+    throw new Error(
+      'This label names a kit select or date field: choose with chooseOption or chooseDay.',
+    );
+  }
   return control;
 }
 
@@ -139,7 +153,7 @@ export function type(host: ParentNode, selector: string, value: string): Control
  * Blur does not bubble, so it is dispatched on the control itself, exactly where the binding sits.
  */
 export function leave(host: ParentNode, label: string): Control {
-  const control = field<Control>(host, label);
+  const control = notKitButton(field<Control>(host, label));
   control.dispatchEvent(new Event('blur'));
   return control;
 }
@@ -232,4 +246,146 @@ export function press(host: ParentNode, label: string): HTMLButtonElement {
 /** The visible text of the whole rendered component, for asserting what a user can read. */
 export function text(fixture: ComponentFixture<unknown>): string {
   return (fixture.nativeElement as HTMLElement).textContent ?? '';
+}
+
+/** The kit select (`app-select`) labelled `label`, failing naming the label when there is none. */
+export function selectField(host: ParentNode, label: string): HTMLElement {
+  const wanted = normalize(label);
+  const matches = Array.from(host.querySelectorAll<HTMLElement>('app-select')).filter(
+    (candidate) => normalize(candidate.querySelector('label')?.textContent) === wanted,
+  );
+  if (matches.length !== 1) {
+    throw new Error(`${matches.length} selects are labelled "${label}".`);
+  }
+
+  return matches[0];
+}
+
+/** What the kit select labelled `label` shows on its button: the choice, or what to choose. */
+export function selectShows(host: ParentNode, label: string): string {
+  return normalize(selectField(host, label).querySelector('.value')?.textContent);
+}
+
+/**
+ * The options of the kit select labelled `label`, in order, read the way a person reads them: the
+ * list is opened with its button and closed again.
+ */
+export async function selectOptionsOf(
+  fixture: ComponentFixture<unknown>,
+  host: ParentNode,
+  label: string,
+): Promise<string[]> {
+  const select = selectField(host, label);
+  const trigger = query<HTMLButtonElement>(select, 'button.trigger');
+  trigger.click();
+  await settle(fixture);
+  const options = Array.from(select.querySelectorAll('[role="option"] .option-label')).map(
+    (option) => normalize(option.textContent),
+  );
+  trigger.click();
+  await settle(fixture);
+  return options;
+}
+
+/**
+ * Chooses the option worded `option` in the kit select labelled `label`, as a person does: the
+ * button opens the list, then the option is pressed. Fails when the select is disabled or the
+ * option is not there.
+ */
+export async function chooseOption(
+  fixture: ComponentFixture<unknown>,
+  host: ParentNode,
+  label: string,
+  option: string,
+): Promise<void> {
+  const select = selectField(host, label);
+  const trigger = query<HTMLButtonElement>(select, 'button.trigger');
+  if (trigger.disabled) {
+    throw new Error(`The select labelled "${label}" is disabled, so a user could not choose.`);
+  }
+  if (trigger.getAttribute('aria-expanded') !== 'true') {
+    trigger.click();
+    await settle(fixture);
+  }
+  const wanted = normalize(option);
+  const target = Array.from(select.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    (candidate) => normalize(candidate.querySelector('.option-label')?.textContent) === wanted,
+  );
+  if (target === undefined) {
+    throw new Error(`The select labelled "${label}" has no option "${option}".`);
+  }
+  if (target.getAttribute('aria-disabled') === 'true') {
+    throw new Error(`"${option}" is not available in "${label}", so a user could not choose it.`);
+  }
+
+  target.click();
+  await settle(fixture);
+}
+
+/** The kit date field (`app-date-field`) labelled `label`, failing naming the label when absent. */
+export function dateField(host: ParentNode, label: string): HTMLElement {
+  const wanted = normalize(label);
+  const matches = Array.from(host.querySelectorAll<HTMLElement>('app-date-field')).filter(
+    (candidate) => normalize(candidate.querySelector('label')?.textContent) === wanted,
+  );
+  if (matches.length !== 1) {
+    throw new Error(`${matches.length} date fields are labelled "${label}".`);
+  }
+
+  return matches[0];
+}
+
+/**
+ * The day the kit date field labelled `label` holds, `YYYY-MM-DD` or `''`, read where a person sees
+ * it: the chosen day of its calendar, which is opened for it and left open.
+ */
+export async function chosenDay(
+  fixture: ComponentFixture<unknown>,
+  host: ParentNode,
+  label: string,
+): Promise<string> {
+  const found = dateField(host, label);
+  const trigger = query<HTMLButtonElement>(found, 'button.trigger');
+  if (trigger.getAttribute('aria-expanded') !== 'true') {
+    trigger.click();
+    await settle(fixture);
+  }
+
+  return found.querySelector<HTMLElement>('button.day.selected')?.dataset['date'] ?? '';
+}
+
+/**
+ * Chooses a day in the kit date field labelled `label`, as a person does: the button opens the
+ * calendar and its pages are turned until the day is on show.
+ */
+export async function chooseDay(
+  fixture: ComponentFixture<unknown>,
+  host: ParentNode,
+  label: string,
+  iso: string,
+): Promise<void> {
+  const found = dateField(host, label);
+  const trigger = query<HTMLButtonElement>(found, 'button.trigger');
+  if (trigger.getAttribute('aria-expanded') !== 'true') {
+    trigger.click();
+    await settle(fixture);
+  }
+  for (let turn = 0; turn < 36; turn++) {
+    const target = found.querySelector<HTMLButtonElement>(`button.day[data-date="${iso}"]`);
+    if (target) {
+      if (target.getAttribute('aria-disabled') === 'true') {
+        throw new Error(`${iso} cannot be chosen in "${label}", so a user could not choose it.`);
+      }
+      target.click();
+      await settle(fixture);
+      return;
+    }
+    const first = query<HTMLElement>(found, 'button.day').dataset['date']!;
+    query<HTMLButtonElement>(
+      found,
+      `button[aria-label="${iso < first ? 'Previous month' : 'Next month'}"]`,
+    ).click();
+    await settle(fixture);
+  }
+  throw new Error(`The date field labelled "${label}" never showed ${iso}.`);
 }

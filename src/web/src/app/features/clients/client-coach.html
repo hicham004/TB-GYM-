@@ -31,13 +31,12 @@
       </p>
     }
     <form class="reassign-form" [formGroup]="form" (ngSubmit)="reassign()" novalidate>
-      <app-field label="New coach" i18n-label>
-        <select appControl formControlName="coachUserId">
-          @for (member of candidates(); track member.userId) {
-            <option [value]="member.userId">{{ member.displayName }}</option>
-          }
-        </select>
-      </app-field>
+      <app-select
+        label="New coach"
+        i18n-label
+        [options]="coachOptions()"
+        formControlName="coachUserId"
+      />
       <app-field
         label="Note (optional)"
         i18n-label

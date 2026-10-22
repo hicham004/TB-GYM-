@@ -32,6 +32,7 @@ import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
+import { TimeInput } from '../../ui/time-input';
 import { mapNotificationPreferences, type NotificationPreferences } from './notification.models';
 
 /** 24-hour `HH:mm`, which is the only shape the API accepts. */
@@ -86,6 +87,7 @@ function quietHoursReasons(start: string, end: string): Partial<Record<QuietHour
     RouterLink,
     Skeleton,
     SettingsFrame,
+    TimeInput,
     UiConfirm,
   ],
   templateUrl: './notification-preferences.html',

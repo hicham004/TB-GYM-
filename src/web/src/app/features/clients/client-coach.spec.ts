@@ -9,7 +9,16 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { installDialogSupport } from '../../../testing/dialog';
-import { fill, formSummary, press, settle, text } from '../../../testing/dom';
+import {
+  chooseOption,
+  fill,
+  formSummary,
+  press,
+  selectOptionsOf,
+  selectShows,
+  settle,
+  text,
+} from '../../../testing/dom';
 import { TeamApi } from '../team/team-api';
 import { ClientCoach } from './client-coach';
 
@@ -142,7 +151,7 @@ describe('ClientCoach', () => {
     expect(text(fixture)).toContain('Olivia Owner');
     press(host, 'Reassign coach');
     await settle(fixture);
-    fill(host, 'New coach', 'coach-1');
+    await chooseOption(fixture, host, 'New coach', 'Cara Coach');
     fill(host, 'Note (optional)', '  Evening schedule  ');
     await settle(fixture);
     press(host, 'Reassign');
@@ -176,7 +185,7 @@ describe('ClientCoach', () => {
     press(host, 'Reassign coach');
     await settle(fixture);
     expect(formSummary(host).textContent?.trim()).toBe('');
-    fill(host, 'New coach', 'coach-1');
+    await chooseOption(fixture, host, 'New coach', 'Cara Coach');
     await settle(fixture);
     press(host, 'Reassign');
     await settle(fixture);
@@ -255,7 +264,7 @@ describe('ClientCoach', () => {
 
     expect(text(fixture)).toContain('The coach history couldn’t be loaded.');
     expect(host.querySelector('dialog [data-coach-history]')).toBeNull();
-    expect(host.querySelectorAll('option')).toHaveLength(1);
+    expect(await selectOptionsOf(fixture, host, 'New coach')).toHaveLength(1);
   });
 
   it('offers only the other members of the team as the new coach', async () => {
@@ -264,7 +273,8 @@ describe('ClientCoach', () => {
     press(host, 'Reassign coach');
     await settle(fixture);
 
-    const options = Array.from(host.querySelectorAll('option')).map((option) => option.value);
-    expect(options).toEqual(['coach-1']);
+    expect(await selectOptionsOf(fixture, host, 'New coach')).toEqual(['Cara Coach']);
+    // The only one is chosen already.
+    expect(selectShows(host, 'New coach')).toBe('Cara Coach');
   });
 });

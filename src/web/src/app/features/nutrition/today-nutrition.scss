@@ -23,10 +23,10 @@
   margin: 0;
 }
 h1 {
-  font-family: var(--tb-font-serif);
-  font-size: clamp(2.7rem, 7vw, 4.6rem);
-  font-weight: 400;
-  line-height: 1;
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
   margin: 0.35rem 0;
 }
 .page-head > p:last-child,
@@ -48,7 +48,6 @@ h3 {
   font-size: 1.2rem;
 }
 button,
-select,
 input {
   font: inherit;
 }
@@ -60,8 +59,7 @@ button:disabled {
   opacity: 0.6;
 }
 button:focus-visible,
-input:focus-visible,
-select:focus-visible {
+input:focus-visible {
   outline: 3px solid var(--tb-focus);
   outline-offset: 3px;
 }
@@ -299,10 +297,9 @@ select:focus-visible {
 .meal-editor label {
   display: grid;
   gap: 0.3rem;
-  font-size: 0.85rem;
-  font-weight: 700;
+  font-size: var(--text-compact-size);
+  font-weight: 600;
 }
-.meal-editor select,
 .meal-editor input {
   min-block-size: 2.75rem;
   inline-size: 100%;
@@ -368,11 +365,10 @@ select:focus-visible {
 .custom-form label {
   display: grid;
   gap: 0.3rem;
-  font-size: 0.85rem;
-  font-weight: 700;
+  font-size: var(--text-compact-size);
+  font-weight: 600;
 }
-.custom-form input,
-.custom-form select {
+.custom-form input {
   inline-size: 100%;
   min-block-size: 2.75rem;
   border: 1px solid var(--tb-line-strong);

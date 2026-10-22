@@ -120,6 +120,11 @@ describe('ClientToday', () => {
 
     expect(read()).toContain('Sunday 20 September');
     expect(host.querySelector('h1')?.textContent?.trim()).toBe('Today, Maya.');
+    // A greeting is a moment: the interface's face, with the name in the serif (plan §3, A14a).
+    expect(host.querySelector('h1 .serif')?.textContent?.trim()).toBe('Maya.');
+    // The name is isolated in its own direction and the full stop is not, so a name written right to
+    // left keeps the stop at the end of the line.
+    expect(host.querySelector('h1 [dir="auto"]')?.textContent).toBe('Maya');
     expect(host.querySelector('.today-coach')?.textContent).toContain('Hicham Haddad');
     expect(host.querySelectorAll('.today-week-days li')).toHaveLength(7);
     expect(read()).toContain('0 of 1 sessions done');

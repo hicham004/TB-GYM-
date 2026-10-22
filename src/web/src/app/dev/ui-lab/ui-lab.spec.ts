@@ -7,12 +7,14 @@ import { describe, expect, it } from 'vitest';
 import {
   announced,
   button,
+  chooseOption,
   field,
   fill,
   focusedId,
   leave,
   press,
   query,
+  selectField,
   settle,
   text,
   tick,
@@ -86,7 +88,9 @@ describe('UiLab', () => {
     expect(query(host, `#${name.id}-error`).textContent).toContain(
       'Enter a name for this exercise.',
     );
-    expect(field<HTMLSelectElement>(host, 'Equipment').hasAttribute('aria-invalid')).toBe(false);
+    expect(
+      query(selectField(host, 'Equipment'), 'button.trigger').hasAttribute('aria-invalid'),
+    ).toBe(false);
     expect(state(host, 'Touched')).toBe('yes');
   });
 
@@ -107,8 +111,7 @@ describe('UiLab', () => {
   it('saves a valid form once, even when pressed again while it is loading', async () => {
     const { fixture, host } = await render();
     fill(host, 'Exercise name', 'Barbell back squat');
-    fill(host, 'Equipment', 'Barbell');
-    await settle(fixture);
+    await chooseOption(fixture, host, 'Equipment', 'Barbell');
     expect(state(host, 'Valid')).toBe('yes');
     expect(state(host, 'Dirty')).toBe('yes');
 

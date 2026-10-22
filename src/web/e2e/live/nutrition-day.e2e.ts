@@ -1,4 +1,5 @@
 import { ACCOUNTS, api, expect, memberships, requireLive, signIn, test } from './support';
+import { chooseOption } from '../kit-controls';
 
 /**
  * The client's nutrition day against a live API (M4, NUT-005, NUT-012, ADR 0032): the macro rings
@@ -87,7 +88,7 @@ test('the rings show what was logged against the plan, and an extra food reverse
     await page.getByRole('button', { name: 'Add food' }).click();
     await page.getByLabel('Food name').fill('Live-check dark chocolate');
     await page.getByLabel('Amount eaten').fill('20');
-    await page.getByLabel('Unit').selectOption('Gram');
+    await chooseOption(page, 'Unit', 'g');
     await page.getByLabel('Calories (kcal)').fill('110');
     await page.getByLabel('Protein (g)').fill('1');
     await page.getByLabel('Carbs (g)').fill('12');

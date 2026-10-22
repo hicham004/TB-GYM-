@@ -22,6 +22,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { initialsOf } from '../../shell/initials';
 import { Avatar } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
+import { drawnTogether } from '../../ui/drawn-together';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
@@ -76,9 +77,20 @@ export class MyCheckIns {
   protected readonly coachName = signal<string | null>(null);
   protected readonly initialsOf = initialsOf;
   protected readonly showAllSent = signal(false);
+  /** The card's two reads, its coach and its question count, have answered. */
+  protected readonly cardRead = signal(false);
 
   protected readonly lists = computed(() => homeLists(this.items()));
   protected readonly next = computed(() => this.lists().open[0] ?? null);
+  /**
+   * The page is drawn once the list and the card's two reads have answered, or the card's are 1.5 s
+   * late, when their lines keep their places until they land; so the coach's line and the count never
+   * push the page down (audit A14a, the shift A13b measured at 0.023).
+   */
+  protected readonly drawn = drawnTogether(
+    () => !this.loading(),
+    () => this.next() === null || this.cardRead(),
+  );
   protected readonly alsoOpen = computed(() => this.lists().open.slice(1));
   protected readonly sentShown = computed(() =>
     this.showAllSent() ? this.lists().sent : this.lists().sent.slice(0, SENT_PREVIEW),
@@ -155,6 +167,7 @@ export class MyCheckIns {
   private async load(): Promise<void> {
     return this.scope.run('load', async (owner) => {
       this.loading.set(true);
+      this.cardRead.set(false);
       this.error.set(null);
       this.denial.set(null);
       const access = this.access.decision('CheckIns');
@@ -201,6 +214,7 @@ export class MyCheckIns {
       );
       this.nextDetail.set(detail.status === 'fulfilled' ? detail.value : null);
       this.coachName.set(coach.status === 'fulfilled' ? coach.value.name : null);
+      this.cardRead.set(true);
     });
   }
 
@@ -208,6 +222,7 @@ export class MyCheckIns {
     this.items.set([]);
     this.total.set(0);
     this.loading.set(true);
+    this.cardRead.set(false);
     this.loadingMore.set(false);
     this.error.set(null);
     this.denial.set(null);

@@ -8,6 +8,7 @@ import {
   test,
   uniqueEmail,
 } from './support';
+import { chooseDay } from '../kit-controls';
 
 /**
  * Sell and get paid, live (full audit, October 2026), against PostgreSQL and the real antiforgery
@@ -138,7 +139,7 @@ test('a plan is sold, part paid, fully paid and protected against double taps an
         .filter((o) => o.isActive).length,
   );
   await start.locator('label.choice', { hasText: 'Online Coaching · 4 weeks' }).click();
-  await start.locator('input[type=date]').fill(beirutDay());
+  await chooseDay(start, 'First day', beirutDay());
   const lastDay = beirutDay(27);
   await expect(start.locator('.run')).toHaveText(
     `Runs ${pretty(beirutDay())} – ${pretty(lastDay)}`,
@@ -334,7 +335,7 @@ test('a plan is sold, part paid, fully paid and protected against double taps an
   await page.locator('.hero-actions button.item', { hasText: 'Start another plan' }).click();
   const clash = page.getByRole('dialog');
   await clash.locator('label.choice', { hasText: 'Online Coaching · 12 weeks' }).click();
-  await clash.locator('input[type=date]').fill(beirutDay());
+  await chooseDay(clash, 'First day', beirutDay());
   const clashText = `Buyer already has Online Coaching from ${pretty(beirutDay())} 2026 to ${pretty(lastDay)} 2026. Start on ${pretty(beirutDay(28))} 2026 or later`;
   await expect(clash.locator('.warn-text')).toContainText(clashText);
   await clash.getByRole('button', { name: 'Start plan' }).click();

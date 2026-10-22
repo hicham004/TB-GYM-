@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import os from 'node:os';
+import { chooseOption } from './kit-controls';
 import { expect, expectNoHorizontalOverflow, mockSignedOut, test, waitForFonts } from './support';
 
 /**
@@ -258,7 +259,7 @@ test('Enter in a field cannot submit the form again while it is saving', async (
   const name = page.getByLabel('Exercise name');
 
   await name.fill('Barbell back squat');
-  await page.getByLabel('Equipment', { exact: true }).selectOption('Barbell');
+  await chooseOption(page, 'Equipment', 'Barbell');
   await name.press('Enter');
   await expect(page.getByRole('button', { name: 'Saving…' })).toHaveAttribute(
     'aria-disabled',
@@ -393,15 +394,51 @@ test('reduced motion stops the loading spinner', async ({ page }) => {
   expect(animation).toBe('none');
 });
 
-test('forced colours hand the select chevron and checkbox back to the platform', async ({
+test('forced colours keep the select’s chevron and hand the checkbox back to the platform', async ({
   page,
 }) => {
   await page.emulateMedia({ forcedColors: 'active' });
   await openLab(page);
 
-  const appearance = await page.evaluate(() => ({
-    select: getComputedStyle(document.querySelector('.tb-select')!).appearance,
-    checkbox: getComputedStyle(document.querySelector('.tb-checkbox-input')!).appearance,
-  }));
-  expect(appearance).toEqual({ select: 'auto', checkbox: 'auto' });
+  // The kit select's chevron is an icon in the text colour, so forced colours keep it (audit A14a).
+  const drawn = await page.evaluate(() => {
+    const chevron = document.querySelector('app-select button.trigger .chevron svg')!;
+    return {
+      chevron: getComputedStyle(chevron).display !== 'none' && chevron.getAttribute('stroke'),
+      checkbox: getComputedStyle(document.querySelector('.tb-checkbox-input')!).appearance,
+    };
+  });
+  expect(drawn).toEqual({ chevron: 'currentColor', checkbox: 'auto' });
+});
+
+test('the kit select opens, moves and chooses by keyboard, and Escape closes only the list', async ({
+  page,
+}) => {
+  await openLab(page, { width: 390 });
+  const equipment = page.getByRole('button', { name: /^Equipment/ });
+
+  await equipment.focus();
+  await page.keyboard.press('ArrowDown');
+  const list = page.getByRole('listbox', { name: 'Equipment' });
+  await expect(list).toBeVisible();
+  await expect(equipment).toHaveAttribute('aria-expanded', 'true');
+  await expect(list.getByRole('option', { name: 'Barbell' })).toBeFocused();
+  await page.keyboard.press('k');
+  await expect(list.getByRole('option', { name: 'Kettlebell' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(list).toBeHidden();
+  await expect(equipment).toBeFocused();
+  await expect(equipment).toHaveAccessibleName('Equipment Kettlebell');
+
+  await page.keyboard.press('Enter');
+  await expect(list.getByRole('option', { name: 'Kettlebell', selected: true })).toBeFocused();
+  const scan = await new AxeBuilder({ page })
+    .include('app-select')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+    .analyze();
+  expect(scan.violations.map((violation) => violation.id)).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(list).toBeHidden();
+  await expect(equipment).toBeFocused();
+  await expect(equipment).toHaveAccessibleName('Equipment Kettlebell');
 });

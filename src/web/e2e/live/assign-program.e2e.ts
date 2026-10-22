@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { ACCOUNTS, api, expect, memberships, requireLive, signIn, test } from './support';
+import { chooseDay, chooseOption } from '../kit-controls';
 
 /**
  * Assign program against the real API (C3 Training, TRN-011, TRN-014, STR-010): Karim publishes a one-week
@@ -122,8 +123,8 @@ test('Karim assigns the program he just published to Lynn, or is refused in word
   await page.goto(`/clients/${lynnId}/training?action=assign`);
   const sheet = page.getByRole('dialog', { name: 'Assign program' });
   await expect(sheet).toBeVisible({ timeout: 20_000 });
-  await sheet.getByLabel('Program', { exact: true }).selectOption({ label: `${name} · 1 week` });
-  await sheet.getByLabel('Start date', { exact: true }).fill(today);
+  await chooseOption(sheet, 'Program', `${name} · 1 week`);
+  await chooseDay(sheet, 'Start date', today);
   await expect(sheet.locator('.run')).toContainText(/Runs \w{3} \d/);
   const squat = sheet.locator('.max', { hasText: 'Back Squat' });
   await expect(squat).toBeVisible();
