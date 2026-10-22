@@ -7,7 +7,10 @@ const labels = (role: Parameters<typeof settingsGroups>[0]) =>
 describe('Settings pages by role', () => {
   it('gives the owner the coaching space’s pages, then their own account’s', () => {
     expect(labels('Owner')).toEqual([
-      ['Coaching space', ['Name and region', 'Brand', 'Nutrition', 'Team', 'Billing']],
+      [
+        'Coaching space',
+        ['Name and region', 'Brand', 'Nutrition', 'Team', 'Billing', 'Undelivered notices'],
+      ],
       ['Your account', ['Notifications', 'Appearance', 'Password and security']],
     ]);
   });
@@ -32,6 +35,7 @@ describe('Settings pages by role', () => {
       '/workspace/nutrition',
       '/team',
       '/billing',
+      '/workspace/undelivered-notices',
       '/notifications/settings',
       '/account/appearance',
       '/account/security',

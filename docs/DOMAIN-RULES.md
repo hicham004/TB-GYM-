@@ -1276,7 +1276,8 @@ or mark it, and workspace membership alone — including the owner's — grants 
 member's notifications. Marking read is idempotent and one-way, and so is Mark all as read, which
 marks only the caller's own unread notices in the active workspace and stays open while an unpaid
 workspace is read-only, like marking one. Dead-letter visibility is owner-only,
-bounded, and carries no recipient, payload, wording or exception.
+bounded, and carries no recipient, payload, wording or exception; the owner reads it on Settings ›
+Undelivered notices (audit INV-4), which offers no way to send one again.
 
 **NOT-008** Account confirmation, password-reset and invitation delivery stay outside the generic
 tenant outbox, permanently. Their links carry single-use credentials, and the outbox is a durable,

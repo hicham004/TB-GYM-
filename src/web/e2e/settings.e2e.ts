@@ -263,6 +263,7 @@ for (const width of [390, 1440]) {
           'Nutrition',
           'Team',
           'Billing',
+          'Undelivered notices',
           'Notifications',
           'Appearance',
           'Password and security',

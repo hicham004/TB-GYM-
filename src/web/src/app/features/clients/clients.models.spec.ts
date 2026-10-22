@@ -248,7 +248,7 @@ describe('client list (C2)', () => {
       departureKind: 'LeftByClient',
     };
 
-    expect(formerClientRow(former, 'en-US')).toEqual({
+    expect(formerClientRow(former, 'en-US', 'Asia/Beirut')).toEqual({
       id: 'client-9',
       name: 'Omar Nasr',
       initials: 'ON',
@@ -258,8 +258,24 @@ describe('client list (C2)', () => {
       how: 'Left by client',
       reason: 'Followed his coach to another gym',
     });
-    expect(formerClientRow({ ...former, departureKind: 'ReleasedByOwner' }, 'en-US').how).toBe(
-      'Ended by owner',
-    );
+    expect(
+      formerClientRow({ ...former, departureKind: 'ReleasedByOwner' }, 'en-US', 'Asia/Beirut').how,
+    ).toBe('Ended by owner');
+  });
+
+  it('says the day coaching ended on the workspace’s calendar, wherever the device is (audit WEB-17)', () => {
+    const former: FormerClient = {
+      id: 'client-9',
+      firstName: 'Omar',
+      lastName: 'Nasr',
+      email: 'omar@example.test',
+      // 03:00 UTC on Monday is still Sunday evening in Los Angeles.
+      releasedAtUtc: '2026-09-21T03:00:00Z',
+      reason: 'Moved away',
+      departureKind: 'LeftByClient',
+    };
+
+    expect(formerClientRow(former, 'en-US', 'America/Los_Angeles').ended).toBe('Sun 20 Sep 2026');
+    expect(formerClientRow(former, 'en-US', 'Asia/Beirut').ended).toBe('Mon 21 Sep 2026');
   });
 });

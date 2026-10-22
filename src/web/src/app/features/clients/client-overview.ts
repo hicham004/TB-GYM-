@@ -1,4 +1,4 @@
-import { DatePipe, NgTemplateOutlet } from '@angular/common';
+import { formatDate, NgTemplateOutlet } from '@angular/common';
 import {
   Component,
   computed,
@@ -21,6 +21,7 @@ import type {
   MesocycleSummary,
 } from '../../core/api/generated';
 import { clientCheckInDenialMessage } from '../../core/i18n/display-labels';
+import { dayInZone } from '../../core/i18n/house-dates';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
@@ -84,7 +85,6 @@ const RECORDS_SHOWN = 4;
     Button,
     ButtonLink,
     Control,
-    DatePipe,
     Field,
     Icon,
     NgTemplateOutlet,
@@ -139,6 +139,13 @@ export class ClientOverview {
   );
 
   protected readonly firstName = computed(() => this.profile()?.firstName ?? '');
+  /** The day a former client's coaching ended, on the workspace's calendar (audit WEB-17). */
+  protected readonly releasedOn = computed(() => {
+    const release = this.profile()?.release;
+    if (!release) return '';
+    const timeZone = this.context.workspace()?.timeZoneId ?? null;
+    return formatDate(dayInZone(release.releasedAtUtc, timeZone), 'EEE d MMM y', this.locale);
+  });
   private readonly today = computed(() => this.context.workspace()?.currentDate ?? null);
 
   private readonly profileContext = computed<ProfileContext>(() => ({

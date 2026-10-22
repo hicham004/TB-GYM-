@@ -326,7 +326,7 @@ of the implemented R1.3 screens before production rollout.
 - **Scale answers in other languages (from R2.4c).** "8 out of 10" formats the number with plain
   digits, as the coach's comparison view already did. Use locale number formatting with the
   translation work.
-- **E2E writes into docs (seen in R2.4c).** `nutrition-day.e2e.ts` and `workout-progress.e2e.ts`
+- **E2E writes into docs (seen in R2.4c; closed in audit A15a, WEB-17: the pictures are written only behind `TB_GYM_DOCS_PICTURES`).** `nutrition-day.e2e.ts` and `workout-progress.e2e.ts`
   save their screenshots into `docs/design/`, so every full e2e run rewrites committed images. Point
   them at `test-results/` as `checkin.e2e.ts` does.
 - **Prototype fidelity pass (owner, 2026-10-01).** The owner felt the built screens have the
@@ -1928,6 +1928,12 @@ limited to the coach's assigned clients.
   its reissue. **Password and security**, for staff and clients: field errors in words with focus on the first,
   Sign out everywhere asked first, and leaving the coaching space in a kit dialog. Appearance and Notification
   settings sit in the same layout. All of it follows dark mode; Billing keeps TB Gym's colours.
+- Built in audit A15a (INV-4): **Undelivered notices** (`/workspace/undelivered-notices`), the last of the coaching
+  space's pages: the notices TB Gym gave up delivering, newest first and 25 at a time, each with what it was about
+  and who such a notice is for (from its kind alone), Email or In the app, why it stopped in words ("Tried 6 times
+  without getting through."), when it was due and given up on the workspace's clock, and a reference to quote to TB
+  Gym. Who it was for and what it said are never shown (NOT-007), and nothing is sent again from there; with none, it
+  says every notice got through.
 - Built in R5.2b: the platform admin's two screens, outside any workspace (a platform admin needs none), in TB
   Gym's colours and the person's mode. **Platform billing** (`/admin/billing`): four tiles (what is owed and by how
   many spaces, read-only now, overdue, trials ending within 7 days), then the coaching spaces as faces with their

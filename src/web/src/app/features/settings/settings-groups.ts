@@ -40,6 +40,7 @@ export function settingsGroups(role: TenantRole | null): readonly SettingsGroup[
         { label: $localize`Nutrition`, link: '/workspace/nutrition' },
         { label: $localize`Team`, link: '/team' },
         { label: $localize`Billing`, link: '/billing' },
+        { label: $localize`Undelivered notices`, link: '/workspace/undelivered-notices' },
       ],
     },
     account,

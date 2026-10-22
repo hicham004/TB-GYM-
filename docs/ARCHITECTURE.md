@@ -1594,7 +1594,8 @@ slice: an in-app notification is passive persisted state, read when the screen i
 
 The dead-letter view is owner-only, bounded and paginated, and returns identifiers, a kind, instants,
 an attempt count and a stable failure code — never a recipient, a payload, rendered wording or an
-exception. See ADR 0018.
+exception. See ADR 0018. Since audit A15a the owner reads it on Settings › Undelivered notices, 25 at a
+time, each kind and code in words and the times on the workspace's clock; the page sends nothing again.
 
 ## 16. Phase 6B-2A persisted messaging flow
 

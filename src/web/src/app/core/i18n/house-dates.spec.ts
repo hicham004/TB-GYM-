@@ -18,6 +18,18 @@ describe('dates as TB Gym writes them (audit COACH-6)', () => {
     expect(dayInZone(new Date('2026-10-26T00:30:00Z'), 'Asia/Beirut')).toBe('2026-10-26');
   });
 
+  it('reads a zone this browser does not know on the device’s clock rather than breaking the page', () => {
+    const device = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date('2026-10-14T22:30:00Z'));
+    expect(dayInZone('2026-10-14T22:30:00Z', 'Middle East Standard Time')).toBe(device);
+    expect(houseMoment('2026-10-14T22:30:00Z', 'en-US', 'Not/A_Zone')).toMatch(
+      /, \d{1,2}:30\s?(AM|PM)$/,
+    );
+  });
+
   it('says a moment as a day and a minute, never with seconds', () => {
     const moment = houseMoment('2026-09-01T21:16:58Z', 'en-US', 'Asia/Beirut');
     expect(moment).toMatch(/^(Wed 2 Sep|2 Sep 2026), 12:16\s?AM$/);

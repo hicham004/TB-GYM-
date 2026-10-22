@@ -25,6 +25,7 @@ import {
   useRtl,
   waitForFonts,
 } from './support';
+import { docsPicture } from './docs-pictures';
 
 /**
  * A client's Nutrition tab (R5.3d) in a real browser: Karim, owner of Atlas Performance, on Sat 10 Oct
@@ -154,10 +155,7 @@ for (const [width, height] of [
     await expect(page.locator('[data-declared] .chip')).toHaveText(['Peanuts', 'Milk']);
     await expectNoHorizontalOverflow(page);
     await axe(page);
-    await page.screenshot({
-      path: `../../docs/design/r53d-nutrition-${width}.png`,
-      fullPage: true,
-    });
+    await docsPicture(page, `r53d-nutrition-${width}.png`, { fullPage: true });
   });
 
   test(`the Nutrition tab follows dark mode at ${width}px and passes axe`, async ({ page }) => {
@@ -166,10 +164,7 @@ for (const [width, height] of [
 
     await expectNoHorizontalOverflow(page);
     await axe(page);
-    await page.screenshot({
-      path: `../../docs/design/r53d-nutrition-dark-${width}.png`,
-      fullPage: true,
-    });
+    await docsPicture(page, `r53d-nutrition-dark-${width}.png`, { fullPage: true });
   });
 }
 
@@ -191,7 +186,7 @@ test('an empty Nutrition tab invites the first targets and says what is missing'
   await expect(page.locator('[data-none-declared]')).toHaveText('None declared for Rana.');
   await expectNoHorizontalOverflow(page);
   await axe(page);
-  await page.screenshot({ path: '../../docs/design/r53d-nutrition-empty-390.png', fullPage: true });
+  await docsPicture(page, 'r53d-nutrition-empty-390.png', { fullPage: true });
 });
 
 test('a closed Nutrition tab says why, in the page, and asks nothing of the server', async ({
@@ -233,7 +228,7 @@ test('works targets out for the coach, from what the record knows, and sends exa
   await expect(sheet.getByRole('radio', { name: 'Female', exact: true })).toBeChecked();
   await expect(sheet.locator('input[name="work"][value="Seated"]')).toBeChecked();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: '../../docs/design/r53d-calculator-390.png' });
+  await docsPicture(page, 'r53d-calculator-390.png');
   await axe(page);
 
   await sheet.getByRole('button', { name: 'Lose faster −500' }).click();
@@ -260,7 +255,7 @@ test('works targets out for the coach, from what the record knows, and sends exa
     },
   ]);
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '../../docs/design/r53d-result-390.png' });
+  await docsPicture(page, 'r53d-result-390.png');
   await axe(page);
 });
 
@@ -278,7 +273,7 @@ test('goes from new targets straight to assigning a meal plan with them', async 
   await assign.locator('label.choice', { hasText: 'Spring cut' }).click();
   await expect(assign).toContainText('Runs Sat 10 Oct – Fri 23 Oct');
   await page.waitForTimeout(400);
-  await page.screenshot({ path: '../../docs/design/r53d-assign-1440.png' });
+  await docsPicture(page, 'r53d-assign-1440.png');
   await axe(page);
 
   await assign.getByRole('button', { name: 'Assign meal plan' }).click();
@@ -307,7 +302,7 @@ test('edits the declared allergens in a sheet that opens with what is declared n
   await expect(sheet.getByLabel('Peanuts', { exact: true })).toBeChecked();
   await expect(sheet.getByLabel('Milk', { exact: true })).toBeChecked();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: '../../docs/design/r53d-allergens-390.png' });
+  await docsPicture(page, 'r53d-allergens-390.png');
   await axe(page);
 
   await sheet.getByLabel('Milk', { exact: true }).uncheck();

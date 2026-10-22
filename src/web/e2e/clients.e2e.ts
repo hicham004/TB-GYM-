@@ -22,6 +22,21 @@ import {
  */
 const owner = { ...SIGNED_IN_USER, id: OWNER_ID, displayName: 'Karim Haddad' };
 
+const WORKSPACE = {
+  id: OWNER_MEMBERSHIP.tenantId,
+  name: 'Atlas Performance',
+  slug: 'atlas-performance',
+  timeZoneId: 'Asia/Beirut',
+  defaultCulture: 'en-LB',
+  defaultCurrencyCode: 'USD',
+  weekStartsOn: 'Monday',
+  currentDate: COACH_NOW.slice(0, 10),
+  version: 1,
+  brandColor: null,
+  accentColor: null,
+  logoAssetId: null,
+};
+
 const FORMER = [
   {
     id: 'c-omar',
@@ -49,6 +64,8 @@ async function openClients(
       'GET /api/clients/overview': (route: Route) =>
         json(route, 200, options.view ?? clientListView()),
       'GET /api/clients/former': (route: Route) => json(route, 200, FORMER),
+      // The former list reads each day on the workspace's calendar (audit WEB-17).
+      'GET /api/workspace': (route: Route) => json(route, 200, WORKSPACE),
     },
   });
   await page.goto(options.url ?? '/clients');

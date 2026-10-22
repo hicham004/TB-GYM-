@@ -8,12 +8,9 @@
         </header>
         <div class="panel-body prose">
           @if (release.departureKind === 'LeftByClient') {
-            <p i18n>Left on {{ release.releasedAtUtc | date: 'EEE d MMM y' }}.</p>
+            <p i18n>Left on {{ releasedOn() }}.</p>
           } @else {
-            <p i18n>
-              Coaching ended on {{ release.releasedAtUtc | date: 'EEE d MMM y' }} by
-              {{ release.releasedByName }}.
-            </p>
+            <p i18n>Coaching ended on {{ releasedOn() }} by {{ release.releasedByName }}.</p>
           }
           <p i18n>
             Their access ended then, and their open plans and programs were closed. This record is

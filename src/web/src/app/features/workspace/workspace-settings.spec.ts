@@ -299,6 +299,7 @@ describe('Settings › Name and region', () => {
       'Nutrition',
       'Team',
       'Billing',
+      'Undelivered notices',
       'Notifications',
       'Appearance',
       'Password and security',

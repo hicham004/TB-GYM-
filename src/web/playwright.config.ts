@@ -14,8 +14,17 @@ import { defineConfig, devices } from '@playwright/test';
  * Files are named `*.e2e.ts`, not `*.spec.ts`, because the Angular unit-test builder collects every
  * `**\/*.spec.ts` under this project and would try to run them in Vitest.
  *
+ * The `far-zone` project (audit WEB-17) runs the same screens with the browser in Kiritimati (UTC+14,
+ * no daylight saving) while the mocked workspaces keep Asia/Beirut, so from 10:00 UTC, the suites'
+ * fixed noon among them, the device's day is the workspace's tomorrow: a screen that reads a day from
+ * the device where the workspace's belongs fails there for an instant in that window, and in `chromium`'s
+ * UTC for one from 21:00 UTC. It compares no pixels, and leaves out what reads no workspace day: the
+ * kit's labs, the homepage, the private build, and Messages and Notifications, whose days are the
+ * reader's own by design.
+ *
  * Screenshot baselines are environment-dependent: the file name carries the browser and platform
- * (`-chromium-win32.png`). Never accept a new or changed baseline without looking at it.
+ * (`-chromium-win32.png`). Never accept a new or changed baseline without looking at it. The pictures
+ * in `docs/design` are written only when asked (`e2e/docs-pictures.ts`).
  */
 const port = 4300;
 const builtPort = 4301;
@@ -24,6 +33,10 @@ const builtFiles = /[\\/]built[\\/].*\.e2e\.ts$/;
 const liveFiles = /[\\/]live[\\/].*\.e2e\.ts$/;
 // The edge checks (playwright.edge.config.ts) need a real nginx; scripts/edge-proof.ps1 runs them.
 const edgeFiles = /[\\/]edge[\\/].*\.e2e\.ts$/;
+// The private build's checks need its own server (npm run e2e:private).
+const privateFiles = /[\\/]private[\\/].*\.e2e\.ts$/;
+// Screens with no workspace day, or whose days are the reader's own (chat-timeline.ts, the inbox).
+const noWorkspaceDay = /[\\/](ui-lab|hero-lab|home|messages|notifications)\.e2e\.ts$/;
 
 export default defineConfig({
   testDir: './e2e',
@@ -50,6 +63,16 @@ export default defineConfig({
       name: 'chromium',
       testIgnore: [builtFiles, liveFiles, edgeFiles],
       use: { ...devices['Desktop Chrome'], deviceScaleFactor: 1 },
+    },
+    {
+      name: 'far-zone',
+      testIgnore: [builtFiles, liveFiles, edgeFiles, privateFiles, noWorkspaceDay],
+      ignoreSnapshots: true,
+      use: {
+        ...devices['Desktop Chrome'],
+        deviceScaleFactor: 1,
+        timezoneId: 'Pacific/Kiritimati',
+      },
     },
     {
       name: 'built',

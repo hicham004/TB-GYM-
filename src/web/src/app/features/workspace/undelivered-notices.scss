@@ -1,0 +1,85 @@
+// Settings › Undelivered notices (audit INV-4). Brand v2 tokens only.
+@use '../settings/settings-page';
+
+.panel {
+  max-inline-size: 48rem;
+}
+
+.list-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.notices {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notice {
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-block: 0.875rem;
+
+  &:first-child {
+    border-block-start: 0;
+    padding-block-start: 0.25rem;
+  }
+
+  &:last-child {
+    padding-block-end: 0;
+  }
+
+  // Reached only by Show more's last page, which moves focus here; never a tab stop.
+  &:focus-visible {
+    border-radius: var(--tb-radius-control);
+    outline: 2px solid var(--tb-focus);
+    outline-offset: 2px;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.5rem 0.75rem;
+  justify-content: space-between;
+}
+
+.about {
+  color: var(--tb-ink);
+  font-weight: 600;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.reason {
+  color: var(--tb-ink);
+}
+
+.reference code {
+  color: var(--tb-ink);
+  font-family: var(--tb-font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.more {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.more p {
+  color: var(--tb-danger);
+  margin: 0;
+}

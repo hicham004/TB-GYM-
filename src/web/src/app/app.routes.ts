@@ -185,6 +185,17 @@ export const routes: Routes = [
       ),
   },
   {
+    // The notices TB Gym gave up delivering (audit INV-4), a Settings page; the API is the owner's too.
+    path: 'workspace/undelivered-notices',
+    canActivate: [authGuard, ownerGuard],
+    data: REDESIGNED,
+    title: $localize`Undelivered notices | TB Gym`,
+    loadComponent: () =>
+      import('./features/workspace/undelivered-notices').then(
+        (module) => module.UndeliveredNotices,
+      ),
+  },
+  {
     // Settings › Name and region (R5.2a): rebuilt in the Settings layout, asks before changes are lost.
     path: 'workspace',
     canActivate: [authGuard, ownerGuard],

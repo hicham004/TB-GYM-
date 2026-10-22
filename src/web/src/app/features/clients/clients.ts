@@ -7,6 +7,7 @@ import {
   inject,
   LOCALE_ID,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -16,6 +17,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Avatar } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
@@ -75,6 +77,7 @@ export class Clients {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly tenants = inject(TenantStore);
+  private readonly calendar = inject(WorkspaceCalendar);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
@@ -165,7 +168,8 @@ export class Clients {
     this.scope.onReset(() => this.reset());
     effect(() => {
       this.scope.epoch();
-      if (this.tenants.selectedTenantId()) void this.load();
+      // Untracked: a read the load makes on its way (the workspace's calendar) must not load it again.
+      if (this.tenants.selectedTenantId()) untracked(() => void this.load());
     });
     // The heading takes focus on arrival, so a screen reader starts at the top of the list.
     afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
@@ -177,8 +181,15 @@ export class Clients {
       this.formerRefused.set(false);
       try {
         if (this.showingFormer) {
-          const former = await owner.wait(firstValueFrom(this.formerApi.getFormerClients()));
-          this.former.set(former.map((client) => formerClientRow(client, this.locale)));
+          // The workspace's zone comes with the list, so each day reads on its calendar at once.
+          const [former] = await owner.wait(
+            Promise.all([
+              firstValueFrom(this.formerApi.getFormerClients()),
+              this.calendar.resolveToday(),
+            ]),
+          );
+          const timeZone = this.calendar.timeZone();
+          this.former.set(former.map((client) => formerClientRow(client, this.locale, timeZone)));
         } else {
           const view = await owner.wait(firstValueFrom(this.listApi.getOverview()));
           this.list.set(

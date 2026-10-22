@@ -12,8 +12,7 @@ export function houseDay(day: IsoDate, locale: string, today: IsoDate): string {
 
 /** The calendar day an instant falls on in a time zone; the device's zone while none is known. */
 export function dayInZone(instant: string | Date, timeZone: string | null): IsoDate {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    ...(timeZone ? { timeZone } : {}),
+  const parts = onClock('en-CA', timeZone, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -26,10 +25,28 @@ export function dayInZone(instant: string | Date, timeZone: string | null): IsoD
 export function houseMoment(instant: string, locale: string, timeZone: string | null): string {
   const now = new Date();
   const day = houseDay(dayInZone(instant, timeZone), locale, dayInZone(now, timeZone));
-  const time = new Intl.DateTimeFormat(locale, {
-    ...(timeZone ? { timeZone } : {}),
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(instant));
+  const time = onClock(locale, timeZone, { hour: 'numeric', minute: '2-digit' }).format(
+    new Date(instant),
+  );
   return $localize`${day}:day:, ${time}:time:`;
+}
+
+/**
+ * A formatter on the zone's clock, or on the device's while no zone is known or when this browser's zone
+ * data lacks it (a newer IANA name, or a Windows id the server also accepts): a day a little off rather
+ * than a page that breaks.
+ */
+function onClock(
+  locale: string,
+  timeZone: string | null,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat(locale, { ...options, timeZone });
+    } catch {
+      // An unknown zone: the device's clock below.
+    }
+  }
+  return new Intl.DateTimeFormat(locale, options);
 }

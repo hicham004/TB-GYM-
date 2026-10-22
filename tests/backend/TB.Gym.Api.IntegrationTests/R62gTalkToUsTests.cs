@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using TB.Gym.Infrastructure.Application;
@@ -60,6 +61,13 @@ public sealed class R62gTalkToUsTests
         if (databaseName is null || adminConnection is null)
         {
             return;
+        }
+
+        // The media folder and the Worker's content root.
+        var temporary = Path.Combine(Path.GetTempPath(), databaseName);
+        if (Directory.Exists(temporary))
+        {
+            Directory.Delete(temporary, recursive: true);
         }
 
         await using var connection = new NpgsqlConnection(adminConnection);
@@ -408,6 +416,83 @@ public sealed class R62gTalkToUsTests
         Assert.HasCount(1, CapturedMail.Captured.Where(capture => capture.Scope == ActionMailScopes.ContactRequest));
     }
 
+    /// <summary>
+    /// Audit BEB-5: the Worker's own loop drains this queue. The tests above call the service directly;
+    /// this one builds the Worker's host as its entry point does and lets its timer run, so a queue the
+    /// Worker stopped sweeping, or a setting it cannot read, fails here. With no inbox set its sweeps
+    /// leave the request waiting with every attempt kept (audit BEB-1); once one is set and the Worker
+    /// restarts, its own sweep emails the owner, once.
+    /// <para>
+    /// Run apart, after the parallel tests: the no-inbox warning is said once per process, which the test
+    /// with nothing configured asserts, and this test's idle Worker would otherwise say it first.
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task TheWorkersOwnSweepWaitsForAnInboxAndThenEmailsTheRequestOnce()
+    {
+        Start(recipient: "");
+        using var visitor = CreateClient();
+        var stamp = await StampAsync(visitor);
+        Clock.Advance(TimeSpan.FromSeconds(10));
+        await RefreshCsrfAsync(visitor);
+        Assert.AreEqual(
+            HttpStatusCode.Accepted,
+            (await visitor.PostAsJsonAsync("/api/website/contact-requests", Body(stamp), TestContext.CancellationToken)).StatusCode);
+
+        // Two sweeps of the queue by the Worker's own loop, with no inbox to send to. (Its warning is said
+        // once per process, so another test may have said it already: the sweeps are counted instead.)
+        var idleSweeps = new SweepCounter();
+        using (var idle = await StartWorkerAsync(recipient: "", new CapturedLog(), idleSweeps))
+        {
+            await WaitForAsync(
+                () => Task.FromResult(idleSweeps.Count >= 2),
+                "the Worker to sweep the contact queue twice");
+            await idle.StopAsync(TestContext.CancellationToken);
+            Assert.IsEmpty(
+                idle.Services.GetRequiredService<CapturedActionEmailTransport>().Captured
+                    .Where(capture => capture.Scope == ActionMailScopes.ContactRequest));
+        }
+
+        var waiting = (await RequestsAsync()).Single();
+        Assert.AreEqual(ContactRequestMailStatus.Pending, waiting.Status);
+        Assert.AreEqual(0, waiting.AttemptCount, "A sweep with no inbox must not spend an attempt.");
+
+        var workerLog = new CapturedLog();
+        using var worker = await StartWorkerAsync(Recipient, workerLog, new SweepCounter());
+        try
+        {
+            await WaitForAsync(
+                async () => (await RequestsAsync()).Single().Status == ContactRequestMailStatus.Materialized,
+                "the Worker's sweep to email the request");
+
+            // Nothing is left for the next sweep: the request was emailed once.
+            await using var scope = worker.Services.CreateAsyncScope();
+            var next = await scope.ServiceProvider
+                .GetRequiredService<IContactRequestMailDispatchService>()
+                .DispatchDueAsync(TestContext.CancellationToken);
+            Assert.AreEqual(0, next.Total);
+        }
+        finally
+        {
+            await worker.StopAsync(TestContext.CancellationToken);
+        }
+
+        var captured = worker.Services.GetRequiredService<CapturedActionEmailTransport>().Captured
+            .Where(capture => capture.Scope == ActionMailScopes.ContactRequest)
+            .ToArray();
+        Assert.HasCount(1, captured);
+        Assert.AreEqual(Recipient, captured[0].RecipientAddress);
+        Assert.AreEqual("Talk to us: Oakline Strength (Rami Tabet)", captured[0].Subject);
+        var sent = (await RequestsAsync()).Single();
+        Assert.AreEqual(waiting.Id, sent.Id);
+        Assert.AreEqual(1, sent.AttemptCount);
+        Assert.AreEqual(CapturedActionEmailTransport.CapturedAdapterName, sent.TransportAdapter);
+        StringAssert.Contains(
+            workerLog.Text,
+            $"Action mail sweep of the {ActionMailScopes.ContactRequest} queue claimed 1 requests: 1 materialized");
+    }
+
     // ---------- the host ----------
 
     private void Start(
@@ -488,6 +573,70 @@ public sealed class R62gTalkToUsTests
         return await scope.ServiceProvider
             .GetRequiredService<IContactRequestMailDispatchService>()
             .DispatchDueAsync(TestContext.CancellationToken);
+    }
+
+    /// <summary>
+    /// The Worker's own host (its entry point's composition) on this test's database, started. Its
+    /// settings arrive as a deployment's do, as configuration it reads while it composes; the content
+    /// root is an empty folder, so no appsettings file in the test output speaks for it. The
+    /// notification and billing sweeps are switched off by their own settings, so only the action-mail
+    /// sweep runs, every second. The one change to its services counts each sweep of the contact queue
+    /// on its way to the real one.
+    /// </summary>
+    private async Task<IHost> StartWorkerAsync(string recipient, CapturedLog workerLog, SweepCounter sweeps)
+    {
+        var contentRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), databaseName!, "worker")).FullName;
+        var builder = TB.Gym.Worker.WorkerProgram.CreateBuilder(
+        [
+            "--environment", "Development",
+            "--contentRoot", contentRoot,
+            $"--ConnectionStrings:Database={databaseConnection}",
+            "--Application:PublicBaseUrl=http://localhost:4200",
+            "--Application:ActionMail:PollIntervalSeconds=1",
+            "--Notifications:Dispatch:Enabled=false",
+            "--Notifications:Email:Enabled=false",
+            "--Notifications:Email:Adapter=Captured",
+            "--PlatformBilling:SweepEnabled=false",
+            $"--Website:ContactRecipient={recipient}",
+        ]);
+        builder.Logging.ClearProviders();
+        builder.Logging.AddProvider(workerLog);
+        var registered = builder.Services.Single(
+            descriptor => descriptor.ServiceType == typeof(IContactRequestMailDispatchService));
+        var implementation = registered.ImplementationType
+            ?? throw new InvalidOperationException("The Worker composes the contact sweep by type.");
+        builder.Services.Remove(registered);
+        builder.Services.AddScoped<IContactRequestMailDispatchService>(provider => new CountedContactSweep(
+            (IContactRequestMailDispatchService)ActivatorUtilities.CreateInstance(provider, implementation),
+            sweeps));
+        var host = builder.Build();
+        try
+        {
+            await host.StartAsync(TestContext.CancellationToken);
+        }
+        catch
+        {
+            host.Dispose();
+            throw;
+        }
+
+        return host;
+    }
+
+    private async Task WaitForAsync(Func<Task<bool>> condition, string what)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (await condition())
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100), TestContext.CancellationToken);
+        }
+
+        Assert.Fail($"Timed out waiting for {what}.");
     }
 
     // ---------- HTTP helpers ----------
@@ -588,6 +737,28 @@ public sealed class R62gTalkToUsTests
             return Task.FromResult(Refuse
                 ? ActionEmailTransportResult.Refused(ResendFailureKind.Unavailable)
                 : ActionEmailTransportResult.ProviderAccepted("msg_r62g"));
+        }
+    }
+
+    /// <summary>How many sweeps of the contact queue a Worker made.</summary>
+    private sealed class SweepCounter
+    {
+        private int count;
+
+        public int Count => Volatile.Read(ref count);
+
+        public void Add() => Interlocked.Increment(ref count);
+    }
+
+    /// <summary>The Worker's own contact sweep, counted once it has run.</summary>
+    private sealed class CountedContactSweep(IContactRequestMailDispatchService sweep, SweepCounter sweeps)
+        : IContactRequestMailDispatchService
+    {
+        public async Task<ContactRequestMailDispatchOutcome> DispatchDueAsync(CancellationToken cancellationToken)
+        {
+            var outcome = await sweep.DispatchDueAsync(cancellationToken);
+            sweeps.Add();
+            return outcome;
         }
     }
 

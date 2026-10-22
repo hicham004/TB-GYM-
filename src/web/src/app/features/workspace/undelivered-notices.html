@@ -1,0 +1,76 @@
+<app-settings-frame>
+  <header settingsHead class="top">
+    <h1 #heading tabindex="-1" i18n>Undelivered notices</h1>
+    <p class="lede" i18n>
+      Notices TB Gym gave up delivering in your coaching space. Who each one was for and what it
+      said stay private, even from you.
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>Undelivered notices couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (rows().length === 0) {
+        <div class="panel" data-none>
+          <app-empty-state
+            heading="Every notice got through"
+            description="If TB Gym ever has to give up on one, it is listed here with what went wrong."
+            i18n-heading
+            i18n-description
+          />
+        </div>
+      } @else {
+        <section class="panel" aria-labelledby="notices-heading">
+          <div class="list-head">
+            <h2 id="notices-heading" data-summary>{{ summary() }}</h2>
+            <p class="quiet" i18n>To ask TB Gym what went wrong with one, quote its reference.</p>
+          </div>
+          <ul class="notices" role="list">
+            @for (row of rows(); track row.id) {
+              <li class="notice" tabindex="-1" [attr.data-notice]="row.id">
+                <div class="head">
+                  <p class="about">{{ row.about }}</p>
+                  <app-status-pill [label]="row.channel" tone="neutral" />
+                </div>
+                <p class="reason">{{ row.reason }}</p>
+                <p class="quiet facts">{{ row.facts }}</p>
+                <p class="quiet reference">
+                  <span i18n>Reference</span>&ngsp;<code dir="ltr" translate="no">{{
+                    row.id
+                  }}</code>
+                </p>
+              </li>
+            }
+          </ul>
+          @if (hasMore()) {
+            <div class="more">
+              @if (moreFailed()) {
+                <p role="alert" i18n>More notices couldn’t be loaded.</p>
+              }
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [loading]="loadingMore()"
+                (click)="loadMore()"
+                i18n
+              >
+                Show more notices
+              </button>
+            </div>
+          }
+        </section>
+      }
+    }
+  }
+</app-settings-frame>

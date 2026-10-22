@@ -9,6 +9,7 @@ import {
   test,
   waitForFonts,
 } from './support';
+import { docsPicture } from './docs-pictures';
 
 const membership = {
   tenantId: '00000000-0000-4000-8000-000000000003',
@@ -229,7 +230,7 @@ test('Nutrition day at 390px shows the plan and logs a meal in one tap', async (
   await expectNoHorizontalOverflow(page);
   await axe(page);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await page.screenshot({ path: '../../docs/design/r24-nutrition-390.png', fullPage: true });
+  await docsPicture(page, 'r24-nutrition-390.png', { fullPage: true });
   await page.getByRole('button', { name: 'Ate as planned' }).first().click();
   await expect(page.getByText('2 of 3 planned meals logged')).toBeVisible();
   await page.getByRole('button', { name: 'Add food' }).click();
@@ -251,7 +252,7 @@ test('Nutrition day at 1440px reflows at 200% text', async ({ page }) => {
   await expectNoHorizontalOverflow(page);
   await axe(page);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await page.screenshot({ path: '../../docs/design/r24-nutrition-1440.png', fullPage: true });
+  await docsPicture(page, 'r24-nutrition-1440.png', { fullPage: true });
   // The day follows the person's mode since R4.4d, so it passes in dark as well.
   await page.emulateMedia({ colorScheme: 'dark' });
   await axe(page);

@@ -23,6 +23,7 @@ import {
   useRtl,
   waitForFonts,
 } from './support';
+import { docsPicture } from './docs-pictures';
 
 /**
  * Foods and Settings › Nutrition (C7, R4.4c) in a real browser: one search over the coach's foods and
@@ -140,14 +141,14 @@ for (const width of [390, 1440]) {
     await expect(page.locator('section[aria-labelledby="own-heading"] .row')).toHaveCount(3);
     await waitForFonts(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-    await page.screenshot({ path: `../../docs/design/r44c-foods-${width}.png`, fullPage: true });
+    await docsPicture(page, `r44c-foods-${width}.png`, { fullPage: true });
 
     await search(page, 'chicken');
     await expect(page.locator('section[aria-labelledby="own-heading"] .row')).toHaveCount(1);
     await expect(page.locator('section[aria-labelledby="usda-heading"] .row')).toHaveCount(3);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await expectNoHorizontalOverflow(page);
-    await page.screenshot({ path: `../../docs/design/r44c-search-${width}.png`, fullPage: true });
+    await docsPicture(page, `r44c-search-${width}.png`, { fullPage: true });
   });
 
   test(`the food sheet at ${width}`, async ({ page }) => {
@@ -164,7 +165,7 @@ for (const width of [390, 1440]) {
     );
     await page.waitForTimeout(300);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-    await page.screenshot({ path: `../../docs/design/r44c-new-food-${width}.png` });
+    await docsPicture(page, `r44c-new-food-${width}.png`);
   });
 
   test(`Settings › Nutrition at ${width}`, async ({ page }) => {
@@ -174,7 +175,7 @@ for (const width of [390, 1440]) {
     await waitForFonts(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await expectNoHorizontalOverflow(page);
-    await page.screenshot({ path: `../../docs/design/r44c-settings-${width}.png`, fullPage: true });
+    await docsPicture(page, `r44c-settings-${width}.png`, { fullPage: true });
   });
 }
 
@@ -230,7 +231,7 @@ test('a food of the coach’s own is saved from the sheet, and a USDA food opens
     'USDA didn’t report fibre, sugar alcohols or alcohol, so they were saved as 0.',
   );
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '../../docs/design/r44c-details-1440.png' });
+  await docsPicture(page, 'r44c-details-1440.png');
   await details.getByRole('button', { name: 'Edit a copy' }).click();
   await expect(
     page.getByRole('dialog', { name: 'Your copy of Chicken, breast, boneless, skinless, raw' }),
@@ -321,7 +322,7 @@ test('foods in dark, right to left and at 200% text', async ({ page }) => {
   await page.goto('/nutrition/foods');
   await search(page, 'chicken');
   await waitForFonts(page);
-  await page.screenshot({ path: '../../docs/design/r44c-search-dark-1440.png', fullPage: true });
+  await docsPicture(page, 'r44c-search-dark-1440.png', { fullPage: true });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await useRtl(page);
   await page.addStyleTag({ content: 'html { font-size: 200%; }' });

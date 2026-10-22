@@ -54,6 +54,15 @@ npx playwright install chromium          # once per machine
   the environment (Playwright's Chrome for Testing on Windows 11). Never accept a new or changed
   baseline without looking at it. e2e is not part of `scripts/check.ps1`, so run it whenever the
   shell or a shared component changes.
+- **Two zones** (audit WEB-17). The `chromium` project's browser is in UTC. The `far-zone` project runs the
+  screens that show a workspace's day with the browser in Kiritimati (UTC+14) while the mocked workspaces keep
+  Asia/Beirut, so from 10:00 to 21:00 UTC the device's day is the workspace's tomorrow: a screen that reads a day
+  from the device where the workspace's belongs fails there for an instant in that window (pin the clock in it, as
+  most specs do at noon), and in `chromium` for one from 21:00 UTC. It compares no pixels; `--project=chromium`
+  runs one project.
+- **Design pictures.** A spec writes its `docs/design` pictures only when asked,
+  `$env:TB_GYM_DOCS_PICTURES = '1'` (then `Remove-Item Env:TB_GYM_DOCS_PICTURES`), and only from `chromium`
+  (`e2e/docs-pictures.ts`), so a plain run leaves the committed pictures alone.
 - **Name specs `*.e2e.ts`.** Prettier reads `src/web/.gitignore` only.
 
 ## Quality checks every redesigned screen keeps

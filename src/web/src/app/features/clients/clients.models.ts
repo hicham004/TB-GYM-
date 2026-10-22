@@ -1,5 +1,6 @@
 import { formatDate } from '@angular/common';
 import type { FormerClient } from '../../core/api/api.models';
+import { dayInZone } from '../../core/i18n/house-dates';
 import type {
   ClientOverviewRow,
   ClientOverviewStatus,
@@ -160,14 +161,22 @@ export function matches(row: ClientRow, filter: ClientFilter, search: string): b
   return words.every((word) => row.searchText.includes(word));
 }
 
-export function formerClientRow(client: FormerClient, locale: string): FormerClientRow {
+/**
+ * A former client as the list reads them. The day coaching ended is the one it was on the workspace's
+ * calendar (audit WEB-17), never the device's: a browser a day ahead would otherwise move it.
+ */
+export function formerClientRow(
+  client: FormerClient,
+  locale: string,
+  timeZone: string | null,
+): FormerClientRow {
   const name = `${client.firstName} ${client.lastName}`.trim();
   return {
     id: client.id,
     name,
     initials: initialsOf(name),
     link: `/clients/${client.id}`,
-    ended: formatDate(client.releasedAtUtc, 'EEE d MMM y', locale),
+    ended: formatDate(dayInZone(client.releasedAtUtc, timeZone), 'EEE d MMM y', locale),
     endedAt: client.releasedAtUtc,
     how:
       client.departureKind === 'LeftByClient'

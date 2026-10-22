@@ -17,6 +17,7 @@ import {
   useRtl,
   waitForFonts,
 } from './support';
+import { docsPicture } from './docs-pictures';
 
 /**
  * Recipes (C7, R4.4b) in a real browser: the cards, the editor with one serving adding up as amounts
@@ -166,7 +167,7 @@ for (const width of [390, 1440]) {
     await waitForFonts(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await expectNoHorizontalOverflow(page);
-    await page.screenshot({ path: `../../docs/design/r44b-recipes-${width}.png`, fullPage: true });
+    await docsPicture(page, `r44b-recipes-${width}.png`, { fullPage: true });
   });
 
   test(`the recipe editor at ${width}`, async ({ page }) => {
@@ -178,7 +179,7 @@ for (const width of [390, 1440]) {
     await waitForFonts(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await expectNoHorizontalOverflow(page);
-    await page.screenshot({ path: `../../docs/design/r44b-editor-${width}.png`, fullPage: true });
+    await docsPicture(page, `r44b-editor-${width}.png`, { fullPage: true });
   });
 }
 
@@ -209,7 +210,7 @@ test('a new recipe from the food search, published in one save', async ({ page }
   // The coach's own food comes first; USDA's match is offered under it.
   await expect(page.getByRole('option').first()).toContainText('Rolled oats');
   await expect(page.getByRole('group', { name: 'From USDA, added to your foods' })).toBeVisible();
-  await page.screenshot({ path: '../../docs/design/r44b-search-1440.png' });
+  await docsPicture(page, 'r44b-search-1440.png');
   await search.press('Enter');
   await search.fill('yogurt');
   await expect(page.getByRole('option').first()).toContainText('Greek yogurt');
@@ -250,7 +251,7 @@ test('the editor in dark, right to left and at 200% text', async ({ page }) => {
   await page.goto('/nutrition/recipes/recipe-oats');
   await expect(page.locator('.totals .big')).toHaveText('222 kcal');
   await waitForFonts(page);
-  await page.screenshot({ path: '../../docs/design/r44b-editor-dark-1440.png', fullPage: true });
+  await docsPicture(page, 'r44b-editor-dark-1440.png', { fullPage: true });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await useRtl(page);
   await page.addStyleTag({ content: 'html { font-size: 200%; }' });

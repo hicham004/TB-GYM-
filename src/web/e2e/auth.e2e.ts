@@ -287,7 +287,10 @@ for (const width of [390, 1440]) {
     await mockSignedOut(page);
     await page.goto('/auth/register');
     await ready(page);
-    await expect(page.locator('[data-zone] strong')).toHaveText('UTC');
+    // It starts in this device's zone: UTC in the main project, Kiritimati in the far-zone one.
+    await expect(page.locator('[data-zone] strong')).toHaveText(
+      test.info().project.use.timezoneId === 'Pacific/Kiritimati' ? 'Kiritimati, Pacific' : 'UTC',
+    );
     await expect(page.locator('select')).toHaveCount(0);
 
     const sheet = await openZoneSheet(page);

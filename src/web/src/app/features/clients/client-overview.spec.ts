@@ -553,4 +553,23 @@ describe('ClientOverview', () => {
     expect(said(host)).toContain('Left on Mon 21 Sep 2026.');
     expect(said(host)).not.toContain('Coaching ended on');
   });
+
+  it('says the day coaching ended on the workspace’s calendar, not the device’s (audit WEB-17)', async () => {
+    const { fixture, host, context } = await render({
+      profile: {
+        ...PROFILE,
+        release: {
+          // 03:00 UTC on Monday is still Sunday evening in the workspace below.
+          releasedAtUtc: '2026-09-21T03:00:00Z',
+          reason: 'Moving abroad',
+          releasedByName: 'Olivia Owner',
+          departureKind: 'ReleasedByOwner',
+        },
+      } as CoachClientDetails,
+    });
+    context.workspace.set({ ...WORKSPACE, timeZoneId: 'America/Los_Angeles' });
+    await settle(fixture);
+
+    expect(said(host)).toContain('Coaching ended on Sun 20 Sep 2026 by Olivia Owner.');
+  });
 });

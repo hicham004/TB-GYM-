@@ -39,6 +39,7 @@ import {
   useRtl,
   waitForFonts,
 } from './support';
+import { docsPicture } from './docs-pictures';
 
 /**
  * A client's Training (R3.4a) in a real browser: Karim, owner of Atlas Performance, on Thu 1 Oct
@@ -1955,8 +1956,7 @@ for (const [width, height] of [
       await axe(page);
       // Clipped out of the whole page, so the sticky top bar does not cover the card's heading.
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.screenshot({
-        path: `../../docs/design/r53d2-strength-${mode === 'dark' ? 'dark-' : ''}${width}.png`,
+      await docsPicture(page, `r53d2-strength-${mode === 'dark' ? 'dark-' : ''}${width}.png`, {
         fullPage: true,
         clip: (await card.boundingBox())!,
       });
@@ -2013,7 +2013,7 @@ test('a max recorded from a lift’s row sends a tested max with no estimate, th
   await expect(sheet.locator('input[name="kind"]')).toHaveCount(2);
   await expect(sheet).not.toContainText('Estimated');
   await axe(page);
-  await page.screenshot({ path: '../../docs/design/r53d2-record-390.png' });
+  await docsPicture(page, 'r53d2-record-390.png');
 
   await sheet.getByRole('button', { name: 'Record max' }).click();
   await expect(sheet).toContainText('Enter the weight.');
@@ -2121,8 +2121,6 @@ for (const mode of ['light', 'dark'] as const) {
     await expect(sheet.locator('app-sparkline')).toHaveCount(1);
     await page.waitForTimeout(900);
     await axe(page);
-    await page.screenshot({
-      path: `../../docs/design/r53d2-history-${mode === 'dark' ? 'dark-' : ''}390.png`,
-    });
+    await docsPicture(page, `r53d2-history-${mode === 'dark' ? 'dark-' : ''}390.png`);
   });
 }

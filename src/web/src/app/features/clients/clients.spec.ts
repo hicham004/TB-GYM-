@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -9,6 +9,7 @@ import type { FormerClient } from '../../core/api/api.models';
 import type { ClientOverviewView } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { COACH_NOW, OWNER_ID } from '../../../testing/coach-today-fixtures';
 import { clientListView } from '../../../testing/client-list-fixtures';
 import { click, fill, press, query, settle, tick } from '../../../testing/dom';
@@ -33,6 +34,8 @@ async function render(
     isOwner?: boolean;
     getOverview?: () => unknown;
     getFormerClients?: () => unknown;
+    timeZone?: string;
+    calendar?: unknown;
   } = {},
 ) {
   vi.useFakeTimers({ now: new Date(COACH_NOW), toFake: ['Date'] });
@@ -51,6 +54,13 @@ async function render(
       {
         provide: TenantStore,
         useValue: { selectedTenantId: tenantId, isOwner: signal(options.isOwner ?? false) },
+      },
+      {
+        provide: WorkspaceCalendar,
+        useValue: options.calendar ?? {
+          timeZone: signal(options.timeZone ?? 'Asia/Beirut'),
+          resolveToday: () => Promise.resolve('2026-10-01'),
+        },
       },
     ],
   });
@@ -336,6 +346,41 @@ describe('Clients', () => {
     );
     expect(query<HTMLAnchorElement>(omar, 'a.name').getAttribute('href')).toBe('/clients/client-9');
     expect(host.querySelector('.chips')).toBeNull();
+  });
+
+  it('says the day coaching ended on the workspace’s calendar, not the device’s (audit WEB-17)', async () => {
+    const { host } = await render({
+      url: '/clients/former',
+      isOwner: true,
+      timeZone: 'America/Los_Angeles',
+      // 03:00 UTC on Monday is still Sunday evening in the workspace.
+      getFormerClients: () => of([{ ...OMAR, releasedAtUtc: '2026-09-21T03:00:00Z' }]),
+    });
+
+    expect(squash(row(host, 'Omar Nasr').querySelector('.goal')?.textContent)).toBe(
+      'Left by client · Sun 20 Sep 2026',
+    );
+  });
+
+  it('reads Former clients once while the workspace’s calendar is first read (review of A15a)', async () => {
+    // The real calendar reads its signals before it waits, and sets them once the workspace answers.
+    const resolved = signal<string | null>(null);
+    const calendar = {
+      timeZone: computed(() => resolved()),
+      resolveToday: () => {
+        resolved();
+        return Promise.resolve().then(() => {
+          resolved.set('Asia/Beirut');
+          return '2026-10-01';
+        });
+      },
+    };
+    const { host, formerApi } = await render({ url: '/clients/former', isOwner: true, calendar });
+
+    expect(formerApi.getFormerClients).toHaveBeenCalledTimes(1);
+    expect(squash(row(host, 'Omar Nasr').querySelector('.goal')?.textContent)).toBe(
+      'Left by client · Sun 20 Sep 2026',
+    );
   });
 
   it('tells a coach who opens Former clients whose list it is, with a way back', async () => {

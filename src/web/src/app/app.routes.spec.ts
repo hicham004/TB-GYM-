@@ -2,9 +2,10 @@ import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
 import { serverRoutes } from './app.routes.server';
-import { memberGuard, sessionKnownGuard } from './core/auth/auth.guards';
+import { memberGuard, ownerGuard, sessionKnownGuard } from './core/auth/auth.guards';
 import { confirmBeforeLeaving, confirmSheetLeave } from './core/forms/leave-guard';
 import { NotFound } from './features/not-found/not-found';
+import { UndeliveredNotices } from './features/workspace/undelivered-notices';
 
 const route = (path: string) => {
   const found = routes.find((item) => item.path === path);
@@ -30,6 +31,14 @@ describe('the app routes', () => {
   it('opens Messages and Notifications only to someone with a role in the workspace', () => {
     expect(route('messages').canActivate).toContain(memberGuard);
     expect(route('notifications').canActivate).toContain(memberGuard);
+  });
+
+  // Audit INV-4: the notices TB Gym gave up delivering are the owner's to read, as the API answers.
+  it('opens Undelivered notices to the owner only, as a page of its own', async () => {
+    const notices = route('workspace/undelivered-notices');
+    expect(notices.canActivate).toContain(ownerGuard);
+    expect(notices.title).toBe('Undelivered notices | TB Gym');
+    expect(await (notices.loadComponent as () => Promise<unknown>)()).toBe(UndeliveredNotices);
   });
 
   it('names neither kind of invitation in the title of its link', () => {

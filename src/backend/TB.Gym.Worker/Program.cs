@@ -20,6 +20,16 @@ internal static class WorkerProgram
 {
     private static async Task Main(string[] args)
     {
+        var host = CreateBuilder(args).Build();
+        await host.RunAsync();
+    }
+
+    /// <summary>
+    /// The whole composition, short of running it. The integration tests build this same host, so the
+    /// sweeps they prove are the ones this process registers (audit BEB-5).
+    /// </summary>
+    internal static HostApplicationBuilder CreateBuilder(string[] args)
+    {
         var builder = Host.CreateApplicationBuilder(args);
 
         builder.Logging.ClearProviders();
@@ -45,8 +55,6 @@ internal static class WorkerProgram
         // Platform billing (ADR 0028): issues last month's invoices and queues reminders. Its emails
         // ride the workspace notice queue the action-mail sweep drains.
         builder.Services.AddHostedService<PlatformBillingWorker>();
-
-        var host = builder.Build();
-        await host.RunAsync();
+        return builder;
     }
 }

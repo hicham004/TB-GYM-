@@ -8,6 +8,7 @@ import {
   useRtl,
   waitForFonts,
 } from './support';
+import { docsPicture } from './docs-pictures';
 
 test.use({ allowedConsoleErrors: { patterns: [/status of 503 .*\/api\/nutrition\/ai-drafts/] } });
 
@@ -50,7 +51,7 @@ for (const width of [390, 1440]) {
     await waitForFonts(page);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await expectNoHorizontalOverflow(page);
-    await page.screenshot({ path: `../../docs/design/r44b-ai-${width}.png`, fullPage: true });
+    await docsPicture(page, `r44b-ai-${width}.png`, { fullPage: true });
     await page.emulateMedia({ colorScheme: 'dark' });
     await useRtl(page);
     await page.addStyleTag({ content: 'html { font-size: 200%; }' });

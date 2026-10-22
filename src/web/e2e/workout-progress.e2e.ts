@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import { expect, json, mockSession, SIGNED_IN_USER, test, waitForFonts } from './support';
+import { docsPicture } from './docs-pictures';
 
 const membership = {
   tenantId: '00000000-0000-4000-8000-000000000003',
@@ -220,7 +221,7 @@ for (const width of [390, 1440]) {
     await page.keyboard.press('Escape');
     await waitForFonts(page);
     await accessible(page);
-    await page.screenshot({ path: `../../docs/design/r23-progress-${width}.png`, fullPage: true });
+    await docsPicture(page, `r23-progress-${width}.png`, { fullPage: true });
     await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
     await accessible(page);
   });
@@ -373,7 +374,7 @@ test.describe('Workout player', () => {
       await expect(page.getByRole('navigation', { name: 'Client navigation' })).toHaveCount(0);
       await waitForFonts(page);
       await accessible(page);
-      await page.screenshot({ path: `../../docs/design/r22-workout-${width}.png`, fullPage: true });
+      await docsPicture(page, `r22-workout-${width}.png`, { fullPage: true });
       await page.getByRole('spinbutton', { name: 'Actual load', exact: true }).fill('105');
       await page.getByRole('button', { name: 'Log set' }).click();
       await expect(page.getByText('PR', { exact: true })).toBeVisible();
@@ -390,10 +391,7 @@ test.describe('Workout player', () => {
       await expect(page.getByText('525')).toBeVisible();
       await waitForFonts(page);
       await accessible(page);
-      await page.screenshot({
-        path: `../../docs/design/r22-workout-finish-${width}.png`,
-        fullPage: true,
-      });
+      await docsPicture(page, `r22-workout-finish-${width}.png`, { fullPage: true });
       await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
       await accessible(page);
     });
