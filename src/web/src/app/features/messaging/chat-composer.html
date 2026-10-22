@@ -58,10 +58,9 @@
       <span i18n>{{ remaining() }} of {{ maximumLength() }} characters left.</span>
     }
   </p>
-  <p class="summary" id="composer-summary" role="alert" tabindex="-1" #summary>
+  <app-form-summary id="composer-summary">
     @if (attempt().wasTried() && reasons.length > 0) {
-      <ng-container i18n>This message cannot be sent yet:</ng-container>
-      <span>{{ reasons[0] }}</span>
+      <ng-container i18n>This message cannot be sent yet: {{ reasons[0] }}</ng-container>
     }
-  </p>
+  </app-form-summary>
 </form>

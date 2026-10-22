@@ -509,7 +509,8 @@ form refuses itself moves focus to the first box marked wrong, whose reason is r
 summary only when no box is (nothing entered yet); a server refusal always moves focus to the summary.
 `SheetForm` and `EntrySheet` do this for their sheets. Load failures and side actions inside a sheet
 (a list that could not be read, a photo that cannot be used, a preview's verdict) keep their own lines.
-The invitation, product, platform, team, workspace, account and messaging forms adopt it when next
+Plans you sell's sheet and the chat composer have it since audit A15b; the invitation, platform, team,
+workspace and account forms, and a message's edit and removal and the saved replies, adopt it when next
 changed.
 
 **Submit controls are not disabled by invalidity.** They are disabled only while a request is in

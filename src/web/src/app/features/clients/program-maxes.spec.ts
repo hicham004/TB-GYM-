@@ -262,7 +262,9 @@ describe('the training maxes panel', () => {
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
       expect(document.activeElement).toBe(query(host, '#suggestion-squat'));
     } finally {
-      HTMLElement.prototype.scrollIntoView = original;
+      // jsdom has none: putting `undefined` back would hide every later spec's stub on Element.
+      if (original) HTMLElement.prototype.scrollIntoView = original;
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
     }
   });
 

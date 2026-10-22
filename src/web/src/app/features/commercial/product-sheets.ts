@@ -13,6 +13,7 @@ import {
   linkedSignal,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type {
@@ -25,6 +26,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ProductsApi } from './products-api';
@@ -61,7 +63,7 @@ export type ProductSheetMode =
 
 @Component({
   selector: 'app-product-sheet',
-  imports: [Button, Checkbox, Control, Field, Icon],
+  imports: [Button, Checkbox, Control, Field, FormSummary, Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -102,6 +104,7 @@ export type ProductSheetMode =
       }
 
       @if (mode().kind === 'new' || mode().kind === 'option') {
+        @let currencyShown = shows('currency');
         @if (mode().kind === 'new') {
           <h3 class="group-title" i18n>First price option</h3>
         }
@@ -134,15 +137,18 @@ export type ProductSheetMode =
                 (input)="setOption({ price: number($any($event.target).valueAsNumber) })"
                 (blur)="attempt.touch('price')"
               />
+              <!-- Its own control, not the Price field's: a wrong code is marked and described
+                   here, and a wrong price does not mark it. -->
               <input
-                appControl
-                class="currency"
+                class="tb-control currency"
                 name="currency"
                 autocomplete="off"
                 autocapitalize="characters"
                 spellcheck="false"
                 maxlength="3"
                 [attr.aria-label]="currencyLabel"
+                [attr.aria-invalid]="currencyShown ? 'true' : null"
+                [attr.aria-describedby]="currencyShown ? 'plan-currency-error' : null"
                 [value]="option().currency"
                 (input)="setOption({ currency: $any($event.target).value })"
                 (blur)="attempt.touch('currency')"
@@ -150,8 +156,8 @@ export type ProductSheetMode =
             </div>
           </app-field>
         </div>
-        @if (shows('currency')) {
-          <p class="warn-text">{{ errors()['currency'][0] }}</p>
+        @if (currencyShown) {
+          <p id="plan-currency-error" class="warn-text">{{ errors()['currency'][0] }}</p>
         }
         <app-field
           [label]="optionNameLabel"
@@ -172,7 +178,7 @@ export type ProductSheetMode =
           class="features"
           [attr.aria-describedby]="shows('features') ? 'plan-features-error' : null"
         >
-          <legend i18n>What's included</legend>
+          <legend i18n>What’s included</legend>
           @for (chip of featureChips; track chip.feature) {
             <app-checkbox [label]="chip.label">
               <input
@@ -187,9 +193,12 @@ export type ProductSheetMode =
         @if (shows('features')) {
           <p id="plan-features-error" class="warn-text">{{ errors()['features'][0] }}</p>
         }
-        @if (sellLine(); as text) {
-          <p class="muted" dir="auto" aria-live="polite">{{ text }}</p>
-        }
+        <!-- In the page from the start, so its first sentence is announced like the ones after it. -->
+        <p class="muted sell-line" dir="auto" aria-live="polite">
+          @if (sellLine(); as text) {
+            {{ text }}
+          }
+        </p>
       }
 
       @if (mode().kind === 'price') {
@@ -222,12 +231,13 @@ export type ProductSheetMode =
         </p>
       }
 
-      @if (attempt.wasTried() && problemCount() > 0) {
-        <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
-      }
-      @if (error(); as message) {
-        <p class="problem-text" role="alert">{{ message }}</p>
-      }
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        } @else if (attempt.wasTried() && problemCount() > 0) {
+          <ng-container i18n>Check the fields marked above.</ng-container>
+        }
+      </app-form-summary>
       <div class="actions">
         <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
           Not now
@@ -342,12 +352,14 @@ export type ProductSheetMode =
       margin-block-start: -0.5rem;
     }
 
-    .problem-text {
-      background: var(--tb-danger-soft);
-      border-radius: var(--tb-radius-control);
-      color: var(--tb-danger);
-      font-weight: 600;
-      padding: 0.625rem 0.875rem;
+    // Empty, the sell line is still a live region, but takes no room in the form's gap.
+    .sell-line:empty {
+      block-size: 1px;
+      clip-path: inset(50%);
+      inline-size: 1px;
+      overflow: hidden;
+      position: absolute;
+      white-space: nowrap;
     }
 
     // Kept above the keyboard and the end of a long form, as on Service & access; a focused field
@@ -381,6 +393,7 @@ export class ProductSheet {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly priceIntent = new IntentIdempotencyKey();
+  private readonly summary = viewChild.required(FormSummary);
 
   readonly mode = input.required<ProductSheetMode>();
   /** The workspace's currency, for a new plan's first option. */
@@ -487,12 +500,17 @@ export class ProductSheet {
     if (this.busy()) return;
     return this.scope.run('submit', async (owner) => {
       if (this.problemCount() > 0) {
+        // The summary points at the marked boxes now, not at the server's last refusal.
+        this.error.set(null);
         this.attempt.attempt();
         afterNextRender(
-          () =>
-            this.host.nativeElement
-              .querySelector<HTMLElement>('[aria-invalid="true"], fieldset[aria-describedby] input')
-              ?.focus(),
+          () => {
+            const wrong = this.host.nativeElement.querySelector<HTMLElement>(
+              '[aria-invalid="true"], fieldset[aria-describedby] input',
+            );
+            if (wrong) wrong.focus();
+            else this.summary().focus();
+          },
           { injector: this.injector },
         );
         return;
@@ -507,6 +525,8 @@ export class ProductSheet {
       } catch (error) {
         if (!owner.current) return;
         this.error.set(productWriteError(error));
+        // At the foot of a long sheet the refusal sits under the sticky actions: focus brings it up.
+        this.summary().focus();
       } finally {
         if (owner.current) {
           this.busy.set(false);

@@ -77,13 +77,9 @@ textarea[aria-invalid='true'] {
   cursor: progress;
   opacity: 0.7;
 }
-.reason,
-.summary {
+.reason {
   color: var(--tb-danger);
   font-size: 0.85rem;
-}
-.summary:empty {
-  display: none;
 }
 .count {
   color: var(--tb-muted);

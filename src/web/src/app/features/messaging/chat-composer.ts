@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FormAttempt } from '../../core/forms/form-attempt';
+import { FormSummary } from '../../ui/form-summary';
 
 /** The counter appears only when the limit is close enough to matter. */
 const nearLimitCharacters = 200;
@@ -25,7 +26,7 @@ const nearLimitCharacters = 200;
  */
 @Component({
   selector: 'app-chat-composer',
-  imports: [FormsModule],
+  imports: [FormsModule, FormSummary],
   templateUrl: './chat-composer.html',
   styleUrl: './chat-composer.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,15 +46,18 @@ export class ChatComposer {
   readonly send = output<void>();
   readonly openSavedReplies = output<void>();
 
-  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
+  private readonly summary = viewChild(FormSummary);
   private readonly field = viewChild<ElementRef<HTMLTextAreaElement>>('field');
 
   protected readonly remaining = computed(() => this.maximumLength() - this.draft().trim().length);
   protected readonly nearLimit = nearLimitCharacters;
 
-  /** Where focus goes when a send is refused, so the reason is what is read next. */
+  /**
+   * Where focus goes when a send is refused, so the reason is what is read next: once its words are
+   * drawn, as the region says nothing until then.
+   */
   focusSummary(): void {
-    this.summary()?.nativeElement.focus();
+    this.summary()?.focus();
   }
 
   /** Back to the message, with the caret after the text, once a saved reply has been dropped in. */

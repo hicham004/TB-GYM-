@@ -81,7 +81,9 @@ export class UiTabPane {
       outline-offset: -3px;
     }
 
-    [ngTab]:disabled {
+    // Angular Aria takes [disabled] as its own input: the tab stays focusable and says so with
+    // aria-disabled, so the native :disabled never matches.
+    [ngTab][aria-disabled='true'] {
       cursor: not-allowed;
       opacity: 0.5;
     }
