@@ -20,26 +20,26 @@
   "private": true,
   "packageManager": "npm@11.17.0",
   "dependencies": {
-    "@angular/aria": "^22.2.1",
-    "@angular/cdk": "^22.2.1",
-    "@angular/common": "^22.2.1",
-    "@angular/compiler": "^22.2.1",
-    "@angular/core": "^22.2.1",
-    "@angular/forms": "^22.2.1",
-    "@angular/localize": "22.2.1",
-    "@angular/platform-browser": "^22.2.1",
-    "@angular/platform-server": "22.2.1",
-    "@angular/router": "^22.2.1",
-    "@angular/ssr": "22.2.1",
+    "@angular/aria": "^22.2.4",
+    "@angular/cdk": "^22.2.4",
+    "@angular/common": "^22.2.3",
+    "@angular/compiler": "^22.2.3",
+    "@angular/core": "^22.2.3",
+    "@angular/forms": "^22.2.3",
+    "@angular/localize": "22.2.3",
+    "@angular/platform-browser": "^22.2.3",
+    "@angular/platform-server": "22.2.3",
+    "@angular/router": "^22.2.3",
+    "@angular/ssr": "22.2.4",
     "@microsoft/signalr": "10.0.11",
     "gsap": "^3.15.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/build": "^22.2.1",
-    "@angular/cli": "^22.2.1",
-    "@angular/compiler-cli": "^22.2.1",
+    "@angular/build": "^22.2.4",
+    "@angular/cli": "^22.2.4",
+    "@angular/compiler-cli": "^22.2.3",
     "@axe-core/playwright": "4.13.0",
     "@eslint/js": "^10.0.1",
     "@hey-api/openapi-ts": "0.97.3",
@@ -50,9 +50,10 @@
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",
     "typescript-eslint": "8.62.1",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "overrides": {
-    "js-yaml": "4.3.2"
+    "js-yaml": "4.3.2",
+    "vite": "8.3.5"
   }
 }

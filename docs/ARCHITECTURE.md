@@ -492,6 +492,11 @@ The Angular 22 application is standalone and feature-oriented:
 - English source text is marked for Angular extraction and layouts use logical CSS properties
   so a later Arabic locale can provide RTL presentation without component rewrites.
 
+**Vite override (2026-10-23).** `package.json` lifts Vite to 8.3.5 through `overrides`. Vite only builds
+and serves the app on developer and CI machines and never ships to users, but `@angular/build` 22.2.4
+still asks for 8.3.0, which `npm audit --audit-level=high` flags through its launch-editor dependency.
+Drop the override once `@angular/build` asks for 8.3.3 or later.
+
 **Ratified convention — inline field validation.** A _derived_ validation reason is one the form
 works out for itself from what has been entered: "choose a due date", "this question has to be
 answered". It is distinct from a _server_ error, which reports what the backend actually said. The
