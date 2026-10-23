@@ -7,13 +7,16 @@ import {
 } from '../../core/i18n/currencies';
 
 /**
- * Settings › Name and region (R5.2a): the coaching space's name, its time zone, the first day of its
- * week and the currency new plans start in. Pure helpers, so the page and its tests share them; the
- * time zone and currency pieces registration shares too are in `core/i18n`.
+ * Settings › Name and region (R5.2a): the coaching space's name, the language of its notices and emails,
+ * its time zone, the first day of its week and the currency new plans start in. Pure helpers, so the
+ * page and its tests share them; the time zone and currency pieces registration shares too are in
+ * `core/i18n`.
  */
 
 export interface SpaceDraft {
   name: string;
+  /** The language TB Gym writes the space's notices and emails in, as the server keeps it. */
+  language: string;
   timeZoneId: string;
   weekStartsOn: DayOfWeek;
   currencyChoice: CurrencyChoice;
@@ -27,6 +30,7 @@ export function draftFrom(workspace: WorkspaceDetails): SpaceDraft {
   const currency = currencyChoiceOf(workspace.defaultCurrencyCode);
   return {
     name: workspace.name,
+    language: workspace.defaultCulture,
     timeZoneId: workspace.timeZoneId,
     weekStartsOn: workspace.weekStartsOn,
     currencyChoice: currency.choice,
@@ -43,10 +47,21 @@ export function draftCurrency(draft: SpaceDraft): string {
 export function draftChanged(draft: SpaceDraft, workspace: WorkspaceDetails): boolean {
   return (
     draft.name.trim() !== workspace.name ||
+    draft.language !== workspace.defaultCulture ||
     draft.timeZoneId !== workspace.timeZoneId ||
     draft.weekStartsOn !== workspace.weekStartsOn ||
     draftCurrency(draft) !== workspace.defaultCurrencyCode.toUpperCase()
   );
+}
+
+/**
+ * What the language means today (audit INV-8): only English wording exists, so a space that chose
+ * Arabic still gets every notice and email, in English, until the Arabic ones are written.
+ */
+export function languageLine(language: string): string {
+  return language === 'ar-LB'
+    ? $localize`Notices and emails aren’t written in Arabic yet, so they go out in English until they are.`
+    : $localize`Notices and emails go out in English.`;
 }
 
 /** What is wrong with each field, in words; an empty list when it is fine. */

@@ -40,7 +40,8 @@ public sealed record NotificationTemplate(string Key, int Version, string Cultur
 /// read when the row is written (audit UIQ-21); never the note's text.
 /// </para>
 /// <para>
-/// Only culture <c>en</c> exists; Arabic and any other locale are deferred. Each template carries its
+/// Only culture <c>en</c> exists; Arabic and any other locale are deferred, and a workspace that chose
+/// Arabic is answered in English until they are (audit INV-8). Each template carries its
 /// own version: a wording change publishes the next version of that template alone and leaves every
 /// already-delivered snapshot exactly as it was read. Version 2 is the glossary pass of audit COACH-12
 /// (the plan and team notices in the screens' words, and the note notices naming the workout).
@@ -175,6 +176,10 @@ public static class NotificationTemplateCatalog
             "Open the workout on the client's Training to read it."),
     };
 
+    /// <summary>The wordings by language; only English is written so far (audit INV-8).</summary>
+    private static readonly Dictionary<string, Dictionary<CommercialNotificationKind, NotificationTemplate>> Wordings =
+        new(StringComparer.OrdinalIgnoreCase) { [DefaultCulture] = English };
+
     /// <summary>
     /// Puts a client's name into a named template's title. The name is data, inserted as plain text
     /// and shortened, never interpreted; a template without the token is returned unchanged.
@@ -289,22 +294,26 @@ public static class NotificationTemplateCatalog
     }
 
     /// <summary>
-    /// Resolves the template for a kind and culture, or reports that none is published. A missing
-    /// template is a permanent dead letter rather than a retry: no amount of waiting will make an
-    /// unpublished wording appear.
+    /// Resolves the template for a kind in a workspace's language, or reports that the kind has no
+    /// published wording at all. A missing kind is a permanent dead letter rather than a retry: no
+    /// amount of waiting will make an unpublished wording appear.
     /// </summary>
+    /// <remarks>
+    /// A kind not yet worded in the workspace's language, such as every kind in Arabic, gets English,
+    /// the source language, so a coaching space that chose it still hears every notice (audit INV-8:
+    /// refusing it stopped every notice of that space). The fallback is per kind, so a language worded
+    /// in part never stops the kinds it lacks. The template keeps its own culture, so the notice records
+    /// the English it was written in and never claims to be Arabic.
+    /// </remarks>
     public static bool TryResolve(
         CommercialNotificationKind kind,
         string culture,
         out NotificationTemplate template)
     {
-        // Only `en` is published. A workspace culture of `en-LB` resolves to it by language, and
-        // anything else is refused rather than silently answered in the wrong language.
-        var language = LanguageOf(culture);
-        if (!string.Equals(language, DefaultCulture, StringComparison.OrdinalIgnoreCase))
+        // `en-LB` resolves to `en` by language.
+        if (Wordings.TryGetValue(LanguageOf(culture), out var wording) && wording.TryGetValue(kind, out template!))
         {
-            template = null!;
-            return false;
+            return true;
         }
 
         return English.TryGetValue(kind, out template!);

@@ -172,6 +172,22 @@ public sealed partial record WorkspaceBrand(string BrandColor, string AccentColo
     private static partial Regex HexColor();
 }
 
+/// <summary>
+/// The languages a coaching space may choose for the notices and emails TB Gym sends for it (ADR 0003,
+/// audit INV-8): English and Arabic, as written in Lebanon, the two the API's requests already speak.
+/// A notice not yet written in the chosen language goes out in English, so a choice never stops one.
+/// </summary>
+public static class WorkspaceLanguages
+{
+    public const string English = "en-LB";
+
+    public const string Arabic = "ar-LB";
+
+    public const string Refusal = "Choose English or Arabic as the coaching space's language.";
+
+    public static IReadOnlyList<string> Supported { get; } = [English, Arabic];
+}
+
 public sealed record WorkspaceSettings(
     string TimeZoneId,
     string DefaultCulture,
@@ -209,7 +225,12 @@ public sealed record WorkspaceSettings(
         }
         catch (CultureNotFoundException exception)
         {
-            throw new ArgumentException("A valid culture is required.", nameof(defaultCulture), exception);
+            throw new ArgumentException(WorkspaceLanguages.Refusal, nameof(defaultCulture), exception);
+        }
+
+        if (!WorkspaceLanguages.Supported.Contains(normalizedCulture, StringComparer.Ordinal))
+        {
+            throw new ArgumentException(WorkspaceLanguages.Refusal, nameof(defaultCulture));
         }
 
         var normalizedCurrency = defaultCurrencyCode.Trim().ToUpperInvariant();

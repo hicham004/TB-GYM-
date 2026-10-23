@@ -7,6 +7,7 @@ import {
   duration,
   emptyOption,
   optionErrors,
+  optionLength,
   optionRequest,
   optionRow,
   planCard,
@@ -79,9 +80,23 @@ describe('Plans you sell, in coach words', () => {
   it('checks an option as the server would, without refusing what it accepts', () => {
     const valid = { ...emptyOption('usd'), price: 99.99 };
     expect(optionErrors(valid)).toEqual({});
-    expect(Object.keys(optionErrors({ ...valid, weeks: 0 }))).toEqual(['weeks']);
-    expect(Object.keys(optionErrors({ ...valid, weeks: 2.5 }))).toEqual(['weeks']);
-    expect(optionErrors({ ...valid, weeks: 3650 })).toEqual({});
+    expect(optionErrors({ ...valid, length: 0 })).toEqual({
+      length: ['Enter a whole number of weeks, 1 or more.'],
+    });
+    expect(Object.keys(optionErrors({ ...valid, length: 2.5 }))).toEqual(['length']);
+    expect(optionErrors({ ...valid, length: 3650 })).toEqual({});
+    expect(optionErrors({ ...valid, length: 3651 })).toEqual({
+      length: ['Keep it to 3,650 weeks or fewer.'],
+    });
+    // A plan sold by the day has the server's same bounds, said in days (INV-7).
+    const days = { ...valid, unit: 'Day' as const };
+    expect(optionErrors({ ...days, length: 30 })).toEqual({});
+    expect(optionErrors({ ...days, length: null })).toEqual({
+      length: ['Enter a whole number of days, 1 or more.'],
+    });
+    expect(optionErrors({ ...days, length: 3651 })).toEqual({
+      length: ['Keep it to 3,650 days or fewer.'],
+    });
     expect(optionErrors({ ...valid, price: 10.005 })['price']).toEqual([
       'Use at most two decimals.',
     ]);
@@ -94,7 +109,8 @@ describe('Plans you sell, in coach words', () => {
     expect(
       optionRequest({
         label: ' ',
-        weeks: 6,
+        length: 6,
+        unit: 'Week',
         price: 0,
         currency: 'lbp',
         features: ['Messaging', 'Training'],
@@ -110,6 +126,21 @@ describe('Plans you sell, in coach words', () => {
         { feature: 'Messaging', allowsConcurrentCoverage: false },
       ],
     });
+  });
+
+  it('sells an option by the day under its length in days (INV-7)', () => {
+    expect(optionLength({ length: 30, unit: 'Day' })).toBe('30 days');
+    expect(optionLength({ length: 1, unit: 'Day' })).toBe('1 day');
+    expect(optionLength({ length: 12, unit: 'Week' })).toBe('12 weeks');
+    expect(optionLength({ length: null, unit: 'Day' })).toBe('');
+    expect(optionLength({ length: 2.5, unit: 'Day' })).toBe('');
+    expect(
+      optionRequest({ ...emptyOption('USD'), length: 30, unit: 'Day', price: 90 }),
+    ).toMatchObject({ label: '30 days', durationCount: 30, durationUnit: 'Day', priceAmount: 90 });
+    expect(
+      optionRequest({ ...emptyOption('USD'), label: 'Monthly', length: 30, unit: 'Day', price: 90 })
+        .label,
+    ).toBe('Monthly');
   });
 
   it('refuses the same price, a negative one and fractions of a cent', () => {

@@ -28,6 +28,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
+import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ProductsApi } from './products-api';
 import {
@@ -37,6 +38,7 @@ import {
   featureChip,
   type FieldMessages,
   optionErrors,
+  optionLength,
   optionRequest,
   type OptionValues,
   planErrors,
@@ -63,7 +65,7 @@ export type ProductSheetMode =
 
 @Component({
   selector: 'app-product-sheet',
-  imports: [Button, Checkbox, Control, Field, FormSummary, Icon],
+  imports: [Button, Checkbox, Control, Field, FormSummary, Icon, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -108,19 +110,26 @@ export type ProductSheetMode =
         @if (mode().kind === 'new') {
           <h3 class="group-title" i18n>First price option</h3>
         }
+        <!-- Weeks, or days for a plan sold by the day, such as 30 days (INV-7). -->
+        <app-segmented-control
+          [label]="unitLabel"
+          [options]="unitOptions"
+          [selected]="option().unit"
+          (selectedChange)="setUnit($event)"
+        />
         <div class="pair">
-          <app-field [label]="weeksLabel" [errors]="shows('weeks') ? errors()['weeks'] : null">
+          <app-field [label]="lengthLabel()" [errors]="shows('length') ? errors()['length'] : null">
             <input
               appControl
-              name="weeks"
+              name="length"
               autocomplete="off"
               type="number"
               inputmode="numeric"
               min="1"
               step="1"
-              [value]="option().weeks ?? ''"
-              (input)="setOption({ weeks: number($any($event.target).valueAsNumber) })"
-              (blur)="attempt.touch('weeks')"
+              [value]="option().length ?? ''"
+              (input)="setOption({ length: number($any($event.target).valueAsNumber) })"
+              (blur)="attempt.touch('length')"
             />
           </app-field>
           <app-field [label]="priceLabel" [errors]="shows('price') ? errors()['price'] : null">
@@ -411,7 +420,11 @@ export class ProductSheet {
   protected readonly nameLabel = $localize`Plan name`;
   protected readonly descriptionLabel = $localize`What clients get (optional)`;
   protected readonly descriptionHelp = $localize`One or two sentences, as you would say it to a new client.`;
-  protected readonly weeksLabel = $localize`Length in weeks`;
+  protected readonly unitLabel = $localize`Length counted in`;
+  protected readonly unitOptions: readonly SegmentOption[] = [
+    { value: 'Week', label: $localize`Weeks` },
+    { value: 'Day', label: $localize`Days` },
+  ];
   protected readonly priceLabel = $localize`Price`;
   protected readonly currencyLabel = $localize`Currency`;
   protected readonly optionNameLabel = $localize`Option name (optional)`;
@@ -441,10 +454,11 @@ export class ProductSheet {
       ? $localize`${mode.product.name}:plan: · ${duration(mode.offer)}:length:, now ${price(mode.offer.priceAmount, mode.offer.priceCurrency, this.locale)}:price:`
       : '';
   });
+  protected readonly lengthLabel = computed(() =>
+    this.option().unit === 'Day' ? $localize`Length in days` : $localize`Length in weeks`,
+  );
   protected readonly optionNameHelp = computed(() => {
-    const weeks = this.option().weeks;
-    const length =
-      weeks && weeks > 0 ? duration({ durationCount: weeks, durationUnit: 'Week' }) : '';
+    const length = optionLength(this.option());
     return length
       ? $localize`Left empty, clients see “${length}:length:”.`
       : $localize`Left empty, clients see its length.`;
@@ -471,7 +485,7 @@ export class ProductSheet {
     const values = this.option();
     if (Object.keys(optionErrors(values)).length > 0) return null;
     const amount = price(values.price ?? 0, values.currency.trim().toUpperCase(), this.locale);
-    const length = duration({ durationCount: values.weeks ?? 0, durationUnit: 'Week' });
+    const length = optionLength(values);
     return values.price === 0
       ? $localize`Clients get ${length}:length: for free, from the day you start their plan.`
       : $localize`Clients pay ${amount}:price: for ${length}:length:. You record each payment on their profile.`;
@@ -484,6 +498,11 @@ export class ProductSheet {
   protected setOption(change: Partial<OptionValues>): void {
     this.option.update((values) => ({ ...values, ...change }));
     this.dirtyChange.emit(true);
+  }
+
+  /** The number stays as typed: the length line under it says what it now means. */
+  protected setUnit(unit: string): void {
+    this.setOption({ unit: unit === 'Day' ? 'Day' : 'Week' });
   }
 
   protected toggleFeature(feature: CoachingFeature, on: boolean): void {

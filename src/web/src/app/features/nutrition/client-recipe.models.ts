@@ -94,11 +94,22 @@ export function clientRecipe(
             ? amountLabel(portion, line.unit, locale, portionDigits(portion, line.unit))
             : wholeAmount,
         },
-        basis: basis && !line.foodName.toLocaleLowerCase(locale).includes(basis) ? basis : null,
+        basis: basis && !namesBasis(line.foodName, basis, locale) ? basis : null,
       };
     }),
     steps: methodSteps(view.instructions),
   };
+}
+
+/**
+ * Whether the food's name already says how the amount is weighed, as a word of its own: "Cooked rice"
+ * does, while "Quinoa, uncooked" weighed cooked (audit A16b) does not, so its client still reads "cooked".
+ */
+function namesBasis(name: string, basis: string, locale: string): boolean {
+  return name
+    .toLocaleLowerCase(locale)
+    .split(/[^\p{L}\p{N}]+/u)
+    .includes(basis);
 }
 
 /**

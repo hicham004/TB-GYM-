@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceDetails } from '../../core/api/api.models';
-import { draftChanged, draftCurrency, draftErrors, draftFrom } from './workspace-settings.models';
+import {
+  draftChanged,
+  draftCurrency,
+  draftErrors,
+  draftFrom,
+  languageLine,
+} from './workspace-settings.models';
 
 function workspace(overrides: Partial<WorkspaceDetails> = {}): WorkspaceDetails {
   return {
@@ -37,9 +43,19 @@ describe('Name and region helpers', () => {
     expect(draftChanged({ ...draft, timeZoneId: 'Europe/Paris' }, saved)).toBe(true);
     expect(draftChanged({ ...draft, weekStartsOn: 'Sunday' }, saved)).toBe(true);
     expect(draftChanged({ ...draft, currencyChoice: 'LBP' }, saved)).toBe(true);
+    expect(draftChanged({ ...draft, language: 'ar-LB' }, saved)).toBe(true);
     // Another currency typed as the one already saved is no change.
     expect(draftChanged({ ...draft, currencyChoice: 'other', otherCurrency: 'usd' }, saved)).toBe(
       false,
+    );
+  });
+
+  it('takes the language as stored and says what Arabic means while only English is written', () => {
+    expect(draftFrom(workspace()).language).toBe('en-LB');
+    expect(draftFrom(workspace({ defaultCulture: 'ar-LB' })).language).toBe('ar-LB');
+    expect(languageLine('en-LB')).toBe('Notices and emails go out in English.');
+    expect(languageLine('ar-LB')).toBe(
+      'Notices and emails aren’t written in Arabic yet, so they go out in English until they are.',
     );
   });
 

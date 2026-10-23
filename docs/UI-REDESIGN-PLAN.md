@@ -657,9 +657,10 @@ of the implemented R1.3 screens before production rollout.
   under 0.5 g a serving); lower is refused and left out of the search (NUT-003, ADR 0008). (7) The food
   sheet asks before it closes with something typed. Imports now also keep Foundation foods' Atwater
   energy as USDA's calories, as the search showed. Left: (3) A USDA copy cannot be renamed without
-  copying it. (5) No screen for a food's label photo or for raw-to-cooked factors. (8) A ceiling per TB
-  Gym plan, or one the platform admin sets per workspace, would replace the one server setting. (9) A
-  line made through cooking factors is not offered new numbers (none can be made on the new screens).
+  copying it. (5) No screen for a food's label photo (raw-to-cooked conversions came in audit A16b, see
+  C7). (8) A ceiling per TB Gym plan, or one the platform admin sets per workspace, would replace the one
+  server setting. (9) Done in audit A16b: a line weighed cooked is offered new numbers too, and stays
+  weighed cooked while the newer food is still raw in grams.
   (10) A meal plan keeps the recipe version it was published with, so a food's new numbers reach a plan
   only through the recipe (R4.4d's "Use the newest version"). (11) No count of the recipes that use a
   food before it is archived, and no archiving several at once.
@@ -737,7 +738,7 @@ of the implemented R1.3 screens before production rollout.
   you sell, an offer a price option; the sidebar keeps "Products". (5) What a plan includes is shown once
   when all its options for sale agree, else per option. Not built: (a) money per plan (what it brought in
   this month) needs a payment read of its own; (b) the counts are not yet links to the client list filtered
-  by plan; (c) a length in days (the server accepts it; the sheets offer weeks, as the old page did);
+  by plan; (c) a length in days, built in audit A16b (the sheets count a length in weeks or days);
   (d) choosing per feature whether two plans may overlap (`allowsConcurrentCoverage`) stays off screen, as
   before; (e) a plan's cover photo, a public page or a checkout link would be a new way to sell, an owner
   decision. Amended 2026-10-20 (audit A7): after Change price the option for sale also counts the clients
@@ -800,7 +801,9 @@ of the implemented R1.3 screens before production rollout.
   Lebanon are billed more and more in dollars, the pound has held near 89,500 to the dollar since mid-2023, and
   a coach with Gulf clients may sell in AED. (4) **The language is not offered**: emails and invitations exist
   in English only (`NotificationTemplateCatalog`), so an Arabic choice would change nothing; the stored value is
-  kept on save. (5) **Sign out everywhere asks first**, since it signs this device out too. (6) **Faces are
+  kept on save. Amended 2026-10-22 (audit A16b, INV-8, the owner's choice): Name and region offers English or
+  Arabic for notices and emails, and says that Arabic ones are not written yet, so they go out in English.
+  (5) **Sign out everywhere asks first**, since it signs this device out too. (6) **Faces are
   initials**: no profile photo exists yet. Not built: (a) a profile photo for staff (Everfit and Trainerize
   coaches have one, shown to clients; it needs the media pipeline and a consent line); (b) an admin role between
   owner and coach (Everfit's Admin manages every client and all settings): an authorization change for the
@@ -1889,6 +1892,14 @@ limited to the coach's assigned clients.
   (optional; 0 cook reads "No cooking" to the client). The meal-plan builder says when a recipe in the
   plan was published again since ("Overnight oats was published again: 420 kcal a serving, 400 kcal
   before") and **Use the newest version** moves that recipe's options in this draft only, with Undo.
+- Built in audit A16b (INV-6, the owner's choice of 2026-10-19): a recipe line of a raw food weighed in
+  grams has **Weigh it cooked**, a sheet that lists the workspace's raw-to-cooked conversions (searched on
+  the server, each with "100 g raw makes 290 g cooked" and where its numbers come from) or, under Add one,
+  takes a new one: what it is, the cooked weight of 100 g raw, the share of protein, carbs and fat kept
+  (100% unless a source says less) and where the numbers come from, said back as they are typed. The line
+  then shows its amount in grams cooked, converted from the raw weight it stood for, names its conversion,
+  and has Change conversion and Weigh it raw. A conversion is never changed once saved, and TB Gym offers
+  no numbers of its own.
 
 **C8. Products**
 - The heading becomes "Plans you sell": cards with price, duration and icons for the included
@@ -1901,6 +1912,10 @@ limited to the coach's assigned clients.
   sheets too, and closing one with something typed asks first. Old price options and plans no longer sold
   wait behind a closed disclosure. The route follows dark mode. The demo's descriptions were already
   plain words.
+- Built in audit A16b (INV-7, the owner's choice of 2026-10-19): New plan and Add price option count the
+  length in weeks or days ("Length counted in"), the number kept as typed when the unit changes; the line
+  under the price, an option's default name and the checks follow the unit ("Clients pay USD 90 for 30
+  days."). Plans covering one feature side by side stay off screen (declined).
 
 **C9. Settings, Team, Billing**
 - One settings layout with a sub-navigation.
@@ -1915,7 +1930,8 @@ limited to the coach's assigned clients.
   marked on all of them. **Name and region**: the name; the time zone shown as "Beirut, Asia · GMT+3 · 8:03 PM"
   with Change opening a sheet that searches every zone by city or region (the device's zone offered first); the
   week's first day and the currency new plans start in as segmented choices (US dollar, Lebanese pound, Another
-  with a code checked against the browser's ISO list); the stored language is kept and not offered (see
+  with a code checked against the browser's ISO list); the stored language was kept and not offered until
+  audit A16b, which offers English or Arabic for notices and emails (see
   follow-ups). Since audit A11a the zone row and its sheet are the kit's `TimeZoneField`, and registration picks
   its zone (from the device's, the sheet light like the page) and its currency the same way, with no language
   select; Save changes, Undo changes and the leave warning. **Team**: the owner first, then each coach with

@@ -363,35 +363,137 @@ internal sealed partial class NutritionApplicationService(
         }
     }
 
-    public async Task<CookingFactorPage> ListCookingFactorsAsync(int skip, int take, CancellationToken cancellationToken)
+    public async Task<CookingConversionPage> ListCookingConversionsAsync(string? query, int skip, int take, CancellationToken cancellationToken)
     {
-        var source = dbContext.CookingFactorRecords.AsNoTracking();
-        var total = await source.CountAsync(cancellationToken);
-        var items = await source.OrderBy(item => item.Kind).ThenBy(item => item.SourceKey).ThenBy(item => item.SourceVersion)
-            .Skip(skip).Take(take).ToArrayAsync(cancellationToken);
-        return new CookingFactorPage(total, skip, take, items.Select(ToCookingFactorView).ToArray());
+        // A conversion is a raw-to-cooked yield and the retention of the same name and source; a factor
+        // without its partner is no conversion and is not offered.
+        var factors = dbContext.CookingFactorRecords.AsNoTracking()
+            .Where(item => item.FromBasis == PreparationBasis.Raw && item.ToBasis == PreparationBasis.Cooked);
+        var pairs =
+            from yield in factors.Where(item => item.Kind == nameof(CookingFactorKind.Yield))
+            join retention in factors.Where(item => item.Kind == nameof(CookingFactorKind.Retention))
+                on new { yield.TenantId, yield.SourceKey, yield.SourceVersion }
+                equals new { retention.TenantId, retention.SourceKey, retention.SourceVersion }
+            select new { Yield = yield, Retention = retention };
+        foreach (var pattern in LikePattern.EachWord(query))
+        {
+            pairs = pairs.Where(pair =>
+                EF.Functions.ILike(pair.Yield.SourceKey, pattern, LikePattern.EscapeCharacter) ||
+                EF.Functions.ILike(pair.Yield.SourceVersion, pattern, LikePattern.EscapeCharacter));
+        }
+
+        var total = await pairs.CountAsync(cancellationToken);
+        var items = await pairs
+            .OrderBy(pair => EF.Functions.Collate(pair.Yield.SourceKey, NameOrder.Collation))
+            .ThenBy(pair => EF.Functions.Collate(pair.Yield.SourceVersion, NameOrder.Collation))
+            .ThenBy(pair => pair.Yield.Id)
+            .Skip(skip).Take(take)
+            .ToArrayAsync(cancellationToken);
+        return new CookingConversionPage(total, skip, take, items.Select(pair => ToCookingConversionView(pair.Yield, pair.Retention)).ToArray());
     }
 
-    public async Task<NutritionCommandResult> CreateCookingFactorAsync(CreateCookingFactorRequest request, CancellationToken cancellationToken)
+    public async Task<NutritionCommandResult> CreateCookingConversionAsync(CreateCookingConversionRequest request, CancellationToken cancellationToken)
     {
+        CookingFactorRecord yield;
+        CookingFactorRecord retention;
         try
         {
-            var factor = new CookingFactor(request.SourceKey, request.SourceVersion, request.FromBasis, request.ToBasis, request.Factor);
-            var record = request.Kind switch
-            {
-                CookingFactorKind.Yield => CookingFactorRecord.CreateYield(tenantContext.TenantId, factor),
-                CookingFactorKind.Retention => CookingFactorRecord.CreateRetention(tenantContext.TenantId, factor),
-                _ => throw new ArgumentException("A supported cooking factor kind is required."),
-            };
-            dbContext.CookingFactorRecords.Add(record);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, CookingFactor: ToCookingFactorView(record));
+            yield = CookingFactorRecord.CreateYield(
+                tenantContext.TenantId,
+                new CookingFactor(request.SourceKey, request.SourceVersion, PreparationBasis.Raw, PreparationBasis.Cooked, request.YieldFactor));
+            retention = CookingFactorRecord.CreateRetention(
+                tenantContext.TenantId,
+                new CookingFactor(request.SourceKey, request.SourceVersion, PreparationBasis.Raw, PreparationBasis.Cooked, request.RetentionFactor));
         }
         catch (ArgumentException exception)
         {
-            return Invalid("cookingFactor", exception.PersonMessage());
+            return Invalid(exception.ParamName ?? "cookingConversion", exception.PersonMessage());
+        }
+
+        var kept = await StoredConversionAsync(yield, retention, cancellationToken);
+        if (kept.Refusal is not null)
+        {
+            return kept.Refusal;
+        }
+
+        if (kept.Yield is not null && kept.Retention is not null)
+        {
+            return ConversionSaved(kept.Yield, kept.Retention);
+        }
+
+        // Whichever factor is not stored yet; the answer names the one that is, never an unsaved copy.
+        if (kept.Yield is null)
+        {
+            dbContext.CookingFactorRecords.Add(yield);
+        }
+
+        if (kept.Retention is null)
+        {
+            dbContext.CookingFactorRecords.Add(retention);
+        }
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return ConversionSaved(kept.Yield ?? yield, kept.Retention ?? retention);
+        }
+        catch (DbUpdateException exception) when (IsCookingFactorTaken(exception))
+        {
+            // The same name and source saved at the same moment: answered as a retry, or refused when
+            // its numbers differ.
+            dbContext.ChangeTracker.Clear();
+            var again = await StoredConversionAsync(yield, retention, cancellationToken);
+            return again.Refusal
+                ?? (again.Yield is not null && again.Retention is not null
+                    ? ConversionSaved(again.Yield, again.Retention)
+                    : Conflict("cooking_conversion_conflict", "The conversion changed while it was being saved. Try again."));
         }
     }
+
+    private static NutritionCommandResult ConversionSaved(CookingFactorRecord yield, CookingFactorRecord retention) =>
+        new(NutritionCommandStatus.Success, CookingConversion: ToCookingConversionView(yield, retention));
+
+    /// <summary>
+    /// What is stored under the new conversion's name and source, compared without case as a coach reads
+    /// them: a refusal when its numbers differ, else the yield and the retention already kept (a retry, a
+    /// double tap, the same name in other capitals), either one null while it is not stored.
+    /// </summary>
+    private async Task<StoredConversion> StoredConversionAsync(CookingFactorRecord yield, CookingFactorRecord retention, CancellationToken cancellationToken)
+    {
+        var name = LikePattern.Escape(yield.SourceKey);
+        var source = LikePattern.Escape(yield.SourceVersion);
+        var stored = await dbContext.CookingFactorRecords.AsNoTracking()
+            .Where(item => EF.Functions.ILike(item.SourceKey, name, LikePattern.EscapeCharacter) &&
+                           EF.Functions.ILike(item.SourceVersion, source, LikePattern.EscapeCharacter) &&
+                           item.FromBasis == PreparationBasis.Raw && item.ToBasis == PreparationBasis.Cooked)
+            .OrderBy(item => item.Id)
+            .ToListAsync(cancellationToken);
+        var other = stored.FirstOrDefault(item =>
+            item.Factor != (item.Kind == yield.Kind ? yield.Factor : retention.Factor));
+        if (other is not null)
+        {
+            return new StoredConversion(
+                Conflict(
+                    "cooking_conversion_taken",
+                    $"A conversion for “{other.SourceKey}” from “{other.SourceVersion}” already has other numbers. Give the new one another name or source."),
+                null,
+                null);
+        }
+
+        return new StoredConversion(
+            null,
+            stored.FirstOrDefault(item => item.Kind == yield.Kind),
+            stored.FirstOrDefault(item => item.Kind == retention.Kind));
+    }
+
+    private sealed record StoredConversion(NutritionCommandResult? Refusal, CookingFactorRecord? Yield, CookingFactorRecord? Retention);
+
+    private static bool IsCookingFactorTaken(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: { } constraint,
+        } && constraint.StartsWith("IX_CookingFactors_", StringComparison.Ordinal);
 
     public async Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, CancellationToken cancellationToken)
     {
@@ -1414,6 +1516,7 @@ internal sealed partial class NutritionApplicationService(
         var ids = requests.Select(item => item.FoodItemVersionId).Distinct().ToArray();
         var versions = await dbContext.FoodItemVersions.AsNoTracking().Where(item => ids.Contains(item.Id)).Include(item => item.Allergens).ToDictionaryAsync(item => item.Id, cancellationToken);
         var foods = await dbContext.FoodItems.AsNoTracking().Where(item => versions.Values.Select(version => version.FoodItemId).Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken);
+        // Another workspace's factors are hidden by the tenant filter, so they read as not found.
         var factorIds = requests.SelectMany(item => new[] { item.YieldFactorId, item.RetentionFactorId }).Where(item => item.HasValue).Select(item => item!.Value).Distinct().ToArray();
         var factors = await dbContext.CookingFactorRecords.AsNoTracking().Where(item => factorIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken);
         var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
@@ -1432,16 +1535,19 @@ internal sealed partial class NutritionApplicationService(
             }
 
             var source = new NutrientQuantity(version.BasisQuantity, version.PreparationBasis, new EnergyNutrients(version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, PolyolGrams: version.PolyolGrams, EthanolGrams: version.EthanolGrams, FibreGrams: version.FibreGrams));
-            CookingFactor? yield = null;
-            CookingFactor? retention = null;
-            if (request.YieldFactorId is { } yieldId && factors.TryGetValue(yieldId, out var yieldRecord))
+            var yield = LineFactor(request.YieldFactorId, CookingFactorKind.Yield, factors, food.Name);
+            var retention = LineFactor(request.RetentionFactorId, CookingFactorKind.Retention, factors, food.Name);
+            if (yield is not null && retention is not null &&
+                (yield.SourceKey != retention.SourceKey || yield.SourceVersion != retention.SourceVersion))
             {
-                yield = new CookingFactor(yieldRecord.SourceKey, yieldRecord.SourceVersion, yieldRecord.FromBasis, yieldRecord.ToBasis, yieldRecord.Factor);
+                // A yield and a retention of two conversions would count the line through neither.
+                throw new NutritionInputException("ingredients", ConversionNotFound(food.Name));
             }
 
-            if (request.RetentionFactorId is { } retentionId && factors.TryGetValue(retentionId, out var retentionRecord))
+            if ((yield is not null || retention is not null) && request.Unit != FoodQuantityUnit.Gram)
             {
-                retention = new CookingFactor(retentionRecord.SourceKey, retentionRecord.SourceVersion, retentionRecord.FromBasis, retentionRecord.ToBasis, retentionRecord.Factor);
+                // A cooked weight is a weight: an amount in servings or millilitres is not weighed cooked.
+                throw new NutritionInputException("ingredients", $"Only an amount in grams can be weighed cooked, and “{food.Name}” is measured another way.");
             }
 
             var resolved = PreparationBasisCalculator.Resolve(source, request.Quantity, request.Basis, yield, retention);
@@ -1624,6 +1730,32 @@ internal sealed partial class NutritionApplicationService(
 
     private static CookingFactorView ToCookingFactorView(CookingFactorRecord item) =>
         new(item.Id, Enum.Parse<CookingFactorKind>(item.Kind), item.SourceKey, item.SourceVersion, item.FromBasis, item.ToBasis, item.Factor);
+
+    private static CookingConversionView ToCookingConversionView(CookingFactorRecord yield, CookingFactorRecord retention) =>
+        new(yield.SourceKey, yield.SourceVersion, ToCookingFactorView(yield), ToCookingFactorView(retention));
+
+    /// <summary>
+    /// A recipe line's factor of the kind its field names, or null when it names none. An id this
+    /// workspace does not hold, or one of the other kind, is refused rather than left out, which would
+    /// count the line raw where the coach weighed it cooked.
+    /// </summary>
+    private static CookingFactor? LineFactor(Guid? factorId, CookingFactorKind kind, Dictionary<Guid, CookingFactorRecord> factors, string foodName)
+    {
+        if (factorId is not { } id)
+        {
+            return null;
+        }
+
+        if (!factors.TryGetValue(id, out var record) || record.Kind != kind.ToString())
+        {
+            throw new NutritionInputException("ingredients", ConversionNotFound(foodName));
+        }
+
+        return new CookingFactor(record.SourceKey, record.SourceVersion, record.FromBasis, record.ToBasis, record.Factor);
+    }
+
+    private static string ConversionNotFound(string foodName) =>
+        $"The cooking conversion for “{foodName}” was not found in this coaching space. Choose it again.";
 
     private static RecipeSummary ToRecipeSummary(Recipe item, RecipeVersion version, Guid? publishedVersionId) =>
         new(item.Id, version.Id, version.Revision, item.Name, version.Status, version.Servings, version.Calories, version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, version.Allergens.Select(allergen => allergen.Code).Order().ToArray(), version.PhotoMediaAssetId, publishedVersionId);

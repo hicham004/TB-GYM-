@@ -5,6 +5,7 @@ import type {
   CoachingFeature,
   CoachingProductView,
   CreateProductOfferRequest,
+  OfferDurationUnit,
   PlanClientCount,
   ProductCatalog,
   ProductOfferView,
@@ -206,7 +207,9 @@ export function catalogSummary(catalog: ProductCatalog | null): string {
 
 export interface OptionValues {
   readonly label: string;
-  readonly weeks: number | null;
+  /** How long a client is on it, counted in `unit`: weeks, or days for a plan sold by the day (INV-7). */
+  readonly length: number | null;
+  readonly unit: OfferDurationUnit;
   readonly price: number | null;
   readonly currency: string;
   readonly features: readonly CoachingFeature[];
@@ -217,7 +220,8 @@ export type FieldMessages = Record<string, string[]>;
 export function emptyOption(currency: string): OptionValues {
   return {
     label: '',
-    weeks: 12,
+    length: 12,
+    unit: 'Week',
     price: null,
     currency,
     features: ['Training', 'CheckIns', 'Messaging'],
@@ -227,10 +231,19 @@ export function emptyOption(currency: string): OptionValues {
 export function optionErrors(values: OptionValues): FieldMessages {
   const errors: FieldMessages = {};
   // The server's own bounds (SUB-002), so the form never refuses what it would accept.
-  if (values.weeks === null || !Number.isInteger(values.weeks) || values.weeks < 1) {
-    errors['weeks'] = [$localize`Enter a whole number of weeks, 1 or more.`];
-  } else if (values.weeks > 3650) {
-    errors['weeks'] = [$localize`Keep it to 3,650 weeks or fewer.`];
+  const days = values.unit === 'Day';
+  if (values.length === null || !Number.isInteger(values.length) || values.length < 1) {
+    errors['length'] = [
+      days
+        ? $localize`Enter a whole number of days, 1 or more.`
+        : $localize`Enter a whole number of weeks, 1 or more.`,
+    ];
+  } else if (values.length > 3650) {
+    errors['length'] = [
+      days
+        ? $localize`Keep it to 3,650 days or fewer.`
+        : $localize`Keep it to 3,650 weeks or fewer.`,
+    ];
   }
   if (values.price === null || !Number.isFinite(values.price) || values.price < 0) {
     errors['price'] = [$localize`Enter a price of zero or more.`];
@@ -259,13 +272,21 @@ export function planErrors(name: string, description: string): FieldMessages {
   return errors;
 }
 
+/** The option's length as clients read it ("12 weeks", "30 days"); empty while the box is not a length. */
+export function optionLength(values: Pick<OptionValues, 'length' | 'unit'>): string {
+  const count = values.length;
+  return count !== null && Number.isInteger(count) && count > 0
+    ? duration({ durationCount: count, durationUnit: values.unit })
+    : '';
+}
+
 /** An option without its own name is called by its length, as the server needs a name. */
 export function optionRequest(values: OptionValues): CreateProductOfferRequest {
-  const weeks = values.weeks ?? 0;
+  const length = values.length ?? 0;
   return {
-    label: values.label.trim() || duration({ durationCount: weeks, durationUnit: 'Week' }),
-    durationCount: weeks,
-    durationUnit: 'Week',
+    label: values.label.trim() || duration({ durationCount: length, durationUnit: values.unit }),
+    durationCount: length,
+    durationUnit: values.unit,
     priceAmount: values.price ?? 0,
     priceCurrency: values.currency.trim().toUpperCase(),
     features: FEATURES.filter((feature) => values.features.includes(feature)).map((feature) => ({

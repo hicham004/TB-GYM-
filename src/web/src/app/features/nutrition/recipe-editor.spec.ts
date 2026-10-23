@@ -8,15 +8,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AddRecipeVersionRequest,
   AiMealDraftView,
+  CookingConversionView,
   CreateRecipeRequest,
   RecipeDetail,
+  RecipeIngredientView,
   ReviewAiMealDraftRequest,
 } from '../../core/api/generated';
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UiToast } from '../../ui/toast';
-import { settle } from '../../../testing/dom';
+import {
+  conversionView,
+  cookedRiceLine,
+  RAW_RICE_FOOD,
+  rawRiceLine,
+} from '../../../testing/cooking-fixtures';
+import { field, fill, press, settle } from '../../../testing/dom';
 import {
   OATS_FOOD,
   recipeDetail,
@@ -34,6 +42,8 @@ interface Options {
   getRecipe?: () => Observable<RecipeDetail>;
   addVersion?: () => Observable<unknown>;
   aiConfigured?: boolean;
+  /** The workspace's raw-to-cooked conversions; white rice boiled unless given. */
+  conversions?: CookingConversionView[];
 }
 
 async function render(options: Options = {}) {
@@ -70,6 +80,11 @@ async function render(options: Options = {}) {
     ),
     searchUsda: vi.fn(() => of({ skip: 0, take: 10, items: [] })),
     importUsda: vi.fn(),
+    listConversions: vi.fn(() => {
+      const items = options.conversions ?? [conversionView()];
+      return of({ total: items.length, skip: 0, take: 20, items });
+    }),
+    createConversion: vi.fn(),
     aiAvailability: vi.fn(() => of({ isConfigured: options.aiConfigured ?? false })),
     suggest: vi.fn<(prompt: string) => Observable<AiMealDraftView>>(() =>
       of(
@@ -200,6 +215,27 @@ async function addIngredient(
 
 const serving = (host: HTMLElement) => textOf(host.querySelector('.totals .big'));
 const lines = (host: HTMLElement) => all(host, '.line .line-name').map(textOf);
+
+/** The recipe as saved, its lines those given. */
+function withLines(...ingredients: RecipeIngredientView[]): () => Observable<RecipeDetail> {
+  const detail = recipeDetail();
+  return () => of({ ...detail, latest: { ...detail.latest, ingredients } });
+}
+
+/** The weigh-it-cooked sheet, which the CDK draws outside the page. */
+const cookingSheet = () => document.querySelector<HTMLElement>('app-cooking-conversion-sheet');
+const confirmQuestion = () => document.querySelector<HTMLElement>('app-confirm');
+
+/** Chooses the conversion listed as `name` in the sheet. */
+function pickConversion(sheet: HTMLElement, name: string): void {
+  const choice = all(sheet, '.choice').find(
+    (item) => textOf(item.querySelector('.choice-name')) === name,
+  );
+  const radio = choice?.querySelector<HTMLInputElement>('input[type="radio"]');
+  if (!radio) throw new Error(`No conversion is listed as "${name}".`);
+  radio.checked = true;
+  radio.dispatchEvent(new Event('change'));
+}
 
 describe('the recipe editor', () => {
   afterEach(() => {
@@ -399,6 +435,176 @@ describe('the recipe editor', () => {
       ['oats-food-v1', 80],
       ['yogurt-food-v2', 200],
     ]);
+  });
+
+  it('weighs a raw food cooked through a conversion, and saves it weighed that way (INV-6)', async () => {
+    const [oats] = recipeDetail().latest.ingredients;
+    const { harness, host, api } = await render({ getRecipe: withLines(oats, rawRiceLine()) });
+
+    // Only the raw food weighed in grams can be weighed cooked.
+    expect(
+      all(host, '.line-cooking button').map((item) => item.getAttribute('aria-label')),
+    ).toEqual(['Weigh it cooked: White rice, raw']);
+    expect(all(host, '.line-kcal').map(textOf)).toEqual(['304 kcal', '353 kcal']);
+
+    named(host, 'Weigh it cooked: White rice, raw').click();
+    await until(harness.fixture, () => cookingSheet()?.querySelector('.choice') != null);
+    expect(api.listConversions).toHaveBeenCalledWith('', 0, 20);
+    // Titled as the button that opened it, the food named first in the sheet.
+    expect(textOf(document.querySelector('[role="dialog"] h2'))).toBe('Weigh it cooked');
+    expect(textOf(cookingSheet()?.querySelector('.about'))).toBe(
+      'White rice, raw 353 kcal per 100 g raw',
+    );
+    pickConversion(cookingSheet()!, 'White rice, boiled');
+    await settle(harness.fixture);
+    press(cookingSheet()!, 'Use it');
+    await until(harness.fixture, () => cookingSheet() === null);
+
+    // The same rice, 290 g once cooked, holding what it held raw.
+    expect(field(host, 'Amount of White rice, raw, weighed cooked').value).toBe('290');
+    expect(all(host, '.line .unit').map(textOf)).toEqual(['g', 'g cooked']);
+    expect(textOf(host.querySelector('.line.cooked .line-cooking span'))).toBe(
+      'Weighed cooked: White rice, boiled, 100 g raw makes 290 g cooked.',
+    );
+    expect(all(host, '.line-kcal').map(textOf)).toEqual(['304 kcal', '353 kcal']);
+    expect(textOf(host.querySelector('.tb-visually-hidden[role="status"]'))).toContain(
+      'White rice, raw is weighed cooked now: 290 g.',
+    );
+    expect(named(host, 'Change conversion: White rice, raw')).toBeTruthy();
+
+    named(host, 'Publish changes').click();
+    await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
+    expect(api.addVersion.mock.calls[0][1].ingredients[1]).toEqual({
+      foodItemVersionId: 'rice-v1',
+      quantity: 290,
+      unit: 'Gram',
+      basis: 'Cooked',
+      yieldFactorId: 'y-rice',
+      retentionFactorId: 'r-rice',
+    });
+  });
+
+  it('opens a line saved cooked, and weighs it raw again with focus kept on its button', async () => {
+    const { harness, host, api } = await render({ getRecipe: withLines(cookedRiceLine()) });
+
+    expect(field(host, 'Amount of White rice, raw, weighed cooked').value).toBe('150');
+    expect(textOf(host.querySelector('.line-cooking span'))).toBe(
+      'Weighed cooked: White rice, boiled, 100 g raw makes 250 g cooked, keeping 90% of its protein, carbs and fat.',
+    );
+    expect(all(host, '.line-kcal').map(textOf)).toEqual(['191 kcal']);
+
+    // Choosing the conversion it is weighed through already changes nothing.
+    named(host, 'Change conversion: White rice, raw').click();
+    await until(
+      harness.fixture,
+      () => cookingSheet()?.querySelector('.choice input:checked') != null,
+    );
+    expect(textOf(document.querySelector('[role="dialog"] h2'))).toBe('Change conversion');
+    press(cookingSheet()!, 'Use it');
+    await until(harness.fixture, () => cookingSheet() === null);
+    expect(field(host, 'Amount of White rice, raw, weighed cooked').value).toBe('150');
+    expect(named(host, 'Publish changes').disabled).toBe(true);
+    expect(textOf(host.querySelector('.tb-visually-hidden[role="status"]'))).not.toContain(
+      'weighed cooked now',
+    );
+    // The coach's own name for it is isolated, so an Arabic one keeps the sentence's order.
+    expect(textOf(host.querySelector('.line-cooking bdi'))).toBe('White rice, boiled');
+
+    named(host, 'Weigh it raw: White rice, raw').click();
+    await settle(harness.fixture);
+    expect(field(host, 'Amount of White rice, raw').value).toBe('60');
+    expect(all(host, '.line .unit').map(textOf)).toEqual(['g']);
+    // Weighed raw, nothing says any of it is lost to cooking.
+    expect(all(host, '.line-kcal').map(textOf)).toEqual(['212 kcal']);
+    expect(textOf(host.querySelector('.line-cooking'))).toBe('Weigh it cooked');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe(
+      'Weigh it cooked: White rice, raw',
+    );
+    expect(textOf(host.querySelector('.tb-visually-hidden[role="status"]'))).toContain(
+      'White rice, raw is weighed raw again: 60 g.',
+    );
+
+    named(host, 'Publish changes').click();
+    await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
+    expect(api.addVersion.mock.calls[0][1].ingredients).toEqual([
+      {
+        foodItemVersionId: 'rice-v1',
+        quantity: 60,
+        unit: 'Gram',
+        basis: 'Raw',
+        yieldFactorId: null,
+        retentionFactorId: null,
+      },
+    ]);
+  });
+
+  it('asks before a conversion typed in the sheet is lost, and keeps the line as it was', async () => {
+    const { harness, host, api } = await render({
+      getRecipe: withLines(rawRiceLine()),
+      conversions: [],
+    });
+
+    named(host, 'Weigh it cooked: White rice, raw').click();
+    // With no conversion to choose, the sheet opens on adding one.
+    await until(
+      harness.fixture,
+      () => cookingSheet()?.querySelector('[name="conversion-name"]') != null,
+    );
+    fill(cookingSheet()!, 'What it is', 'White rice, boiled');
+    await settle(harness.fixture);
+    press(cookingSheet()!, 'Not now');
+    await until(harness.fixture, () => confirmQuestion() !== null);
+    expect(textOf(confirmQuestion())).toContain('What you typed will be lost.');
+    press(confirmQuestion()!, 'Keep editing');
+    await until(harness.fixture, () => confirmQuestion() === null);
+    // The answer is taken in before anyone can press again.
+    await settle(harness.fixture);
+    expect(field(cookingSheet()!, 'What it is').value).toBe('White rice, boiled');
+
+    press(cookingSheet()!, 'Not now');
+    await until(harness.fixture, () => confirmQuestion() !== null);
+    press(confirmQuestion()!, 'Discard');
+    await until(harness.fixture, () => cookingSheet() === null);
+    expect(field(host, 'Amount of White rice, raw').value).toBe('100');
+    expect(named(host, 'Publish changes').disabled).toBe(true);
+    expect(api.createConversion).not.toHaveBeenCalled();
+  });
+
+  it('closes the cooking sheet when the editor opens another recipe in its place', async () => {
+    const { harness, host } = await render({ getRecipe: withLines(rawRiceLine()) });
+
+    named(host, 'Weigh it cooked: White rice, raw').click();
+    await until(harness.fixture, () => cookingSheet()?.querySelector('.choice') != null);
+    // Back to another recipe: the sheet would weigh a line no longer on screen.
+    await harness.navigateByUrl('/nutrition/recipes/recipe-other');
+    await until(harness.fixture, () => cookingSheet() === null);
+    const other = () => harness.routeNativeElement as HTMLElement;
+    await until(harness.fixture, () => lines(other()).length === 1);
+    expect(lines(other())).toEqual(['White rice, raw']);
+    // The editor was reused in place, so nothing but the close took the sheet away.
+    expect(other()).toBe(host);
+  });
+
+  it('says a line weighed cooked whose food is no longer raw in grams needs its amount again', async () => {
+    const asSold = {
+      ...RAW_RICE_FOOD,
+      currentVersion: {
+        ...RAW_RICE_FOOD.currentVersion,
+        id: 'rice-v2',
+        preparationBasis: 'AsSold',
+      },
+    } satisfies RecipeIngredientView['newerFood'];
+    const { harness, host } = await render({
+      getRecipe: withLines(cookedRiceLine({ newerFood: asSold })),
+    });
+
+    named(host, 'Use its new numbers').click();
+    await settle(harness.fixture);
+    expect(textOf(host.querySelector('.tb-visually-hidden[role="status"]'))).toBe(
+      'White rice, raw now has its new numbers. A food weighed cooked is no longer a raw food in grams, so type its amount again.',
+    );
+    expect(field(host, 'Amount of White rice, raw').value).toBe('');
+    expect(host.querySelector('.line-cooking')).toBeNull();
   });
 
   it('tells the coach when someone saved the recipe since it opened', async () => {

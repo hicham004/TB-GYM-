@@ -209,7 +209,9 @@ access.
 
 Culture `en` and template version 1 are the only published wordings. Arabic and any other locale are
 deferred. (Since audit A12, 2026-10-21, each template carries its own version: the plan, team and note
-notices are at version 2, in the screens' words, under NOT-006.) The rendered title and body are snapshotted onto the notification: a later template change
+notices are at version 2, in the screens' words, under NOT-006. Since audit A16b, 2026-10-22, a workspace
+may choose Arabic, and its notices are written in English and recorded as `en` until Arabic wording
+exists, where refusing the language dead-lettered every notice of that workspace.) The rendered title and body are snapshotted onto the notification: a later template change
 publishes a new version and never rewrites what somebody was already told, which is the same
 immutability rule a published check-in version has.
 

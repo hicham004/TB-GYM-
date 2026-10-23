@@ -26,6 +26,7 @@ import { Button } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
+import { FormSummary } from '../../ui/form-summary';
 import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { TimeZoneField } from '../../ui/time-zone-field';
@@ -36,14 +37,16 @@ import {
   draftCurrency,
   draftErrors,
   draftFrom,
+  languageLine,
   type SpaceDraft,
   type SpaceField,
 } from './workspace-settings.models';
 
 /**
- * Settings › Name and region (C9, R5.2a): the coaching space's name, the time zone every date rule
- * follows, the first day of its week and the currency new plans start in. The owner's page, as the
- * API is. Leaving with changes asks first (plan §9), as does switching workspace or signing out.
+ * Settings › Name and region (C9, R5.2a): the coaching space's name, the language of the notices and
+ * emails TB Gym sends for it (audit INV-8), the time zone every date rule follows, the first day of its
+ * week and the currency new plans start in. The owner's page, as the API is. Leaving with changes asks
+ * first (plan §9), as does switching workspace or signing out.
  */
 @Component({
   selector: 'app-workspace-settings',
@@ -51,6 +54,7 @@ import {
     Button,
     Control,
     Field,
+    FormSummary,
     SegmentedControl,
     SettingsFrame,
     Skeleton,
@@ -71,6 +75,7 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
+  private readonly summary = viewChild(FormSummary);
   private loadedTenantId: string | null = null;
 
   protected readonly loadingLabel = $localize`Loading your coaching space…`;
@@ -86,6 +91,10 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
   protected readonly saveError = signal<string | null>(null);
   protected readonly attempt = new FormAttempt();
 
+  protected readonly languageOptions: readonly SegmentOption[] = [
+    { value: 'en-LB', label: $localize`English` },
+    { value: 'ar-LB', label: $localize`Arabic` },
+  ];
   protected readonly weekOptions: readonly SegmentOption[] = [
     { value: 'Monday', label: $localize`Monday` },
     { value: 'Sunday', label: $localize`Sunday` },
@@ -105,6 +114,13 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
   protected readonly errors = computed(() => {
     const draft = this.draft();
     return draft ? draftErrors(draft) : { name: [], currency: [] };
+  });
+  protected readonly problemCount = computed(
+    () => Object.values(this.errors()).filter((messages) => messages.length > 0).length,
+  );
+  protected readonly languageLine = computed(() => {
+    const draft = this.draft();
+    return draft ? languageLine(draft.language) : '';
   });
   protected readonly currencyLine = computed(() => {
     const draft = this.draft();
@@ -177,6 +193,10 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
     this.saveError.set(null);
   }
 
+  protected setLanguage(value: string): void {
+    this.set({ language: value });
+  }
+
   protected setWeek(value: string): void {
     this.set({ weekStartsOn: value as DayOfWeek });
   }
@@ -225,8 +245,7 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
             this.api.updateWorkspace({
               name: draft.name.trim(),
               timeZoneId: draft.timeZoneId,
-              // Kept as it was: emails and invitations exist in English only (see the page's note).
-              defaultCulture: workspace.defaultCulture,
+              defaultCulture: draft.language,
               defaultCurrencyCode: draftCurrency(draft),
               weekStartsOn: draft.weekStartsOn,
               version: workspace.version,
@@ -242,6 +261,7 @@ export class WorkspaceSettings implements HoldsUnsavedWork {
       } catch (error) {
         if (!owner.current) return;
         this.saveError.set(apiErrorMessage(error, $localize`Your settings couldn’t be saved.`));
+        this.summary()?.focus();
       } finally {
         if (owner.current) this.saving.set(false);
       }

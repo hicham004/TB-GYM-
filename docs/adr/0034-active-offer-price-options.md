@@ -38,3 +38,10 @@ clients of every option it replaced through Change price, read from `OfferPriceC
 counts its own and names the option that replaced it (`ReplacedByOfferId`). Renew starts on that
 replacement when the plan's own price is no longer sold (COACH-3). A new price with a part of a cent is
 refused, never rounded (BILL-1).
+
+## Amended in the audit's batch A16b (2026-10-22)
+
+New plan and Add price option sell a length in days as well as in weeks (INV-7). A slot is still the
+exact count and unit: 28 days and 4 weeks cover the same dates and are two options, while a second 30
+days in the same currency is refused. Plans covering one feature side by side (`AllowsConcurrentCoverage`)
+stay off screen; the owner declined them.

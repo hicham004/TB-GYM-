@@ -1389,14 +1389,21 @@ export type ConversationSummary = {
   latestFromCounterpart?: null | ConversationMessagePreview;
 };
 
-export type CookingFactorKind = 'Yield' | 'Retention';
-
-export type CookingFactorPage = {
+export type CookingConversionPage = {
   total: number | string;
   skip: number | string;
   take: number | string;
-  items: Array<CookingFactorView>;
+  items: Array<CookingConversionView>;
 };
+
+export type CookingConversionView = {
+  sourceKey: string;
+  sourceVersion: string;
+  yield: CookingFactorView;
+  retention: CookingFactorView;
+};
+
+export type CookingFactorKind = 'Yield' | 'Retention';
 
 export type CookingFactorView = {
   id: string;
@@ -1450,13 +1457,11 @@ export type CreateCoachInvitationRequest = {
   idempotencyKey?: null | string;
 };
 
-export type CreateCookingFactorRequest = {
-  kind: CookingFactorKind;
+export type CreateCookingConversionRequest = {
   sourceKey: string;
   sourceVersion: string;
-  fromBasis: PreparationBasis;
-  toBasis: PreparationBasis;
-  factor: number | string;
+  yieldFactor: number | string;
+  retentionFactor: number | string;
 };
 
 export type CreateDirectConversationRequest = {
@@ -3073,6 +3078,8 @@ export type RecipeIngredientView = {
   yieldFactorId: null | string;
   retentionFactorId: null | string;
   newerFood?: null | FoodItemView;
+  yieldFactor?: null | CookingFactorView;
+  retentionFactor?: null | CookingFactorView;
 };
 
 export type RecipePage = {
@@ -4826,6 +4833,39 @@ export type PublishLegalDocumentVersionResponses = {
 
 export type PublishLegalDocumentVersionResponse =
   PublishLegalDocumentVersionResponses[keyof PublishLegalDocumentVersionResponses];
+
+export type WithdrawLegalDocumentVersionData = {
+  body?: never;
+  path: {
+    documentVersionId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/legal-documents/{documentVersionId}/withdraw';
+};
+
+export type WithdrawLegalDocumentVersionErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type WithdrawLegalDocumentVersionError =
+  WithdrawLegalDocumentVersionErrors[keyof WithdrawLegalDocumentVersionErrors];
+
+export type WithdrawLegalDocumentVersionResponses = {
+  /**
+   * OK
+   */
+  200: LegalDocumentAdminView;
+};
+
+export type WithdrawLegalDocumentVersionResponse =
+  WithdrawLegalDocumentVersionResponses[keyof WithdrawLegalDocumentVersionResponses];
 
 export type ListTeamMembersData = {
   body?: never;
@@ -7874,51 +7914,57 @@ export type ImportUsdaFoodDataCentralFoodResponses = {
 export type ImportUsdaFoodDataCentralFoodResponse =
   ImportUsdaFoodDataCentralFoodResponses[keyof ImportUsdaFoodDataCentralFoodResponses];
 
-export type ListCookingFactorsData = {
+export type ListCookingConversionsData = {
   body?: never;
   path?: never;
   query?: {
+    query?: string;
     skip?: number | string;
     take?: number | string;
   };
-  url: '/api/nutrition/cooking-factors';
+  url: '/api/nutrition/cooking-conversions';
 };
 
-export type ListCookingFactorsResponses = {
+export type ListCookingConversionsResponses = {
   /**
    * OK
    */
-  200: CookingFactorPage;
+  200: CookingConversionPage;
 };
 
-export type ListCookingFactorsResponse =
-  ListCookingFactorsResponses[keyof ListCookingFactorsResponses];
+export type ListCookingConversionsResponse =
+  ListCookingConversionsResponses[keyof ListCookingConversionsResponses];
 
-export type CreateCookingFactorData = {
-  body: CreateCookingFactorRequest;
+export type CreateCookingConversionData = {
+  body: CreateCookingConversionRequest;
   path?: never;
   query?: never;
-  url: '/api/nutrition/cooking-factors';
+  url: '/api/nutrition/cooking-conversions';
 };
 
-export type CreateCookingFactorErrors = {
+export type CreateCookingConversionErrors = {
   /**
    * Bad Request
    */
   400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
 };
 
-export type CreateCookingFactorError = CreateCookingFactorErrors[keyof CreateCookingFactorErrors];
+export type CreateCookingConversionError =
+  CreateCookingConversionErrors[keyof CreateCookingConversionErrors];
 
-export type CreateCookingFactorResponses = {
+export type CreateCookingConversionResponses = {
   /**
    * OK
    */
-  200: CookingFactorView;
+  200: CookingConversionView;
 };
 
-export type CreateCookingFactorResponse =
-  CreateCookingFactorResponses[keyof CreateCookingFactorResponses];
+export type CreateCookingConversionResponse =
+  CreateCookingConversionResponses[keyof CreateCookingConversionResponses];
 
 export type ListRecipesData = {
   body?: never;

@@ -9,6 +9,11 @@
   max-inline-size: 48rem;
 }
 
+// The form's summary takes the line beside the buttons once it has something to say.
+.actions app-form-summary {
+  flex: 1 1 16rem;
+}
+
 .code {
   max-inline-size: 12rem;
 

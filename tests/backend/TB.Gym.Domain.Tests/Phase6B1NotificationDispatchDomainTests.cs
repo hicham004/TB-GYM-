@@ -628,16 +628,18 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             CommercialNotificationKind.PaymentRequired,
             "en",
             out _));
-        // Arabic is deferred. A missing template is refused rather than answered in the wrong
-        // language, and the dispatcher turns that refusal into a permanent dead letter.
-        Assert.IsFalse(NotificationTemplateCatalog.TryResolve(
+        // Arabic wording is deferred. Since audit A16b (INV-8) a workspace that chose Arabic is answered
+        // in English, recorded as English, where refusing it dead-lettered every notice of that space.
+        Assert.IsTrue(NotificationTemplateCatalog.TryResolve(
             CommercialNotificationKind.PaymentRequired,
             "ar-LB",
-            out _));
-        Assert.IsFalse(NotificationTemplateCatalog.TryResolve(
+            out var arabicSpace));
+        Assert.AreEqual(NotificationTemplateCatalog.DefaultCulture, arabicSpace.Culture);
+        Assert.IsTrue(NotificationTemplateCatalog.TryResolve(
             CommercialNotificationKind.PaymentRequired,
             string.Empty,
-            out _));
+            out var unnamed));
+        Assert.AreEqual(NotificationTemplateCatalog.DefaultCulture, unnamed.Culture);
         Assert.HasCount(
             Enum.GetValues<CommercialNotificationKind>().Length,
             NotificationTemplateCatalog.Published);

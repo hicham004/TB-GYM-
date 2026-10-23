@@ -1248,8 +1248,11 @@ internal sealed class CommercialApplicationService(
                 "activated");
         }
 
-        var endingAtUtc = ToUtc(enrollment.EndDateExclusive.AddDays(-3), new TimeOnly(9, 0), context.TimeZoneId);
-        if (endingAtUtc > clock.UtcNow)
+        // Three days before the end, and never before the plan's first day: a plan of one or two days,
+        // which the sheets sell since audit A16b, is not told it ends soon before it begins.
+        var endingDay = enrollment.EndDateExclusive.AddDays(-3);
+        var endingAtUtc = ToUtc(endingDay, new TimeOnly(9, 0), context.TimeZoneId);
+        if (endingDay >= enrollment.StartDate && endingAtUtc > clock.UtcNow)
         {
             Schedule(
                 enrollment,

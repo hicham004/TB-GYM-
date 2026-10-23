@@ -221,9 +221,9 @@
             }
 
             @if (current.lines.length) {
-              <ul class="lines" role="list">
+              <ul class="lines" role="list" [class.has-cooked]="hasCookedLine()">
                 @for (line of current.lines; track line.key) {
-                  <li class="line" [class.unmatched]="!line.food">
+                  <li class="line" [class.unmatched]="!line.food" [class.cooked]="!!line.cooked">
                     @if (line.food; as food) {
                       <div class="line-food">
                         <span class="line-name" dir="auto">{{ food.name }}</span>
@@ -250,10 +250,46 @@
                             }
                           </span>
                         }
+                        <!-- A raw food in grams may be weighed cooked through a conversion (INV-6). The
+                             first button stays one element, so focus stays on it as it changes. -->
+                        @if (weighable(food)) {
+                          <span class="line-cooking">
+                            <!-- The coach's own name for it is isolated, so an Arabic one keeps the
+                                 sentence's order. -->
+                            @if (line.cooked; as cooked) {
+                              <span dir="auto" i18n
+                                >Weighed cooked: <bdi>{{ cooked.name }}</bdi
+                                >, {{ conversionText(cooked) }}.</span
+                              >
+                            }
+                            <button
+                              appButton
+                              type="button"
+                              variant="text"
+                              [id]="'cook-' + line.key"
+                              [attr.aria-label]="cookLabel(line)"
+                              (click)="openCooking(line)"
+                            >
+                              {{ line.cooked ? changeConversionText : weighCookedText }}
+                            </button>
+                            @if (line.cooked) {
+                              <button
+                                appButton
+                                type="button"
+                                variant="text"
+                                [attr.aria-label]="rawLabel(line)"
+                                (click)="weighLineRaw(line)"
+                                i18n
+                              >
+                                Weigh it raw
+                              </button>
+                            }
+                          </span>
+                        }
                       </div>
                       <app-field
                         class="amount"
-                        [label]="amountLabel(food.name)"
+                        [label]="amountLabel(food.name, line)"
                         [hideLabel]="true"
                         density="compact"
                         [errors]="errorsFor('lines', line.key)"
@@ -269,7 +305,7 @@
                             [value]="line.quantity ?? ''"
                             (input)="quantityTyped(line, $any($event.target).value)"
                           />
-                          <span class="unit">{{ unitWord(food.unit) }}</span>
+                          <span class="unit">{{ amountUnit(line) }}</span>
                         </span>
                       </app-field>
                       <span class="line-kcal">{{ lineKcal(line) }}</span>
@@ -482,6 +518,8 @@
     }
   }
 </div>
+
+<app-recipe-cooking-sheets [locale]="locale" (chosen)="cookingChosen($event)" />
 
 <ng-template #confirmDialog let-dialog>
   @if (asking(); as question) {

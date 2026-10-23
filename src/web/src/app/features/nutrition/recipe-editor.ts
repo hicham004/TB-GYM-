@@ -12,6 +12,7 @@ import {
   LOCALE_ID,
   signal,
   TemplateRef,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -35,7 +36,9 @@ import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { UiToast } from '../../ui/toast';
 import { numeric } from '../training/training-builder.models';
+import { type Conversion, conversionWords } from './cooking-conversion.models';
 import { RecipeApi } from './recipe-api';
+import { type CookingChoice, RecipeCookingSheets } from './recipe-cooking-sheets';
 import { RecipeFoodSearch } from './recipe-food-search';
 import {
   allergenText,
@@ -47,6 +50,7 @@ import {
   grams,
   ingredientRequests,
   kcal,
+  keepsAmount,
   lineForFood,
   lineMacros,
   linesFromSuggestion,
@@ -66,6 +70,10 @@ import {
   servingsLabel,
   sourceWord,
   unitWord,
+  weighable,
+  weighCooked,
+  weighedThrough,
+  weighRaw,
 } from './recipe.models';
 
 /** The photo kinds and size the server takes (MED-004, MED-014); checked here only to answer sooner. */
@@ -94,6 +102,7 @@ type SaveKind = 'publish' | 'draft';
     FormsModule,
     Icon,
     IconButton,
+    RecipeCookingSheets,
     RecipeFoodSearch,
     RouterLink,
     Skeleton,
@@ -116,7 +125,6 @@ export class RecipeEditor implements HoldsUnsavedWork {
   private readonly dialogs = inject(UiDialog);
   private readonly toast = inject(UiToast);
   private readonly injector = inject(Injector);
-  private readonly locale = inject(LOCALE_ID);
   private readonly document = inject(DOCUMENT);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
@@ -124,7 +132,12 @@ export class RecipeEditor implements HoldsUnsavedWork {
   private readonly totalsCard = viewChild<ElementRef<HTMLElement>>('totalsCard');
   /** The One serving card is on screen, so the phone's bar would only repeat it. */
   protected readonly totalsInView = signal(true);
+  /** A line weighed cooked gives every amount its wider room, so they still line up (INV-6). */
+  protected readonly hasCookedLine = computed(() =>
+    this.draft().lines.some((line) => line.cooked !== null),
+  );
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+  private readonly cookingSheets = viewChild(RecipeCookingSheets);
   private readonly params = toSignal(this.route.paramMap, {
     initialValue: this.route.snapshot.paramMap,
   });
@@ -140,6 +153,10 @@ export class RecipeEditor implements HoldsUnsavedWork {
   protected readonly aiPromptMax = AI_PROMPT_MAX;
   protected readonly unitWord = unitWord;
   protected readonly sourceWord = sourceWord;
+  protected readonly weighable = weighable;
+  protected readonly locale = inject(LOCALE_ID);
+  protected readonly weighCookedText = $localize`Weigh it cooked`;
+  protected readonly changeConversionText = $localize`Change conversion`;
 
   /** The recipe in the address, or null for a new one (`/nutrition/recipes/new`). */
   protected readonly recipeId = computed(() => {
@@ -261,6 +278,8 @@ export class RecipeEditor implements HoldsUnsavedWork {
       const key = `${tenantId}:${id ?? 'new'}`;
       if (tenantId && key !== this.loadedKey) {
         this.loadedKey = key;
+        // A sheet left open over the recipe before (Back to another one) would weigh a line no longer here.
+        untracked(() => this.cookingSheets()?.close());
         void this.load(id);
       }
     });
@@ -380,10 +399,75 @@ export class RecipeEditor implements HoldsUnsavedWork {
       offered.length === 1
         ? $localize`${offered[0].newer?.name ?? ''}:food: now has its new numbers.`
         : $localize`${offered.length}:count: foods now have their new numbers.`;
-    const retype = offered.some((item) => item.food?.unit !== item.newer?.unit)
-      ? $localize`A food is now measured in another unit, so type its amount again.`
-      : '';
-    this.announced.set(retype ? `${said} ${retype}` : said);
+    const retype = [
+      offered.some((item) => item.food?.unit !== item.newer?.unit)
+        ? $localize`A food is now measured in another unit, so type its amount again.`
+        : '',
+      offered.some((item) => item.food?.unit === item.newer?.unit && !keepsAmount(item))
+        ? $localize`A food weighed cooked is no longer a raw food in grams, so type its amount again.`
+        : '',
+    ].filter((sentence) => sentence !== '');
+    this.announced.set([said, ...retype].join(' '));
+  }
+
+  // ---------- weighed cooked (audit INV-6) ----------
+
+  /** Opens the sheet that weighs a raw food's line cooked, or changes the conversion it goes through. */
+  protected openCooking(line: EditorLine): void {
+    this.cookingSheets()?.weighCooked(line);
+  }
+
+  /** The conversion chosen in the sheet: the line is weighed cooked through it, at the same food. */
+  protected cookingChosen(choice: CookingChoice): void {
+    const line = this.draft().lines.find((item) => item.key === choice.lineKey);
+    // The conversion the line is weighed through already changes nothing.
+    if (!line?.food || weighedThrough(line, choice.conversion)) return;
+    const cooked = weighCooked(line, choice.conversion);
+    this.change({
+      lines: this.draft().lines.map((item) => (item.key === line.key ? cooked : item)),
+    });
+    this.announced.set(
+      cooked.quantity === null
+        ? $localize`${line.food.name}:food: is weighed cooked now.`
+        : $localize`${line.food.name}:food: is weighed cooked now: ${grams(cooked.quantity, this.locale)}:grams:.`,
+    );
+  }
+
+  /** Back to the raw weight the cooked one came from; focus stays on the line's cooking button. */
+  protected weighLineRaw(line: EditorLine): void {
+    const raw = weighRaw(line);
+    this.change({ lines: this.draft().lines.map((item) => (item.key === line.key ? raw : item)) });
+    this.announced.set(
+      raw.quantity === null
+        ? $localize`${line.food?.name ?? ''}:food: is weighed raw again.`
+        : $localize`${line.food?.name ?? ''}:food: is weighed raw again: ${grams(raw.quantity, this.locale)}:grams:.`,
+    );
+    afterNextRender(() => this.document.getElementById(`cook-${line.key}`)?.focus(), {
+      injector: this.injector,
+    });
+  }
+
+  /** "100 g raw makes 290 g cooked", said after the conversion's name on its line. */
+  protected conversionText(conversion: Conversion): string {
+    return conversionWords(conversion, this.locale);
+  }
+
+  protected cookLabel(line: EditorLine): string {
+    const food = line.food?.name ?? '';
+    return line.cooked
+      ? $localize`Change conversion: ${food}:food:`
+      : $localize`Weigh it cooked: ${food}:food:`;
+  }
+
+  protected rawLabel(line: EditorLine): string {
+    return $localize`Weigh it raw: ${line.food?.name ?? ''}:food:`;
+  }
+
+  /** The unit after the amount: "g", or "g cooked" for a raw food weighed cooked. */
+  protected amountUnit(line: EditorLine): string {
+    const food = line.food;
+    if (!food) return '';
+    return line.cooked ? $localize`g cooked` : unitWord(food.unit);
   }
 
   protected newerText(line: EditorLine): string {
@@ -441,8 +525,10 @@ export class RecipeEditor implements HoldsUnsavedWork {
     return $localize`Suggested: ${suggestion.quantity}:quantity: ${suggestion.unit}:unit: ${suggestion.name}:ingredient:`;
   }
 
-  protected amountLabel(food: string): string {
-    return $localize`Amount of ${food}:food:`;
+  protected amountLabel(food: string, line?: EditorLine): string {
+    return line?.cooked
+      ? $localize`Amount of ${food}:food:, weighed cooked`
+      : $localize`Amount of ${food}:food:`;
   }
 
   protected matchLabel(line: EditorLine): string {

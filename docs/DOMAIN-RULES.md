@@ -203,7 +203,11 @@ idempotency; existing enrollments and receipts keep their original snapshots. A 
 at a retired price starts on the option that replaced it (audit COACH-3). No two plans for sale in a
 workspace share a name, compared without case (audit BILL-7, the owner's decision of 2026-10-19): a new,
 renamed or restored plan that would answers 409 `product_name_taken`, and plans that shared a name
-before keep it until one is renamed.
+before keep it until one is renamed. Since audit A16b (INV-7, the owner's choice of 2026-10-19) a plan's
+length is sold in weeks or in days; a length is its exact count and unit, so 28 days sells beside 4 weeks
+while a second 30 days in the same currency does not (ADR 0034). A client hears that a plan ends soon three
+days before its end, at 09:00 on the workspace's clock, and never before its first day, so a plan of one
+or two days is not told it.
 
 **SUB-003** An enrollment is a dated client-specific snapshot of one offer in one tenant.
 Periods use `[startDate, endDateExclusive)`, so a four-week period starting July 27 ends
@@ -920,7 +924,14 @@ Atwater workspaces to v2). In Settings the two are called US-style and EU-style 
 Provider calories and policy-computed calories are both retained; a configurable
 tolerance produces a discrepancy flag. Missing provider nutrient facts are never inferred as
 zero during import. Raw-to-cooked conversion requires compatible, sourced `Yield` and
-`Retention` factor records and applies yield before retention.
+`Retention` factor records and applies yield before retention. Since audit A16b (INV-6) a coach saves
+them as a pair, a conversion: a yield and a retention, raw to cooked, under one name (what it is for)
+and source (where its numbers come from), each factor to six decimals at most. The same conversion saved
+again, its name and source compared without case, answers with the one kept; other numbers under that
+name and source are refused (409 `cooking_conversion_taken`), never replaced. TB Gym seeds none. A recipe
+line weighs a raw food in grams cooked through both factors of one conversion of its own workspace; a
+factor of another workspace, of the other kind, of another conversion or missing is refused, never left
+out.
 
 **NUT-012** A client-entered extra food is a consumed-log entry with a name, amount, unit and
 calories/macros for that amount. It is not a coach-approved recipe or a change to the assigned
@@ -2077,7 +2088,11 @@ Approved on 2026-08-20 and recorded under `docs/adr/`:
 4. Client-editable and coach-only fields follow ADR 0004. Account email changes require a
    separate verification flow.
 5. Lebanon launches first with English source text, localization-ready UI, configurable
-   workspace currency, and initial `USD`/`Asia/Beirut`/Monday/`en-LB` defaults.
+   workspace currency, and initial `USD`/`Asia/Beirut`/Monday/`en-LB` defaults. A workspace's
+   language is English (`en-LB`) or Arabic (`ar-LB`), chosen on Name and region, and nothing else
+   (audit A16b, INV-8). Notices and emails are written in English only, so an Arabic workspace's go
+   out in English, recorded as English, until Arabic wording is written; a kind with no wording at
+   all is still a dead letter (NOT-003).
 6. Phase 1 is adults-only. Email delivery is implemented first; WhatsApp remains behind a
    future provider integration.
 7. Platform support has no implicit tenant-data access. Any future support access is

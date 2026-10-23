@@ -15,6 +15,7 @@ import {
   field,
   fill,
   focusedId,
+  formSummary,
   press,
   settle,
   tick,
@@ -133,7 +134,7 @@ describe('Settings › Name and region', () => {
     expect(api['updateWorkspace']).toHaveBeenCalledWith({
       name: 'Atlas Strength',
       timeZoneId: 'Asia/Beirut',
-      // Emails exist only in English, so the page keeps whatever language was stored.
+      // The language the owner left alone goes back as it was stored.
       defaultCulture: 'ar-LB',
       defaultCurrencyCode: 'LBP',
       weekStartsOn: 'Sunday',
@@ -141,6 +142,45 @@ describe('Settings › Name and region', () => {
     });
     expect(tenants.load).toHaveBeenCalledWith('tenant-1');
     expect(toast.show).toHaveBeenCalledWith('Settings saved.', { tone: 'success' });
+    expect(button(host, 'Save changes').disabled).toBe(true);
+  });
+
+  /**
+   * The language of the space's notices and emails (audit INV-8). Only English wording exists, so the page
+   * says that an Arabic space still hears every notice, in English, until the Arabic ones are written.
+   */
+  it('chooses the language of notices and emails, saying what Arabic means today', async () => {
+    const { fixture, host, api } = await render();
+    const line = () => textOf(host.querySelector('[data-language-line]'));
+
+    expect(textOf(host.querySelector('#language-heading'))).toBe('Language');
+    expect(field(host, 'Arabic').checked).toBe(true);
+    expect(field(host, 'English').checked).toBe(false);
+    expect(line()).toBe(
+      'Notices and emails aren’t written in Arabic yet, so they go out in English until they are.',
+    );
+    // A live region from the start, so the line said after a change is announced.
+    expect(host.querySelector('[data-language-line]')?.getAttribute('aria-live')).toBe('polite');
+
+    tick(host, 'English');
+    await settle(fixture);
+    expect(line()).toBe('Notices and emails go out in English.');
+    expect(button(host, 'Save changes').disabled).toBe(false);
+    press(host, 'Save changes');
+    await settle(fixture);
+    expect(api['updateWorkspace']).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultCulture: 'en-LB', version: 5 }),
+    );
+    expect(field(host, 'English').checked).toBe(true);
+    expect(button(host, 'Save changes').disabled).toBe(true);
+
+    // Back to Arabic and undone: nothing left to save.
+    tick(host, 'Arabic');
+    await settle(fixture);
+    expect(button(host, 'Save changes').disabled).toBe(false);
+    press(host, 'Undo changes');
+    await settle(fixture);
+    expect(field(host, 'English').checked).toBe(true);
     expect(button(host, 'Save changes').disabled).toBe(true);
   });
 
@@ -210,6 +250,8 @@ describe('Settings › Name and region', () => {
     expect(api['updateWorkspace']).not.toHaveBeenCalled();
     expect(host.textContent).toContain('Give your coaching space a name.');
     expect(focusedId()).toBe('space-name');
+    // The kit's summary points at the box (ARCHITECTURE §8).
+    expect(announced(host)).toBe('Check the fields marked above.');
   });
 
   it('says why a save was refused and keeps what the owner typed', async () => {
@@ -233,6 +275,8 @@ describe('Settings › Name and region', () => {
     expect(announced(host)).toBe(
       'Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.',
     );
+    // In the kit's summary, which takes focus so the refusal is read where the owner is.
+    expect(document.activeElement).toBe(formSummary(host));
     expect(field(host, 'Coaching space name').value).toBe('Atlas Strength');
     expect(button(host, 'Save changes').disabled).toBe(false);
   });

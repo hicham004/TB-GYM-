@@ -11,8 +11,19 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> SetFoodArchivedAsync(Guid foodItemId, SetFoodArchivedRequest request, CancellationToken cancellationToken);
     Task<ProviderFoodSearchPage> SearchUsdaAsync(string query, FoodSearchKind kind, int skip, int take, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ImportUsdaFoodAsync(ImportUsdaFoodRequest request, CancellationToken cancellationToken);
-    Task<CookingFactorPage> ListCookingFactorsAsync(int skip, int take, CancellationToken cancellationToken);
-    Task<NutritionCommandResult> CreateCookingFactorAsync(CreateCookingFactorRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The workspace's raw-to-cooked conversions (NUT-001, audit INV-6), each a yield and a retention factor
+    /// under one name and source, by name; with <paramref name="query"/>, those whose name or source holds
+    /// every word of it.
+    /// </summary>
+    Task<CookingConversionPage> ListCookingConversionsAsync(string? query, int skip, int take, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A conversion's two factors, saved together. The same name, source and numbers again answer with the
+    /// conversion saved first; other numbers under the same name and source are refused, never replaced.
+    /// </summary>
+    Task<NutritionCommandResult> CreateCookingConversionAsync(CreateCookingConversionRequest request, CancellationToken cancellationToken);
     /// <param name="publishedOnly">
     /// Only recipes with a published version, each summarized at its newest published one: what a
     /// meal plan may hold (the meal-plan builder's recipe panel).
@@ -180,17 +191,21 @@ public enum CookingFactorKind
     Retention = 2,
 }
 
-public sealed record CreateCookingFactorRequest(
-    CookingFactorKind Kind,
-    string SourceKey,
-    string SourceVersion,
-    PreparationBasis FromBasis,
-    PreparationBasis ToBasis,
-    decimal Factor);
-
 public sealed record CookingFactorView(Guid Id, CookingFactorKind Kind, string SourceKey, string SourceVersion, PreparationBasis FromBasis, PreparationBasis ToBasis, decimal Factor);
 
-public sealed record CookingFactorPage(int Total, int Skip, int Take, IReadOnlyList<CookingFactorView> Items);
+/// <summary>
+/// A raw-to-cooked conversion (NUT-001, ADR 0008): the yield factor that makes a raw weight a cooked one and
+/// the retention factor for the share of protein, carbs and fat that survives, applied in that order. A coach
+/// names what it is for, its source key ("White rice, boiled"), and where its numbers come from, its source
+/// version ("USDA cooking yields, 2014"); TB Gym seeds none (audit INV-6).
+/// </summary>
+public sealed record CookingConversionView(string SourceKey, string SourceVersion, CookingFactorView Yield, CookingFactorView Retention);
+
+public sealed record CookingConversionPage(int Total, int Skip, int Take, IReadOnlyList<CookingConversionView> Items);
+
+/// <param name="YieldFactor">Grams cooked per gram raw, above 0 and at most 5 (rice and burghul near 3).</param>
+/// <param name="RetentionFactor">The share of protein, carbs and fat kept, above 0 and at most 1.</param>
+public sealed record CreateCookingConversionRequest(string SourceKey, string SourceVersion, decimal YieldFactor, decimal RetentionFactor);
 
 public sealed record RecipeIngredientRequest(
     Guid FoodItemVersionId,
@@ -296,7 +311,9 @@ public sealed record RecipeIngredientView(
     IReadOnlyList<AllergenCode> DeclaredAllergens,
     Guid? YieldFactorId,
     Guid? RetentionFactorId,
-    FoodItemView? NewerFood = null);
+    FoodItemView? NewerFood = null,
+    CookingFactorView? YieldFactor = null,
+    CookingFactorView? RetentionFactor = null);
 
 public sealed record RecipePage(int Total, int Skip, int Take, IReadOnlyList<RecipeSummary> Items);
 
@@ -595,7 +612,7 @@ public sealed record NutritionCommandResult(
     RecipeSummary? Recipe = null,
     MealPlanTemplateSummary? MealPlan = null,
     NutritionCalculationView? Calculation = null,
-    CookingFactorView? CookingFactor = null,
+    CookingConversionView? CookingConversion = null,
     NutritionCalculationRecord? CalculationRecord = null,
     ClientNutritionPlanSummary? ClientPlan = null,
     ClientNutritionDayView? Day = null,

@@ -434,22 +434,51 @@ public sealed class CookingFactorRecord : TenantEntity
     private CookingFactorRecord(Guid tenantId, string kind, CookingFactor factor) : base(tenantId)
     {
         Kind = NutritionRules.RequiredText(kind, 32, nameof(kind));
-        SourceKey = NutritionRules.RequiredText(factor.SourceKey, 200, nameof(factor));
-        SourceVersion = NutritionRules.RequiredText(factor.SourceVersion, 100, nameof(factor));
+        // What it is for and where its number comes from, in a coach's words (audit INV-6).
+        SourceKey = (factor.SourceKey ?? string.Empty).Trim();
+        if (SourceKey.Length is 0 or > MaximumSourceKeyLength)
+        {
+            throw Refusal("sourceKey", $"Say what the conversion is for, in up to {MaximumSourceKeyLength} characters.");
+        }
+
+        SourceVersion = (factor.SourceVersion ?? string.Empty).Trim();
+        if (SourceVersion.Length is 0 or > MaximumSourceVersionLength)
+        {
+            throw Refusal("sourceVersion", $"Say where its numbers come from, in up to {MaximumSourceVersionLength} characters.");
+        }
+
+        if (factor.FromBasis == factor.ToBasis || !Enum.IsDefined(factor.FromBasis) || !Enum.IsDefined(factor.ToBasis))
+        {
+            throw new ArgumentException("A cooking factor turns one preparation basis into another.", nameof(factor));
+        }
+
         FromBasis = factor.FromBasis;
         ToBasis = factor.ToBasis;
         Factor = factor.Factor;
         // Yield may exceed 1 because water-absorbing staples gain mass; retention is a surviving
         // fraction and cannot. Bounds match PreparationBasisCalculator so a record that persists
-        // can always be applied.
-        var maximum = kind == nameof(CookingFactorKind.Retention)
+        // can always be applied, and the column's six decimals hold the number exactly as given.
+        var retention = kind == nameof(CookingFactorKind.Retention);
+        var maximum = retention
             ? PreparationBasisCalculator.MaximumRetentionFactor
             : PreparationBasisCalculator.MaximumYieldFactor;
-        if (factor.Factor <= 0m || factor.Factor > maximum || factor.FromBasis == factor.ToBasis)
+        if (factor.Factor <= 0m || factor.Factor > maximum || decimal.Round(factor.Factor, FactorDecimals) != factor.Factor)
         {
-            throw new ArgumentOutOfRangeException(nameof(factor));
+            throw retention
+                ? Refusal("retentionFactor", "The share of protein, carbs and fat kept must be above 0 and at most all of it, to six decimals.")
+                : Refusal("yieldFactor", string.Create(System.Globalization.CultureInfo.InvariantCulture, $"The cooked weight must be above 0 and at most {maximum:0.##} times the raw weight, to six decimals."));
         }
     }
+
+    public const int MaximumSourceKeyLength = 200;
+
+    public const int MaximumSourceVersionLength = 100;
+
+    /// <summary>The factor column's scale: a number with more decimals is refused, never rounded.</summary>
+    public const int FactorDecimals = 6;
+
+    /// <summary>A refusal naming the request field at fault, which the API answers under that name.</summary>
+    private static ArgumentException Refusal(string field, string message) => new(message, field);
 
     public string Kind { get; private set; } = string.Empty;
 

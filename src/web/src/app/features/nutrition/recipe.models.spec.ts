@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CHICKEN_GRILLED,
+  cookedRiceLine,
+  RAW_RICE,
+  RAW_RICE_FOOD,
+  RICE_BOILED,
+} from '../../../testing/cooking-fixtures';
+import {
   OATS_FOOD,
   recipeDetail,
   recipeSummary,
@@ -13,6 +20,7 @@ import {
   energySplit,
   foodFromView,
   ingredientRequests,
+  keepsAmount,
   lineForFood,
   lineMacros,
   linesFromSuggestion,
@@ -24,6 +32,10 @@ import {
   recipeProblem,
   recipeTotal,
   useNewerFood,
+  weighable,
+  weighCooked,
+  weighedThrough,
+  weighRaw,
 } from './recipe.models';
 
 const OATS = foodFromView(OATS_FOOD);
@@ -91,14 +103,11 @@ describe('recipe totals as typed', () => {
       ...detail,
       latest: {
         ...detail.latest,
-        ingredients: [
-          { ...oats, newerFood: perServing, yieldFactorId: 'yield-1' },
-          { ...yogurt, newerFood: edited },
-        ],
+        ingredients: [oats, { ...yogurt, newerFood: edited }],
       },
     });
 
-    // A line through cooking factors is the server's to work out, so it is not offered.
+    // Only a line whose food was edited since it was saved is offered new numbers.
     expect(draft.lines.map((line) => line.newer?.versionId ?? null)).toEqual([
       null,
       'yogurt-food-v2',
@@ -133,6 +142,145 @@ describe('recipe totals as typed', () => {
     expect(recipeAllergens(lines)).toEqual(['GlutenCereals', 'Milk']);
     expect(allergenText(recipeAllergens(lines))).toBe('Contains gluten, milk');
     expect(allergenText([])).toBe('');
+  });
+});
+
+describe('a raw food weighed cooked (INV-6)', () => {
+  it('offers only a raw food measured in grams', () => {
+    expect(weighable(RAW_RICE)).toBe(true);
+    expect(weighable(OATS)).toBe(false);
+    expect(weighable({ ...RAW_RICE, basis: 'Cooked' })).toBe(false);
+    expect(weighable({ ...RAW_RICE, unit: 'Serving', basisQuantity: 1 })).toBe(false);
+    expect(weighable(null)).toBe(false);
+  });
+
+  it('turns the raw amount into the cooked weight of the same rice, counting what cooking keeps', () => {
+    const raw = lineForFood(RAW_RICE);
+    const cooked = weighCooked(raw, RICE_BOILED);
+    expect([cooked.quantity, cooked.cooked]).toEqual([290, RICE_BOILED]);
+    // All of it kept: the same rice holds the same numbers.
+    expect(lineMacros(cooked)).toEqual(lineMacros(raw));
+
+    // Chicken's numbers on the same 100 g: 75 g cooked, 95% kept.
+    const lossy = weighCooked(raw, CHICKEN_GRILLED);
+    expect(lossy.quantity).toBe(75);
+    expect(lineMacros(lossy)?.calories).toBeCloseTo(353 * 0.95);
+    expect(lineMacros(lossy)?.protein).toBeCloseTo(7 * 0.95);
+    // Typed in cooked grams from there: 150 g cooked is 200 g raw.
+    expect(lineMacros({ ...lossy, quantity: 150 })?.carbs).toBeCloseTo(80 * 2 * 0.95);
+  });
+
+  it('changes conversion and weighs raw again from the raw weight, to a kitchen scale’s decimal', () => {
+    const cooked = weighCooked({ ...lineForFood(RAW_RICE), quantity: 33 }, RICE_BOILED);
+    expect(cooked.quantity).toBe(95.7);
+    expect(weighRaw(cooked)).toMatchObject({ quantity: 33, cooked: null });
+    const forty = weighCooked({ ...lineForFood(RAW_RICE), quantity: 40 }, RICE_BOILED);
+    expect(weighCooked(forty, CHICKEN_GRILLED)).toMatchObject({
+      quantity: 30,
+      cooked: CHICKEN_GRILLED,
+    });
+
+    // An empty box stays empty, and a line weighed raw is left as it is.
+    expect(weighCooked({ ...cooked, quantity: null }, CHICKEN_GRILLED).quantity).toBeNull();
+    const raw = lineForFood(RAW_RICE);
+    expect(weighRaw(raw)).toBe(raw);
+  });
+
+  it('weighs back to the very raw amount it came from while the cooked one is as converted', () => {
+    // 33 g raw through a 0.75 yield is 24.75 g, 24.8 g on a kitchen scale.
+    const cooked = weighCooked({ ...lineForFood(RAW_RICE), quantity: 33 }, CHICKEN_GRILLED);
+    expect(cooked.quantity).toBe(24.8);
+    expect(weighRaw(cooked).quantity).toBe(33);
+    expect(weighCooked(cooked, RICE_BOILED).quantity).toBe(95.7);
+    expect(weighedThrough(cooked, CHICKEN_GRILLED)).toBe(true);
+    expect(weighedThrough(cooked, RICE_BOILED)).toBe(false);
+    // Typed again, the amount is the coach's own: 30 g cooked is 40 g raw.
+    expect(weighRaw({ ...cooked, quantity: 30 }).quantity).toBe(40);
+    expect(weighedThrough(lineForFood(RAW_RICE), RICE_BOILED)).toBe(false);
+  });
+
+  it('opens a line saved cooked as its raw food, weighed through its conversion', () => {
+    const detail = recipeDetail();
+    detail.latest = {
+      ...detail.latest,
+      ingredients: [
+        cookedRiceLine({
+          newerFood: {
+            ...RAW_RICE_FOOD,
+            currentVersion: { ...RAW_RICE_FOOD.currentVersion, id: 'rice-v2' },
+          },
+        }),
+      ],
+    };
+    const draft = draftFromDetail(detail);
+    const [line] = draft.lines;
+
+    expect(line.cooked).toEqual({
+      ...RICE_BOILED,
+      yieldId: 'y-rice-weighed',
+      retentionId: 'r-rice-weighed',
+      yield: 2.5,
+      retention: 0.9,
+      source: 'Weighed in my kitchen',
+    });
+    expect([line.food?.basis, line.food?.basisQuantity, line.quantity]).toEqual(['Raw', 60, 150]);
+    expect(weighable(line.food)).toBe(true);
+    // The editor works a line weighed cooked out itself, so a food edited since is offered too.
+    expect(line.newer?.versionId).toBe('rice-v2');
+    // As saved, it holds what the server worked out; doubled, twice that.
+    expect(lineMacros(line)?.calories).toBeCloseTo(190.62);
+    expect(lineMacros({ ...line, quantity: 300 })?.protein).toBeCloseTo(7.56);
+
+    // Weighed raw again: the 60 g it came from, whole, as nothing says it was cooked.
+    const raw = weighRaw(line);
+    expect(raw.quantity).toBe(60);
+    expect(lineMacros(raw)?.protein).toBeCloseTo(4.2);
+
+    // Sent as weighed: cooked through its two factors, or raw with none.
+    expect(ingredientRequests([line, raw])).toEqual([
+      {
+        foodItemVersionId: 'rice-v1',
+        quantity: 150,
+        unit: 'Gram',
+        basis: 'Cooked',
+        yieldFactorId: 'y-rice-weighed',
+        retentionFactorId: 'r-rice-weighed',
+      },
+      {
+        foodItemVersionId: 'rice-v1',
+        quantity: 60,
+        unit: 'Gram',
+        basis: 'Raw',
+        yieldFactorId: null,
+        retentionFactorId: null,
+      },
+    ]);
+    // Another conversion at the same amount is a change to save.
+    const other = {
+      ...line,
+      cooked: { ...line.cooked!, yieldId: 'y-other', retentionId: 'r-other' },
+    };
+    expect(draftSignature({ ...draft, lines: [other] })).not.toBe(draftSignature(draft));
+  });
+
+  it('keeps a line weighed cooked while its food’s new numbers are still a raw food in grams', () => {
+    const line = weighCooked(lineForFood(RAW_RICE), RICE_BOILED);
+    const newer = { ...RAW_RICE, versionId: 'rice-v2', protein: 7.5 };
+    expect(keepsAmount({ ...line, newer })).toBe(true);
+    expect(useNewerFood({ ...line, newer })).toMatchObject({
+      food: newer,
+      quantity: 290,
+      cooked: RICE_BOILED,
+      newer: null,
+    });
+
+    // Now sold as it is, it is no longer weighed through the conversion, and the amount is typed again.
+    const asSold = { ...newer, basis: 'AsSold' as const };
+    expect(keepsAmount({ ...line, newer: asSold })).toBe(false);
+    expect(useNewerFood({ ...line, newer: asSold })).toMatchObject({
+      quantity: null,
+      cooked: null,
+    });
   });
 });
 

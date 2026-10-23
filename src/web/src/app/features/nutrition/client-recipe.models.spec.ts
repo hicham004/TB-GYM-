@@ -40,6 +40,19 @@ describe('a recipe in the client’s plan (R4.4d)', () => {
       'en-US',
     );
     expect(rice.ingredients[0].basis).toBeNull();
+    // A raw food weighed cooked (audit A16b) keeps its word unless the name says it as a word of its own.
+    const weighed = clientRecipe(
+      planRecipeView({
+        ingredients: [
+          { foodName: 'Quinoa, uncooked', quantity: 185, unit: 'Gram', basis: 'Cooked' },
+          { foodName: 'Precooked lentils', quantity: 120, unit: 'Gram', basis: 'Cooked' },
+          { foodName: 'Rice, pre-cooked', quantity: 150, unit: 'Gram', basis: 'Cooked' },
+        ],
+      }),
+      OATS_CHOICE,
+      'en-US',
+    );
+    expect(weighed.ingredients.map((line) => line.basis)).toEqual(['cooked', 'cooked', null]);
     expect(recipe.steps).toEqual(['Stir the oats into the milk.', 'Chill overnight.']);
     expect(recipe.photoId).toBe('photo-1');
   });

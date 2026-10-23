@@ -60,16 +60,18 @@ public static class NutritionEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.ImportUsdaFoodAsync(request, token));
         }).WithName("ImportUsdaFoodDataCentralFood").Produces<FoodItemView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status503ServiceUnavailable);
-        coach.MapGet("/cooking-factors", async (int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
+        // Raw-to-cooked conversions, each a yield and a retention factor (NUT-001, audit INV-6): the recipe
+        // editor weighs a raw food cooked through one. They replace the single-factor routes no screen called.
+        coach.MapGet("/cooking-conversions", async (string? query, int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
         {
             var page = Page(skip, take);
-            return Results.Ok(await service.ListCookingFactorsAsync(page.Skip, page.Take, token));
-        }).WithName("ListCookingFactors").Produces<CookingFactorPage>();
-        coach.MapPost("/cooking-factors", async (CreateCookingFactorRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+            return Results.Ok(await service.ListCookingConversionsAsync(query, page.Skip, page.Take, token));
+        }).WithName("ListCookingConversions").Produces<CookingConversionPage>();
+        coach.MapPost("/cooking-conversions", async (CreateCookingConversionRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            return ToResult(await service.CreateCookingFactorAsync(request, token));
-        }).WithName("CreateCookingFactor").Produces<CookingFactorView>().ProducesValidationProblem();
+            return ToResult(await service.CreateCookingConversionAsync(request, token));
+        }).WithName("CreateCookingConversion").Produces<CookingConversionView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict);
 
         coach.MapGet("/recipes", async (string? query, int? skip, int? take, bool? published, INutritionApplicationService service, CancellationToken token) =>
         {
@@ -241,7 +243,7 @@ public static class NutritionEndpoints
 
     private static IResult ToResult(NutritionCommandResult result) => result.Status switch
     {
-        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingFactor ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? result.MealPlanDraft),
+        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingConversion ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? result.MealPlanDraft),
         NutritionCommandStatus.NotFound => Results.NotFound(),
         NutritionCommandStatus.Forbidden => Results.Forbid(),
         NutritionCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),

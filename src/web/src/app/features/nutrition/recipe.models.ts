@@ -9,6 +9,7 @@ import type {
   RecipeSummary,
 } from '../../core/api/generated';
 import { numeric } from '../training/training-builder.models';
+import { conversionFromFactors, type Conversion } from './cooking-conversion.models';
 import { initialsOf, type Macros } from './meal-plan-builder.models';
 import { ALLERGEN_LABELS } from './nutrition.models';
 
@@ -57,14 +58,22 @@ export interface SuggestedIngredient {
 
 export interface EditorLine {
   key: string;
-  /** Null while an AI-suggested ingredient waits for the coach to choose a food. */
+  /**
+   * Null while an AI-suggested ingredient waits for the coach to choose a food. A line weighed cooked
+   * keeps its raw food here, as the server reads it (NUT-001).
+   */
   food: RecipeFood | null;
-  /** In the food's own unit; null while the box is empty. */
+  /** In the food's own unit, cooked grams when weighed cooked; null while the box is empty. */
   quantity: number | null;
   suggestion: SuggestedIngredient | null;
-  /** A saved line's cooking factors, sent back unchanged. */
-  yieldFactorId: string | null;
-  retentionFactorId: string | null;
+  /** The raw-to-cooked conversion a raw food is weighed cooked through (audit INV-6), or null. */
+  cooked: Conversion | null;
+  /**
+   * The raw grams a converted cooked amount came from, while the amount is still as converted: weighing
+   * it raw again, or through another conversion, starts from them rather than from the rounded cooked
+   * weight, so a round trip never moves the amount.
+   */
+  converted?: { readonly raw: number; readonly cooked: number } | null;
   /** The food as it is now, when it was edited since this line copied it (R4.4c). */
   newer?: RecipeFood | null;
 }
@@ -115,39 +124,44 @@ export function draftFromDetail(detail: RecipeDetail): RecipeDraft {
     photoId: latest.photoMediaAssetId,
     prepMinutes: nullableMinutes(latest.prepMinutes),
     cookMinutes: nullableMinutes(latest.cookMinutes),
-    lines: latest.ingredients.map((line) => ({
-      key: lineKey(),
-      // A saved line is its own measure: what its amount held, scaled from there as it changes.
-      food: {
-        foodId: line.foodItemId,
-        versionId: line.foodItemVersionId,
-        name: line.foodName,
-        source: line.foodProvenance,
-        basisQuantity: numeric(line.quantity),
-        unit: line.unit,
-        basis: line.basis,
-        calories: numeric(line.calories),
-        protein: numeric(line.proteinGrams),
-        carbs: numeric(line.carbohydrateGrams),
-        fat: numeric(line.fatGrams),
-        allergens: line.declaredAllergens,
-      },
-      quantity: numeric(line.quantity),
-      suggestion: null,
-      yieldFactorId: line.yieldFactorId,
-      retentionFactorId: line.retentionFactorId,
-      // A line through cooking factors is worked out by the server alone, so it is not offered.
-      newer:
-        line.newerFood && !line.yieldFactorId && !line.retentionFactorId
-          ? foodFromView(line.newerFood)
-          : null,
-    })),
+    lines: latest.ingredients.map((line) => {
+      const cooked =
+        line.yieldFactor && line.retentionFactor
+          ? conversionFromFactors(line.yieldFactor, line.retentionFactor)
+          : null;
+      // A saved line is its own measure: what its amount held, scaled from there as it changes. One
+      // weighed cooked is held as the raw weight it came from and what that held before cooking.
+      const quantity = numeric(line.quantity);
+      const keep = cooked ? cooked.retention : 1;
+      return {
+        key: lineKey(),
+        food: {
+          foodId: line.foodItemId,
+          versionId: line.foodItemVersionId,
+          name: line.foodName,
+          source: line.foodProvenance,
+          basisQuantity: cooked ? quantity / cooked.yield : quantity,
+          unit: line.unit,
+          basis: cooked ? 'Raw' : line.basis,
+          calories: numeric(line.calories) / keep,
+          protein: numeric(line.proteinGrams) / keep,
+          carbs: numeric(line.carbohydrateGrams) / keep,
+          fat: numeric(line.fatGrams) / keep,
+          allergens: line.declaredAllergens,
+        },
+        quantity,
+        suggestion: null,
+        cooked,
+        newer: line.newerFood ? foodFromView(line.newerFood) : null,
+      };
+    }),
   };
 }
 
 /**
  * The line with its food's newer numbers. The amount stays when the food is still measured in the
- * same unit; otherwise the coach types it again, since no unit is converted.
+ * same unit, and still weighed cooked when it is still a raw food in grams; otherwise the coach types
+ * it again, since no unit or weight is converted.
  */
 export function useNewerFood(line: EditorLine): EditorLine {
   const newer = line.newer;
@@ -155,9 +169,75 @@ export function useNewerFood(line: EditorLine): EditorLine {
   return {
     ...line,
     food: newer,
-    quantity: line.food?.unit === newer.unit ? line.quantity : null,
+    quantity: keepsAmount(line) ? line.quantity : null,
+    cooked: line.cooked && weighable(newer) ? line.cooked : null,
     newer: null,
   };
+}
+
+/** Whether taking the food's newer numbers keeps the amount typed for it. */
+export function keepsAmount(line: EditorLine): boolean {
+  const newer = line.newer;
+  if (!newer) return true;
+  return line.food?.unit === newer.unit && (!line.cooked || weighable(newer));
+}
+
+// ---------- weighed cooked (NUT-001, audit INV-6) ----------
+
+/** A raw food measured in grams can be weighed cooked through a conversion; nothing else can. */
+export function weighable(food: RecipeFood | null): boolean {
+  return food?.basis === 'Raw' && food.unit === 'Gram';
+}
+
+/** Kitchen-scale grams: a converted amount keeps one decimal. */
+function scaleGrams(grams: number): number {
+  return Math.round(grams * 10) / 10;
+}
+
+/**
+ * The line weighed cooked through `conversion`, its amount the cooked weight of the same raw food, so the
+ * recipe's totals move only by the share the conversion says cooking loses. A line already weighed
+ * cooked changes conversion the same way.
+ */
+export function weighCooked(line: EditorLine, conversion: Conversion): EditorLine {
+  const raw = rawGrams(line);
+  const cooked = raw === null ? null : scaleGrams(raw * conversion.yield);
+  return {
+    ...line,
+    cooked: conversion,
+    quantity: cooked,
+    converted: raw === null || cooked === null ? null : { raw, cooked },
+  };
+}
+
+/** The line weighed raw again, its amount the raw weight its cooked one came from. */
+export function weighRaw(line: EditorLine): EditorLine {
+  if (!line.cooked) return line;
+  const raw = rawGrams(line);
+  return {
+    ...line,
+    cooked: null,
+    quantity: raw === null ? null : scaleGrams(raw),
+    converted: null,
+  };
+}
+
+/** Whether `conversion` is the one the line is weighed through already. */
+export function weighedThrough(line: EditorLine, conversion: Conversion): boolean {
+  return (
+    line.cooked?.yieldId === conversion.yieldId &&
+    line.cooked.retentionId === conversion.retentionId
+  );
+}
+
+/** The raw grams the line's amount stands for; null while the box holds no amount. */
+function rawGrams(line: EditorLine): number | null {
+  const quantity = line.quantity;
+  if (quantity === null || !(quantity > 0)) return null;
+  if (!line.cooked) return quantity;
+  // Still the amount a conversion made: the raw grams it came from, not the rounded cooked weight's share.
+  if (line.converted && line.converted.cooked === quantity) return line.converted.raw;
+  return quantity / line.cooked.yield;
 }
 
 export function emptyDraft(): RecipeDraft {
@@ -179,8 +259,7 @@ export function lineForFood(food: RecipeFood): EditorLine {
     food,
     quantity: food.basisQuantity,
     suggestion: null,
-    yieldFactorId: null,
-    retentionFactorId: null,
+    cooked: null,
   };
 }
 
@@ -201,8 +280,7 @@ export function matchLine(line: EditorLine, food: RecipeFood): EditorLine {
     ...line,
     food,
     quantity: carried ?? line.quantity ?? food.basisQuantity,
-    yieldFactorId: null,
-    retentionFactorId: null,
+    cooked: null,
   };
 }
 
@@ -213,8 +291,7 @@ export function linesFromSuggestion(ingredients: readonly SuggestedIngredient[])
     food: null,
     quantity: null,
     suggestion,
-    yieldFactorId: null,
-    retentionFactorId: null,
+    cooked: null,
   }));
 }
 
@@ -249,12 +326,19 @@ export function readSuggestion(
 
 const ZERO: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
-/** What a line's amount holds, or null while it has no food or no usable amount. */
+/**
+ * What a line's amount holds, or null while it has no food or no usable amount. An amount weighed
+ * cooked counts the raw share it came from, kept as its conversion says: yield first, then retention,
+ * as the server works it out (NUT-001).
+ */
 export function lineMacros(line: EditorLine): Macros | null {
   const food = line.food;
   const quantity = line.quantity;
   if (!food || quantity === null || !(quantity > 0) || !(food.basisQuantity > 0)) return null;
-  const share = quantity / food.basisQuantity;
+  const cooked = line.cooked;
+  const share = cooked
+    ? (quantity / cooked.yield / food.basisQuantity) * cooked.retention
+    : quantity / food.basisQuantity;
   return {
     calories: food.calories * share,
     protein: food.protein * share,
@@ -407,9 +491,9 @@ export function ingredientRequests(lines: readonly EditorLine[]): RecipeIngredie
             foodItemVersionId: line.food.versionId,
             quantity: line.quantity,
             unit: line.food.unit,
-            basis: line.food.basis,
-            yieldFactorId: line.yieldFactorId,
-            retentionFactorId: line.retentionFactorId,
+            basis: line.cooked ? 'Cooked' : line.food.basis,
+            yieldFactorId: line.cooked?.yieldId ?? null,
+            retentionFactorId: line.cooked?.retentionId ?? null,
           },
         ]
       : [],
@@ -429,6 +513,8 @@ export function draftSignature(draft: RecipeDraft): string {
       line.food?.versionId ?? null,
       line.quantity,
       line.suggestion?.name ?? null,
+      line.cooked?.yieldId ?? null,
+      line.cooked?.retentionId ?? null,
     ]),
   });
 }

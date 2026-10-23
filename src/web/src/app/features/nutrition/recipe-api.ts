@@ -5,6 +5,9 @@ import type {
   AddRecipeVersionRequest,
   AiMealDraftAvailabilityView,
   AiMealDraftView,
+  CookingConversionPage,
+  CookingConversionView,
+  CreateCookingConversionRequest,
   CreateRecipeRequest,
   FoodItemPage,
   FoodItemView,
@@ -87,6 +90,21 @@ export class RecipeApi {
   /** Copies a USDA food into the workspace's foods, so a recipe line can use it. */
   importUsda(fdcId: string): Observable<FoodItemView> {
     return this.http.post<FoodItemView>('/api/nutrition/providers/usda/import', { fdcId });
+  }
+
+  /**
+   * The workspace's raw-to-cooked conversions by name, or those whose name or source holds every word of
+   * `query` (NUT-001, audit INV-6).
+   */
+  listConversions(query: string, skip: number, take: number): Observable<CookingConversionPage> {
+    return this.http.get<CookingConversionPage>('/api/nutrition/cooking-conversions', {
+      params: new HttpParams().set('query', query).set('skip', skip).set('take', take),
+    });
+  }
+
+  /** Saves a conversion; the same one again answers with the one saved first, other numbers 409. */
+  createConversion(request: CreateCookingConversionRequest): Observable<CookingConversionView> {
+    return this.http.post<CookingConversionView>('/api/nutrition/cooking-conversions', request);
   }
 
   aiAvailability(): Observable<AiMealDraftAvailabilityView> {

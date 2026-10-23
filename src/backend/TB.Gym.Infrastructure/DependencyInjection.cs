@@ -419,14 +419,10 @@ public static class DependencyInjection
                     }));
         });
 
-        var supportedCultures = new[]
-        {
-            CultureInfo.GetCultureInfo("en-LB"),
-            CultureInfo.GetCultureInfo("ar-LB"),
-        };
+        var supportedCultures = WorkspaceLanguages.Supported.Select(CultureInfo.GetCultureInfo).ToArray();
         services.Configure<RequestLocalizationOptions>(options =>
         {
-            options.DefaultRequestCulture = new RequestCulture("en-LB");
+            options.DefaultRequestCulture = new RequestCulture(WorkspaceLanguages.English);
             options.SupportedCultures = supportedCultures;
             options.SupportedUICultures = supportedCultures;
         });

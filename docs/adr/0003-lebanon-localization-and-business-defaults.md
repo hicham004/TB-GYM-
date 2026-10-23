@@ -35,3 +35,10 @@ hard-coded into the application.
 - Production readiness cannot be declared until privacy notices, consent, processor/provider
   contracts, retention, export, and deletion behavior receive legal review.
 
+## Amended in the audit's batch A16b (2026-10-22)
+
+A workspace's culture is `en-LB` or `ar-LB`, the two the API's request localization speaks; any other
+is refused in words. The owner chooses it on Name and region for the notices and emails TB Gym sends.
+Only English wording exists, so a notice for an Arabic workspace is written and recorded in English
+until Arabic is written, where refusing it dead-lettered every notice of that workspace (INV-8).
+

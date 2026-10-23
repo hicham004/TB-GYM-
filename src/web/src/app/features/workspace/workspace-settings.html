@@ -2,8 +2,8 @@
   <header settingsHead class="top">
     <h1 id="space-heading" #heading tabindex="-1" i18n>Name and region</h1>
     <p class="lede" i18n>
-      Your coaching space’s name, and the clock and calendar that every plan, program and check-in
-      follows.
+      Your coaching space’s name and language, and the clock and calendar that every plan, program
+      and check-in follows.
     </p>
   </header>
 
@@ -48,10 +48,19 @@
                 (blur)="attempt.touch('name')"
               />
             </app-field>
-            <p class="quiet" i18n>
-              Emails and invitations go out in English for now. Arabic comes with the translation
-              work.
-            </p>
+          </section>
+
+          <section class="panel" aria-labelledby="language-heading">
+            <h2 id="language-heading" i18n>Language</h2>
+            <app-segmented-control
+              label="Notices and emails in"
+              i18n-label
+              [options]="languageOptions"
+              [selected]="current.language"
+              (selectedChange)="setLanguage($event)"
+            />
+            <!-- Said as it is: only English wording exists, so no notice stops for the choice (INV-8). -->
+            <p class="quiet" data-language-line aria-live="polite">{{ languageLine() }}</p>
           </section>
 
           <section class="panel" aria-labelledby="calendar-heading">
@@ -114,7 +123,15 @@
           </section>
 
           <div class="actions">
-            <p class="save-error" role="alert">{{ saveError() }}</p>
+            <!-- The kit's summary (ARCHITECTURE §8), there from the first render: the server's words,
+                 focused on a refusal, else a pointer to the boxes marked above. -->
+            <app-form-summary>
+              @if (saveError(); as message) {
+                {{ message }}
+              } @else if (attempt.wasTried() && problemCount() > 0) {
+                <ng-container i18n>Check the fields marked above.</ng-container>
+              }
+            </app-form-summary>
             <div class="buttons">
               @if (dirty()) {
                 <button appButton type="button" variant="text" (click)="discard()" i18n>

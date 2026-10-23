@@ -101,6 +101,13 @@ does not silently convert units or bases and seeds no factor values. A yield fac
 burghul near 3x, pasta near 2.4x); a retention factor is a surviving fraction and cannot exceed
 1.0.
 
+Amended in the audit's batch A16b (2026-10-22, INV-6): a coach saves a raw-to-cooked conversion, a
+yield and a retention factor under one source key (what it is for) and source version (where its
+numbers come from), from the recipe editor's Weigh it cooked sheet (`/api/nutrition/cooking-conversions`,
+which replaced the single-factor routes no screen called). A factor keeps six decimals and one with more
+is refused, never rounded; a saved conversion is never changed, so other numbers need another name or
+source. TB Gym still seeds no factor values.
+
 ### Assigned plan lifecycle
 
 An assigned plan is a snapshot, not an immovable rock: a misassignment must be correctable. A

@@ -60,6 +60,20 @@ internal sealed partial class NutritionApplicationService
         FoodItemView? Newer(Guid foodId, Guid versionId) =>
             currentFoods.TryGetValue(foodId, out var current) && current.CurrentVersion.Id != versionId ? current : null;
 
+        // A line weighed cooked carries its conversion's two factors, so the editor can name it and weigh
+        // the line raw again (audit INV-6).
+        var factorIds = latest.Ingredients
+            .SelectMany(item => new[] { item.YieldFactorId, item.RetentionFactorId })
+            .OfType<Guid>()
+            .Distinct()
+            .ToArray();
+        var factors = factorIds.Length == 0
+            ? new Dictionary<Guid, CookingFactorView>()
+            : await dbContext.CookingFactorRecords.AsNoTracking()
+                .Where(item => factorIds.Contains(item.Id))
+                .ToDictionaryAsync(item => item.Id, ToCookingFactorView, cancellationToken);
+        CookingFactorView? Factor(Guid? id) => id is { } value ? factors.GetValueOrDefault(value) : null;
+
         var ingredients = latest.Ingredients
             .OrderBy(item => item.Order)
             .Select(item => new RecipeIngredientView(
@@ -77,7 +91,9 @@ internal sealed partial class NutritionApplicationService
                 allergens[item.FoodItemVersionId].Order().ToArray(),
                 item.YieldFactorId,
                 item.RetentionFactorId,
-                Newer(foods[item.FoodItemVersionId].FoodId, item.FoodItemVersionId)))
+                Newer(foods[item.FoodItemVersionId].FoodId, item.FoodItemVersionId),
+                Factor(item.YieldFactorId),
+                Factor(item.RetentionFactorId)))
             .ToArray();
         return new RecipeDetail(
             recipe.Id,

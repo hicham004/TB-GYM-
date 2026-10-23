@@ -172,6 +172,61 @@ describe('ProductSheet', () => {
       );
     });
 
+    it('sells a plan by the day, its length, checks and words in days (INV-7)', async () => {
+      const { fixture, host, api, dirty } = await render({ kind: 'new' });
+      // Weeks first, as before; the number stays as typed when the unit changes.
+      expect(field(host, 'Weeks').checked).toBe(true);
+      expect(field(host, 'Length in weeks').value).toBe('12');
+      tick(host, 'Days');
+      await settle(fixture);
+      expect(dirty).toContain(true);
+      expect(() => field(host, 'Length in weeks')).toThrow();
+      expect(field(host, 'Length in days').value).toBe('12');
+
+      fill(host, 'Plan name', 'Monthly coaching');
+      fill(host, 'Length in days', '30');
+      fill(host, 'Price', '90');
+      await settle(fixture);
+      expect(sellLine(host)).toBe(
+        'Clients pay USD 90 for 30 days. You record each payment on their profile.',
+      );
+      expect(describedText(field(host, 'Option name (optional)'))).toBe(
+        'Left empty, clients see “30 days”.',
+      );
+
+      // A length the server would refuse is refused here, in days.
+      fill(host, 'Length in days', '0');
+      await settle(fixture);
+      press(host, 'Create plan');
+      await settle(fixture);
+      expect(reasonFor(field(host, 'Length in days'))).toBe(
+        'Enter a whole number of days, 1 or more.',
+      );
+      expect(document.activeElement).toBe(field(host, 'Length in days'));
+      expect(api.createProduct).not.toHaveBeenCalled();
+
+      fill(host, 'Length in days', '30');
+      await settle(fixture);
+      press(host, 'Create plan');
+      await settle(fixture);
+      expect(api.createProduct).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Monthly coaching',
+          initialOffer: expect.objectContaining({
+            label: '30 days',
+            durationCount: 30,
+            durationUnit: 'Day',
+            priceAmount: 90,
+          }),
+        }),
+      );
+
+      // Back to weeks, the same number is weeks again.
+      tick(host, 'Weeks');
+      await settle(fixture);
+      expect(field(host, 'Length in weeks').value).toBe('30');
+    });
+
     it('says what an option left unnamed is called, and sends it by that name', async () => {
       const { fixture, host, api } = await render({ kind: 'option', product: ONLINE });
       const name = field(host, 'Option name (optional)');
