@@ -186,7 +186,7 @@ public sealed partial class Phase6B2BRealtimeSignalRTests
         Assert.IsTrue(
             await client.Connection.InvokeAsync<bool>("SubscribeConversation", workspace.ConversationId));
         await SweepAsync(ReplicaA);
-        client.Clear();
+        await client.ClearAfterAsync(1);
 
         // A message is committed, and only then does the relationship close.
         await SendAsync(workspace.Coach, workspace.ConversationId, "written before the block");
@@ -214,7 +214,7 @@ public sealed partial class Phase6B2BRealtimeSignalRTests
         Assert.IsTrue(
             await client.Connection.InvokeAsync<bool>("SubscribeConversation", workspace.ConversationId));
         await SweepAsync(ReplicaA);
-        client.Clear();
+        await client.ClearAfterAsync(1);
 
         var sent = await SendAsync(workspace.Coach, workspace.ConversationId, "over a real socket");
         await SweepAsync(ReplicaA);
@@ -288,7 +288,7 @@ public sealed partial class Phase6B2BRealtimeSignalRTests
         Assert.IsTrue(
             await client.Connection.InvokeAsync<bool>("SubscribeConversation", workspace.ConversationId));
         await SweepAsync(ReplicaA);
-        client.Clear();
+        await client.ClearAfterAsync(1);
 
         // Drop and re-open, which is what an ordinary reconnect amounts to from the server's side.
         await client.Connection.StopAsync();
@@ -335,7 +335,7 @@ public sealed partial class Phase6B2BRealtimeSignalRTests
         await SweepAsync(ReplicaA);
 
         await client.Connection.InvokeAsync("UnsubscribeConversation", workspace.ConversationId);
-        client.Clear();
+        await client.ClearAfterAsync(1);
 
         await SendAsync(workspace.Coach, workspace.ConversationId, "after leaving the thread");
         await SweepAsync(ReplicaA);
@@ -440,17 +440,25 @@ public sealed partial class Phase6B2BRealtimeSignalRTests
 
         // The service is alive and still works. A later message publishes normally.
         client.Clear();
-        var afterOutage = await SendAsync(workspace.Coach, workspace.ConversationId, "after the outage");
-        // A frame attempted during the outage may surface late. It is not proof that this new work
-        // crossed the recovered backplane, so wait for the exact message this assertion is about.
-        for (var attempt = 0; attempt < 10 && !client.HasMessage(afterOutage.Id); attempt++)
+        // Redis accepting connections again is not every replica subscribed again: each one's
+        // subscriber reconnects on its own backoff, and a frame published before the replica holding
+        // the socket is back is lost like any outage frame (catch-up is what recovers it). A published
+        // frame is final, so sweeping it again proves nothing; new work on each try is what shows the
+        // loop publishing across the recovered backplane. A frame attempted during the outage may
+        // surface late too, so each try waits for its own message.
+        var delivered = false;
+        for (var attempt = 1; attempt <= 10 && !delivered; attempt++)
         {
+            var afterOutage = await SendAsync(
+                workspace.Coach,
+                workspace.ConversationId,
+                $"after the outage, try {attempt}");
             await SweepAsync(ReplicaB);
-            await client.WaitForMessageAsync(afterOutage.Id, TimeSpan.FromSeconds(3));
+            delivered = await client.WaitForMessageAsync(afterOutage.Id, TimeSpan.FromSeconds(3));
         }
 
         Assert.IsTrue(
-            client.HasMessage(afterOutage.Id),
+            delivered,
             "After Redis returns, eligible work publishes again and the loop was never killed.");
 
         // No connection string and no exception prose anywhere in either replica's log.
