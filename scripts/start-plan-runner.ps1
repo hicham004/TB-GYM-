@@ -5,7 +5,7 @@ Starts scripts/plan-runner.ps1 as the scheduled task "TB Gym plan runner", so it
 .DESCRIPTION
 Registers (or replaces) a scheduled task that runs the plan runner in its own PowerShell window
 under the current user with no time limit, then starts it. The runner builds the plan's Open rows
-(by default the audit's fix batches, -Plan audit) one fresh chat at a time until every row is Done,
+(by default the audit's fix batches, -Plan audit; -Plan critique for the critique's fixes) one fresh chat at a time until every row is Done,
 and stops early at the first gate, Optional row or step that does not end Done, or, when given
 -NoNewStepAfter, before a step that would start after that clock time.
 Closing VS Code or any chat does not stop the task; the laptop sleeping does (keep it on power with
@@ -20,7 +20,7 @@ the lid open). Windows asks for nothing: the task runs as you, already signed in
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('audit', 'ui')]
+    [ValidateSet('audit', 'ui', 'critique')]
     [string]$Plan = 'audit',
     # A clock time such as 08:00: no step starts after its next occurrence (empty: run on; the owner, 2026-10-19).
     [string]$NoNewStepAfter = '',

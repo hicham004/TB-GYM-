@@ -5,7 +5,8 @@ Runs a plan's status table unattended: one fresh Claude chat per row.
 .DESCRIPTION
 -Plan audit (the default since 2026-10-19) runs the fix batches in section 0 of
 docs/FULL-AUDIT-2026-10.md; -Plan ui runs the section 0 table of docs/UI-REDESIGN-PLAN.md,
-which the owner marked complete on 2026-10-13.
+which the owner marked complete on 2026-10-13; -Plan critique runs the rows in section 0 of
+docs/CRITIQUE-FIXES-2026-10.md, the fixes from Toufic's critique (2026-10-27).
 
 Each step is a new `claude -p` chat at max effort, on Opus unless -RowModels names another
 model for its row (the owner put R6.2 on Fable on 2026-10-11). It gets the plan's opening in
@@ -39,7 +40,7 @@ with its context, instead of refusing to start on the changed tree.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('audit', 'ui')]
+    [ValidateSet('audit', 'ui', 'critique')]
     [string]$Plan = 'audit',
     # A clock time such as 08:00: no step starts after its next occurrence (empty: no limit).
     [string]$NoNewStepAfter = '',
@@ -64,7 +65,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$planFiles = @{ audit = 'docs\FULL-AUDIT-2026-10.md'; ui = 'docs\UI-REDESIGN-PLAN.md' }
+$planFiles = @{ audit = 'docs\FULL-AUDIT-2026-10.md'; ui = 'docs\UI-REDESIGN-PLAN.md'; critique = 'docs\CRITIQUE-FIXES-2026-10.md' }
 $planPath = Join-Path $repositoryRoot $planFiles[$Plan]
 $logDir = Join-Path $repositoryRoot 'artifacts\plan-runner'
 $stopFile = Join-Path $logDir 'STOP'
@@ -133,6 +134,37 @@ The owner's decisions for this run (2026-10-19):
 - A batch too big to finish well in one chat: split its row into parts (A3a, A3b), each
   with its scope, build and commit the first, and leave the others Open for the next chat.
 - Where a fix changes a rule, update DOMAIN-RULES, the ADR or ARCHITECTURE in a few
+  lines, as AGENTS.md asks.
+'@
+    critique = @'
+Read docs/CRITIQUE-FIXES-2026-10.md and do the next step: the first row of its section 0
+status table that is not Done, passing over rows marked "Open, not blocking". Build it as
+section 2 describes that row; docs/CRITIQUE-TOUFIC-2026-10.md has the evidence.
+
+This chat runs unattended. scripts/plan-runner.ps1 started it, and nobody will see or
+answer anything until it has finished. The runner expects the next step to be <<ROW>>.
+If section 0 gives a different row, change nothing and say why.
+
+Traps on this laptop (your memory notes have more):
+- A full backend suite started between 00:00 and 01:00 Beirut time fails R34a and R25b
+  on the day boundary: start it after 01:00 or rerun those two alone. The known flakes
+  (the rate-limit test, the Redis-outage SignalR test, the Step3Renewal double tap) pass
+  when rerun alone.
+- The live specs in src/web/e2e/live run against a fresh demo copy, never against the
+  owner's own API (port 5134), web (port 4200) or the tbgym database, which holds the
+  owner's accounts.
+
+The owner's decisions for this run (2026-10-27):
+- The owner chose every row's content on a decision page of sketches, so rows are built
+  without another preview round: the owner judges the screenshots afterwards. The row's
+  third column is the owner's word; an item it leaves out is not built.
+- A question the row and the docs do not settle: a technical one is yours (AGENTS.md).
+  A business question, a new money rule or legal wording is not delegated: leave that
+  item out, write it with your recommendation into the row's status and your report,
+  and build the rest of the row.
+- A row too big to finish well in one chat: split it into parts (B5a1, B5a2), each with
+  its scope, build and commit the first, and leave the others Open for the next chat.
+- Where a row changes a rule, update DOMAIN-RULES, the ADR or ARCHITECTURE in a few
   lines, as AGENTS.md asks.
 '@
 }
