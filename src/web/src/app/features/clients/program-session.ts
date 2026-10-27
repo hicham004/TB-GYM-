@@ -73,7 +73,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
           }
           @case ('error') {
             <div class="problem">
-              <p role="alert" i18n>The session could not be loaded.</p>
+              <p role="alert" i18n>The workout could not be loaded.</p>
               <button appButton type="button" variant="outlined" (click)="reload()" i18n>
                 Try again
               </button>
@@ -100,7 +100,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
                   }
                 </li>
               } @empty {
-                <li class="muted" i18n>No exercises in this session.</li>
+                <li class="muted" i18n>No exercises in this workout.</li>
               }
             </ol>
           }
@@ -109,11 +109,11 @@ import { ClientWorkspaceContext } from './client-workspace.context';
 
       @if (canSwap()) {
         <details class="swap" (toggle)="swapToggled($event)">
-          <summary i18n>Swap this session</summary>
+          <summary i18n>Swap this workout</summary>
           <div class="swap-body">
             <p class="muted" i18n>
-              Replace it with one of your saved sessions. It stays on {{ session().day }}: only this
-              session changes, and the rest of the program stays as it is.
+              Replace it with one of your saved workouts. It stays on {{ session().day }}: only this
+              workout changes, and the rest of the program stays as it is.
             </p>
             <app-select
               [label]="savedLabel"
@@ -124,7 +124,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
             />
             @if (savedLoaded() && saved().length === 0) {
               <p class="muted" i18n>
-                You have no saved sessions yet. Save one from the program builder first.
+                You have no saved workouts yet. Save one from the program builder first.
               </p>
             }
             <app-form-summary>
@@ -143,7 +143,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
                 @if (busy()) {
                   <ng-container i18n>Swapping…</ng-container>
                 } @else {
-                  <ng-container i18n>Swap session</ng-container>
+                  <ng-container i18n>Swap workout</ng-container>
                 }
               </button>
             </div>
@@ -299,9 +299,9 @@ export class ProgramSession {
   /** True when the session was swapped, so the page reloads the program. */
   readonly closed = output<boolean>();
 
-  protected readonly loadingLabel = $localize`Loading the session…`;
-  protected readonly savedLabel = $localize`Saved session`;
-  protected readonly savedPlaceholder = $localize`Choose a saved session…`;
+  protected readonly loadingLabel = $localize`Loading the workout…`;
+  protected readonly savedLabel = $localize`Saved workout`;
+  protected readonly savedPlaceholder = $localize`Choose a saved workout…`;
   protected readonly load = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly view = signal<TrainingMesocycleView | null>(null);
   protected readonly saved = signal<SavedSessionView[]>([]);
@@ -372,7 +372,7 @@ export class ProgramSession {
         this.saved.set(await owner.wait(firstValueFrom(this.api.listSavedSessions())));
         this.savedLoaded.set(true);
       } catch {
-        if (owner.current) this.error.set($localize`Your saved sessions could not be loaded.`);
+        if (owner.current) this.error.set($localize`Your saved workouts could not be loaded.`);
       }
     });
   }
@@ -381,7 +381,7 @@ export class ProgramSession {
     if (this.busy()) return;
     const saved = this.saved().find((item) => item.id === this.chosenId());
     if (!saved) {
-      this.swapError.set($localize`Choose a saved session.`);
+      this.swapError.set($localize`Choose a saved workout.`);
       this.error.set(null);
       afterNextRender(() => this.savedField()?.focus(), { injector: this.injector });
       return;
@@ -405,7 +405,7 @@ export class ProgramSession {
       this.closed.emit(true);
     } catch (error) {
       this.error.set(
-        programWriteError(error, $localize`The session could not be swapped.`, this.firstName()),
+        programWriteError(error, $localize`The workout could not be swapped.`, this.firstName()),
       );
       this.summary()?.focus();
     } finally {

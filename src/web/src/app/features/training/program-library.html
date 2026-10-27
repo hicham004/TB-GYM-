@@ -5,9 +5,9 @@
 @if (tab() === 'saved' && showTabs()) {
   <p class="help">
     @if (mode() === 'drag') {
-      <ng-container i18n>Drag a saved session onto a day.</ng-container>
+      <ng-container i18n>Drag a saved workout onto a day.</ng-container>
     } @else {
-      <ng-container i18n>Choose a saved session to add a copy on this day.</ng-container>
+      <ng-container i18n>Choose a saved workout to add a copy on this day.</ng-container>
     }
   </p>
   @if (mode() === 'drag') {
@@ -123,7 +123,7 @@
           </button>
         </div>
       } @else if (mode() === 'drag') {
-        <p class="help" i18n>Drag an exercise into a session, or onto an empty day.</p>
+        <p class="help" i18n>Drag an exercise into a workout, or onto an empty day.</p>
         <ul
           class="items"
           role="list"

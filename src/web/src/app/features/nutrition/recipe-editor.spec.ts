@@ -11,6 +11,7 @@ import type {
   CookingConversionView,
   CreateRecipeRequest,
   RecipeDetail,
+  ProviderFoodSearchPage,
   RecipeIngredientView,
   ReviewAiMealDraftRequest,
 } from '../../core/api/generated';
@@ -25,6 +26,7 @@ import {
   rawRiceLine,
 } from '../../../testing/cooking-fixtures';
 import { field, fill, press, settle } from '../../../testing/dom';
+import { provideMediaUploads } from '../../../testing/media-uploads';
 import {
   OATS_FOOD,
   recipeDetail,
@@ -44,6 +46,7 @@ interface Options {
   aiConfigured?: boolean;
   /** The workspace's raw-to-cooked conversions; white rice boiled unless given. */
   conversions?: CookingConversionView[];
+  uploadsOff?: boolean;
 }
 
 async function render(options: Options = {}) {
@@ -78,7 +81,9 @@ async function render(options: Options = {}) {
         ),
       }),
     ),
-    searchUsda: vi.fn(() => of({ skip: 0, take: 10, items: [] })),
+    searchUsda: vi.fn((): Observable<ProviderFoodSearchPage> =>
+      of({ skip: 0, take: 10, items: [] }),
+    ),
     importUsda: vi.fn(),
     listConversions: vi.fn(() => {
       const items = options.conversions ?? [conversionView()];
@@ -125,6 +130,7 @@ async function render(options: Options = {}) {
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       { provide: UiToast, useValue: toast },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      provideMediaUploads(options.uploadsOff),
     ],
   });
   const harness = await RecipeHarness.create(options.url ?? '/nutrition/recipes/recipe-oats');
@@ -246,7 +252,7 @@ describe('the recipe editor', () => {
   });
 
   it('opens a recipe with its lines, one serving’s numbers, allergens and photo', async () => {
-    const { host, api } = await render();
+    const { harness, host, api } = await render();
 
     expect(api.getRecipe).toHaveBeenCalledWith('recipe-oats');
     expect((host.querySelector('#recipe-name') as HTMLInputElement).value).toBe('Overnight oats');
@@ -258,10 +264,49 @@ describe('the recipe editor', () => {
     expect(textOf(host.querySelector('.standing'))).toContain('Published');
     // Nothing changed since it was published, so there is nothing to publish.
     expect(named(host, 'Publish changes').disabled).toBe(true);
+    // Until working drafts (B5d), a draft asks for everything Publish does, and says so.
+    named(host, 'More save options').click();
+    await settle(harness.fixture);
+    expect(textOf(host.querySelector('.panel .item-title'))).toBe(
+      'Save as draft (complete, not published)',
+    );
     expect(api.grantPhotos).toHaveBeenCalledWith(['photo-1']);
     expect(host.querySelector('.photo img')?.getAttribute('src')).toBe(
       '/api/media/photo-1/content',
     );
+  });
+
+  it('says once when USDA search is not set up on this server, and still lists the coach’s foods', async () => {
+    const { harness, host, api } = await render();
+    api.searchUsda.mockReturnValue(
+      of({
+        skip: 0,
+        take: 10,
+        items: [],
+        failureCode: 'usda_api_key_missing',
+        message: 'USDA FoodData Central is not configured. Add the data.gov API key…',
+      }),
+    );
+    const box = host.querySelector<HTMLInputElement>('#add-ingredient')!;
+    box.dispatchEvent(new Event('focus'));
+    typeInto(box, 'oats');
+    await until(harness.fixture, () =>
+      all(host, '.note').some((note) => textOf(note).startsWith('USDA')),
+    );
+
+    expect(textOf(host.querySelector('[role="option"] .name'))).toBe('Rolled oats');
+    expect(all(host, '.note').map(textOf)).toEqual(['USDA search isn’t set up on this server.']);
+    expect(host.textContent).not.toContain('data.gov');
+  });
+
+  it('says uploads are not set up beside the photo on a server with no media storage', async () => {
+    const { host } = await render({ uploadsOff: true });
+
+    expect(textOf(host.querySelector('.photo-actions'))).toContain(
+      'Uploads aren’t set up on this server.',
+    );
+    expect(host.querySelector('.photo-actions input[type="file"]')).toBeNull();
+    expect(named(host, 'Remove')).toBeTruthy();
   });
 
   it('adds up one serving as amounts are typed', async () => {

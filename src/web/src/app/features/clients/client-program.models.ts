@@ -38,7 +38,7 @@ function count(value: number | string): number {
 }
 
 function sessionsLabel(total: number): string {
-  return total === 1 ? $localize`1 session` : $localize`${total}:count: sessions`;
+  return total === 1 ? $localize`1 workout` : $localize`${total}:count: workouts`;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -204,7 +204,7 @@ function weekColumn(
     missed,
     summary:
       sessions.length === 0
-        ? $localize`No sessions`
+        ? $localize`No workouts`
         : begun
           ? $localize`${done}:done: of ${sessions.length}:total: done`
           : sessionsLabel(sessions.length),
@@ -320,10 +320,10 @@ function historyWords(event: MesocycleLifecycleEventView): string {
       )?.[1];
       if (notDone) {
         return Number(notDone) === 1
-          ? $localize`Closed after its last day · 1 session not done`
-          : $localize`Closed after its last day · ${notDone}:count: sessions not done`;
+          ? $localize`Closed after its last day · 1 workout not done`
+          : $localize`Closed after its last day · ${notDone}:count: workouts not done`;
       }
-      return $localize`Finished · every session done`;
+      return $localize`Finished · every workout done`;
     }
   }
 }
@@ -396,8 +396,8 @@ export function blockCard(block: CoachProgramBlockView, context: ProgramContext)
     block.status === 'Planned'
       ? $localize`${weekCount}:weeks: weeks · ${sessionsLabel(total)}:sessions:`
       : total === 1
-        ? $localize`${done}:done: of 1 session done`
-        : $localize`${done}:done: of ${total}:total: sessions done`;
+        ? $localize`${done}:done: of 1 workout done`
+        : $localize`${done}:done: of ${total}:total: workouts done`;
   const current = block.currentWeekNumber === null ? null : count(block.currentWeekNumber);
   return {
     id: block.id,
@@ -457,8 +457,8 @@ function blockRow(block: CoachProgramBlockView, context: ProgramContext): BlockR
       block.status === 'Planned'
         ? sessionsLabel(total)
         : total === 1
-          ? $localize`${done}:done: of 1 session done`
-          : $localize`${done}:done: of ${total}:total: sessions done`,
+          ? $localize`${done}:done: of 1 workout done`
+          : $localize`${done}:done: of ${total}:total: workouts done`,
   };
 }
 
@@ -544,7 +544,7 @@ export function programMenu(
     // The weeks still to come, in the builder's grid (TRN-028); what started or passed stays locked.
     items.push({
       label: $localize`Edit weeks`,
-      hint: $localize`Change the sessions still to come`,
+      hint: $localize`Change the workouts still to come`,
       action: 'edit-weeks',
     });
     items.push(
@@ -591,8 +591,8 @@ export function programMenu(
           ? {
               label: $localize`Close program`,
               hint: allDone
-                ? $localize`Every session is done`
-                : $localize`Missed sessions stay on record`,
+                ? $localize`Every workout is done`
+                : $localize`Missed workouts stay on record`,
               action: 'complete',
             }
           : {
@@ -613,7 +613,7 @@ export function programMenu(
         }
       : {
           label: $localize`Cancel program`,
-          hint: $localize`Stop the sessions still to come`,
+          hint: $localize`Stop the workouts still to come`,
           action: 'cancel',
         },
   );
@@ -640,11 +640,13 @@ function setText(set: SetPrescriptionView, fallbackUnit: TrainingLoadUnit, local
   const reps =
     minimum === null && maximum === null
       ? null
-      : minimum === maximum || maximum === null
+      : minimum === maximum
         ? $localize`${minimum}:reps: reps`
         : minimum === null
-          ? $localize`${maximum}:reps: reps`
-          : $localize`${minimum}:min:–${maximum}:max: reps`;
+          ? $localize`up to ${maximum}:reps: reps`
+          : maximum === null
+            ? $localize`at least ${minimum}:reps: reps`
+            : $localize`${minimum}:min:–${maximum}:max: reps`;
   const load = set.prescribedLoad ?? set.directLoad;
   const unit = unitLabel(set.loadUnit ?? fallbackUnit);
   const weight =

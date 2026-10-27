@@ -65,7 +65,7 @@ describe('client list (C2)', () => {
 
     expect(Sara.reasons).toBe('Unread messages');
     expect(Rita.reasons).toBe('');
-    expect(Jad.reasons).toBe('Missed sessions');
+    expect(Jad.reasons).toBe('Missed workouts');
     expect(Lynn.reasons).toBe('No program yet');
     expect(Elie.reasons).toBe('Asked to renew');
 
@@ -118,7 +118,7 @@ describe('client list (C2)', () => {
       'done',
     ]);
     expect(Maya.week?.value).toBe('3 of 4');
-    expect(Maya.week?.summary).toBe('3 of 4 sessions done in the last 7 days');
+    expect(Maya.week?.summary).toBe('3 of 4 workouts done in the last 7 days');
 
     // Two sessions with one done is partly done; today's session is due, not missed.
     expect(Tala.week?.days.map((day) => day.mark)).toEqual([

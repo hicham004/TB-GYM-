@@ -78,14 +78,19 @@ describe('ProductSheet', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   describe('what each sheet asks', () => {
-    it('asks a new plan for its name, what clients get and a first price option in the workspace’s currency', async () => {
+    it('asks a new plan for its name, what it includes, a description and a first price option in the workspace’s currency', async () => {
       const { host } = await render({ kind: 'new' }, { currency: 'LBP' });
 
       expect(field(host, 'Plan name').value).toBe('');
-      const description = field<HTMLTextAreaElement>(host, 'What clients get (optional)');
+      const description = field<HTMLTextAreaElement>(host, 'Description (optional)');
       expect(describedText(description)).toBe(
-        'One or two sentences, as you would say it to a new client.',
+        'What you’ll do for them and what you expect, as you’d tell a new client. The ticks are what the app opens for them.',
       );
+      // What's included first, so the description can speak of the ticks above it.
+      const fieldset = query(host, 'fieldset.features');
+      expect(
+        fieldset.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       expect(textOf(host.querySelector('h3'))).toBe('First price option');
       expect(field(host, 'Length in weeks').value).toBe('12');
       expect(field(host, 'Price').value).toBe('');
@@ -98,8 +103,29 @@ describe('ProductSheet', () => {
         ['Messaging', true],
         ['Resources', false],
       ]);
+      // A first plan's price is called by its length until the coach asks to name it.
+      expect(() => field(host, 'Name for this price (optional)')).toThrow();
       expect(button(host, 'Create plan').type).toBe('submit');
       expect(host.textContent).not.toContain('New price');
+    });
+
+    it('names a first plan’s price option only when asked, and sends that name', async () => {
+      const { fixture, host, api } = await render({ kind: 'new' });
+      fill(host, 'Plan name', 'Student coaching');
+      fill(host, 'Price', '60');
+      press(host, 'Name this price option');
+      await settle(fixture);
+      const name = field(host, 'Name for this price (optional)');
+      expect(document.activeElement).toBe(name);
+      expect(describedText(name)).toBe(
+        'Left empty it’s called by its length, “12 weeks”. Name it when the length isn’t the point, like “Student rate”.',
+      );
+      expect(() => button(host, 'Name this price option')).toThrow();
+      fill(host, 'Name for this price (optional)', 'Student rate');
+      await settle(fixture);
+      press(host, 'Create plan');
+      await settle(fixture);
+      expect(api.createProduct.mock.calls[0][0].initialOffer.label).toBe('Student rate');
     });
 
     it('adds a price option to the plan it names, asking nothing about the plan itself', async () => {
@@ -110,6 +136,7 @@ describe('ProductSheet', () => {
       expect(() => field(host, 'Plan name')).toThrow();
       expect(host.querySelector('h3')).toBeNull();
       expect(field(host, 'Length in weeks').value).toBe('12');
+      expect(field(host, 'Name for this price (optional)').value).toBe('');
       expect(included(host)).toHaveLength(5);
       expect(button(host, 'Add price option').type).toBe('submit');
     });
@@ -135,8 +162,13 @@ describe('ProductSheet', () => {
       const { host } = await render({ kind: 'details', product: ONLINE });
 
       expect(field(host, 'Plan name').value).toBe('Online Coaching');
-      expect(field<HTMLTextAreaElement>(host, 'What clients get (optional)').value).toBe(
+      const description = field<HTMLTextAreaElement>(host, 'Description (optional)');
+      expect(description.value).toBe(
         'Your own program, a weekly check-in and direct chat with your coach.',
+      );
+      // No ticks on this sheet, so the help does not speak of them.
+      expect(describedText(description)).toBe(
+        'What you’ll do for them and what you expect, as you’d tell a new client.',
       );
       expect(() => field(host, 'Price')).toThrow();
       expect(host.querySelector('fieldset.features')).toBeNull();
@@ -190,8 +222,10 @@ describe('ProductSheet', () => {
       expect(sellLine(host)).toBe(
         'Clients pay USD 90 for 30 days. You record each payment on their profile.',
       );
-      expect(describedText(field(host, 'Option name (optional)'))).toBe(
-        'Left empty, clients see “30 days”.',
+      press(host, 'Name this price option');
+      await settle(fixture);
+      expect(describedText(field(host, 'Name for this price (optional)'))).toBe(
+        'Left empty it’s called by its length, “30 days”. Name it when the length isn’t the point, like “Student rate”.',
       );
 
       // A length the server would refuse is refused here, in days.
@@ -229,15 +263,17 @@ describe('ProductSheet', () => {
 
     it('says what an option left unnamed is called, and sends it by that name', async () => {
       const { fixture, host, api } = await render({ kind: 'option', product: ONLINE });
-      const name = field(host, 'Option name (optional)');
-      expect(describedText(name)).toBe('Left empty, clients see “12 weeks”.');
+      const name = field(host, 'Name for this price (optional)');
+      const unnamed = (length: string) =>
+        `Left empty it’s called by its length${length}. Name it when the length isn’t the point, like “Student rate”.`;
+      expect(describedText(name)).toBe(unnamed(', “12 weeks”'));
 
       fill(host, 'Length in weeks', '4');
       await settle(fixture);
-      expect(describedText(name)).toBe('Left empty, clients see “4 weeks”.');
+      expect(describedText(name)).toBe(unnamed(', “4 weeks”'));
       fill(host, 'Length in weeks', '');
       await settle(fixture);
-      expect(describedText(name)).toBe('Left empty, clients see its length.');
+      expect(describedText(name)).toBe(unnamed(''));
 
       fill(host, 'Length in weeks', '4');
       fill(host, 'Price', '100');
@@ -252,7 +288,7 @@ describe('ProductSheet', () => {
       fill(host, 'Length in weeks', '8');
       fill(host, 'Price', '99.99');
       fill(host, 'Currency', 'gbp');
-      fill(host, 'Option name (optional)', '  Summer offer ');
+      fill(host, 'Name for this price (optional)', '  Summer offer ');
       tick(host, 'Training', false);
       tick(host, 'Resources');
       tick(host, 'Nutrition');
@@ -442,7 +478,7 @@ describe('ProductSheet', () => {
     it('creates a plan with its first price option, trimmed, and closes with the plan saved', async () => {
       const { fixture, host, api, saved, closed } = await render({ kind: 'new' });
       fill(host, 'Plan name', '  Hybrid Coaching ');
-      fill(host, 'What clients get (optional)', '   ');
+      fill(host, 'Description (optional)', '   ');
       fill(host, 'Length in weeks', '6');
       fill(host, 'Price', '150');
       await settle(fixture);
@@ -472,7 +508,7 @@ describe('ProductSheet', () => {
         product: summer,
       });
       fill(host, 'Plan name', 'Summer Shred 2027');
-      fill(host, 'What clients get (optional)', '');
+      fill(host, 'Description (optional)', '');
       await settle(fixture);
 
       press(host, 'Save');
@@ -595,7 +631,7 @@ describe('ProductSheet', () => {
     [
       'a plan’s description alone',
       { kind: 'details', product: ONLINE },
-      (host) => fill(host, 'What clients get (optional)', 'Now with a monthly video call.'),
+      (host) => fill(host, 'Description (optional)', 'Now with a monthly video call.'),
     ],
   ])('tells the page once %s is typed, so closing asks first', async (_, mode, change) => {
     const { fixture, host, dirty } = await render(mode);

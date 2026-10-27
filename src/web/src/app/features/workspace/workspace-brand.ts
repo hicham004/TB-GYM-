@@ -21,6 +21,7 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
+import { MediaUploads } from '../../core/system/media-uploads';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { BRAND_PRESETS, type BrandColors, TB_GYM_BRAND } from '../../core/theme/brand-theme';
@@ -84,6 +85,7 @@ export class WorkspaceBrand implements HoldsUnsavedWork {
   private readonly api = inject(ApiClient);
   private readonly brandApi = inject(WorkspaceBrandApi);
   private readonly csrf = inject(CsrfService);
+  protected readonly uploadsOff = inject(MediaUploads).off;
   private readonly tenants = inject(TenantStore);
   private readonly toast = inject(UiToast);
   private readonly dialogs = inject(UiDialog);

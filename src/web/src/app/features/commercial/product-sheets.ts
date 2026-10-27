@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
@@ -65,7 +66,16 @@ export type ProductSheetMode =
 
 @Component({
   selector: 'app-product-sheet',
-  imports: [Button, Checkbox, Control, Field, FormSummary, Icon, SegmentedControl],
+  imports: [
+    Button,
+    Checkbox,
+    Control,
+    Field,
+    FormSummary,
+    Icon,
+    NgTemplateOutlet,
+    SegmentedControl,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -81,9 +91,13 @@ export type ProductSheetMode =
             (blur)="attempt.touch('name')"
           />
         </app-field>
+        <!-- On a new plan what it includes comes first, and the description says it in words. -->
+        @if (mode().kind === 'new') {
+          <ng-container *ngTemplateOutlet="included" />
+        }
         <app-field
           [label]="descriptionLabel"
-          [help]="descriptionHelp"
+          [help]="descriptionHelp()"
           [errors]="shows('description') ? errors()['description'] : null"
         >
           <textarea
@@ -168,39 +182,37 @@ export type ProductSheetMode =
         @if (currencyShown) {
           <p id="plan-currency-error" class="warn-text">{{ errors()['currency'][0] }}</p>
         }
-        <app-field
-          [label]="optionNameLabel"
-          [help]="optionNameHelp()"
-          [errors]="shows('label') ? errors()['label'] : null"
-        >
-          <input
-            appControl
-            name="option-name"
-            autocomplete="off"
-            maxlength="120"
-            [value]="option().label"
-            (input)="setOption({ label: $any($event.target).value })"
-            (blur)="attempt.touch('label')"
-          />
-        </app-field>
-        <fieldset
-          class="features"
-          [attr.aria-describedby]="shows('features') ? 'plan-features-error' : null"
-        >
-          <legend i18n>What’s included</legend>
-          @for (chip of featureChips; track chip.feature) {
-            <app-checkbox [label]="chip.label">
-              <input
-                appControl
-                type="checkbox"
-                [checked]="option().features.includes(chip.feature)"
-                (change)="toggleFeature(chip.feature, $any($event.target).checked)"
-              />
-            </app-checkbox>
-          }
-        </fieldset>
-        @if (shows('features')) {
-          <p id="plan-features-error" class="warn-text">{{ errors()['features'][0] }}</p>
+        <!-- A first plan's one price is called by its length, so its name waits to be asked for. -->
+        @if (optionNameShown()) {
+          <app-field
+            [label]="optionNameLabel"
+            [help]="optionNameHelp()"
+            [errors]="shows('label') ? errors()['label'] : null"
+          >
+            <input
+              appControl
+              name="option-name"
+              autocomplete="off"
+              maxlength="120"
+              [value]="option().label"
+              (input)="setOption({ label: $any($event.target).value })"
+              (blur)="attempt.touch('label')"
+            />
+          </app-field>
+        } @else {
+          <button
+            appButton
+            class="name-option"
+            type="button"
+            variant="text"
+            (click)="showOptionName()"
+            i18n
+          >
+            Name this price option
+          </button>
+        }
+        @if (mode().kind === 'option') {
+          <ng-container *ngTemplateOutlet="included" />
         }
         <!-- In the page from the start, so its first sentence is announced like the ones after it. -->
         <p class="muted sell-line" dir="auto" aria-live="polite">
@@ -239,6 +251,28 @@ export type ProductSheetMode =
           payments.
         </p>
       }
+
+      <ng-template #included>
+        <fieldset
+          class="features"
+          [attr.aria-describedby]="shows('features') ? 'plan-features-error' : null"
+        >
+          <legend i18n>What’s included</legend>
+          @for (chip of featureChips; track chip.feature) {
+            <app-checkbox [label]="chip.label">
+              <input
+                appControl
+                type="checkbox"
+                [checked]="option().features.includes(chip.feature)"
+                (change)="toggleFeature(chip.feature, $any($event.target).checked)"
+              />
+            </app-checkbox>
+          }
+        </fieldset>
+        @if (shows('features')) {
+          <p id="plan-features-error" class="warn-text">{{ errors()['features'][0] }}</p>
+        }
+      </ng-template>
 
       <app-form-summary>
         @if (error(); as message) {
@@ -338,6 +372,10 @@ export type ProductSheetMode =
       font-weight: 600;
     }
 
+    .name-option {
+      align-self: flex-start;
+    }
+
     .features {
       border: 0;
       display: grid;
@@ -418,8 +456,13 @@ export class ProductSheet {
   protected readonly featureChips = FEATURES.map(featureChip);
 
   protected readonly nameLabel = $localize`Plan name`;
-  protected readonly descriptionLabel = $localize`What clients get (optional)`;
-  protected readonly descriptionHelp = $localize`One or two sentences, as you would say it to a new client.`;
+  protected readonly descriptionLabel = $localize`Description (optional)`;
+  /** The ticks are named only where they are on the sheet, a new plan's. */
+  protected readonly descriptionHelp = computed(() =>
+    this.mode().kind === 'new'
+      ? $localize`What you’ll do for them and what you expect, as you’d tell a new client. The ticks are what the app opens for them.`
+      : $localize`What you’ll do for them and what you expect, as you’d tell a new client.`,
+  );
   protected readonly unitLabel = $localize`Length counted in`;
   protected readonly unitOptions: readonly SegmentOption[] = [
     { value: 'Week', label: $localize`Weeks` },
@@ -427,7 +470,7 @@ export class ProductSheet {
   ];
   protected readonly priceLabel = $localize`Price`;
   protected readonly currencyLabel = $localize`Currency`;
-  protected readonly optionNameLabel = $localize`Option name (optional)`;
+  protected readonly optionNameLabel = $localize`Name for this price (optional)`;
   protected readonly newPriceLabel = $localize`New price`;
 
   private readonly product = computed(() => {
@@ -460,9 +503,10 @@ export class ProductSheet {
   protected readonly optionNameHelp = computed(() => {
     const length = optionLength(this.option());
     return length
-      ? $localize`Left empty, clients see “${length}:length:”.`
-      : $localize`Left empty, clients see its length.`;
+      ? $localize`Left empty it’s called by its length, “${length}:length:”. Name it when the length isn’t the point, like “Student rate”.`
+      : $localize`Left empty it’s called by its length. Name it when the length isn’t the point, like “Student rate”.`;
   });
+  protected readonly optionNameShown = linkedSignal(() => this.mode().kind !== 'new');
 
   protected readonly priceProblems = computed(() => {
     const mode = this.mode();
@@ -498,6 +542,15 @@ export class ProductSheet {
   protected setOption(change: Partial<OptionValues>): void {
     this.option.update((values) => ({ ...values, ...change }));
     this.dirtyChange.emit(true);
+  }
+
+  protected showOptionName(): void {
+    this.optionNameShown.set(true);
+    afterNextRender(
+      () =>
+        this.host.nativeElement.querySelector<HTMLInputElement>('[name="option-name"]')?.focus(),
+      { injector: this.injector },
+    );
   }
 
   /** The number stays as typed: the length line under it says what it now means. */

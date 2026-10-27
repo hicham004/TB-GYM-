@@ -402,7 +402,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     const weekText =
       weeks.length === 1 ? $localize`1 week` : $localize`${weeks.length}:count: weeks`;
     const sessionText =
-      sessions === 1 ? $localize`1 session` : $localize`${sessions}:count: sessions`;
+      sessions === 1 ? $localize`1 workout` : $localize`${sessions}:count: workouts`;
     return `${weekText} · ${sessionText}`;
   });
 
@@ -784,7 +784,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
       case 'copy': {
         const copied = copySession(before, ref);
         this.commit(copied.draft);
-        this.announce($localize`Session copied.`);
+        this.announce($localize`Workout copied.`);
         return;
       }
       case 'library': {
@@ -799,7 +799,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
 
   protected deleteSession(ref: SessionRef, sheet: Closable | null): void {
     const before = this.draft();
-    const name = findSession(before, ref)?.name.trim() || $localize`The session`;
+    const name = findSession(before, ref)?.name.trim() || $localize`The workout`;
     sheet?.close();
     this.commit(removeSession(before, ref));
     this.focusWeek(ref.weekKey);
@@ -877,7 +877,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   protected openSession(ref: SessionRef): void {
     this.editing.set(ref);
     const sheet = this.sheets.open(this.sessionSheet(), {
-      title: $localize`Edit session`,
+      title: $localize`Edit workout`,
       closeLabel: this.closeLabel,
       initialFocus: findSession(this.draft(), ref)?.name.trim()
         ? undefined
@@ -1294,13 +1294,13 @@ export class ProgramBuilder implements HoldsUnsavedWork {
           }),
         );
         this.library.saved.set(await owner.wait(firstValueFrom(this.api.listSavedSessions())));
-        this.toast.show($localize`${session.name.trim()}:session: is in your saved sessions.`, {
+        this.toast.show($localize`${session.name.trim()}:session: is in your saved workouts.`, {
           tone: 'success',
         });
       } catch (error) {
         if (!owner.current) return;
         this.toast.show(
-          apiErrorMessage(error, $localize`The session could not be added to your saved sessions.`),
+          apiErrorMessage(error, $localize`The workout could not be added to your saved workouts.`),
           { tone: 'error' },
         );
       } finally {
@@ -1333,8 +1333,8 @@ export class ProgramBuilder implements HoldsUnsavedWork {
           : $localize`Fold week ${number}:number:`,
         summary: `${
           week.sessions.length === 1
-            ? $localize`1 session`
-            : $localize`${week.sessions.length}:count: sessions`
+            ? $localize`1 workout`
+            : $localize`${week.sessions.length}:count: workouts`
         } · ${exercises === 1 ? $localize`1 exercise` : $localize`${exercises}:count: exercises`}`,
         fold:
           isFolded && freeDay !== undefined
@@ -1397,7 +1397,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
 
   private sessionCell(week: DraftWeek, session: DraftSession, changed: boolean): SessionCell {
     const ref = { weekKey: week.key, sessionKey: session.key };
-    const name = session.name.trim() || $localize`Unnamed session`;
+    const name = session.name.trim() || $localize`Unnamed workout`;
     // A saved session is copied from a published version, so it waits for changes to be published.
     const canSave = Boolean(session.sourceId) && !changed;
     return {
@@ -1414,15 +1414,15 @@ export class ProgramBuilder implements HoldsUnsavedWork {
       menuLabel: $localize`More for ${name}:session:`,
       addLabel: $localize`Add exercise to ${name}:session:`,
       menu: [
-        { label: $localize`Edit session`, action: 'edit' },
-        { label: $localize`Copy session`, action: 'copy', hint: $localize`To the next free day` },
+        { label: $localize`Edit workout`, action: 'edit' },
+        { label: $localize`Copy workout`, action: 'copy', hint: $localize`To the next free day` },
         {
-          label: $localize`Add to saved sessions`,
+          label: $localize`Add to saved workouts`,
           action: 'library',
           disabled: !canSave,
           hint: canSave ? undefined : $localize`Publish the program first`,
         },
-        { label: $localize`Delete session`, action: 'delete', danger: true },
+        { label: $localize`Delete workout`, action: 'delete', danger: true },
       ],
       exercises: session.exercises.map((exercise) => ({
         key: exercise.key,

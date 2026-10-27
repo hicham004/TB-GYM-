@@ -96,7 +96,7 @@ export class ProgramLibrary {
   protected readonly loadingLabel = $localize`Loading your exercises…`;
   protected readonly tabs = [
     { value: 'exercises', label: $localize`Exercises` },
-    { value: 'saved', label: $localize`Saved sessions` },
+    { value: 'saved', label: $localize`Saved workouts` },
   ];
   /** Nothing is ever dropped back into the library. */
   protected readonly never = () => false;

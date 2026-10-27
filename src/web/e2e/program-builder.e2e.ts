@@ -430,7 +430,7 @@ test('the builder and its session sheet pass axe in dark mode', async ({ page })
   await axe(page);
 
   await week(page, 0).getByRole('button', { name: 'Lower A', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Edit session' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Edit workout' })).toBeVisible();
   await axe(page);
 });
 
@@ -440,7 +440,7 @@ test('a session’s menu works from the keyboard', async ({ page }) => {
 
   await first.getByRole('button', { name: 'More for Lower A' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: /^Edit session/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /^Edit workout/ })).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   // A copy lands on the next free day, and focus is back on the menu's button.
@@ -456,8 +456,7 @@ for (const width of [390, 1440]) {
     const exercise = week(page, 0).locator('.exercise-row').first();
     await exercise.getByRole('button', { name: 'Edit sets for Back squat' }).click();
     const inline = exercise.locator('.inline-sets');
-    await inline.getByRole('spinbutton', { name: 'Reps from', exact: true }).fill('3');
-    await inline.getByRole('spinbutton', { name: 'Reps to', exact: true }).fill('6');
+    await inline.getByRole('textbox', { name: 'Reps', exact: true }).fill('3-6');
     await inline.getByRole('spinbutton', { name: '% of training max', exact: true }).fill('82.5');
     await inline.getByRole('button', { name: 'Effort: RPE', exact: true }).click();
     await inline.getByRole('button', { name: 'RIR', exact: true }).click();

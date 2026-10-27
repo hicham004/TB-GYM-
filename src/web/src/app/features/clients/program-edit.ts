@@ -324,7 +324,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   protected readonly statusLine = computed(() =>
     this.dirty()
       ? $localize`Changes not applied yet`
-      : $localize`Sessions that started, finished or passed stay as they are`,
+      : $localize`Workouts that started, finished or passed stay as they are`,
   );
 
   protected readonly runsLine = computed(() => {
@@ -573,7 +573,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
         return this.openSession(ref);
       case 'copy':
         this.commit(copySession(this.draft(), ref).draft);
-        this.toast.show($localize`Session copied.`, { tone: 'success' });
+        this.toast.show($localize`Workout copied.`, { tone: 'success' });
         return;
       case 'delete':
         return this.deleteSession(ref, null);
@@ -582,7 +582,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
 
   protected deleteSession(ref: SessionRef, sheet: Closable | null): void {
     const before = this.draft();
-    const name = findSession(before, ref)?.name.trim() || $localize`The session`;
+    const name = findSession(before, ref)?.name.trim() || $localize`The workout`;
     sheet?.close();
     this.commit(removeSession(before, ref));
     this.focusWeek(ref.weekKey);
@@ -619,7 +619,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   protected openSession(ref: SessionRef): void {
     this.editing.set(ref);
     const sheet = this.sheets.open(this.sessionSheet(), {
-      title: $localize`Edit session`,
+      title: $localize`Edit workout`,
       closeLabel: this.closeLabel,
     });
     sheet.closed.subscribe(() => this.editing.set(null));
@@ -867,7 +867,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
 
   private rows(edit: ProgramEdit, draft: ProgramDraft): WeekRow[] {
     const count = draft.weeks.length;
-    const frozenLine = $localize`Weeks up to week ${edit.frozen}:number: have sessions that started or passed, so they stay where they are.`;
+    const frozenLine = $localize`Weeks up to week ${edit.frozen}:number: have workouts that started or passed, so they stay where they are.`;
     return draft.weeks.map((week, index) => {
       const number = index + 1;
       const frozen = index < edit.frozen;
@@ -914,7 +914,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
             danger: true,
             disabled: !canRemoveWeek(edit, count, index),
             hint: frozen
-              ? $localize`It has sessions that started or passed.`
+              ? $localize`It has workouts that started or passed.`
               : count <= 1
                 ? $localize`A program keeps at least one week.`
                 : undefined,
@@ -943,7 +943,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
 
   private sessionCell(week: DraftWeek, session: DraftSession): SessionCell {
     const ref = { weekKey: week.key, sessionKey: session.key };
-    const name = session.name.trim() || $localize`Unnamed session`;
+    const name = session.name.trim() || $localize`Unnamed workout`;
     return {
       key: session.key,
       listId: `exercises-${session.key}`,
@@ -958,9 +958,9 @@ export class ProgramEditPage implements HoldsUnsavedWork {
       menuLabel: $localize`More for ${name}:session:`,
       addLabel: $localize`Add exercise to ${name}:session:`,
       menu: [
-        { label: $localize`Edit session`, action: 'edit' },
-        { label: $localize`Copy session`, action: 'copy', hint: $localize`To the next free day` },
-        { label: $localize`Remove session`, action: 'delete', danger: true },
+        { label: $localize`Edit workout`, action: 'edit' },
+        { label: $localize`Copy workout`, action: 'copy', hint: $localize`To the next free day` },
+        { label: $localize`Remove workout`, action: 'delete', danger: true },
       ],
       exercises: session.exercises.map((exercise) => ({
         key: exercise.key,

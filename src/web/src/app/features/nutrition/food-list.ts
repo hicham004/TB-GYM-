@@ -37,7 +37,14 @@ import { numeric } from '../training/training-builder.models';
 import { FoodApi } from './food-api';
 import { FoodDetails } from './food-details';
 import { FoodEditor } from './food-editor';
-import { foodRow, type FoodSheetMode, USDA_MINIMUM, type UsdaKind, usdaRow } from './food.models';
+import {
+  foodRow,
+  type FoodSheetMode,
+  USDA_MINIMUM,
+  type UsdaKind,
+  usdaRow,
+  usdaUnavailableNote,
+} from './food.models';
 import { NUTRITION_SECTIONS } from './nutrition-sections';
 
 const PAGE_SIZE = 50;
@@ -110,6 +117,8 @@ export class FoodList {
   protected readonly moreFailed = signal(false);
   protected readonly usdaKind = signal<UsdaKind>('Basic');
   protected readonly usdaState = signal<UsdaState>('idle');
+  /** Said while the state is unavailable: not set up on this server, or down for now. */
+  protected readonly usdaNote = signal('');
   protected readonly adding = signal<string | null>(null);
   protected readonly addError = signal<{ fdcId: string; message: string } | null>(null);
   protected readonly showDatabase = signal(false);
@@ -481,7 +490,7 @@ export class FoodList {
       try {
         const page = await owner.wait(firstValueFrom(this.api.searchUsda(query, this.usdaKind())));
         this.usdaItems.set([...page.items]);
-        // Never the server's own sentence, which is written for whoever runs the server.
+        this.usdaNote.set(usdaUnavailableNote(page.failureCode));
         this.usdaState.set(page.failureCode ? 'unavailable' : 'ready');
       } catch {
         if (owner.current) {

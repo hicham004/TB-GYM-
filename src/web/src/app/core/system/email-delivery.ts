@@ -1,7 +1,5 @@
-import { HttpClient } from '@angular/common/http';
-import { computed, inject, Injectable, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
-import type { SystemStatusResponse } from '../api/generated';
+import { computed, inject, Injectable } from '@angular/core';
+import { SystemStatus } from './system-status';
 
 /**
  * Whether this deployment sends email at all (audit LOST-1), asked for once per visit. A deployment
@@ -12,22 +10,16 @@ import type { SystemStatusResponse } from '../api/generated';
  */
 @Injectable({ providedIn: 'root' })
 export class EmailDelivery {
-  private readonly http = inject(HttpClient);
-  private readonly available = signal<boolean | null>(null);
-  private request: Promise<void> | null = null;
+  private readonly status = inject(SystemStatus);
 
   /** True only once the server has said that it sends no email. */
-  readonly off = computed(() => this.available() === false);
+  readonly off = computed(() => this.status.current()?.emailAvailable === false);
 
   constructor() {
     void this.load();
   }
 
   load(): Promise<void> {
-    this.request ??= firstValueFrom(this.http.get<SystemStatusResponse>('/api/system/status')).then(
-      (status) => this.available.set(status.emailAvailable),
-      () => this.available.set(null),
-    );
-    return this.request;
+    return this.status.load();
   }
 }

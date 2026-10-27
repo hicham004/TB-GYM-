@@ -22,10 +22,12 @@ import {
   libraryFilterKey,
   libraryNames,
   moveWeek,
+  parseReps,
   programLibraryIds,
   draftCard,
   programCard,
   removeWeek,
+  repsText,
   versionRows,
   versionToOpen,
 } from './program-builder.models';
@@ -121,6 +123,47 @@ describe('program builder grid', () => {
     );
   });
 
+  it('reads the one Reps box as one number or a range and says a set’s reps back the same way', () => {
+    expect(parseReps('10')).toEqual({ repetitionsMinimum: 10, repetitionsMaximum: 10 });
+    for (const typed of ['8-12', '8–12', '8 — 12', ' 8 to 12 ', '8TO12']) {
+      expect(parseReps(typed)).toEqual({ repetitionsMinimum: 8, repetitionsMaximum: 12 });
+    }
+    expect(parseReps('')).toEqual({ repetitionsMinimum: null, repetitionsMaximum: null });
+    expect(parseReps('up to 10')).toEqual({ repetitionsMinimum: null, repetitionsMaximum: 10 });
+    expect(parseReps('at least 8')).toEqual({ repetitionsMinimum: 8, repetitionsMaximum: null });
+    // Out-of-order and out-of-range numbers are read, so setIssue can say what is wrong with them.
+    expect(parseReps('12-8')).toEqual({ repetitionsMinimum: 12, repetitionsMaximum: 8 });
+    expect(parseReps('0')).toEqual({ repetitionsMinimum: 0, repetitionsMaximum: 0 });
+    for (const typed of ['ten', '8-', '-12', '8-10-12', '8.5', '8 or 9', '10 reps']) {
+      expect(parseReps(typed)).toBeNull();
+    }
+
+    expect(repsText({ repetitionsMinimum: 10, repetitionsMaximum: 10 })).toBe('10');
+    expect(repsText({ repetitionsMinimum: 8, repetitionsMaximum: 12 })).toBe('8–12');
+    expect(repsText({ repetitionsMinimum: null, repetitionsMaximum: null })).toBe('');
+    // Sets saved before the box with one end: the client's app says "up to 10 reps" too.
+    expect(repsText({ repetitionsMinimum: null, repetitionsMaximum: 10 })).toBe('up to 10');
+    expect(repsText({ repetitionsMinimum: 8, repetitionsMaximum: null })).toBe('at least 8');
+    for (const reps of [
+      { repetitionsMinimum: 10, repetitionsMaximum: 10 },
+      { repetitionsMinimum: 8, repetitionsMaximum: 12 },
+      { repetitionsMinimum: null, repetitionsMaximum: 10 },
+      { repetitionsMinimum: 8, repetitionsMaximum: null },
+    ]) {
+      expect(parseReps(repsText(reps))).toEqual(reps);
+    }
+
+    const set = { ...emptySet(), repetitionsEntry: '8 or 9' };
+    expect(setIssue(set)).toEqual({
+      field: 'repetitionsMinimum',
+      message: 'type the reps as one number, like 10, or a range, like 8-12.',
+    });
+    expect(setIssue({ ...set, repetitionsEntry: '8-12' })).toBeNull();
+    expect(setSummary({ ...emptySet(), repetitionsMinimum: null, repetitionsMaximum: 10 })).toBe(
+      'up to 10 · No prescribed load',
+    );
+  });
+
   it('lets a fixed coach load win over a calculated target while still validating its effort', () => {
     const set = {
       ...emptySet(),
@@ -133,7 +176,7 @@ describe('program builder grid', () => {
     expect(setIssue({ ...set, manualLoadOverride: 0 })?.field).toBe('manualLoadOverride');
     expect(setIssue({ ...set, exertionTarget: 11 })?.field).toBe('exertionTarget');
   });
-  it('gives room to days that hold a session in any week and keeps rest days a thin strip', () => {
+  it('gives room to days that hold a workout in any week and keeps rest days a thin strip', () => {
     expect(gridColumns(program())).toBe(
       [0, 1, 2, 3, 4, 5, 6]
         .map((day) => (day === 0 || day === 2 ? 'minmax(9rem, 1fr)' : '2.5rem'))
@@ -186,7 +229,7 @@ describe('program builder grid', () => {
 });
 
 describe('program builder drops', () => {
-  it('takes exercises into sessions, sessions onto days, and an exercise onto an empty day only', () => {
+  it('takes exercises into workouts, workouts onto days, and an exercise onto an empty day only', () => {
     const ref = { weekKey: 'w', sessionKey: 's' };
     const at = { weekKey: 'w', day: 3 };
     const library = { kind: 'library' as const, exercise: squat };
@@ -221,7 +264,7 @@ describe('program builder drops', () => {
     expect(draft.weeks[0].sessions[0].exercises).toHaveLength(2);
   });
 
-  it('moves an exercise within a session and between sessions', () => {
+  it('moves an exercise within a workout and between workouts', () => {
     const draft = program();
     const week = draft.weeks[0];
     const lower = { weekKey: week.key, sessionKey: week.sessions[0].key };
@@ -254,7 +297,7 @@ describe('program builder drops', () => {
     ]);
   });
 
-  it('starts a session on an empty day from an exercise, and refuses a day that has one', () => {
+  it('starts a workout on an empty day from an exercise, and refuses a day that has one', () => {
     const draft = program();
     const week = draft.weeks[0];
 
@@ -278,7 +321,7 @@ describe('program builder drops', () => {
     expect(refused).toBe(draft);
   });
 
-  it('moves a session to another day and week, keeping each week in day order', () => {
+  it('moves a workout to another day and week, keeping each week in day order', () => {
     const draft = program();
     const upper = { weekKey: draft.weeks[0].key, sessionKey: draft.weeks[0].sessions[1].key };
 
@@ -302,7 +345,7 @@ describe('program builder drops', () => {
     expect(names(otherWeek, 1)).toEqual(['Lower B@0', 'Upper A@5']);
   });
 
-  it('drops a fresh copy of a saved session, never the saved one itself', () => {
+  it('drops a fresh copy of a saved workout, never the saved one itself', () => {
     const draft = program();
     const savedSession = {
       id: 'saved-1',
@@ -338,7 +381,7 @@ describe('program builder drops', () => {
 });
 
 describe('program builder menus', () => {
-  it('copies a session to the next free day, or beside it when the week is full', () => {
+  it('copies a workout to the next free day, or beside it when the week is full', () => {
     const draft = program();
     const lower = { weekKey: draft.weeks[0].key, sessionKey: draft.weeks[0].sessions[0].key };
 
@@ -387,7 +430,7 @@ describe('program builder save checks', () => {
 
     second.exercises[0].sets[0].exertionTarget = 8;
     second.name = '';
-    expect(draftProblem(draft)?.message).toBe('Week 2, Day 1: give the session a name.');
+    expect(draftProblem(draft)?.message).toBe('Week 2, Day 1: give the workout a name.');
   });
 });
 

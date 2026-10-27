@@ -42,34 +42,21 @@
           </div>
           <div class="numbers">
             <app-field
-              [errors]="errors(set, 'repetitionsMinimum')"
-              label="Reps from"
+              [errors]="repsErrors(set)"
+              label="Reps"
               i18n-label
+              help="10, or a range like 8-12"
+              i18n-help
               density="compact"
               ><input
                 appControl
-                type="number"
-                min="1"
-                max="100"
-                step="1"
-                inputmode="numeric"
-                [(ngModel)]="set.repetitionsMinimum"
-                (ngModelChange)="changed()"
-            /></app-field>
-            <app-field
-              [errors]="errors(set, 'repetitionsMaximum')"
-              label="Reps to"
-              i18n-label
-              density="compact"
-              ><input
-                appControl
-                type="number"
-                min="1"
-                max="100"
-                step="1"
-                inputmode="numeric"
-                [(ngModel)]="set.repetitionsMaximum"
-                (ngModelChange)="changed()"
+                autocomplete="off"
+                spellcheck="false"
+                maxlength="20"
+                #repsBox
+                [ngModel]="repsValue(set)"
+                (ngModelChange)="repsChanged(set, $event)"
+                (blur)="repsSettled(set, repsBox)"
             /></app-field>
             @if (set.loadStrategy === 'Direct' || set.loadStrategy === 'PercentageWorkingMax') {
               <app-field
@@ -82,6 +69,7 @@
                   )
                 "
                 [label]="loadLabel(set)"
+                [help]="loadHelp(set)"
                 density="compact"
                 ><input
                   appControl

@@ -312,7 +312,7 @@ export class ProgramReschedule {
       @switch (closing()) {
         @case ('done') {
           <p dir="auto" i18n>
-            Close {{ block().name }}? Every session is done, and {{ firstName() }}’s workouts stay
+            Close {{ block().name }}? Every workout is done, and {{ firstName() }}’s workouts stay
             in their history.
           </p>
           <p class="muted" i18n>You can’t undo this.</p>
@@ -324,7 +324,7 @@ export class ProgramReschedule {
         @default {
           <p dir="auto" i18n>
             {{ block().name }} can be closed after its last day, {{ lastDay() }}, or once every
-            session is done. {{ remaining() }} still to go.
+            workout is done. {{ remaining() }} still to go.
           </p>
         }
       }
@@ -388,14 +388,14 @@ export class ProgramComplete {
     }
     const missed =
       missedCount === 1
-        ? $localize`1 missed session stays`
-        : $localize`${missedCount}:count: missed sessions stay`;
+        ? $localize`1 missed workout stays`
+        : $localize`${missedCount}:count: missed workouts stay`;
     return $localize`Close ${name}:program: as finished? ${missed}:missed: on record as missed, and ${first}:name: can no longer start them.`;
   });
 
   protected readonly remaining = computed(() => {
     const left = this.block().sessionCount - this.block().doneCount;
-    return left === 1 ? $localize`1 session is` : $localize`${left}:count: sessions are`;
+    return left === 1 ? $localize`1 workout is` : $localize`${left}:count: workouts are`;
   });
 
   protected async submit(): Promise<void> {
@@ -429,7 +429,7 @@ export class ProgramComplete {
   template: `
     <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p dir="auto" i18n>
-        Cancel {{ block().name }}? {{ firstName() }} stops seeing the sessions still to come.
+        Cancel {{ block().name }}? {{ firstName() }} stops seeing the workouts still to come.
         Workouts already finished stay in their history.
       </p>
       <p class="muted" i18n>You can’t undo this. Assign a program again to start another.</p>

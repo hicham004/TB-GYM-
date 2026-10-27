@@ -448,8 +448,8 @@ describe('what an update would change', () => {
 
   it('counts what changes and what is kept, in the singular too', () => {
     expect(previewSummary(preview(), 'en-US')).toMatchObject({
-      counts: '3 weights change in 2 sessions.',
-      kept: '1 session has started or is already past, so it keeps its weights.',
+      counts: '3 weights change in 2 workouts.',
+      kept: '1 workout has started or is already past, so it keeps its weights.',
       appliesFrom: 'The new max applies from week 2.',
       changedSets: 3,
     });
@@ -459,8 +459,8 @@ describe('what an update would change', () => {
         'en-US',
       ),
     ).toMatchObject({
-      counts: '1 weight changes in 1 session. 2 more stay the same once rounded.',
-      kept: '3 sessions have started or are already past, so they keep their weights.',
+      counts: '1 weight changes in 1 workout. 2 more stay the same once rounded.',
+      kept: '3 workouts have started or are already past, so they keep their weights.',
     });
     expect(previewSummary(preview({ keptSessionCount: 0 }), 'en-US').kept).toBeNull();
   });
@@ -469,7 +469,7 @@ describe('what an update would change', () => {
     expect(
       previewSummary(preview({ sets: [], changedSetCount: 0, sessionCount: 0 }), 'en-US').counts,
     ).toBe(
-      'No session still to come uses this max, so no weight changes now. The new max is kept for weeks you add later.',
+      'No workout still to come uses this max, so no weight changes now. The new max is kept for weeks you add later.',
     );
     expect(
       previewSummary(preview({ sets: [], changedSetCount: 0, sessionCount: 2 }), 'en-US').counts,

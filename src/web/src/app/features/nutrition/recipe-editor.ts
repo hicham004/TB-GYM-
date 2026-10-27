@@ -24,6 +24,7 @@ import type { RecipeDetail } from '../../core/api/generated';
 import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
+import { MediaUploads } from '../../core/system/media-uploads';
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink, IconButton } from '../../ui/button';
@@ -119,6 +120,7 @@ type SaveKind = 'publish' | 'draft';
 export class RecipeEditor implements HoldsUnsavedWork {
   private readonly api = inject(RecipeApi);
   private readonly csrf = inject(CsrfService);
+  protected readonly uploadsOff = inject(MediaUploads).off;
   private readonly tenants = inject(TenantStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -243,7 +245,7 @@ export class RecipeEditor implements HoldsUnsavedWork {
   );
   protected readonly moreItems = computed<UiMenuItem[]>(() => [
     {
-      label: $localize`Save as draft`,
+      label: $localize`Save as draft (complete, not published)`,
       hint: $localize`Kept here, out of meal plans`,
       action: 'draft',
     },

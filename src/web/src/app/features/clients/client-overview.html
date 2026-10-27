@@ -184,7 +184,7 @@
                     @if (story.scheduled > 0) {
                       <p class="week-count">
                         <strong>{{ story.done }} of {{ story.scheduled }}</strong>
-                        <span i18n>sessions done</span>
+                        <span i18n>workouts done</span>
                       </p>
                       <ol class="strip" aria-label="This week, day by day" i18n-aria-label>
                         @for (day of story.days; track day.date) {

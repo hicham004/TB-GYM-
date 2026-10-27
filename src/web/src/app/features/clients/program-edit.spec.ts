@@ -207,7 +207,7 @@ describe('editing a client’s weeks', () => {
     expect(host.querySelectorAll('button[aria-label="Watch the Back squat demo"]')).toHaveLength(1);
   });
 
-  it('shows the sessions still to come beside the locked ones, with nothing to review yet', async () => {
+  it('shows the workouts still to come beside the locked ones, with nothing to review yet', async () => {
     const { host } = await render();
 
     expect(textOf(host.querySelector('#edit-title'))).toBe('Edit weeks');
@@ -309,7 +309,7 @@ describe('editing a client’s weeks', () => {
     // Week 2's Wednesday session loses its name in its sheet.
     named(host.querySelectorAll('section.week')[1], 'Upper').click();
     await settle(harness.fixture);
-    const sheet = await dialogNamed(harness.fixture, 'Edit session');
+    const sheet = await dialogNamed(harness.fixture, 'Edit workout');
     const name = sheet.querySelector<HTMLInputElement>('.basics input')!;
     name.value = '';
     name.dispatchEvent(new Event('input'));
@@ -322,10 +322,10 @@ describe('editing a client’s weeks', () => {
 
     expect(programApi.previewProgramEdit).not.toHaveBeenCalled();
     expect(textOf(host.querySelector('.alert[role="alert"] p'))).toBe(
-      'Week 2, Day 3: give the session a name.',
+      'Week 2, Day 3: give the workout a name.',
     );
     // The session that needs it is opened for the coach.
-    expect(await dialogNamed(harness.fixture, 'Edit session')).toBeTruthy();
+    expect(await dialogNamed(harness.fixture, 'Edit workout')).toBeTruthy();
   });
 
   it('asks before leaving with changes not applied, and warns before a reload', async () => {

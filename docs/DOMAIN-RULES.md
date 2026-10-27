@@ -1759,7 +1759,10 @@ configuration refuses startup, as does selecting the allow-everything developmen
 Development; selecting neither keeps the MED-004 fail-closed Degraded state unchanged. Readiness
 additionally probes a composed provider and reports `Degraded`, never `Unhealthy`, when it does not
 answer. No provider secret, key, bucket, endpoint or object key appears in a log, an error or a
-response.
+response. `GET /api/system/status` carries `mediaUploadsAvailable`, false while either provider is
+unselected, so the screens that offer an upload say "Uploads aren't set up on this server" before
+anyone tries (critique B1, T25); a selected provider that does not answer is an outage, which the
+refused upload says.
 
 **MED-012** Inventory reconciliation reads and never repairs. A bounded pass compares the objects at
 the reconciled storage location with the rows that own them and records durable findings; it deletes

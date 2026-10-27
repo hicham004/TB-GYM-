@@ -108,7 +108,7 @@ export function exerciseClassificationLabel(value: ExerciseClassification): stri
 export function trainingSetTypeLabel(value: TrainingSetType): string {
   const labels: Record<TrainingSetType, string> = {
     WarmUp: $localize`Warm-up`,
-    Normal: $localize`Normal`,
+    Normal: $localize`Working`,
     Top: $localize`Top`,
     BackOff: $localize`Back-off`,
     Drop: $localize`Drop`,
@@ -121,7 +121,7 @@ export function trainingLoadStrategyLabel(value: TrainingLoadStrategy): string {
   const labels: Record<TrainingLoadStrategy, string> = {
     None: $localize`No prescribed load`,
     Direct: $localize`Direct load`,
-    PercentageWorkingMax: $localize`% training max`,
+    PercentageWorkingMax: $localize`% of training max`,
     RpeBasedEpley: $localize`RPE · Epley curve`,
     RpeChart: $localize`RPE · RTS chart`,
   };

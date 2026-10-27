@@ -52,7 +52,7 @@ describe('which program the page opens on', () => {
 describe('the running program in coach words', () => {
   const card = blockCard(runningBlock(), context);
 
-  it('says where it stands: the week, the dates, the sessions done and the misses', () => {
+  it('says where it stands: the week, the dates, the workouts done and the misses', () => {
     expect(card).toMatchObject({
       name: 'Lean & Strong · Phase 2',
       eyebrow: 'Week 3 of 6',
@@ -67,7 +67,7 @@ describe('the running program in coach words', () => {
     });
     expect(card.facts).toEqual([
       { text: 'Mon 14 Sep – Sun 25 Oct', warm: false },
-      { text: '9 of 24 sessions done', warm: false },
+      { text: '9 of 24 workouts done', warm: false },
       { text: '1 missed', warm: true },
     ]);
   });
@@ -97,11 +97,11 @@ describe('the running program in coach words', () => {
       done: 2,
     });
     // A week that has not begun counts its sessions instead of "0 of 4 done".
-    expect(fourth).toMatchObject({ range: '5–11 Oct', isCurrent: false, summary: '4 sessions' });
+    expect(fourth).toMatchObject({ range: '5–11 Oct', isCurrent: false, summary: '4 workouts' });
     expect(card.weeks.filter((week) => week.isCurrent).map((week) => week.number)).toEqual([3]);
   });
 
-  it('marks each session by what the server says, in words as well as marks', () => {
+  it('marks each workout by what the server says, in words as well as marks', () => {
     const week = card.weeks[2];
 
     expect(
@@ -141,7 +141,7 @@ describe('the running program in coach words', () => {
     );
   });
 
-  it('shows a session the client did late, with the day, and one started late (TRN-020 v2)', () => {
+  it('shows a workout the client did late, with the day, and one started late (TRN-020 v2)', () => {
     const week = programWeek('late', '2026-09-14', 1, ['Completed', 'InProgress', 'Completed']);
     const late = programBlock(
       [
@@ -193,11 +193,11 @@ describe('a program that has not started, or has ended', () => {
     });
     expect(card.facts.map((fact) => fact.text)).toEqual([
       'Mon 26 Oct – Sun 8 Nov',
-      '2 weeks · 8 sessions',
+      '2 weeks · 8 workouts',
     ]);
     // Nothing has begun, so no week claims to be this one.
     expect(card.weeks.some((week) => week.isCurrent)).toBe(false);
-    expect(card.weeks[0].summary).toBe('4 sessions');
+    expect(card.weeks[0].summary).toBe('4 workouts');
   });
 
   it('says a completed program is complete, with the dates it ran', () => {
@@ -211,12 +211,12 @@ describe('a program that has not started, or has ended', () => {
     });
     expect(card.facts.map((fact) => fact.text)).toEqual([
       'Mon 20 Jul – Sun 16 Aug',
-      '16 of 16 sessions done',
+      '16 of 16 workouts done',
     ]);
     expect(card.facts.some((fact) => fact.warm)).toBe(false);
   });
 
-  it('says a cancelled program is cancelled, and counts only the sessions that were done', () => {
+  it('says a cancelled program is cancelled, and counts only the workouts that were done', () => {
     const card = blockCard(cancelledBlock(), context);
 
     expect(card).toMatchObject({
@@ -227,7 +227,7 @@ describe('a program that has not started, or has ended', () => {
     });
     expect(card.facts.map((fact) => fact.text)).toEqual([
       'Mon 4 May – Sun 17 May',
-      '2 of 8 sessions done',
+      '2 of 8 workouts done',
     ]);
     const left = card.weeks[1].sessions[0];
     expect(left).toMatchObject({ mark: 'closed', markLabel: 'Cancelled' });
@@ -297,13 +297,13 @@ describe('a program that has not started, or has ended', () => {
       ).history[0];
 
     expect(closed('All programmed sessions were completed.').what).toBe(
-      'Finished · every session done',
+      'Finished · every workout done',
     );
     expect(closed('Closed after its last day with 2 programmed session(s) not done.').what).toBe(
-      'Closed after its last day · 2 sessions not done',
+      'Closed after its last day · 2 workouts not done',
     );
     expect(closed('Closed after its last day with 1 programmed session(s) not done.').what).toBe(
-      'Closed after its last day · 1 session not done',
+      'Closed after its last day · 1 workout not done',
     );
     // A program with no recorded history shows no fold.
     expect(blockCard(completedBlock(), context).history).toEqual([]);
@@ -315,14 +315,14 @@ describe('a program that has not started, or has ended', () => {
     expect(lastYear.facts[0].text).toBe('22 Dec 2025 – 18 Jan 2026');
   });
 
-  it('says a single session in the singular', () => {
+  it('says a single workout in the singular', () => {
     const one = programBlock([programWeek('one', '2026-09-14', 1, ['Completed'])], {
       id: 'one',
       status: 'Completed',
     });
     const card = blockCard(one, context);
 
-    expect(card.facts[1].text).toBe('1 of 1 session done');
+    expect(card.facts[1].text).toBe('1 of 1 workout done');
   });
 });
 
@@ -341,7 +341,7 @@ describe('a program past its last day that never closed', () => {
     });
     expect(card.facts.map((fact) => fact.text)).toEqual([
       'Sat 1 Aug – Fri 11 Sep',
-      '22 of 24 sessions done',
+      '22 of 24 workouts done',
       '2 missed',
     ]);
     expect(card.weeks.some((week) => week.isCurrent)).toBe(false);
@@ -358,7 +358,7 @@ describe('a program past its last day that never closed', () => {
       'Cancel program',
     ]);
     // Past its last day it closes as finished, the two missed sessions kept on record (TRN-013).
-    expect(items[2]).toMatchObject({ action: 'complete', hint: 'Missed sessions stay on record' });
+    expect(items[2]).toMatchObject({ action: 'complete', hint: 'Missed workouts stay on record' });
     expect(items[2].disabled).toBeFalsy();
     expect(items[3].disabled).toBeFalsy();
   });
@@ -401,12 +401,12 @@ describe('the other programs', () => {
     expect(others.coming[0]).toMatchObject({
       pill: { label: 'Starts Mon 26 Oct', tone: 'info' },
       range: 'Mon 26 Oct – Sun 8 Nov',
-      summary: '8 sessions',
+      summary: '8 workouts',
     });
     expect(others.earlier[0]).toMatchObject({
       pill: { label: 'Completed', tone: 'neutral' },
       range: 'Mon 20 Jul – Sun 16 Aug',
-      summary: '16 of 16 sessions done',
+      summary: '16 of 16 workouts done',
     });
   });
 
@@ -440,7 +440,7 @@ describe('what a coach can do about a program', () => {
     // The weeks still to come can change after workouts were done; those stay locked (TRN-028).
     expect(items[3]).toMatchObject({
       action: 'edit-weeks',
-      hint: 'Change the sessions still to come',
+      hint: 'Change the workouts still to come',
     });
     expect(items[3].disabled).toBeFalsy();
     // Workouts were done, so the dates can no longer move; sessions remain, so it cannot be closed.
@@ -514,7 +514,7 @@ describe('what a coach can do about a program', () => {
     expect(programMenu(null, false, context)).toEqual([]);
   });
 
-  it('closes a running program early only when every session is done', () => {
+  it('closes a running program early only when every workout is done', () => {
     const done = programBlock(
       [programWeek('d', '2026-09-14', 1, ['Completed', 'Completed', 'Completed', 'Completed'])],
       { id: 'd', status: 'Active', currentWeekNumber: 1 },
@@ -524,7 +524,7 @@ describe('what a coach can do about a program', () => {
       (item) => item.action === 'complete',
     );
 
-    expect(complete).toMatchObject({ label: 'Close program', hint: 'Every session is done' });
+    expect(complete).toMatchObject({ label: 'Close program', hint: 'Every workout is done' });
     expect(complete?.disabled).toBeFalsy();
   });
 
@@ -542,7 +542,7 @@ describe('what a coach can do about a program', () => {
   });
 });
 
-describe('what a session prescribes', () => {
+describe('what a workout prescribes', () => {
   function set(fields: Partial<SetPrescriptionView>): SetPrescriptionView {
     return {
       id: 'set',
@@ -625,11 +625,20 @@ describe('what a session prescribes', () => {
     ).toEqual(['5 reps · 75% of training max']);
   });
 
+  it('says an older set with one end of its reps as the client’s app does', () => {
+    expect(setLines([set({ repetitionsMaximum: 10 })], 'Kilogram', 'en-US')).toEqual([
+      'up to 10 reps',
+    ]);
+    expect(setLines([set({ repetitionsMinimum: 8 })], 'Kilogram', 'en-US')).toEqual([
+      'at least 8 reps',
+    ]);
+  });
+
   it('names a set with nothing prescribed rather than leaving it blank', () => {
     expect(setLines([set({})], 'Kilogram', 'en-US')).toEqual(['Set']);
   });
 
-  it('lists the exercises of a session with their notes and demos', () => {
+  it('lists the exercises of a workout with their notes and demos', () => {
     const session = {
       id: 's1',
       exercises: [

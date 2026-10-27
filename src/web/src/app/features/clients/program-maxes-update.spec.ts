@@ -211,10 +211,10 @@ describe('Update maxes for the coming weeks', () => {
     expect(api.applyTrainingMaxes).not.toHaveBeenCalled();
     const section = query<HTMLElement>(host, '.preview');
     expect(textOf(section.querySelector('.lift-move'))).toBe('100 kg to 120 kg');
-    expect(textOf(section.querySelector('.strong'))).toBe('2 weights change in 2 sessions.');
+    expect(textOf(section.querySelector('.strong'))).toBe('2 weights change in 2 workouts.');
     expect(textOf(section)).toContain('The new max applies from week 2.');
     expect(textOf(section)).toContain(
-      '1 session has started or is already past, so it keeps its weights.',
+      '1 workout has started or is already past, so it keeps its weights.',
     );
     expect(Array.from(section.querySelectorAll('.week-title')).map(textOf)).toEqual([
       'Week 2',

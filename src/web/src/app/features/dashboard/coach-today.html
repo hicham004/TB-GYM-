@@ -95,7 +95,7 @@
           }
         </app-stat-tile>
         <app-stat-tile
-          label="Sessions done this week"
+          label="Workouts done this week"
           i18n-label
           [value]="sessionsValue()"
           [context]="sessionsContext()"
@@ -222,7 +222,7 @@
             <span class="week-number" i18n
               >{{ view.week.completed }} of {{ view.week.scheduled }}</span
             >
-            <span class="week-caption" i18n>sessions done so far</span>
+            <span class="week-caption" i18n>workouts done so far</span>
           </p>
         </div>
         <div class="bars" aria-hidden="true">
@@ -239,7 +239,7 @@
         <div class="tb-visually-hidden">
           <table>
             <caption i18n>
-              Sessions this week, by day
+              Workouts this week, by day
             </caption>
             <thead>
               <tr>

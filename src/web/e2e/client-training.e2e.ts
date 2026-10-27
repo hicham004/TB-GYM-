@@ -537,7 +537,7 @@ for (const [width, height] of [
     await expect(page.locator('#program-title')).toHaveText('Lean & Strong · Phase 2');
     await expect(page.locator('.facts li')).toHaveText([
       'Mon 14 Sep – Sun 25 Oct',
-      '9 of 24 sessions done',
+      '9 of 24 workouts done',
       '1 missed',
     ]);
     await expect(page.locator('.week.current h3')).toHaveText('Week 3');
@@ -625,7 +625,7 @@ test('a session opens in a sheet that names it, holds focus and gives it back on
   await expect(sheet.getByText('Back Squat', { exact: true })).toBeVisible();
   await expect(sheet).toContainText('3 × 5 reps · 60 kg · RPE 8');
   await expect(sheet).toContainText('2 × 8–10 reps · 62.5 kg · RPE 7.5');
-  await expect(sheet.locator('summary')).toHaveText('Swap this session');
+  await expect(sheet.locator('summary')).toHaveText('Swap this workout');
   await axe(page);
   await page.screenshot({ path: 'test-results/r34a-training-session-1440.png' });
 
@@ -791,7 +791,7 @@ test.describe('a refused change', () => {
     await page.getByRole('button', { name: 'Manage program' }).click();
     await page.getByRole('button', { name: /^Cancel program/ }).click();
     const dialog = page.getByRole('dialog', { name: 'Cancel program' });
-    await expect(dialog).toContainText('Maya stops seeing the sessions still to come.');
+    await expect(dialog).toContainText('Maya stops seeing the workouts still to come.');
 
     await dialog.getByRole('button', { name: 'Cancel program' }).click();
     await expect(dialog.getByText('Say why, so it is on record.')).toBeVisible();
@@ -1110,10 +1110,10 @@ test('updating a max shows every new weight first, then sends what was reviewed'
   await sheet.getByRole('button', { name: 'Show the new weights' }).click();
 
   await expect(sheet.locator('.lift-move')).toHaveText('70 kg to 75 kg');
-  await expect(sheet.locator('.strong')).toHaveText('4 weights change in 2 sessions.');
+  await expect(sheet.locator('.strong')).toHaveText('4 weights change in 2 workouts.');
   await expect(sheet).toContainText('The new max applies from week 3.');
   await expect(sheet).toContainText(
-    '3 sessions have started or are already past, so they keep their weights.',
+    '3 workouts have started or are already past, so they keep their weights.',
   );
   await expect(sheet.locator('.week-title')).toHaveText(['Week 3', 'Week 4']);
   await expect(sheet.locator('.sets li').first()).toContainText('Set 1 · 5 reps · RPE 8');
@@ -1188,7 +1188,7 @@ test('a lift’s logged sets suggest a max, and Review opens its new weights alr
   const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
   await expect(sheet.locator('.lift-move')).toHaveText('70 kg to 77.07 kg');
   await expect(sheet.locator('.lift-changes .why')).toContainText('the best set of week 2');
-  await expect(sheet.locator('.strong')).toHaveText('4 weights change in 2 sessions.');
+  await expect(sheet.locator('.strong')).toHaveText('4 weights change in 2 workouts.');
   expect(requests[0].body).toEqual({
     mesocycleVersion: 4,
     changes: [
@@ -1817,7 +1817,7 @@ test('Edit weeks opens the weeks still to come in the builder’s grid and appli
 
   const sheet = await reviewRenamedWeek(page);
   await expect(sheet.locator('.review-headline')).toHaveText(
-    '1 session changed · 1 week renamed or shared differently',
+    '1 workout changed · 1 week renamed or shared differently',
   );
   await expect(sheet.locator('.review-title')).toHaveText([
     'Week 4 · Heavy',

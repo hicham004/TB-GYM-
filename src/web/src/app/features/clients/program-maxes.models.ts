@@ -421,9 +421,9 @@ export interface PreviewWeekGroup {
 export interface MaxesPreviewSummary {
   readonly lifts: readonly PreviewLiftLine[];
   readonly weeks: readonly PreviewWeekGroup[];
-  /** "6 weights change in 3 sessions." */
+  /** "6 weights change in 3 workouts." */
   readonly counts: string;
-  /** "2 sessions have started or are already past, so they keep their weights."; null when none. */
+  /** "2 workouts have started or are already past, so they keep their weights."; null when none. */
   readonly kept: string | null;
   readonly appliesFrom: string;
   readonly changedSets: number;
@@ -459,13 +459,13 @@ function countsText(preview: TrainingMaxesPreviewView): string {
   const sessions = num(preview.sessionCount);
   if (changed === 0) {
     return sessions === 0
-      ? $localize`No session still to come uses this max, so no weight changes now. The new max is kept for weeks you add later.`
+      ? $localize`No workout still to come uses this max, so no weight changes now. The new max is kept for weeks you add later.`
       : $localize`Once rounded, the new max gives the same weights as before.`;
   }
   const weights =
     changed === 1 ? $localize`1 weight changes` : $localize`${changed}:count: weights change`;
   const where =
-    sessions === 1 ? $localize`in 1 session` : $localize`in ${sessions}:count: sessions`;
+    sessions === 1 ? $localize`in 1 workout` : $localize`in ${sessions}:count: workouts`;
   const same =
     unchanged === 0
       ? ''
@@ -479,8 +479,8 @@ function keptText(preview: TrainingMaxesPreviewView): string | null {
   const kept = num(preview.keptSessionCount);
   if (kept === 0) return null;
   return kept === 1
-    ? $localize`1 session has started or is already past, so it keeps its weights.`
-    : $localize`${kept}:count: sessions have started or are already past, so they keep their weights.`;
+    ? $localize`1 workout has started or is already past, so it keeps its weights.`
+    : $localize`${kept}:count: workouts have started or are already past, so they keep their weights.`;
 }
 
 /** The preview, grouped the way a coach reads a program: week, then day, then lift. */
