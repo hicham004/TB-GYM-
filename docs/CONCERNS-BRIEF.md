@@ -645,3 +645,101 @@ the Render test copy).
 built in the audit's fix batch A1 (`docs/FULL-AUDIT-2026-10.md`, section 0; MED-016): "Watch on YouTube" in the
 client's player and the coach's demo sheet, and the exercise sheet no longer says clients see it in their
 workout. Embedding is still open.
+
+## C19 The app needs an internet connection; it does not work offline
+
+**Seen:** the owner asked whether the app works without wifi (2026-10-26).
+
+**Today:** no. Read from the code, not tried in airplane mode.
+
+- Wifi or mobile data, either works; what the app needs is a connection to the server. TB Gym is a website
+  installed as an app: every screen asks the server for what it shows, and every save goes to the server
+  at once (`src/web/src/app/core/api/api-client.ts`). Nothing is kept on the phone.
+- Opening the app with no connection shows the browser's own "No internet" page. The page the app starts
+  from is always fetched fresh (`src/web/nginx.conf` sends it with `no-cache`), and there is no service
+  worker to keep a copy: R2.5c left it out on purpose (`docs/UI-REDESIGN-PLAN.md`), so a client's health
+  data and a coach's client list never sit in an offline cache; the manifest only installs the icon.
+- A connection that drops while a screen is open: what is on screen stays. Every save then says "The app
+  couldn't connect. Check your connection and try again." (`core/api/api-error.ts`), and a page not opened
+  yet says "That page couldn't be opened. Check your connection and try again." with Try again
+  (`core/routing/navigation-failure.ts`). A client logging a workout keeps the sets they typed on the page
+  ("Your entries are still on this page", `features/training/today-training.ts`) and retries each one; the
+  program and meal-plan builders retry on their own with growing waits (`program-autosave.ts`); messaging
+  says "You're offline, so new messages won't appear on their own" and offers a check by hand.
+- What a drop can lose: a workout's unsaved sets if the tab is closed, or the phone drops it, while still
+  offline, as the drafts live in the page's memory only (`workout-set-drafts.ts`). Everything else is
+  written only once the server has answered, so nothing else is half-saved.
+- Competitors: Trainerize clients can view a saved schedule offline but not log a workout; its offline
+  request is marked "Not Right Now". TrainHeroic has an offline setting that logs and syncs later (videos
+  don't play). TrueCoach: not confirmed either way.
+
+**Recommend:**
+
+- Now: nothing to build. Say it once in the help text: TB Gym needs a connection, wifi or mobile data, and
+  a lost connection keeps what you typed on the page until it is back.
+- Next, small, if clients train in gyms with poor signal: keep a workout's unsaved sets in the phone's
+  browser storage and resend them when the connection returns, so a closed tab loses nothing. Safe to
+  resend: a set's save names the set and carries its version
+  (`/api/training/me/workouts/{workoutExecutionId}/sets/{setPerformanceId}`), so sending it again writes
+  the same set, never a second one. The stored drafts would be numbers and a note, no health data. Vitest
+  and one live airplane-mode pass.
+- Later, bigger: the app opens offline with the last-loaded training day (an Angular service worker that
+  keeps the app's files and that day's answers, and nothing else, to honour R2.5c). It adds a caching layer
+  every release must respect; only if clients ask.
+- Not recommended: a full offline app (coach edits, nutrition and messaging offline, merged later). Weeks
+  of work, and every server rule (actuals never overwrite prescribed, no overlapping enrollments, a released
+  client read-only) would need an offline answer.
+
+**Owner decides:** is "keeps your entries on the page until the signal returns" enough for launch, or should
+unsaved sets survive a closed tab first (the small step)? **Status:** Open.
+
+## C20 People sign up on their own and pick TB Gym's ready-made programs, with 3D demos
+
+**Seen:** the owner restated the ready-made programs idea (2026-10-26), replacing the 13 October page's "sell it
+through a coach": a person registers on the website as a client with no invitation, sees TB Gym's ready-made
+programs, starts a free plan open to everyone or subscribes to a paid one (training only, no food), logs weights
+and tracks progress, and no future weights are worked out for them. Watch demo shows an animated 3D figure made
+from imported 3D models, not a filmed person.
+
+**Today:** read from the code, not clicked through.
+
+- A client joins only by a coach's invitation (ADR 0002); only a new coaching space's owner self-registers. A
+  person with no coaching space sees "You are not part of a coaching space right now" (`dashboard.html`).
+- Inside one coaching space the rest exists: products whose price options cover Training only, a free option
+  that starts at once (SUB-008), a template copied to each client with every week showing (TRN-006), the workout
+  player with logging, records, progress and share cards.
+- No worked-out weights needs no code: a set with no load (the builder's None strategy) leaves the weight to the
+  client, and the player shows what they lifted last time ("Last time", `today-training.html`). Loads from maxes
+  (PercentageWorkingMax, RpeChart, ADR 0036) apply only to sets built that way.
+- Exercises and their media belong to one coaching space. A demo can be an uploaded MP4 or WebM (scanned, up to
+  500 MB) that plays inside the player with play controls; GIF is not accepted.
+- Missing: sign-up without an invitation, a page listing programs to start, a program that starts by itself, self-
+  guided clients kept off Coach Today, a demo that plays like a GIF, and payment nobody records by hand (Step 5).
+
+**Others** (searched 2026-10-26; prices vary by store): Hevy, free routines, logging and an animated figure per
+exercise, Pro about $4.99 a month; Boostcamp, free logging and programs, Pro $59.99 a year for coach-only programs;
+JEFIT, free community routines with ads, Elite $12.99 a month for coach-built plans; Caliber, free log, Plus about
+$12 a month for coach-made plans; Virtuagym and Fit Coach show 3D figures (13 October research). Fitbod, Caliber and
+Ladder film real people. The pattern is the owner's idea: free logging, tracking and demos; paid expert programs.
+
+**Recommend:**
+
+- One coaching space owned by TB Gym, where everyone who signs up lands, the partner its coach. Coaches' own
+  spaces don't change and never see these clients.
+- Five slices, about 11 to 18 hours of AI work: (1) sign up as a client of that one space without an invitation,
+  a decision record amending ADR 0002, the terms and health consent asked once published (CLI-010); (2) a programs
+  page with a sample week and Start; (3) a free plan starts at once and copies its program with every week showing,
+  through `TrainingCoveragePolicy`, and these clients raise nothing on Coach Today; (4) a short demo plays like a GIF
+  (muted, looping, inline); (5) paid: Subscribe, pay by Whish, the owner confirms, until Step 5.
+- 3D clips: a one-time library whose licence allows a paid app and keeping and converting the files, tested on its
+  free sample first: ExerciseDB on Gumroad (1,500+ moves, about $300, free 30-move sample) or RepDB (about $399 with
+  looping animations). Each GIF converted to an MP4 loop, many times smaller. Not the ExerciseDB API (its terms
+  forbid keeping copies), not a reseller of copied GIFs. A 3D figure the client can turn is not worth it now.
+- Free gets two or three starter programs, logging, tracking and every demo; paid gets the whole catalogue, later
+  perhaps weights worked out from the client's logs, which TB Gym already does for coaches.
+- Terms and a health notice written or reviewed by a lawyer before strangers train with no coach.
+- Risk: paying coaches may read a free TB Gym program as competition; a later Find a coach link for free users
+  makes it a source of clients for them.
+
+**Owner decides:** what is free and what is paid; free first or both at once; when, as it is outside the
+commercial track's order. **Status:** Open.
