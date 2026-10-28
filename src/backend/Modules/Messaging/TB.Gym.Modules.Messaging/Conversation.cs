@@ -206,6 +206,14 @@ public sealed class ConversationParticipant : TenantEntity
 
     public DateTimeOffset? LastReadAtUtc { get; private set; }
 
+    /// <summary>
+    /// When this participant marked the chat unread (MSG-022, critique B3b), as WhatsApp does: the chat
+    /// counts as unread to them until they next read it, whatever the cursor says. Null otherwise.
+    /// </summary>
+    public DateTimeOffset? MarkedUnreadAtUtc { get; private set; }
+
+    public bool IsMarkedUnread => MarkedUnreadAtUtc is not null;
+
     /// <summary>Only the coach side may moderate, and only the other participant's message.</summary>
     public bool CanModerate => Role == ConversationParticipantRole.Coach;
 
@@ -236,19 +244,40 @@ public sealed class ConversationParticipant : TenantEntity
         new(tenantId, conversationId, userId, role);
 
     /// <summary>
-    /// Advances this participant's own cursor.
+    /// How many unread this chat counts as for this participant, its unread messages given: a chat
+    /// marked unread counts as at least one, so the Unread filter and the badge both show it.
+    /// </summary>
+    public static long UnreadIncludingMark(long unreadMessages, bool markedUnread) =>
+        markedUnread ? Math.Max(1, unreadMessages) : unreadMessages;
+
+    /// <summary>Marks the chat unread for this participant (MSG-022); marking it again changes nothing.</summary>
+    /// <returns><see langword="true"/> when the mark was set now.</returns>
+    public bool MarkUnread(DateTimeOffset now)
+    {
+        if (IsMarkedUnread)
+        {
+            return false;
+        }
+
+        MarkedUnreadAtUtc = now;
+        return true;
+    }
+
+    /// <summary>
+    /// Advances this participant's own cursor, and takes away a mark set by Mark as unread.
     /// </summary>
     /// <param name="throughSequence">The sequence the caller says it has displayed.</param>
     /// <param name="latestCommittedSequence">The conversation's newest committed sequence.</param>
     /// <param name="now">The server instant to stamp when the cursor moves.</param>
-    /// <returns><see langword="true"/> when the cursor actually moved.</returns>
+    /// <returns><see langword="true"/> when the cursor moved or the mark went.</returns>
     /// <remarks>
     /// A sequence beyond the newest committed message is <b>clamped down</b> to it rather than
     /// refused. The client reports what it has displayed, and a message committed between rendering
     /// and reporting is a normal race rather than a caller error; clamping records the honest truth —
     /// everything that existed has been read — while making it impossible to mark a message that does
     /// not exist. A request at or below the current cursor is accepted and changes nothing, because
-    /// retrying a read report must not be an error.
+    /// retrying a read report must not be an error. A read report is the person reading the chat, so it
+    /// clears the mark even when there is nothing new to read.
     /// </remarks>
     public bool AdvanceReadCursor(
         long throughSequence,
@@ -258,10 +287,13 @@ public sealed class ConversationParticipant : TenantEntity
         ArgumentOutOfRangeException.ThrowIfNegative(throughSequence);
         ArgumentOutOfRangeException.ThrowIfNegative(latestCommittedSequence);
 
+        var unmarked = IsMarkedUnread;
+        MarkedUnreadAtUtc = null;
+
         var clamped = Math.Min(throughSequence, latestCommittedSequence);
         if (clamped <= LastReadSequence)
         {
-            return false;
+            return unmarked;
         }
 
         LastReadSequence = clamped;

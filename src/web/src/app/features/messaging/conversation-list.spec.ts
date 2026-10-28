@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
-import { button, press, settle } from '../../../testing/dom';
+import { button, menuChoices, press, query, settle } from '../../../testing/dom';
 import { ConversationList } from './conversation-list';
 import type { Conversation, MessagePreview } from './messaging.models';
 
@@ -42,7 +42,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     accessReason: 'Granted',
     lastMessage: preview(),
     isReadOnly: false,
-    isAwaitingReply: false,
+    isMarkedUnread: false,
     latestFromCounterpart: null,
     ...overrides,
   };
@@ -52,7 +52,6 @@ interface Options {
   readonly selectedId?: string | null;
   readonly hasMore?: boolean;
   readonly loadingMore?: boolean;
-  readonly showWaiting?: boolean;
   readonly now?: Date;
 }
 
@@ -64,7 +63,6 @@ async function render(conversations: readonly Conversation[], options: Options =
   fixture.componentRef.setInput('selectedId', options.selectedId ?? null);
   fixture.componentRef.setInput('hasMore', options.hasMore ?? false);
   fixture.componentRef.setInput('loadingMore', options.loadingMore ?? false);
-  fixture.componentRef.setInput('showWaiting', options.showWaiting ?? false);
   const chosen: Conversation[] = [];
   let loadMore = 0;
   fixture.componentInstance.choose.subscribe((picked) => chosen.push(picked));
@@ -171,34 +169,49 @@ describe('ConversationList', () => {
     expect(rami.getAttribute('aria-label')).toBe('Rami Tabet, no unread messages');
   });
 
-  it('marks a thread waiting for the coach’s reply, in words and with a quiet tag, on the coach’s side', async () => {
-    const { host } = await render(
-      [
-        conversation({ isAwaitingReply: true }),
-        conversation({ id: 'conversation-2', isAwaitingReply: true, unreadCount: 2 }),
-      ],
-      { showWaiting: true },
-    );
-    const [read, unread] = rows(host);
+  it('draws a chat marked unread as a dot with no number, and says so in words (critique B3b)', async () => {
+    const { host } = await render([
+      conversation({ isMarkedUnread: true }),
+      conversation({ id: 'conversation-2', isMarkedUnread: true, unreadCount: 2 }),
+    ]);
+    const [marked, both] = rows(host);
 
-    const tag = read.querySelector('.tag.waiting');
-    expect(textOf(tag)).toBe('Waiting');
-    expect(tag?.getAttribute('aria-hidden')).toBe('true');
-    expect(read.getAttribute('aria-label')).toBe('Lea Haddad, waiting for your reply');
-    // The count is the cue when something is unread; the name still says it is waiting.
-    expect(unread.querySelector('.tag')).toBeNull();
-    expect(textOf(unread.querySelector('.count'))).toBe('2');
-    expect(unread.getAttribute('aria-label')).toBe(
-      'Lea Haddad, 2 unread messages, waiting for your reply',
-    );
+    const dot = marked.querySelector('.count.marked');
+    expect(dot).not.toBeNull();
+    expect(textOf(dot)).toBe('');
+    expect(dot?.getAttribute('aria-hidden')).toBe('true');
+    expect(marked.getAttribute('aria-label')).toBe('Lea Haddad, marked unread');
+    expect(marked.closest('li')?.classList).toContain('waiting');
+    // With messages unread too, the number is the cue and the mark adds nothing to it.
+    expect(textOf(both.querySelector('.count'))).toBe('2');
+    expect(both.querySelector('.count.marked')).toBeNull();
+    expect(both.getAttribute('aria-label')).toBe('Lea Haddad, 2 unread messages');
   });
 
-  it('says nothing of waiting on a client’s side', async () => {
-    const { host } = await render([conversation({ isAwaitingReply: true, callerRole: 'Client' })]);
-    const [row] = rows(host);
+  it('offers Mark as unread in a read row’s menu only, and hands the chat to the screen', async () => {
+    const { fixture, host } = await render([
+      conversation(),
+      conversation({ id: 'conversation-2', unreadCount: 1 }),
+      conversation({ id: 'conversation-3', isMarkedUnread: true }),
+      conversation({ id: 'conversation-4', isAvailable: false }),
+    ]);
+    const marked: Conversation[] = [];
+    fixture.componentInstance.markUnread.subscribe((chat) => marked.push(chat));
 
-    expect(row.querySelector('.tag')).toBeNull();
-    expect(row.getAttribute('aria-label')).toBe('Lea Haddad, no unread messages');
+    const menus = Array.from(host.querySelectorAll('li')).map(
+      (row) => row.querySelector('app-menu.row-menu') !== null,
+    );
+    expect(menus).toEqual([true, false, false, false]);
+
+    const trigger = query<HTMLButtonElement>(host, 'app-menu.row-menu button');
+    expect(trigger.getAttribute('aria-label')).toBe('More for Lea Haddad');
+    trigger.click();
+    await settle(fixture);
+    menuChoices(trigger)
+      .find((item) => textOf(item).includes('Mark as unread'))!
+      .click();
+    await settle(fixture);
+    expect(marked.map((chat) => chat.id)).toEqual(['conversation-1']);
   });
 
   it('tags a thread nobody can write in: a former coach for a client, read-only for staff', async () => {

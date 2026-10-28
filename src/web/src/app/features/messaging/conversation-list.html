@@ -3,7 +3,7 @@
     @let last = conversation.lastMessage;
     <li
       [class.selected]="conversation.id === selectedId()"
-      [class.waiting]="conversation.unreadCount > 0"
+      [class.waiting]="countsAsUnread(conversation)"
       [class.unavailable]="!conversation.isAvailable"
     >
       <button
@@ -39,13 +39,23 @@
         @if (conversation.unreadCount > 0) {
           <!-- The number is the visible cue; the row's name says it in words. -->
           <span class="count" aria-hidden="true">{{ conversation.unreadCount }}</span>
+        } @else if (conversation.isMarkedUnread) {
+          <!-- Marked unread: a dot, as WhatsApp draws it, with no number to make up. -->
+          <span class="count marked" aria-hidden="true"></span>
         } @else if (conversation.isReadOnly) {
           <span class="tag">{{ readOnlyLabel(conversation) }}</span>
-        } @else if (showWaiting() && conversation.isAwaitingReply) {
-          <!-- Read but not answered yet; the row's name says it in words. -->
-          <span class="tag waiting" aria-hidden="true" i18n>Waiting</span>
         }
       </button>
+      @if (canMarkUnread(conversation)) {
+        <app-menu
+          class="row-menu"
+          icon="more"
+          label="More for {{ conversation.counterpart.displayName }}"
+          i18n-label
+          [items]="rowMenu"
+          (chosen)="markUnread.emit(conversation)"
+        />
+      }
     </li>
   }
 </ul>

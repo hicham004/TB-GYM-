@@ -67,6 +67,22 @@
 
   @if (!singleLayout()) {
     <nav class="inbox" #inbox aria-label="Conversations" i18n-aria-label>
+      @if (!forClient()) {
+        <!-- Saved replies to manage from here, as well as to pick in the composer (critique B3b). -->
+        <div class="inbox-head">
+          <button
+            appButton
+            type="button"
+            variant="outlined"
+            aria-haspopup="dialog"
+            data-saved-replies
+            (click)="openSavedReplies(true)"
+            i18n
+          >
+            Saved replies
+          </button>
+        </div>
+      }
       @if (showToolbar()) {
         <app-inbox-toolbar
           [filter]="inboxFilter()"
@@ -117,8 +133,8 @@
           [hasMore]="conversationsHasMore()"
           [loadingMore]="listLoadingMore()"
           [now]="now()"
-          [showWaiting]="!forClient()"
           (choose)="select($event)"
+          (markUnread)="markUnread($event)"
           (loadMore)="loadMoreConversations()"
         />
       }
@@ -157,6 +173,17 @@
           >
             Client details
           </button>
+        }
+        <!-- A client's only chat reopens by itself, which would read it again at once. -->
+        @if (!singleThread() && conversation.isAvailable) {
+          <app-menu
+            class="thread-menu"
+            icon="more"
+            label="More for {{ conversation.counterpart.displayName }}"
+            i18n-label
+            [items]="threadMenu"
+            (chosen)="markUnread(conversation)"
+          />
         }
         <p class="thread-unread tb-visually-hidden" role="status">
           @if (conversationUnread() > 0) {
@@ -467,7 +494,12 @@
 </div>
 
 <ng-template #savedRepliesSheet>
-  <app-saved-replies [draft]="draft()" (use)="useSavedReply($event)" />
+  <!-- From the inbox no chat's draft is offered as a new reply's text. -->
+  <app-saved-replies
+    [draft]="managingReplies() ? '' : draft()"
+    [manage]="managingReplies()"
+    (use)="useSavedReply($event)"
+  />
 </ng-template>
 
 <ng-template #clientSheet>

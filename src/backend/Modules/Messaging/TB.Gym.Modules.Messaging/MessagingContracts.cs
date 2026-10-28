@@ -34,9 +34,11 @@ public sealed record ConversationMessagePreview(
     MessageDeletionKind? DeletionKind);
 
 /// <summary>One conversation as its own participant sees it.</summary>
-/// <param name="IsAwaitingReply">
-/// The newest message still present was written by the other participant (MSG-022). False for a
-/// conversation the caller cannot currently open or can no longer write in.
+/// <param name="UnreadCount">The other participant's messages the caller has not read yet.</param>
+/// <param name="IsMarkedUnread">
+/// The caller marked the chat unread and has not read it since (MSG-022): it counts as unread in
+/// the Unread filter and the badge even with no unread message. False for a conversation the caller
+/// cannot currently open.
 /// </param>
 /// <param name="LatestFromCounterpart">
 /// The newest message still present that the other participant wrote, whoever spoke last, so the
@@ -59,7 +61,7 @@ public sealed record ConversationSummary(
     FeatureAccessReason AccessReason,
     ConversationMessagePreview? LastMessage,
     bool IsReadOnly = false,
-    bool IsAwaitingReply = false,
+    bool IsMarkedUnread = false,
     ConversationMessagePreview? LatestFromCounterpart = null);
 
 /// <summary>Which of the caller's conversations a list shows (MSG-022).</summary>
@@ -67,18 +69,18 @@ public enum ConversationListFilter
 {
     All = 1,
 
-    /// <summary>Something from the other participant the caller has not read yet.</summary>
+    /// <summary>
+    /// Something from the other participant the caller has not read yet, or a chat they marked
+    /// unread. Waiting for reply went in critique B3b: one Unread filter, as in WhatsApp.
+    /// </summary>
     Unread = 2,
-
-    /// <summary>The other participant spoke last and the caller can still answer.</summary>
-    AwaitingReply = 3,
 }
 
 /// <summary>
 /// How many of the caller's conversations each filter holds, over all of them whatever the search,
 /// so a filter's count never changes because of what was typed.
 /// </summary>
-public sealed record ConversationListCounts(int All, int Unread, int AwaitingReply);
+public sealed record ConversationListCounts(int All, int Unread);
 
 /// <summary>
 /// One keyset page of the caller's own conversations, newest activity first.
@@ -126,6 +128,7 @@ public sealed record MessageView(
     uint Version);
 
 /// <summary>The caller's own read cursor for one conversation, as the server holds it.</summary>
+/// <param name="IsMarkedUnread">The caller marked the chat unread and has not read it since.</param>
 public sealed record ConversationReadState(
     Guid ConversationId,
     Guid UserId,
@@ -133,7 +136,8 @@ public sealed record ConversationReadState(
     long LastReadSequence,
     DateTimeOffset? LastReadAtUtc,
     long UnreadCount,
-    long LatestSequence);
+    long LatestSequence,
+    bool IsMarkedUnread = false);
 
 /// <summary>
 /// One ascending page of history.
@@ -384,6 +388,12 @@ public interface IMessagingApplicationService
         Guid conversationId,
         AdvanceReadCursorRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Marks a chat unread for the caller (MSG-022), as WhatsApp does, until they next read it. Only a
+    /// participant who may open the chat can, as with reading it.
+    /// </summary>
+    Task<ReadStateCommandResult> MarkUnreadAsync(Guid conversationId, CancellationToken cancellationToken);
 
     Task<MessagingUnreadCount> CountUnreadAsync(CancellationToken cancellationToken);
 

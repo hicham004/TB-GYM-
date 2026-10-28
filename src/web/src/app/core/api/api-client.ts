@@ -1231,6 +1231,16 @@ export class ApiClient {
     );
   }
 
+  /** Mark as unread (MSG-022, critique B3b): the caller's own mark, until they next read the chat. */
+  markConversationUnread(
+    conversationId: string,
+  ): Observable<Phase3Contracts.ConversationReadState> {
+    return this.http.post<Phase3Contracts.ConversationReadState>(
+      `/api/messaging/conversations/${conversationId}/unread`,
+      {},
+    );
+  }
+
   getMessagingUnreadCount(): Observable<number> {
     return this.http
       .get<Phase3Contracts.MessagingUnreadCount>('/api/messaging/unread-count')

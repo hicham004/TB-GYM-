@@ -1715,12 +1715,14 @@ publishes its top bar the same way (`--tb-topbar-block-size`), so on a phone the
 sticks below it; the client's check-in review pins its send bar above the tab bar the same way.
 
 R3.5b gives the coach's side of that screen (C6) a search and filters (MSG-022) on the same list
-endpoint: `filter` (All, Unread, AwaitingReply) and `search` (names only). A filter or a search, and
-the first page's counts, classify the caller's whole list in a fixed number of queries — feature access
-for every client in one batched evaluation, then unread and the newest message still present only for
-the conversations that pass — and page the matching identifiers by the same `(LastActivityAtUtc, Id)`
-cursor in SQL, so the order and tie-breaker are the plain list's. Each row says whether it waits for a
-reply. Beside the thread, the coach reads the client's page read (`GET /api/clients/{clientId}/overview`),
+endpoint: `filter` (All, Unread; AwaitingReply went in critique B3b) and `search` (names only). A filter
+or a search, and the first page's counts, classify the caller's whole list in a fixed number of queries —
+feature access for every client in one batched evaluation, then unread and the marks only for the
+conversations that pass — and page the matching identifiers by the same `(LastActivityAtUtc, Id)`
+cursor in SQL, so the order and tie-breaker are the plain list's. Since B3b a participant's row in
+`messaging."ConversationParticipants"` holds `MarkedUnreadAtUtc` beside its read cursor: `POST
+/api/messaging/conversations/{id}/unread` sets it under the cursor's row lock, the next read report clears
+it, and each row says `IsMarkedUnread`. Beside the thread, the coach reads the client's page read (`GET /api/clients/{clientId}/overview`),
 which now also names the plan and carries the last finished workout. The `/messages` route is
 `REDESIGNED`, so the chat follows dark mode on both sides.
 

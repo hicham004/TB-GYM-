@@ -64,8 +64,11 @@ export interface Conversation {
   readonly lastMessage: MessagePreview | null;
   /** The client's thread with a coach they no longer have: readable, never writable (ADR 0026). */
   readonly isReadOnly: boolean;
-  /** The other person spoke last and the caller can still answer (MSG-022). */
-  readonly isAwaitingReply: boolean;
+  /**
+   * The caller marked the chat unread and has not read it since (MSG-022, critique B3b): it counts as
+   * unread, at least one in the badge, even with no unread message.
+   */
+  readonly isMarkedUnread: boolean;
   /**
    * The newest message still present that the other person wrote, whoever spoke last: what the
    * client's Today shows as their coach's latest (audit CLIENT-13).
@@ -73,10 +76,18 @@ export interface Conversation {
   readonly latestFromCounterpart: MessagePreview | null;
 }
 
-/** The coach's inbox filters (C6, MSG-022), as the address keeps them (`?show=waiting`). */
-export type InboxFilter = 'all' | 'unread' | 'waiting';
+/**
+ * The coach's inbox filters (C6, MSG-022), as the address keeps them (`?show=unread`). One Unread
+ * filter, as in WhatsApp: Waiting for reply went in critique B3b.
+ */
+export type InboxFilter = 'all' | 'unread';
 
-export const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unread', 'waiting'];
+export const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unread'];
+
+/** Whether a chat counts as unread to the caller: an unread message, or their own mark. */
+export function countsAsUnread(conversation: Conversation): boolean {
+  return conversation.unreadCount > 0 || conversation.isMarkedUnread;
+}
 
 /** How many conversations each filter holds, over the whole list whatever the search. */
 export type InboxCounts = Readonly<Record<InboxFilter, number>>;
@@ -105,14 +116,7 @@ export function serverInboxQuery(query: InboxQuery): {
 }
 
 export function inboxFilterParam(filter: InboxFilter): ConversationListFilter {
-  switch (filter) {
-    case 'unread':
-      return 'Unread';
-    case 'waiting':
-      return 'AwaitingReply';
-    default:
-      return 'All';
-  }
+  return filter === 'unread' ? 'Unread' : 'All';
 }
 
 export interface Message {
@@ -182,6 +186,8 @@ export interface ConversationReadState {
   readonly lastReadAtUtc: string | null;
   readonly unreadCount: number;
   readonly latestSequence: number;
+  /** The caller marked the chat unread and has not read it since (MSG-022). */
+  readonly isMarkedUnread: boolean;
 }
 
 export interface MessagePage {
@@ -237,7 +243,7 @@ export function mapConversation(value: ContractConversationSummary): Conversatio
     accessReason: value.accessReason,
     lastMessage: value.lastMessage ? mapPreview(value.lastMessage) : null,
     isReadOnly: value.isReadOnly ?? false,
-    isAwaitingReply: value.isAwaitingReply ?? false,
+    isMarkedUnread: value.isMarkedUnread ?? false,
     latestFromCounterpart: value.latestFromCounterpart
       ? mapPreview(value.latestFromCounterpart)
       : null,
@@ -258,7 +264,6 @@ function mapCounts(value: ContractListCounts): InboxCounts {
   return {
     all: toCount(value.all),
     unread: toCount(value.unread),
-    waiting: toCount(value.awaitingReply),
   };
 }
 
@@ -383,6 +388,7 @@ export function mapReadState(value: ContractReadState): ConversationReadState {
     lastReadAtUtc: value.lastReadAtUtc ?? null,
     unreadCount: toCount(value.unreadCount),
     latestSequence: toCount(value.latestSequence),
+    isMarkedUnread: value.isMarkedUnread ?? false,
   };
 }
 

@@ -5,7 +5,6 @@ import { INBOX_FILTERS, type InboxCounts, type InboxFilter } from './messaging.m
 const FILTER_LABELS: Record<InboxFilter, string> = {
   all: $localize`All`,
   unread: $localize`Unread`,
-  waiting: $localize`Waiting for reply`,
 };
 
 /**

@@ -137,18 +137,26 @@
       <ul class="replies">
         @for (reply of visible(); track reply.id) {
           <li>
-            <button
-              type="button"
-              class="use"
-              [attr.aria-label]="reply.title"
-              [attr.aria-describedby]="'reply-text-' + reply.id"
-              (click)="useReply(reply)"
-            >
-              <span class="reply-title" dir="auto">{{ reply.title }}</span>
-              <span class="reply-text" dir="auto" [id]="'reply-text-' + reply.id">{{
-                reply.body
-              }}</span>
-            </button>
+            @if (manage()) {
+              <!-- Managed from the inbox: no chat to drop the reply into, so it is only read. -->
+              <div class="use read">
+                <span class="reply-title" dir="auto">{{ reply.title }}</span>
+                <span class="reply-text" dir="auto">{{ reply.body }}</span>
+              </div>
+            } @else {
+              <button
+                type="button"
+                class="use"
+                [attr.aria-label]="reply.title"
+                [attr.aria-describedby]="'reply-text-' + reply.id"
+                (click)="useReply(reply)"
+              >
+                <span class="reply-title" dir="auto">{{ reply.title }}</span>
+                <span class="reply-text" dir="auto" [id]="'reply-text-' + reply.id">{{
+                  reply.body
+                }}</span>
+              </button>
+            }
             <button
               type="button"
               class="edit"

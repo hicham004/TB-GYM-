@@ -26,16 +26,16 @@ public sealed class ConversationListQueryDomainTests
     [DataRow("maya k", false)]
     [DataRow("ahma", true)]
     public void EveryWordTypedMustBeInTheName(string search, bool expected) =>
-        Assert.AreEqual(expected, Query(search).Matches("Maya Rahman", hasUnread: false, isAwaitingReply: false));
+        Assert.AreEqual(expected, Query(search).Matches("Maya Rahman", hasUnread: false));
 
     [TestMethod]
     public void AccentsAndArabicVowelSignsNeverDecideAMatch()
     {
-        Assert.IsTrue(Query("elie kh").Matches("Élie Khoury", false, false));
-        Assert.IsTrue(Query("ÉLIE").Matches("Elie Khoury", false, false));
-        Assert.IsTrue(Query("zoe").Matches("Zoë Haddad", false, false));
+        Assert.IsTrue(Query("elie kh").Matches("Élie Khoury", false));
+        Assert.IsTrue(Query("ÉLIE").Matches("Elie Khoury", false));
+        Assert.IsTrue(Query("zoe").Matches("Zoë Haddad", false));
         // "محمد" written with and without its vowel signs is the same name.
-        Assert.IsTrue(Query("محمد").Matches("مُحَمَّد نصر", false, false));
+        Assert.IsTrue(Query("محمد").Matches("مُحَمَّد نصر", false));
         Assert.AreEqual("eleve", ConversationListQuery.Fold("Élève"));
     }
 
@@ -43,18 +43,25 @@ public sealed class ConversationListQueryDomainTests
     public void AFilterKeepsOnlyWhatItNames()
     {
         var unread = Query(null, ConversationListFilter.Unread);
-        Assert.IsTrue(unread.Matches("Maya Rahman", hasUnread: true, isAwaitingReply: false));
-        Assert.IsFalse(unread.Matches("Maya Rahman", hasUnread: false, isAwaitingReply: true));
-
-        var waiting = Query(null, ConversationListFilter.AwaitingReply);
-        Assert.IsTrue(waiting.Matches("Maya Rahman", hasUnread: false, isAwaitingReply: true));
-        Assert.IsFalse(waiting.Matches("Maya Rahman", hasUnread: true, isAwaitingReply: false));
+        Assert.IsTrue(unread.Matches("Maya Rahman", hasUnread: true));
+        Assert.IsFalse(unread.Matches("Maya Rahman", hasUnread: false));
+        Assert.IsTrue(Query(null, ConversationListFilter.All).Matches("Maya Rahman", hasUnread: false));
 
         // A filter and a search together: both must hold.
-        var both = Query("omar", ConversationListFilter.AwaitingReply);
-        Assert.IsTrue(both.Matches("Omar Nasser", false, true));
-        Assert.IsFalse(both.Matches("Maya Rahman", false, true));
-        Assert.IsFalse(both.Matches("Omar Nasser", true, false));
+        var both = Query("omar", ConversationListFilter.Unread);
+        Assert.IsTrue(both.Matches("Omar Nasser", true));
+        Assert.IsFalse(both.Matches("Maya Rahman", true));
+        Assert.IsFalse(both.Matches("Omar Nasser", false));
+    }
+
+    [TestMethod]
+    public void WaitingForReplyIsNoFilterAnyMore()
+    {
+        // One Unread filter, as in WhatsApp (critique B3b): the third filter's number is refused.
+        Assert.IsNull(ConversationListQuery.TryCreate(null, (ConversationListFilter)3));
+        CollectionAssert.AreEqual(
+            new[] { ConversationListFilter.All, ConversationListFilter.Unread },
+            Enum.GetValues<ConversationListFilter>());
     }
 
     [TestMethod]

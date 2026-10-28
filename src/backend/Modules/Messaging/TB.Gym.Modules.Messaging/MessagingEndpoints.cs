@@ -300,6 +300,25 @@ public static class MessagingEndpoints
         .ProducesProblem(StatusCodes.Status404NotFound)
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
 
+        // Mark as unread (MSG-022, critique B3b), as WhatsApp does. The caller's own state, as reading
+        // is, so it stays open while the workspace is read-only.
+        messages.MapPost("/unread", async (
+            Guid conversationId,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IMessagingApplicationService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToReadStateResult(await service.MarkUnreadAsync(conversationId, token));
+        })
+        .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+        .WithName("MarkOwnConversationUnread")
+        .Produces<ConversationReadState>()
+        .ProducesProblem(StatusCodes.Status403Forbidden)
+        .ProducesProblem(StatusCodes.Status404NotFound)
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite);
+
         MapRealtime(messages);
     }
 

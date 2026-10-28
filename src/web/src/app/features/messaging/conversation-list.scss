@@ -13,6 +13,19 @@
   margin: 0;
   padding: 0;
 }
+
+// A row's menu sits beside its button, at the row's end (critique B3b); every row keeps its room, so
+// the times and counts line up whether a row has a menu or not.
+li {
+  position: relative;
+}
+
+.row-menu {
+  inset-block-start: 50%;
+  inset-inline-end: var(--space-4);
+  position: absolute;
+  translate: 0 -50%;
+}
 .conversation {
   align-items: center;
   background: none;
@@ -31,6 +44,8 @@
   inline-size: 100%;
   min-block-size: 4.5rem;
   padding: var(--space-12);
+  // The row menu's 44px button and its gap.
+  padding-inline-end: calc(var(--space-12) + 2.75rem);
   row-gap: 2px;
   text-align: start;
   transition: background-color var(--tb-duration-fast) var(--tb-ease);
@@ -117,11 +132,13 @@ li.unavailable .who {
   font-weight: 600;
   padding: 0.05rem 0.5rem;
 }
-// Waiting for the coach: the warm accent Today uses for what is due, and a word, not a colour alone.
-.tag.waiting {
-  background: var(--tb-warm-soft);
-  border-color: transparent;
-  color: var(--tb-warm-ink);
+// Marked unread (MSG-022): the count's colour as a dot; the row's name says it in words.
+.count.marked {
+  align-self: center;
+  block-size: 0.75rem;
+  inline-size: 0.75rem;
+  min-inline-size: 0;
+  padding: 0;
 }
 .more {
   background: none;

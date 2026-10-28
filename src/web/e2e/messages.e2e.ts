@@ -120,8 +120,7 @@ function summary(
       deletionKind: null,
     },
     isReadOnly: false,
-    // The other person spoke last (MSG-022).
-    isAwaitingReply: !last.fromCaller,
+    isMarkedUnread: false,
   };
 }
 
@@ -246,25 +245,18 @@ async function openMessages(
         const url = new URL(route.request().url());
         const filter = url.searchParams.get('filter');
         const search = (url.searchParams.get('search') ?? '').toLowerCase();
-        const unread = (item: (typeof inbox)[number]) => item.unreadCount > 0;
-        const waiting = (item: (typeof inbox)[number]) => item.isAwaitingReply;
+        const unread = (item: (typeof inbox)[number]) =>
+          item.unreadCount > 0 || item.isMarkedUnread;
         return json(route, 200, {
           items: inbox.filter(
             (item) =>
-              (filter === 'Unread'
-                ? unread(item)
-                : filter === 'AwaitingReply'
-                  ? waiting(item)
-                  : true) && item.counterpart.displayName.toLowerCase().includes(search),
+              (filter === 'Unread' ? unread(item) : true) &&
+              item.counterpart.displayName.toLowerCase().includes(search),
           ),
           hasMore: false,
           nextBeforeActivityAtUtc: null,
           nextBeforeConversationId: null,
-          counts: {
-            all: inbox.length,
-            unread: inbox.filter(unread).length,
-            awaitingReply: inbox.filter(waiting).length,
-          },
+          counts: { all: inbox.length, unread: inbox.filter(unread).length },
         });
       },
       // The client beside the coach's thread, from the read their page uses.
@@ -464,25 +456,24 @@ test('the chat mirrors in right-to-left', async ({ page }) => {
   expect(mine!.x).toBeLessThan(theirs!.x);
 });
 
-// R3.5b: the coach's inbox finds who is waiting, and the client sits beside the thread (C6).
+// R3.5b: the coach's inbox finds who is waiting, and the client sits beside the thread (C6). One Unread
+// filter since critique B3b.
 test('a coach at 1440px finds who is waiting and sees the client beside the thread', async ({
   page,
 }) => {
   await openMessages(page, 'lea', 1440, 900);
   const inbox = page.getByRole('navigation', { name: 'Conversations' });
   const chips = inbox.getByRole('group', { name: 'Show' });
-  await expect(chips.getByRole('radio')).toHaveCount(3);
-  await expect(inbox.locator('.chip')).toHaveText(['All 5', 'Unread 1', 'Waiting for reply 2']);
-  await expect(
-    inbox.getByRole('button', { name: 'Rita Daher, waiting for your reply' }),
-  ).toBeVisible();
+  await expect(chips.getByRole('radio')).toHaveCount(2);
+  await expect(inbox.locator('.chip')).toHaveText(['All 5', 'Unread 1']);
+  await expect(inbox.getByRole('button', { name: 'Rita Daher, no unread messages' })).toBeVisible();
 
   // The radio is the chip's own input; a reader clicks the chip around it.
-  await inbox.locator('.chip', { hasText: 'Waiting for reply' }).click();
-  await expect(chips.getByRole('radio', { name: /Waiting for reply/ })).toBeChecked();
-  await expect(inbox.locator('.conversation')).toHaveCount(2);
-  await expect(page).toHaveURL(/show=waiting/);
-  await inbox.getByRole('searchbox', { name: 'Search conversations' }).fill('rit');
+  await inbox.locator('.chip', { hasText: 'Unread' }).click();
+  await expect(chips.getByRole('radio', { name: /Unread/ })).toBeChecked();
+  await expect(inbox.locator('.conversation')).toHaveCount(1);
+  await expect(page).toHaveURL(/show=unread/);
+  await inbox.getByRole('searchbox', { name: 'Search conversations' }).fill('nou');
   await expect(inbox.locator('.conversation')).toHaveCount(1);
   await inbox.getByRole('searchbox', { name: 'Search conversations' }).fill('zz');
   await expect(inbox.getByText('No conversation matches “zz”')).toBeVisible();

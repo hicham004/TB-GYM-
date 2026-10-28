@@ -71,7 +71,7 @@ ul {
   padding: var(--space-12);
   text-align: start;
 }
-.use:hover {
+.use:not(.read):hover {
   background: var(--tb-surface-2);
 }
 .reply-title {

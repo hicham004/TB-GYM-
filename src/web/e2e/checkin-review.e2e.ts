@@ -121,7 +121,7 @@ const conversation = {
     accessReason: 'Granted',
     lastMessage: null,
     isReadOnly: false,
-    isAwaitingReply: false,
+    isMarkedUnread: false,
   },
   readState: {
     conversationId: 'conversation-1',

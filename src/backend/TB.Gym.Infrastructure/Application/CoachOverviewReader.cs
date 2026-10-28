@@ -429,10 +429,11 @@ internal sealed class CoachOverviewReader(
             .ToLookup(item => item.ClientProfileId);
 
     /// <summary>
-    /// The caller's own unread messages, counted exactly as their Messages badge counts them: written by
-    /// the client, past the caller's read cursor and not removed, in a thread the caller still coaches.
-    /// Chats stay private (ADR 0026), so an Owner never sees another coach's conversation counted here,
-    /// nor their own old thread with a client they handed to a coach (COACH-13).
+    /// The caller's own unread messages, counted as their Messages badge counts messages: written by the
+    /// client, past the caller's read cursor and not removed, in a thread the caller still coaches. A
+    /// chat the caller marked unread (MSG-022) counts in the badge but holds no message to tell of, so
+    /// it is not here. Chats stay private (ADR 0026), so an Owner never sees another coach's
+    /// conversation counted here, nor their own old thread with a client they handed to a coach (COACH-13).
     /// </summary>
     private async Task<ILookup<Guid, UnreadConversation>> ReadUnreadAsync(
         Guid callerUserId,

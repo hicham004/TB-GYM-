@@ -8,16 +8,18 @@ import {
 } from '@angular/core';
 import { initialsOf } from '../../shell/initials';
 import { Avatar } from '../../ui/avatar';
+import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { conversationTimeLabel } from './chat-timeline';
-import type { Conversation } from './messaging.models';
+import { countsAsUnread, type Conversation } from './messaging.models';
 
 /**
  * The inbox half of the chat (M7, and the coach's C6): a face, a name, when, the last line said and
- * how many are waiting. Presentation only; the screen owns selection, paging and every request.
+ * how many are waiting, and each row's menu with Mark as unread. Presentation only; the screen owns
+ * selection, paging and every request.
  */
 @Component({
   selector: 'app-conversation-list',
-  imports: [Avatar],
+  imports: [Avatar, UiMenu],
   templateUrl: './conversation-list.html',
   styleUrl: './conversation-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,29 +32,35 @@ export class ConversationList {
   readonly hasMore = input(false);
   readonly loadingMore = input(false);
   readonly now = input.required<Date>();
-  /** The coach's side marks a thread whose client spoke last (MSG-022); a client's side does not. */
-  readonly showWaiting = input(false);
   readonly choose = output<Conversation>();
+  /** Mark as unread, from the row's own menu (MSG-022, critique B3b). */
+  readonly markUnread = output<Conversation>();
   readonly loadMore = output<void>();
 
   protected readonly initialsOf = initialsOf;
+  protected readonly countsAsUnread = countsAsUnread;
+  protected readonly rowMenu: readonly UiMenuItem[] = [
+    { label: $localize`Mark as unread`, action: 'unread' },
+  ];
 
   protected time(conversation: Conversation): string {
     return conversationTimeLabel(conversation.lastActivityAtUtc, this.now(), this.locale);
   }
 
-  /** The row's name for assistive technology: who, and whether anything is waiting. */
+  /** A row offers Mark as unread while the chat opens and nothing in it counts as unread yet. */
+  protected canMarkUnread(conversation: Conversation): boolean {
+    return conversation.isAvailable && !countsAsUnread(conversation);
+  }
+
+  /** The row's name for assistive technology: who, and whether anything is unread. */
   protected label(conversation: Conversation): string {
     const name = conversation.counterpart.displayName;
-    const waiting = this.showWaiting() && conversation.isAwaitingReply;
     if (conversation.unreadCount > 0) {
-      return waiting
-        ? $localize`${name}:name:, ${conversation.unreadCount}:count: unread messages, waiting for your reply`
-        : $localize`${name}:name:, ${conversation.unreadCount}:count: unread messages`;
+      return $localize`${name}:name:, ${conversation.unreadCount}:count: unread messages`;
     }
 
-    return waiting
-      ? $localize`${name}:name:, waiting for your reply`
+    return conversation.isMarkedUnread
+      ? $localize`${name}:name:, marked unread`
       : $localize`${name}:name:, no unread messages`;
   }
 

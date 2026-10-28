@@ -3265,6 +3265,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<long>("LastReadSequence")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTimeOffset?>("MarkedUnreadAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(16)

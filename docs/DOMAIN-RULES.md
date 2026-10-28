@@ -1205,16 +1205,18 @@ from PostgreSQL because Redis cannot replay a lost send. Realtime publication th
 runs in the API host; the notification Worker keeps no hub, no listener, no exposed port and no Redis
 dependency.
 
-**MSG-022** The conversation list (R3.5b) can be narrowed to **Unread** (something from the other
-participant past the caller's cursor, as MSG-009 counts it) or **Waiting for reply** (the newest
-message still present was written by the other participant, so a message taken back never makes an
-earlier question look answered), and searched by the other participant's display name: every word
-typed must appear in it, ignoring case and accents. Message text is never searched. Both look at the
-caller's whole list (their 2,000 most recently active conversations), page by the list's own cursor,
-and decide Messaging access before any message row is read: a conversation the caller cannot open
-now is neither unread nor waiting, though its name can still be found. A thread kept only to read
-(a client's former coach, ADR 0026) waits for nobody. The first page carries how many conversations
-each filter holds, over the whole list whatever the search. Each row also carries the newest message
+**MSG-022** The conversation list (R3.5b) can be narrowed to **Unread**: something from the other
+participant past the caller's cursor, as MSG-009 counts it, or a chat the caller marked unread. Waiting
+for reply went in critique B3b (2026-10-28): one Unread filter, as in WhatsApp. **Mark as unread** is a
+mark on that participant alone, set from the chat's menu or its row's: the chat counts as unread to
+them, at least one in the badge, until they next read it, which takes the mark away even with nothing
+new to read; the other participant never sees it. Only someone who may open the chat may mark it. The
+list is searched by the other participant's display name: every word typed must appear in it,
+ignoring case and accents. Message text is never searched. Both look at the caller's whole list
+(their 2,000 most recently active conversations), page by the list's own cursor, and decide Messaging
+access before any message row is read: a conversation the caller cannot open now is not unread, its
+mark included, though its name can still be found. The first page carries how many conversations each
+filter holds, over the whole list whatever the search. Each row also carries the newest message
 still present that the other participant wrote, whoever spoke last (`LatestFromCounterpart`, under the
 same access decision as the row's last message): the client's Today shows it as their coach's latest
 and reads the list again when the live channel says a conversation changed (audit A9, CLIENT-13).

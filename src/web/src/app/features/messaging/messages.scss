@@ -61,6 +61,12 @@ h2:focus {
 .inbox {
   grid-area: inbox;
 }
+// The coach's Saved replies, at the inbox's head (critique B3b).
+.inbox-head {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-end: var(--space-8);
+}
 .thread {
   display: flex;
   flex-direction: column;

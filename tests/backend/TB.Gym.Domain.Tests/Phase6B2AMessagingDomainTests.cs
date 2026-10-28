@@ -494,6 +494,33 @@ public sealed class Phase6B2AMessagingDomainTests
     }
 
     [TestMethod]
+    public void AChatMarkedUnreadStaysUnreadUntilItsParticipantReadsIt()
+    {
+        var participant = NewParticipant();
+        participant.AdvanceReadCursor(10, 10, Now);
+
+        // Mark as unread (MSG-022, critique B3b): set once, then a repeat changes nothing.
+        Assert.IsTrue(participant.MarkUnread(Now.AddMinutes(1)));
+        Assert.IsFalse(participant.MarkUnread(Now.AddMinutes(2)));
+        Assert.AreEqual(Now.AddMinutes(1), participant.MarkedUnreadAtUtc);
+
+        // Reading takes it away even with nothing new to read, and says something changed.
+        Assert.IsTrue(participant.AdvanceReadCursor(10, 10, Now.AddMinutes(3)));
+        Assert.IsFalse(participant.IsMarkedUnread);
+        Assert.AreEqual(10L, participant.LastReadSequence);
+        Assert.AreEqual(Now, participant.LastReadAtUtc, "Nothing new was read, so the read instant stays.");
+        Assert.IsFalse(participant.AdvanceReadCursor(10, 10, Now.AddMinutes(4)));
+    }
+
+    [TestMethod]
+    [DataRow(0L, false, 0L)]
+    [DataRow(3L, false, 3L)]
+    [DataRow(0L, true, 1L)]
+    [DataRow(3L, true, 3L)]
+    public void AMarkedChatCountsAsAtLeastOneUnread(long unreadMessages, bool marked, long expected) =>
+        Assert.AreEqual(expected, ConversationParticipant.UnreadIncludingMark(unreadMessages, marked));
+
+    [TestMethod]
     public void AReadCursorBeyondTheNewestCommittedSequenceIsClampedToIt()
     {
         var participant = NewParticipant();

@@ -1333,10 +1333,9 @@ export type ConversationDetail = {
 export type ConversationListCounts = {
   all: number | string;
   unread: number | string;
-  awaitingReply: number | string;
 };
 
-export type ConversationListFilter = 'All' | 'Unread' | 'AwaitingReply';
+export type ConversationListFilter = 'All' | 'Unread';
 
 export type ConversationMessagePreview = {
   messageId: string;
@@ -1367,6 +1366,7 @@ export type ConversationReadState = {
   lastReadAtUtc: null | string;
   unreadCount: number | string;
   latestSequence: number | string;
+  isMarkedUnread?: boolean;
 };
 
 export type ConversationSummary = {
@@ -1385,7 +1385,7 @@ export type ConversationSummary = {
   accessReason: FeatureAccessReason;
   lastMessage: null | ConversationMessagePreview;
   isReadOnly?: boolean;
-  isAwaitingReply?: boolean;
+  isMarkedUnread?: boolean;
   latestFromCounterpart?: null | ConversationMessagePreview;
 };
 
@@ -11113,6 +11113,39 @@ export type AdvanceOwnConversationReadCursorResponses = {
 
 export type AdvanceOwnConversationReadCursorResponse =
   AdvanceOwnConversationReadCursorResponses[keyof AdvanceOwnConversationReadCursorResponses];
+
+export type MarkOwnConversationUnreadData = {
+  body?: never;
+  path: {
+    conversationId: string;
+  };
+  query?: never;
+  url: '/api/messaging/conversations/{conversationId}/unread';
+};
+
+export type MarkOwnConversationUnreadErrors = {
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+};
+
+export type MarkOwnConversationUnreadError =
+  MarkOwnConversationUnreadErrors[keyof MarkOwnConversationUnreadErrors];
+
+export type MarkOwnConversationUnreadResponses = {
+  /**
+   * OK
+   */
+  200: ConversationReadState;
+};
+
+export type MarkOwnConversationUnreadResponse =
+  MarkOwnConversationUnreadResponses[keyof MarkOwnConversationUnreadResponses];
 
 export type ListConversationRealtimeEventsData = {
   body?: never;

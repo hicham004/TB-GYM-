@@ -62,58 +62,57 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var other = await R35bChatAsync(stranger, strangerTenant, "other-maya", "Maya", "Rahman");
         await SendChatAsync(other.Client, other.ChatId, "Elsewhere");
 
-        // The plain list: every thread, newest first, the waiting ones marked and every filter counted.
+        // The plain list: every thread, newest first, and both filters counted.
         var plain = await ReadSliceAsync<ConversationPage>(owner, R35bInboxUrl);
         CollectionAssert.AreEqual(
             new[] { karl.ChatId, rami.ChatId, sara.ChatId, elie.ChatId, omar.ChatId, maya.ChatId },
             plain.Items.Select(item => item.Id).ToArray());
-        Assert.AreEqual(new ConversationListCounts(6, 3, 3), plain.Counts);
+        Assert.AreEqual(new ConversationListCounts(6, 3), plain.Counts);
         Assert.AreEqual(
-            "Karl False 0 False, Rami True 1 True, Sara True 0 False, Élie True 1 False, Omar True 0 True, Maya True 1 True",
+            "Karl False 0, Rami True 1, Sara True 0, Élie True 1, Omar True 0, Maya True 1",
             string.Join(", ", plain.Items.Select(item =>
-                $"{item.Counterpart.DisplayName.Split(' ')[0]} {item.IsAvailable} {item.UnreadCount} {item.IsAwaitingReply}")));
+                $"{item.Counterpart.DisplayName.Split(' ')[0]} {item.IsAvailable} {item.UnreadCount}")));
         Assert.IsNull(plain.Items[0].LastMessage, "A closed thread shows nothing of what was said.");
 
-        // Each filter keeps what it names, over the whole list.
+        // Each filter keeps what it names, over the whole list. Waiting for reply went in critique B3b.
         Assert.AreEqual("Rami, Élie, Maya", await R35bNamesAsync(owner, "?filter=Unread"));
-        Assert.AreEqual("Rami, Omar, Maya", await R35bNamesAsync(owner, "?filter=AwaitingReply"));
         Assert.AreEqual("Karl, Rami, Sara, Élie, Omar, Maya", await R35bNamesAsync(owner, "?filter=All"));
+        await AssertStatusAsync(await owner.GetAsync($"{R35bInboxUrl}?filter=AwaitingReply"), HttpStatusCode.BadRequest);
 
         // The search reads names only, ignoring case and accents; a closed thread can still be found.
         Assert.AreEqual("Élie", await R35bNamesAsync(owner, "?search=ELIE%20kh"));
         Assert.AreEqual("Karl", await R35bNamesAsync(owner, "?search=aoun"));
         Assert.AreEqual(string.Empty, await R35bNamesAsync(owner, "?search=deload"), "Message text is never searched.");
-        Assert.AreEqual("Maya", await R35bNamesAsync(owner, "?search=rahman&filter=AwaitingReply"));
+        Assert.AreEqual("Maya", await R35bNamesAsync(owner, "?search=rahman&filter=Unread"));
         var searched = await ReadSliceAsync<ConversationPage>(owner, $"{R35bInboxUrl}?search=zzz");
-        Assert.AreEqual(new ConversationListCounts(6, 3, 3), searched.Counts, "Counts never depend on the search.");
+        Assert.AreEqual(new ConversationListCounts(6, 3), searched.Counts, "Counts never depend on the search.");
 
         // A filtered list pages by the same cursor; the counts come with the first page only.
-        var first = await ReadSliceAsync<ConversationPage>(owner, $"{R35bInboxUrl}?filter=AwaitingReply&take=2");
+        var first = await ReadSliceAsync<ConversationPage>(owner, $"{R35bInboxUrl}?filter=Unread&take=2");
         Assert.AreEqual((2, true), (first.Items.Count, first.HasMore));
         var next = await ReadSliceAsync<ConversationPage>(owner,
-            $"{R35bInboxUrl}?filter=AwaitingReply&take=2" +
+            $"{R35bInboxUrl}?filter=Unread&take=2" +
             $"&beforeActivityAtUtc={Uri.EscapeDataString(first.NextBeforeActivityAtUtc!.Value.ToString("O"))}" +
             $"&beforeConversationId={first.NextBeforeConversationId}");
         Assert.AreEqual((1, false, (ConversationListCounts?)null), (next.Items.Count, next.HasMore, next.Counts));
         CollectionAssert.AreEqual(
-            new[] { rami.ChatId, omar.ChatId, maya.ChatId },
+            new[] { rami.ChatId, elie.ChatId, maya.ChatId },
             first.Items.Concat(next.Items).Select(item => item.Id).ToArray());
 
-        // Answering takes Maya out of Waiting; reading her takes her out of Unread.
+        // Reading Maya takes her out of Unread; the coach's answer is unread on her side.
         var mayaLast = (await ReadSliceAsync<ConversationPage>(owner, $"{R35bInboxUrl}?search=maya")).Items.Single();
         await SendChatAsync(owner, maya.ChatId, "Friday at 7 then.");
         await R35bReadAsync(owner, maya.ChatId, mayaLast.LastSequence);
-        Assert.AreEqual(new ConversationListCounts(6, 2, 2), (await ReadSliceAsync<ConversationPage>(owner, R35bInboxUrl)).Counts);
+        Assert.AreEqual(new ConversationListCounts(6, 2), (await ReadSliceAsync<ConversationPage>(owner, R35bInboxUrl)).Counts);
 
-        // The client's side: Maya now waits for nobody but has the coach's reply to answer.
-        var mayaView = await ReadSliceAsync<ConversationPage>(maya.Client, $"{R35bInboxUrl}?filter=AwaitingReply");
-        Assert.AreEqual((maya.ChatId, true), (mayaView.Items.Single().Id, mayaView.Items.Single().IsAwaitingReply));
-        Assert.AreEqual(new ConversationListCounts(1, 1, 1), mayaView.Counts);
+        var mayaView = await ReadSliceAsync<ConversationPage>(maya.Client, $"{R35bInboxUrl}?filter=Unread");
+        Assert.AreEqual((maya.ChatId, 1L), (mayaView.Items.Single().Id, mayaView.Items.Single().UnreadCount));
+        Assert.AreEqual(new ConversationListCounts(1, 1), mayaView.Counts);
 
         // The team coach sees their own chat only, and the owner never sees it counted.
         var linaView = await ReadSliceAsync<ConversationPage>(coach, $"{R35bInboxUrl}?search=maya");
         Assert.AreEqual(nour.ChatId, linaView.Items.Single().Id);
-        Assert.AreEqual(new ConversationListCounts(1, 1, 1), linaView.Counts);
+        Assert.AreEqual(new ConversationListCounts(1, 1), linaView.Counts);
         Assert.AreEqual("Maya", await R35bNamesAsync(owner, "?search=maya"));
 
         // Another workspace's owner finds nothing of this one, and is refused it outright.
@@ -131,6 +130,65 @@ public sealed partial class Phase3TrainingWorkflowTests
             await owner.GetAsync($"{R35bInboxUrl}?search={new string('a', ConversationListQuery.MaximumSearchLength + 1)}"),
             HttpStatusCode.BadRequest);
         await AssertStatusAsync(await owner.GetAsync($"{R35bInboxUrl}?filter=7"), HttpStatusCode.BadRequest);
+    }
+
+    [TestMethod]
+    public async Task B3bAChatMarkedUnreadCountsAsUnreadUntilItsParticipantReadsIt()
+    {
+        using var owner = CreateClient();
+        var tenant = await RegisterCoachAsync(owner, "b3b-unread-owner@example.test", "Hicham Haddad", "B3b Unread");
+        using var maya = await R35bChatAsync(owner, tenant, "b3b-maya", "Maya", "Rahman");
+        var asked = await R35bSendAsync(maya.Client, maya.ChatId, "Can we move Friday?");
+        await R35bReadAsync(owner, maya.ChatId, asked.Sequence);
+        Assert.AreEqual(new ConversationListCounts(1, 0), (await ReadSliceAsync<ConversationPage>(owner, R35bInboxUrl)).Counts);
+        Assert.AreEqual(0L, await R35bBadgeAsync(owner));
+
+        // Marked unread (MSG-022), the read chat counts as one in the Unread filter and the badge.
+        var marked = await R35bMarkUnreadAsync(owner, maya.ChatId);
+        Assert.AreEqual((true, 0L), (marked.IsMarkedUnread, marked.UnreadCount));
+        var unread = await ReadSliceAsync<ConversationPage>(owner, $"{R35bInboxUrl}?filter=Unread");
+        Assert.AreEqual((maya.ChatId, true, 0L), (unread.Items.Single().Id, unread.Items.Single().IsMarkedUnread, unread.Items.Single().UnreadCount));
+        Assert.AreEqual(new ConversationListCounts(1, 1), unread.Counts);
+        Assert.AreEqual(1L, await R35bBadgeAsync(owner));
+
+        // Marking again changes nothing, and the mark is the caller's own: Maya's side is untouched.
+        Assert.IsTrue((await R35bMarkUnreadAsync(owner, maya.ChatId)).IsMarkedUnread);
+        Assert.AreEqual(1L, await R35bBadgeAsync(owner));
+        Assert.IsFalse((await ReadSliceAsync<ConversationPage>(maya.Client, R35bInboxUrl)).Items.Single().IsMarkedUnread);
+
+        // A new message on a marked chat counts as itself, never one more for the mark.
+        await SendChatAsync(maya.Client, maya.ChatId, "Or Saturday?");
+        Assert.AreEqual(1L, await R35bBadgeAsync(owner));
+
+        // Reading the chat takes the mark away; so does a read with nothing new in it.
+        var latest = (await ReadSliceAsync<ConversationPage>(owner, R35bInboxUrl)).Items.Single().LastSequence;
+        await R35bReadAsync(owner, maya.ChatId, latest);
+        var read = await ReadSliceAsync<ConversationPage>(owner, R35bInboxUrl);
+        Assert.AreEqual((false, 0L), (read.Items.Single().IsMarkedUnread, read.Items.Single().UnreadCount));
+        Assert.AreEqual(new ConversationListCounts(1, 0), read.Counts);
+        Assert.AreEqual(0L, await R35bBadgeAsync(owner));
+        await R35bMarkUnreadAsync(owner, maya.ChatId);
+        await R35bReadAsync(owner, maya.ChatId, latest);
+        Assert.AreEqual(0L, await R35bBadgeAsync(owner));
+
+        // A client marks their own chat unread the same way.
+        Assert.IsTrue((await R35bMarkUnreadAsync(maya.Client, maya.ChatId)).IsMarkedUnread);
+        Assert.AreEqual(1L, await R35bBadgeAsync(maya.Client));
+
+        // Nobody else can: a team coach who is not in the chat, another space's owner, someone signed out.
+        using var coach = CreateClient();
+        await JoinAsCoachAsync(owner, coach, "b3b-unread-coach@example.test", "Lina Saad");
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(await coach.PostAsync($"{R35bInboxUrl}/{maya.ChatId}/unread", null), HttpStatusCode.NotFound);
+        using var stranger = CreateClient();
+        await RegisterCoachAsync(stranger, "b3b-unread-stranger@example.test", "Other Owner", "B3b Elsewhere");
+        SetTenant(stranger, tenant);
+        await RefreshCsrfAsync(stranger);
+        await AssertStatusAsync(await stranger.PostAsync($"{R35bInboxUrl}/{maya.ChatId}/unread", null), HttpStatusCode.Forbidden);
+        using var anonymous = CreateClient();
+        SetTenant(anonymous, tenant);
+        await AssertStatusAsync(await anonymous.PostAsync($"{R35bInboxUrl}/{maya.ChatId}/unread", null), HttpStatusCode.Unauthorized);
+        Assert.AreEqual(0L, await R35bBadgeAsync(owner), "None of the refused marks reached the owner's chat.");
     }
 
     [TestMethod]
@@ -230,6 +288,17 @@ public sealed partial class Phase3TrainingWorkflowTests
             await reader.PostAsJsonAsync($"{R35bInboxUrl}/{conversationId}/read", new { throughSequence }),
             HttpStatusCode.OK);
     }
+
+    private static async Task<ConversationReadState> R35bMarkUnreadAsync(HttpClient caller, Guid conversationId)
+    {
+        await RefreshCsrfAsync(caller);
+        var response = await caller.PostAsync($"{R35bInboxUrl}/{conversationId}/unread", null);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
+        return await ReadSlicePayloadAsync<ConversationReadState>(response);
+    }
+
+    private static async Task<long> R35bBadgeAsync(HttpClient caller) =>
+        (await ReadSliceAsync<MessagingUnreadCount>(caller, "/api/messaging/unread-count")).Unread;
 
     private sealed record R35bChat(HttpClient Client, Guid ClientId, Guid ChatId) : IDisposable
     {

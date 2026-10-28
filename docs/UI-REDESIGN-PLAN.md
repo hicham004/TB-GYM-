@@ -1852,11 +1852,15 @@ limited to the coach's assigned clients.
 - Built in R3.5b, on the same list endpoint with `filter` and `search` (MSG-022), and the client
   page's read (now with the plan's name and the last workout):
   - Above the inbox: a search box (names, ignoring case and accents, over every conversation, not
-    just the loaded page) and chips All, Unread and Waiting for reply with the server's counts; the
-    chip is kept in `?show=`. A narrowed list that comes back empty says why ("Nobody is waiting for
-    a reply", "No conversation matches …") with the one way back. A thread whose client spoke last
-    carries a warm "Waiting" mark; answering takes it off, and the open thread stays open when it
-    leaves the filtered list.
+    just the loaded page) and chips All and Unread with the server's counts; the chip is kept in
+    `?show=`. A narrowed list that comes back empty says why ("Nothing unread", "No conversation
+    matches …") with the one way back, and the open thread stays open when it leaves the filtered
+    list. Critique B3b took Waiting for reply and its warm "Waiting" mark away: one Unread filter, as
+    in WhatsApp, with **Mark as unread** in each read row's menu and the open chat's (which then
+    closes, so reading it does not take the mark straight away); a marked chat shows a dot with no
+    number and counts in Unread and the badge until it is read. The coach's **Saved replies** button
+    at the inbox's head opens the sheet to manage them (list, search, Edit, New, Delete); the
+    composer's button still picks one.
   - Beside the thread, when the screen has room for three columns: the client's standing ("On
     track", "Trained yesterday"), the plan with its end, the last workout with its duration and
     records, this week's sessions, what else needs the coach (messages left out: the coach is in

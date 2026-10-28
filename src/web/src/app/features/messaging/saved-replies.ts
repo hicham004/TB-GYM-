@@ -58,6 +58,11 @@ export class SavedRepliesSheet {
 
   /** What the coach has written so far, offered as a new reply's text. */
   readonly draft = input('');
+  /**
+   * Opened from the inbox to manage the replies (critique B3b): list, search, Edit, New and Delete,
+   * with no chat to drop a reply into, so a reply is read here, not used.
+   */
+  readonly manage = input(false);
   readonly use = output<string>();
 
   protected readonly items = signal<readonly SavedReply[] | null>(null);

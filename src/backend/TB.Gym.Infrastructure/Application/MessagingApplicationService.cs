@@ -77,10 +77,7 @@ internal sealed class MessagingApplicationService(
             ? await ClassifyAsync(userId, withNames: query.Terms.Count > 0, cancellationToken)
             : null;
         var counts = firstPage
-            ? new ConversationListCounts(
-                classified!.Count,
-                classified.Count(item => item.HasUnread),
-                classified.Count(item => item.IsAwaitingReply))
+            ? new ConversationListCounts(classified!.Count, classified.Count(item => item.HasUnread))
             : null;
 
         var normalizedTake = MessagingPaging.NormalizeConversationTake(take);
@@ -97,7 +94,7 @@ internal sealed class MessagingApplicationService(
         else
         {
             var matching = classified!
-                .Where(item => query.Matches(item.CounterpartName, item.HasUnread, item.IsAwaitingReply))
+                .Where(item => query.Matches(item.CounterpartName, item.HasUnread))
                 .Select(item => item.Id)
                 .ToArray();
             ordered = matching.Length == 0
@@ -623,6 +620,52 @@ internal sealed class MessagingApplicationService(
             await ReadStateAsync(conversation, refreshed, cancellationToken));
     }
 
+    public async Task<ReadStateCommandResult> MarkUnreadAsync(
+        Guid conversationId,
+        CancellationToken cancellationToken)
+    {
+        // The same access as reading the chat: a stranger's chat, or one the caller may no longer open,
+        // answers as reading it would.
+        var access = await ResolveAsync(conversationId, cancellationToken);
+        if (access.Status != MessagingCommandStatus.Success)
+        {
+            return access.Status == MessagingCommandStatus.Forbidden
+                ? ReadStateCommandResult.Forbidden(access.Reason!.Value)
+                : ReadStateCommandResult.NotFound();
+        }
+
+        var userId = access.Participant!.UserId;
+        await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+            // Under the same row lock as a read report, so a mark and a read of the same chat land one
+            // after the other: whichever comes last decides.
+            await LockReadCursorAsync(conversationId, userId, cancellationToken);
+            var participant = await dbContext.ConversationParticipants
+                .SingleAsync(
+                    item => item.ConversationId == conversationId && item.UserId == userId,
+                    cancellationToken);
+            if (participant.MarkUnread(clock.UtcNow))
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        });
+
+        dbContext.ChangeTracker.Clear();
+        var refreshed = await dbContext.ConversationParticipants
+            .AsNoTracking()
+            .SingleAsync(item => item.ConversationId == conversationId && item.UserId == userId, cancellationToken);
+        var conversation = await dbContext.Conversations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == conversationId, cancellationToken);
+        return ReadStateCommandResult.Success(
+            await ReadStateAsync(conversation, refreshed, cancellationToken));
+    }
+
     public async Task<MessagingUnreadCount> CountUnreadAsync(CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId || !tenantContext.HasTenant)
@@ -646,6 +689,7 @@ internal sealed class MessagingApplicationService(
                 conversation.CoachUserId,
                 participant.Role,
                 participant.LastReadSequence,
+                IsMarkedUnread = participant.MarkedUnreadAtUtc != null,
             })
             .ToListAsync(cancellationToken);
         if (memberships.Count == 0)
@@ -675,8 +719,11 @@ internal sealed class MessagingApplicationService(
             return new MessagingUnreadCount(0);
         }
 
+        // A chat marked unread counts as at least one, so the badge never says nothing is waiting.
         var unread = await UnreadByConversationAsync([.. available], userId, cancellationToken);
-        return new MessagingUnreadCount(unread.Values.Sum());
+        var marked = memberships.Where(item => item.IsMarkedUnread).Select(item => item.Id).ToHashSet();
+        return new MessagingUnreadCount(available.Sum(id =>
+            ConversationParticipant.UnreadIncludingMark(unread.GetValueOrDefault(id, 0L), marked.Contains(id))));
     }
 
     // ---------- realtime catch-up and acknowledgement ----------
@@ -1384,11 +1431,6 @@ internal sealed class MessagingApplicationService(
             }
         }
 
-        var awaiting = await AwaitingReplyAsync(
-            [.. available.Where(conversation => !readOnly.Contains(conversation.Id)).Select(conversation => conversation.Id)],
-            userId,
-            cancellationToken);
-
         var summaries = new List<ConversationSummary>(ordered.Length);
         foreach (var conversation in ordered)
         {
@@ -1417,7 +1459,7 @@ internal sealed class MessagingApplicationService(
                 decision.Reason,
                 decision.IsAllowed ? previews.GetValueOrDefault(conversation.Id) : null,
                 isReadOnly,
-                awaiting.Contains(conversation.Id),
+                decision.IsAllowed && participant.IsMarkedUnread,
                 decision.IsAllowed ? fromCounterpart.GetValueOrDefault(conversation.Id) : null));
         }
 
@@ -1425,8 +1467,8 @@ internal sealed class MessagingApplicationService(
     }
 
     /// <summary>
-    /// Every conversation the caller may see in the list, with whether it holds something unread and
-    /// whether it waits for the caller's reply (MSG-022), for the counts, the filters and the search.
+    /// Every conversation the caller may see in the list, with whether it holds something unread or
+    /// was marked unread (MSG-022), for the counts, the filter and the search.
     /// </summary>
     /// <remarks>
     /// Feature access is decided first and in one batch, and only conversations that pass it are asked
@@ -1455,10 +1497,14 @@ internal sealed class MessagingApplicationService(
             .AsNoTracking()
             .Where(conversation => ids.Contains(conversation.Id))
             .ToListAsync(cancellationToken);
-        var roles = await dbContext.ConversationParticipants
+        var marked = await dbContext.ConversationParticipants
             .AsNoTracking()
-            .Where(participant => ids.Contains(participant.ConversationId) && participant.UserId == userId)
-            .ToDictionaryAsync(participant => participant.ConversationId, participant => participant.Role, cancellationToken);
+            .Where(participant =>
+                ids.Contains(participant.ConversationId) &&
+                participant.UserId == userId &&
+                participant.MarkedUnreadAtUtc != null)
+            .Select(participant => participant.ConversationId)
+            .ToHashSetAsync(cancellationToken);
 
         var undecided = conversations
             .Select(conversation => conversation.ClientProfileId)
@@ -1480,67 +1526,25 @@ internal sealed class MessagingApplicationService(
         var available = conversations
             .Where(conversation => accessCache[conversation.ClientProfileId].IsAllowed)
             .ToArray();
-        // The list shows a coach a thread only while they coach the client, so on the coach side every
-        // listed thread can be answered. A client's thread with a former coach is kept to read and
-        // waits for nobody (ADR 0026).
-        var writable = new List<Guid>(available.Length);
-        foreach (var conversation in available)
-        {
-            if (roles.GetValueOrDefault(conversation.Id) == ConversationParticipantRole.Coach ||
-                await coachClientScope.IsAssignedCoachAsync(conversation.CoachUserId, conversation.ClientProfileId, cancellationToken))
-            {
-                writable.Add(conversation.Id);
-            }
-        }
-
         var unread = await UnreadByConversationAsync(
             [.. available.Select(conversation => conversation.Id)],
             userId,
             cancellationToken);
-        var awaiting = await AwaitingReplyAsync([.. writable], userId, cancellationToken);
         var names = withNames
             ? await CounterpartNamesAsync([.. conversations], userId, cancellationToken)
             : [];
 
+        // A conversation the caller cannot open counts nothing, its mark included, as in the badge.
+        var reachable = available.Select(conversation => conversation.Id).ToHashSet();
         return conversations
             .Select(conversation => new ClassifiedConversation(
                 conversation.Id,
                 names.GetValueOrDefault(conversation.CounterpartOf(userId), string.Empty),
-                unread.GetValueOrDefault(conversation.Id, 0L) > 0,
-                awaiting.Contains(conversation.Id)))
+                reachable.Contains(conversation.Id) &&
+                ConversationParticipant.UnreadIncludingMark(
+                    unread.GetValueOrDefault(conversation.Id, 0L),
+                    marked.Contains(conversation.Id)) > 0))
             .ToArray();
-    }
-
-    /// <summary>
-    /// The conversations whose newest message still present was written by somebody other than the
-    /// caller (MSG-022). A removed message is passed over, so taking one back never leaves the other
-    /// person's earlier question looking answered. The caller passes only conversations it may read.
-    /// </summary>
-    private async Task<HashSet<Guid>> AwaitingReplyAsync(
-        Guid[] conversationIds,
-        Guid userId,
-        CancellationToken cancellationToken)
-    {
-        if (conversationIds.Length == 0)
-        {
-            return [];
-        }
-
-        var newest = await (
-            from message in dbContext.Messages.AsNoTracking()
-            where conversationIds.Contains(message.ConversationId) &&
-                  message.DeletedAtUtc == null &&
-                  message.Sequence == dbContext.Messages
-                      .Where(other => other.TenantId == message.TenantId &&
-                                      other.ConversationId == message.ConversationId &&
-                                      other.DeletedAtUtc == null)
-                      .Max(other => other.Sequence)
-            select new { message.ConversationId, message.SenderUserId })
-            .ToListAsync(cancellationToken);
-        return newest
-            .Where(item => item.SenderUserId != userId)
-            .Select(item => item.ConversationId)
-            .ToHashSet();
     }
 
     /// <summary>
@@ -1747,7 +1751,8 @@ internal sealed class MessagingApplicationService(
             participant.LastReadSequence,
             participant.LastReadAtUtc,
             unread.GetValueOrDefault(conversation.Id, 0L),
-            conversation.LastSequence);
+            conversation.LastSequence,
+            participant.IsMarkedUnread);
     }
 
     // ---------- helpers ----------
@@ -1975,7 +1980,7 @@ internal sealed class MessagingApplicationService(
     /// <summary>What a command body decided: either a refusal that rolls back, or what it wrote.</summary>
     private sealed record CommandOutcome<TResult>(TResult? Refusal, Guid? TargetId);
 
-    private sealed record ClassifiedConversation(Guid Id, string CounterpartName, bool HasUnread, bool IsAwaitingReply);
+    private sealed record ClassifiedConversation(Guid Id, string CounterpartName, bool HasUnread);
 
     private sealed record IdempotentDecision<TResult>(
         MessagingCommandRecord? Replay,

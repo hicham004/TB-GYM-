@@ -151,11 +151,9 @@ describe('ApiClient contract mapping', () => {
   });
 
   it('sends the list’s filter in the server’s words and leaves All out', () => {
-    api
-      .listConversations(null, null, 25, { filter: 'AwaitingReply', search: ' rania ' })
-      .subscribe();
+    api.listConversations(null, null, 25, { filter: 'Unread', search: ' rania ' }).subscribe();
     const narrowed = http.expectOne((request) => request.url === '/api/messaging/conversations');
-    expect(narrowed.request.params.get('filter')).toBe('AwaitingReply');
+    expect(narrowed.request.params.get('filter')).toBe('Unread');
     expect(narrowed.request.params.get('search')).toBe('rania');
     narrowed.flush({ items: [], hasMore: false });
 

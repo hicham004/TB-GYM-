@@ -17,7 +17,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { profileOverview } from '../../../testing/client-profile-fixtures';
 import { MAYA } from '../../../testing/coach-today-fixtures';
-import { button, field, press, query, settle } from '../../../testing/dom';
+import { button, field, menuChoices, press, query, settle } from '../../../testing/dom';
 import { ConversationLaunch } from './conversation-launch';
 import { SavedRepliesApi } from './saved-replies-api';
 import { messagingRoutes } from './messages.routes';
@@ -69,7 +69,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     accessReason: 'Granted',
     lastMessage: null,
     isReadOnly: false,
-    isAwaitingReply: false,
+    isMarkedUnread: false,
     latestFromCounterpart: null,
     ...overrides,
   };
@@ -129,6 +129,7 @@ function readState(overrides: Partial<ConversationReadState> = {}): Conversation
     lastReadAtUtc: '2026-09-01T09:00:00.000Z',
     unreadCount: 0,
     latestSequence: 99,
+    isMarkedUnread: false,
     ...overrides,
   };
 }
@@ -194,6 +195,7 @@ interface ApiMocks {
   deleteConversationMessage: ReturnType<typeof vi.fn>;
   moderateConversationMessage: ReturnType<typeof vi.fn>;
   advanceConversationReadCursor: ReturnType<typeof vi.fn>;
+  markConversationUnread: ReturnType<typeof vi.fn>;
   getClientOverview: ReturnType<typeof vi.fn>;
 }
 
@@ -278,6 +280,7 @@ async function render(
     deleteConversationMessage: vi.fn(),
     moderateConversationMessage: vi.fn(),
     advanceConversationReadCursor: vi.fn(() => of(readState())),
+    markConversationUnread: vi.fn(() => of(readState({ isMarkedUnread: true }))),
     getClientOverview: vi.fn(() =>
       of(
         profileOverview({
@@ -2259,8 +2262,8 @@ describe('Messages', () => {
   // ---------- the coach's inbox and the client beside the thread (C6, R3.5b) ----------
 
   describe('coach inbox', () => {
-    const COUNTS = { all: 5, unread: 2, awaitingReply: 3 };
-    const waitingRow = conversation({ isAwaitingReply: true });
+    const COUNTS = { all: 5, unread: 2 };
+    const listedRow = conversation();
 
     afterEach(() => {
       document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
@@ -2300,32 +2303,33 @@ describe('Messages', () => {
 
     it('counts each chip from the server and asks the server for what a chip names', async () => {
       const harness = await render(({ listConversations }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
       });
 
-      expect(chips(harness.host)).toEqual(['All 5', 'Unread 2', 'Waiting for reply 3']);
+      // One Unread filter, as in WhatsApp: Waiting for reply went in critique B3b.
+      expect(chips(harness.host)).toEqual(['All 5', 'Unread 2']);
       expect(chip(harness.host, 'All').checked).toBe(true);
       expect(lastQuery(harness)).toEqual({ filter: 'All', search: '' });
 
-      await choose(harness, 'Waiting for reply');
+      await choose(harness, 'Unread');
       // Every conversation is searched by the server, not only the page already loaded.
       expect(harness.listConversations).toHaveBeenLastCalledWith(null, null, 25, {
-        filter: 'AwaitingReply',
+        filter: 'Unread',
         search: '',
       });
 
       await search(harness, 'rania');
-      expect(lastQuery(harness)).toEqual({ filter: 'AwaitingReply', search: 'rania' });
+      expect(lastQuery(harness)).toEqual({ filter: 'Unread', search: 'rania' });
       const calls = harness.listConversations.mock.calls.length;
       await search(harness, '');
       expect(harness.listConversations.mock.calls.length).toBe(calls + 1);
-      expect(lastQuery(harness)).toEqual({ filter: 'AwaitingReply', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'Unread', search: '' });
     });
 
     it('keeps the chip in the address, so Back returns to the same list', async () => {
       const harness = await render(
         ({ listConversations }) => {
-          listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+          listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
         },
         undefined,
         '/messages?show=unread',
@@ -2349,17 +2353,15 @@ describe('Messages', () => {
           ) =>
             of(
               conversationPage(
-                wanted?.filter === 'All' && wanted.search === '' ? [waitingRow] : [],
+                wanted?.filter === 'All' && wanted.search === '' ? [listedRow] : [],
                 { counts: COUNTS },
               ),
             ),
         );
       });
 
-      await choose(harness, 'Waiting for reply');
-      expect(query(harness.host, '.inbox .empty').textContent).toContain(
-        'Nobody is waiting for a reply',
-      );
+      await choose(harness, 'Unread');
+      expect(query(harness.host, '.inbox .empty').textContent).toContain('Nothing unread');
       // Not the invitation a coach with no conversations at all is given.
       expect(harness.host.textContent).not.toContain('No conversations yet');
 
@@ -2369,48 +2371,94 @@ describe('Messages', () => {
       );
       press(harness.host, 'Clear search');
       await settle(harness.fixture);
-      expect(lastQuery(harness)).toEqual({ filter: 'AwaitingReply', search: '' });
+      expect(lastQuery(harness)).toEqual({ filter: 'Unread', search: '' });
 
       press(harness.host, 'Show all conversations');
       await settle(harness.fixture);
       expect(harness.host.querySelectorAll('.conversation')).toHaveLength(1);
     });
 
-    it('marks a thread whose client spoke last, until the coach answers', async () => {
-      const harness = await render(({ listConversations, sendConversationMessage }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
-        sendConversationMessage.mockReturnValue(
-          of(message(3, { isFromCaller: true, senderUserId: 'coach-1', body: 'Friday at 7.' })),
+    it('marks a chat unread from its row’s menu: a dot, the chip and the badge (critique B3b)', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(
+          of(conversationPage([listedRow], { counts: { ...COUNTS, unread: 0 } })),
         );
       });
+      const trigger = query<HTMLButtonElement>(harness.host, 'app-menu.row-menu button');
+      trigger.click();
+      await settle(harness.fixture);
+      const unreadUsed = harness.unreadRefresh.mock.calls.length;
+      menuChoices(trigger)
+        .find((item) => (item.textContent ?? '').includes('Mark as unread'))!
+        .click();
+      await settle(harness.fixture);
 
+      expect(harness.markConversationUnread).toHaveBeenCalledWith('conversation-1');
       const row = query(harness.host, '.conversation');
-      expect(query(row, '.tag.waiting').textContent).toContain('Waiting');
-      expect(row.getAttribute('aria-label')).toBe('Rania Haddad, waiting for your reply');
-
-      await open(harness);
-      const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
-      composer.value = 'Friday at 7.';
-      composer.dispatchEvent(new Event('input'));
-      await settle(harness.fixture);
-      press(harness.host, 'Send message');
-      await settle(harness.fixture);
-
-      expect(harness.host.querySelector('.conversation .tag.waiting')).toBeNull();
-      expect(chips(harness.host)).toContain('Waiting for reply 2');
+      expect(row.querySelector('.count.marked')).not.toBeNull();
+      expect(row.getAttribute('aria-label')).toBe('Rania Haddad, marked unread');
+      expect(chips(harness.host)).toContain('Unread 1');
+      expect(harness.unreadRefresh.mock.calls.length).toBeGreaterThan(unreadUsed);
+      // Already unread, the row offers nothing more.
+      expect(harness.host.querySelector('app-menu.row-menu')).toBeNull();
     });
 
-    it('keeps the open thread when answering takes it out of the filtered list', async () => {
+    it('marks the open chat unread from its menu and closes it, so reading it does not undo that', async () => {
       const harness = await render(({ listConversations, listConversationMessages }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversations.mockReturnValue(
+          of(conversationPage([listedRow], { counts: { ...COUNTS, unread: 0 } })),
+        );
         listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
       });
-      await choose(harness, 'Waiting for reply');
+      await open(harness);
+      const reads = harness.advanceConversationReadCursor.mock.calls.length;
+
+      const trigger = query<HTMLButtonElement>(harness.host, 'app-menu.thread-menu button');
+      trigger.click();
+      await settle(harness.fixture);
+      menuChoices(trigger)
+        .find((item) => (item.textContent ?? '').includes('Mark as unread'))!
+        .click();
+      await settle(harness.fixture);
+
+      expect(harness.markConversationUnread).toHaveBeenCalledWith('conversation-1');
+      expect(harness.host.querySelector('#thread-heading')).toBeNull();
+      expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(reads);
+      expect(query(harness.host, '.conversation .count.marked')).not.toBeNull();
+    });
+
+    it('takes the mark away once the chat is read, and the chip with it', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(
+          of(
+            conversationPage([conversation({ isMarkedUnread: true })], {
+              counts: { ...COUNTS, unread: 1 },
+            }),
+          ),
+        );
+        listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      expect(chips(harness.host)).toContain('Unread 1');
+
+      await open(harness);
+
+      expect(chips(harness.host)).toContain('Unread 0');
+      expect(harness.host.querySelector('.conversation .count.marked')).toBeNull();
+    });
+
+    it('keeps the open thread when reading takes it out of the filtered list', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(
+          of(conversationPage([conversation({ unreadCount: 1 })], { counts: COUNTS })),
+        );
+        listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      await choose(harness, 'Unread');
       await open(harness);
 
       // The list is read again and the thread no longer answers the chip.
       harness.listConversations.mockReturnValue(
-        of(conversationPage([], { counts: { ...COUNTS, awaitingReply: 2 } })),
+        of(conversationPage([], { counts: { ...COUNTS, unread: 1 } })),
       );
       harness.realtime.invalidate();
       await settle(harness.fixture);
@@ -2491,7 +2539,7 @@ describe('Messages', () => {
 
     it('shows the client beside the coach’s thread, from the read their page uses', async () => {
       const harness = await render(({ listConversations }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
       });
       await open(harness);
 
@@ -2507,7 +2555,7 @@ describe('Messages', () => {
 
     it('opens the same panel as a sheet where the column does not fit', async () => {
       const harness = await render(({ listConversations }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
       });
       await open(harness);
 
@@ -2523,7 +2571,7 @@ describe('Messages', () => {
     it('says when the client could not be read, and leaves the chat working', async () => {
       const harness = await render(
         ({ listConversations, listConversationMessages, getClientOverview }) => {
-          listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+          listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
           listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
           getClientOverview.mockReturnValue(
             throwError(() => new HttpErrorResponse({ status: 404 })),
@@ -2539,13 +2587,13 @@ describe('Messages', () => {
       expect(query(harness.host, 'p.error[role="alert"]').textContent?.trim()).toBe('');
     });
 
-    it('gives a client no search, chips, waiting marks or client panel', async () => {
+    it('gives a client no search, chips, Saved replies or client panel', async () => {
       const LEA = { userId: 'coach-user', displayName: 'Lea Haddad', role: 'Coach' as const };
       const harness = await render(({ listConversations }) => {
         listConversations.mockReturnValue(
           of(
             conversationPage([
-              conversation({ callerRole: 'Client', counterpart: LEA, isAwaitingReply: true }),
+              conversation({ callerRole: 'Client', counterpart: LEA }),
               conversation({ ...SECOND, callerRole: 'Client', isReadOnly: true, counterpart: LEA }),
             ]),
           ),
@@ -2555,7 +2603,7 @@ describe('Messages', () => {
       await settle(harness.fixture);
 
       expect(harness.host.querySelector('app-inbox-toolbar')).toBeNull();
-      expect(harness.host.querySelector('.tag.waiting')).toBeNull();
+      expect(harness.host.querySelector('[data-saved-replies]')).toBeNull();
       await open(harness, 'Lea Haddad');
       expect(harness.getClientOverview).not.toHaveBeenCalled();
       expect(harness.host.querySelector('app-chat-client-panel')).toBeNull();
@@ -2564,7 +2612,7 @@ describe('Messages', () => {
 
     it('puts focus back in the search box when the search is cleared', async () => {
       const harness = await render(({ listConversations }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
       });
       await search(harness, 'rania');
 
@@ -2579,7 +2627,7 @@ describe('Messages', () => {
 
     it('drops a saved reply into the coach’s draft and sends nothing', async () => {
       const harness = await render(({ listConversations }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
       });
       await open(harness);
       const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
@@ -2587,7 +2635,8 @@ describe('Messages', () => {
       composer.dispatchEvent(new Event('input'));
       await settle(harness.fixture);
 
-      press(harness.host, 'Saved replies');
+      // The composer's own button, which picks a reply; the inbox's manages them (critique B3b).
+      press(query(harness.host, 'app-chat-composer'), 'Saved replies');
       await settle(harness.fixture);
       const sheet = query(document.body, '.tb-modal-pane--sheet');
       expect(sheet.textContent).toContain('Check-in reminder');
@@ -2598,6 +2647,22 @@ describe('Messages', () => {
       expect(harness.sendConversationMessage).not.toHaveBeenCalled();
       expect(document.body.querySelector('.tb-modal-pane--sheet')).toBeNull();
       expect(document.activeElement).toBe(composer);
+    });
+
+    it('manages saved replies from the inbox: each one to read and change, none to drop in (critique B3b)', async () => {
+      const harness = await render(({ listConversations }) => {
+        listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
+      });
+
+      press(query(harness.host, '.inbox-head'), 'Saved replies');
+      await settle(harness.fixture);
+      const sheet = query(document.body, '.tb-modal-pane--sheet');
+      expect(sheet.textContent).toContain('Check-in reminder');
+      expect(sheet.querySelector('button.use')).toBeNull();
+      expect(sheet.querySelector('.use.read')?.textContent).toContain(
+        'Your check-in is due today.',
+      );
+      expect(sheet.querySelector('[data-reply-edit]')).not.toBeNull();
     });
 
     it('offers saved replies on the coach’s side only', async () => {
@@ -2614,7 +2679,7 @@ describe('Messages', () => {
 
     it('forgets the search when the workspace changes', async () => {
       const harness = await render(({ listConversations }) => {
-        listConversations.mockReturnValue(of(conversationPage([waitingRow], { counts: COUNTS })));
+        listConversations.mockReturnValue(of(conversationPage([listedRow], { counts: COUNTS })));
       });
       await search(harness, 'rania');
       expect(lastQuery(harness)).toEqual({ filter: 'All', search: 'rania' });

@@ -49,13 +49,15 @@ public sealed class ConversationListQuery
             : new ConversationListQuery(chosen, terms);
     }
 
-    /// <summary>Whether a conversation in this state, with this counterpart, belongs in the list.</summary>
-    public bool Matches(string counterpartName, bool hasUnread, bool isAwaitingReply)
+    /// <summary>
+    /// Whether a conversation in this state, with this counterpart, belongs in the list. Unread holds a
+    /// chat with an unread message or one its participant marked unread.
+    /// </summary>
+    public bool Matches(string counterpartName, bool hasUnread)
     {
         var inFilter = Filter switch
         {
             ConversationListFilter.Unread => hasUnread,
-            ConversationListFilter.AwaitingReply => isAwaitingReply,
             _ => true,
         };
         if (!inFilter || Terms.Count == 0)

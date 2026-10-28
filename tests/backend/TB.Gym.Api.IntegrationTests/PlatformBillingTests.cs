@@ -504,6 +504,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         "EstimateMaxFromRpeChart",
         "EstimateOneRepMax",
         "MarkAllOwnNotificationsRead",
+        "MarkOwnConversationUnread",
         "MarkOwnNotificationRead",
         "PreviewProgramEdit",
         "PreviewTrainingMaxes",

@@ -41,6 +41,7 @@ import { Avatar } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
+import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { ChatBubble } from './chat-bubble';
@@ -53,6 +54,7 @@ import { InboxToolbar } from './inbox-toolbar';
 import { SavedRepliesSheet } from './saved-replies';
 import { insertReply } from './saved-replies.models';
 import {
+  countsAsUnread,
   INBOX_FILTERS,
   isNewerProjection,
   mapConversationPage,
@@ -129,6 +131,7 @@ const plainQuery: InboxQuery = { filter: 'all', search: '' };
     RouterLink,
     SavedRepliesSheet,
     Skeleton,
+    UiMenu,
   ],
   templateUrl: './messages.html',
   styleUrl: './messages.scss',
@@ -171,11 +174,20 @@ export class Messages {
    */
   private readonly pinned = signal<Conversation | null>(null);
 
-  /** The coach's filter chip, kept in the address (`?show=waiting`) so Back returns to it. */
+  /**
+   * The coach's filter chip, kept in the address (`?show=unread`) so Back returns to it. An old
+   * `?show=waiting` opens on All: Waiting for reply went in critique B3b.
+   */
   protected readonly inboxFilter = signal<InboxFilter>(
     INBOX_FILTERS.find((filter) => filter === this.route?.snapshot.queryParamMap.get('show')) ??
       'all',
   );
+  /** The open chat's menu (MSG-022, critique B3b). */
+  protected readonly threadMenu: readonly UiMenuItem[] = [
+    { label: $localize`Mark as unread`, action: 'unread' },
+  ];
+  /** The saved replies sheet opened from the inbox to manage them, rather than to pick one. */
+  protected readonly managingReplies = signal(false);
   /** What the search box shows, and what the list was last asked for. */
   protected readonly searchDraft = signal('');
   private readonly searchApplied = signal('');
@@ -381,17 +393,11 @@ export class Messages {
       };
     }
 
-    return this.inboxFilter() === 'unread'
-      ? {
-          heading: $localize`Nothing unread`,
-          description: $localize`You have read everything your clients sent.`,
-          action: $localize`Show all conversations`,
-        }
-      : {
-          heading: $localize`Nobody is waiting for a reply`,
-          description: $localize`Every client has heard back from you.`,
-          action: $localize`Show all conversations`,
-        };
+    return {
+      heading: $localize`Nothing unread`,
+      description: $localize`You have read everything your clients sent.`,
+      action: $localize`Show all conversations`,
+    };
   });
 
   /** Derived reasons the composer works out for itself; never the channel a server error uses. */
@@ -630,6 +636,47 @@ export class Messages {
     );
   }
 
+  /**
+   * Mark as unread (MSG-022, critique B3b), from a row's menu or the open chat's: the caller's own
+   * mark, until they next read the chat. The open chat closes first, since reading it on screen would
+   * take the mark straight away.
+   */
+  protected async markUnread(conversation: Conversation): Promise<void> {
+    if (conversation.id === this.selectedId()) this.closeThread();
+    return this.scope.run('markUnread', async (owner) => {
+      try {
+        await owner.wait(this.csrf.refresh());
+        const readState = await owner.wait(
+          firstValueFrom(this.api.markConversationUnread(conversation.id).pipe(map(mapReadState))),
+        );
+        const before = this.conversations().find((item) => item.id === conversation.id);
+        if (before !== undefined && !countsAsUnread(before) && readState.isMarkedUnread) {
+          // Marking is not an event the live channel carries, so the chip is told here.
+          this.counts.update((counts) =>
+            counts === null ? null : { ...counts, unread: counts.unread + 1 },
+          );
+        }
+        this.conversations.update((loaded) =>
+          loaded.map((item) =>
+            item.id === conversation.id
+              ? {
+                  ...item,
+                  unreadCount: readState.unreadCount,
+                  isMarkedUnread: readState.isMarkedUnread,
+                }
+              : item,
+          ),
+        );
+        await owner.wait(this.unreadStore.refresh());
+      } catch (error) {
+        if (!owner.current) return;
+        this.showError(
+          apiErrorMessage(error, $localize`This chat couldn’t be marked unread. Try again.`),
+        );
+      }
+    });
+  }
+
   /** A chip: the list is asked again for what it names, and the address keeps it. */
   protected setInboxFilter(filter: InboxFilter): void {
     if (filter === this.inboxFilter()) {
@@ -689,17 +736,24 @@ export class Messages {
     }
   }
 
-  /** The coach's own saved replies, in a sheet over the thread (R3.5c). */
-  protected openSavedReplies(): void {
+  /**
+   * The coach's own saved replies, in a sheet over the thread to pick one (R3.5c), or from the inbox
+   * to manage them: list, search, change, add and delete (critique B3b).
+   */
+  protected openSavedReplies(manage = false): void {
     const template = this.savedRepliesSheet();
     if (template === undefined) return;
+    this.managingReplies.set(manage);
     const ref = this.sheets.open(template, {
       title: $localize`Saved replies`,
       closeLabel: $localize`Close`,
     });
     this.savedRepliesRef = ref;
     ref.closed.subscribe(() => {
-      if (this.savedRepliesRef === ref) this.savedRepliesRef = null;
+      if (this.savedRepliesRef === ref) {
+        this.savedRepliesRef = null;
+        this.managingReplies.set(false);
+      }
     });
   }
 
@@ -920,16 +974,9 @@ export class Messages {
           return;
         }
 
-        const wasWaiting = this.selected()?.isAwaitingReply === true;
         this.messages.update((loaded) => mergeNewer(loaded, [sent]));
         this.latestSequence.set(Math.max(this.latestSequence(), sent.sequence));
         this.applyToPreview(sent);
-        if (wasWaiting) {
-          // Answered: one fewer waiting, until the next read of the list says so itself.
-          this.counts.update((counts) =>
-            counts === null ? null : { ...counts, waiting: Math.max(0, counts.waiting - 1) },
-          );
-        }
         this.commandKeys.release('send', conversationId);
         this.draft.set('');
         this.composerAttempt.reset();
@@ -1489,14 +1536,23 @@ export class Messages {
       (highest, message) => Math.max(highest, message.sequence),
       0,
     );
+    // Opening a chat marked unread reads it, with nothing new on screen too (MSG-022, critique B3b).
+    const marked =
+      page.readState.isMarkedUnread ||
+      this.conversations().some((item) => item.id === conversationId && item.isMarkedUnread);
     // Asked for once (audit UIQ-8): the thread scrolling to its newest message may have asked already,
     // and once this asks, that scroll does not ask again.
-    if (displayed <= Math.max(this.confirmedRead, this.readTarget)) {
+    if (displayed <= Math.max(this.confirmedRead, this.readTarget) && !marked) {
       return;
     }
 
-    this.readTarget = displayed;
-    await this.reportRead(conversationId, displayed, generation, thread);
+    this.readTarget = Math.max(displayed, this.readTarget);
+    await this.reportRead(
+      conversationId,
+      Math.max(displayed, this.confirmedRead),
+      generation,
+      thread,
+    );
   }
 
   /**
@@ -1559,15 +1615,23 @@ export class Messages {
     }
 
     this.confirmedRead = readState.lastReadSequence;
-    const hadUnread = (this.selected()?.unreadCount ?? 0) > 0;
-    if (hadUnread && readState.unreadCount === 0) {
+    // A chat marked unread counted too, and reading it takes the mark away (MSG-022).
+    const selected = this.selected();
+    const hadUnread = selected !== undefined && countsAsUnread(selected);
+    if (hadUnread && readState.unreadCount === 0 && !readState.isMarkedUnread) {
       // Reading is not an event the live channel carries, so the chip is told here.
       this.counts.update((counts) =>
         counts === null ? null : { ...counts, unread: Math.max(0, counts.unread - 1) },
       );
     }
     this.pinned.update((pinned) =>
-      pinned?.id === conversationId ? { ...pinned, unreadCount: readState.unreadCount } : pinned,
+      pinned?.id === conversationId
+        ? {
+            ...pinned,
+            unreadCount: readState.unreadCount,
+            isMarkedUnread: readState.isMarkedUnread,
+          }
+        : pinned,
     );
     this.conversationUnread.set(readState.unreadCount);
     // The rows the cursor now covers stop being unread. Leaving the marks up would contradict the
@@ -1585,6 +1649,7 @@ export class Messages {
           ? {
               ...conversation,
               unreadCount: readState.unreadCount,
+              isMarkedUnread: readState.isMarkedUnread,
               lastReadSequence: readState.lastReadSequence,
               lastReadAtUtc: readState.lastReadAtUtc,
             }
@@ -1627,11 +1692,6 @@ export class Messages {
       };
       return {
         ...conversation,
-        // Who spoke last decides who waits (MSG-022). A removal is left to the next read of the
-        // list, which knows which earlier message is now the newest.
-        isAwaitingReply: message.isDeleted
-          ? conversation.isAwaitingReply
-          : !message.isFromCaller && !conversation.isReadOnly,
         lastSequence: Math.max(conversation.lastSequence, message.sequence),
         lastActivityAtUtc:
           message.sentAtUtc > conversation.lastActivityAtUtc
