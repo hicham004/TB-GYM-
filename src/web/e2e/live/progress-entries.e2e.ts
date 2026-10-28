@@ -118,7 +118,8 @@ test('log, correct, move and re-log a weigh-in; the history and the stored kilog
     await expect(sheet(page).getByRole('button', { name: 'Correct that weight' })).toBeVisible();
     await sheet(page).getByRole('button', { name: 'Not now' }).click();
     // A sheet with typed work asks first; Discard drops the 70.3 and lets the next step tap freely.
-    await page.locator('app-confirm button', { hasText: 'Discard' }).click();
+    // The question's answers sit in its dialog's footer, beside the message.
+    await page.locator('[role="dialog"]:has(app-confirm) button', { hasText: 'Discard' }).click();
     await expect(page.locator('app-confirm')).toHaveCount(0);
   });
 
@@ -222,7 +223,7 @@ test('a measurement out of range is refused in words and the others wait', async
   await expect(sheet(page)).toContainText('Waist has to be between 10 and 300 cm.');
   await expect(sheet(page)).toContainText('Check the fields marked above.');
   await sheet(page).getByRole('button', { name: 'Not now' }).click();
-  const confirm = page.locator('app-confirm');
+  const confirm = page.locator('[role="dialog"]:has(app-confirm)');
   if (await confirm.isVisible().catch(() => false)) {
     await confirm.locator('button').last().click();
   }

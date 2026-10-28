@@ -419,14 +419,19 @@ export class UiMenu {
     };
   }
 
+  /**
+   * Closed before the list is taken away: removing it blurs the item that had focus, and the browser's
+   * focusout would otherwise close the menu a second time, halfway through the first.
+   */
   private close(returnFocus: boolean): void {
-    if (!this.overlayRef) return;
+    const ref = this.overlayRef;
+    if (!ref) return;
+    this.overlayRef = null;
     this.stopFollowing?.();
     this.stopFollowing = null;
-    this.overlayRef.dispose();
-    this.overlayRef = null;
     this.open.set(false);
     if (returnFocus) this.trigger().nativeElement.focus();
+    ref.dispose();
   }
 
   /**

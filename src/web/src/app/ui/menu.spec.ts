@@ -337,13 +337,49 @@ describe('UiMenu', () => {
     expect(view.host.heard).toEqual([]);
   });
 
+  it('closes once when taking its list away blurs the item that had focus, as Chrome does', async () => {
+    // Chrome tells a removed element it lost focus; jsdom does not, so this does it the same way.
+    const realRemove = Element.prototype.remove;
+    vi.spyOn(Element.prototype, 'remove').mockImplementation(function (this: Element) {
+      const focused = document.activeElement;
+      if (focused && this.contains(focused)) {
+        focused.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      }
+      realRemove.call(this);
+    });
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const view = await render();
+
+    await open(view);
+    await key(view, 'Escape');
+    expect(list(view.element)).toBeNull();
+    expect(document.activeElement).toBe(trigger(view.element));
+
+    await open(view);
+    item(view.element, 'Copy to next week').click();
+    await settle(view.fixture);
+    expect(list(view.element)).toBeNull();
+    expect(view.host.heard.map((choice) => choice.action)).toEqual(['copy']);
+
+    // Pressed outside, the list goes with nothing else to do.
+    await open(view);
+    query<HTMLButtonElement>(view.element, '#after').dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    await settle(view.fixture);
+    expect(pane()).toBeNull();
+    expect(reported).not.toHaveBeenCalled();
+  });
+
   it('takes its list away with it when the page removes it while open', async () => {
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const view = await render();
     await open(view);
 
     view.fixture.destroy();
 
     expect(pane()).toBeNull();
+    expect(reported).not.toHaveBeenCalled();
   });
 
   describe('where the list opens', () => {
