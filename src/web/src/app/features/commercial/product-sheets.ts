@@ -29,6 +29,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ProductsApi } from './products-api';
@@ -73,12 +74,13 @@ export type ProductSheetMode =
     Field,
     FormSummary,
     Icon,
+    ModalFooter,
     NgTemplateOutlet,
     SegmentedControl,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (mode().kind === 'new' || mode().kind === 'details') {
         <app-field [label]="nameLabel" [errors]="shows('name') ? errors()['name'] : null">
           <input
@@ -281,33 +283,33 @@ export type ProductSheetMode =
           <ng-container i18n>Check the fields marked above.</ng-container>
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Saving…</ng-container>
-          } @else {
-            @switch (mode().kind) {
-              @case ('new') {
-                <app-icon name="plus" />
-                <ng-container i18n>Create plan</ng-container>
-              }
-              @case ('option') {
-                <ng-container i18n>Add price option</ng-container>
-              }
-              @case ('price') {
-                <ng-container i18n>Change price</ng-container>
-              }
-              @default {
-                <ng-container i18n>Save</ng-container>
-              }
+    </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Saving…</ng-container>
+        } @else {
+          @switch (mode().kind) {
+            @case ('new') {
+              <app-icon name="plus" />
+              <ng-container i18n>Create plan</ng-container>
+            }
+            @case ('option') {
+              <ng-container i18n>Add price option</ng-container>
+            }
+            @case ('price') {
+              <ng-container i18n>Change price</ng-container>
+            }
+            @default {
+              <ng-container i18n>Save</ng-container>
             }
           }
-        </button>
-      </div>
-    </form>
+        }
+      </button>
+    </ng-template>
   `,
   styles: `
     :host {
@@ -408,27 +410,6 @@ export type ProductSheetMode =
       position: absolute;
       white-space: nowrap;
     }
-
-    // Kept above the keyboard and the end of a long form, as on Service & access; a focused field
-    // scrolls clear of it.
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: -1.5rem;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
-    }
-
-    input,
-    textarea {
-      scroll-margin-block-end: 5rem;
-    }
   `,
 })
 export class ProductSheet {
@@ -451,6 +432,7 @@ export class ProductSheet {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('product');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly featureChips = FEATURES.map(featureChip);
@@ -597,7 +579,7 @@ export class ProductSheet {
       } catch (error) {
         if (!owner.current) return;
         this.error.set(productWriteError(error));
-        // At the foot of a long sheet the refusal sits under the sticky actions: focus brings it up.
+        // At the foot of a long sheet the refusal may be scrolled out of view: focus brings it up.
         this.summary().focus();
       } finally {
         if (owner.current) {

@@ -16,6 +16,7 @@ import type { ProgressPhotoPose } from '../../core/api/generated';
 import { Button } from '../../ui/button';
 import { DateField } from '../../ui/date-field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter } from '../../ui/modal-footer';
 import { Skeleton } from '../../ui/skeleton';
 import { EntryActions, EntrySheet, ReasonPicker, SHEET_STYLES } from './entry-sheet';
 import {
@@ -59,7 +60,7 @@ const emptySlots = (): Slots => ({ Front: emptySlot, Side: emptySlot, Back: empt
   imports: [Button, DateField, EntryActions, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted">{{ privacy() }}</p>
       <p class="muted" i18n>The same spot, light and relaxed pose make photos easy to compare.</p>
       <app-date-field
@@ -137,6 +138,7 @@ const emptySlots = (): Slots => ({ Front: emptySlot, Side: emptySlot, Back: empt
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"
@@ -359,7 +361,7 @@ export class AddPhotos extends EntrySheet {
  */
 @Component({
   selector: 'app-photo-view',
-  imports: [Button, EntryActions, FormSummary, ReasonPicker, Skeleton],
+  imports: [Button, EntryActions, FormSummary, ModalFooter, ReasonPicker, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -395,7 +397,7 @@ export class AddPhotos extends EntrySheet {
         </p>
       }
       @if (removing()) {
-        <form class="remove" (submit)="$event.preventDefault(); remove()" novalidate>
+        <form [id]="formId" class="remove" (submit)="$event.preventDefault(); remove()" novalidate>
           <app-reason-picker
             [label]="reasonLabel"
             [picks]="picks()"
@@ -411,6 +413,7 @@ export class AddPhotos extends EntrySheet {
             }
           </app-form-summary>
           <app-entry-actions
+            [form]="formId"
             [saveLabel]="removeLabel"
             [busyLabel]="removingLabel"
             [busy]="busy()"
@@ -419,14 +422,14 @@ export class AddPhotos extends EntrySheet {
           />
         </form>
       } @else {
-        <div class="foot">
+        <ng-template appModalFooter>
           @if (tile().photo.status === 'Active') {
             <button appButton type="button" variant="outlined" (click)="startRemoving()" i18n>
               Remove photo
             </button>
           }
           <button appButton type="button" (click)="closed.emit(null)" i18n>Close</button>
-        </div>
+        </ng-template>
       }
     </div>
   `,
@@ -446,13 +449,6 @@ export class AddPhotos extends EntrySheet {
         display: flex;
         flex-direction: column;
         gap: 1rem;
-      }
-
-      .foot {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        justify-content: flex-end;
       }
     `,
   ],

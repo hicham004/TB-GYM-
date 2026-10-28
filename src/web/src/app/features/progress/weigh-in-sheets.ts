@@ -55,7 +55,7 @@ const MASS_UNITS: readonly SegmentOption[] = [
   imports: [Control, DateField, EntryActions, Field, FormSummary, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted">{{ lede() }}</p>
       <app-field
         [label]="weightLabel"
@@ -106,6 +106,7 @@ const MASS_UNITS: readonly SegmentOption[] = [
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="taken() ? correctLabel : saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"
@@ -206,7 +207,7 @@ export class LogWeight extends EntrySheet {
   imports: [Control, EntryActions, Field, FormSummary, ReasonPicker, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about">
         <strong>{{ row().value }}</strong
         >&ngsp;
@@ -254,6 +255,7 @@ export class LogWeight extends EntrySheet {
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"
@@ -346,7 +348,7 @@ export class CorrectWeight extends EntrySheet {
   imports: [DateField, EntryActions, FormSummary, ReasonPicker],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about">
         <strong>{{ row().value }}</strong
         >&ngsp;
@@ -381,6 +383,7 @@ export class CorrectWeight extends EntrySheet {
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { field, fill, leave, press, settle } from '../../../testing/dom';
+import { field, fill, leave, press, query, settle } from '../../../testing/dom';
 import { setIssue } from './program-builder.models';
 import { ProgramSetsEditor } from './program-sets-editor';
 import {
@@ -116,12 +116,13 @@ describe('the shared program set editor', () => {
     const { fixture, host, exercise } = await render();
     press(host, 'Effort: RPE');
     await settle(fixture);
-    press(host, 'RIR');
+    // A menu's list is drawn in an overlay of its own, outside the editor.
+    press(query(document, '.tb-menu-pane'), 'RIR');
     await settle(fixture);
     expect(exercise.sets[0].exertionTarget).toBe(3);
     press(host, 'Unit: kg');
     await settle(fixture);
-    press(host, 'lb');
+    press(query(document, '.tb-menu-pane'), 'lb');
     await settle(fixture);
     expect(exercise.sets[0]).toMatchObject({
       loadUnit: 'Pound',

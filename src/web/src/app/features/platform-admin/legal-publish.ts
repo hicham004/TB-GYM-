@@ -23,6 +23,7 @@ import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
 import { selectOptions, UiSelect } from '../../ui/select';
 import {
@@ -62,10 +63,10 @@ import {
  */
 @Component({
   selector: 'app-legal-publish',
-  imports: [Button, Checkbox, Control, Field, FormSummary, SegmentedControl, UiSelect],
+  imports: [Button, Checkbox, Control, Field, FormSummary, ModalFooter, SegmentedControl, UiSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <app-select
         label="Document"
         i18n-label
@@ -187,26 +188,28 @@ import {
           <ng-container i18n>Check the fields marked above.</ng-container>
         }
       </app-form-summary>
-      <div class="actions">
-        @if (confirming()) {
-          <button appButton type="button" variant="text" (click)="backToEditing()" i18n>
-            Back to editing
-          </button>
-          <button appButton type="button" [loading]="busy()" (click)="publish()" data-publish-now>
-            @if (busy()) {
-              <ng-container i18n>Publishing…</ng-container>
-            } @else {
-              <ng-container i18n>Publish now</ng-container>
-            }
-          </button>
-        } @else {
-          <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
-            Not now
-          </button>
-          <button appButton type="submit" data-submit i18n>Publish this version</button>
-        }
-      </div>
     </form>
+    <ng-template appModalFooter>
+      @if (confirming()) {
+        <button appButton type="button" variant="text" (click)="backToEditing()" i18n>
+          Back to editing
+        </button>
+        <button appButton type="button" [loading]="busy()" (click)="publish()" data-publish-now>
+          @if (busy()) {
+            <ng-container i18n>Publishing…</ng-container>
+          } @else {
+            <ng-container i18n>Publish now</ng-container>
+          }
+        </button>
+      } @else {
+        <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+          Not now
+        </button>
+        <button appButton type="submit" [attr.form]="formId" data-submit i18n>
+          Publish this version
+        </button>
+      }
+    </ng-template>
   `,
   styles: `
     :host {
@@ -243,7 +246,7 @@ import {
       border-radius: var(--tb-radius-control);
       font-weight: 600;
       padding: 0.75rem 0.875rem;
-      scroll-margin-block: 1rem 5rem;
+      scroll-margin-block: 1rem;
     }
 
     .confirm:focus {
@@ -253,13 +256,6 @@ import {
     .confirm:focus-visible {
       outline: 3px solid var(--tb-focus);
       outline-offset: 2px;
-    }
-
-    // A focused field scrolls clear of the sticky action bar at the sheet's foot.
-    input,
-    textarea,
-    button.trigger {
-      scroll-margin-block-end: 5rem;
     }
 
     textarea {
@@ -307,21 +303,6 @@ import {
       font-weight: 600;
       margin-inline-start: calc(16px + 0.5rem);
     }
-
-    // The platform sheets' sticky actions (platform-sheets.ts).
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: -1.5rem;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
-    }
   `,
 })
 export class LegalPublish {
@@ -344,6 +325,7 @@ export class LegalPublish {
   readonly changedMeanwhile = output<void>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('legal-publish');
   protected readonly kindOptions = selectOptions(LEGAL_KINDS, legalKindName);
   protected readonly contextOptions: readonly SegmentOption[] = [
     { value: 'Platform', label: $localize`Once per person` },

@@ -70,7 +70,7 @@ describe('UiSheet', () => {
     const wrapper = query<HTMLElement>(document, '.cdk-global-overlay-wrapper');
     expect(wrapper.style.alignItems).toBe('flex-end');
     expect(wrapper.style.justifyContent).toBe('center');
-    expect(pane().style.width).toBe('100vw');
+    expect(pane().style.width).toBe('100%');
     expect(pane().style.maxWidth).toBe('40rem');
     expect(document.querySelector('.cdk-overlay-backdrop.tb-modal-backdrop')).not.toBeNull();
   });

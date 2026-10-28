@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoachingProductView, ProductCatalog } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, fill, press, settle, tick } from '../../../testing/dom';
+import { button, fill, menuChoices, press, settle, tick } from '../../../testing/dom';
 import { atlasCatalog, offer, product } from '../../../testing/product-fixtures';
 import { Products } from './products';
 import { ProductsApi } from './products-api';
@@ -65,7 +65,7 @@ async function choose(
   trigger.click();
   await settle(fixture as never);
   // Matched by its title: an item with a hint reads both.
-  const choice = Array.from(host.querySelectorAll<HTMLButtonElement>('.panel .item')).find(
+  const choice = menuChoices(trigger).find(
     (candidate) => textOf(candidate.querySelector('.item-title')) === item,
   );
   if (!choice) throw new Error(`The menu "${label}" has no "${item}".`);

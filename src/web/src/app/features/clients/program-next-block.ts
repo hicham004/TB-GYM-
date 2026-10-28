@@ -31,6 +31,7 @@ import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter } from '../../ui/modal-footer';
 import { unitLabel } from '../training/training-program.models';
 import type { BlockCard } from './client-program.models';
 import {
@@ -59,7 +60,7 @@ import { addDays } from './client-overview.models';
  */
 @Component({
   selector: 'app-program-next-block',
-  imports: [Button, Checkbox, Control, Field, FormSummary],
+  imports: [Button, Checkbox, Control, Field, FormSummary, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -233,36 +234,29 @@ import { addDays } from './client-overview.models';
           {{ message }}
         }
       </app-form-summary>
-
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        @if (preview()) {
-          <button
-            appButton
-            type="button"
-            [loading]="busy()"
-            [disabled]="!canAdd()"
-            (click)="apply()"
-          >
-            @if (busy()) {
-              <ng-container i18n>Adding…</ng-container>
-            } @else {
-              <ng-container i18n>Add these weeks</ng-container>
-            }
-          </button>
-        } @else {
-          <button appButton type="button" [loading]="busy()" (click)="previewIt()">
-            @if (busy()) {
-              <ng-container i18n>Working it out…</ng-container>
-            } @else {
-              <ng-container i18n>Preview the new weeks</ng-container>
-            }
-          </button>
-        }
-      </div>
     </div>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      @if (preview()) {
+        <button appButton type="button" [loading]="busy()" [disabled]="!canAdd()" (click)="apply()">
+          @if (busy()) {
+            <ng-container i18n>Adding…</ng-container>
+          } @else {
+            <ng-container i18n>Add these weeks</ng-container>
+          }
+        </button>
+      } @else {
+        <button appButton type="button" [loading]="busy()" (click)="previewIt()">
+          @if (busy()) {
+            <ng-container i18n>Working it out…</ng-container>
+          } @else {
+            <ng-container i18n>Preview the new weeks</ng-container>
+          }
+        </button>
+      }
+    </ng-template>
   `,
   styles: `
     :host {
@@ -305,12 +299,6 @@ import { addDays } from './client-overview.models';
       padding: 0;
     }
 
-    // The action bar sticks over the end of the scrolling sheet: when focus scrolls a control into
-    // view, leave room for the bar so it never covers it.
-    input {
-      scroll-margin-block-end: 5rem;
-    }
-
     .field-error {
       color: var(--tb-danger);
       font-size: 0.8125rem;
@@ -330,22 +318,6 @@ import { addDays } from './client-overview.models';
       color: var(--tb-danger);
       font-weight: 600;
       padding: 0.625rem 0.875rem;
-    }
-
-    // The buttons stay in view while a long sheet scrolls under them. The sheet pads its body by
-    // 1.5rem, which the bar cancels so it spans the sheet edge to edge.
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: 0;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
     }
 
     .preview {

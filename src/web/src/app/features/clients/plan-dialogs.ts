@@ -20,6 +20,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { REASON_LIMIT, reasonErrors, serviceWriteError } from './client-service-forms.models';
 import { shortDate, type PlanCard } from './client-service.models';
 
@@ -49,13 +50,6 @@ const DIALOG_STYLES = `
   .muted {
     color: var(--tb-muted);
   }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: flex-end;
-  }
 `;
 
 const REASON_HELP = $localize`Kept on the record. ${REASON_LIMIT}:limit: characters at most.`;
@@ -64,10 +58,10 @@ const REASON_HELP = $localize`Kept on the record. ${REASON_LIMIT}:limit: charact
 
 @Component({
   selector: 'app-plan-status-change',
-  imports: [Button, Control, Field, FormSummary],
+  imports: [Button, Control, Field, FormSummary, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (mode() === 'pause') {
         <p dir="auto">{{ pauseLine() }}</p>
         <p class="muted" i18n>Resume it at any time from Manage plan.</p>
@@ -97,21 +91,21 @@ const REASON_HELP = $localize`Kept on the record. ${REASON_LIMIT}:limit: charact
           {{ message }}
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Keep plan
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Saving…</ng-container>
-          } @else if (mode() === 'pause') {
-            <ng-container i18n>Pause plan</ng-container>
-          } @else {
-            <ng-container i18n>Cancel plan</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Keep plan
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Saving…</ng-container>
+        } @else if (mode() === 'pause') {
+          <ng-container i18n>Pause plan</ng-container>
+        } @else {
+          <ng-container i18n>Cancel plan</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: DIALOG_STYLES,
 })
@@ -130,6 +124,7 @@ export class PlanStatusChange {
   readonly closed = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('plan-status-change');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly limit = REASON_LIMIT;
@@ -197,10 +192,10 @@ export class PlanStatusChange {
 
 @Component({
   selector: 'app-access-change',
-  imports: [Button, Control, Field, FormSummary],
+  imports: [Button, Control, Field, FormSummary, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (blocking()) {
         <p dir="auto" i18n>
           Block {{ client().firstName }}? They can’t use anything their plans include in your
@@ -235,21 +230,21 @@ export class PlanStatusChange {
           {{ message }}
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Saving…</ng-container>
-          } @else if (blocking()) {
-            <ng-container i18n>Block access</ng-container>
-          } @else {
-            <ng-container i18n>Unblock</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Saving…</ng-container>
+        } @else if (blocking()) {
+          <ng-container i18n>Block access</ng-container>
+        } @else {
+          <ng-container i18n>Unblock</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: DIALOG_STYLES,
 })
@@ -265,6 +260,7 @@ export class AccessChange {
   readonly closed = output<CoachClientDetails | null>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('access-change');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly limit = REASON_LIMIT;

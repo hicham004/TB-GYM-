@@ -42,7 +42,7 @@ import { questionFacts, readQuestions, versionRows, type FormClock } from './che
   imports: [Control, EntryActions, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <app-field
         [label]="titleLabel"
         [errors]="shows('title', titleIssues()) ? titleIssues() : null"
@@ -83,6 +83,7 @@ import { questionFacts, readQuestions, versionRows, type FormClock } from './che
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"

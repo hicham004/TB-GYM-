@@ -352,13 +352,6 @@ h1 {
   gap: 1rem;
 }
 
-.sheet-footer {
-  border-block-start: 1px solid var(--tb-line);
-  display: flex;
-  justify-content: flex-end;
-  padding-block-start: 0.875rem;
-}
-
 .history {
   display: flex;
   flex-direction: column;
@@ -416,16 +409,6 @@ h1 {
   text-align: center;
 }
 
-.preview-footer {
-  align-items: center;
-  border-block-start: 1px solid var(--tb-line);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: space-between;
-  margin-block-start: 1rem;
-  padding-block-start: 1rem;
-}
 .preview-error {
   background: var(--tb-danger-soft);
   border-radius: var(--tb-radius-card-small);

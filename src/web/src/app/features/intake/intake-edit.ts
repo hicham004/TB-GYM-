@@ -20,6 +20,7 @@ import { Button } from '../../ui/button';
 import type { IsoDate } from '../../ui/calendar';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { IntakeFields } from './intake-fields';
 import {
   hasChanges,
@@ -42,10 +43,10 @@ import {
  */
 @Component({
   selector: 'app-intake-edit',
-  imports: [Button, FormSummary, Icon, IntakeFields],
+  imports: [Button, FormSummary, Icon, IntakeFields, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (step() === 'start') {
         <p class="muted" i18n>
           This is the weight their progress is measured from. It is recorded once; later weigh-ins
@@ -75,19 +76,19 @@ import {
           <ng-container i18n>Check the fields marked above.</ng-container>
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (step() === 'start') {
-            <ng-container i18n>Finish setting up</ng-container>
-          } @else {
-            <ng-container i18n>Save changes</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (step() === 'start') {
+          <ng-container i18n>Finish setting up</ng-container>
+        } @else {
+          <ng-container i18n>Save changes</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: `
     :host {
@@ -124,20 +125,6 @@ import {
     .privacy app-icon {
       flex: none;
     }
-
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: -1.5rem;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
-    }
   `,
 })
 export class IntakeEdit {
@@ -161,6 +148,7 @@ export class IntakeEdit {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('intake-edit');
   protected readonly busy = signal(false);
   protected readonly refusal = signal<string | null>(null);
   /** The client editing their own health answers is told who sees them, as on the first run (CLIENT-18). */

@@ -31,7 +31,7 @@ import { ALLERGEN_LABELS } from './nutrition.models';
   imports: [Checkbox, Control, EntryActions, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (theirWords(); as words) {
         <blockquote class="theirs" data-theirs>
           <span class="muted" i18n>What {{ firstName() }} wrote about allergies</span>&ngsp;<span
@@ -64,6 +64,7 @@ import { ALLERGEN_LABELS } from './nutrition.models';
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"

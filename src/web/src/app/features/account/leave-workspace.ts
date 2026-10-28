@@ -17,6 +17,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import type { ModalSurface } from '../../ui/modal-surface';
 import { LeaveWorkspaceApi } from './leave-workspace-api';
 
@@ -30,7 +31,7 @@ import { LeaveWorkspaceApi } from './leave-workspace-api';
  */
 @Component({
   selector: 'app-leave-workspace',
-  imports: [Button, Control, Field],
+  imports: [Button, Control, Field, ModalFooter],
   templateUrl: './leave-workspace.html',
   styleUrl: './leave-workspace.scss',
 })
@@ -42,6 +43,7 @@ export class LeaveWorkspace {
   private readonly router = inject(Router);
   private readonly dialogs = inject(UiDialog);
   private readonly dialogTemplate = viewChild.required<TemplateRef<unknown>>('leaveDialog');
+  protected readonly formId = modalFormId('leave');
   private openDialog: DialogRef<unknown, ModalSurface> | null = null;
 
   protected readonly membership = this.tenants.selectedMembership;

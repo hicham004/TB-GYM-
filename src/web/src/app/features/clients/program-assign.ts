@@ -36,6 +36,7 @@ import { isoWeekdayOfName } from '../../ui/calendar';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { UiSelect, type SelectOption } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
@@ -78,6 +79,7 @@ import {
     DateField,
     Field,
     FormSummary,
+    ModalFooter,
     RouterLink,
     SegmentedControl,
     Skeleton,
@@ -85,7 +87,7 @@ import {
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @switch (load()) {
         @case ('loading') {
           <app-skeleton [label]="loadingLabel" [lines]="4" />
@@ -314,23 +316,25 @@ import {
               <ng-container i18n>Check the fields marked above.</ng-container>
             }
           </app-form-summary>
-          <div class="actions">
-            <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
-              Not now
-            </button>
-            @if (plans().length > 0) {
-              <button appButton type="submit" [loading]="busy()">
-                @if (busy()) {
-                  <ng-container i18n>Assigning…</ng-container>
-                } @else {
-                  <ng-container i18n>Assign program</ng-container>
-                }
-              </button>
-            }
-          </div>
         }
       }
     </form>
+    @if (load() === 'ready') {
+      <ng-template appModalFooter>
+        <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+          Not now
+        </button>
+        @if (plans().length > 0) {
+          <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+            @if (busy()) {
+              <ng-container i18n>Assigning…</ng-container>
+            } @else {
+              <ng-container i18n>Assign program</ng-container>
+            }
+          </button>
+        }
+      </ng-template>
+    }
   `,
   styles: `
     :host {
@@ -498,22 +502,6 @@ import {
       flex-wrap: wrap;
       gap: 0.5rem 1rem;
     }
-
-    // The buttons stay in view while a long sheet scrolls under them. The sheet pads its body by
-    // 1.5rem, which the bar cancels so it spans the sheet edge to edge.
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: 0;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
-    }
   `,
 })
 export class ProgramAssign {
@@ -569,6 +557,7 @@ export class ProgramAssign {
   ];
 
   protected readonly load = signal<'loading' | 'ready' | 'error'>('loading');
+  protected readonly formId = modalFormId('program-assign');
   protected readonly templates = signal<ProgramTemplateSummary[]>([]);
   protected readonly templateTotal = signal(0);
   protected readonly loadingMore = signal(false);

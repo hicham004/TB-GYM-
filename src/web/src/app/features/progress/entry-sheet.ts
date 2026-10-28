@@ -20,6 +20,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import type { IsoDate } from '../../ui/calendar';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { modalFormId } from '../../ui/modal-footer';
 import { ProgressEntriesApi } from './progress-entries-api';
 import {
   entryRefusal,
@@ -60,6 +61,8 @@ export abstract class EntrySheet {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  /** The form's `id`, which the submit button in the sheet's footer names. */
+  protected readonly formId = modalFormId('entry-form');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -85,7 +88,7 @@ export abstract class EntrySheet {
     );
   }
 
-  /** The server refused: its words are in the summary, which takes focus clear of the sticky bar. */
+  /** The server refused: its words are in the summary, which takes focus. */
   protected focusSummary(): void {
     this.summary()?.focus();
   }

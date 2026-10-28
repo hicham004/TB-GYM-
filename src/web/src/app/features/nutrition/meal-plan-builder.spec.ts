@@ -20,7 +20,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { UiToast } from '../../ui/toast';
-import { field, fill, settle } from '../../../testing/dom';
+import { field, fill, menuChoices, settle } from '../../../testing/dom';
 import {
   CHICKEN,
   draftContent,
@@ -544,7 +544,7 @@ describe('the meal-plan builder', () => {
 
     named(days(host)[0], 'More for day 1').click();
     await settle(harness.fixture);
-    const remove = all(days(host)[0], 'app-menu .item').find((item) =>
+    const remove = menuChoices(named(days(host)[0], 'More for day 1')).find((item) =>
       textOf(item).startsWith('Delete day'),
     );
     remove!.click();

@@ -1,5 +1,5 @@
 @let current = draft();
-<form class="food-form" novalidate (ngSubmit)="save()">
+<form [id]="formId" class="food-form" novalidate (ngSubmit)="save()">
   <app-form-summary>
     @if (stale()) {
       <ng-container i18n
@@ -212,7 +212,8 @@
       }
     </div>
   </fieldset>
-
+</form>
+<ng-template appModalFooter>
   <div class="footer">
     <p class="estimate" aria-live="polite">
       @if (estimate(); as line) {
@@ -231,7 +232,9 @@
     }
     <div class="actions">
       <button appButton type="button" variant="text" (click)="cancelled.emit()" i18n>Cancel</button>
-      <button appButton type="submit" [loading]="saving()">{{ saveLabel() }}</button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="saving()">
+        {{ saveLabel() }}
+      </button>
     </div>
   </div>
-</form>
+</ng-template>

@@ -15,7 +15,7 @@ const WEEK: UiMenuItem[] = [
 @Component({
   imports: [UiMenu],
   template: `
-    <div class="row">
+    <div class="row" [attr.dir]="dir()" [attr.data-mode]="mode()">
       <app-menu
         [label]="label()"
         [items]="items()"
@@ -42,6 +42,8 @@ class Host {
   readonly selected = signal(false);
   readonly disabled = signal(false);
   readonly current = signal<string | null>(null);
+  readonly dir = signal<'ltr' | 'rtl' | null>(null);
+  readonly mode = signal<'dark' | null>(null);
   readonly menu = viewChild.required(UiMenu);
   /** Each choice the page heard, with where focus was when it heard it. */
   readonly heard: { action: string; focus: Element | null }[] = [];
@@ -67,9 +69,13 @@ type Rendered = Awaited<ReturnType<typeof render>>;
 
 const trigger = (element: HTMLElement) =>
   query<HTMLButtonElement>(element, 'app-menu .menu > button');
-const list = (element: HTMLElement) => element.querySelector<HTMLElement>('app-menu ul');
+/** The overlay pane the open list is drawn in: beside the button in a browser, in the body here. */
+const pane = () => document.querySelector<HTMLElement>('.tb-menu-pane');
+// The list, found as a person's assistive technology finds it: through the button it belongs to.
+const list = (element: HTMLElement) =>
+  document.getElementById(trigger(element).getAttribute('aria-controls')!);
 const items = (element: HTMLElement) =>
-  Array.from(element.querySelectorAll<HTMLButtonElement>('app-menu .item'));
+  Array.from(list(element)?.querySelectorAll<HTMLButtonElement>('.item') ?? []);
 const item = (element: HTMLElement, label: string) => {
   const found = items(element).find(
     (candidate) => candidate.querySelector('.item-title')?.textContent?.trim() === label,
@@ -95,8 +101,8 @@ async function key({ fixture }: Rendered, name: string): Promise<KeyboardEvent> 
 describe('UiMenu', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (document.documentElement as unknown as { clientWidth?: number }).clientWidth;
     TestBed.resetTestingModule();
+    document.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
   });
 
   it('is a button named by its words that says whether its list is open and which list it opens', async () => {
@@ -302,63 +308,136 @@ describe('UiMenu', () => {
     expect(document.activeElement).toBe(trigger(view.element));
   });
 
-  describe('near the edge of the screen', () => {
+  it('draws its list in an overlay of its own, in the mode and direction of the row it sits in', async () => {
+    const view = await render((host) => {
+      host.dir.set('rtl');
+      host.mode.set('dark');
+    });
+    await open(view);
+
+    expect(pane()).not.toBeNull();
+    expect(pane()!.contains(list(view.element))).toBe(true);
+    expect(pane()!.dataset['mode']).toBe('dark');
+    expect(pane()!.closest('[dir]')?.getAttribute('dir')).toBe('rtl');
+  });
+
+  it('closes on a press outside it, leaving focus where the press put it', async () => {
+    const view = await render();
+    await open(view);
+    const after = query<HTMLButtonElement>(view.element, '#after');
+
+    after.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    after.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settle(view.fixture);
+
+    expect(list(view.element)).toBeNull();
+    expect(pane()).toBeNull();
+    expect(trigger(view.element).getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).not.toBe(trigger(view.element));
+    expect(view.host.heard).toEqual([]);
+  });
+
+  it('takes its list away with it when the page removes it while open', async () => {
+    const view = await render();
+    await open(view);
+
+    view.fixture.destroy();
+
+    expect(pane()).toBeNull();
+  });
+
+  describe('where the list opens', () => {
     const realBox = Element.prototype.getBoundingClientRect;
 
-    /** The list's box once drawn, on a screen 390 px wide. */
-    function screenWith(panel: Partial<DOMRect>): void {
-      Object.defineProperty(document.documentElement, 'clientWidth', {
-        configurable: true,
-        get: () => 390,
-      });
+    /** A phone screen 390 × 844, the button at `button`, and a list 200 × 160 once drawn. */
+    function screenWith(button: Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>): void {
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390);
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(844);
+      // The overlay measures the window without its scrollbars, as the page's own width and height.
+      const page = (size: number) =>
+        function (this: Element) {
+          return this === document.documentElement ? size : 0;
+        };
+      vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(page(390));
+      vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(page(844));
       vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
         this: Element,
       ) {
-        return this.classList.contains('panel')
-          ? ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0, ...panel } as DOMRect)
-          : realBox.call(this);
+        const box = (rect: Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>) =>
+          ({
+            ...rect,
+            x: rect.left,
+            y: rect.top,
+            width: rect.right - rect.left,
+            height: rect.bottom - rect.top,
+          }) as DOMRect;
+        if (this.matches('app-menu .menu > button')) return box(button);
+        if (this.classList.contains('tb-menu-pane')) {
+          return box({ top: 0, left: 0, right: 200, bottom: 160 });
+        }
+        return realBox.call(this);
       });
     }
 
-    const startAligned = (element: HTMLElement) => list(element)!.classList.contains('start');
+    const placed = () =>
+      Array.from(pane()!.classList).find((name) => name.startsWith('tb-menu-pane--'));
 
-    it('lines the list up with the button’s end, or its start when asked', async () => {
-      screenWith({ left: 120, right: 360 });
+    it('opens below, lined up with the button’s end, or its start when asked', async () => {
+      screenWith({ top: 100, bottom: 136, left: 300, right: 336 });
       const view = await render();
       await open(view);
-      expect(startAligned(view.element)).toBe(false);
+      expect(placed()).toBe('tb-menu-pane--below-end');
       await open(view);
 
       view.host.align.set('start');
       await settle(view.fixture);
+      screenWith({ top: 100, bottom: 136, left: 24, right: 60 });
       await open(view);
-      expect(startAligned(view.element)).toBe(true);
+      expect(placed()).toBe('tb-menu-pane--below-start');
     });
 
-    it('opens from the other edge when the list would run off the screen', async () => {
-      screenWith({ left: 200, right: 440 });
+    it('lines up with the button’s other edge when its own would run off the screen', async () => {
+      screenWith({ top: 100, bottom: 136, left: 16, right: 52 });
       const view = await render();
       await open(view);
-      expect(startAligned(view.element)).toBe(true);
+
+      expect(placed()).toBe('tb-menu-pane--below-start');
+    });
+
+    it('opens above the button when there is no room below it', async () => {
+      screenWith({ top: 760, bottom: 796, left: 300, right: 336 });
+      const view = await render();
+      await open(view);
+      expect(placed()).toBe('tb-menu-pane--above-end');
       await open(view);
 
-      screenWith({ left: -40, right: 200 });
-      view.host.align.set('start');
+      screenWith({ top: 760, bottom: 796, left: 16, right: 52 });
+      await open(view);
+      expect(placed()).toBe('tb-menu-pane--above-start');
+    });
+
+    it('reads its edges the other way round in a right-to-left row', async () => {
+      // The end is the left edge there: lined up with it, the list would run off the right.
+      screenWith({ top: 100, bottom: 136, left: 340, right: 376 });
+      const view = await render((host) => host.dir.set('rtl'));
+      await open(view);
+
+      expect(placed()).toBe('tb-menu-pane--below-start');
+    });
+
+    it('closes once a scroll has carried its button out of sight, focus going back to it', async () => {
+      screenWith({ top: 100, bottom: 136, left: 300, right: 336 });
+      const view = await render();
+      await open(view);
+      expect(document.activeElement).toBe(items(view.element)[0]);
+
+      screenWith({ top: -80, bottom: -44, left: 300, right: 336 });
+      document.dispatchEvent(new Event('scroll'));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       await settle(view.fixture);
-      await open(view);
-      expect(startAligned(view.element)).toBe(false);
-    });
 
-    it('reads the screen again each time it opens', async () => {
-      screenWith({ left: 200, right: 440 });
-      const view = await render();
-      await open(view);
-      expect(startAligned(view.element)).toBe(true);
-      await open(view);
-
-      screenWith({ left: 120, right: 360 });
-      await open(view);
-      expect(startAligned(view.element)).toBe(false);
+      expect(list(view.element)).toBeNull();
+      expect(document.activeElement).toBe(trigger(view.element));
     });
   });
 });

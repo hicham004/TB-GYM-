@@ -61,7 +61,7 @@ describe('Stop a meal plan (NCM-1)', () => {
     expect(textOf(host)).toContain(
       'Kept with the plan, where you and your team see it. Rana doesn’t.',
     );
-    expect(textOf(host.querySelector('.actions'))).toBe('Keep it Stop meal plan');
+    expect(textOf(host.querySelector('app-entry-actions'))).toBe('Keep it Stop meal plan');
   });
 
   it('says a coming plan will not start', async () => {

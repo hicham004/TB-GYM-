@@ -40,6 +40,20 @@ export async function settle(fixture: ComponentFixture<unknown>): Promise<void> 
 }
 
 /**
+ * The choices of the kit menu whose button is `trigger`, once it is open. The list is an overlay of
+ * its own (critique B2a): beside its button in a browser, at the end of the body under jsdom, so it
+ * is found through the button, as assistive technology finds it.
+ */
+export function menuChoices(trigger: Element): HTMLButtonElement[] {
+  const list = document.getElementById(trigger.getAttribute('aria-controls') ?? '');
+  if (!list)
+    throw new Error(
+      `The menu "${normalize(trigger.textContent) || trigger.getAttribute('aria-label')}" is not open.`,
+    );
+  return Array.from(list.querySelectorAll<HTMLButtonElement>('.item'));
+}
+
+/**
  * Finds a control the test is about to drive, and fails naming the selector when it is absent.
  * Without this a renamed or removed control surfaces as `Cannot read properties of null`, which
  * reads like a broken test rather than a missing control.

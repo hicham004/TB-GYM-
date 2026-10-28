@@ -92,20 +92,12 @@ legend {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
 }
 
-// The calories and the buttons stay in view while the sheet scrolls under them. The sheet pads its
-// body by 1.5rem, which the footer cancels so it spans the sheet edge to edge, and sits on the
-// sheet's bottom edge: a sticky box otherwise stops at the padding and lets boxes show beneath it.
+// The calories and the buttons, in the sheet's footer so they stay in view while the form scrolls.
 .footer {
-  background: var(--tb-surface);
-  border-block-start: 1px solid var(--tb-line);
   display: flex;
+  flex: 1 1 100%;
   flex-direction: column;
   gap: 0.5rem;
-  inset-block-end: -1.5rem;
-  margin-block-end: -1.5rem;
-  margin-inline: -1.5rem;
-  padding: 0.75rem 1.5rem;
-  position: sticky;
 }
 
 .estimate {
@@ -119,14 +111,6 @@ legend {
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: flex-end;
-}
-
-// A focused box stays above the sticky footer, the kit select's button as well (it reads the property).
-input {
-  scroll-margin-block-end: 9rem;
-}
-app-select {
-  --tb-field-scroll-margin-end: 9rem;
 }
 
 @container (max-width: 18rem) {

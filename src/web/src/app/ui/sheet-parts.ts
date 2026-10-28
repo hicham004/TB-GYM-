@@ -1,49 +1,48 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { Button } from './button';
+import { ModalFooter } from './modal-footer';
 
 /**
- * The foot of a form in a sheet: Not now, and the one action. It stays in view while a long form
- * scrolls. Shared by the weigh-in, measurement and photo sheets (R5.3c) and the nutrition sheets (R5.3d).
+ * The foot of a form in a sheet: Not now, and the one action, drawn in the sheet's footer so they stay
+ * in view while a long form scrolls (critique B2a). The submit button sits outside the form there, so
+ * `form` names it: the form's `id`, from `modalFormId`. Shared by the weigh-in, measurement and photo
+ * sheets (R5.3c) and the nutrition sheets (R5.3d).
  */
 @Component({
   selector: 'app-entry-actions',
-  imports: [Button],
+  imports: [Button, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="actions">
+    <ng-template appModalFooter>
       <button appButton type="button" variant="text" (click)="notNow.emit()">
         {{ cancelLabel() }}
       </button>
-      <button appButton type="submit" [loading]="busy()">
+      <button appButton type="submit" [attr.form]="form()" [loading]="busy()">
         @if (busy()) {
           {{ busyLabel() }}
         } @else {
           {{ saveLabel() }}
         }
       </button>
-    </div>
+    </ng-template>
   `,
   styles: `
+    // Outside a sheet (a spec, the lab) the buttons stay here, in a row at the form's end.
     :host {
-      display: block;
-    }
-
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
-      inset-block-end: -1.5rem;
       justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
+    }
+
+    :host(:empty) {
+      display: none;
     }
   `,
 })
 export class EntryActions {
+  /** The `id` of the form the action submits. */
+  readonly form = input.required<string>();
   readonly saveLabel = input.required<string>();
   readonly busyLabel = input.required<string>();
   readonly busy = input(false);
@@ -107,14 +106,5 @@ export const SHEET_STYLES = `
     color: var(--tb-danger);
     font-weight: 600;
     padding: 0.625rem 0.875rem;
-    // Scrolled into view clear of the sticky action bar below it.
-    scroll-margin-block-end: 5rem;
-  }
-
-  // A focused box scrolls clear of the sticky action bar at the sheet's foot.
-  input,
-  textarea,
-  button {
-    scroll-margin-block-end: 5rem;
   }
 `;

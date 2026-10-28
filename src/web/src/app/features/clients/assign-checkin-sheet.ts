@@ -50,7 +50,7 @@ export type WriteForm = 'library' | 'new';
   imports: [Button, DateField, EntryActions, FormSummary, Skeleton, UiSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (forms() === null && !loadFailed()) {
         <app-skeleton [label]="loadingLabel" [lines]="3" />
       } @else if (loadFailed()) {
@@ -108,6 +108,7 @@ export type WriteForm = 'library' | 'new';
       </app-form-summary>
       @if (ready().length > 0) {
         <app-entry-actions
+          [form]="formId"
           [saveLabel]="assignLabel"
           [busyLabel]="assigningLabel"
           [busy]="busy()"

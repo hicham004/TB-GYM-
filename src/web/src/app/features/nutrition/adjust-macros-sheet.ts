@@ -68,7 +68,7 @@ import { TargetsResult } from './targets-result';
         </div>
       </div>
     } @else {
-      <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+      <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
         <p class="about" data-from>
           <span class="muted">{{ fromWords() }}</span
           >&ngsp;<strong i18n
@@ -158,6 +158,7 @@ import { TargetsResult } from './targets-result';
           }
         </app-form-summary>
         <app-entry-actions
+          [form]="formId"
           [saveLabel]="saveLabel"
           [busyLabel]="savingLabel"
           [busy]="busy()"

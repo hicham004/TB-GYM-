@@ -9,7 +9,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, menuChoices, press, settle } from '../../../testing/dom';
 import { workspace } from '../../../testing/intake-fixtures';
 import {
   mayaMeasurements,
@@ -232,20 +232,22 @@ describe('Your entries', () => {
       expect(more.classList).toContain('trigger-touch');
       more.click();
       await settle(fixture);
-      expect(all(first, '[role="menuitem"], .item').map(textOf).join('|')).toContain(
-        'Correct the weight',
-      );
-      expect(textOf(first)).toContain('Wrong day');
-      expect(textOf(first)).toContain('See changes');
+      const choices = menuChoices(more).map(textOf).join('|');
+      expect(choices).toContain('Correct the weight');
+      expect(choices).toContain('Wrong day');
+      expect(choices).toContain('See changes');
     });
 
     it('opens the correction for that weight in a sheet', async () => {
       const { fixture, host } = await render();
 
       const first = host.querySelector('[data-weighin]')!;
-      first.querySelector<HTMLButtonElement>('button[aria-label="More for Fri 9 Oct"]')!.click();
+      const more = first.querySelector<HTMLButtonElement>(
+        'button[aria-label="More for Fri 9 Oct"]',
+      )!;
+      more.click();
       await settle(fixture);
-      const item = all(first, 'button').find((button) =>
+      const item = menuChoices(more).find((button) =>
         textOf(button).startsWith('Correct the weight'),
       )!;
       item.click();

@@ -44,7 +44,7 @@ export interface StopOutcome {
   imports: [Control, EntryActions, Field, FormSummary],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about" data-stopping>
         <strong dir="auto">{{ plan().name }}</strong
         >&ngsp;<span class="muted">{{ dates() }}</span>
@@ -72,6 +72,7 @@ export interface StopOutcome {
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="stopLabel"
         [busyLabel]="stoppingLabel"
         [busy]="busy()"

@@ -25,7 +25,7 @@ import {
   RAW_RICE_FOOD,
   rawRiceLine,
 } from '../../../testing/cooking-fixtures';
-import { field, fill, press, settle } from '../../../testing/dom';
+import { field, fill, menuChoices, press, settle } from '../../../testing/dom';
 import { provideMediaUploads } from '../../../testing/media-uploads';
 import {
   OATS_FOOD,
@@ -230,7 +230,11 @@ function withLines(...ingredients: RecipeIngredientView[]): () => Observable<Rec
 
 /** The weigh-it-cooked sheet, which the CDK draws outside the page. */
 const cookingSheet = () => document.querySelector<HTMLElement>('app-cooking-conversion-sheet');
-const confirmQuestion = () => document.querySelector<HTMLElement>('app-confirm');
+/** The dialog asking about typed work, whose answers sit in its footer. */
+const confirmQuestion = () =>
+  document.querySelector('app-confirm')?.closest<HTMLElement>('[role="dialog"]') ?? null;
+/** The sheet around the weigh-it-cooked form, whose footer holds its buttons. */
+const cookingDialog = () => cookingSheet()!.closest<HTMLElement>('[role="dialog"]')!;
 
 /** Chooses the conversion listed as `name` in the sheet. */
 function pickConversion(sheet: HTMLElement, name: string): void {
@@ -267,9 +271,9 @@ describe('the recipe editor', () => {
     // Until working drafts (B5d), a draft asks for everything Publish does, and says so.
     named(host, 'More save options').click();
     await settle(harness.fixture);
-    expect(textOf(host.querySelector('.panel .item-title'))).toBe(
-      'Save as draft (complete, not published)',
-    );
+    expect(
+      textOf(menuChoices(named(host, 'More save options'))[0].querySelector('.item-title')),
+    ).toBe('Save as draft (complete, not published)');
     expect(api.grantPhotos).toHaveBeenCalledWith(['photo-1']);
     expect(host.querySelector('.photo img')?.getAttribute('src')).toBe(
       '/api/media/photo-1/content',
@@ -502,7 +506,7 @@ describe('the recipe editor', () => {
     );
     pickConversion(cookingSheet()!, 'White rice, boiled');
     await settle(harness.fixture);
-    press(cookingSheet()!, 'Use it');
+    press(cookingDialog(), 'Use it');
     await until(harness.fixture, () => cookingSheet() === null);
 
     // The same rice, 290 g once cooked, holding what it held raw.
@@ -545,7 +549,7 @@ describe('the recipe editor', () => {
       () => cookingSheet()?.querySelector('.choice input:checked') != null,
     );
     expect(textOf(document.querySelector('[role="dialog"] h2'))).toBe('Change conversion');
-    press(cookingSheet()!, 'Use it');
+    press(cookingDialog(), 'Use it');
     await until(harness.fixture, () => cookingSheet() === null);
     expect(field(host, 'Amount of White rice, raw, weighed cooked').value).toBe('150');
     expect(named(host, 'Publish changes').disabled).toBe(true);
@@ -597,7 +601,7 @@ describe('the recipe editor', () => {
     );
     fill(cookingSheet()!, 'What it is', 'White rice, boiled');
     await settle(harness.fixture);
-    press(cookingSheet()!, 'Not now');
+    press(cookingDialog(), 'Not now');
     await until(harness.fixture, () => confirmQuestion() !== null);
     expect(textOf(confirmQuestion())).toContain('What you typed will be lost.');
     press(confirmQuestion()!, 'Keep editing');
@@ -606,7 +610,7 @@ describe('the recipe editor', () => {
     await settle(harness.fixture);
     expect(field(cookingSheet()!, 'What it is').value).toBe('White rice, boiled');
 
-    press(cookingSheet()!, 'Not now');
+    press(cookingDialog(), 'Not now');
     await until(harness.fixture, () => confirmQuestion() !== null);
     press(confirmQuestion()!, 'Discard');
     await until(harness.fixture, () => cookingSheet() === null);

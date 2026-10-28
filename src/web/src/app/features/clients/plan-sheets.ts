@@ -31,6 +31,7 @@ import { isoWeekdayOfName } from '../../ui/calendar';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { selectOptions, UiSelect } from '../../ui/select';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -198,20 +199,6 @@ const SHEET_STYLES = `
     color: var(--tb-muted);
     font-weight: 600;
   }
-
-  .actions {
-    background: var(--tb-surface);
-    border-block-start: 1px solid var(--tb-line);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    inset-block-end: 0;
-    justify-content: flex-end;
-    margin-block-end: -1.5rem;
-    margin-inline: -1.5rem;
-    padding: 0.75rem 1.5rem;
-    position: sticky;
-  }
 `;
 
 /** After a refused submit, the first field marked wrong takes focus, as on Assign program. */
@@ -229,10 +216,10 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
 
 @Component({
   selector: 'app-plan-start',
-  imports: [Button, DateField, FormSummary, RouterLink],
+  imports: [Button, DateField, FormSummary, ModalFooter, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (renewFrom(); as from) {
         <p class="plan-line">
           <span class="caption" i18n>Renewing</span>
@@ -304,23 +291,23 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
           <ng-container i18n>Check the fields marked above.</ng-container>
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
-          Not now
-        </button>
-        @if (choices().length > 0) {
-          <button appButton type="submit" [loading]="busy()">
-            @if (busy()) {
-              <ng-container i18n>Saving…</ng-container>
-            } @else if (renewFrom()) {
-              <ng-container i18n>Renew plan</ng-container>
-            } @else {
-              <ng-container i18n>Start plan</ng-container>
-            }
-          </button>
-        }
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+        Not now
+      </button>
+      @if (choices().length > 0) {
+        <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+          @if (busy()) {
+            <ng-container i18n>Saving…</ng-container>
+          } @else if (renewFrom()) {
+            <ng-container i18n>Renew plan</ng-container>
+          } @else {
+            <ng-container i18n>Start plan</ng-container>
+          }
+        </button>
+      }
+    </ng-template>
   `,
   styles: SHEET_STYLES,
 })
@@ -352,6 +339,7 @@ export class PlanStart {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('plan-start');
   protected readonly startLabel = $localize`First day`;
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -483,10 +471,10 @@ const METHODS: readonly ManualPaymentMethod[] = [
 
 @Component({
   selector: 'app-plan-payment',
-  imports: [Button, Control, DateField, Field, FormSummary, UiSelect],
+  imports: [Button, Control, DateField, Field, FormSummary, ModalFooter, UiSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="plan-line">
         <span class="caption" i18n>Plan</span>
         <span dir="auto">{{ planLine() }}</span>
@@ -568,19 +556,19 @@ const METHODS: readonly ManualPaymentMethod[] = [
           <ng-container i18n>Check the fields marked above.</ng-container>
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Recording…</ng-container>
-          } @else {
-            <ng-container i18n>Record payment</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Recording…</ng-container>
+        } @else {
+          <ng-container i18n>Record payment</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: SHEET_STYLES,
 })
@@ -608,6 +596,7 @@ export class PlanPayment {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('plan-payment');
   protected readonly methods = selectOptions(METHODS, paymentMethodLabel);
   protected readonly amountLabel = $localize`Amount received`;
   protected readonly receivedLabel = $localize`Received on`;
