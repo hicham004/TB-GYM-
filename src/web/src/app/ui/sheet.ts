@@ -47,7 +47,8 @@ export class UiSheet {
       panelClass: modalPaneClasses('sheet', options),
       direction: modalDirection(this.document, options.direction),
       positionStrategy: this.overlay.position().global().centerHorizontally().bottom('0'),
-      width: '100vw',
+      // The overlay's width, not the viewport's: 100vw counts a page scrollbar the sheet would run under.
+      width: '100%',
       maxWidth: '40rem',
       maxHeight: '90dvh',
       closeOnNavigation: options.closeOnNavigation ?? true,

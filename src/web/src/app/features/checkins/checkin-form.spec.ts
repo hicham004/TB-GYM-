@@ -20,7 +20,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { UiToast } from '../../ui/toast';
-import { chooseOption, selectShows, settle } from '../../../testing/dom';
+import { chooseOption, menuChoices, selectShows, settle } from '../../../testing/dom';
 import { CheckInForm } from './checkin-form';
 
 @Component({ template: '' })
@@ -299,9 +299,10 @@ async function fromMenu(
   menu: string,
   item: string,
 ): Promise<void> {
-  named(host, menu).click();
+  const trigger = named(host, menu);
+  trigger.click();
   await settle(harness.fixture);
-  const choice = all(host, 'app-menu button.item').filter(
+  const choice = menuChoices(trigger).filter(
     (candidate) => textOf(candidate.querySelector('.item-title')) === item,
   );
   if (choice.length !== 1) throw new Error(`${choice.length} menu items are named "${item}".`);
@@ -627,7 +628,11 @@ describe('a check-in form’s page (audit A14b)', () => {
     expect(host.querySelector('.actions')!.textContent).not.toContain('Change the questions');
     named(host, 'More for this form').click();
     await settle(harness.fixture);
-    expect(all(host, 'app-menu .item-title').map((item) => textOf(item))).toEqual(['Versions']);
+    expect(
+      menuChoices(named(host, 'More for this form')).map((item) =>
+        textOf(item.querySelector('.item-title')),
+      ),
+    ).toEqual(['Versions']);
     named(host, 'More for this form').click();
     await settle(harness.fixture);
 

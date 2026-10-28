@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormSummary } from '../../ui/form-summary';
+import { modalFormId } from '../../ui/modal-footer';
 import { CsrfService } from '../security/csrf.service';
 import { TenantAsyncScope, type TenantOperation } from '../tenancy/tenant-async-scope';
 import { TenantStore } from '../tenancy/tenant.store';
@@ -34,6 +35,8 @@ export abstract class SheetForm {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  /** The form's `id`, which the submit button in the sheet's footer names. */
+  protected readonly formId = modalFormId('sheet-form');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -59,12 +62,12 @@ export abstract class SheetForm {
     );
   }
 
-  /** The server refused: its words are in the summary, which takes focus clear of the sticky bar. */
+  /** The server refused: its words are in the summary, which takes focus. */
   protected focusSummary(): void {
     this.summary()?.focus();
   }
 
-  /** Brings a part of the sheet that has just appeared above the sticky bar that would cover it. */
+  /** Brings a part of the sheet that has just appeared into view. */
   protected reveal(selector: string): void {
     afterNextRender(
       () => this.host.nativeElement.querySelector(selector)?.scrollIntoView?.({ block: 'nearest' }),

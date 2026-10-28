@@ -162,9 +162,9 @@ let nextId = 0;
       // A long choice wraps instead of hiding its end; the chevron stays at the inline end.
       padding-block: var(--space-8);
       padding-inline-end: var(--space-8);
-      // A focused select scrolls clear of the sticky action bar a sheet keeps at its foot; a sheet
-      // with a taller bar sets the property on the field.
-      scroll-margin-block: 0.5rem var(--tb-field-scroll-margin-end, 5.5rem);
+      // A focused select scrolls clear of a bar pinned at the screen's foot: a phone's tab bar, a
+      // page's save bar. A sheet's footer is outside the body that scrolls and needs none.
+      scroll-margin-block: 0.5rem 5.5rem;
       text-align: start;
     }
 
@@ -242,8 +242,8 @@ let nextId = 0;
       // A finger's target (plan §2 rule 6), whatever the field's own density.
       min-block-size: 2.75rem;
       padding: var(--space-8) var(--space-12);
-      // A focused option scrolls clear of the sticky action bar a sheet keeps at its foot.
-      scroll-margin-block: 0.5rem var(--tb-field-scroll-margin-end, 5.5rem);
+      // A focused option scrolls clear of a bar pinned at the screen's foot, as the select does.
+      scroll-margin-block: 0.5rem 5.5rem;
       touch-action: manipulation;
     }
 

@@ -284,7 +284,7 @@ interface DayCell {
       max-inline-size: 2.75rem;
       min-block-size: 2.5rem;
       padding: 0;
-      // A focused day scrolls clear of the sticky action bar a sheet keeps at its foot.
+      // A focused day scrolls clear of a bar pinned at the screen's foot (a phone's tab bar).
       scroll-margin-block: 1rem 5.5rem;
       touch-action: manipulation;
     }

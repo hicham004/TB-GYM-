@@ -60,7 +60,7 @@ import { MealPlanApi } from './meal-plan-api';
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted" data-declared>
         @if (declared().length > 0) {
           <span i18n>{{ firstName() }} declared these allergens:</span>&ngsp;<strong>{{
@@ -216,6 +216,7 @@ import { MealPlanApi } from './meal-plan-api';
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="reviewing() ? anywayLabel : saveLabel"
         [busyLabel]="assigningLabel"
         [busy]="busy()"

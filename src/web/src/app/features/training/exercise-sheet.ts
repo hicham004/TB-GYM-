@@ -31,6 +31,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { selectOptions, UiSelect } from '../../ui/select';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import {
@@ -61,10 +62,10 @@ import {
  */
 @Component({
   selector: 'app-exercise-sheet',
-  imports: [Button, Checkbox, Control, Field, FormSummary, Icon, UiSelect],
+  imports: [Button, Checkbox, Control, Field, FormSummary, Icon, ModalFooter, UiSelect],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <app-field [label]="nameLabel" [errors]="shows('name') ? errors()['name'] : null">
         <input
           appControl
@@ -344,22 +345,28 @@ import {
           <ng-container i18n>Check the fields marked above.</ng-container>
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()" [disabled]="uploading()">
-          @if (busy()) {
-            <ng-container i18n>Saving…</ng-container>
-          } @else if (exercise()) {
-            <ng-container i18n>Save exercise</ng-container>
-          } @else {
-            <app-icon name="plus" />
-            <ng-container i18n>Add exercise</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+        Not now
+      </button>
+      <button
+        appButton
+        type="submit"
+        [attr.form]="formId"
+        [loading]="busy()"
+        [disabled]="uploading()"
+      >
+        @if (busy()) {
+          <ng-container i18n>Saving…</ng-container>
+        } @else if (exercise()) {
+          <ng-container i18n>Save exercise</ng-container>
+        } @else {
+          <app-icon name="plus" />
+          <ng-container i18n>Add exercise</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: `
     :host {
@@ -513,25 +520,6 @@ import {
       font-weight: 600;
       padding: 0.625rem 0.875rem;
     }
-
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: -1.5rem;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
-    }
-
-    input,
-    textarea {
-      scroll-margin-block-end: 5rem;
-    }
   `,
 })
 export class ExerciseSheet implements OnInit {
@@ -555,6 +543,7 @@ export class ExerciseSheet implements OnInit {
   readonly reloaded = output<void>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('exercise');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly typeOptions = selectOptions(TYPES, exerciseClassificationLabel);

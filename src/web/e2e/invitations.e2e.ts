@@ -201,11 +201,11 @@ test.describe('when the server refuses an invitation', () => {
   // The browser logs the failed request itself; what matters is that the sheet says why.
   test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/invitations/] } });
 
-  test('the message stays in the sheet and is brought into view above the Send bar', async ({
+  test('the message stays in the sheet and is brought into view above its footer', async ({
     page,
   }) => {
     const writes = await openInvitations(page, 390, { refuse: true });
-    // A short phone, so the form scrolls and the message at its foot starts below the bar.
+    // A short phone, so the form scrolls and the message at its foot starts out of view.
     await page.setViewportSize({ width: 390, height: 600 });
     await page.getByRole('button', { name: 'Invite a client' }).first().click();
     const sheet = page.getByRole('dialog');
@@ -218,7 +218,7 @@ test.describe('when the server refuses an invitation', () => {
     await expect(refusal).toHaveText('Rana Haddad is already a client here.');
     await expect(async () => {
       const message = (await refusal.boundingBox())!;
-      const bar = (await sheet.locator('.actions').boundingBox())!;
+      const bar = (await sheet.locator('.tb-modal__footer').boundingBox())!;
       expect(message.y).toBeGreaterThanOrEqual(0);
       expect(message.y + message.height).toBeLessThanOrEqual(bar.y);
     }).toPass();

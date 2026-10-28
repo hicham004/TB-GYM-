@@ -22,7 +22,7 @@
 
 <!-- Leaving is confirmed first. Only "Leave permanently" calls the API. -->
 <ng-template #leaveDialog>
-  <form class="leave-form" novalidate (submit)="$event.preventDefault(); leave()">
+  <form [id]="formId" class="leave-form" novalidate (submit)="$event.preventDefault(); leave()">
     @if (isClient()) {
       <p class="message" i18n>
         You lose access right away, including your history there. Your open plans and programs are
@@ -53,15 +53,15 @@
       </p>
     }
     <p class="leave-error" role="alert">{{ error() }}</p>
-    <div class="dialog-actions">
-      <button appButton variant="text" type="button" (click)="cancel()" i18n>Stay</button>
-      <button appButton type="submit" [loading]="saving()">
-        @if (saving()) {
-          <ng-container i18n>Leaving…</ng-container>
-        } @else {
-          <ng-container i18n>Leave permanently</ng-container>
-        }
-      </button>
-    </div>
   </form>
+  <ng-template appModalFooter>
+    <button appButton variant="text" type="button" (click)="cancel()" i18n>Stay</button>
+    <button appButton type="submit" [attr.form]="formId" [loading]="saving()">
+      @if (saving()) {
+        <ng-container i18n>Leaving…</ng-container>
+      } @else {
+        <ng-container i18n>Leave permanently</ng-container>
+      }
+    </button>
+  </ng-template>
 </ng-template>

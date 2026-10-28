@@ -477,6 +477,12 @@ for (const width of [390, 1440]) {
     });
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
+    // A menu's list is in the top layer since critique B2a, so opening one no longer scrolls the
+    // page: at this scroll the day's own menu button sits under the sticky top bar, so it is judged
+    // where a coach reaches it.
+    await week(page, 0)
+      .getByRole('button', { name: 'More for Lower A' })
+      .evaluate((button) => button.scrollIntoView({ block: 'center' }));
     await axe(page);
 
     await page.getByRole('button', { name: 'Publish', exact: true }).click();

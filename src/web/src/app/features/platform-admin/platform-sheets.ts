@@ -22,6 +22,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import {
   formatMonth,
   formatMoney,
@@ -119,13 +120,6 @@ const SHEET_STYLES = `
     padding: 0.75rem 0.875rem;
   }
 
-  // A focused field scrolls clear of the sticky action bar at the sheet's foot.
-  input,
-  textarea,
-  button.trigger {
-    scroll-margin-block-end: 5rem;
-  }
-
   .value-unit {
     align-items: center;
     display: grid;
@@ -149,20 +143,6 @@ const SHEET_STYLES = `
     font-weight: 600;
     padding: 0.625rem 0.875rem;
   }
-
-  .actions {
-    background: var(--tb-surface);
-    border-block-start: 1px solid var(--tb-line);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    inset-block-end: -1.5rem;
-    justify-content: flex-end;
-    margin-block-end: -1.5rem;
-    margin-inline: -1.5rem;
-    padding: 0.75rem 1.5rem;
-    position: sticky;
-  }
 `;
 
 /** After a refused submit, the first field marked wrong takes focus. */
@@ -177,10 +157,10 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
 
 @Component({
   selector: 'app-platform-payment',
-  imports: [Button, Control, DateField, Field],
+  imports: [Button, Control, DateField, Field, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about">
         <span class="who"
           ><span dir="auto">{{ spaceName() }}</span></span
@@ -252,19 +232,19 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
       @if (error(); as message) {
         <p class="problem-text" role="alert">{{ message }}</p>
       }
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Recording…</ng-container>
-          } @else {
-            <ng-container i18n>Record payment</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Recording…</ng-container>
+        } @else {
+          <ng-container i18n>Record payment</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: SHEET_STYLES,
 })
@@ -285,6 +265,7 @@ export class PlatformPayment {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('platform-payment');
   protected readonly referenceLabel = $localize`Whish or transfer reference`;
   protected readonly referenceHelp = $localize`The number on the transfer, so the money can be found later.`;
   protected readonly receivedLabel = $localize`Received on`;
@@ -359,10 +340,10 @@ export class PlatformPayment {
 
 @Component({
   selector: 'app-platform-void',
-  imports: [Button, Checkbox, Control, Field],
+  imports: [Button, Checkbox, Control, Field, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about">
         <span class="who"
           ><span dir="auto">{{ spaceName() }}</span></span
@@ -412,21 +393,21 @@ export class PlatformPayment {
       @if (error(); as message) {
         <p class="problem-text" role="alert">{{ message }}</p>
       }
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Voiding…</ng-container>
-          } @else if (reissue()) {
-            <ng-container i18n>Void and reissue</ng-container>
-          } @else {
-            <ng-container i18n>Void invoice</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Voiding…</ng-container>
+        } @else if (reissue()) {
+          <ng-container i18n>Void and reissue</ng-container>
+        } @else {
+          <ng-container i18n>Void invoice</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: SHEET_STYLES,
 })
@@ -444,6 +425,7 @@ export class PlatformVoid {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('platform-void');
   protected readonly reasonLabel = $localize`Why is it void?`;
   protected readonly reasonHelp = $localize`Kept on the invoice. The owner sees it too.`;
   protected readonly reissueLabel = $localize`Issue a corrected invoice`;
@@ -500,10 +482,10 @@ export class PlatformVoid {
 
 @Component({
   selector: 'app-platform-discount',
-  imports: [Button, Control, DateField, Field],
+  imports: [Button, Control, DateField, Field, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about">
         <span class="who"
           ><span dir="auto">{{ spaceName() }}</span></span
@@ -576,19 +558,19 @@ export class PlatformVoid {
       @if (error(); as message) {
         <p class="problem-text" role="alert">{{ message }}</p>
       }
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Granting…</ng-container>
-          } @else {
-            <ng-container i18n>Grant discount</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Granting…</ng-container>
+        } @else {
+          <ng-container i18n>Grant discount</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles:
     SHEET_STYLES +
@@ -618,6 +600,7 @@ export class PlatformDiscount {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('platform-discount');
   protected readonly percentLabel = $localize`Percent off`;
   protected readonly fromLabel = $localize`First day`;
   protected readonly throughLabel = $localize`Last day`;
@@ -707,10 +690,10 @@ export class PlatformDiscount {
 
 @Component({
   selector: 'app-platform-plan',
-  imports: [Button, Control, Field, Icon],
+  imports: [Button, Control, Field, Icon, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted" i18n>
         Version {{ current().versionNumber }} is in force. Invoices issued from now on use the new
         terms; invoices already issued keep theirs.
@@ -790,24 +773,25 @@ export class PlatformDiscount {
       @if (error(); as message) {
         <p class="problem-text" role="alert">{{ message }}</p>
       }
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button
-          appButton
-          type="submit"
-          [loading]="busy()"
-          [disabled]="changes().length === 0 && problemCount() === 0"
-        >
-          @if (busy()) {
-            <ng-container i18n>Publishing…</ng-container>
-          } @else {
-            <ng-container i18n>Publish version {{ current().versionNumber + 1 }}</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button
+        appButton
+        type="submit"
+        [attr.form]="formId"
+        [loading]="busy()"
+        [disabled]="changes().length === 0 && problemCount() === 0"
+      >
+        @if (busy()) {
+          <ng-container i18n>Publishing…</ng-container>
+        } @else {
+          <ng-container i18n>Publish version {{ current().versionNumber + 1 }}</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles:
     SHEET_STYLES +
@@ -884,6 +868,7 @@ export class PlatformPlan {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('platform-plan');
   protected readonly fields = planFields();
   protected readonly entry = linkedSignal(() => planEntryFrom(this.current()));
   protected readonly busy = signal(false);

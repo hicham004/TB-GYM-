@@ -153,7 +153,7 @@ describe('TrainingProgram', () => {
     expect(textOf(dialog())).toContain(
       'It was planned for Thu 24 Sep. Done now, it counts as done late, and your coach sees that.',
     );
-    press(dialog()!.querySelector('app-confirm')!, 'Start workout');
+    press(dialog()!, 'Start workout');
     await settle();
     await settle();
 
@@ -171,7 +171,7 @@ describe('TrainingProgram', () => {
     await settle();
     host.querySelector<HTMLButtonElement>('button.do-now')!.click();
     await settle();
-    press(dialog()!.querySelector('app-confirm')!, 'Not now');
+    press(dialog()!, 'Not now');
     await settle();
     await settle();
 
@@ -192,7 +192,7 @@ describe('TrainingProgram', () => {
     await settle();
     host.querySelector<HTMLButtonElement>('button.do-now')!.click();
     await settle();
-    press(dialog()!.querySelector('app-confirm')!, 'Start workout');
+    press(dialog()!, 'Start workout');
     await settle();
     await settle();
 

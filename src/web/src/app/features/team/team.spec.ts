@@ -11,7 +11,7 @@ import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { UiToast } from '../../ui/toast';
-import { fill, focusedId, press, settle } from '../../../testing/dom';
+import { fill, focusedId, menuChoices, press, settle } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { Team } from './team';
 import { TeamApi } from './team-api';
@@ -141,7 +141,7 @@ async function choose(
   if (!trigger) throw new Error(`No menu is named "${label}".`);
   trigger.click();
   await settle(fixture as never);
-  const choice = Array.from(host.querySelectorAll<HTMLButtonElement>('.panel .item')).find(
+  const choice = menuChoices(trigger).find(
     (candidate) => textOf(candidate.querySelector('.item-title')) === item,
   );
   if (!choice) throw new Error(`The menu "${label}" has no "${item}".`);

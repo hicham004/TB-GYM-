@@ -2,13 +2,21 @@ import { NgTemplateOutlet } from '@angular/common';
 import { DIALOG_DATA, DialogConfig, DialogRef } from '@angular/cdk/dialog';
 import { hasModifierKey } from '@angular/cdk/keycodes';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
+  DestroyRef,
+  ElementRef,
   inject,
+  Injector,
+  signal,
   TemplateRef,
+  viewChild,
   ViewEncapsulation,
 } from '@angular/core';
 import { IconButton } from './button';
+import { MODAL_FOOTER_SLOT, type ModalFooterSlot } from './modal-footer';
 
 export type ModalDirection = 'ltr' | 'rtl';
 
@@ -70,7 +78,12 @@ export interface ModalData {
   requestClose?: () => void;
 }
 
-/** Content shell shared by the centred dialog and the mobile bottom sheet. */
+/**
+ * Content shell shared by the centred dialog and the mobile bottom sheet: the title bar, the body that
+ * scrolls, and the footer the content's `appModalFooter` actions are drawn in (critique B2a). The footer
+ * is outside the body, so it never covers the body's last line; it lifts on a soft shadow while there
+ * is more to scroll to.
+ */
 @Component({
   selector: 'app-modal-surface',
   imports: [IconButton, NgTemplateOutlet],
@@ -82,12 +95,19 @@ export interface ModalData {
         <span aria-hidden="true">&times;</span>
       </button>
     </div>
-    <div class="tb-modal__body">
+    <div #body class="tb-modal__body">
       <ng-container
         [ngTemplateOutlet]="data.content"
         [ngTemplateOutletContext]="{ $implicit: dialogRef }"
+        [ngTemplateOutletInjector]="contentInjector"
       />
+      <div #end class="tb-modal__end"></div>
     </div>
+    @if (footer(); as actions) {
+      <div class="tb-modal__footer" [class.tb-modal__footer--raised]="moreBelow()">
+        <ng-container [ngTemplateOutlet]="actions" />
+      </div>
+    }
   `,
   styleUrl: './overlay-base.scss',
   styles: `
@@ -121,7 +141,6 @@ export interface ModalData {
       border-end-end-radius: 0;
       border-end-start-radius: 0;
       max-block-size: min(90dvh, 52rem);
-      padding-block-end: env(safe-area-inset-bottom);
       animation-name: tb-sheet-enter;
     }
 
@@ -151,6 +170,46 @@ export interface ModalData {
       overflow: auto;
       overscroll-behavior: contain;
       padding: 1.5rem;
+    }
+
+    // A little more room between the last line and the footer than the body's own edge.
+    .tb-modal__body:has(+ .tb-modal__footer) {
+      padding-block-end: 2rem;
+    }
+
+    // A phone's home indicator sits under whatever ends the sheet: the footer, or the body without one.
+    .tb-modal-pane--sheet .tb-modal__body:not(:has(+ .tb-modal__footer)) {
+      padding-block-end: calc(1.5rem + env(safe-area-inset-bottom));
+    }
+
+    // Marks the end of the body's content; while it is out of view there is more below the footer.
+    .tb-modal__end {
+      block-size: 0;
+    }
+
+    .tb-modal__footer {
+      align-items: center;
+      background: var(--tb-surface);
+      border-block-start: 1px solid var(--tb-line);
+      display: flex;
+      flex: none;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      padding-block: 0.75rem;
+      padding-inline: 1.5rem;
+      // Above the body, which scrolls in a layer of its own, so its shadow falls on the body.
+      position: relative;
+      transition: box-shadow var(--tb-duration) var(--tb-ease);
+      z-index: 1;
+    }
+
+    .tb-modal-pane--sheet .tb-modal__footer {
+      padding-block-end: calc(0.75rem + env(safe-area-inset-bottom));
+    }
+
+    .tb-modal__footer--raised {
+      box-shadow: 0 -0.25rem 0.75rem -0.25rem color-mix(in srgb, var(--tb-night) 24%, transparent);
     }
 
     .tb-modal-pane :is(button, a, input, select, textarea, [tabindex]):focus-visible {
@@ -184,7 +243,8 @@ export interface ModalData {
       .tb-modal-pane app-modal-surface {
         animation: none;
       }
-      .tb-modal-backdrop {
+      .tb-modal-backdrop,
+      .tb-modal__footer {
         transition: none;
       }
     }
@@ -206,6 +266,7 @@ export interface ModalData {
       .cdk-overlay-container:has(.tb-modal-pane--printable) > :not(:has(.tb-modal-pane--printable)),
       :has(> .tb-modal-pane--printable) > .cdk-overlay-backdrop,
       .tb-modal-pane--printable .tb-modal__header button,
+      .tb-modal-pane--printable .tb-modal__footer,
       .tb-modal-pane--printable .tb-print-hide {
         display: none !important;
       }
@@ -249,6 +310,41 @@ export interface ModalData {
 export class ModalSurface {
   protected readonly data = inject<ModalData>(DIALOG_DATA);
   protected readonly dialogRef = inject<DialogRef<unknown>>(DialogRef);
+  private readonly body = viewChild.required<ElementRef<HTMLElement>>('body');
+  private readonly end = viewChild.required<ElementRef<HTMLElement>>('end');
+  private readonly footers = signal<readonly TemplateRef<unknown>[]>([]);
+  /** The actions the content handed over; the newest, should it hand over more than one. */
+  protected readonly footer = computed(() => this.footers().at(-1) ?? null);
+  /** The body can still scroll down, so the footer lifts off it. */
+  protected readonly moreBelow = signal(false);
+  /**
+   * The content's own injector holds the footer slot and nothing else, so every other token is still
+   * found where the content was declared, never in the overlay.
+   */
+  protected readonly contentInjector = Injector.create({
+    providers: [
+      {
+        provide: MODAL_FOOTER_SLOT,
+        useValue: {
+          show: (actions) => this.footers.update((shown) => [...shown, actions]),
+          hide: (actions) => this.footers.update((shown) => shown.filter((it) => it !== actions)),
+        } satisfies ModalFooterSlot,
+      },
+    ],
+  });
+
+  constructor() {
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      if (typeof IntersectionObserver === 'undefined') return;
+      const observer = new IntersectionObserver(
+        (entries) => this.moreBelow.set(!entries[entries.length - 1].isIntersecting),
+        { root: this.body().nativeElement },
+      );
+      observer.observe(this.end().nativeElement);
+      destroyRef.onDestroy(() => observer.disconnect());
+    });
+  }
 
   protected close(): void {
     if (this.data.requestClose) this.data.requestClose();

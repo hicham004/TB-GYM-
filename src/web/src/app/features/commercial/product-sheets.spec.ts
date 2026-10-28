@@ -407,7 +407,7 @@ describe('ProductSheet', () => {
       expect(button(host, 'Create plan').hasAttribute('aria-disabled')).toBe(false);
     });
 
-    it('brings a server refusal into view above the sticky actions and gives it focus', async () => {
+    it('brings a server refusal into view above the footer and gives it focus', async () => {
       const { fixture, host, api } = await render({ kind: 'new' });
       api.createProduct.mockReturnValue(
         throwError(

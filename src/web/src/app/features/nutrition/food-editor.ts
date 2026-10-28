@@ -25,6 +25,7 @@ import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { UiSelect, type SelectOption } from '../../ui/select';
 import { numeric } from '../training/training-builder.models';
@@ -59,7 +60,17 @@ type NumberKey =
  */
 @Component({
   selector: 'app-food-editor',
-  imports: [Button, Checkbox, Control, Field, FormSummary, FormsModule, SegmentedControl, UiSelect],
+  imports: [
+    Button,
+    Checkbox,
+    Control,
+    Field,
+    FormSummary,
+    FormsModule,
+    ModalFooter,
+    SegmentedControl,
+    UiSelect,
+  ],
   templateUrl: './food-editor.html',
   styleUrl: './food-editor.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,6 +82,8 @@ export class FoodEditor {
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly summary = viewChild.required(FormSummary);
+  /** The form's `id`, which the save button in the sheet's footer names. */
+  protected readonly formId = modalFormId('food');
 
   readonly mode = input.required<FoodSheetMode>();
   /** The food to edit or copy; none for a new one. */

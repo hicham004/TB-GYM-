@@ -1,14 +1,21 @@
+import type { Direction } from '@angular/cdk/bidi';
+import { type ConnectedPosition, Overlay, type OverlayRef } from '@angular/cdk/overlay';
+import { TemplatePortal } from '@angular/cdk/portal';
+import { DOCUMENT } from '@angular/common';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   inject,
   Injector,
   input,
   output,
   signal,
+  TemplateRef,
   viewChild,
+  ViewContainerRef,
 } from '@angular/core';
 import { Icon, type IconName } from './icon';
 
@@ -26,18 +33,88 @@ export interface UiMenuItem {
 
 let nextId = 0;
 
+const GAP = 4;
+const BELOW_END: ConnectedPosition = {
+  originX: 'end',
+  originY: 'bottom',
+  overlayX: 'end',
+  overlayY: 'top',
+  offsetY: GAP,
+  panelClass: 'tb-menu-pane--below-end',
+};
+const BELOW_START: ConnectedPosition = {
+  originX: 'start',
+  originY: 'bottom',
+  overlayX: 'start',
+  overlayY: 'top',
+  offsetY: GAP,
+  panelClass: 'tb-menu-pane--below-start',
+};
+const ABOVE_END: ConnectedPosition = {
+  originX: 'end',
+  originY: 'top',
+  overlayX: 'end',
+  overlayY: 'bottom',
+  offsetY: -GAP,
+  panelClass: 'tb-menu-pane--above-end',
+};
+const ABOVE_START: ConnectedPosition = {
+  originX: 'start',
+  originY: 'top',
+  overlayX: 'start',
+  overlayY: 'bottom',
+  offsetY: -GAP,
+  panelClass: 'tb-menu-pane--above-start',
+};
+
+/** Where the list may open, in order: below on its own edge, below on the other, then the same above. */
+function menuPositions(align: 'start' | 'end'): ConnectedPosition[] {
+  return align === 'end'
+    ? [BELOW_END, BELOW_START, ABOVE_END, ABOVE_START]
+    : [BELOW_START, BELOW_END, ABOVE_START, ABOVE_END];
+}
+
+/** The writing direction the button sits in, from the nearest `dir` that sets one. */
+function directionOf(element: Element): Direction {
+  return element.closest('[dir]:not([dir="auto"])')?.getAttribute('dir') === 'rtl' ? 'rtl' : 'ltr';
+}
+
+/** Whether a scroll has carried the element wholly out of the window or out of a box that clips it. */
+function outOfSight(element: Element): boolean {
+  const box = element.getBoundingClientRect();
+  const view = element.ownerDocument.documentElement;
+  const clips: Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>[] = [
+    { top: 0, left: 0, bottom: view.clientHeight, right: view.clientWidth },
+  ];
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (getComputedStyle(parent).overflow !== 'visible') clips.push(parent.getBoundingClientRect());
+  }
+  return clips.some(
+    (clip) =>
+      box.bottom <= clip.top ||
+      box.top >= clip.bottom ||
+      box.right <= clip.left ||
+      box.left >= clip.right,
+  );
+}
+
 /**
  * Surfaces/Menu: the secondary actions of a card or a row behind one button (plan §2 rule 5). A
  * disclosure menu, as on the client's page: the button says whether it is open, focus moves into
- * the list, the arrow keys, Home and End move through it, and Escape or leaving it closes it and
- * gives focus back to the button. With `icon` the button shows only that glyph and `label` becomes
- * its accessible name, so name the thing it acts on ("More for week 2").
+ * the list, the arrow keys, Home and End move through it, Escape closes it and gives focus back to
+ * the button, and leaving it or pressing outside it closes it. With `icon` the button shows only that
+ * glyph and `label` becomes its accessible name, so name the thing it acts on ("More for week 2").
+ *
+ * The list is a CDK overlay anchored on the button (critique B2a): a popover in the top layer, placed
+ * just after the button in the page so Tab and the page's mode carry on from it, which no scrolling
+ * box, card or open sheet can clip. It opens below the button's `align` edge, else below its other
+ * edge, else above, 8 px clear of the window's edges, pushed inside them only when nothing fits; it
+ * follows the button when anything scrolls and closes once the button has scrolled out of sight.
  */
 @Component({
   selector: 'app-menu',
   imports: [Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(keydown.escape)': 'closeFromKeyboard($event)', '(keydown)': 'moveFocus($event)' },
   template: `
     <div class="menu" (focusout)="closeOnFocusOut($event)">
       @if (icon(); as glyph) {
@@ -51,6 +128,7 @@ let nextId = 0;
           [attr.aria-expanded]="open()"
           [attr.aria-controls]="panelId"
           (click)="toggle()"
+          (keydown)="triggerKey($event)"
         >
           <app-icon [name]="glyph" />
         </button>
@@ -64,42 +142,41 @@ let nextId = 0;
           [attr.aria-expanded]="open()"
           [attr.aria-controls]="panelId"
           (click)="toggle()"
+          (keydown)="triggerKey($event)"
         >
           <span>{{ label() }}</span>
           <app-icon name="chevron-down" />
         </button>
       }
-      @if (open()) {
-        <ul class="panel" [class.start]="(align() === 'start') !== flipped()" [id]="panelId">
-          @for (item of items(); track item.action) {
-            <li>
-              <button
-                class="item"
-                type="button"
-                [class.danger]="item.danger"
-                [class.current]="current() === item.action"
-                [attr.aria-current]="current() === item.action ? 'true' : null"
-                [attr.aria-disabled]="item.disabled ? 'true' : null"
-                (click)="choose(item)"
-              >
-                <span class="item-title">{{ item.label }}</span>
-                @if (item.hint) {
-                  <span class="item-hint">{{ item.hint }}</span>
-                }
-              </button>
-            </li>
-          }
-        </ul>
-      }
     </div>
+    <ng-template #panel>
+      <ul class="panel" [id]="panelId">
+        @for (item of items(); track item.action) {
+          <li>
+            <button
+              class="item"
+              type="button"
+              [class.danger]="item.danger"
+              [class.current]="current() === item.action"
+              [attr.aria-current]="current() === item.action ? 'true' : null"
+              [attr.aria-disabled]="item.disabled ? 'true' : null"
+              (click)="choose(item)"
+              (keydown)="itemKey($event)"
+              (focusout)="closeOnFocusOut($event)"
+            >
+              <span class="item-title">{{ item.label }}</span>
+              @if (item.hint) {
+                <span class="item-hint">{{ item.hint }}</span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    </ng-template>
   `,
   styles: `
     :host {
       display: inline-block;
-    }
-
-    .menu {
-      position: relative;
     }
 
     .trigger-icon {
@@ -149,15 +226,21 @@ let nextId = 0;
       opacity: 0.5;
     }
 
+    // The list inherits from the row its button sits in, so it states its own type.
     .panel {
       background: var(--tb-surface);
       border: 1px solid var(--tb-line);
       border-radius: var(--tb-radius-card-small);
       box-shadow: var(--tb-shadow-overlay);
       box-sizing: border-box;
+      color: var(--tb-ink);
+      font-family: var(--font-sans);
+      font-size: var(--text-body-size);
+      font-style: normal;
+      font-weight: 400;
       inline-size: max-content;
-      inset-block-start: calc(100% + 0.25rem);
-      inset-inline-end: 0;
+      letter-spacing: normal;
+      line-height: var(--text-body-line-height);
       list-style: none;
       margin: 0;
       max-inline-size: min(18rem, calc(100vw - 2rem));
@@ -167,13 +250,9 @@ let nextId = 0;
       overflow-y: auto;
       overscroll-behavior: contain;
       padding: 0.375rem;
-      position: absolute;
-      z-index: 40;
-    }
-
-    .panel.start {
-      inset-inline-end: auto;
-      inset-inline-start: 0;
+      text-align: start;
+      text-transform: none;
+      white-space: normal;
     }
 
     .item {
@@ -238,8 +317,12 @@ let nextId = 0;
 })
 export class UiMenu {
   private readonly injector = inject(Injector);
+  private readonly overlay = inject(Overlay);
+  private readonly viewContainer = inject(ViewContainerRef);
+  private readonly document = inject(DOCUMENT);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly trigger = viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
+  private readonly panel = viewChild.required<TemplateRef<unknown>>('panel');
 
   /** The button's text, or with `icon` its accessible name. */
   readonly label = input.required<string>();
@@ -259,9 +342,14 @@ export class UiMenu {
   /** The `action` of the item chosen, once the menu has closed and focus is back on the button. */
   readonly chosen = output<string>();
   protected readonly open = signal(false);
-  /** The list opens from the button's other edge, because the usual one would leave the screen. */
-  protected readonly flipped = signal(false);
   protected readonly panelId = `tb-menu-${nextId++}`;
+  /** The open list's overlay; null while the menu is closed. */
+  private overlayRef: OverlayRef | null = null;
+  private stopFollowing: (() => void) | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.close(false));
+  }
 
   /** Puts focus back on the button, for a page whose chosen action removed what had focus. */
   focus(): void {
@@ -269,30 +357,81 @@ export class UiMenu {
   }
 
   protected toggle(): void {
-    const opening = !this.open();
-    this.flipped.set(false);
-    this.open.set(opening);
-    if (opening) {
-      afterNextRender(
-        () => {
-          this.keepOnScreen();
-          this.itemElements()[0]?.focus();
-        },
-        { injector: this.injector },
-      );
-    }
+    if (this.open()) this.close(false);
+    else this.show();
+  }
+
+  private show(): void {
+    const trigger = this.trigger().nativeElement;
+    const position = this.overlay
+      .position()
+      .flexibleConnectedTo(trigger)
+      .withPositions(menuPositions(this.align()))
+      .withViewportMargin(8)
+      .withFlexibleDimensions(false)
+      .withPush(true)
+      .withPopoverLocation('inline');
+    const ref = this.overlay.create({
+      positionStrategy: position,
+      scrollStrategy: this.overlay.scrollStrategies.noop(),
+      direction: directionOf(trigger),
+      panelClass: 'tb-menu-pane',
+    });
+    // The page's light or dark scope, for a browser that draws the list away from the button.
+    const mode = trigger.closest('[data-mode]')?.getAttribute('data-mode');
+    if (mode) ref.overlayElement.dataset['mode'] = mode;
+    ref.outsidePointerEvents().subscribe((event) => {
+      // The button's own press toggles the menu itself.
+      if (!trigger.contains(event.target as Node)) this.close(false);
+    });
+    ref.attach(new TemplatePortal(this.panel(), this.viewContainer));
+    this.overlayRef = ref;
+    this.stopFollowing = this.followScrolling(trigger, ref);
+    this.open.set(true);
+    afterNextRender(() => this.itemElements()[0]?.focus(), { injector: this.injector });
   }
 
   /**
-   * A list that would run past the screen's edge opens from the button's other edge instead, as a
-   * filter chip near the end of a row on a phone needs. Read once, when the list opens.
+   * Keeps the list on its button while the page or any box around the button scrolls, once a frame,
+   * and closes it once the button has scrolled out of sight, its focus going back to the button.
    */
-  private keepOnScreen(): void {
-    const panel = this.host.nativeElement.querySelector<HTMLElement>('.panel');
-    if (!panel) return;
-    const rect = panel.getBoundingClientRect();
-    const width = this.host.nativeElement.ownerDocument.documentElement.clientWidth;
-    if (rect.left < 0 || rect.right > width) this.flipped.set(true);
+  private followScrolling(trigger: HTMLElement, ref: OverlayRef): () => void {
+    const view = this.document.defaultView;
+    let frame: number | null = null;
+    const follow = () => {
+      frame = null;
+      if (outOfSight(trigger)) {
+        const focused = ref.overlayElement.contains(this.document.activeElement);
+        this.close(false);
+        if (focused) trigger.focus({ preventScroll: true });
+      } else {
+        ref.updatePosition();
+      }
+    };
+    const onScroll = (event: Event) => {
+      if (frame !== null || ref.overlayElement.contains(event.target as Node)) return;
+      frame = view?.requestAnimationFrame(follow) ?? null;
+    };
+    this.document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => {
+      this.document.removeEventListener('scroll', onScroll, { capture: true });
+      if (frame !== null) view?.cancelAnimationFrame(frame);
+    };
+  }
+
+  /**
+   * Closed before the list is taken away: removing it blurs the item that had focus, and the browser's
+   * focusout would otherwise close the menu a second time, halfway through the first.
+   */
+  private close(returnFocus: boolean): void {
+    const ref = this.overlayRef;
+    if (!ref) return;
+    this.overlayRef = null;
+    this.stopFollowing?.();
+    this.stopFollowing = null;
+    this.open.set(false);
+    if (returnFocus) this.trigger().nativeElement.focus();
+    ref.dispose();
   }
 
   /**
@@ -301,27 +440,38 @@ export class UiMenu {
    */
   protected choose(item: UiMenuItem): void {
     if (item.disabled) return;
-    this.open.set(false);
-    this.trigger().nativeElement.focus();
+    this.close(true);
     this.chosen.emit(item.action);
   }
 
-  protected closeFromKeyboard(event: Event): void {
+  /** On the open menu's button: Escape closes it, an arrow, Home or End goes into the list. */
+  protected triggerKey(event: KeyboardEvent): void {
     if (!this.open()) return;
-    event.stopPropagation();
-    this.open.set(false);
-    this.trigger().nativeElement.focus();
-  }
-
-  protected closeOnFocusOut(event: FocusEvent): void {
-    const next = event.relatedTarget as Node | null;
-    if (this.open() && !this.host.nativeElement.contains(next)) this.open.set(false);
-  }
-
-  protected moveFocus(event: KeyboardEvent): void {
     const items = this.itemElements();
-    if (!this.open() || items.length === 0) return;
-    const current = items.indexOf(document.activeElement as HTMLElement);
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      this.close(true);
+    } else if (event.key === 'ArrowDown' || event.key === 'Home') {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === 'ArrowUp' || event.key === 'End') {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  }
+
+  /**
+   * In the list: the arrows move through it and wrap round, Home and End go to either end, and
+   * Escape closes it without reaching the sheet around it.
+   */
+  protected itemKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      this.close(true);
+      return;
+    }
+    const items = this.itemElements();
+    const current = items.indexOf(this.document.activeElement as HTMLElement);
     const target =
       event.key === 'ArrowDown'
         ? (current + 1) % items.length
@@ -332,12 +482,20 @@ export class UiMenu {
             : event.key === 'End'
               ? items.length - 1
               : -1;
-    if (target < 0) return;
+    if (target < 0 || items.length === 0) return;
     event.preventDefault();
     items[target].focus();
   }
 
+  protected closeOnFocusOut(event: FocusEvent): void {
+    const next = event.relatedTarget as Node | null;
+    const inside =
+      !!next &&
+      (this.host.nativeElement.contains(next) || !!this.overlayRef?.overlayElement.contains(next));
+    if (this.open() && !inside) this.close(false);
+  }
+
   private itemElements(): HTMLElement[] {
-    return Array.from(this.host.nativeElement.querySelectorAll<HTMLElement>('.item'));
+    return Array.from(this.overlayRef?.overlayElement.querySelectorAll<HTMLElement>('.item') ?? []);
   }
 }

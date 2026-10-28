@@ -63,7 +63,7 @@ const emptyLines = <T>(value: T): Lines<T> =>
   imports: [Control, DateField, EntryActions, Field, FormSummary, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted" i18n>Fill in what you measured. Leave the rest empty.</p>
       <app-segmented-control
         [label]="unitLabel"
@@ -110,6 +110,7 @@ const emptyLines = <T>(value: T): Lines<T> =>
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"
@@ -263,7 +264,7 @@ export class LogMeasurements extends EntrySheet {
   imports: [Control, EntryActions, Field, FormSummary, ReasonPicker, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about">
         <strong>{{ row().name }}: {{ row().value }}</strong
         >&ngsp;
@@ -315,6 +316,7 @@ export class LogMeasurements extends EntrySheet {
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"

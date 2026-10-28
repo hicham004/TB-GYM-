@@ -57,7 +57,7 @@ let nextSheet = 0;
   imports: [Button, Control, EntryActions, Field, FormSummary, SegmentedControl, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="about">
         <strong dir="auto">{{ food().name }}</strong
         >&ngsp;<span class="muted">{{ measure() }}</span>
@@ -220,6 +220,7 @@ let nextSheet = 0;
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="mode() === 'add' ? saveLabel : useLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"

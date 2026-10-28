@@ -252,7 +252,7 @@ describe('a client’s check-ins', () => {
     await settle(fixture);
 
     expect(textOf(dialog())).toContain('Close without saving? What you typed will be lost.');
-    press(dialog()!.querySelector('app-confirm')!, 'Keep editing');
+    press(dialog()!, 'Keep editing');
     await settle(fixture);
     await settle(fixture);
     expect(textOf(dialog())).toContain('Assign check-in');

@@ -48,6 +48,7 @@ import { UiDialog } from '../../ui/dialog';
 import { Control } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { Icon } from '../../ui/icon';
+import { ModalFooter } from '../../ui/modal-footer';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
@@ -205,6 +206,7 @@ interface EditFailure {
     FormSummary,
     FormsModule,
     Icon,
+    ModalFooter,
     ProgramLibrary,
     ProgramSessionEditor,
     ProgramSetsEditor,

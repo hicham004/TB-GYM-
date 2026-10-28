@@ -29,7 +29,7 @@ import {
   REVIEW_CLIENT_ID,
 } from '../../../testing/checkin-review-fixtures';
 import { LEA_ID } from '../../../testing/coach-today-fixtures';
-import { press, settle, type } from '../../../testing/dom';
+import { menuChoices, press, settle, type } from '../../../testing/dom';
 import { ClientCheckInReview } from './client-checkin-review';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
@@ -241,9 +241,12 @@ describe('a check-in under review', () => {
 
       named(host, 'Compare with another').click();
       await settle(harness.fixture);
-      const choices = all(host, '.item .item-title').map(textOf);
-      expect(choices).toEqual(['Sent Wed 23 Sep', 'Sent Wed 16 Sep']);
-      all(host, '.item')[1].click();
+      const choices = menuChoices(named(host, 'Compare with another'));
+      expect(choices.map((item) => textOf(item.querySelector('.item-title')))).toEqual([
+        'Sent Wed 23 Sep',
+        'Sent Wed 16 Sep',
+      ]);
+      choices[1].click();
       await settle(harness.fixture);
 
       expect(api.compareCheckInResponses).toHaveBeenLastCalledWith(

@@ -17,7 +17,7 @@ request or commit, Built, not merged, or Blocked (with the question).
 | Step | What | The owner's decisions and what is left out | Status |
 | --- | --- | --- | --- |
 | B1 | Words | Every rename on the word list except the Clients filter chips, which wait for the filters' rework (2026-10-27). One Reps box. "Workouts", not "sessions", on coach screens. | Done · 2026-10-27 · PR #1 |
-| B2a | Kit · The sheet's footer and menus | A footer outside the scroll, in the kit, for every sheet (not the one-line fix). Menus fixed in the kit, the meal plan's day menu included. | Open |
+| B2a | Kit · The sheet's footer and menus | A footer outside the scroll, in the kit, for every sheet (not the one-line fix). Menus fixed in the kit, the meal plan's day menu included. | Done · 2026-10-28 · PR #4 |
 | B2b | Kit · Folds, the sidebar and the view switch | One fold look everywhere. Tighter sidebar rows on short windows, with a thin dark scrollbar only where still needed. Cards / List with an icon and the word. Before it starts, the dark mode switch still uncommitted in the owner's tree is committed or dropped, since it changes the coach shell too. | Open |
 | B3a | Team | A Team row in the sidebar. The seats line and the invite's seat sentence (yes, 2026-10-27, once explained). A read-only Team page for coaches (yes, against the recommendation). A Coach filter on Clients. Chats stay private: the owner sees every client and their data, never a coach's chats (ADR 0026, confirmed 2026-10-27). | Open |
 | B3b | Messages and check-ins | Saved replies at the top of Messages. One Unread filter with Mark as unread, as in WhatsApp, and Waiting for reply removed (2026-10-27). Check-ins opens on To review, with a line saying what a check-in is (the owner's note). | Open |

@@ -169,6 +169,9 @@ async function render(
   };
 }
 
+/** The open menu's list, which the kit draws in an overlay of its own, outside the player. */
+const menuList = () => query<HTMLElement>(document, '.tb-menu-pane');
+
 describe('TodayTraining interactions', () => {
   afterEach(() => {
     document.body.replaceChildren();
@@ -429,9 +432,9 @@ describe('TodayTraining interactions', () => {
     await settle(fixture);
     // The prescribed lift is listed first and marked as the one in use.
     expect(
-      button(host, 'Back squatThe one your coach prescribed').getAttribute('aria-current'),
+      button(menuList(), 'Back squatThe one your coach prescribed').getAttribute('aria-current'),
     ).toBe('true');
-    press(host, 'Hack squat');
+    press(menuList(), 'Hack squat');
     await settle(fixture);
 
     expect(api.substituteMyTrainingExercise).toHaveBeenCalledWith(
@@ -462,8 +465,8 @@ describe('TodayTraining interactions', () => {
 
     press(host, 'Swap exercise');
     await settle(fixture);
-    expect(button(host, 'Hack squat').getAttribute('aria-current')).toBe('true');
-    press(host, 'Back squatThe one your coach prescribed');
+    expect(button(menuList(), 'Hack squat').getAttribute('aria-current')).toBe('true');
+    press(menuList(), 'Back squatThe one your coach prescribed');
     await settle(fixture);
 
     expect(api.substituteMyTrainingExercise).toHaveBeenCalledWith(
@@ -506,10 +509,10 @@ describe('TodayTraining interactions', () => {
     press(host, 'Swap exercise');
     await settle(fixture);
     const why = 'Not this workout: a set is logged as Hack squat';
-    expect(button(host, `Back squat${why}`).getAttribute('aria-disabled')).toBe('true');
-    expect(button(host, `Leg press${why}`).getAttribute('aria-disabled')).toBe('true');
-    expect(button(host, 'Hack squat').getAttribute('aria-current')).toBe('true');
-    press(host, `Back squat${why}`);
+    expect(button(menuList(), `Back squat${why}`).getAttribute('aria-disabled')).toBe('true');
+    expect(button(menuList(), `Leg press${why}`).getAttribute('aria-disabled')).toBe('true');
+    expect(button(menuList(), 'Hack squat').getAttribute('aria-current')).toBe('true');
+    press(menuList(), `Back squat${why}`);
     await settle(fixture);
     expect(api.substituteMyTrainingExercise).not.toHaveBeenCalled();
   });
@@ -552,7 +555,7 @@ describe('TodayTraining interactions', () => {
 
     press(host, 'Swap exercise');
     await settle(fixture);
-    press(host, 'Hack squat');
+    press(menuList(), 'Hack squat');
     await settle(fixture);
 
     expect(getMyTrainingToday).toHaveBeenCalledTimes(2);
@@ -563,7 +566,7 @@ describe('TodayTraining interactions', () => {
     press(host, 'Swap exercise');
     await settle(fixture);
     expect(
-      button(host, 'Hack squatNot this workout: a set is logged as Back squat').getAttribute(
+      button(menuList(), 'Hack squatNot this workout: a set is logged as Back squat').getAttribute(
         'aria-disabled',
       ),
     ).toBe('true');
@@ -1125,8 +1128,10 @@ describe('TodayTraining interactions', () => {
 
     press(host, 'Choose workout');
     await settle(fixture);
-    expect(button(host, 'Lower AToday · in progress').getAttribute('aria-current')).toBe('true');
-    press(host, 'Upper BStarted for Mon 24 Aug');
+    expect(button(menuList(), 'Lower AToday · in progress').getAttribute('aria-current')).toBe(
+      'true',
+    );
+    press(menuList(), 'Upper BStarted for Mon 24 Aug');
     await settle(fixture);
 
     expect(host.querySelector('h1')?.textContent).toContain('Upper B');

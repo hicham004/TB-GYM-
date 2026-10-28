@@ -45,7 +45,7 @@ const UNITS: readonly SegmentOption[] = [
   imports: [Control, DateField, EntryActions, ExercisePicker, Field, FormSummary, SegmentedControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted" i18n>
         A max is added to {{ firstName() }}’s history and never changed; to put one right, record
         the right number for the day.
@@ -130,6 +130,7 @@ const UNITS: readonly SegmentOption[] = [
         }
       </app-form-summary>
       <app-entry-actions
+        [form]="formId"
         [saveLabel]="saveLabel"
         [busyLabel]="savingLabel"
         [busy]="busy()"

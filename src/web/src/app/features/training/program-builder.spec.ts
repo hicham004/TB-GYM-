@@ -920,14 +920,14 @@ describe('the program builder', () => {
 
     named(host, 'More for week 1').click();
     await settle(harness.fixture);
-    named(host, 'Unfold every week').click();
+    named(document, 'Unfold every week').click();
     await settle(harness.fixture);
     expect(all(host, '.week-fold')).toHaveLength(0);
     expect(localStorage.getItem('tb.program-folds:template-1')).toBeNull();
 
     named(host, 'More for week 2').click();
     await settle(harness.fixture);
-    named(host, 'Fold the other weeks').click();
+    named(document, 'Fold the other weeks').click();
     await settle(harness.fixture);
     expect(
       all(host, 'section.week').map((week) => week.querySelector('.week-fold') !== null),
@@ -949,7 +949,7 @@ describe('the program builder', () => {
 
     named(host, 'More for week 1').click();
     await settle(harness.fixture);
-    named(host, 'Duplicate week').click();
+    named(document, 'Duplicate week').click();
     await settle(harness.fixture);
     expect(all(host, 'section.week')).toHaveLength(3);
     expect(all(host, '.week-label').map((input) => (input as HTMLInputElement).value)).toEqual([
@@ -960,7 +960,7 @@ describe('the program builder', () => {
 
     named(host, 'More for week 2').click();
     await settle(harness.fixture);
-    named(host, 'Delete week').click();
+    named(document, 'Delete week').click();
     await settle(harness.fixture);
     expect(all(host, 'section.week')).toHaveLength(2);
     const [message, options] = toast.show.mock.lastCall as unknown as [
@@ -978,7 +978,7 @@ describe('the program builder', () => {
 
     named(host, 'More for week 1').click();
     await settle(harness.fixture);
-    named(host, 'Duplicate with progression…').click();
+    named(document, 'Duplicate with progression…').click();
     const open = await dialogNamed(harness.fixture, 'Duplicate with progression');
     fill(open, 'Copies', '2');
     await settle(harness.fixture);
@@ -1035,7 +1035,7 @@ describe('the program builder', () => {
     named(host, 'More for week 1').click();
     await settle(harness.fixture);
 
-    const entry = all(host, 'button').find((candidate) =>
+    const entry = all(document, '.tb-menu-pane button').find((candidate) =>
       textOf(candidate).startsWith('Duplicate with progression'),
     ) as HTMLButtonElement;
     // A disabled menu item stays listed and focusable, and says why.
@@ -1070,7 +1070,9 @@ describe('the program builder', () => {
       trigger.click();
       await settle(harness.fixture);
       (
-        all(host, 'ul.panel button').find((item) => textOf(item).startsWith(formula)) as HTMLElement
+        all(document, 'ul.panel button').find((item) =>
+          textOf(item).startsWith(formula),
+        ) as HTMLElement
       ).click();
       await settle(harness.fixture);
     };

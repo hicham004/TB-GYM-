@@ -46,6 +46,7 @@ import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
+import { ModalFooter } from '../../ui/modal-footer';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
@@ -223,6 +224,7 @@ const RING = 2 * Math.PI * 16;
     Icon,
     MealPlanLibrary,
     MealPlanMealEditor,
+    ModalFooter,
     RouterLink,
     Skeleton,
     StatusPill,

@@ -14,6 +14,7 @@ import {
   field,
   fill,
   formSummary,
+  menuChoices,
   press,
   selectShows,
   settle,
@@ -115,7 +116,7 @@ async function choose(
   if (!trigger) throw new Error(`No menu is named "${label}".`);
   trigger.click();
   await settle(harness.fixture);
-  const choice = Array.from(host.querySelectorAll<HTMLButtonElement>('.panel .item')).find(
+  const choice = menuChoices(trigger).find(
     (candidate) => textOf(candidate.querySelector('.item-title')) === item,
   );
   if (!choice) throw new Error(`The menu "${label}" has no "${item}".`);
@@ -489,11 +490,12 @@ describe('the exercise library', () => {
       of(results([archived])),
     );
     expect(textOf(cards(host)[0].querySelector('.archived-tag'))).toBe('Archived');
-    host
-      .querySelector<HTMLButtonElement>('button[aria-label="More for Banded Pull-apart"]')!
-      .click();
+    const more = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="More for Banded Pull-apart"]',
+    )!;
+    more.click();
     await settle(harness.fixture);
-    expect(Array.from(host.querySelectorAll('.panel .item-title')).map(textOf)).toEqual([
+    expect(menuChoices(more).map((item) => textOf(item.querySelector('.item-title')))).toEqual([
       'Restore',
     ]);
   });

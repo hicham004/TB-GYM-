@@ -284,7 +284,7 @@ import type { IntakeErrors, IntakeStepId, IntakeSubject, IntakeValues } from './
       }
     }
 
-    // A focused box scrolls clear of the sticky action bar at the sheet's foot.
+    // A focused box scrolls clear of the tab bar pinned over a phone's foot on the intake steps.
     input,
     textarea,
     button {

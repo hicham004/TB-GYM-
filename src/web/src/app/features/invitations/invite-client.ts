@@ -24,6 +24,7 @@ import { Button } from '../../ui/button';
 import { type IsoDate } from '../../ui/calendar';
 import { DateInput, type DateInputStatus } from '../../ui/date-input';
 import { Control, Field } from '../../ui/field';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { inviteErrors } from './invitations.models';
 
@@ -42,10 +43,10 @@ export interface InvitePrefill {
  */
 @Component({
   selector: 'app-invite-client',
-  imports: [Button, Control, DateInput, Field],
+  imports: [Button, Control, DateInput, Field, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       @if (emailOff()) {
         <p class="muted" data-email-off i18n>
           Email is off on this server, so they won’t get the link to set up their account. The
@@ -129,19 +130,19 @@ export interface InvitePrefill {
       @if (error(); as message) {
         <p class="problem-text refusal" role="alert">{{ message }}</p>
       }
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Sending…</ng-container>
-          } @else {
-            <ng-container i18n>Send invitation</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Sending…</ng-container>
+        } @else {
+          <ng-container i18n>Send invitation</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: `
     :host {
@@ -171,22 +172,6 @@ export interface InvitePrefill {
       color: var(--tb-danger);
       font-weight: 600;
       padding: 0.625rem 0.875rem;
-      // Scrolled into view clear of the sticky action bar below it.
-      scroll-margin-block-end: 5rem;
-    }
-
-    .actions {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      inset-block-end: -1.5rem;
-      justify-content: flex-end;
-      margin-block-end: -1.5rem;
-      margin-inline: -1.5rem;
-      padding: 0.75rem 1.5rem;
-      position: sticky;
     }
   `,
 })
@@ -214,6 +199,7 @@ export class InviteClient {
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('invite-client');
   protected readonly firstLabel = $localize`First name`;
   protected readonly lastLabel = $localize`Last name`;
   protected readonly emailLabel = $localize`Email`;
@@ -296,7 +282,7 @@ export class InviteClient {
         this.error.set(
           apiErrorMessage(error, $localize`The invitation could not be created. Try again.`),
         );
-        // The refusal is at the foot of the form, where the sticky action bar can cover it.
+        // The refusal is at the foot of a form that may be scrolled away from it.
         afterNextRender(
           () =>
             this.host.nativeElement

@@ -75,7 +75,7 @@ const SEXES: readonly SegmentOption[] = [
         </div>
       </div>
     } @else {
-      <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+      <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
         <p class="muted" i18n>
           Estimates from the formulas, not measurements. You choose the numbers that go to
           {{ firstName() }}.
@@ -341,6 +341,7 @@ const SEXES: readonly SegmentOption[] = [
           }
         </app-form-summary>
         <app-entry-actions
+          [form]="formId"
           [saveLabel]="saveLabel"
           [busyLabel]="workingLabel"
           [busy]="busy()"

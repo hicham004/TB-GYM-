@@ -23,6 +23,7 @@ import { isoWeekdayOfName } from '../../ui/calendar';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
+import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { ClientProgramApi } from './client-program-api';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import type { BlockCard } from './client-program.models';
@@ -68,13 +69,6 @@ const DIALOG_STYLES = `
     color: var(--tb-ink);
     font-weight: 600;
   }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: flex-end;
-  }
 `;
 
 /** A refused submit: the box that is wrong takes focus once its reason is drawn. */
@@ -93,10 +87,10 @@ function focusWrongBox(host: ElementRef<HTMLElement>, injector: Injector): void 
  */
 @Component({
   selector: 'app-program-rename',
-  imports: [Button, Control, Field, FormSummary],
+  imports: [Button, Control, Field, FormSummary, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted" dir="auto" i18n>
         This changes what {{ firstName() }} and you call the program. Its dates, its weeks and what
         it was built from stay as they are.
@@ -119,19 +113,19 @@ function focusWrongBox(host: ElementRef<HTMLElement>, injector: Injector): void 
           {{ message }}
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Renaming…</ng-container>
-          } @else {
-            <ng-container i18n>Rename program</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Renaming…</ng-container>
+        } @else {
+          <ng-container i18n>Rename program</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: DIALOG_STYLES,
 })
@@ -148,6 +142,7 @@ export class ProgramRename {
   private readonly summary = viewChild.required(FormSummary);
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('program-rename');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly limit = PROGRAM_NAME_LIMIT;
@@ -192,10 +187,10 @@ export class ProgramRename {
 
 @Component({
   selector: 'app-program-reschedule',
-  imports: [Button, DateField, FormSummary],
+  imports: [Button, DateField, FormSummary, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted" dir="auto" i18n>
         Every week of {{ block().name }} moves with it. Nothing has been started, so no workout
         changes date.
@@ -217,19 +212,19 @@ export class ProgramRename {
           {{ message }}
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Moving…</ng-container>
-          } @else {
-            <ng-container i18n>Reschedule</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Moving…</ng-container>
+        } @else {
+          <ng-container i18n>Reschedule</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: DIALOG_STYLES,
 })
@@ -254,6 +249,7 @@ export class ProgramReschedule {
   private readonly summary = viewChild.required(FormSummary);
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('program-reschedule');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly startLabel = $localize`New start date`;
@@ -305,7 +301,7 @@ export class ProgramReschedule {
 
 @Component({
   selector: 'app-program-complete',
-  imports: [Button, FormSummary],
+  imports: [Button, FormSummary, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -333,21 +329,21 @@ export class ProgramReschedule {
           {{ message }}
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Not now
-        </button>
-        @if (closing() !== 'not-yet') {
-          <button appButton type="button" [loading]="busy()" (click)="submit()">
-            @if (busy()) {
-              <ng-container i18n>Closing…</ng-container>
-            } @else {
-              <ng-container i18n>Close program</ng-container>
-            }
-          </button>
-        }
-      </div>
     </div>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Not now
+      </button>
+      @if (closing() !== 'not-yet') {
+        <button appButton type="button" [loading]="busy()" (click)="submit()">
+          @if (busy()) {
+            <ng-container i18n>Closing…</ng-container>
+          } @else {
+            <ng-container i18n>Close program</ng-container>
+          }
+        </button>
+      }
+    </ng-template>
   `,
   styles: DIALOG_STYLES,
 })
@@ -424,10 +420,10 @@ export class ProgramComplete {
 
 @Component({
   selector: 'app-program-cancel',
-  imports: [Button, Control, Field, FormSummary],
+  imports: [Button, Control, Field, FormSummary, ModalFooter],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <form class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p dir="auto" i18n>
         Cancel {{ block().name }}? {{ firstName() }} stops seeing the workouts still to come.
         Workouts already finished stay in their history.
@@ -452,19 +448,19 @@ export class ProgramComplete {
           {{ message }}
         }
       </app-form-summary>
-      <div class="actions">
-        <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
-          Keep program
-        </button>
-        <button appButton type="submit" [loading]="busy()">
-          @if (busy()) {
-            <ng-container i18n>Cancelling…</ng-container>
-          } @else {
-            <ng-container i18n>Cancel program</ng-container>
-          }
-        </button>
-      </div>
     </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>
+        Keep program
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Cancelling…</ng-container>
+        } @else {
+          <ng-container i18n>Cancel program</ng-container>
+        }
+      </button>
+    </ng-template>
   `,
   styles: DIALOG_STYLES,
 })
@@ -481,6 +477,7 @@ export class ProgramCancel {
   private readonly summary = viewChild.required(FormSummary);
 
   protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('program-cancel');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly limit = CANCEL_REASON_LIMIT;

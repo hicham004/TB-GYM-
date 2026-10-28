@@ -474,9 +474,9 @@
       (retry)="loadLibrary()"
     />
     <p class="tb-visually-hidden" role="status">{{ announcement() }}</p>
-    <div class="sheet-footer">
+    <ng-template appModalFooter>
       <button appButton type="button" (click)="sheet.close()" i18n>Done</button>
-    </div>
+    </ng-template>
   </div>
 </ng-template>
 
@@ -538,7 +538,7 @@
         {{ trouble.message }}
       }
     </app-form-summary>
-    <div class="preview-footer">
+    <ng-template appModalFooter>
       <button
         appButton
         variant="outlined"
@@ -558,7 +558,7 @@
           <span i18n>Publish program</span>
         }
       </button>
-    </div>
+    </ng-template>
   }
 </ng-template>
 

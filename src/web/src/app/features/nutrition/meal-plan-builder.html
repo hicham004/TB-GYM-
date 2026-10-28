@@ -499,11 +499,11 @@
       (pickRecipe)="pickRecipe($event)"
       (retry)="loadLibrary()"
     />
-    <div class="sheet-footer">
+    <ng-template appModalFooter>
       <button appButton type="button" variant="outlined" (click)="sheet.close()" i18n>
         Cancel
       </button>
-    </div>
+    </ng-template>
   </div>
 </ng-template>
 
