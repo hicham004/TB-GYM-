@@ -33,7 +33,15 @@ export function clientCheckInsMoved({ queryParams }: { queryParams: Params }): U
 
 export const checkInRoutes: Routes = [
   {
-    // The forms as cards (audit A14b); each opens on its own page below.
+    // Where Check-ins opens (critique B3b): every sent check-in waiting for its review.
+    path: 'review',
+    data: REDESIGNED,
+    canActivate: [coachGuard],
+    title: $localize`Check-ins to review | TB Gym`,
+    loadComponent: () => import('./checkins-to-review').then((module) => module.CheckInsToReview),
+  },
+  {
+    // The forms as cards (audit A14b), the second page of Check-ins; each opens on its own page below.
     path: 'forms',
     data: REDESIGNED,
     canActivate: [coachGuard],
@@ -67,5 +75,5 @@ export const checkInRoutes: Routes = [
     title: $localize`Check-in | TB Gym`,
     loadComponent: () => import('./checkin-flow').then((module) => module.CheckInFlow),
   },
-  { path: '', redirectTo: 'forms', pathMatch: 'full' },
+  { path: '', redirectTo: 'review', pathMatch: 'full' },
 ];

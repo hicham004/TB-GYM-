@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.CheckIns;
+using TB.Gym.Modules.Clients;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
@@ -17,9 +18,14 @@ internal sealed class CheckInApplicationService(
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
-    CheckInAccessResolver accessResolver)
+    CheckInAccessResolver accessResolver,
+    CoachClientScope coachClientScope,
+    ICoachingFeatureAccessService featureAccessService)
     : ICheckInApplicationService
 {
+    /// <summary>The longest To review list: its oldest this many, with how many wait in all.</summary>
+    private const int MaximumToReview = 500;
+
     public async Task<CheckInFormPage> ListFormsAsync(
         int skip,
         int take,
@@ -496,6 +502,75 @@ internal sealed class CheckInApplicationService(
             : new CheckInAssignmentListResult(
                 CheckInCommandStatus.Success,
                 await BuildListAsync(access.ClientProfileId, skip, take, cancellationToken));
+    }
+
+    public async Task<CheckInToReviewList> ListToReviewAsync(CancellationToken cancellationToken)
+    {
+        // The caller's current clients (ADR 0026): a Coach's own, every one for the Owner (the owner's
+        // choice of 2026-10-28); never a former client, whose record is read-only (ADR 0027).
+        var clients = dbContext.ClientProfiles.AsNoTracking().Where(client => client.ReleasedAtUtc == null);
+        if (await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId)
+        {
+            clients = clients.Where(client => client.AssignedCoachUserId == coachUserId);
+        }
+
+        var sent = await (
+            from response in dbContext.CheckInResponses.AsNoTracking()
+            join assignment in dbContext.CheckInAssignments.AsNoTracking()
+                on response.AssignmentId equals assignment.Id
+            join form in dbContext.CheckInForms.AsNoTracking() on assignment.FormId equals form.Id
+            join client in clients on assignment.ClientProfileId equals client.Id
+            join coach in dbContext.Users.AsNoTracking() on client.AssignedCoachUserId equals coach.Id
+            where response.Status == CheckInResponseStatus.Submitted &&
+                  response.SubmittedAtUtc != null &&
+                  response.SubmittedDate != null
+            orderby response.SubmittedAtUtc, assignment.Id
+            select new
+            {
+                AssignmentId = assignment.Id,
+                ClientProfileId = client.Id,
+                client.FirstName,
+                client.LastName,
+                CoachUserId = coach.Id,
+                CoachName = coach.DisplayName,
+                form.Title,
+                SentAtUtc = response.SubmittedAtUtc!.Value,
+                SentDate = response.SubmittedDate!.Value,
+                assignment.DueDate,
+            })
+            .ToListAsync(cancellationToken);
+        if (sent.Count == 0)
+        {
+            return new CheckInToReviewList([], 0, MaximumToReview);
+        }
+
+        // A review is coaching the plan must cover now: a client whose plan no longer includes check-ins
+        // is left out, rather than listed to be refused on opening.
+        var access = await featureAccessService.EvaluateManyAsync(
+            tenantContext.TenantId,
+            [.. sent.Select(row => row.ClientProfileId).Distinct()],
+            cancellationToken);
+        var waiting = sent
+            .Where(row => access[row.ClientProfileId]
+                .Single(decision => decision.Feature == CoachingFeature.CheckIns)
+                .IsAllowed)
+            .ToList();
+        return new CheckInToReviewList(
+            [.. waiting.Take(MaximumToReview).Select(row => new CheckInToReviewItem(
+                row.AssignmentId,
+                row.ClientProfileId,
+                row.FirstName,
+                row.LastName,
+                row.CoachUserId,
+                row.CoachName,
+                row.Title,
+                row.SentAtUtc,
+                row.SentDate,
+                row.DueDate,
+                // Lateness from the stored workspace-local day against the due day, as the lists say it.
+                Math.Max(0, row.SentDate.DayNumber - row.DueDate.DayNumber)))],
+            waiting.Count,
+            MaximumToReview);
     }
 
     private async Task<CheckInFormCommandResult> SetArchivedAsync(

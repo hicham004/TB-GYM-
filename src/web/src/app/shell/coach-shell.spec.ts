@@ -64,6 +64,7 @@ async function render(
         { path: 'clients', children: [] },
         { path: 'training/programs', children: [] },
         { path: 'nutrition/plans', children: [] },
+        { path: 'checkins/review', children: [] },
         { path: 'checkins/forms', children: [] },
         { path: 'messages', children: [] },
         { path: 'products', children: [] },

@@ -67,7 +67,11 @@ export function localDate(instant: string, timeZone: string): string {
 }
 
 function daysLate(dueDate: string, sentDate: string): string {
-  const days = daysBetween(dueDate, sentDate);
+  return lateBy(daysBetween(dueDate, sentDate));
+}
+
+/** "1 day late", "3 days late": how long after its due day a check-in was sent (CHK-012). */
+export function lateBy(days: number): string {
   return days === 1 ? $localize`1 day late` : $localize`${days}:count: days late`;
 }
 

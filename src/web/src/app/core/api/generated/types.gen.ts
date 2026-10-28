@@ -645,6 +645,26 @@ export type CheckInResponseView = {
   answersWithheld?: boolean;
 };
 
+export type CheckInToReviewItem = {
+  assignmentId: string;
+  clientProfileId: string;
+  clientFirstName: string;
+  clientLastName: string;
+  coachUserId: string;
+  coachName: string;
+  formTitle: string;
+  sentAtUtc: string;
+  sentDate: string;
+  dueDate: string;
+  daysLate: number | string;
+};
+
+export type CheckInToReviewList = {
+  items: Array<CheckInToReviewItem>;
+  total: number | string;
+  maximum: number | string;
+};
+
 export type ClientAllergensView = {
   codes: Array<AllergenCode>;
 };
@@ -4258,6 +4278,23 @@ export type GetOwnCoachingFeatureAccessResponses = {
 
 export type GetOwnCoachingFeatureAccessResponse =
   GetOwnCoachingFeatureAccessResponses[keyof GetOwnCoachingFeatureAccessResponses];
+
+export type ListCheckInsToReviewData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/checkins/to-review';
+};
+
+export type ListCheckInsToReviewResponses = {
+  /**
+   * OK
+   */
+  200: CheckInToReviewList;
+};
+
+export type ListCheckInsToReviewResponse =
+  ListCheckInsToReviewResponses[keyof ListCheckInsToReviewResponses];
 
 export type UploadWorkspaceLogoData = {
   body: IFormFile;

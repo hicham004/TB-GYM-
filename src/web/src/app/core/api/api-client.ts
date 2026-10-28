@@ -1380,6 +1380,11 @@ export class ApiClient {
     );
   }
 
+  /** Every sent check-in waiting for its review, of the clients the caller coaches (CHK-014). */
+  listCheckInsToReview(): Observable<Phase3Contracts.CheckInToReviewList> {
+    return this.http.get<Phase3Contracts.CheckInToReviewList>('/api/checkins/to-review');
+  }
+
   assignCheckIn(
     clientId: string,
     request: Phase3Contracts.AssignCheckInRequest,

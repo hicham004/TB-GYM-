@@ -1579,6 +1579,11 @@ asked. Since audit A14b assigning is in the record too: Assign a check-in on tha
 (a published form and a due date on the workspace's calendar), and the old `/checkins/clients` page
 is gone; its address redirects to the client's Check-ins it named, or to Clients.
 
+Critique B3b adds the one read across clients, `GET /api/checkins/to-review` (staff), where Check-ins
+opens: every sent, unreviewed check-in of the caller's current clients whose plan includes check-ins
+now, oldest first, at most 500 with the total, and nothing a client typed. A Coach's are their own
+clients' (`CoachClientScope`); the Owner's every client's, each with its coach's name (CHK-014).
+
 See ADR 0017 for authoring and ADR 0016 for responses.
 
 ## 15. Phase 6B-1 notification flow

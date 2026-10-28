@@ -1,0 +1,92 @@
+<section class="review" aria-labelledby="review-heading">
+  <header class="top">
+    <h1 id="review-heading" #heading tabindex="-1" i18n>Check-ins to review</h1>
+    <p class="lede" i18n>
+      A check-in is a short form your clients fill in on a schedule: their weight, photos and your
+      questions. Sent ones wait here for your review.
+    </p>
+  </header>
+
+  <!-- To review and Forms are the two pages of Check-ins; the sidebar links to this one. -->
+  <app-section-nav label="Check-in sections" i18n-label [links]="sections" />
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>The check-ins to review could not be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (!hasAny()) {
+        <app-empty-state
+          class="panel"
+          heading="Nothing to review from clients with a plan"
+          description="When a client whose plan includes check-ins sends one, it waits here, oldest first."
+          i18n-heading
+          i18n-description
+        />
+      } @else {
+        <div class="toolbar">
+          <div class="find" role="search" aria-label="Find a client" i18n-aria-label>
+            <app-field class="search" [label]="searchLabel" hideLabel>
+              <input
+                appControl
+                type="search"
+                name="checkin-review-search"
+                autocomplete="off"
+                enterkeyhint="search"
+                [placeholder]="searchPlaceholder"
+                [value]="search()"
+                (input)="typed($any($event.target).value)"
+              />
+            </app-field>
+          </div>
+          <p class="count" role="status">{{ count() }}</p>
+        </div>
+
+        @if (shown().length > 0) {
+          <ul class="panel rows" role="list">
+            @for (row of shown(); track row.id) {
+              <li class="row">
+                <app-avatar [initials]="row.initials" presentation="client" />
+                <div class="row-copy">
+                  <!-- The link covers the row; its name carries the lines, which are drawn once below. -->
+                  <a class="row-link" [routerLink]="row.link">
+                    <span dir="auto">{{ row.name }}</span>
+                    <span class="tb-visually-hidden">, {{ row.spoken }}</span>
+                  </a>
+                  <p class="row-line" aria-hidden="true">
+                    <span class="form" dir="auto">{{ row.form }}</span
+                    >&ngsp;
+                    <span class="sent">{{ row.sent }}</span>
+                  </p>
+                  @if (row.coach; as coach) {
+                    <p class="row-coach" aria-hidden="true">{{ coach }}</p>
+                  }
+                </div>
+                <app-icon class="chevron" name="chevron-right" />
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="panel pad no-match">
+            <p i18n>No client called “{{ search().trim() }}” has a check-in to review.</p>
+            <button appButton type="button" variant="outlined" (click)="clearSearch()" i18n>
+              Clear search
+            </button>
+          </div>
+        }
+
+        @if (note(); as line) {
+          <p class="note">{{ line }}</p>
+        }
+      }
+    }
+  }
+</section>

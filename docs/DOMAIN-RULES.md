@@ -2235,6 +2235,13 @@ interpreted — there is no derived score, flag, rating, adherence percentage, s
 check-in answers, and no stated or implied relationship between an answer and any training,
 nutrition or bodyweight fact.
 
+**CHK-014** To review (critique B3b) lists every `Submitted` check-in of the caller's current clients
+whose plan includes check-ins now: a Coach's own, every one for the Owner (the owner's choice of
+2026-10-28), never a former client's. Oldest sent first, each with the client, their coach, the form,
+the workspace-local day it was sent and how many days after its due day (CHK-012), at most 500 with
+the total. A client whose plan no longer includes check-ins is left out rather than listed to be
+refused; reviewing one (CHK-009) takes it off.
+
 ## 14. The public website
 
 **WEB-001** A Talk-to-us request (UI plan R6.2g, ADR 0037) is what a gym wrote, as received: a name,

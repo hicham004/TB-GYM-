@@ -28,6 +28,7 @@ const COACH_ROUTES = [
   '/nutrition/plans',
   '/nutrition/recipes',
   '/nutrition/foods',
+  '/checkins/review',
   '/checkins/forms',
   '/checkins/forms/new',
   '/messages',

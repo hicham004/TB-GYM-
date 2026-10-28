@@ -22,9 +22,11 @@ import { Button, ButtonLink } from '../../ui/button';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
+import { SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { formCard, libraryLine, type FormClock } from './checkin-forms.models';
+import { CHECK_IN_SECTIONS } from './checkin-sections';
 
 /** The most forms one read brings, the server's own page limit. */
 const PAGE = 100;
@@ -44,6 +46,7 @@ const PAGE = 100;
     Icon,
     NgTemplateOutlet,
     RouterLink,
+    SectionNav,
     Skeleton,
     StatusPill,
     UiDisclosure,
@@ -63,6 +66,7 @@ export class CheckInForms {
   private readonly injector = inject(Injector);
   private loadedTenantId: string | null = null;
 
+  protected readonly sections = CHECK_IN_SECTIONS;
   protected readonly loadingLabel = $localize`Loading your check-in forms…`;
   protected readonly starter = { start: 'weekly' };
 

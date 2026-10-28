@@ -18,6 +18,9 @@
     </a>
   </header>
 
+  <!-- To review and Forms are the two pages of Check-ins; the sidebar links to To review. -->
+  <app-section-nav label="Check-in sections" i18n-label [links]="sections" />
+
   @switch (state()) {
     @case ('loading') {
       <div class="panel pad" aria-busy="true">

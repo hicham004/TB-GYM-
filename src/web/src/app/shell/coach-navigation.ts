@@ -79,7 +79,7 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
         key: 'check-ins',
         label: $localize`Check-ins`,
         icon: 'check-ins',
-        link: '/checkins/forms',
+        link: '/checkins/review',
         section: ['/checkins'],
       },
       {

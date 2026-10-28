@@ -194,6 +194,17 @@ public static class CheckInEndpoints
 
     private static void MapCoachAssignments(IEndpointRouteBuilder endpoints)
     {
+        // The coach's To review list (critique B3b): every sent check-in waiting for its review, of the
+        // caller's clients whose plan includes check-ins, oldest first. Its rows open the review page.
+        endpoints.MapGet("/api/checkins/to-review", async (
+                ICheckInApplicationService service,
+                CancellationToken token) =>
+                Results.Ok(await service.ListToReviewAsync(token)))
+            .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithTags(CheckInsModule.Name)
+            .WithName("ListCheckInsToReview")
+            .Produces<CheckInToReviewList>();
+
         var coach = endpoints.MapGroup("/api/checkins/clients/{clientProfileId:guid}/assignments")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
             .WithTags(CheckInsModule.Name);

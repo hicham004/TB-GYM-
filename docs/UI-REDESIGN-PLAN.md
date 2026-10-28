@@ -1842,6 +1842,12 @@ limited to the coach's assigned clients.
   - **Assign a check-in** on a client's Check-ins opens a sheet: a published form (the only one chosen
     for the coach) and the day it is due on the workspace's calendar. With none ready it says to publish
     a draft, or to write a first form. The Client check-ins page is gone, its address redirected.
+- Critique B3b: Check-ins opens on **To review** (`/checkins/review`, where `/checkins` and the sidebar
+  go), with Forms as the section's second page. A line says what a check-in is; one row per sent
+  check-in waiting for its review, oldest first: the client's initials and name, the form, "Sent Mon
+  19 Oct · 1 day late", and for the owner "Coached by …" on a team coach's client, each opening its
+  review on the client's record. A name search narrows the rows; with none waiting it says "Nothing to
+  review from clients with a plan". A coach reads their own clients', the owner every client's (CHK-014).
 
 **C6. Messages**
 - Job: "It's a chat."

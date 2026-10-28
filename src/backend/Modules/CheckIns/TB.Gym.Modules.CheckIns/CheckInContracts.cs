@@ -64,7 +64,34 @@ public interface ICheckInApplicationService
         int skip,
         int take,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every sent check-in waiting for its review (critique B3b), of the caller's current clients whose
+    /// plan includes check-ins now: a Coach's own, every one for the Owner (ADR 0026), oldest first.
+    /// </summary>
+    Task<CheckInToReviewList> ListToReviewAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// One sent check-in waiting for its review, as the coach's To review list shows it: whose, coached
+/// by whom, which form, the day it was sent on the workspace's calendar and how many days after its
+/// due day, and the assignment its review opens.
+/// </summary>
+public sealed record CheckInToReviewItem(
+    Guid AssignmentId,
+    Guid ClientProfileId,
+    string ClientFirstName,
+    string ClientLastName,
+    Guid CoachUserId,
+    string CoachName,
+    string FormTitle,
+    DateTimeOffset SentAtUtc,
+    DateOnly SentDate,
+    DateOnly DueDate,
+    int DaysLate);
+
+/// <summary>The oldest <see cref="Maximum"/> waiting at most, and how many wait in all.</summary>
+public sealed record CheckInToReviewList(IReadOnlyList<CheckInToReviewItem> Items, int Total, int Maximum);
 
 public sealed record CheckInQuestionRequest(
     CheckInQuestionType QuestionType,
