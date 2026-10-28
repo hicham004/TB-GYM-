@@ -26,6 +26,7 @@ import { Icon } from '../ui/icon';
 import { CoachNav } from './coach-nav';
 import { countDisplay } from './coach-navigation';
 import { initialsOf } from './initials';
+import { ThemeSwitch, ThemeSwitchArt } from './theme-switch';
 
 type ShellMenu = 'workspace' | 'account';
 
@@ -60,6 +61,8 @@ export const TOPBAR_BLOCK_SIZE = '--tb-topbar-block-size';
     NgTemplateOutlet,
     RouterLink,
     RouterLinkActive,
+    ThemeSwitch,
+    ThemeSwitchArt,
   ],
   templateUrl: './coach-shell.html',
   styleUrls: ['./coach-shell.scss', './coach-topbar.scss'],

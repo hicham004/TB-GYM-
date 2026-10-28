@@ -141,3 +141,31 @@ a {
 [data-route-heading]:focus {
   outline: none;
 }
+
+// The account menu's Dark mode switch (shell/theme-switch.ts): the new mode spreads from the switch
+// in a circle over the old one, instead of the browser's cross-fade, and the page stays clickable
+// underneath. Slower than everyday motion and eased at both ends, so it reads as a circle rather than
+// a flash. The switch sets the circle's centre and reach on <html> and skips it for less motion.
+.tb-theme-reveal::view-transition {
+  pointer-events: none;
+}
+
+.tb-theme-reveal::view-transition-old(root),
+.tb-theme-reveal::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+.tb-theme-reveal::view-transition-new(root) {
+  animation: tb-theme-reveal calc(var(--tb-duration-slow) * 1.5) cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@keyframes tb-theme-reveal {
+  from {
+    clip-path: circle(0 at var(--tb-reveal-x) var(--tb-reveal-y));
+  }
+
+  to {
+    clip-path: circle(var(--tb-reveal-radius) at var(--tb-reveal-x) var(--tb-reveal-y));
+  }
+}

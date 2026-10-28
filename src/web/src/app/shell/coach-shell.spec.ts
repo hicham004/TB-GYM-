@@ -177,6 +177,9 @@ describe('CoachShell', () => {
     await settle(fixture);
 
     expect(host.querySelector('a[href="/account/security"]')).not.toBeNull();
+    // Light or dark is switched in the menu, not on a page of its own.
+    expect(host.querySelector('a[href="/account/appearance"]')).toBeNull();
+    expect(button(host, 'Dark mode').getAttribute('role')).toBe('switch');
     button(host, 'Sign out').click();
     await settle(fixture);
 

@@ -1,0 +1,314 @@
+// The account menu's Dark mode switch (theme-switch.ts): a sun in a warm sky by day; by night the sun
+// is eclipsed into a crescent moon and the stars come out. Every colour is a brand token that is the
+// same in light and dark, so nothing in the switch jumps when the page's mode flips under it half way
+// through. Sizes are rem, so the switch grows with the text.
+
+:host {
+  display: block;
+  flex: none;
+}
+
+.track {
+  // How far the knob travels: the track less its border, the knob and the gap on either side.
+  --travel: calc(3.25rem - 2px - 1.375rem - 0.25rem);
+  --direction: 1;
+  background: linear-gradient(
+    color-mix(in srgb, var(--tb-warm) 50%, var(--tb-on-brand)),
+    color-mix(in srgb, var(--tb-warm) 20%, var(--tb-on-brand))
+  );
+  block-size: 1.75rem;
+  border: 1px solid var(--tb-line-strong);
+  border-radius: var(--radius-full);
+  box-sizing: border-box;
+  display: block;
+  inline-size: 3.25rem;
+  isolation: isolate;
+  overflow: hidden;
+  position: relative;
+}
+
+.track:dir(rtl) {
+  --direction: -1;
+}
+
+// Flat, because the shadow that carves the moon is drawn in the same colour.
+.night-sky {
+  background: var(--tb-night);
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+  transition: opacity var(--tb-duration-slow) var(--tb-ease);
+}
+
+.star {
+  background: var(--tb-accent-bright);
+  block-size: 0.125rem;
+  border-radius: 50%;
+  inline-size: 0.125rem;
+  opacity: 0;
+  position: absolute;
+  transform: scale(0);
+  transition:
+    opacity var(--tb-duration-fast) var(--tb-ease),
+    transform var(--tb-duration-fast) var(--tb-ease);
+}
+
+// The largest star, a four-pointed glint.
+.star-glint {
+  block-size: 0.4375rem;
+  border-radius: 0;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  inline-size: 0.4375rem;
+  inset-block-start: 0.25rem;
+  inset-inline-start: 0.5rem;
+}
+
+.star-2 {
+  inset-block-start: 1rem;
+  inset-inline-start: 0.4375rem;
+}
+
+.star-3 {
+  inset-block-start: 0.5rem;
+  inset-inline-start: 1.1875rem;
+}
+
+.star-4 {
+  block-size: 0.09375rem;
+  inline-size: 0.09375rem;
+  inset-block-start: 1.125rem;
+  inset-inline-start: 1.25rem;
+}
+
+// By day the clouds drift back once the moon has gone.
+.cloud {
+  background: var(--tb-on-brand);
+  border-radius: var(--radius-full);
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--tb-brand) 18%, transparent);
+  position: absolute;
+  transition:
+    opacity var(--tb-duration) var(--tb-ease) var(--tb-duration-fast),
+    transform var(--tb-duration-slow) var(--tb-ease) var(--tb-duration-fast);
+}
+
+// The puff on top of each cloud.
+.cloud::before {
+  aspect-ratio: 1;
+  background: inherit;
+  border-radius: 50%;
+  content: '';
+  position: absolute;
+}
+
+.cloud-1 {
+  block-size: 0.3125rem;
+  inline-size: 0.875rem;
+  inset-block-start: 0.9375rem;
+  inset-inline-start: 1.875rem;
+}
+
+.cloud-1::before {
+  inline-size: 0.5rem;
+  inset-block-end: 0.125rem;
+  inset-inline-start: 0.1875rem;
+}
+
+.cloud-2 {
+  block-size: 0.25rem;
+  inline-size: 0.625rem;
+  inset-block-start: 0.4375rem;
+  inset-inline-start: 2.3125rem;
+}
+
+.cloud-2::before {
+  inline-size: 0.375rem;
+  inset-block-end: 0.125rem;
+  inset-inline-start: 0.125rem;
+}
+
+.knob {
+  block-size: 1.375rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0.5rem color-mix(in srgb, var(--tb-warm) 80%, transparent);
+  display: block;
+  inline-size: 1.375rem;
+  inset-block-start: 0.125rem;
+  inset-inline-start: 0.125rem;
+  // Hides the night's shadow while it waits off the knob by day.
+  overflow: hidden;
+  position: absolute;
+  transition:
+    box-shadow var(--tb-duration-slow) var(--tb-ease),
+    transform var(--tb-duration-slow) var(--tb-ease);
+}
+
+svg {
+  block-size: 100%;
+  display: block;
+  inline-size: 100%;
+}
+
+.rays,
+.body,
+.shadow {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+.rays {
+  fill: none;
+  stroke: var(--tb-brand-strong);
+  stroke-linecap: round;
+  stroke-width: 1.5;
+  transition:
+    opacity var(--tb-duration) var(--tb-ease),
+    transform var(--tb-duration-slow) var(--tb-ease);
+}
+
+.body {
+  fill: var(--tb-warm);
+  stroke: var(--tb-brand-strong);
+  stroke-width: 1.5;
+  transition:
+    fill var(--tb-duration-slow) var(--tb-ease),
+    stroke var(--tb-duration-slow) var(--tb-ease),
+    stroke-width var(--tb-duration-slow) var(--tb-ease),
+    transform var(--tb-duration-slow) var(--tb-ease);
+}
+
+.crater {
+  fill: var(--tb-on-brand-muted);
+  opacity: 0;
+  transition: opacity var(--tb-duration) var(--tb-ease);
+}
+
+.shadow {
+  fill: var(--tb-night);
+  transform: translate(12px, -12px);
+  transition: transform var(--tb-duration-slow) var(--tb-ease);
+}
+
+:host(.night) {
+  .night-sky {
+    opacity: 1;
+  }
+
+  // The stars come out one by one once the moon has crossed.
+  .star {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .star-glint {
+    transition-delay: 160ms;
+  }
+
+  .star-2 {
+    transition-delay: 220ms;
+  }
+
+  .star-3 {
+    transition-delay: 260ms;
+  }
+
+  .star-4 {
+    transition-delay: 300ms;
+  }
+
+  .cloud {
+    opacity: 0;
+    transform: translateX(calc(0.75rem * var(--direction)));
+    transition-delay: 0s;
+  }
+
+  .knob {
+    box-shadow: 0 0 0.5rem color-mix(in srgb, var(--tb-on-brand-soft) 35%, transparent);
+    transform: translateX(calc(var(--travel) * var(--direction)));
+  }
+
+  .rays {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.5);
+  }
+
+  .body {
+    fill: var(--tb-on-brand-soft);
+    stroke: var(--tb-on-brand-soft);
+    stroke-width: 0;
+    transform: scale(2.1);
+  }
+
+  .crater {
+    opacity: 1;
+    transition-delay: 160ms;
+  }
+
+  .shadow {
+    transform: none;
+  }
+}
+
+@keyframes twinkle {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :host(.night) .star-2 {
+    animation: twinkle 2.6s ease-in-out 0.8s infinite;
+  }
+
+  :host(.night) .star-4 {
+    animation: twinkle 3.4s ease-in-out 1.4s infinite;
+  }
+}
+
+// Less motion: the switch changes at once, and the page with it (theme-switch.ts).
+@media (prefers-reduced-motion: reduce) {
+  .night-sky,
+  .star,
+  .cloud,
+  .knob,
+  .rays,
+  .body,
+  .crater,
+  .shadow {
+    transition: none;
+  }
+}
+
+// High contrast: a plain switch, its knob at the end and the track filled when it is on.
+@media (forced-colors: active) {
+  .track {
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  .night-sky,
+  .star,
+  .cloud,
+  .rays,
+  .crater,
+  .shadow {
+    display: none;
+  }
+
+  .knob {
+    box-shadow: none;
+  }
+
+  .body {
+    fill: CanvasText;
+    stroke: CanvasText;
+  }
+
+  :host(.night) .track {
+    background: Highlight;
+  }
+
+  :host(.night) .body {
+    fill: HighlightText;
+    stroke: HighlightText;
+  }
+}

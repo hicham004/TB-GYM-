@@ -1343,7 +1343,9 @@ Tokens are theme-ready from R1, so this costs little later.
   - Their clients see this brand everywhere, share cards included. The TB Gym brand stays on the
     website, sign-in and the coach's own billing.
 - **Personal mode (per person):** light, dark or system, for coaches and clients alike, remembered
-  on the account.
+  on the account. Staff switch light or dark in the account menu (Dark mode, the owner's ask of
+  2026-10-24): a sun eclipsed into a moon, the new mode spreading over the page from the switch (a
+  view transition, none for less motion). Following the device stays in Settings › Appearance.
 - **Safety:**
   - Only validated colour values and a logo through the existing media pipeline (scanned,
     tenant-scoped). No custom CSS or fonts.

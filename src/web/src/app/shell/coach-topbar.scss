@@ -238,6 +238,11 @@
   overflow-wrap: anywhere;
 }
 
+// The Dark mode switch stands taller than a line of text; less padding keeps its row as tall as the rest.
+.theme-item {
+  padding-block: var(--space-4);
+}
+
 .menu-item[aria-current='true'] {
   background-color: var(--color-accent-subtle);
 }

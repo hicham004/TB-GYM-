@@ -153,7 +153,16 @@
               <a class="menu-item" routerLink="/account/security" i18n>Password and security</a>
             </li>
             <li>
-              <a class="menu-item" routerLink="/account/appearance" i18n>Appearance</a>
+              <!-- Light or dark in place; Settings › Appearance also offers following the device. -->
+              <button
+                #theme="appThemeSwitch"
+                appThemeSwitch
+                type="button"
+                class="menu-item theme-item"
+              >
+                <span i18n>Dark mode</span>
+                <app-theme-switch-art [night]="theme.dark()" />
+              </button>
             </li>
             <!-- A global role, not a workspace one (ADR 0028). Presentation only; the API decides. -->
             @if (auth.user()?.roles?.includes('PlatformAdmin')) {
