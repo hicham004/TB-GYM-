@@ -59,7 +59,7 @@ test('Lea types a new training max for Maya, reviews every changed weight, then 
     `${fmt(current)} kg to ${fmt(next)} kg`,
   );
   await expect(sheet.locator('.line.strong')).toHaveText(
-    /^(\d+ weights? change in \d+ sessions?\.|No session still to come uses this max.*|Once rounded, the new max gives the same weights as before\.)/,
+    /^(\d+ weights? change in \d+ workouts?\.|No workout still to come uses this max.*|Once rounded, the new max gives the same weights as before\.)/,
   );
   await expect(sheet).toContainText('Reason: Live check: a typed max');
   // Every changed set is worked out from the new max, and says so.

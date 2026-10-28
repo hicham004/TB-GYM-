@@ -53,6 +53,8 @@ public sealed class ApiSmokeTests
         Assert.IsNotNull(status);
         Assert.AreEqual("TB Gym API", status.Name);
         Assert.AreEqual("Modular Monolith", status.Architecture);
+        // Development composes local storage and its scanner, so uploads are set up.
+        Assert.IsTrue(status.MediaUploadsAvailable);
     }
 
     [TestMethod]
@@ -162,7 +164,12 @@ public sealed class ApiSmokeTests
     private WebApplicationFactory<Program> RequiredFactory =>
         factory ?? throw new InvalidOperationException("The test factory is not initialized.");
 
-    private sealed record SystemStatus(string Name, string Architecture, string Framework, DateTimeOffset UtcTime);
+    private sealed record SystemStatus(
+        string Name,
+        string Architecture,
+        string Framework,
+        DateTimeOffset UtcTime,
+        bool MediaUploadsAvailable);
 
     private sealed record CsrfResponse(string Token);
 }

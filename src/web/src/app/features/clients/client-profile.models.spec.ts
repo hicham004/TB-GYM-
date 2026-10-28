@@ -203,7 +203,7 @@ describe('what needs the coach on a client’s page', () => {
     });
   });
 
-  it('asks about a renewal request, an unshared week and missed sessions in coach words', () => {
+  it('asks about a renewal request, an unshared week and missed workouts in coach words', () => {
     const [renewal, share, missed, never] = needRows(
       [
         attentionItem('RenewalRequested', MAYA, { date: '2026-09-27', subjectId: 'enrollment-2' }),
@@ -226,7 +226,7 @@ describe('what needs the coach on a client’s page', () => {
       action: { label: 'Share week', link: `${page}/training` },
     });
     expect(missed).toMatchObject({
-      heading: 'Missed 3 sessions in a row',
+      heading: 'Missed 3 workouts in a row',
       detail: 'Last trained Thu 24 Sep',
       action: { label: 'See training', link: `${page}/training` },
     });
@@ -360,7 +360,7 @@ describe('this week', () => {
 
     expect(story.range).toBe('Mon 28 Sep – Sun 4 Oct');
     expect([story.done, story.scheduled]).toEqual([2, 5]);
-    expect(story.summary).toBe('2 of 5 sessions done this week');
+    expect(story.summary).toBe('2 of 5 workouts done this week');
     expect(story.days.map((day) => day.label)).toEqual([
       'Mon',
       'Tue',
@@ -385,7 +385,7 @@ describe('this week', () => {
     expect(story.days.filter((day) => day.isToday).map((day) => day.date)).toEqual([COACH_TODAY]);
   });
 
-  it('marks a session before today that was not done as missed, and says so in words', () => {
+  it('marks a workout before today that was not done as missed, and says so in words', () => {
     const story = weekStory(
       weekDays([
         [1, 0],
@@ -403,10 +403,10 @@ describe('this week', () => {
     expect(story.days.slice(0, 3).map((day) => day.mark)).toEqual(['missed', 'missed', 'done']);
     expect(story.days.slice(0, 3).map((day) => `${day.longLabel}: ${day.state}`)).toEqual([
       'Monday 28 September: missed',
-      'Tuesday 29 September: 2 sessions missed',
-      'Wednesday 30 September: all 2 sessions done',
+      'Tuesday 29 September: 2 workouts missed',
+      'Wednesday 30 September: all 2 workouts done',
     ]);
-    expect(story.days[5].state).toBe('no session');
+    expect(story.days[5].state).toBe('no workout');
   });
 
   it('says nothing is scheduled when the week is empty', () => {
@@ -415,7 +415,7 @@ describe('this week', () => {
       COACH_TODAY,
       'en-US',
     );
-    expect([story.scheduled, story.summary]).toEqual([0, 'No sessions scheduled this week']);
+    expect([story.scheduled, story.summary]).toEqual([0, 'No workouts scheduled this week']);
   });
 
   it('never counts more done than scheduled on a day', () => {

@@ -2189,6 +2189,13 @@ The engine keeps its precise names in code. Screens use the words on the right.
 | Bodyweight observation | Weigh-in |
 | BodyweightTrendEwma | Smoothed average *(coaches only)* |
 | Canonical food | Food |
+| Training session, saved session (`TrainingSessionView`, `SavedSessionTemplate`) | Workout, saved workout *(coach screens; "session" is kept for a paid 1-on-1 hour, critique B10)* |
+| Set type Normal | Working *(top, back-off, drop and failure sets are working sets too)* |
+| Product offer label | Name for this price |
+| Coaching product description | Description |
+
+Critique B1 (2026-10-27): coach screens say "workout", never "session", for a day's training, and
+"% of training max"; the client's own screens keep their words until a later pass.
 
 Built in R0.2 (2026-09-29): staff read "coaching space", clients read "your coach" where the
 coach's name is not on screen, and history keeps its versions (check-in forms, price plans).

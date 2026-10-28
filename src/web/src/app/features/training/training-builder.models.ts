@@ -54,6 +54,8 @@ export interface DraftSet {
   setType: TrainingSetType;
   repetitionsMinimum: number | null;
   repetitionsMaximum: number | null;
+  /** What the coach typed in the Reps box until it settles; kept when it reads as no reps at all. */
+  repetitionsEntry?: string;
   loadStrategy: TrainingLoadStrategy;
   loadValue: number | null;
   loadUnit: TrainingLoadUnit;

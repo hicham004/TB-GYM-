@@ -9,11 +9,12 @@ import { TenantContext } from '../../core/tenancy/tenant-context';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { asset, exercise, results } from '../../../testing/exercise-fixtures';
 import { chooseOption, formSummary, settle } from '../../../testing/dom';
+import { provideMediaUploads } from '../../../testing/media-uploads';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import { ExerciseSheet } from './exercise-sheet';
 import { mediaLine, type ExerciseValues } from './exercise-library.models';
 
-async function render() {
+async function render(options: { uploadsOff?: boolean } = {}) {
   const tenant = signal('tenant-a');
   const csrf = { refresh: vi.fn(() => Promise.resolve()) };
   const api = {
@@ -31,6 +32,7 @@ async function render() {
       { provide: TenantStore, useValue: { selectedTenantId: tenant } },
       { provide: CsrfService, useValue: csrf },
       { provide: ExerciseLibraryApi, useValue: api },
+      provideMediaUploads(options.uploadsOff),
     ],
   });
   const fixture = TestBed.createComponent(ExerciseSheet);
@@ -63,6 +65,32 @@ it('says a video link opens on its own site from the workout, not that it plays 
   await settle(fixture);
   expect(shown()).toContain('Vimeo video found. Clients open it on Vimeo from their workout.');
   expect(shown()).not.toContain('Clients see it in their workout');
+});
+
+it('says uploads are not set up on a server with no media storage, before the coach tries one', async () => {
+  const shown = (fixture: { nativeElement: unknown }) =>
+    ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/g, ' ');
+
+  const details = async (fixture: Awaited<ReturnType<typeof render>>['fixture']) => {
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('button.more')!.click();
+    await settle(fixture);
+  };
+
+  const on = await render();
+  await details(on.fixture);
+  expect(shown(on.fixture)).toContain('Upload a picture or video');
+  expect(shown(on.fixture)).not.toContain('set up on this server');
+  TestBed.resetTestingModule();
+
+  const off = await render({ uploadsOff: true });
+  await details(off.fixture);
+  const host = off.fixture.nativeElement as HTMLElement;
+  expect(shown(off.fixture)).toContain('Uploads aren’t set up on this server. Video links work.');
+  expect(shown(off.fixture)).toContain('Nothing in your media yet. Paste a video link above.');
+  expect(shown(off.fixture)).not.toContain('Upload a picture or video');
+  expect(host.querySelector('input[type="file"]')).toBeNull();
+  // A video link still works.
+  expect(shown(off.fixture)).toContain('Paste a YouTube or Vimeo link.');
 });
 
 it('does not dispatch the exercise write after an obsolete video-registration reply', async () => {

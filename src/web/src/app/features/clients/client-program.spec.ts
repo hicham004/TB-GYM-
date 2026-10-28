@@ -183,7 +183,7 @@ describe('a client’s Training', () => {
       expect(textOf(host.querySelector('#program-title'))).toBe('Lean & Strong · Phase 2');
       expect(all(host, '.facts li').map(textOf)).toEqual([
         'Mon 14 Sep – Sun 25 Oct',
-        '9 of 24 sessions done',
+        '9 of 24 workouts done',
         '1 missed',
       ]);
       expect(all(host, '.week h3').map(textOf)).toEqual([
@@ -199,7 +199,7 @@ describe('a client’s Training', () => {
       expect(textOf(current?.querySelector('.now'))).toBe('This week');
     });
 
-    it('marks each session of the current week by what happened, in words', async () => {
+    it('marks each workout of the current week by what happened, in words', async () => {
       const { host } = await render();
 
       const sessions = all(host.querySelector('.week.current')!, 'button.session');
@@ -423,7 +423,7 @@ describe('a client’s Training', () => {
         all(host, '.others .row').map((row) => textOf(row.querySelector('.row-name'))),
       ).toEqual(['Strength Base', 'Foundations', 'Summer Reset']);
       const first = host.querySelector('.others .row')!;
-      expect(textOf(first.querySelector('.row-meta'))).toBe('Mon 26 Oct – Sun 8 Nov · 8 sessions');
+      expect(textOf(first.querySelector('.row-meta'))).toBe('Mon 26 Oct – Sun 8 Nov · 8 workouts');
       expect(textOf(first.querySelector('app-status-pill'))).toBe('Starts Mon 26 Oct');
 
       all(host, '.others .row')[1].click();
@@ -589,7 +589,7 @@ describe('a client’s Training', () => {
 
       const cancel = dialog()!;
       expect(textOf(cancel.querySelector('h2'))).toBe('Cancel program');
-      expect(textOf(cancel)).toContain('Maya stops seeing the sessions still to come.');
+      expect(textOf(cancel)).toContain('Maya stops seeing the workouts still to come.');
 
       // Without a reason nothing is sent, and the field says why.
       press(cancel, 'Cancel program');
@@ -888,7 +888,7 @@ describe('a client’s Training', () => {
     });
   });
 
-  describe('a session', () => {
+  describe('a workout', () => {
     function blockView(): TrainingMesocycleView {
       return {
         id: 'block-lean',
@@ -946,10 +946,10 @@ describe('a client’s Training', () => {
       expect(textOf(sheet)).toContain('Back squat');
       expect(textOf(sheet)).toContain('2 × 8–10 reps · 60 kg · RPE 8');
       expect(sheet.querySelector('app-coach-workout')).toBeNull();
-      expect(textOf(sheet.querySelector('.swap summary'))).toBe('Swap this session');
+      expect(textOf(sheet.querySelector('.swap summary'))).toBe('Swap this workout');
     });
 
-    it('swaps a session for a saved one on the day it already has (TRAIN-3)', async () => {
+    it('swaps a workout for a saved one on the day it already has (TRAIN-3)', async () => {
       const view = blockView();
       (view.weeks[0].sessions[0] as unknown as { dayOffset: number }).dayOffset = 3;
       const saved = {
@@ -1011,8 +1011,8 @@ describe('a client’s Training', () => {
       swap.dispatchEvent(new Event('toggle'));
       await settle(harness.fixture);
       expect(textOf(swap)).toContain('It stays on Thu 1 Oct');
-      await chooseOption(harness.fixture, swap, 'Saved session', 'Lower A (saved)');
-      press(sheet, 'Swap session');
+      await chooseOption(harness.fixture, swap, 'Saved workout', 'Lower A (saved)');
+      press(sheet, 'Swap workout');
       await settle(harness.fixture);
 
       expect(replaceFutureTrainingSession).toHaveBeenCalledWith(
@@ -1060,16 +1060,16 @@ describe('a client’s Training', () => {
       await settle(harness.fixture);
       expect(textOf(formSummary(swap))).toBe('');
 
-      press(sheet, 'Swap session');
+      press(sheet, 'Swap workout');
       await settle(harness.fixture);
-      const select = query<HTMLButtonElement>(selectField(swap, 'Saved session'), 'button.trigger');
-      expect(textOf(swap)).toContain('Choose a saved session.');
+      const select = query<HTMLButtonElement>(selectField(swap, 'Saved workout'), 'button.trigger');
+      expect(textOf(swap)).toContain('Choose a saved workout.');
       expect(document.activeElement).toBe(select);
       expect(select.getAttribute('aria-invalid')).toBe('true');
       expect(replaceFutureTrainingSession).not.toHaveBeenCalled();
 
-      await chooseOption(harness.fixture, swap, 'Saved session', 'Upper A (saved)');
-      press(sheet, 'Swap session');
+      await chooseOption(harness.fixture, swap, 'Saved workout', 'Upper A (saved)');
+      press(sheet, 'Swap workout');
       await settle(harness.fixture);
 
       expect(replaceFutureTrainingSession).toHaveBeenCalledTimes(1);
@@ -1080,7 +1080,7 @@ describe('a client’s Training', () => {
       expect(document.activeElement).toBe(formSummary(swap));
     });
 
-    it('opens the session a client’s note is on when a notice links to it, once', async () => {
+    it('opens the workout a client’s note is on when a notice links to it, once', async () => {
       const { harness, router } = await render({
         url: '/clients/client-1/training?session=block-lean-s33',
         api: { getTrainingMesocycle: vi.fn(() => of(blockView())) },
@@ -1092,7 +1092,7 @@ describe('a client’s Training', () => {
       expect(router.url).toBe('/clients/client-1/training');
     });
 
-    it('shows what the client did for a finished session, and offers no swap', async () => {
+    it('shows what the client did for a finished workout, and offers no swap', async () => {
       const { harness, host } = await render({
         api: { getTrainingMesocycle: vi.fn(() => of(blockView())) },
       });

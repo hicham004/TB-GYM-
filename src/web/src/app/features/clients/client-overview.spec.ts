@@ -186,7 +186,7 @@ describe('ClientOverview', () => {
     );
     expect(text).toContain('This week Mon 28 Sep – Sun 4 Oct');
     expect(text).toContain('Lean & Strong · Phase 2 · Week 3 of 6');
-    expect(text).toContain('2 of 5 sessions done');
+    expect(text).toContain('2 of 5 workouts done');
     expect(
       Array.from(host.querySelectorAll('.strip .day')).map((day) => day.getAttribute('data-mark')),
     ).toEqual(['done', 'rest', 'partial', 'due', 'due', 'rest', 'rest']);
@@ -301,7 +301,7 @@ describe('ClientOverview', () => {
 
     expect(said(host)).toContain('Records could not be loaded.');
     // Everything else is on screen.
-    expect(said(host)).toContain('2 of 5 sessions done');
+    expect(said(host)).toContain('2 of 5 workouts done');
     expect(said(host)).toContain('71.4 kg');
     press(host, 'Try again');
     await settle(fixture);

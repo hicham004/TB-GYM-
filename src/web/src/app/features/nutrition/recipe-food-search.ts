@@ -18,6 +18,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Icon } from '../../ui/icon';
 import { numeric } from '../training/training-builder.models';
+import { usdaUnavailableNote } from './food.models';
 import { RecipeApi } from './recipe-api';
 import { foodFromView, foodMeasure, kcal, type RecipeFood, sourceWord } from './recipe.models';
 
@@ -234,9 +235,7 @@ export class RecipeFoodSearch {
         })) ?? [],
       );
       if (usda?.failureCode || usda?.message) {
-        this.usdaNote.set(
-          $localize`USDA search isn’t available right now, so only your own foods are listed.`,
-        );
+        this.usdaNote.set(usdaUnavailableNote(usda.failureCode));
       }
       this.active.set(0);
     } catch {

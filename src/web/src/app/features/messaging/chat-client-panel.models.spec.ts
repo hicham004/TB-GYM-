@@ -19,7 +19,7 @@ describe('clientPanel', () => {
       activity: 'Trained 2 hours ago',
       plan: { name: 'Online coaching', label: 'Plan ends Sun 20 Dec', soon: false },
       trainingClosed: null,
-      week: '2 of 5 sessions done this week',
+      week: '2 of 5 workouts done this week',
     });
     expect(panel.lastWorkout).toEqual({
       title: 'Lower A',
@@ -68,10 +68,10 @@ describe('clientPanel', () => {
     expect(none.plan).toEqual({ name: null, label: 'No plan yet', soon: false });
   });
 
-  it('counts a week with nothing scheduled as no sessions, not "0 of 0"', () => {
+  it('counts a week with nothing scheduled as no workouts, not "0 of 0"', () => {
     const week = { ...profileOverview().week!, scheduled: 0, completed: 0 };
 
-    expect(clientPanel(profileOverview({ week }), context).week).toBe('No sessions this week');
+    expect(clientPanel(profileOverview({ week }), context).week).toBe('No workouts this week');
   });
 
   it('lists what waits for the coach except the messages, which are on screen already', () => {

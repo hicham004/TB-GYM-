@@ -52,9 +52,9 @@ const textOf = (element: Element | null | undefined) =>
 describe('Close program', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('closes the program once every session is done', async () => {
+  it('closes the program once every workout is done', async () => {
     const { fixture, host, api, closed } = await render(['Completed', 'Completed']);
-    expect(textOf(host)).toContain('Close Foundations? Every session is done');
+    expect(textOf(host)).toContain('Close Foundations? Every workout is done');
 
     press(host, 'Close program');
     await settle(fixture);
@@ -66,7 +66,7 @@ describe('Close program', () => {
   it('closes a program past its last day as finished, keeping the misses on record', async () => {
     const { fixture, host, api, closed } = await render(['Completed', 'Missed', 'Missed'], null);
     expect(textOf(host)).toContain(
-      'Close Foundations as finished? 2 missed sessions stay on record as missed, and Maya can no longer start them.',
+      'Close Foundations as finished? 2 missed workouts stay on record as missed, and Maya can no longer start them.',
     );
 
     press(host, 'Close program');
@@ -76,7 +76,7 @@ describe('Close program', () => {
     expect(closed).toHaveBeenCalledWith(true);
   });
 
-  it('does not call sessions of a week never shared missed', async () => {
+  it('does not call workouts of a week never shared missed', async () => {
     const { host } = await render(['Completed', null], null);
 
     expect(textOf(host)).toContain(
@@ -88,16 +88,16 @@ describe('Close program', () => {
     const { host, api } = await render(['Completed', 'Upcoming', 'Upcoming']);
 
     expect(textOf(host)).toContain(
-      'Foundations can be closed after its last day, Sun 20 Sep, or once every session is done. 2 sessions are still to go.',
+      'Foundations can be closed after its last day, Sun 20 Sep, or once every workout is done. 2 workouts are still to go.',
     );
     expect(Array.from(host.querySelectorAll('button')).map(textOf)).toEqual(['Not now']);
     expect(api.completeTrainingMesocycle).not.toHaveBeenCalled();
   });
 
-  it('says one session in the singular', async () => {
+  it('says one workout in the singular', async () => {
     const { host } = await render(['Completed', 'Today']);
 
-    expect(textOf(host)).toContain('1 session is still to go.');
+    expect(textOf(host)).toContain('1 workout is still to go.');
   });
 
   it('can be left without closing anything', async () => {

@@ -111,7 +111,7 @@ describe('Clients', () => {
     expect(squash(maya.querySelector('.reasons')?.textContent)).toBe('Check-in to review');
     expect(squash(maya.querySelector('.activity')?.textContent)).toBe('Trained 2 hours ago');
     expect(squash(maya.querySelector('.week')?.textContent)).toContain(
-      '3 of 4 sessions done in the last 7 days',
+      '3 of 4 workouts done in the last 7 days',
     );
     expect(squash(maya.querySelector('.plan')?.textContent)).toBe('Plan ends Sun 20 Dec');
     // One link per row, on the name; its overlay makes the whole row clickable.

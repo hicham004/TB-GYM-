@@ -32,6 +32,16 @@ export const USDA_MINIMUM = 3;
 
 export type UsdaKind = FoodSearchKind;
 
+/**
+ * Why a USDA search came back empty-handed, in coach words (T14): a server with no USDA key is not
+ * set up for it, which is not an outage. Never the server's own sentence, written for whoever runs it.
+ */
+export function usdaUnavailableNote(failureCode: string | null | undefined): string {
+  return failureCode === 'usda_api_key_missing'
+    ? $localize`USDA search isn’t set up on this server.`
+    : $localize`USDA search isn’t available right now, so only your own foods are listed.`;
+}
+
 const PREPARATION_WORDS: Record<PreparationBasis, string> = {
   Raw: $localize`raw`,
   Cooked: $localize`cooked`,

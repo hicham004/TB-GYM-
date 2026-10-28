@@ -135,8 +135,8 @@ import {
             }
           } @else {
             <p class="muted" dir="auto" i18n>
-              Change a training max and the weights of the sessions still to come follow it.
-              Sessions that have started, or are already past, keep what they had. You see every
+              Change a training max and the weights of the workouts still to come follow it.
+              Workouts that have started, or are already past, keep what they had. You see every
               change before anything is saved.
             </p>
             @for (row of rows(); track row.exerciseId) {

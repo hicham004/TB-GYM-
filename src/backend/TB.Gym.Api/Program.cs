@@ -118,12 +118,17 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     ResponseWriter = WriteHealthResponseAsync,
 }).AllowAnonymous();
 
-app.MapGet("/api/system/status", (IClock clock, IEmailDeliveryStatus email) => Results.Ok(new SystemStatusResponse(
+app.MapGet("/api/system/status", (
+    IClock clock,
+    IEmailDeliveryStatus email,
+    IObjectStorage mediaStorage,
+    IMediaScanner mediaScanner) => Results.Ok(new SystemStatusResponse(
     "TB Gym API",
     "Modular Monolith",
     ".NET 10",
     clock.UtcNow,
-    email.IsAvailable)))
+    email.IsAvailable,
+    mediaStorage.IsAvailable && mediaScanner.IsAvailable)))
 .AllowAnonymous()
 .WithName("GetSystemStatus")
 .WithTags("System")

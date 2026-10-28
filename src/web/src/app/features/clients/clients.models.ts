@@ -214,7 +214,7 @@ function attentionReason(kind: CoachAttentionKind): string {
     case 'WeekNotShared':
       return $localize`Week not shared`;
     case 'MissedSessions':
-      return $localize`Missed sessions`;
+      return $localize`Missed workouts`;
     case 'NoProgram':
       return $localize`No program yet`;
     case 'MaxesToReview':
@@ -265,7 +265,7 @@ export function clientWeek(days: readonly SessionDayCountView[], today: string):
   return {
     days: marks,
     value: $localize`${done}:done: of ${scheduled}:scheduled:`,
-    summary: $localize`${done}:done: of ${scheduled}:scheduled: sessions done in the last 7 days`,
+    summary: $localize`${done}:done: of ${scheduled}:scheduled: workouts done in the last 7 days`,
   };
 }
 

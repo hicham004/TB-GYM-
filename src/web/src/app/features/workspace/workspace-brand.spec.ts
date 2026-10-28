@@ -13,6 +13,7 @@ import { brandTokens } from '../../core/theme/brand-theme';
 import { PersonalModeStore } from '../../core/theme/personal-mode.store';
 import { UiToast } from '../../ui/toast';
 import { announced, button, field, fill, leave, press, query, settle } from '../../../testing/dom';
+import { provideMediaUploads } from '../../../testing/media-uploads';
 import { WorkspaceBrand } from './workspace-brand';
 import { WorkspaceBrandApi } from './workspace-brand-api';
 
@@ -39,6 +40,7 @@ async function render(
     saved?: WorkspaceDetails;
     api?: Record<string, unknown>;
     brandApi?: Record<string, unknown>;
+    uploadsOff?: boolean;
   } = {},
 ) {
   const saved = options.saved ?? workspace();
@@ -72,6 +74,7 @@ async function render(
       { provide: TenantStore, useValue: tenants },
       { provide: UiToast, useValue: toast },
       { provide: PersonalModeStore, useValue: { mode: signal('light') } },
+      provideMediaUploads(options.uploadsOff),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(WorkspaceBrand);
@@ -129,6 +132,14 @@ describe('WorkspaceBrand', () => {
     expect(query(host, '.logo-tile').textContent?.trim()).toBe('CS');
     expect(button(host, 'Upload logo')).toBeTruthy();
     expect(host.textContent).not.toContain('Remove logo');
+  });
+
+  it('says uploads are not set up on a server with no media storage, and still removes a logo', async () => {
+    const { host } = await render({ uploadsOff: true });
+
+    expect(host.textContent).toContain('Uploads aren’t set up on this server.');
+    expect(() => button(host, 'Replace logo')).toThrow();
+    expect(button(host, 'Remove logo')).toBeTruthy();
   });
 
   it('previews a look and saves it, then reads the workspaces again so the app repaints', async () => {

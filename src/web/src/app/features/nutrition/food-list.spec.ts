@@ -177,7 +177,7 @@ describe('the Foods page', () => {
     );
   });
 
-  it('never shows the server’s own sentence when USDA is not set up', async () => {
+  it('says USDA is not set up on this server, never in the server’s own sentence', async () => {
     const { fixture, host } = await render({
       searchUsda: () =>
         of(
@@ -191,9 +191,27 @@ describe('the Foods page', () => {
 
     const usda = host.querySelector('section[aria-labelledby="usda-heading"]');
     expect(textOf(usda?.querySelector('[role="status"]'))).toBe(
-      'USDA search isn’t available right now, so only your own foods are listed.',
+      'USDA search isn’t set up on this server.',
     );
     expect(textOf(usda)).not.toContain('data.gov');
+  });
+
+  it('keeps its own words for USDA being down', async () => {
+    const { fixture, host } = await render({
+      searchUsda: () =>
+        of(
+          usdaPage([], {
+            failureCode: 'usda_timeout',
+            message: 'USDA FoodData Central took too long to answer…',
+          }),
+        ),
+    });
+    await search(fixture, host, 'rice');
+
+    const usda = host.querySelector('section[aria-labelledby="usda-heading"]');
+    expect(textOf(usda?.querySelector('[role="status"]'))).toBe(
+      'USDA search isn’t available right now, so only your own foods are listed.',
+    );
   });
 
   it('opens a food in a sheet: the coach’s own is edited, a USDA one as a copy', async () => {

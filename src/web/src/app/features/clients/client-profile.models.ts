@@ -176,7 +176,7 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
         ...base,
         tone: 'missed',
         tag: $localize`Missed`,
-        heading: $localize`Missed ${count}:count: sessions in a row`,
+        heading: $localize`Missed ${count}:count: workouts in a row`,
         detail: item.date
           ? $localize`Last trained ${date(item.date)}:date:`
           : $localize`No workout logged yet`,
@@ -354,25 +354,25 @@ export function weekStory(week: CoachWeekView, today: string, locale: string): W
     days,
     summary:
       scheduled === 0
-        ? $localize`No sessions scheduled this week`
-        : $localize`${done}:done: of ${scheduled}:scheduled: sessions done this week`,
+        ? $localize`No workouts scheduled this week`
+        : $localize`${done}:done: of ${scheduled}:scheduled: workouts done this week`,
   };
 }
 
 function markState(mark: DayMark, scheduled: number, completed: number): string {
   switch (mark) {
     case 'done':
-      return scheduled > 1 ? $localize`all ${scheduled}:count: sessions done` : $localize`done`;
+      return scheduled > 1 ? $localize`all ${scheduled}:count: workouts done` : $localize`done`;
     case 'partial':
-      return $localize`${completed}:done: of ${scheduled}:scheduled: sessions done`;
+      return $localize`${completed}:done: of ${scheduled}:scheduled: workouts done`;
     case 'missed':
-      return scheduled > 1 ? $localize`${scheduled}:count: sessions missed` : $localize`missed`;
+      return scheduled > 1 ? $localize`${scheduled}:count: workouts missed` : $localize`missed`;
     case 'due':
       return scheduled > 1
-        ? $localize`${scheduled}:count: sessions to do`
-        : $localize`session to do`;
+        ? $localize`${scheduled}:count: workouts to do`
+        : $localize`workout to do`;
     case 'rest':
-      return $localize`no session`;
+      return $localize`no workout`;
   }
 }
 

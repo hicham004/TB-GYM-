@@ -696,7 +696,7 @@ function knownSentence(text: string, name: string): string | null {
     return $localize`${name}:name: has a workout open right now. Cancel the program once it is finished.`;
   }
   if (said.includes('or the last day must have passed')) {
-    return $localize`The program can be closed after its last day, or once every session is done.`;
+    return $localize`The program can be closed after its last day, or once every workout is done.`;
   }
   if (said.includes('workout in progress cannot be completed')) {
     return $localize`${name}:name: has a workout open right now. Close the program once it is finished.`;
@@ -711,7 +711,7 @@ function knownSentence(text: string, name: string): string | null {
     said.includes('historical sessions cannot be reprogrammed') ||
     said.includes('already started')
   ) {
-    return $localize`That session has already begun, so it can’t be swapped.`;
+    return $localize`That workout has already begun, so it can’t be swapped.`;
   }
   return null;
 }

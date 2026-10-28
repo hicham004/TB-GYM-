@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Text.Json;
 using Amazon.Runtime;
 using Amazon.S3;
 using Microsoft.AspNetCore.Hosting;
@@ -187,6 +189,40 @@ public sealed class Phase6B4BMediaProviderStartupTests
             HealthStatus.Unhealthy,
             readiness.Status,
             "One unconfigured adapter must not pull a working API out of its load balancer.");
+    }
+
+    /// <summary>
+    /// The status every coach screen reads says whether uploads are set up here at all (critique
+    /// T25): both providers named, or not. One that is named but not answering is an outage, which
+    /// an upload's own refusal says, so it never reads as not set up.
+    /// </summary>
+    [TestMethod]
+    public async Task TheStatusSaysMediaUploadsAreSetUpOnlyWhenStorageAndAScannerAreNamed()
+    {
+        Dictionary<string, string?> both = new(R2Settings());
+        foreach (var (key, value) in ClamAvSettings(port: 1))
+        {
+            both[key] = value;
+        }
+
+        foreach (var (settings, expected) in new[]
+        {
+            (new Dictionary<string, string?>(), false),
+            (R2Settings(), false),
+            (ClamAvSettings(port: 1), false),
+            (both, true),
+        })
+        {
+            using var factory = CreateFactory("Production", settings);
+            using var client = factory.CreateClient();
+
+            var status = await client.GetFromJsonAsync<JsonElement>("/api/system/status");
+
+            Assert.AreEqual(
+                expected,
+                status.GetProperty("mediaUploadsAvailable").GetBoolean(),
+                string.Join(", ", settings.Keys.Where(key => key.EndsWith("Adapter", StringComparison.Ordinal))));
+        }
     }
 
     /// <summary>

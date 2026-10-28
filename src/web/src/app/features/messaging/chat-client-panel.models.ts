@@ -97,8 +97,8 @@ function lastWorkout(
 }
 
 function weekLine(completed: number, scheduled: number): string {
-  if (scheduled === 0) return $localize`No sessions this week`;
-  return $localize`${Math.min(completed, scheduled)}:done: of ${scheduled}:total: sessions done this week`;
+  if (scheduled === 0) return $localize`No workouts this week`;
+  return $localize`${Math.min(completed, scheduled)}:done: of ${scheduled}:total: workouts done this week`;
 }
 
 /** The panel as the screen holds it while a thread is open on the coach's side. */

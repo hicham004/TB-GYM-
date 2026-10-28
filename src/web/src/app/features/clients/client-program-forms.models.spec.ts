@@ -878,7 +878,7 @@ describe('what the server answers', () => {
       say(
         'Every programmed session must be completed, or the last day must have passed, before the mesocycle closes.',
       ),
-    ).toBe('The program can be closed after its last day, or once every session is done.');
+    ).toBe('The program can be closed after its last day, or once every workout is done.');
     expect(say('A mesocycle with a workout in progress cannot be completed.')).toBe(
       'Maya has a workout open right now. Close the program once it is finished.',
     );
@@ -889,7 +889,7 @@ describe('what the server answers', () => {
       'A completed or cancelled program can’t be changed.',
     );
     expect(say('Historical sessions cannot be reprogrammed.')).toBe(
-      'That session has already begun, so it can’t be swapped.',
+      'That workout has already begun, so it can’t be swapped.',
     );
   });
 

@@ -170,9 +170,7 @@
             <p class="pad note" role="status" i18n>Searching USDA…</p>
           }
           @case ('unavailable') {
-            <p class="pad note" role="status" i18n>
-              USDA search isn’t available right now, so only your own foods are listed.
-            </p>
+            <p class="pad note" role="status">{{ usdaNote() }}</p>
           }
           @case ('error') {
             <p class="pad note" role="alert" i18n>

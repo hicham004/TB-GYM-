@@ -1,7 +1,7 @@
 @let current = session();
 <div class="editor">
   <div class="basics">
-    <app-field label="Session name" i18n-label>
+    <app-field label="Workout name" i18n-label>
       <input
         appControl
         [(ngModel)]="current.name"
@@ -20,7 +20,7 @@
     <app-field
       label="Notes for the client"
       i18n-label
-      help="Shown with this session in the client's program."
+      help="Shown with this workout in the client's program."
       i18n-help
     >
       <textarea
@@ -138,7 +138,7 @@
     </button>
     <div class="footer-end">
       <button appButton type="button" variant="text" class="danger" (click)="remove.emit()" i18n>
-        Delete session
+        Delete workout
       </button>
       @if (canSaveToLibrary()) {
         <button
@@ -149,7 +149,7 @@
           (click)="saveToLibrary.emit()"
           i18n
         >
-          Save to saved sessions
+          Save to saved workouts
         </button>
       }
       <button appButton type="button" (click)="done.emit()" i18n>Done</button>

@@ -25,6 +25,7 @@ import {
   muscleGroupLabel,
 } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
+import { MediaUploads } from '../../core/system/media-uploads';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control, Field } from '../../ui/field';
@@ -251,9 +252,13 @@ import {
             <p class="problem-text" role="alert">{{ message }}</p>
           }
           @if (library().length === 0) {
-            <p class="muted" i18n>
-              Nothing in your media yet. Paste a video link above, or upload a picture or video.
-            </p>
+            @if (uploadsOff()) {
+              <p class="muted" i18n>Nothing in your media yet. Paste a video link above.</p>
+            } @else {
+              <p class="muted" i18n>
+                Nothing in your media yet. Paste a video link above, or upload a picture or video.
+              </p>
+            }
           } @else {
             <ul class="media" role="list">
               @for (asset of library(); track asset.id) {
@@ -309,21 +314,26 @@ import {
               }
             </ul>
           }
-          <label class="upload" [class.busy]="uploading()">
-            <input
-              type="file"
-              class="file"
-              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
-              [disabled]="uploading()"
-              (change)="upload($event)"
-            />
-            <app-icon name="camera" />
-            @if (uploading()) {
-              <ng-container i18n>Uploading…</ng-container>
-            } @else {
-              <ng-container i18n>Upload a picture or video</ng-container>
-            }
-          </label>
+          <!-- Said before the coach tries, on a server with no media storage (critique T25). -->
+          @if (uploadsOff()) {
+            <p class="muted" i18n>Uploads aren’t set up on this server. Video links work.</p>
+          } @else {
+            <label class="upload" [class.busy]="uploading()">
+              <input
+                type="file"
+                class="file"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+                [disabled]="uploading()"
+                (change)="upload($event)"
+              />
+              <app-icon name="camera" />
+              @if (uploading()) {
+                <ng-container i18n>Uploading…</ng-container>
+              } @else {
+                <ng-container i18n>Upload a picture or video</ng-container>
+              }
+            </label>
+          }
         </fieldset>
       }
 
@@ -528,6 +538,7 @@ export class ExerciseSheet implements OnInit {
   private readonly api = inject(ExerciseLibraryApi);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
+  protected readonly uploadsOff = inject(MediaUploads).off;
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);

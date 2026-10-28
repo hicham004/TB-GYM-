@@ -30,7 +30,7 @@ const states = new Map<string, ClientSessionState | null>([
 ]);
 
 describe('editing a client’s weeks: the grid', () => {
-  it('opens with the sessions still to come, and locks what started or passed in its week', () => {
+  it('opens with the workouts still to come, and locks what started or passed in its week', () => {
     const edit = programEdit(program(), TODAY, states);
 
     // Week 2 holds Monday's missed session, so weeks 1 and 2 keep their place.
@@ -112,7 +112,7 @@ describe('editing a client’s weeks: the grid', () => {
     expect(last.weeks[3].sessions.every((item) => item.sourceId === null)).toBe(true);
   });
 
-  it('closes the days already gone and names a session put on one', () => {
+  it('closes the days already gone and names a workout put on one', () => {
     const edit = programEdit(program(), TODAY, states);
 
     expect(isClosedDay(edit, 1, 1)).toBe(true);
@@ -222,7 +222,7 @@ describe('editing a client’s weeks: the review', () => {
     const review = editReview(preview(), 'Kilogram', 'en-US', 'Maya');
 
     expect(review.headline).toBe(
-      '1 session changed · 1 session added · 1 session moved · 1 week added',
+      '1 workout changed · 1 workout added · 1 workout moved · 1 week added',
     );
     expect(review.endLine).toBe('The program now ends Sun 25 Oct. It ended Sun 18 Oct before.');
     expect(review.hasChanges).toBe(true);

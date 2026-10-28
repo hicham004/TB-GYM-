@@ -14,14 +14,18 @@ import { trainingLoadStrategyLabel, trainingSetTypeLabel } from '../../core/i18n
 import { Button, IconButton } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
-import { UiMenu } from '../../ui/menu';
-import { setIssue, setSummary, type SetIssue } from './program-builder.models';
+import { UiMenu, type UiMenuItem } from '../../ui/menu';
+import { parseReps, repsText, setIssue, setSummary, type SetIssue } from './program-builder.models';
 import {
   type DraftExercise,
   type DraftSet,
   emptySet,
   withExertionPreference,
 } from './training-builder.models';
+
+/** "Normal" is said "Working": the other kinds but a warm-up are working sets too (B1). */
+const WORKING_HINT = $localize`Top, back-off, drop and failure sets are working sets too; a warm-up never counts in the summary or the records.`;
+const PERCENTAGE_HINT = $localize`Of this client’s training max, set when you assign the program.`;
 
 /** The same set editor on the grid and in the session sheet; all edits reach the owned draft. */
 @Component({
@@ -50,13 +54,15 @@ export class ProgramSetsEditor {
     'RpeChart',
     'RpeBasedEpley',
   ] as const;
-  protected readonly typeItems = this.setTypes.map((action) => ({
+  protected readonly typeItems: UiMenuItem[] = this.setTypes.map((action) => ({
     action,
     label: trainingSetTypeLabel(action),
+    hint: action === 'Normal' ? WORKING_HINT : undefined,
   }));
-  protected readonly loadItems = this.strategies.map((action) => ({
+  protected readonly loadItems: UiMenuItem[] = this.strategies.map((action) => ({
     action,
     label: trainingLoadStrategyLabel(action),
+    hint: action === 'PercentageWorkingMax' ? PERCENTAGE_HINT : undefined,
   }));
   protected readonly unitItems = [
     { action: 'Kilogram', label: 'kg' },
@@ -72,6 +78,10 @@ export class ProgramSetsEditor {
     return set.loadStrategy === 'PercentageWorkingMax'
       ? $localize`% of training max`
       : $localize`Load (${unit}:unit:)`;
+  }
+
+  protected loadHelp(set: DraftSet): string | null {
+    return set.loadStrategy === 'PercentageWorkingMax' ? PERCENTAGE_HINT : null;
   }
 
   protected effortLabel(set: DraftSet): string {
@@ -116,6 +126,33 @@ export class ProgramSetsEditor {
     this.revision();
     const issue = this.checked().has(set.key) ? setIssue(set) : null;
     return issue?.field === field ? [issue.message] : null;
+  }
+
+  /** One Reps box for both numbers (B1): what the coach is typing, else the set's reps. */
+  protected repsValue(set: DraftSet): string {
+    return set.repetitionsEntry ?? repsText(set);
+  }
+
+  protected repsChanged(set: DraftSet, text: string): void {
+    set.repetitionsEntry = text;
+    const reps = parseReps(text);
+    if (reps) Object.assign(set, reps);
+    this.changed();
+  }
+
+  /**
+   * Leaving the box writes the reps the usual way ("8–12"), unless they could not be read. The box
+   * is written directly: its binding may already hold that text from before the coach typed.
+   */
+  protected repsSettled(set: DraftSet, box: HTMLInputElement): void {
+    if (set.repetitionsEntry !== undefined && parseReps(set.repetitionsEntry)) {
+      delete set.repetitionsEntry;
+      box.value = repsText(set);
+    }
+  }
+
+  protected repsErrors(set: DraftSet): string[] | null {
+    return this.errors(set, 'repetitionsMinimum') ?? this.errors(set, 'repetitionsMaximum');
   }
 
   protected typeChanged(set: DraftSet, value: string): void {

@@ -248,7 +248,7 @@ export function attentionRow(
     case 'MissedSessions':
       return {
         ...base,
-        heading: $localize`${name}:name: missed ${count}:count: sessions in a row`,
+        heading: $localize`${name}:name: missed ${count}:count: workouts in a row`,
         detail: item.date
           ? $localize`Last trained ${date(item.date)}:date:`
           : $localize`No workout logged yet`,

@@ -121,7 +121,7 @@ describe('Coach Today view model', () => {
         null,
       ],
       [
-        'Jad Karam missed 3 sessions in a row',
+        'Jad Karam missed 3 workouts in a row',
         'Last trained Thu 24 Sep',
         'Missed',
         'missed',

@@ -283,7 +283,7 @@ export function editProblem(
   for (const [index, week] of draft.weeks.entries()) {
     for (const session of week.sessions) {
       if (!isClosedDay(edit, index, session.dayOffset)) continue;
-      const name = session.name.trim() || $localize`A session`;
+      const name = session.name.trim() || $localize`A workout`;
       const day = formatDate(
         dayDate(edit.startDate, index, session.dayOffset),
         'EEE d MMM',
@@ -383,23 +383,23 @@ export function editReview(
   const parts = [
     plural(
       n(preview.sessionsEdited),
-      $localize`1 session changed`,
-      $localize`${n(preview.sessionsEdited)}:count: sessions changed`,
+      $localize`1 workout changed`,
+      $localize`${n(preview.sessionsEdited)}:count: workouts changed`,
     ),
     plural(
       n(preview.sessionsAdded),
-      $localize`1 session added`,
-      $localize`${n(preview.sessionsAdded)}:count: sessions added`,
+      $localize`1 workout added`,
+      $localize`${n(preview.sessionsAdded)}:count: workouts added`,
     ),
     plural(
       n(preview.sessionsMoved),
-      $localize`1 session moved`,
-      $localize`${n(preview.sessionsMoved)}:count: sessions moved`,
+      $localize`1 workout moved`,
+      $localize`${n(preview.sessionsMoved)}:count: workouts moved`,
     ),
     plural(
       n(preview.sessionsRemoved),
-      $localize`1 session removed`,
-      $localize`${n(preview.sessionsRemoved)}:count: sessions removed`,
+      $localize`1 workout removed`,
+      $localize`${n(preview.sessionsRemoved)}:count: workouts removed`,
     ),
     plural(
       n(preview.weeksAdded),

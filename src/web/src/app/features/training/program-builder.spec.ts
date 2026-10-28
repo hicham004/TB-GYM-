@@ -228,7 +228,7 @@ describe('the program builder', () => {
     TestBed.resetTestingModule();
   });
 
-  it('draws each week as seven days with their sessions and one line per exercise', async () => {
+  it('draws each week as seven days with their workouts and one line per exercise', async () => {
     const { host, api } = await render();
 
     expect(api.getProgramTemplateVersion).toHaveBeenCalledWith('version-2');
@@ -256,7 +256,7 @@ describe('the program builder', () => {
       ['Romanian deadlift', '2 × 8–10 · RPE 8'],
     ]);
     expect(status(host)).toBe('Published: you can assign it');
-    expect(textOf(host.querySelector('#weeks-title'))).toBe('2 weeks · 4 sessions');
+    expect(textOf(host.querySelector('#weeks-title'))).toBe('2 weeks · 4 workouts');
     // Nothing changed and this version is published: nothing to publish, nothing to discard.
     expect(all(host, '.save-buttons button').map(textOf)).toEqual(['Versions', 'Publish']);
     expect((all(host, '.save-buttons button')[1] as HTMLButtonElement).disabled).toBe(true);
@@ -436,8 +436,8 @@ describe('the program builder', () => {
 
     named(all(host, 'section.week')[0], 'Lower A').click();
     await settle(harness.fixture);
-    expect(textOf(sheet().querySelector('h2'))).toBe('Edit session');
-    fill(sheet(), 'Session name', 'Lower body A');
+    expect(textOf(sheet().querySelector('h2'))).toBe('Edit workout');
+    fill(sheet(), 'Workout name', 'Lower body A');
     await settle(harness.fixture);
 
     expect(sessionsOf(all(host, 'section.week')[0])).toEqual(['Lower body A', 'Upper A']);
@@ -458,7 +458,7 @@ describe('the program builder', () => {
       'Publish',
     ]);
 
-    fill(sheet(), 'Session name', 'Lower body');
+    fill(sheet(), 'Workout name', 'Lower body');
     await settle(harness.fixture);
     expect(programApi.saveDraft).toHaveBeenCalledWith(
       'draft-1',
@@ -467,7 +467,7 @@ describe('the program builder', () => {
     expect(programApi.createDraft).toHaveBeenCalledTimes(1);
   });
 
-  it('takes an exercise out in the session sheet and offers to put it back', async () => {
+  it('takes an exercise out in the workout sheet and offers to put it back', async () => {
     const { host, harness, toast } = await render();
     const lower = () => all(all(host, 'section.week')[0], '.session-card')[0];
 
@@ -491,7 +491,7 @@ describe('the program builder', () => {
     ]);
   });
 
-  it('starts a session on a rest day from the add sheet and keeps adding to it', async () => {
+  it('starts a workout on a rest day from the add sheet and keeps adding to it', async () => {
     const { host, harness } = await render();
 
     named(host, 'Add to week 1, day 2').click();
@@ -694,7 +694,7 @@ describe('the program builder', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it('focuses the session name when a blank one prevents previewing', async () => {
+  it('focuses the workout name when a blank one prevents previewing', async () => {
     const broken = versionView();
     broken.weeks[0].sessions[0].name = '';
     const { host, harness, programApi } = await render({ versions: { 'version-2': broken } });
@@ -702,7 +702,7 @@ describe('the program builder', () => {
     await settle(harness.fixture);
     press(host, 'Publish');
     await settle(harness.fixture);
-    expect(textOf(sheet().querySelector('h2'))).toBe('Edit session');
+    expect(textOf(sheet().querySelector('h2'))).toBe('Edit workout');
     expect(document.activeElement).toBe(sheet().querySelector('.basics input'));
     expect(programApi.publishDraft).not.toHaveBeenCalled();
   });
@@ -740,8 +740,7 @@ describe('the program builder', () => {
     host.querySelector<HTMLButtonElement>('.prescription-toggle')!.click();
     await settle(harness.fixture);
     const inline = host.querySelector<HTMLElement>('.inline-sets')!;
-    fill(inline, 'Reps from', '3');
-    fill(inline, 'Reps to', '6');
+    fill(inline, 'Reps', '3-6');
     fill(inline, '% of training max', '82.5');
     fill(inline, 'RPE target', '8');
     await settle(harness.fixture);
@@ -913,7 +912,7 @@ describe('the program builder', () => {
     await settle(harness.fixture);
     expect(weeks[1].querySelector('.days')?.classList.contains('folded')).toBe(true);
     expect(weeks[0].querySelector('.days')?.classList.contains('folded')).toBe(false);
-    expect(textOf(weeks[1].querySelector('.week-summary'))).toBe('2 sessions · 3 exercises');
+    expect(textOf(weeks[1].querySelector('.week-summary'))).toBe('2 workouts · 3 exercises');
     expect(named(host, 'Unfold week 2').getAttribute('aria-expanded')).toBe('false');
     // A drop on the folded week lands on its first free day (day 2).
     expect(weeks[1].querySelector('.week-fold')?.id).toBe(`fold-${weeks[1].dataset['week']}`);

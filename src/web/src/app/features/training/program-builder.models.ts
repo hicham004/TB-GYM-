@@ -171,12 +171,45 @@ function sharedReps(sets: readonly DraftSet[]): string | null {
       set.repetitionsMinimum === first.repetitionsMinimum &&
       set.repetitionsMaximum === first.repetitionsMaximum,
   );
-  if (!same) {
-    return null;
-  }
-  const minimum = first.repetitionsMinimum ?? first.repetitionsMaximum;
-  const maximum = first.repetitionsMaximum ?? first.repetitionsMinimum;
+  return same ? repsText(first) : null;
+}
+
+/** The two numbers a set stores for its reps; null on either end leaves that end open. */
+export type RepsRange = Pick<DraftSet, 'repetitionsMinimum' | 'repetitionsMaximum'>;
+
+/**
+ * The Reps box's text for a set (B1): "10", "8–12", or empty. A set saved before the box with only
+ * a highest number reads "up to 10", as the client's app says it, and one with only a lowest
+ * "at least 8", so opening it changes nothing.
+ */
+export function repsText(set: RepsRange): string {
+  const { repetitionsMinimum: minimum, repetitionsMaximum: maximum } = set;
+  if (minimum === null && maximum === null) return '';
+  if (minimum === null) return $localize`up to ${maximum}:reps:`;
+  if (maximum === null) return $localize`at least ${minimum}:reps:`;
   return minimum === maximum ? `${minimum}` : `${minimum}–${maximum}`;
+}
+
+/**
+ * Reads the Reps box: "10" stores 10 as both numbers, "8-12" (a hyphen, an en dash or "to") the
+ * range, empty no reps, and "up to 10" or "at least 8" one end, as `repsText` shows an older set.
+ * Null when the text is none of these; the numbers' limits are `setIssue`'s to check.
+ */
+export function parseReps(text: string): RepsRange | null {
+  const value = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  const reps = (minimum: string | null, maximum: string | null): RepsRange => ({
+    repetitionsMinimum: minimum === null ? null : Number(minimum),
+    repetitionsMaximum: maximum === null ? null : Number(maximum),
+  });
+  if (!value) return reps(null, null);
+  const single = /^(\d{1,4})$/.exec(value);
+  if (single) return reps(single[1], single[1]);
+  const range = /^(\d{1,4}) ?(?:-|–|—|to) ?(\d{1,4})$/.exec(value);
+  if (range) return reps(range[1], range[2]);
+  const upTo = /^up to (\d{1,4})$/.exec(value);
+  if (upTo) return reps(null, upTo[1]);
+  const atLeast = /^at least (\d{1,4})$/.exec(value);
+  return atLeast ? reps(atLeast[1], null) : null;
 }
 
 // ---------- changing the draft ----------
@@ -628,7 +661,7 @@ export function draftProblem(draft: ProgramDraft): DraftProblem | null {
         ? $localize`Week ${weekIndex + 1}:week:, ${session.name.trim()}:session:`
         : $localize`Week ${weekIndex + 1}:week:, Day ${session.dayOffset + 1}:day:`;
       if (!session.name.trim()) {
-        return { ...where, message: $localize`${place}:place:: give the session a name.` };
+        return { ...where, message: $localize`${place}:place:: give the workout a name.` };
       }
       for (const exercise of session.exercises) {
         if (exercise.sets.length === 0) {
@@ -672,6 +705,12 @@ export interface SetIssue {
 
 /** Identifies the field as well as the rule, so both editors explain and focus the same problem. */
 export function setIssue(set: DraftSet): SetIssue | null {
+  if (set.repetitionsEntry !== undefined && parseReps(set.repetitionsEntry) === null) {
+    return {
+      field: 'repetitionsMinimum',
+      message: $localize`type the reps as one number, like 10, or a range, like 8-12.`,
+    };
+  }
   for (const field of ['repetitionsMinimum', 'repetitionsMaximum'] as const) {
     const value = set[field];
     if (value !== null && (value < 1 || value > 100))
