@@ -50,20 +50,25 @@ the Clients filter chips (later, the owner's note).
 before the next row starts, since most rows build on the one before. A cloud session starts with "Read
 docs/CRITIQUE-FIXES-2026-10.md and do the next step."
 
+**No waiting for CI** (the owner, 2026-10-27). A session runs the checks below, opens its pull request and reports;
+it does not wait for CI. The owner merges once CI is green. A session first looks at the open pull requests of
+earlier rows: one with red CI is fixed first, on its own branch, and one still waiting to be merged is named in the
+report; either way the session builds no new row on top of an unmerged one.
+
 **Branch and pull request.** A cloud session works on its own branch, commits as it goes and pushes, so a reclaimed
-machine loses nothing. It opens one pull request into main through `gh api` (REST; `gh pr` is refused there), or
-leaves the Create PR button to the owner. The same pull request sets the row's status: "Done · date · PR #n" once
-every check below has passed, or "Built, not merged" with what is left. Locally the plan runner commits on the
-current branch, as it did for the audit.
+machine loses nothing. It opens one pull request into main with the session's GitHub tools, or leaves the Create PR
+button to the owner. The same pull request sets the row's status: "Done · date · PR #n" once the session's checks
+below have passed (it reaches main only when the owner merges it, after CI), or "Built, not merged" with what is
+left. Locally the plan runner commits on the current branch, as it did for the audit.
 
 **Checks**, as AGENTS.md asks, in proportion to what changed:
 
 - Web code: `npm ci`, `format:check`, `lint`, the production build and Vitest, under Node 24.19.0 and npm 11.17.0
   (npm 10.9 crashes on this repository).
-- Backend code: the build and the area's tests. The full suite runs in CI on every pull request against
-  PostgreSQL 18; read it with `gh api repos/hicham004/TB-GYM-/commits/<sha>/check-runs`. A row is Done only when CI
-  is green. Long commands, the suite's 35 minutes included, run in the background with a timeout of up to two
-  hours.
+- Backend code: the build and the area's tests. CI runs the full suite against PostgreSQL 18 on every pull request
+  that changes more than the web app, docs or Markdown (45 to 70 minutes on 2026-10-27); one that changes only
+  those runs the domain and architecture tests and leaves the integration suite out. A pull request is merged only
+  once CI is green. Long commands run in the background with a timeout of up to two hours.
 - Always `git diff --check`.
 - Every new or changed screen is opened in a real browser at 1440 × 900 and 390 × 844 (kit and sidebar rows also at
   1366 × 633 and 1093 × 489), light and dark, axe clean and with no sideways scroll; the report names the 1440 and
@@ -84,11 +89,19 @@ current branch, as it did for the audit.
   bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet
   ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet
   curl -fsSL https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
+  # The image puts its own Node 22 first on PATH (/etc/profile.d/nodejs.sh); 24.19.0 goes in front of it.
+  printf 'export PATH=/usr/local/bin:$PATH\n' >> /etc/profile.d/nodejs.sh
+  export PATH=/usr/local/bin:$PATH
   npm install --global npm@11.17.0
   ```
 
-- In a session: `npx playwright install --with-deps chromium` in `src/web` after `npm ci`; and the database the
-  way CI starts it:
+  Where `builds.dotnet.microsoft.com` is blocked, a session can copy the SDK out of `mcr.microsoft.com/dotnet/sdk:10.0`
+  instead (`docker create`, then `docker cp <id>:/usr/share/dotnet /usr/share/`).
+
+- In a session: Playwright's Chromium (the cloud image has it in `/opt/pw-browsers`; elsewhere
+  `npx playwright install --with-deps chromium` in `src/web` after `npm ci`); Docker's daemon, which a session
+  starts without (`dockerd > /tmp/dockerd.log 2>&1 &` when `docker info` fails); and the database the way CI starts
+  it:
 
   ```bash
   docker run -d --name tbgym-test-pg -p 5433:5432 -e POSTGRES_DB=postgres -e POSTGRES_USER=tbgym \
@@ -99,9 +112,9 @@ current branch, as it did for the audit.
   ```
 
 **Cost.** A cloud session uses the same plan limits as a local chat; past the weekly limit it needs extra usage (the
-owner's credits) switched on at claude.ai. The machine itself costs nothing. A green CI run takes about 38 minutes
-(backend 30, containers 5, web 3), so a row with two or three runs uses 80 to 120 of the private repository's 2,000
-free minutes a month.
+owner's credits) switched on at claude.ai. The machine itself costs nothing. A full CI run took 50 to 80 minutes on
+2026-10-27 (the integration suite alone 45 to 70); a pull request of web, docs or Markdown only skips that suite
+and takes about 20. Every job counts against the private repository's 2,000 free minutes a month.
 
 **Rules every row keeps.** A rule changes in a few lines of DOMAIN-RULES, an ADR or ARCHITECTURE (B10b writes ADR
 0038). The generated API client is never edited by hand. Commits and pull requests carry no co-author or "Generated

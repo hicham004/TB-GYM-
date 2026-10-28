@@ -36,9 +36,31 @@ jobs:
           --health-retries 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A pull request is checked out as its merge into the base: the first parent is the base.
+          fetch-depth: 2
+      # What a pull request changes decides whether the integration suite, about an hour of
+      # PostgreSQL work, can be reached by it. Only the web app, docs and Markdown cannot (no backend
+      # code reads them; the architecture tests that read nginx.conf and the app's routes still run).
+      # A push to main runs everything; a diff that cannot be read fails the job.
+      - name: Decide which tests the change can reach
+        id: scope
+        run: |
+          integration=true
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            printf '%s\n' "$changed"
+            # A here-string, not a pipe: under pipefail an early-exiting grep could fail the pipe.
+            if ! grep -qvE '^(src/web/|docs/)|\.md$' <<< "$changed"; then
+              integration=false
+            fi
+          fi
+          echo "Integration suite: $integration"
+          echo "integration=$integration" >> "$GITHUB_OUTPUT"
       # Pulled once, up front, so a test that starts its own backplane is not also waiting on a
       # registry. Pinned to the same tag compose.yaml uses.
       - name: Pre-pull the pinned Redis image
+        if: steps.scope.outputs.integration != 'false'
         run: docker pull redis:8.2.2-alpine
       - uses: actions/setup-dotnet@v4
         with:
@@ -49,11 +71,19 @@ jobs:
         run: dotnet format analyzers TB.Gym.slnx --verify-no-changes --no-restore
       - name: Build
         run: dotnet build TB.Gym.slnx --configuration Release --no-restore
-      # The same progress lines and hang limit as scripts/check.ps1.
+      # The same progress lines and hang limit as scripts/check.ps1. Only an explicit "false" from
+      # the scope step leaves the integration suite out.
       - name: Test
-        run: >-
-          dotnet test TB.Gym.slnx --configuration Release --no-build
-          --logger "console;verbosity=normal" --blame-hang-timeout 30m --blame-hang-dump-type none
+        env:
+          INTEGRATION: ${{ steps.scope.outputs.integration }}
+        run: |
+          scope=()
+          if [ "$INTEGRATION" = "false" ]; then
+            scope=(--filter "FullyQualifiedName!~TB.Gym.Api.IntegrationTests")
+          fi
+          dotnet test TB.Gym.slnx --configuration Release --no-build \
+            --logger "console;verbosity=normal" --blame-hang-timeout 30m --blame-hang-dump-type none \
+            "${scope[@]}"
       - name: Verify EF model and migrations agree
         run: |
           dotnet tool restore
