@@ -726,6 +726,20 @@ public sealed partial class Phase6B2BRealtimeSignalRTests : IDisposable
             }
         }
 
+        /// <summary>
+        /// Forgets what has arrived, once the frames a finished sweep handed to the hub are here. The
+        /// hub accepting a frame is not the socket delivering it: on a loaded machine the setup
+        /// frame can land after a plain <see cref="Clear"/>, where a later "nothing arrives" or
+        /// "exactly one" assertion takes it for new.
+        /// </summary>
+        public async Task ClearAfterAsync(int handedOver)
+        {
+            Assert.IsTrue(
+                await WaitForEventsAsync(handedOver),
+                $"The {handedOver} frame(s) the sweep published never reached the socket.");
+            Clear();
+        }
+
         /// <summary>Whether the live socket has received the named durable message.</summary>
         public bool HasMessage(Guid messageId)
         {
