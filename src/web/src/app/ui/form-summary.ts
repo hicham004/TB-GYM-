@@ -33,7 +33,7 @@ import {
       margin: 0;
       overflow-wrap: anywhere;
       padding: 0.625rem 0.875rem;
-      // Focus and a scroll bring it clear of a sheet's sticky action bar below it.
+      // Focus and a scroll bring it clear of a bar pinned at the screen's foot (a page's save bar).
       scroll-margin-block: 1rem 5rem;
     }
 
@@ -64,7 +64,7 @@ export class FormSummary {
 
   /**
    * Moves focus here once what it says is drawn, so a refusal is read where the person already is, and
-   * scrolls it into view above a sticky action bar. A summary with nothing to say is left alone.
+   * scrolls it into view. A summary with nothing to say is left alone.
    */
   focus(): void {
     afterNextRender(

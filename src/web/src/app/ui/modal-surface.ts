@@ -198,7 +198,10 @@ export interface ModalData {
       justify-content: flex-end;
       padding-block: 0.75rem;
       padding-inline: 1.5rem;
+      // Above the body, which scrolls in a layer of its own, so its shadow falls on the body.
+      position: relative;
       transition: box-shadow var(--tb-duration) var(--tb-ease);
+      z-index: 1;
     }
 
     .tb-modal-pane--sheet .tb-modal__footer {
@@ -206,7 +209,7 @@ export interface ModalData {
     }
 
     .tb-modal__footer--raised {
-      box-shadow: 0 -0.5rem 1rem -0.75rem color-mix(in srgb, var(--tb-night) 40%, transparent);
+      box-shadow: 0 -0.25rem 0.75rem -0.25rem color-mix(in srgb, var(--tb-night) 24%, transparent);
     }
 
     .tb-modal-pane :is(button, a, input, select, textarea, [tabindex]):focus-visible {

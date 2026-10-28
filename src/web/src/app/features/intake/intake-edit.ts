@@ -39,7 +39,7 @@ import {
 /**
  * One group of answers in a sheet (R5.3b): the same boxes as the first-run step, saved on their own.
  * The weight group is the last part of setting up, so its button finishes setting up instead of saving.
- * A refusal stays in the sheet in the server's words, in the summary above the sticky bar, which takes focus.
+ * A refusal stays in the sheet in the server's words, in the summary, which takes focus.
  */
 @Component({
   selector: 'app-intake-edit',

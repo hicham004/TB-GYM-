@@ -514,7 +514,7 @@ at once. A refused submit moves focus to it, so the refusal is where the user al
 
 The kit's `<app-form-summary>` (`ui/form-summary.ts`) is that region (audit A12b, WEA-9). Empty, it is
 visually hidden but stays in the accessibility tree, never `display: none`; its `focus()` takes focus
-once the words are drawn and scrolls clear of a sheet's sticky bar. Each form in a sheet or dialog in
+once the words are drawn and scrolls it into view. Each form in a sheet or dialog in
 clients, nutrition, training, progress and intake, the intake steps and Notification settings has one:
 the server's words first, else the form's own pointer ("Check the fields marked above."). A submit the
 form refuses itself moves focus to the first box marked wrong, whose reason is read with it, and to the
@@ -773,8 +773,12 @@ colour values with brand v2 light/dark roles while keeping aliases for unmigrate
 marked `REDESIGNED` follows the selected mode; other routed content stays light during migration.
 The development build alone reads brand and mode preview query parameters.
 R1.2 puts the reusable display, chart and selection components in `src/app/ui`; `@angular/aria`
-owns tab interaction, and `@angular/cdk` owns dialog, sheet and toast overlays. The UI lab exercises
-the kit in light, dark and RTL before any redesigned screen adopts it.
+owns tab interaction, and `@angular/cdk` owns dialog, sheet, toast and (since critique B2a) menu
+overlays. The UI lab exercises the kit in light, dark and RTL before any redesigned screen adopts it.
+Since B2a a sheet's or dialog's actions go in its `appModalFooter`, which the surface draws outside the
+body that scrolls, so no sticky bar or scroll-margin workaround sits inside a modal; a submit button
+there names its form with `form`, since it is outside it. The kit menu's list is a top-layer popover
+anchored on its button, never a box drawn inside the card or row that holds it.
 
 R5.3f removes the pre-foundation global classes and colour aliases. `npm run lint:styles` reads
 Angular's actual template and style metadata (including shared style constants) and rejects old

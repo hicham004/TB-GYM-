@@ -134,6 +134,11 @@ of the implemented R1.3 screens before production rollout.
 
 *(Sessions add items here instead of building them.)*
 
+- **Sheets whose buttons end their content (from critique B2a).** The share card and before-and-after
+  sheets, saved replies, a food's details and the program's session and maxes panels keep their
+  buttons in the body, where they scroll with it; none covers a line. Each moves to `appModalFooter`
+  when it is next changed.
+
 - **Demo data gaps (from R0.1).** The demo has no progress photos
   or coach/exercise media (the real M1 uses coach initials until a profile photo source exists; use
   licensed images, never AI-made people), and no former client. Add each when its screen is built.
@@ -1431,6 +1436,22 @@ Tokens are theme-ready from R1, so this costs little later.
     or leaving it), in any script's digits.
   - `npm run lint:styles` refuses a `<select>` and a date or time `<input>` in any template; since
     audit A14b rebuilt the two coach check-in pages, nothing is excused.
+- Built in critique B2a (`docs/CRITIQUE-FIXES-2026-10.md`): the modal footer and the menu overlay.
+  - `ModalFooter` (`ui/modal-footer.ts`): a sheet's or dialog's actions are written once after its
+    form as `<ng-template appModalFooter>`, and `ModalSurface` draws them in a footer outside the body
+    that scrolls: the surface colour, a top hairline, the safe-area padding, and a soft shadow while
+    there is more to scroll to. No bar covers the body's last line or runs beside its scrollbar. A
+    submit button there names its form (`[attr.form]="formId"`, from `modalFormId`); outside a modal
+    the actions stay where they are written. `EntryActions` and `UiConfirm` use it, as do Start and
+    Renew plan, Record payment, Assign program, Update maxes, Build next block, the product,
+    invitation, intake, exercise, food, legal and platform sheets, the plan and program dialogs, Leave,
+    and the builders' picker and publish sheets. A sheet is as wide as the overlay, never `100vw`.
+  - `UiMenu` keeps its inputs, keys and focus and draws its list through a CDK connected overlay: a
+    popover in the top layer, placed just after its button so Tab and the page's mode carry on from
+    it, which no scrolling box, card or open sheet can clip. It opens below its `align` edge, else
+    below its other edge, else above, 8 px from the window's edges, pushed inside them only when
+    nothing fits; it follows its button when anything scrolls and closes once the button has scrolled
+    out of sight. Specs find an open menu's items with `menuChoices` (`src/testing/dom.ts`).
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves

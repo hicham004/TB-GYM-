@@ -926,7 +926,7 @@ for (const [width, height, mode] of [
     await expect(sheet.locator('.suggested p')).toHaveText(
       'Strength Base’s logged sets suggest 86.25 kg (70 kg for 5 reps at RPE 8).',
     );
-    // Clear of the sheet's sticky buttons, as a coach scrolling to it would see it.
+    // In the middle of the sheet's body, as a coach scrolling to it would see it.
     await sheet.locator('.suggested').evaluate((box) => box.scrollIntoView({ block: 'center' }));
     await expectNoHorizontalOverflow(page);
     await axe(page);
