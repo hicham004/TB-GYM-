@@ -1982,6 +1982,12 @@ limited to the coach's assigned clients.
   its reissue. **Password and security**, for staff and clients: field errors in words with focus on the first,
   Sign out everywhere asked first, and leaving the coaching space in a kit dialog. Appearance and Notification
   settings sit in the same layout. All of it follows dark mode; Billing keeps TB Gym's colours.
+- Built in critique B3a: **Team** leaves the owner's Settings column for a sidebar row of its own (Business:
+  Products · Team · Settings) at the same address, a page with three lines on how a team works and "You and 2
+  coaches · 3 seats this month" (the seats from the owner's billing read, PBL-002), and Invite a coach says each
+  coach is a seat on the TB Gym bill. A coach opens a read-only Team from their Settings, after their own pages
+  (the owner's choice of 2026-10-28): names, roles and since when. The owner's Clients list has a Coach filter, a
+  chip with a menu (Every coach, You, each coach), kept in the address (`?coach=`).
 - Built in audit A15a (INV-4): **Undelivered notices** (`/workspace/undelivered-notices`), the last of the coaching
   space's pages: the notices TB Gym gave up delivering, newest first and 25 at a time, each with what it was about
   and who such a notice is for (from its kind alone), Email or In the app, why it stopped in words ("Tried 6 times

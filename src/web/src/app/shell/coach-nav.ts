@@ -57,10 +57,15 @@ export class CoachNav {
       label: group.label,
       destinations: group.destinations
         .filter((destination) => !destination.messaging || messaging)
+        .filter((destination) => owner || !destination.ownerOnly)
         .map((destination) =>
-          !owner && destination.coachLink
-            ? { ...destination, link: destination.coachLink }
-            : destination,
+          owner
+            ? destination
+            : {
+                ...destination,
+                link: destination.coachLink ?? destination.link,
+                section: destination.coachSection ?? destination.section,
+              },
         ),
     })).filter((group) => group.destinations.length > 0);
   });

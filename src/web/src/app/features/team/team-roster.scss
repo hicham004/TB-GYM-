@@ -1,0 +1,81 @@
+// A coach's Team (critique B3a): the owner's rows without the emails, the client counts or the menu.
+// Brand v2 tokens only.
+@use '../settings/settings-page';
+
+.panel {
+  max-inline-size: 56rem;
+}
+
+.people {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+// Not `.client`: the avatar's `presentation="client"` puts that class on the avatar itself.
+.person {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: grid;
+  gap: 0.25rem 0.875rem;
+  grid-template-areas:
+    'face name role'
+    'face joined joined';
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-block: 0.875rem;
+
+  &:first-child {
+    border-block-start: 0;
+    padding-block-start: 0.25rem;
+  }
+}
+
+.face {
+  --avatar-size: 2.75rem;
+  background: var(--tb-accent-soft);
+  color: var(--tb-ink);
+  font-size: 0.9375rem;
+  grid-area: face;
+}
+
+.name {
+  color: var(--tb-ink);
+  font-weight: 600;
+  grid-area: name;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.you {
+  color: var(--tb-muted);
+  font-weight: 400;
+}
+
+.role {
+  grid-area: role;
+  justify-self: end;
+}
+
+.joined {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  grid-area: joined;
+  margin: 0;
+}
+
+// A phone: the role under the name, then the day they joined.
+@container (max-width: 30rem) {
+  .person {
+    grid-template-areas:
+      'face name'
+      'face role'
+      'face joined';
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .role {
+    justify-self: start;
+  }
+}

@@ -92,6 +92,19 @@
             </button>
           }
         </div>
+        <!-- The owner's Coach filter (critique B3a), on a list with more than one coach. -->
+        @if (coachChip(); as chip) {
+          <app-menu
+            class="coach-filter"
+            variant="chip"
+            align="start"
+            [label]="chip.name"
+            [selected]="chip.active"
+            [current]="chip.active ? coach() : ''"
+            [items]="chip.items"
+            (chosen)="setCoach($event)"
+          />
+        }
         <fieldset class="chips">
           <legend class="tb-visually-hidden" i18n>Show</legend>
           @for (chip of chips(); track chip.value) {

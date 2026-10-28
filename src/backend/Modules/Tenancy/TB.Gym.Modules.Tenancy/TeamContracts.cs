@@ -9,6 +9,13 @@ public interface ITeamApplicationService
     Task<IReadOnlyList<TeamMemberSummary>> ListMembersAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// The team as every member of staff sees it (critique B3a): the active Owner and Coaches, each
+    /// with their name, role and the day they joined. No email, invitation or client count: those stay
+    /// the owner's, on the members list.
+    /// </summary>
+    Task<IReadOnlyList<TeamRosterMember>> ListRosterAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Removes a coach. Their clients move to the owner in the same transaction, and their pending
     /// client invitations will land with the owner too. Nothing about the clients is deleted.
     /// </summary>
@@ -33,6 +40,12 @@ public sealed record TeamMemberSummary(
     int AssignedClientCount,
     DateTimeOffset JoinedAtUtc,
     uint Version);
+
+/// <summary>
+/// One member of staff on the team every coach can read: who, in which role, since when, and whether
+/// it is the caller, said rather than shown by an id.
+/// </summary>
+public sealed record TeamRosterMember(string DisplayName, TenantRole Role, DateTimeOffset JoinedAtUtc, bool IsYou);
 
 /// <summary>The membership version the owner saw, so a stale screen conflicts instead of acting.</summary>
 public sealed record RemoveCoachRequest(uint Version);

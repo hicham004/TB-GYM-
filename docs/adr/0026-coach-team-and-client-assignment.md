@@ -25,6 +25,9 @@ Business rules, decided by the product owner on 2026-09-23:
   owner.
 - **A Coach sees and acts only on their own clients; the Owner sees all.** A solo owner notices no
   change.
+- **Every member of staff reads who is on the team** (critique B3a, 2026-10-28): each active owner
+  and coach's name, role and joining day (`GET /api/team/roster`), which a coach opens from Settings.
+  Emails, invitations, client counts and every change to the team stay the owner's.
 - **The owner reassigns** a client (optional note, optimistic concurrency on the client version).
 - **Removing a coach moves all their clients, and their pending client invitations, to the owner**
   in one transaction. Nothing about a client is deleted. **A coach can also resign themselves**, with

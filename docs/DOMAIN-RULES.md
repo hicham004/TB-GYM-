@@ -110,7 +110,9 @@ who joined before a version was published are not asked yet.
 
 **CLI-011** The owner invites coaches by email; accepting creates an active Coach membership (or
 reactivates a removed coach's). Only the owner manages coach invitations and removes coaches, and a
-workspace has exactly one active owner. See `docs/adr/0026-coach-team-and-client-assignment.md`.
+workspace has exactly one active owner. Every member of staff may read who is on the team: each
+active owner and coach's name, role and joining day, and nothing else (critique B3a). See
+`docs/adr/0026-coach-team-and-client-assignment.md`.
 
 **CLI-012** Every client has exactly one coach, an active Owner or Coach of the workspace: whoever
 sent their invitation, or the owner when that coach has left. Every change appends to an

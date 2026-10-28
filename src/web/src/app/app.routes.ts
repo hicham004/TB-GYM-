@@ -6,6 +6,7 @@ import {
   coachGuard,
   memberGuard,
   ownerGuard,
+  ownerMatchGuard,
   publicHomeGuard,
   sessionKnownGuard,
   signedOutGuard,
@@ -215,12 +216,22 @@ export const routes: Routes = [
   },
   {
     path: 'team',
+    // The owner's Team, from the sidebar; the rest of the staff match the read-only one below.
+    canMatch: [ownerMatchGuard],
     canActivate: [authGuard, ownerGuard],
     // Its Invite a coach sheet asks before Browser Back drops what was typed (audit COACH-1).
     canDeactivate: [confirmSheetLeave],
     data: REDESIGNED,
     title: $localize`Team | TB Gym`,
     loadComponent: () => import('./features/team/team').then((module) => module.Team),
+  },
+  {
+    // A coach's Team (critique B3a), from their Settings: who coaches here, read-only.
+    path: 'team',
+    canActivate: [authGuard, coachGuard],
+    data: REDESIGNED,
+    title: $localize`Team | TB Gym`,
+    loadComponent: () => import('./features/team/team-roster').then((module) => module.TeamRoster),
   },
   {
     path: 'billing',

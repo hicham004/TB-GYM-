@@ -1,5 +1,6 @@
-<app-settings-frame>
-  <header settingsHead class="top team-top">
+<!-- The owner's own page from the sidebar since critique B3a; a coach reads theirs in Settings. -->
+<section class="team" aria-labelledby="team-heading">
+  <header class="top team-top">
     <div class="intro">
       <h1 id="team-heading" #heading tabindex="-1" i18n>Team</h1>
       @if (state() === 'ready') {
@@ -13,6 +14,15 @@
       <span i18n>Invite a coach</span>
     </button>
   </header>
+
+  <ul class="how" role="list" aria-label="How a team works" i18n-aria-label data-how>
+    <li i18n>One coach per client, given from the client’s profile.</li>
+    <li i18n>
+      You see every client and all their data, and a coach only their own. Chats stay between a
+      client and their coach, even from you.
+    </li>
+    <li i18n>A leaving coach’s clients come back to you, and they are told.</li>
+  </ul>
 
   @switch (state()) {
     @case ('loading') {
@@ -132,7 +142,7 @@
       }
     }
   }
-</app-settings-frame>
+</section>
 
 <ng-template #inviteSheet>
   <form class="invite" novalidate (submit)="$event.preventDefault(); sendInvite()">
@@ -148,6 +158,8 @@
         yet; you give them clients from each client’s profile.
       </p>
     }
+    <!-- The amount is Billing's alone (critique B3a); a trial month is not invoiced (ADR 0028). -->
+    <p class="quiet" data-seat i18n>Each coach you invite counts as a seat on your TB Gym bill.</p>
     <app-field label="Email" i18n-label [errors]="shownInviteErrors('email')">
       <input
         appControl

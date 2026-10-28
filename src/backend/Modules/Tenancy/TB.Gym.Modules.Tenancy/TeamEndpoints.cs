@@ -51,6 +51,17 @@ public static class TeamEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // The team as every member of staff sees it (critique B3a): names, roles and since when. Emails,
+        // invitations and client counts stay the owner's, on the members list above.
+        endpoints.MapGet("/api/team/roster", async (
+            ITeamApplicationService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListRosterAsync(cancellationToken)))
+        .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+        .WithTags(TenancyModule.Name)
+        .WithName("ListTeamRoster")
+        .Produces<TeamRosterMember[]>();
+
         // A coach leaves the team themselves (ADR 0027). Their access ends with this request.
         endpoints.MapPost("/api/team/me/resign", async (
             HttpContext context,

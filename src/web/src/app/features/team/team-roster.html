@@ -1,0 +1,46 @@
+<app-settings-frame>
+  <header settingsHead class="top">
+    <h1 id="team-heading" #heading tabindex="-1" i18n>Team</h1>
+    <p class="lede" i18n>
+      Who coaches in this coaching space, and since when. Only the owner adds or removes a coach.
+    </p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="3" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>Your team couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      <section class="panel" aria-labelledby="members-heading">
+        <h2 id="members-heading" i18n>Coaching here</h2>
+        <ul class="people" role="list">
+          @for (row of rows(); track $index) {
+            <li class="person">
+              <app-avatar class="face" [initials]="row.initials" presentation="client" />
+              <p class="name">
+                <span dir="auto">{{ row.name }}</span>
+                @if (row.isYou) {
+                  &ngsp;<span class="you" i18n>(you)</span>
+                }
+              </p>
+              <app-status-pill
+                class="role"
+                [label]="row.role"
+                [tone]="row.isOwner ? 'info' : 'neutral'"
+              />
+              <p class="joined">{{ row.joined }}</p>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  }
+</app-settings-frame>

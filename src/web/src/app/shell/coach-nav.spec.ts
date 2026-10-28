@@ -24,6 +24,8 @@ const ROUTES = [
   'notifications',
   'notifications/settings',
   'account/appearance',
+  'team',
+  'billing',
 ].map((path) => ({ path, children: [] }));
 
 async function render(options: { owner?: boolean; unread?: number; messaging?: boolean } = {}) {
@@ -69,6 +71,7 @@ describe('coach navigation', () => {
   it('is the locked list, in order, in three headed groups', async () => {
     const { host, labels } = await render({ owner: true });
 
+    // Team is the owner's own row since critique B3a: people are not settings.
     expect(labels()).toEqual([
       'Today',
       'Clients',
@@ -77,6 +80,7 @@ describe('coach navigation', () => {
       'Check-ins',
       'Messages',
       'Products',
+      'Team',
       'Settings',
     ]);
     expect(
@@ -100,6 +104,7 @@ describe('coach navigation', () => {
       '/checkins/forms',
       '/messages',
       '/products',
+      '/team',
       '/workspace',
     ]);
   });
@@ -135,6 +140,25 @@ describe('coach navigation', () => {
     await go('/account/appearance');
     expect(settings()?.getAttribute('aria-current')).toBe('true');
     expect(settings()?.classList.contains('selected')).toBe(true);
+
+    // A coach reads the team from their Settings (critique B3a), so Settings stays current there.
+    await go('/team');
+    expect(settings()?.getAttribute('aria-current')).toBe('true');
+    expect(host.querySelector('a[data-destination="team"]')).toBeNull();
+  });
+
+  it('gives the owner Team as a row of its own, current on the Team page alone', async () => {
+    const { host, go } = await render({ owner: true });
+    const team = () => host.querySelector('a[data-destination="team"]');
+    const settings = () => host.querySelector('a[data-destination="settings"]');
+
+    await go('/team');
+    expect(team()?.getAttribute('aria-current')).toBe('page');
+    expect(settings()?.getAttribute('aria-current')).toBeNull();
+
+    await go('/billing');
+    expect(team()?.getAttribute('aria-current')).toBeNull();
+    expect(settings()?.getAttribute('aria-current')).toBe('true');
   });
 
   it('drops Messages when messaging is not available to this member', async () => {

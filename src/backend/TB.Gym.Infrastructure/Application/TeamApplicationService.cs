@@ -19,13 +19,9 @@ internal sealed class TeamApplicationService(
 {
     public async Task<IReadOnlyList<TeamMemberSummary>> ListMembersAsync(CancellationToken cancellationToken)
     {
-        var tenantId = tenantContext.TenantId;
         var members = await (
-            from membership in dbContext.TenantMemberships.AsNoTracking()
+            from membership in ActiveStaff()
             join user in dbContext.Users.AsNoTracking() on membership.UserId equals user.Id
-            where membership.TenantId == tenantId &&
-                  membership.Status == MembershipStatus.Active &&
-                  (membership.Role == TenantRole.Owner || membership.Role == TenantRole.Coach)
             select new
             {
                 membership.UserId,
@@ -56,6 +52,38 @@ internal sealed class TeamApplicationService(
                 member.CreatedAtUtc,
                 member.Version))
             .ToArray();
+    }
+
+    public async Task<IReadOnlyList<TeamRosterMember>> ListRosterAsync(CancellationToken cancellationToken)
+    {
+        // Only what a coach may see of their colleagues is read at all (ADR 0026).
+        var members = await (
+            from membership in ActiveStaff()
+            join user in dbContext.Users.AsNoTracking() on membership.UserId equals user.Id
+            select new { membership.UserId, user.DisplayName, membership.Role, membership.CreatedAtUtc })
+            .ToListAsync(cancellationToken);
+
+        return members
+            .OrderBy(member => member.Role == TenantRole.Owner ? 0 : 1)
+            .ThenBy(member => member.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .Select(member => new TeamRosterMember(
+                member.DisplayName,
+                member.Role,
+                member.CreatedAtUtc,
+                member.UserId == currentUser.UserId))
+            .ToArray();
+    }
+
+    /// <summary>The workspace's active Owner and Coaches, the team both lists read.</summary>
+    private IQueryable<TenantMembership> ActiveStaff()
+    {
+        var tenantId = tenantContext.TenantId;
+        return dbContext.TenantMemberships
+            .AsNoTracking()
+            .Where(membership =>
+                membership.TenantId == tenantId &&
+                membership.Status == MembershipStatus.Active &&
+                (membership.Role == TenantRole.Owner || membership.Role == TenantRole.Coach));
     }
 
     public Task<CoachRemovalResult> RemoveCoachAsync(

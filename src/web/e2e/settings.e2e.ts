@@ -240,9 +240,9 @@ async function axe(page: Page) {
   ).toEqual([]);
 }
 
+// Team is the owner's own sidebar page since critique B3a, out of the Settings layout.
 const PAGES = [
   { path: '/workspace', heading: 'Name and region', shot: 'space' },
-  { path: '/team', heading: 'Team', shot: 'team' },
   { path: '/billing', heading: 'Billing', shot: 'billing' },
   { path: '/account/security', heading: 'Password and security', shot: 'security' },
 ];
@@ -261,7 +261,6 @@ for (const width of [390, 1440]) {
           'Name and region',
           'Brand',
           'Nutrition',
-          'Team',
           'Billing',
           'Undelivered notices',
           'Notifications',
@@ -341,7 +340,7 @@ test('Name and region asks before its changes are left behind', async ({ page })
   await page.getByLabel('Coaching space name').fill('Atlas Strength');
   await page
     .getByRole('navigation', { name: 'Settings' })
-    .getByRole('link', { name: 'Team' })
+    .getByRole('link', { name: 'Billing' })
     .click();
   const ask = page.getByRole('dialog');
   await expect(ask.getByRole('heading', { name: 'Leave without saving?' })).toBeVisible();
@@ -353,10 +352,10 @@ test('Name and region asks before its changes are left behind', async ({ page })
 
   await page
     .getByRole('navigation', { name: 'Settings' })
-    .getByRole('link', { name: 'Team' })
+    .getByRole('link', { name: 'Billing' })
     .click();
   await page.getByRole('dialog').getByRole('button', { name: 'Leave without saving' }).click();
-  await expect(page.getByRole('heading', { name: 'Team', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Billing', level: 1 })).toBeVisible();
 });
 
 test('Team invites a coach from a sheet that passes axe', async ({ page }) => {
@@ -416,10 +415,12 @@ test('a coach’s Settings are their own account’s pages, and Billing stays th
   });
 
   const nav = page.getByRole('navigation', { name: 'Settings' });
+  // The read-only Team a coach opens from here comes after their own pages (critique B3a).
   await expect(nav.getByRole('link')).toHaveText([
     'Notifications',
     'Appearance',
     'Password and security',
+    'Team',
   ]);
   // The sidebar's Settings opens on the coach's own pages and stays selected on each (C13).
   const sidebarSettings = page.locator('.sidebar a.item[data-destination="settings"]');

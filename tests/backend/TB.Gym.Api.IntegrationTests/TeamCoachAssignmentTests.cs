@@ -77,6 +77,66 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
+    public async Task TeamEveryMemberOfStaffReadsTheTeamsNamesRolesAndSinceWhenAndNothingMore()
+    {
+        using var owner = CreateClient();
+        var tenant = await RegisterCoachAsync(owner, "roster-owner@example.test", "Olivia Owner", "Roster Gym");
+        using var coach = CreateClient();
+        await JoinAsCoachAsync(owner, coach, "roster-coach@example.test", "Cara Coach");
+        using var leaving = CreateClient();
+        var leavingUserId = await JoinAsCoachAsync(owner, leaving, "roster-leaving@example.test", "Lee Leaving");
+        using var client = CreateClient();
+        await InviteAndAcceptAsync(coach, client, "roster-client@example.test", true);
+
+        // Someone still invited is not on the team yet, and a removed coach is not on it any more.
+        await RefreshCsrfAsync(owner);
+        await AssertStatusAsync(
+            await owner.PostAsJsonAsync(
+                "/api/team/invitations",
+                new { email = "roster-pending@example.test", firstName = "Pat", lastName = "Pending" }),
+            HttpStatusCode.Created);
+        var member = (await TeamMembersAsync(owner)).Single(item => item.UserId == leavingUserId);
+        await AssertStatusAsync(
+            await owner.PostAsJsonAsync($"/api/team/members/{leavingUserId}/remove", new { version = member.Version }),
+            HttpStatusCode.OK);
+
+        // Names, roles and since when (critique B3a); never an email, an id, an invitation or a client count.
+        string[] fields = ["displayName", "role", "joinedAtUtc", "isYou"];
+        string[] names = ["Olivia Owner", "Cara Coach"];
+        string[] roles = ["Owner", "Coach"];
+        foreach (var (caller, name) in new[] { (owner, "Olivia Owner"), (coach, "Cara Coach") })
+        {
+            var response = await caller.GetAsync("/api/team/roster");
+            await AssertStatusAsync(response, HttpStatusCode.OK);
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.DoesNotContain("@", body);
+            using var document = System.Text.Json.JsonDocument.Parse(body);
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                CollectionAssert.AreEquivalent(
+                    fields,
+                    item.EnumerateObject().Select(property => property.Name).ToArray());
+            }
+
+            var roster = await RequiredJsonAsync<TeamRosterMember[]>(response);
+            CollectionAssert.AreEqual(names, roster.Select(item => item.DisplayName).ToArray());
+            CollectionAssert.AreEqual(roles, roster.Select(item => item.Role).ToArray());
+            Assert.AreEqual(name, roster.Single(item => item.IsYou).DisplayName, "Only the caller's row says it is theirs.");
+            Assert.IsTrue(roster.All(item => item.JoinedAtUtc > DateTimeOffset.UtcNow.AddHours(-1)));
+        }
+
+        // A client, someone signed out, the removed coach and another space's owner are refused.
+        await AssertStatusAsync(await client.GetAsync("/api/team/roster"), HttpStatusCode.Forbidden);
+        using var stranger = CreateClient();
+        await AssertStatusAsync(await stranger.GetAsync("/api/team/roster"), HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(await leaving.GetAsync("/api/team/roster"), HttpStatusCode.Forbidden);
+        using var other = CreateClient();
+        await RegisterCoachAsync(other, "roster-other@example.test", "Otto Other", "Other Gym");
+        SetTenant(other, tenant);
+        await AssertStatusAsync(await other.GetAsync("/api/team/roster"), HttpStatusCode.Forbidden);
+    }
+
+    [TestMethod]
     public async Task TeamACoachIsRefusedEverywhereOnAnotherCoachsClientUntilReassigned()
     {
         using var owner = CreateClient();
@@ -756,6 +816,7 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     private sealed record TeamWorkspace(Guid TenantId, string Role);
     private sealed record TeamMember(Guid UserId, string DisplayName, string Email, string Role, int AssignedClientCount, uint Version);
+    private sealed record TeamRosterMember(string DisplayName, string Role, DateTimeOffset JoinedAtUtc, bool IsYou);
     private sealed record TeamClient(Guid Id, Guid AssignedCoachUserId, string AssignedCoachName);
     private sealed record TeamClientDetails(Guid Id, Guid? UserId, Guid AssignedCoachUserId, string AssignedCoachName, uint Version);
     private sealed record TeamInvitation(Guid Id, string Email, string Kind, uint Version, string? DevelopmentActionUrl);

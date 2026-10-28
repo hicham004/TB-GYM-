@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
-import { invitationRows, memberRows, teamSummary } from './team.models';
+import { invitationRows, memberRows, rosterRows, teamSummary } from './team.models';
 
 const NOW = '2026-10-22T09:00:00Z';
 
@@ -273,25 +273,60 @@ describe('Settings › Team: the invitations', () => {
   });
 });
 
-describe('Settings › Team: the line under the heading', () => {
-  it('says it is just the owner so far, however many clients they have', () => {
-    expect(teamSummary([member({ assignedClientCount: 8 })])).toBe(
-      'Just you so far. Invite a coach and give them their own clients: a coach sees only the clients you give them.',
+describe('Team: the line under the heading (critique B3a)', () => {
+  it('says it is just the owner so far, with this month’s seats once the bill answers', () => {
+    expect(teamSummary([member({ assignedClientCount: 8 })], 1)).toBe(
+      'Just you so far · 1 seat this month',
     );
+    expect(teamSummary([member()], null)).toBe('Just you so far');
   });
 
-  it('counts the coaches and every client between them, the owner’s own included', () => {
-    expect(teamSummary([member(), coach('coach-cara', 'Cara Nassar')])).toBe(
-      'You and 1 coach, 5 clients between you. Each client has one coach, and a coach sees only their own; you see every client.',
+  it('counts the coaches, and the seats as the bill counts them, a coach gone this month included', () => {
+    expect(teamSummary([member(), coach('coach-cara', 'Cara Nassar')], 2)).toBe(
+      'You and 1 coach · 2 seats this month',
     );
     expect(
-      teamSummary([
-        member({ assignedClientCount: 0 }),
-        coach('coach-a', 'Adam Sabbagh', { assignedClientCount: 1 }),
-        coach('coach-b', 'Bilal Saad', { assignedClientCount: 0 }),
-      ]),
-    ).toBe(
-      'You and 2 coaches, 1 client between you. Each client has one coach, and a coach sees only their own; you see every client.',
+      teamSummary(
+        [
+          member({ assignedClientCount: 0 }),
+          coach('coach-a', 'Adam Sabbagh', { assignedClientCount: 1 }),
+          coach('coach-b', 'Bilal Saad', { assignedClientCount: 0 }),
+        ],
+        4,
+      ),
+    ).toBe('You and 2 coaches · 4 seats this month');
+    expect(teamSummary([member(), coach('coach-cara', 'Cara Nassar')], null)).toBe(
+      'You and 1 coach',
     );
+  });
+});
+
+describe('Team: the roster a coach reads (critique B3a)', () => {
+  it('gives each person a face, their role and the day they joined, and says which is the reader', () => {
+    const rows = rosterRows(
+      [
+        {
+          displayName: 'Olivia Haddad',
+          role: 'Owner',
+          joinedAtUtc: '2026-08-20T09:00:00Z',
+          isYou: false,
+        },
+        {
+          displayName: 'Cara Nassar',
+          role: 'Coach',
+          joinedAtUtc: '2026-09-02T09:00:00Z',
+          isYou: true,
+        },
+      ],
+      'en-US',
+      'Asia/Beirut',
+    );
+
+    expect(rows.map((row) => [row.name, row.initials, row.role, row.isOwner, row.isYou])).toEqual([
+      ['Olivia Haddad', 'OH', 'Owner', true, false],
+      ['Cara Nassar', 'CN', 'Coach', false, true],
+    ]);
+    // The workspace's day in the house style (COACH-6); another year names its year instead.
+    expect(rows[1].joined).toMatch(/^Joined (Wed 2 Sep|2 Sep 2026)$/);
   });
 });

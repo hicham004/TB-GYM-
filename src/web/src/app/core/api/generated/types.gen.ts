@@ -3495,6 +3495,13 @@ export type TeamMemberSummary = {
   version: number | string;
 };
 
+export type TeamRosterMember = {
+  displayName: string;
+  role: TenantRole;
+  joinedAtUtc: string;
+  isYou: boolean;
+};
+
 export type TenantMembershipSummary = {
   tenantId: string;
   tenantName: string;
@@ -4105,6 +4112,22 @@ export type UpdateWorkspaceBrandResponses = {
 
 export type UpdateWorkspaceBrandResponse =
   UpdateWorkspaceBrandResponses[keyof UpdateWorkspaceBrandResponses];
+
+export type ListTeamRosterData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/team/roster';
+};
+
+export type ListTeamRosterResponses = {
+  /**
+   * OK
+   */
+  200: Array<TeamRosterMember>;
+};
+
+export type ListTeamRosterResponse = ListTeamRosterResponses[keyof ListTeamRosterResponses];
 
 export type ResignFromTeamData = {
   body?: never;

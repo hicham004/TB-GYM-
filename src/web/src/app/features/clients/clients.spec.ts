@@ -10,9 +10,9 @@ import type { ClientOverviewView } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
-import { COACH_NOW, OWNER_ID } from '../../../testing/coach-today-fixtures';
+import { COACH_NOW, LEA_ID, OWNER_ID } from '../../../testing/coach-today-fixtures';
 import { clientListView } from '../../../testing/client-list-fixtures';
-import { click, fill, press, query, settle, tick } from '../../../testing/dom';
+import { click, fill, menuChoices, press, query, settle, tick } from '../../../testing/dom';
 import { ClientListApi } from './client-list-api';
 import { Clients } from './clients';
 import { FormerClientsApi } from './former-clients-api';
@@ -175,6 +175,40 @@ describe('Clients', () => {
     expect(names(host)).toEqual(['Rita Daher', 'Sara Mansour']);
     expect(TestBed.inject(Router).url).toBe('/clients?show=ending');
     expect(squash(query(host, '[role="status"]').textContent)).toBe('Showing 2 of 12 clients');
+  });
+
+  it('narrows the owner’s list to one coach’s clients, kept in the address (critique B3a)', async () => {
+    const { host, harness } = await render({ isOwner: true });
+    const trigger = query<HTMLButtonElement>(host, 'app-menu.coach-filter button');
+    expect(squash(trigger.textContent)).toBe('Coach');
+
+    trigger.click();
+    await settle(harness.fixture);
+    const choices = menuChoices(trigger);
+    expect(
+      choices.map((choice) => squash(choice.querySelector('.item-title')?.textContent)),
+    ).toEqual(['Every coach', 'You', 'Lea Khoury']);
+    choices[2].click();
+    await settle(harness.fixture);
+
+    expect(names(host)).toEqual(['Maya Fakhoury']);
+    expect(TestBed.inject(Router).url).toBe(`/clients?coach=${LEA_ID}`);
+    expect(squash(query(host, 'app-menu.coach-filter button').textContent)).toBe(
+      'Coach: Lea Khoury',
+    );
+    expect(squash(query(host, '[role="status"]').textContent)).toBe('Showing 1 of 12 clients');
+    // Each chip counts the chosen coach's clients, not the whole list's.
+    expect(squash(query(host, '.chips .chip').textContent)).toBe('All 1');
+  });
+
+  it('opens on the coach named in the address, and narrows nothing for a coach it does not hold', async () => {
+    const named = await render({ isOwner: true, url: `/clients?coach=${LEA_ID}` });
+    expect(names(named.host)).toEqual(['Maya Fakhoury']);
+    TestBed.resetTestingModule();
+
+    const unknown = await render({ isOwner: true, url: '/clients?coach=someone-else' });
+    expect(names(unknown.host)).toHaveLength(12);
+    expect(squash(query(unknown.host, 'app-menu.coach-filter button').textContent)).toBe('Coach');
   });
 
   it('offers Maxes to review only while a client has maxes to review', async () => {

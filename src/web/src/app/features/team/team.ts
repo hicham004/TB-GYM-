@@ -32,7 +32,7 @@ import { UiMenu } from '../../ui/menu';
 import type { ModalSurface } from '../../ui/modal-surface';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
-import { SettingsFrame } from '../settings/settings-frame';
+import { BillingApi } from '../billing/billing-api';
 import { TeamApi } from './team-api';
 import {
   type InvitationRow,
@@ -72,7 +72,6 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     EmptyState,
     Field,
     Icon,
-    SettingsFrame,
     Skeleton,
     StatusPill,
     UiConfirm,
@@ -83,6 +82,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 })
 export class Team extends GuardedSheets {
   private readonly api = inject(TeamApi);
+  private readonly billing = inject(BillingApi);
   private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
@@ -126,7 +126,9 @@ export class Team extends GuardedSheets {
   protected readonly waiting = computed(() =>
     invitationRows(this.invitations(), new Date(), this.locale, this.calendar.timeZone()),
   );
-  protected readonly summary = computed(() => teamSummary(this.members()));
+  /** Seats on this month's bill so far; null until the bill answers, or when it cannot. */
+  protected readonly seats = signal<number | null>(null);
+  protected readonly summary = computed(() => teamSummary(this.members(), this.seats()));
   protected readonly coachCount = computed(
     () => this.members().filter((member) => member.role === 'Coach').length,
   );
@@ -139,6 +141,7 @@ export class Team extends GuardedSheets {
       this.closeSheets();
       this.members.set([]);
       this.invitations.set([]);
+      this.seats.set(null);
       this.state.set('loading');
       this.working.set(null);
       this.devLink.set(null);
@@ -158,16 +161,23 @@ export class Team extends GuardedSheets {
     return this.scope.run('load', async (owner) => {
       if (this.members().length === 0) this.state.set('loading');
       try {
+        // This month's seats as the bill counts them (PBL-002); the team still shows without them.
+        const seats = firstValueFrom(this.billing.getWorkspaceBilling()).then(
+          (bill) => bill.currentMonth.amounts.seats,
+          () => null,
+        );
         // The workspace's clock dates each row; it is read once per workspace and shared.
-        const [members, invitations] = await owner.wait(
+        const [members, invitations, seatsThisMonth] = await owner.wait(
           Promise.all([
             firstValueFrom(this.api.getTeamMembers()),
             firstValueFrom(this.api.getCoachInvitations()),
+            seats,
             this.calendar.resolveToday(),
           ]),
         );
         this.members.set(members);
         this.invitations.set(invitations);
+        this.seats.set(seatsThisMonth);
         this.state.set('ready');
       } catch {
         if (!owner.current) return;

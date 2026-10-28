@@ -224,14 +224,16 @@ describe('Settings › Password and security', () => {
     expect(host.querySelector('a.back')?.getAttribute('href')).toBe('/me');
   });
 
-  it('shows a coach their own account pages only', async () => {
+  it('shows a coach their own account pages, then the team they read', async () => {
     const { host } = await render({}, 'Coach');
 
     const nav = host.querySelector('nav[aria-label="Settings"]')!;
+    // The read-only Team comes after the coach's own pages (critique B3a).
     expect(Array.from(nav.querySelectorAll('a')).map(textOf)).toEqual([
       'Notifications',
       'Appearance',
       'Password and security',
+      'Team',
     ]);
     expect(host.querySelector('a.back')).toBeNull();
   });

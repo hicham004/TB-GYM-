@@ -337,11 +337,11 @@ describe('Settings › Name and region', () => {
       'Coaching space',
       'Your account',
     ]);
+    // Team is the owner's own sidebar row since critique B3a, out of this column.
     expect(Array.from(nav.querySelectorAll('a')).map(textOf)).toEqual([
       'Name and region',
       'Brand',
       'Nutrition',
-      'Team',
       'Billing',
       'Undelivered notices',
       'Notifications',

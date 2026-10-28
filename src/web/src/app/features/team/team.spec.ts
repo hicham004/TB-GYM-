@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { type Observable, of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
@@ -13,6 +13,7 @@ import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { UiToast } from '../../ui/toast';
 import { fill, focusedId, menuChoices, press, settle } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
+import { BillingApi } from '../billing/billing-api';
 import { Team } from './team';
 import { TeamApi } from './team-api';
 
@@ -59,12 +60,18 @@ function invitation(overrides: Partial<ClientInvitation> = {}): ClientInvitation
   };
 }
 
-async function render(api: Partial<Record<keyof TeamApi, unknown>> = {}, emailOff = false) {
+async function render(
+  api: Partial<Record<keyof TeamApi, unknown>> = {},
+  emailOff = false,
+  // This month's bill so far (PBL-002): only its seats reach the page.
+  bill: Observable<unknown> = of({ currentMonth: { amounts: { seats: 2 } } }),
+) {
   const toast = { show: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [Team],
     providers: [
       provideRouter([]),
+      { provide: BillingApi, useValue: { getWorkspaceBilling: vi.fn(() => bill) } },
       {
         provide: TeamApi,
         useValue: {
@@ -159,7 +166,7 @@ describe('Settings › Team', () => {
     const { host } = await render();
 
     expect(textOf(host.querySelector('[data-summary]'))).toBe(
-      'You and 1 coach, 5 clients between you. Each client has one coach, and a coach sees only their own; you see every client.',
+      'You and 1 coach · 2 seats this month',
     );
     const rows = Array.from(host.querySelectorAll('[data-member]'));
     expect(rows.map((row) => row.getAttribute('data-member'))).toEqual(['owner-1', 'coach-1']);
@@ -182,7 +189,14 @@ describe('Settings › Team', () => {
       getCoachInvitations: vi.fn(() =>
         of([
           invitation(),
-          invitation({ id: 'invite-old', email: 'ziad@example.test', expiresAtUtc: inDays(-1) }),
+          // Sent before the other on its own clock reading: two readings a moment apart can
+          // straddle a millisecond and sort the "old" one first.
+          invitation({
+            id: 'invite-old',
+            email: 'ziad@example.test',
+            createdAtUtc: inDays(-9),
+            expiresAtUtc: inDays(-1),
+          }),
           invitation({ id: 'invite-done', status: 'Accepted' }),
         ]),
       ),
@@ -417,15 +431,45 @@ describe('Settings › Team', () => {
   });
 
   it('invites the owner of a one-person space to coach with a team', async () => {
-    const { host } = await render({
-      getTeamMembers: vi.fn(() => of([member()])),
-      getCoachInvitations: vi.fn(() => of([])),
-    });
+    const { host } = await render(
+      { getTeamMembers: vi.fn(() => of([member()])), getCoachInvitations: vi.fn(() => of([])) },
+      false,
+      of({ currentMonth: { amounts: { seats: 1 } } }),
+    );
 
     expect(textOf(host.querySelector('[data-summary]'))).toBe(
-      'Just you so far. Invite a coach and give them their own clients: a coach sees only the clients you give them.',
+      'Just you so far · 1 seat this month',
     );
     expect(textOf(host.querySelector('app-empty-state h2'))).toBe('Coach with a team');
+  });
+
+  it('says how a team works in three lines, and that each coach invited is a seat (critique B3a)', async () => {
+    const { fixture, host } = await render();
+
+    expect(Array.from(host.querySelectorAll('[data-how] li')).map(textOf)).toEqual([
+      'One coach per client, given from the client’s profile.',
+      'You see every client and all their data, and a coach only their own. Chats stay between a client and their coach, even from you.',
+      'A leaving coach’s clients come back to you, and they are told.',
+    ]);
+    // A page of its own now, out of the Settings column.
+    expect(host.querySelector('app-settings-frame')).toBeNull();
+
+    press(host, 'Invite a coach');
+    await settle(fixture);
+    expect(textOf(dialog()?.querySelector('[data-seat]'))).toBe(
+      'Each coach you invite counts as a seat on your TB Gym bill.',
+    );
+  });
+
+  it('names the team without its seats when the bill cannot be read', async () => {
+    const { host } = await render(
+      {},
+      false,
+      throwError(() => new HttpErrorResponse({ status: 500 })),
+    );
+
+    expect(textOf(host.querySelector('[data-summary]'))).toBe('You and 1 coach');
+    expect(host.querySelectorAll('[data-member]').length).toBe(2);
   });
 
   it('offers another try when the team cannot be read', async () => {

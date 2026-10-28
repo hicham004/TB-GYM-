@@ -10,12 +10,60 @@ import { clientListView, overviewRow, recentDays } from '../../../testing/client
 import {
   clientRow,
   clientWeek,
+  coachChip,
   formerClientRow,
   mapClientList,
   matches,
   type ClientListContext,
   type ClientRow,
 } from './clients.models';
+
+describe('the owner’s Coach filter (critique B3a)', () => {
+  const row = (coachId: string, coach: string | null): ClientRow =>
+    ({ coachId, coach, filters: new Set(['all']), searchText: '' }) as unknown as ClientRow;
+  const rows = [
+    row('me', null),
+    row('lea', 'Lea Khoury'),
+    row('adam', 'Adam Sabbagh'),
+    row('lea', 'Lea Khoury'),
+  ];
+
+  it('offers every coach with clients here, you first, then the others by name', () => {
+    const chip = coachChip(rows, '', 'me', 'en-US');
+
+    expect(chip?.name).toBe('Coach');
+    expect(chip?.active).toBe(false);
+    expect(chip?.items).toEqual([
+      { label: 'Every coach', action: '' },
+      { label: 'You', action: 'me' },
+      { label: 'Adam Sabbagh', action: 'adam' },
+      { label: 'Lea Khoury', action: 'lea' },
+    ]);
+  });
+
+  it('names the chosen coach, and narrows nothing for one the list does not hold', () => {
+    expect(coachChip(rows, 'lea', 'me', 'en-US')).toMatchObject({
+      name: 'Coach: Lea Khoury',
+      active: true,
+    });
+    expect(coachChip(rows, 'me', 'me', 'en-US')).toMatchObject({
+      name: 'Coach: You',
+      active: true,
+    });
+    expect(coachChip(rows, 'gone', 'me', 'en-US')).toMatchObject({ name: 'Coach', active: false });
+  });
+
+  it('has no chip on a list with one coach, as every coach’s own list is', () => {
+    expect(coachChip([row('me', null), row('me', null)], '', 'me', 'en-US')).toBeNull();
+    expect(coachChip([], '', 'me', 'en-US')).toBeNull();
+  });
+
+  it('keeps only the chosen coach’s clients, and every client without a choice', () => {
+    expect(matches(rows[1], 'all', '', 'lea')).toBe(true);
+    expect(matches(rows[2], 'all', '', 'lea')).toBe(false);
+    expect(matches(rows[2], 'all', '')).toBe(true);
+  });
+});
 
 const context: ClientListContext = {
   locale: 'en-US',

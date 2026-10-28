@@ -66,6 +66,42 @@ export function memberRows(
     });
 }
 
+/** Someone on the team as a coach reads it (critique B3a): who, in which role, since when. */
+export interface RosterMember {
+  readonly displayName: string;
+  readonly role: 'Owner' | 'Coach';
+  readonly joinedAtUtc: string;
+  readonly isYou: boolean;
+}
+
+export interface RosterRow {
+  readonly name: string;
+  readonly initials: string;
+  readonly isOwner: boolean;
+  readonly isYou: boolean;
+  readonly role: string;
+  readonly joined: string;
+}
+
+/** The roster as the server orders it, the owner first: the same faces, roles and dates as Team. */
+export function rosterRows(
+  members: readonly RosterMember[],
+  locale: string,
+  timeZone: string | null = null,
+): readonly RosterRow[] {
+  return members.map((member) => {
+    const isOwner = member.role === 'Owner';
+    return {
+      name: member.displayName,
+      initials: initialsOf(member.displayName),
+      isOwner,
+      isYou: member.isYou,
+      role: isOwner ? $localize`Owner` : $localize`Coach`,
+      joined: $localize`Joined ${workspaceDay(member.joinedAtUtc, locale, timeZone)}:date:`,
+    };
+  });
+}
+
 /** Invitations still waiting for an answer, newest first. */
 export function invitationRows(
   invitations: readonly ClientInvitation[],
@@ -115,16 +151,23 @@ export function invitationRows(
     });
 }
 
-/** "You and 2 coaches, 31 clients between you." The line under the heading. */
-export function teamSummary(members: readonly TeamMember[]): string {
+/**
+ * "You and 2 coaches · 3 seats this month" (critique B3a), the line under the heading. The seats are the
+ * bill's (PBL-002: everyone on staff at any moment of the month), so a coach removed this month still
+ * counts; the amounts stay on Billing. Without the bill's answer the line names the team alone.
+ */
+export function teamSummary(members: readonly TeamMember[], seats: number | null): string {
   const coaches = members.filter((member) => member.role === 'Coach').length;
-  const clients = members.reduce((sum, member) => sum + member.assignedClientCount, 0);
-  if (coaches === 0) {
-    return $localize`Just you so far. Invite a coach and give them their own clients: a coach sees only the clients you give them.`;
-  }
   const team =
-    coaches === 1 ? $localize`You and 1 coach` : $localize`You and ${coaches}:count: coaches`;
-  return $localize`${team}:team:, ${clientCount(clients)}:clients: between you. Each client has one coach, and a coach sees only their own; you see every client.`;
+    coaches === 0
+      ? $localize`Just you so far`
+      : coaches === 1
+        ? $localize`You and 1 coach`
+        : $localize`You and ${coaches}:count: coaches`;
+  if (seats === null) return team;
+  const bill =
+    seats === 1 ? $localize`1 seat this month` : $localize`${seats}:count: seats this month`;
+  return `${team} · ${bill}`;
 }
 
 function clientCount(count: number): string {

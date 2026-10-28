@@ -15,15 +15,32 @@ import type {
   CoachRemovalResponse,
   InvitationSummary,
   TeamMemberSummary,
+  TeamRosterMember,
 } from '../../core/api/generated';
+import type { RosterMember } from './team.models';
 
 /**
- * The owner's team endpoints (ADR 0026). Kept out of `ApiClient` so they load only with the
- * screens that use them — the Team page and the client page's reassign action.
+ * The team's endpoints (ADR 0026): the owner's, and the roster every coach reads. Kept out of
+ * `ApiClient` so they load only with the screens that use them — the Team pages and the client
+ * page's reassign action.
  */
 @Injectable({ providedIn: 'root' })
 export class TeamApi {
   private readonly http = inject(HttpClient);
+
+  /** The team as every member of staff reads it (critique B3a): names, roles and since when. */
+  getRoster(): Observable<RosterMember[]> {
+    return this.http.get<TeamRosterMember[]>('/api/team/roster').pipe(
+      map((items) =>
+        items.map((item) => ({
+          displayName: item.displayName,
+          role: item.role === 'Owner' ? 'Owner' : 'Coach',
+          joinedAtUtc: item.joinedAtUtc,
+          isYou: item.isYou,
+        })),
+      ),
+    );
+  }
 
   getTeamMembers(): Observable<TeamMember[]> {
     return this.http.get<TeamMemberSummary[]>('/api/team/members').pipe(

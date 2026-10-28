@@ -9,6 +9,7 @@ import type {
   SessionDayCountView,
 } from '../../core/api/generated';
 import { initialsOf } from '../../shell/initials';
+import type { UiMenuItem } from '../../ui/menu';
 import type { StatusPillTone } from '../../ui/status-pill';
 import { ago, daysBetween } from '../dashboard/coach-today.models';
 
@@ -61,6 +62,8 @@ export interface ClientRow {
   link: string;
   /** The client's coach, shown to an Owner for a team member's client; null for the caller's own. */
   coach: string | null;
+  /** Who coaches the client, the caller included: what the owner's Coach filter keeps (B3a). */
+  coachId: string;
   status: { label: string; tone: StatusPillTone };
   /** Why the client needs attention, in short words joined by "·"; empty when nothing does. */
   reasons: string;
@@ -105,10 +108,14 @@ const ENDING_SOON_DAYS = 14;
 
 export function mapClientList(view: ClientOverviewView, context: ClientListContext): ClientList {
   const rows = view.clients.map((row) => clientRow(row, view.today, context));
-  const counts = Object.fromEntries(
+  return { rows, counts: filterCounts(rows) };
+}
+
+/** How many of these rows each chip holds: the whole list's, or one coach's (critique B3a). */
+export function filterCounts(rows: readonly ClientRow[]): Record<ClientFilter, number> {
+  return Object.fromEntries(
     CLIENT_FILTERS.map((filter) => [filter, rows.filter((row) => row.filters.has(filter)).length]),
   ) as Record<ClientFilter, number>;
-  return { rows, counts };
 }
 
 export function clientRow(
@@ -139,6 +146,7 @@ export function clientRow(
       context.userId !== null && client.assignedCoachUserId !== context.userId
         ? client.assignedCoachName
         : null,
+    coachId: client.assignedCoachUserId,
     status: statusPill(row.status),
     reasons: row.attention
       .filter((kind) => kind !== 'PlanEndingSoon')
@@ -155,10 +163,58 @@ export function clientRow(
 }
 
 /** Whether a row answers the chosen chip and every word typed in the search box. */
-export function matches(row: ClientRow, filter: ClientFilter, search: string): boolean {
+export function matches(
+  row: ClientRow,
+  filter: ClientFilter,
+  search: string,
+  coachId = '',
+): boolean {
   if (!row.filters.has(filter)) return false;
+  if (coachId !== '' && row.coachId !== coachId) return false;
   const words = searchable(search).split(/\s+/).filter(Boolean);
   return words.every((word) => row.searchText.includes(word));
+}
+
+/** The owner's Coach filter (critique B3a), a chip with a menu as the exercise library's are. */
+export interface CoachChip {
+  /** "Coach", or "Coach: Lea Khoury" once one is chosen: the chip's words and its name. */
+  readonly name: string;
+  /** Whether the list is narrowed to the chosen coach, a coach the list still holds. */
+  readonly active: boolean;
+  readonly items: readonly UiMenuItem[];
+}
+
+/**
+ * One choice per coach with clients here: you first, then the others by name. A list with one coach,
+ * as every coach's own list is, has nothing to filter by, so it has no chip.
+ */
+export function coachChip(
+  rows: readonly ClientRow[],
+  chosen: string,
+  me: string | null,
+  locale: string,
+): CoachChip | null {
+  const coaches = new Map<string, string>();
+  for (const row of rows) {
+    if (!coaches.has(row.coachId)) coaches.set(row.coachId, row.coach ?? '');
+  }
+  if (coaches.size < 2) return null;
+
+  const you = $localize`You`;
+  const others = [...coaches]
+    .filter(([id]) => id !== me)
+    .sort(([, a], [, b]) => a.localeCompare(b, locale));
+  const items: UiMenuItem[] = [
+    { label: $localize`Every coach`, action: '' },
+    ...(me !== null && coaches.has(me) ? [{ label: you, action: me }] : []),
+    ...others.map(([id, name]) => ({ label: name, action: id })),
+  ];
+  const chosenName = chosen === me && coaches.has(chosen) ? you : coaches.get(chosen);
+  return {
+    name: chosenName === undefined ? $localize`Coach` : $localize`Coach: ${chosenName}:coach:`,
+    active: chosenName !== undefined,
+    items,
+  };
 }
 
 /**

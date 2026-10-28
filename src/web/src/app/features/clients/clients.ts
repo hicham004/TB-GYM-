@@ -22,6 +22,7 @@ import { Avatar } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
+import { UiMenu } from '../../ui/menu';
 import { SectionLink, SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
@@ -29,6 +30,8 @@ import { ClientListApi } from './client-list-api';
 import {
   CLIENT_FILTERS,
   CLIENT_FILTERS_WHEN_USED,
+  coachChip,
+  filterCounts,
   formerClientRow,
   mapClientList,
   matches,
@@ -65,6 +68,7 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
     SectionNav,
     Skeleton,
     StatusPill,
+    UiMenu,
   ],
   templateUrl: './clients.html',
   styleUrls: ['./clients.scss', './clients-toolbar.scss'],
@@ -99,9 +103,24 @@ export class Clients {
   /** The chip is kept in the address (`?show=attention`), so Back returns to the same list. */
   protected readonly filter = signal<ClientFilter>(initialFilter(this.route));
   protected readonly search = signal('');
+  /** The owner's Coach filter (critique B3a), kept in the address too (`?coach=<user id>`). */
+  protected readonly coach = signal(this.route.snapshot.queryParamMap.get('coach') ?? '');
+  // The owner's alone: a coach's list holds only their own clients (CLI-013).
+  protected readonly coachChip = computed(() =>
+    this.isOwner()
+      ? coachChip(this.list()?.rows ?? [], this.coach(), this.auth.user()?.id ?? null, this.locale)
+      : null,
+  );
+  /** The chosen coach while the list still has them; an address naming anyone else narrows nothing. */
+  private readonly chosenCoach = computed(() => (this.coachChip()?.active ? this.coach() : ''));
 
   protected readonly chips = computed(() => {
-    const counts = this.list()?.counts;
+    const coach = this.chosenCoach();
+    // Narrowed to one coach, each chip counts that coach's clients (critique B3a).
+    const counts =
+      coach === ''
+        ? this.list()?.counts
+        : filterCounts((this.list()?.rows ?? []).filter((row) => row.coachId === coach));
     const chosen = this.filter();
     return CLIENT_FILTERS.map((value) => ({
       value,
@@ -116,14 +135,17 @@ export class Clients {
   protected readonly visible = computed(() => {
     const filter = this.filter();
     const search = this.search();
-    return (this.list()?.rows ?? []).filter((row) => matches(row, filter, search));
+    const coach = this.chosenCoach();
+    return (this.list()?.rows ?? []).filter((row) => matches(row, filter, search, coach));
   });
 
   /** Announced politely as the list narrows, since the rows change without a page load. */
   protected readonly resultSummary = computed(() => {
     const total = this.list()?.rows.length ?? 0;
     const shown = this.visible().length;
-    if (total === 0 || (this.filter() === 'all' && this.search().trim() === '')) return '';
+    const narrowed =
+      this.filter() !== 'all' || this.search().trim() !== '' || this.chosenCoach() !== '';
+    if (total === 0 || !narrowed) return '';
     return shown === 1
       ? $localize`Showing 1 of ${total}:total: clients`
       : $localize`Showing ${shown}:shown: of ${total}:total: clients`;
@@ -219,6 +241,16 @@ export class Clients {
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { show: filter === 'all' ? null : filter },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  protected setCoach(coachId: string): void {
+    this.coach.set(coachId);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { coach: coachId === '' ? null : coachId },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });

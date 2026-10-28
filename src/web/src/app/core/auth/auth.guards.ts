@@ -59,6 +59,17 @@ export const ownerGuard: CanActivateFn = async () => {
 };
 
 /**
+ * Matches a route for the open workspace's owner only, so a route at the same address can serve the
+ * rest of the staff (critique B3a: the owner's Team, and the read-only one a coach opens).
+ */
+export const ownerMatchGuard: CanMatchFn = async () => {
+  const auth = inject(AuthStore);
+  const tenants = inject(TenantStore);
+  await auth.initialize();
+  return tenants.isOwner();
+};
+
+/**
  * A page every member of the chosen workspace has, whatever their role: Messages and Notifications. Someone
  * with no role there, such as a client who left or whose coaching ended, goes to Today, which tells them so,
  * as every other page does (audit COACH-14); the API would refuse them on these pages anyway.

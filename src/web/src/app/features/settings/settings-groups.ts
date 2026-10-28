@@ -14,7 +14,8 @@ export interface SettingsGroup {
 /**
  * The Settings pages a person reaches, by their role in the open workspace (C9). The coaching space's
  * pages are the owner's alone, as their APIs are; every member of staff has their own account pages.
- * A client's account pages open from Me, so a client gets no Settings section at all.
+ * A client's account pages open from Me, so a client gets no Settings section at all. Team is the
+ * owner's own sidebar row, and a coach reads it from here (critique B3a).
  */
 export function settingsGroups(role: TenantRole | null): readonly SettingsGroup[] {
   if (role === null || role === 'Client') return [];
@@ -28,7 +29,17 @@ export function settingsGroups(role: TenantRole | null): readonly SettingsGroup[
       { label: $localize`Password and security`, link: '/account/security' },
     ],
   };
-  if (role !== 'Owner') return [account];
+  // A coach's Settings still opens on their own account (C13); the team they read comes after.
+  if (role !== 'Owner') {
+    return [
+      account,
+      {
+        key: 'space',
+        label: $localize`Coaching space`,
+        items: [{ label: $localize`Team`, link: '/team' }],
+      },
+    ];
+  }
 
   return [
     {
@@ -38,7 +49,6 @@ export function settingsGroups(role: TenantRole | null): readonly SettingsGroup[
         { label: $localize`Name and region`, link: '/workspace' },
         { label: $localize`Brand`, link: '/workspace/brand' },
         { label: $localize`Nutrition`, link: '/workspace/nutrition' },
-        { label: $localize`Team`, link: '/team' },
         { label: $localize`Billing`, link: '/billing' },
         { label: $localize`Undelivered notices`, link: '/workspace/undelivered-notices' },
       ],

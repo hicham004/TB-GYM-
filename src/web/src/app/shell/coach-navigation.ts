@@ -2,7 +2,8 @@ import type { IconName } from '../ui/icon';
 
 /**
  * The locked coach navigation (Figma "Desktop Navigation v1", 118:135): three groups and eight
- * workspace-wide destinations, in this order. Group labels are headings, never controls.
+ * workspace-wide destinations, in this order, and the owner's Team (critique B3a), a ninth. Group
+ * labels are headings, never controls.
  *
  * Every destination is an existing lazy route behind its existing guard. Hiding a destination, or
  * pointing a coach's at another page, is presentation only: `ownerGuard` still protects the owner's
@@ -16,6 +17,7 @@ export type CoachDestinationKey =
   | 'check-ins'
   | 'messages'
   | 'products'
+  | 'team'
   | 'settings';
 
 export interface CoachDestination {
@@ -28,6 +30,10 @@ export interface CoachDestination {
   readonly section: readonly string[];
   /** Where the link goes for a coach, when that differs from the owner's page. */
   readonly coachLink?: string;
+  /** The prefixes it stands for on a coach's sidebar, when they differ from the owner's. */
+  readonly coachSection?: readonly string[];
+  /** The owner's sidebar alone has it; a coach reaches the page elsewhere, if at all. */
+  readonly ownerOnly?: boolean;
   /** Messaging has its own availability and its own unread count. */
   readonly messaging?: boolean;
 }
@@ -97,6 +103,16 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
         section: ['/products'],
       },
       {
+        // People, actions and money are not settings (critique B3a): the owner's Team is a page of its
+        // own. A coach opens their read-only Team from Settings, the owner's choice of 2026-10-28.
+        key: 'team',
+        label: $localize`Team`,
+        icon: 'team',
+        link: '/team',
+        section: ['/team'],
+        ownerOnly: true,
+      },
+      {
         key: 'settings',
         label: $localize`Settings`,
         icon: 'settings',
@@ -105,7 +121,8 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
         link: '/workspace',
         coachLink: '/notifications/settings',
         // Every page of the Settings layout (R5.2a), the account pages included.
-        section: ['/workspace', '/team', '/billing', '/account', '/notifications/settings'],
+        section: ['/workspace', '/billing', '/account', '/notifications/settings'],
+        coachSection: ['/team', '/account', '/notifications/settings'],
       },
     ],
   },
