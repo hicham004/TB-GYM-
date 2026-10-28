@@ -7,7 +7,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { UiToast } from '../../ui/toast';
 import { cancelledBlock, runningBlock } from '../../../testing/client-program-fixtures';
-import { press, query, settle } from '../../../testing/dom';
+import { fold, press, query, settle, toggleFold } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { blockCard, type ProgramContext } from './client-program.models';
 import { ProgramMaxes } from './program-maxes';
@@ -125,7 +125,7 @@ describe('the training maxes panel', () => {
   });
 
   it('shows each lift with its number, where it came from and how it moved', async () => {
-    const { host, api } = await render();
+    const { fixture, host, api } = await render();
 
     expect(api.getTrainingMaxes).toHaveBeenCalledWith('block-lean');
     expect(textOf(query(host, 'h2'))).toBe('Training maxes');
@@ -141,6 +141,7 @@ describe('the training maxes panel', () => {
     expect(textOf(lifts[1].querySelector('.source'))).toBe('From Maya’s recorded max · Mon 14 Sep');
     // The older max is kept, one tap away.
     expect(textOf(lifts[0].querySelector('summary'))).toBe('Earlier maxes 1');
+    await toggleFold(fixture, lifts[0], 'Earlier maxes');
     expect(textOf(lifts[0].querySelector('.history li'))).toContain('100 kg');
     expect(lifts[1].querySelector('details')).toBeNull();
   });
@@ -175,10 +176,10 @@ describe('the training maxes panel', () => {
     expect(textOf(suggestion?.querySelector('.detail'))).toBe(
       'From 130 kg for 3 reps at RPE 8 on Wed 30 Sep, week 2.',
     );
-    const how = suggestion?.querySelector('details.how');
-    expect(textOf(how?.querySelector('summary'))).toBe('How it is worked out');
-    expect(how?.hasAttribute('open')).toBe(false);
-    expect(textOf(how?.querySelector('p'))).toBe('Best logged set v1: …');
+    const how = fold(suggestion!, 'How it is worked out');
+    expect(how.open).toBe(false);
+    await toggleFold(fixture, suggestion!, 'How it is worked out');
+    expect(textOf(how.querySelector('p'))).toBe('Best logged set v1: …');
     expect(lifts[1].querySelector('.suggestion')).toBeNull();
     // Nothing changed on its own: the max in use is still the one shown.
     expect(textOf(lifts[0].querySelector('.value'))).toBe('120 kg');

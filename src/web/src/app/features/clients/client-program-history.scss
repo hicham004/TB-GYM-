@@ -3,28 +3,14 @@
 .history {
   border-block-start: 1px solid var(--tb-line);
   margin-block-start: 1rem;
-  padding-block-start: 0.75rem;
-}
-
-.history summary {
-  color: var(--tb-ink);
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 600;
-  min-block-size: 1.5rem;
-}
-
-.history summary:focus-visible {
-  border-radius: 4px;
-  outline: 3px solid var(--tb-focus);
-  outline-offset: 2px;
+  padding-block-start: 0.5rem;
 }
 
 .history-rows {
   display: grid;
   gap: 0.5rem;
   list-style: none;
-  margin: 0.625rem 0 0;
+  margin: 0;
   padding: 0;
 }
 

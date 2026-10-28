@@ -60,26 +60,15 @@
         }
       </div>
     </div>
-    <div class="views" role="group" aria-label="Show as" i18n-aria-label>
-      <button
-        type="button"
-        class="view"
-        [attr.aria-pressed]="filters().view === 'grid'"
-        (click)="setView('grid')"
-        i18n
-      >
-        Cards
-      </button>
-      <button
-        type="button"
-        class="view"
-        [attr.aria-pressed]="filters().view === 'list'"
-        (click)="setView('list')"
-        i18n
-      >
-        List
-      </button>
-    </div>
+    <app-segmented-control
+      class="views"
+      label="Show as"
+      i18n-label
+      hideLabel
+      [options]="viewOptions"
+      [selected]="filters().view"
+      (selectedChange)="setView($any($event))"
+    />
   </div>
 
   @switch (state()) {

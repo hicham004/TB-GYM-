@@ -5,7 +5,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, formSummary, press, query, settle, type } from '../../../testing/dom';
+import { fill, formSummary, press, query, settle, toggleFold, type } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ProgramMaxesUpdate } from './program-maxes-update';
 
@@ -225,6 +225,7 @@ describe('Update maxes for the coming weeks', () => {
     expect(textOf(section.querySelector('.sets li .was'))).toBe('was 80 kg');
     expect(textOf(section.querySelector('.sets li .delta'))).toBe('+17.5 kg');
     // The working-out is there for the coach who asks.
+    await toggleFold(fixture, section, 'How it is worked out');
     expect(textOf(section.querySelector('.how p'))).toContain('97.297 kg');
   });
 

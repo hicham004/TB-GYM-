@@ -3,7 +3,16 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { field, fill, formSummary, leave, press, settle } from '../../../testing/dom';
+import {
+  field,
+  fill,
+  fold,
+  formSummary,
+  leave,
+  press,
+  settle,
+  toggleFold,
+} from '../../../testing/dom';
 import {
   calculationRecord,
   calculationView,
@@ -91,10 +100,13 @@ describe('Work out targets', () => {
   });
 
   it('leaves sex and the kind of work for the coach to choose, with no default', async () => {
-    const { host } = await render();
+    const { fixture, host } = await render();
 
+    // Sex and work have nothing chosen; the usual formula waits, folded under its name.
+    expect(host.querySelectorAll('input[type="radio"]:checked').length).toBe(0);
+    expect(fold(host, 'Formula: Mifflin-St Jeor').open).toBe(false);
+    await toggleFold(fixture, host, 'Formula: Mifflin-St Jeor');
     expect(host.querySelectorAll('input[type="radio"]:checked').length).toBe(1);
-    // The one checked radio is the formula; sex and work have none.
     expect(radio(host, 'formula', 'MifflinStJeor').checked).toBe(true);
     expect(radio(host, 'work', 'Seated').checked).toBe(false);
     expect(host.querySelector<HTMLInputElement>('input[value="Female"]')!.checked).toBe(false);
@@ -213,6 +225,8 @@ describe('Work out targets', () => {
     const { fixture, host } = await render({}, { calculate });
 
     expect(host.querySelector('input[name="bodyFat"]')).toBeNull();
+    await toggleFold(fixture, host, 'Formula: Mifflin-St Jeor');
+    expect(host.querySelector('input[name="bodyFat"]')).toBeNull();
     radio(host, 'formula', 'KatchMcArdle').click();
     await settle(fixture);
     expect(host.querySelector('input[name="bodyFat"]')).not.toBeNull();
@@ -232,6 +246,39 @@ describe('Work out targets', () => {
       'client-1',
       expect.objectContaining({ bmrMethodKey: 'KatchMcArdle', bodyFatPercentage: 28 }),
     );
+  });
+
+  it('keeps Formula open while a formula is chosen in it, the usual one included (critique B2b)', async () => {
+    const { fixture, host } = await render();
+
+    await toggleFold(fixture, host, 'Formula: Mifflin-St Jeor');
+    radio(host, 'formula', 'KatchMcArdle').click();
+    await settle(fixture);
+    // A keyboard's arrows choose as they move: landing on the usual one must not hide the radios.
+    radio(host, 'formula', 'MifflinStJeor').click();
+    await settle(fixture);
+
+    expect(fold(host, 'Formula: Mifflin-St Jeor').open).toBe(true);
+    expect(radio(host, 'formula', 'MifflinStJeor').checked).toBe(true);
+  });
+
+  it('opens Formula on a refused body fat, with focus on the box (critique B2b)', async () => {
+    const calculate = vi.fn(() => of(calculationView()));
+    const { fixture, host } = await render({}, { calculate });
+    await toggleFold(fixture, host, 'Formula: Mifflin-St Jeor');
+    radio(host, 'formula', 'KatchMcArdle').click();
+    await settle(fixture);
+    await chooseTheirs(fixture, host);
+    press(host, '2 g a kilogram');
+    await settle(fixture);
+    await toggleFold(fixture, host, 'Formula: Katch-McArdle', false);
+
+    press(host, 'Work out targets');
+    await settle(fixture);
+
+    expect(calculate).not.toHaveBeenCalled();
+    expect(fold(host, 'Formula: Katch-McArdle').open).toBe(true);
+    expect(document.activeElement).toBe(host.querySelector('input[name="bodyFat"]'));
   });
 
   it('keeps what was typed and says why when the server refuses', async () => {

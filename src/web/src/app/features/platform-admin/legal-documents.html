@@ -99,26 +99,31 @@
             </ul>
           }
           @if (group.earlier.length > 0) {
-            <details class="earlier">
-              <summary i18n>Earlier versions ({{ group.earlier.length }})</summary>
-              <ul role="list">
-                @for (version of group.earlier; track version.id) {
-                  <li [attr.data-version]="version.id">
-                    <strong i18n>Version {{ version.version }}</strong
-                    >&ngsp;
-                    <span class="quiet"
-                      >{{ version.contextName }} · {{ inForce(version) }} ·
-                      {{ accepted(version) }}</span
-                    >&ngsp;
-                    <a class="read" [routerLink]="version.link" i18n
-                      >Read<span class="tb-visually-hidden">
-                        version {{ version.version }} of the {{ version.name }}</span
-                      ></a
-                    >
-                  </li>
-                }
-              </ul>
-            </details>
+            <app-disclosure
+              class="earlier"
+              label="Earlier versions ({{ group.earlier.length }})"
+              i18n-label
+            >
+              <ng-template appDisclosureContent>
+                <ul role="list">
+                  @for (version of group.earlier; track version.id) {
+                    <li [attr.data-version]="version.id">
+                      <strong i18n>Version {{ version.version }}</strong
+                      >&ngsp;
+                      <span class="quiet"
+                        >{{ version.contextName }} · {{ inForce(version) }} ·
+                        {{ accepted(version) }}</span
+                      >&ngsp;
+                      <a class="read" [routerLink]="version.link" i18n
+                        >Read<span class="tb-visually-hidden">
+                          version {{ version.version }} of the {{ version.name }}</span
+                        ></a
+                      >
+                    </li>
+                  }
+                </ul>
+              </ng-template>
+            </app-disclosure>
           }
         </section>
       }

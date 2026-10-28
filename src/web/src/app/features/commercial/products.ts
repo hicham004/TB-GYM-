@@ -22,6 +22,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { UiMenu } from '../../ui/menu';
@@ -45,7 +46,18 @@ import {
  */
 @Component({
   selector: 'app-products',
-  imports: [Button, EmptyState, Icon, NgTemplateOutlet, ProductSheet, Skeleton, UiConfirm, UiMenu],
+  imports: [
+    Button,
+    EmptyState,
+    Icon,
+    NgTemplateOutlet,
+    ProductSheet,
+    Skeleton,
+    UiConfirm,
+    UiDisclosure,
+    UiDisclosureContent,
+    UiMenu,
+  ],
   templateUrl: './products.html',
   styleUrl: './products.scss',
 })

@@ -9,7 +9,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, menuChoices, press, settle } from '../../../testing/dom';
+import { fill, fold, menuChoices, press, settle, toggleFold } from '../../../testing/dom';
 import { workspace } from '../../../testing/intake-fixtures';
 import {
   mayaMeasurements,
@@ -441,8 +441,8 @@ describe('Your entries', () => {
       expect(days[0].querySelector('button.tile img')!.getAttribute('src')).toBe(
         '/thumb/asset-Front-2026-10-03',
       );
-      const removed = host.querySelector<HTMLDetailsElement>('[data-removed]')!;
-      expect(removed.open).toBe(false);
+      const removed = host.querySelector<HTMLElement>('[data-removed]')!;
+      expect(removed.querySelector('details')?.open).toBe(false);
       expect(textOf(removed.querySelector('summary'))).toBe('Photos you removed (1)');
     });
 
@@ -527,10 +527,11 @@ describe('Your entries', () => {
     });
 
     it('explains how the trend is worked out, in words and without the method code', async () => {
-      const { host } = await render({ clientId: 'client-9' });
+      const { fixture, host } = await render({ clientId: 'client-9' });
 
-      const how = host.querySelector<HTMLDetailsElement>('details.how')!;
+      const how = fold(host, 'How the trend is worked out');
       expect(how.open).toBe(false);
+      await toggleFold(fixture, host, 'How the trend is worked out');
       expect(textOf(how)).toContain('Smoothed average, version 2.0');
       expect(textOf(how)).toContain('time constant 10 days');
       expect(textOf(how)).not.toContain('BodyweightTrendEwma');
@@ -539,7 +540,7 @@ describe('Your entries', () => {
     it('never shows a client how their trend is worked out', async () => {
       const { host } = await render();
 
-      expect(host.querySelector('details.how')).toBeNull();
+      expect(host.querySelector('.how')).toBeNull();
       expect(textOf(host)).not.toContain('Smoothed average');
     });
 

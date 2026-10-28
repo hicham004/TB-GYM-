@@ -19,6 +19,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Skeleton } from '../../ui/skeleton';
 import { UiToast } from '../../ui/toast';
 import { ClientProgramApi } from './client-program-api';
@@ -48,7 +49,7 @@ export function maxesKey(id: string, version: number): string {
  */
 @Component({
   selector: 'app-program-maxes',
-  imports: [Button, Skeleton],
+  imports: [Button, Skeleton, UiDisclosure, UiDisclosureContent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // The page lays itself out around this panel only while it has something to show.
   host: { '[attr.data-filled]': 'cards().length > 0 ? "" : null' },
@@ -110,10 +111,11 @@ export function maxesKey(id: string, version: number): string {
                           {{ suggestion.headline }}
                         </p>
                         <p class="detail" dir="auto">{{ suggestion.from }}</p>
-                        <details class="how">
-                          <summary i18n>How it is worked out</summary>
-                          <p class="how-text" dir="auto">{{ suggestion.explanation }}</p>
-                        </details>
+                        <app-disclosure class="how" label="How it is worked out" i18n-label>
+                          <ng-template appDisclosureContent>
+                            <p class="how-text" dir="auto">{{ suggestion.explanation }}</p>
+                          </ng-template>
+                        </app-disclosure>
                         <div class="suggestion-actions">
                           <button
                             appButton
@@ -152,22 +154,24 @@ export function maxesKey(id: string, version: number): string {
                     </p>
                   }
                   @if (card.earlier.length > 0) {
-                    <details class="history">
-                      <summary>
-                        <ng-container i18n>Earlier maxes</ng-container>&ngsp;<span class="count">{{
-                          card.earlier.length
-                        }}</span>
-                      </summary>
-                      <ul>
-                        @for (row of card.earlier; track row.id) {
-                          <li>
-                            <span class="past-value">{{ row.value }}</span>
-                            <span class="past-words" dir="auto">{{ row.words }}</span>
-                            <span class="past-reason" dir="auto">{{ row.reason }}</span>
-                          </li>
-                        }
-                      </ul>
-                    </details>
+                    <app-disclosure
+                      class="history"
+                      label="Earlier maxes"
+                      i18n-label
+                      [count]="card.earlier.length"
+                    >
+                      <ng-template appDisclosureContent>
+                        <ul>
+                          @for (row of card.earlier; track row.id) {
+                            <li>
+                              <span class="past-value">{{ row.value }}</span>
+                              <span class="past-words" dir="auto">{{ row.words }}</span>
+                              <span class="past-reason" dir="auto">{{ row.reason }}</span>
+                            </li>
+                          }
+                        </ul>
+                      </ng-template>
+                    </app-disclosure>
                   }
                 </li>
               }
@@ -293,19 +297,8 @@ export function maxesKey(id: string, version: number): string {
     }
 
     // The exact estimate behind the rounded sentence (R5.4c), closed until the coach asks.
-    .how summary {
-      align-items: center;
-      color: var(--tb-accent-ink);
-      cursor: pointer;
-      display: inline-flex;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      min-block-size: 2rem;
-    }
-
-    .how summary:focus-visible {
-      outline: 3px solid var(--tb-focus);
-      outline-offset: 2px;
+    .how {
+      align-self: stretch;
     }
 
     .suggestion-actions {
@@ -337,30 +330,6 @@ export function maxesKey(id: string, version: number): string {
 
     .history {
       margin-block-start: 0.25rem;
-    }
-
-    .history summary {
-      align-items: center;
-      color: var(--tb-accent-ink);
-      cursor: pointer;
-      display: inline-flex;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      gap: 0.5rem;
-      min-block-size: 2rem;
-    }
-
-    .history summary:focus-visible {
-      outline: 3px solid var(--tb-focus);
-      outline-offset: 2px;
-    }
-
-    .count {
-      background: var(--tb-surface-2);
-      border-radius: 999px;
-      color: var(--tb-ink);
-      font-variant-numeric: tabular-nums;
-      padding: 0 0.5rem;
     }
 
     .history li {

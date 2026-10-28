@@ -94,8 +94,7 @@ h1 {
   gap: 0.375rem;
 }
 
-.toggle-chip,
-.view {
+.toggle-chip {
   align-items: center;
   background: var(--tb-surface);
   border: 1px solid var(--tb-line-strong);
@@ -110,28 +109,25 @@ h1 {
   padding: 0.25rem 0.875rem;
 }
 
-.toggle-chip:hover,
-.view:hover {
+.toggle-chip:hover {
   border-color: var(--tb-ink);
 }
 
-.toggle-chip:focus-visible,
-.view:focus-visible {
+.toggle-chip:focus-visible {
   outline: 2px solid var(--tb-focus);
   outline-offset: 2px;
 }
 
-.toggle-chip[aria-pressed='true'],
-.view[aria-pressed='true'] {
+.toggle-chip[aria-pressed='true'] {
   background: var(--tb-brand);
   border-color: var(--tb-brand);
   color: var(--tb-on-brand);
   font-weight: 700;
 }
 
+// Cards or List: a choice of how to show the page, not a filter, so it never looks like a chip.
 .views {
-  display: inline-flex;
-  gap: 0.25rem;
+  flex: none;
 }
 
 // ---------- the exercises ----------

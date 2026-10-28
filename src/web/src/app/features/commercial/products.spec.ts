@@ -7,7 +7,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoachingProductView, ProductCatalog } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, fill, menuChoices, press, settle, tick } from '../../../testing/dom';
+import {
+  button,
+  fill,
+  fold,
+  menuChoices,
+  press,
+  settle,
+  tick,
+  toggleFold,
+} from '../../../testing/dom';
 import { atlasCatalog, offer, product } from '../../../testing/product-fixtures';
 import { Products } from './products';
 import { ProductsApi } from './products-api';
@@ -127,7 +136,7 @@ describe('Plans you sell', () => {
   });
 
   it('shows each plan with its clients, price options shortest first and what each includes', async () => {
-    const { host } = await render();
+    const { fixture, host } = await render();
 
     expect(textOf(host.querySelector('h1'))).toBe('Plans you sell');
     expect(textOf(host.querySelector('.lede'))).toBe('2 plans for sale · 8 clients on them now');
@@ -160,12 +169,10 @@ describe('Plans you sell', () => {
     expect(textOf(strength.querySelector('.option .length'))).toBe('8 weeks · Meet prep');
 
     // Old prices and plans no longer sold wait behind a closed disclosure.
-    const retired = online.querySelector<HTMLDetailsElement>('details.retired')!;
-    expect(retired.open).toBe(false);
-    expect(textOf(retired.querySelector('summary'))).toBe('Old price options (1)');
-    const stopped = host.querySelector<HTMLDetailsElement>('details.stopped')!;
+    expect(fold(online, 'Old price options (1)').open).toBe(false);
+    const stopped = fold(host, 'No longer sold (1)');
     expect(stopped.open).toBe(false);
-    expect(textOf(stopped.querySelector('summary'))).toBe('No longer sold (1)');
+    await toggleFold(fixture, host, 'No longer sold (1)');
     expect(textOf(stopped.querySelector('.card-name'))).toBe('Summer Shred');
     expect(stopped.querySelector('.card-foot')).toBeNull();
   });
@@ -193,7 +200,9 @@ describe('Plans you sell', () => {
     press(host, 'Try again');
     await settle(fixture);
     expect(api.getCatalog).toHaveBeenCalledTimes(2);
-    expect(host.querySelectorAll('.card')).toHaveLength(3);
+    // Two plans for sale, and the one no longer sold waits in its closed fold.
+    expect(host.querySelectorAll('.card')).toHaveLength(2);
+    expect(fold(host, 'No longer sold (1)').open).toBe(false);
   });
 
   it('creates a plan with its first price option, named by its length unless the coach names it', async () => {

@@ -87,19 +87,6 @@
   gap: 0.5rem;
 }
 
-.earlier summary {
-  color: var(--tb-ink);
-  cursor: pointer;
-  font-weight: 600;
-  min-block-size: 2.5rem;
-  padding-block: 0.5rem;
-}
-
-.earlier summary:focus-visible {
-  outline: 3px solid var(--tb-focus);
-  outline-offset: 2px;
-}
-
 .earlier ul {
   display: flex;
   flex-direction: column;

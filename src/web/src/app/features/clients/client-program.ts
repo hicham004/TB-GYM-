@@ -28,6 +28,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Control } from '../../ui/field';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
@@ -89,6 +90,8 @@ import { ProgramSession } from './program-session';
     RouterLink,
     Skeleton,
     StatusPill,
+    UiDisclosure,
+    UiDisclosureContent,
   ],
   templateUrl: './client-program.html',
   styleUrls: ['./client-program.scss', './client-program-history.scss'],

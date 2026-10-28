@@ -39,6 +39,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
@@ -108,6 +109,8 @@ function isConflict(error: unknown): error is HttpErrorResponse {
     ShareTeaser,
     StatusLabel,
     UiConfirm,
+    UiDisclosure,
+    UiDisclosureContent,
     UiMenu,
   ],
   templateUrl: './today-training.html',
@@ -200,6 +203,8 @@ export class TodayTraining implements HoldsUnsavedWork {
   protected readonly setDrafts = signal<WorkoutSetDrafts>({});
   protected readonly savingSetIds = signal<ReadonlySet<string>>(new Set());
   protected readonly savingWorkoutIds = signal<ReadonlySet<string>>(new Set());
+  /** The sets whose More options is open; a refused effort opens it on its box (critique B2b). */
+  private readonly optionsOpen = signal<ReadonlySet<string>>(new Set());
   protected readonly workoutNotes: Record<string, string> = {};
   private readonly errorSummary = viewChild<ElementRef<HTMLElement>>('errorSummary');
   protected readonly mediaDialog = viewChild<ElementRef<HTMLElement>>('mediaDialog');
@@ -321,6 +326,7 @@ export class TodayTraining implements HoldsUnsavedWork {
         // The server's own refusal would cost a round trip and read like a system (CLIENT-5).
         const effort = effortOutOfRange(snapshot);
         if (effort) {
+          this.optionsToggled(set, true);
           this.reportSetError(
             setId,
             effort === 'rpe'
@@ -818,6 +824,21 @@ export class TodayTraining implements HoldsUnsavedWork {
   /** The effort field whose number the server would refuse, so its hint says so at once. */
   protected effortProblem(draft: WorkoutSetDraft | null): 'rpe' | 'rir' | null {
     return draft ? effortOutOfRange(draft) : null;
+  }
+
+  protected optionsShown(set: ClientSetView): boolean {
+    return set.performanceId !== null && this.optionsOpen().has(set.performanceId);
+  }
+
+  protected optionsToggled(set: ClientSetView, open: boolean): void {
+    const id = set.performanceId;
+    if (!id) return;
+    this.optionsOpen.update((ids) => {
+      const next = new Set(ids);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   }
 
   protected updateSetDraft(

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { trainingSetTypeLabel } from '../../core/i18n/display-labels';
-import { Icon } from '../../ui/icon';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { libraryNames, setSummary, type LibraryExercise } from './program-builder.models';
 import type { DraftExercise, ProgramDraft } from './training-builder.models';
@@ -8,7 +8,7 @@ import type { DraftExercise, ProgramDraft } from './training-builder.models';
 /** A read-only look at the client's prescriptions, without inventing dates or calculated loads. */
 @Component({
   selector: 'app-program-publish-preview',
-  imports: [Icon, SegmentedControl],
+  imports: [SegmentedControl, UiDisclosure, UiDisclosureContent],
   templateUrl: './program-publish-preview.html',
   styleUrl: './program-publish-preview.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

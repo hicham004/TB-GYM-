@@ -15,7 +15,7 @@ import {
   workspace,
 } from '../../../testing/client-strength-fixtures';
 import { profile } from '../../../testing/client-nutrition-fixtures';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, press, settle, toggleFold } from '../../../testing/dom';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -125,11 +125,12 @@ describe('A client’s strength history', () => {
   });
 
   it('lists every max of a lift behind a closed disclosure, with where each came from', async () => {
-    const { host } = await render();
+    const { fixture, host } = await render();
 
-    const history = host.querySelector<HTMLDetailsElement>('[data-lift] [data-history]')!;
-    expect(history.open).toBe(false);
+    const history = host.querySelector<HTMLElement>('[data-lift] [data-history]')!;
+    expect(history.querySelector('details')?.open).toBe(false);
     expect(textOf(history.querySelector('summary'))).toBe('All 3 on record');
+    await toggleFold(fixture, history, 'All 3 on record');
     expect(Array.from(history.querySelectorAll('.entry')).map((item) => textOf(item))).toEqual([
       'Sun 20 Sep 92.5 kg Tested 1RM Tested Tested after the deload week.',
       'Tue 15 Sep 62.5 kg Training max Lean & Strong · Phase 2, from week 1, typed',

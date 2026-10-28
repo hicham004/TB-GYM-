@@ -301,12 +301,26 @@ describe('the exercise library', () => {
 
   it('switches between cards and a list without asking the server again', async () => {
     const { harness, host, api } = await render();
-    press(host, 'List');
+    // The kit's segmented control, each choice with its glyph and its word, never a chip (B2b).
+    const views = host.querySelector('app-segmented-control.views')!;
+    expect(textOf(views.querySelector('legend'))).toBe('Show as');
+    expect(
+      Array.from(views.querySelectorAll('label')).map((label) => [
+        textOf(label),
+        label.querySelector('app-icon') !== null,
+      ]),
+    ).toEqual([
+      ['Cards', true],
+      ['List', true],
+    ]);
+    expect(field(host, 'Cards').checked).toBe(true);
+
+    tick(host, 'List');
     await settle(harness.fixture);
 
     expect(params()).toEqual({ view: 'list' });
     expect(host.querySelector('.exercises')?.classList).toContain('as-list');
-    expect(button(host, 'List').getAttribute('aria-pressed')).toBe('true');
+    expect(field(host, 'List').checked).toBe(true);
     expect(api.search).toHaveBeenCalledTimes(1);
   });
 

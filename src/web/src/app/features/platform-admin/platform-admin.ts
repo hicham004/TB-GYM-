@@ -20,6 +20,7 @@ import { Avatar, type AvatarPresentation } from '../../ui/avatar';
 import { Button, ButtonLink } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
 import { UiDialog } from '../../ui/dialog';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { UiSheet } from '../../ui/sheet';
@@ -95,6 +96,8 @@ interface SpaceRow {
     StatTile,
     StatusPill,
     UiConfirm,
+    UiDisclosure,
+    UiDisclosureContent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './platform-admin.html',

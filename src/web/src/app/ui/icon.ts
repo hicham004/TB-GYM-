@@ -196,6 +196,15 @@ const GLYPHS = {
       ' 4.75 5.5ZM3.75 8.75H16.25',
   },
   'chevron-left': { size: 20, path: 'M12 6L8 10L12 14' },
+  // The exercise library's Cards and List (critique B2b), drawn in code on the same 20px grid.
+  grid: {
+    size: 20,
+    path: 'M4 4H8.5V8.5H4V4ZM11.5 4H16V8.5H11.5V4ZM4 11.5H8.5V16H4V11.5ZM11.5 11.5H16V16H11.5V11.5Z',
+  },
+  list: {
+    size: 20,
+    path: 'M3.75 5.5H4.25M7.5 5.5H16.25M3.75 10H4.25M7.5 10H16.25M3.75 14.5H4.25M7.5 14.5H16.25',
+  },
 } as const satisfies Record<string, { size: number; path: string }>;
 
 export type IconName = keyof typeof GLYPHS;

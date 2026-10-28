@@ -517,7 +517,7 @@ for (const [width, height] of [
     await expect(page.getByText('Maya has no progress photos in this period.')).toBeVisible();
 
     // The entry tools are one collapsed section, and nothing of them is read until it is opened.
-    const entries = page.locator('details.entries');
+    const entries = page.locator('.entries details');
     await expect(entries).not.toHaveAttribute('open', '');
     await expect(entries.locator('summary')).toContainText('Entries and corrections');
     expect(
@@ -576,15 +576,15 @@ test('a coach logs a weight for the client from Entries and corrections, in the 
     },
   });
 
-  await page.locator('details.entries summary').click();
+  await page.locator('.entries summary').click();
   await expect(page.getByRole('tab', { name: 'Weight' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Measurements' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Photos' })).toBeVisible();
   // Added by the client, in a coach's words; and how the trend is worked out, without the method code.
   await expect(page.locator('[data-weighin]').first()).toContainText('Added by Maya');
-  await page.locator('details.how summary').click();
-  await expect(page.locator('details.how')).toContainText('Smoothed average, version 2.0');
-  await expect(page.locator('details.how')).not.toContainText('BodyweightTrendEwma');
+  await page.locator('.how summary').click();
+  await expect(page.locator('.how')).toContainText('Smoothed average, version 2.0');
+  await expect(page.locator('.how')).not.toContainText('BodyweightTrendEwma');
 
   await page.locator('[data-log-weight]').click();
   const sheet = page.getByRole('dialog', { name: 'Log weight for Maya' });

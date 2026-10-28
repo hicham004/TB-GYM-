@@ -114,65 +114,72 @@
               (chosen)="effortChanged(set, $event)"
             />
           </div>
-          <details class="more">
-            <summary i18n>Rest, tempo &amp; notes</summary>
-            <div class="numbers">
-              <app-field
-                [errors]="errors(set, 'restSeconds')"
-                label="Rest (seconds)"
-                i18n-label
-                density="compact"
-                ><input
-                  appControl
-                  type="number"
-                  min="0"
-                  max="3600"
-                  step="1"
-                  inputmode="numeric"
-                  [(ngModel)]="set.restSeconds"
-                  (ngModelChange)="changed()"
-              /></app-field>
-              <app-field label="Tempo" i18n-label density="compact"
-                ><input
-                  appControl
-                  maxlength="32"
-                  [(ngModel)]="set.tempo"
-                  (ngModelChange)="changed()"
-              /></app-field>
-              @if (
-                set.loadStrategy === 'PercentageWorkingMax' ||
-                set.loadStrategy === 'RpeChart' ||
-                set.loadStrategy === 'RpeBasedEpley'
-              ) {
+          <app-disclosure
+            class="more"
+            label="Rest, tempo &amp; notes"
+            i18n-label
+            [open]="moreOpen().has(set.key)"
+            (openChange)="moreToggled(set, $event)"
+          >
+            <ng-template appDisclosureContent>
+              <div class="numbers">
                 <app-field
-                  [errors]="errors(set, 'manualLoadOverride')"
-                  class="wide"
-                  label="Fixed load instead"
+                  [errors]="errors(set, 'restSeconds')"
+                  label="Rest (seconds)"
                   i18n-label
                   density="compact"
-                  help="Wins over the calculated load, in the selected unit."
-                  i18n-help
                   ><input
                     appControl
                     type="number"
                     min="0"
-                    max="2000"
-                    step="0.25"
-                    inputmode="decimal"
-                    [(ngModel)]="set.manualLoadOverride"
+                    max="3600"
+                    step="1"
+                    inputmode="numeric"
+                    [(ngModel)]="set.restSeconds"
                     (ngModelChange)="changed()"
                 /></app-field>
-              }
-              <app-field class="wide" label="Set note" i18n-label density="compact"
-                ><input
-                  appControl
-                  maxlength="1000"
-                  dir="auto"
-                  [(ngModel)]="set.coachNotes"
-                  (ngModelChange)="changed()"
-              /></app-field>
-            </div>
-          </details>
+                <app-field label="Tempo" i18n-label density="compact"
+                  ><input
+                    appControl
+                    maxlength="32"
+                    [(ngModel)]="set.tempo"
+                    (ngModelChange)="changed()"
+                /></app-field>
+                @if (
+                  set.loadStrategy === 'PercentageWorkingMax' ||
+                  set.loadStrategy === 'RpeChart' ||
+                  set.loadStrategy === 'RpeBasedEpley'
+                ) {
+                  <app-field
+                    [errors]="errors(set, 'manualLoadOverride')"
+                    class="wide"
+                    label="Fixed load instead"
+                    i18n-label
+                    density="compact"
+                    help="Wins over the calculated load, in the selected unit."
+                    i18n-help
+                    ><input
+                      appControl
+                      type="number"
+                      min="0"
+                      max="2000"
+                      step="0.25"
+                      inputmode="decimal"
+                      [(ngModel)]="set.manualLoadOverride"
+                      (ngModelChange)="changed()"
+                  /></app-field>
+                }
+                <app-field class="wide" label="Set note" i18n-label density="compact"
+                  ><input
+                    appControl
+                    maxlength="1000"
+                    dir="auto"
+                    [(ngModel)]="set.coachNotes"
+                    (ngModelChange)="changed()"
+                /></app-field>
+              </div>
+            </ng-template>
+          </app-disclosure>
         </div>
       }
     </li>

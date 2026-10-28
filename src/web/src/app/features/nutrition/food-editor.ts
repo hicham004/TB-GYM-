@@ -23,6 +23,7 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
@@ -69,6 +70,8 @@ type NumberKey =
     FormsModule,
     ModalFooter,
     SegmentedControl,
+    UiDisclosure,
+    UiDisclosureContent,
     UiSelect,
   ],
   templateUrl: './food-editor.html',

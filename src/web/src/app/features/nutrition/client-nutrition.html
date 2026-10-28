@@ -63,27 +63,33 @@
                 }
                 <app-targets-result [record]="made" />
                 @if (earlierWorkedOut().length > 0) {
-                  <details class="earlier" data-earlier-targets>
-                    <summary i18n>Earlier targets ({{ earlierWorkedOut().length }})</summary>
-                    <ul class="list">
-                      @for (entry of earlierWorkedOut(); track entry.item.id) {
-                        <li>
-                          <span class="what">
-                            {{ entry.on }}
-                            @if (entry.item.adjustment) {
-                              <span class="meta" i18n>Your macros</span>
-                            }
-                          </span>
-                          <span class="numbers" i18n
-                            >{{ entry.item.calories | number: '1.0-0' }} calories ·
-                            {{ entry.item.protein | number: '1.0-0' }} g protein ·
-                            {{ entry.item.carbohydrate | number: '1.0-0' }} g carbs ·
-                            {{ entry.item.fat | number: '1.0-0' }} g fat</span
-                          >
-                        </li>
-                      }
-                    </ul>
-                  </details>
+                  <app-disclosure
+                    class="earlier"
+                    data-earlier-targets
+                    label="Earlier targets ({{ earlierWorkedOut().length }})"
+                    i18n-label
+                  >
+                    <ng-template appDisclosureContent>
+                      <ul class="list">
+                        @for (entry of earlierWorkedOut(); track entry.item.id) {
+                          <li>
+                            <span class="what">
+                              {{ entry.on }}
+                              @if (entry.item.adjustment) {
+                                <span class="meta" i18n>Your macros</span>
+                              }
+                            </span>
+                            <span class="numbers" i18n
+                              >{{ entry.item.calories | number: '1.0-0' }} calories ·
+                              {{ entry.item.protein | number: '1.0-0' }} g protein ·
+                              {{ entry.item.carbohydrate | number: '1.0-0' }} g carbs ·
+                              {{ entry.item.fat | number: '1.0-0' }} g fat</span
+                            >
+                          </li>
+                        }
+                      </ul>
+                    </ng-template>
+                  </app-disclosure>
                 }
               } @else {
                 <p class="empty" data-no-targets i18n>
@@ -148,42 +154,49 @@
                 </p>
               }
               @if (otherPlans().length > 0) {
-                <details class="earlier" data-earlier-plans>
-                  <summary i18n>Other meal plans ({{ otherPlans().length }})</summary>
-                  <ul class="list">
-                    @for (plan of otherPlans(); track plan.row.id) {
-                      <li [attr.data-plan]="plan.row.state">
-                        <span class="what">
-                          <strong dir="auto">{{ plan.row.name }}</strong
-                          >&ngsp;<span class="meta">{{ plan.dates }}</span>
-                          @if (plan.stopped; as words) {
-                            <span class="meta stop-reason" dir="auto" data-stop-reason>{{
-                              words
-                            }}</span>
-                          }
-                        </span>
-                        &ngsp;<app-status-pill [label]="plan.state" [tone]="plan.tone" />&ngsp;<span
-                          class="numbers"
-                          i18n
-                          >{{ plan.row.calories | number: '1.0-0' }} calories</span
-                        >
-                        @if (plan.stoppable) {
-                          <button
-                            appButton
-                            type="button"
-                            variant="text"
-                            [attr.aria-label]="stopLabel(plan.row)"
-                            (click)="stop(plan.row)"
-                            data-stop-other
-                            i18n
+                <app-disclosure
+                  class="earlier"
+                  data-earlier-plans
+                  label="Other meal plans ({{ otherPlans().length }})"
+                  i18n-label
+                >
+                  <ng-template appDisclosureContent>
+                    <ul class="list">
+                      @for (plan of otherPlans(); track plan.row.id) {
+                        <li [attr.data-plan]="plan.row.state">
+                          <span class="what">
+                            <strong dir="auto">{{ plan.row.name }}</strong
+                            >&ngsp;<span class="meta">{{ plan.dates }}</span>
+                            @if (plan.stopped; as words) {
+                              <span class="meta stop-reason" dir="auto" data-stop-reason>{{
+                                words
+                              }}</span>
+                            }
+                          </span>
+                          &ngsp;<app-status-pill
+                            [label]="plan.state"
+                            [tone]="plan.tone"
+                          />&ngsp;<span class="numbers" i18n
+                            >{{ plan.row.calories | number: '1.0-0' }} calories</span
                           >
-                            Stop
-                          </button>
-                        }
-                      </li>
-                    }
-                  </ul>
-                </details>
+                          @if (plan.stoppable) {
+                            <button
+                              appButton
+                              type="button"
+                              variant="text"
+                              [attr.aria-label]="stopLabel(plan.row)"
+                              (click)="stop(plan.row)"
+                              data-stop-other
+                              i18n
+                            >
+                              Stop
+                            </button>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  </ng-template>
+                </app-disclosure>
               }
             </div>
           </section>

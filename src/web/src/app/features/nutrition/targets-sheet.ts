@@ -14,6 +14,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import type { FormulaSex, OccupationActivityType } from '../../core/api/generated';
 import { SheetForm } from '../../core/forms/sheet-form';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
@@ -55,7 +56,17 @@ const SEXES: readonly SegmentOption[] = [
  */
 @Component({
   selector: 'app-work-out-targets',
-  imports: [Button, Control, EntryActions, Field, FormSummary, SegmentedControl, TargetsResult],
+  imports: [
+    Button,
+    Control,
+    EntryActions,
+    Field,
+    FormSummary,
+    SegmentedControl,
+    TargetsResult,
+    UiDisclosure,
+    UiDisclosureContent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (result(); as made) {
@@ -294,44 +305,50 @@ const SEXES: readonly SegmentOption[] = [
           </app-field>
         </fieldset>
 
-        <details class="formula" [open]="formula() !== 'MifflinStJeor'">
-          <summary i18n>Formula: {{ formulaName() }}</summary>
-          <div class="choices" role="radiogroup" [attr.aria-label]="formulaLabel">
-            @for (option of formulas; track option.value) {
-              <label class="choice" [class.chosen]="formula() === option.value">
+        <app-disclosure
+          class="formula"
+          label="Formula: {{ formulaName() }}"
+          i18n-label
+          [(open)]="formulaOpen"
+        >
+          <ng-template appDisclosureContent>
+            <div class="choices" role="radiogroup" [attr.aria-label]="formulaLabel">
+              @for (option of formulas; track option.value) {
+                <label class="choice" [class.chosen]="formula() === option.value">
+                  <input
+                    type="radio"
+                    name="formula"
+                    [value]="option.value"
+                    [checked]="formula() === option.value"
+                    (change)="formula.set(option.value)"
+                  />
+                  <span class="choice-text">
+                    <strong>{{ option.label }}</strong
+                    >&ngsp;<span class="muted">{{ option.hint }}</span>
+                  </span>
+                </label>
+              }
+            </div>
+            @if (formula() === 'KatchMcArdle') {
+              <app-field
+                [label]="bodyFatLabel"
+                [errors]="shows('bodyFat', issues().bodyFat) ? issues().bodyFat : null"
+              >
                 <input
-                  type="radio"
-                  name="formula"
-                  [value]="option.value"
-                  [checked]="formula() === option.value"
-                  (change)="formula.set(option.value)"
+                  appControl
+                  name="bodyFat"
+                  type="number"
+                  inputmode="decimal"
+                  step="any"
+                  min="0"
+                  [value]="bodyFat() ?? ''"
+                  (input)="bodyFat.set(numberOrNull($any($event.target).valueAsNumber))"
+                  (blur)="attempt.touch('bodyFat')"
                 />
-                <span class="choice-text">
-                  <strong>{{ option.label }}</strong
-                  >&ngsp;<span class="muted">{{ option.hint }}</span>
-                </span>
-              </label>
+              </app-field>
             }
-          </div>
-          @if (formula() === 'KatchMcArdle') {
-            <app-field
-              [label]="bodyFatLabel"
-              [errors]="shows('bodyFat', issues().bodyFat) ? issues().bodyFat : null"
-            >
-              <input
-                appControl
-                name="bodyFat"
-                type="number"
-                inputmode="decimal"
-                step="any"
-                min="0"
-                [value]="bodyFat() ?? ''"
-                (input)="bodyFat.set(numberOrNull($any($event.target).valueAsNumber))"
-                (blur)="attempt.touch('bodyFat')"
-              />
-            </app-field>
-          }
-        </details>
+          </ng-template>
+        </app-disclosure>
 
         <app-form-summary>
           @if (error(); as message) {
@@ -493,19 +510,6 @@ const SEXES: readonly SegmentOption[] = [
         min-inline-size: 0;
       }
 
-      .formula summary {
-        color: var(--tb-ink);
-        cursor: pointer;
-        font-weight: 600;
-        min-block-size: 2.75rem;
-        padding-block: 0.625rem;
-      }
-
-      .formula summary:focus-visible {
-        outline: 3px solid var(--tb-focus);
-        outline-offset: 2px;
-      }
-
       .formula .choices {
         margin-block-end: 0.75rem;
       }
@@ -577,6 +581,11 @@ export class WorkOutTargets extends SheetForm {
   protected readonly fat = linkedSignal<number | null>(() => this.start().fat);
   protected readonly formula = linkedSignal<FormulaKey>(() => this.start().formula);
   protected readonly bodyFat = linkedSignal<number | null>(() => this.start().bodyFat);
+  /**
+   * Formula starts folded on the usual one and open on any other, and a refused body fat opens it. A
+   * choice made inside never closes it, which would hide the radio a keyboard's arrows are on.
+   */
+  protected readonly formulaOpen = linkedSignal(() => this.start().formula !== 'MifflinStJeor');
 
   protected readonly result = signal<WorkedOut | null>(null);
 
@@ -667,6 +676,7 @@ export class WorkOutTargets extends SheetForm {
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     if (this.problems() > 0) {
+      if (this.issues().bodyFat.length > 0) this.formulaOpen.set(true);
       this.refuse();
       return;
     }

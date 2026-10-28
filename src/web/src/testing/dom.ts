@@ -53,6 +53,34 @@ export function menuChoices(trigger: Element): HTMLButtonElement[] {
   return Array.from(list.querySelectorAll<HTMLButtonElement>('.item'));
 }
 
+/** The kit fold (`app-disclosure`, critique B2b) whose row reads `label`, found as a person finds it. */
+export function fold(host: ParentNode, label: string): HTMLDetailsElement {
+  const found = Array.from(
+    host.querySelectorAll<HTMLDetailsElement>('app-disclosure > details'),
+  ).find(
+    (details) => normalize(details.querySelector(':scope > summary .label')?.textContent) === label,
+  );
+  if (!found) throw new Error(`No fold reads "${label}".`);
+  return found;
+}
+
+/**
+ * Opens or closes the kit fold whose row reads `label`, as a press on its row does. jsdom gives a
+ * `<details>` no toggle of its own, so this sets it and sends the browser's `toggle` event.
+ */
+export async function toggleFold(
+  fixture: ComponentFixture<unknown>,
+  host: ParentNode,
+  label: string,
+  open = true,
+): Promise<HTMLDetailsElement> {
+  const details = fold(host, label);
+  details.open = open;
+  details.dispatchEvent(new Event('toggle'));
+  await settle(fixture);
+  return details;
+}
+
 /**
  * Finds a control the test is about to drive, and fails naming the selector when it is absent.
  * Without this a renamed or removed control surfaces as `Cannot read properties of null`, which

@@ -21,6 +21,7 @@ import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
@@ -63,7 +64,18 @@ import {
  */
 @Component({
   selector: 'app-legal-publish',
-  imports: [Button, Checkbox, Control, Field, FormSummary, ModalFooter, SegmentedControl, UiSelect],
+  imports: [
+    Button,
+    Checkbox,
+    Control,
+    Field,
+    FormSummary,
+    ModalFooter,
+    SegmentedControl,
+    UiDisclosure,
+    UiDisclosureContent,
+    UiSelect,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -141,14 +153,20 @@ import {
       </app-field>
 
       @if (paragraphs().length > 0) {
-        <details class="preview">
-          <summary i18n>Preview as people will read it</summary>
-          <article lang="en" dir="auto" data-preview>
-            @for (paragraph of paragraphs(); track $index) {
-              <p>{{ paragraph }}</p>
-            }
-          </article>
-        </details>
+        <app-disclosure
+          class="preview"
+          variant="panel"
+          label="Preview as people will read it"
+          i18n-label
+        >
+          <ng-template appDisclosureContent>
+            <article lang="en" dir="auto" data-preview>
+              @for (paragraph of paragraphs(); track $index) {
+                <p>{{ paragraph }}</p>
+              }
+            </article>
+          </ng-template>
+        </app-disclosure>
       }
 
       <div class="reviewed">
@@ -263,24 +281,10 @@ import {
       resize: vertical;
     }
 
-    .preview {
-      border: 1px solid var(--tb-line);
-      border-radius: var(--tb-radius-control);
-      padding: 0.625rem 0.875rem;
-    }
-
-    .preview summary {
-      color: var(--tb-ink);
-      cursor: pointer;
-      font-weight: 600;
-      min-block-size: 1.5rem;
-    }
-
     .preview article {
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
-      margin-block-start: 0.75rem;
       max-block-size: 22rem;
       overflow-y: auto;
     }

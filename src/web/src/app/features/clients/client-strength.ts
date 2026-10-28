@@ -21,6 +21,7 @@ import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Button } from '../../ui/button';
 import { isoWeekdayOfName } from '../../ui/calendar';
 import { UiConfirm } from '../../ui/confirm';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Skeleton } from '../../ui/skeleton';
 import { Sparkline } from '../../ui/sparkline';
 import { dayWords } from '../progress/progress-entries.models';
@@ -52,7 +53,16 @@ const PAGE = 100;
  */
 @Component({
   selector: 'app-client-strength',
-  imports: [Button, ExerciseHistory, RecordMax, Skeleton, Sparkline, UiConfirm],
+  imports: [
+    Button,
+    ExerciseHistory,
+    RecordMax,
+    Skeleton,
+    Sparkline,
+    UiConfirm,
+    UiDisclosure,
+    UiDisclosureContent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './client-strength.html',
   styleUrl: './client-strength.scss',

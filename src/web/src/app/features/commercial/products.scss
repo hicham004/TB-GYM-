@@ -255,59 +255,18 @@ h1 {
   padding-block: 0.75rem;
 }
 
-// ---------- what is no longer sold ----------
-
-details > summary {
-  align-items: center;
-  border-radius: var(--tb-radius-control);
-  color: var(--tb-muted);
-  cursor: pointer;
-  display: inline-flex;
-  font-weight: 600;
-  gap: 0.25rem;
-  list-style: none;
-  min-block-size: 2.75rem;
-}
-
-details > summary::-webkit-details-marker {
-  display: none;
-}
-
-details > summary:hover {
-  color: var(--tb-ink);
-}
-
-details > summary:focus-visible {
-  outline: 2px solid var(--tb-focus);
-  outline-offset: 2px;
-}
-
-details[open] > summary app-icon {
-  transform: rotate(180deg);
-}
+// ---------- what is no longer sold (the kit's folds) ----------
 
 .retired {
   border-block-start: 1px solid var(--tb-line);
 }
 
-.retired > summary {
-  font-size: 0.875rem;
-}
-
-.stopped {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.stopped .cards {
+  margin-block-start: 0.25rem;
 }
 
 .card-foot {
   border-block-start: 1px solid var(--tb-line);
   display: flex;
   padding-block-start: 0.375rem;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  details > summary app-icon {
-    transition: transform var(--tb-duration-fast) var(--tb-ease);
-  }
 }

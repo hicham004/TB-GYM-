@@ -321,25 +321,26 @@
 
     <!-- A coach's list of weigh-ins, with its corrections, is under "Entries and corrections". -->
     @if (!coachMode()) {
-      <details class="all-entries">
-        <summary i18n>All entries</summary>
-        @if (!entries().length) {
-          <p class="empty" i18n>No weight entries in this period yet.</p>
-        } @else {
-          <ol>
-            @for (entry of entries(); track entry.date) {
-              <li>
-                <time>{{ entry.date | date: 'mediumDate' }}</time
-                ><strong
-                  >{{ entry.displayValue | number: '1.0-2' }}
-                  {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</strong
-                >
-              </li>
-            }
-          </ol>
-        }
-        <a routerLink="/progress" i18n>Open the full entry history and corrections</a>
-      </details>
+      <app-disclosure class="all-entries" variant="panel" label="All entries" i18n-label>
+        <ng-template appDisclosureContent>
+          @if (!entries().length) {
+            <p class="empty" i18n>No weight entries in this period yet.</p>
+          } @else {
+            <ol>
+              @for (entry of entries(); track entry.date) {
+                <li>
+                  <time>{{ entry.date | date: 'mediumDate' }}</time
+                  ><strong
+                    >{{ entry.displayValue | number: '1.0-2' }}
+                    {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</strong
+                  >
+                </li>
+              }
+            </ol>
+          }
+          <a routerLink="/progress" i18n>Open the full entry history and corrections</a>
+        </ng-template>
+      </app-disclosure>
     }
     <p class="footnote" i18n>
       These figures show recorded activity side by side. One does not explain another.

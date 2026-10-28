@@ -9,7 +9,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type { CheckInFormPage, CheckInFormSummary } from '../../core/api/generated';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
-import { press, settle } from '../../../testing/dom';
+import { fold, press, settle, toggleFold } from '../../../testing/dom';
 import { CheckInForms } from './checkin-forms';
 
 function form(overrides: Partial<CheckInFormSummary> = {}): CheckInFormSummary {
@@ -86,7 +86,7 @@ describe('Check-in forms (audit A14b)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('shows each form as a card that opens it, archived ones folded away', async () => {
-    const { host } = await render(() =>
+    const { harness, host } = await render(() =>
       of(
         page([
           form(),
@@ -136,9 +136,9 @@ describe('Check-in forms (audit A14b)', () => {
       ['Monthly review', '/checkins/forms/form-2'],
       ['Recovery', '/checkins/forms/form-4'],
     ]);
-    const archived = host.querySelector<HTMLDetailsElement>('details.archived')!;
+    const archived = fold(host, 'Archived (1)');
     expect(archived.open).toBe(false);
-    expect(textOf(archived.querySelector('summary'))).toBe('Archived (1)');
+    await toggleFold(harness.fixture, host, 'Archived (1)');
     expect(cardParts(archived)).toEqual([
       ['Archived', '6 questions', 'Old intake', 'Takes two minutes.', '', 'Published Thu 22 Oct'],
     ]);
@@ -170,7 +170,7 @@ describe('Check-in forms (audit A14b)', () => {
     expect(textOf(host.querySelector('.all-archived'))).toBe(
       'Every form is archived. Write a new one, or open an archived form below to restore it.',
     );
-    expect(host.querySelector('details.archived')).not.toBeNull();
+    expect(fold(host, 'Archived (1)')).not.toBeNull();
   });
 
   it('says the forms could not be loaded, and reads them again on Try again', async () => {

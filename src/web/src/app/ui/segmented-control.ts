@@ -1,9 +1,12 @@
 import { booleanAttribute, ChangeDetectionStrategy, Component, input, model } from '@angular/core';
+import { Icon, type IconName } from './icon';
 
 export interface SegmentOption {
   readonly value: string;
   readonly label: string;
   readonly disabled?: boolean;
+  /** Drawn before the word, never instead of it (critique B2b's Cards and List). */
+  readonly icon?: IconName;
 }
 
 let nextGroupId = 0;
@@ -11,6 +14,7 @@ let nextGroupId = 0;
 /** A small single choice control. Native radios provide the keyboard and screen reader behavior. */
 @Component({
   selector: 'app-segmented-control',
+  imports: [Icon],
   template: `
     <fieldset>
       <legend [class.tb-visually-hidden]="hideLabel()">{{ label() }}</legend>
@@ -25,7 +29,12 @@ let nextGroupId = 0;
               [disabled]="option.disabled || false"
               (change)="selected.set(option.value)"
             />
-            <span>{{ option.label }}</span>
+            <span>
+              @if (option.icon) {
+                <app-icon [name]="option.icon" />
+              }
+              {{ option.label }}
+            </span>
           </label>
         }
       </div>
@@ -86,6 +95,7 @@ let nextGroupId = 0;
       display: flex;
       font-size: var(--text-compact-size);
       font-weight: 600;
+      gap: var(--space-8);
       justify-content: center;
       min-block-size: 40px;
       padding: var(--space-4) var(--space-12);

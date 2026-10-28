@@ -123,22 +123,11 @@
   font-size: 0.875rem;
 }
 
-.how {
+.how .chain,
+.how .from,
+.how .note {
   color: var(--tb-muted);
   font-size: 0.875rem;
-}
-
-.how summary {
-  color: var(--tb-ink);
-  cursor: pointer;
-  font-weight: 600;
-  min-block-size: 2.75rem;
-  padding-block: 0.625rem;
-}
-
-.how summary:focus-visible {
-  outline: 3px solid var(--tb-focus);
-  outline-offset: 2px;
 }
 
 .chain {

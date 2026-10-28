@@ -181,8 +181,8 @@ for (const width of [390, 1440]) {
     await axe(page);
     await page.screenshot({ path: `test-results/a14b-forms-${width}.png`, fullPage: true });
 
-    await page.locator('details.archived > summary').click();
-    await expect(page.locator('details.archived .card-name')).toHaveText(['Old intake']);
+    await page.locator('.archived summary').click();
+    await expect(page.locator('.archived .card-name')).toHaveText(['Old intake']);
     await axe(page);
 
     await cards.first().locator('a.stretched').click();

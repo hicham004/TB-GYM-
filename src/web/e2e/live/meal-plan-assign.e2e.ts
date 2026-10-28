@@ -331,7 +331,7 @@ test.describe('meal plan assignment live', () => {
       );
 
       // The page and the record agree: stopped, with the reason, and the dates free again.
-      const others = planCard.locator('details[data-earlier-plans]');
+      const others = planCard.locator('[data-earlier-plans] details');
       if (!(await others.evaluate((node) => (node as HTMLDetailsElement).open))) {
         await others.locator('summary').click();
       }

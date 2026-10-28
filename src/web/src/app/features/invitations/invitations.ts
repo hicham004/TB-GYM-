@@ -26,6 +26,7 @@ import { Avatar } from '../../ui/avatar';
 import { Button } from '../../ui/button';
 import { deviceToday } from '../../ui/calendar';
 import { UiConfirm } from '../../ui/confirm';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
@@ -51,6 +52,8 @@ import { splitInvitations, type InvitationRow } from './invitations.models';
     Skeleton,
     StatusPill,
     UiConfirm,
+    UiDisclosure,
+    UiDisclosureContent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './invitations.html',

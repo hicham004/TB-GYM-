@@ -17,6 +17,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { type Closable, GuardedSheets, type LeaveQuestion } from '../../core/forms/guarded-sheets';
 import { Button, ButtonLink } from '../../ui/button';
 import { UiConfirm } from '../../ui/confirm';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
@@ -41,7 +42,18 @@ import { LegalPublish } from './legal-publish';
  */
 @Component({
   selector: 'app-legal-documents',
-  imports: [Button, ButtonLink, Icon, LegalPublish, RouterLink, Skeleton, StatusPill, UiConfirm],
+  imports: [
+    Button,
+    ButtonLink,
+    Icon,
+    LegalPublish,
+    RouterLink,
+    Skeleton,
+    StatusPill,
+    UiConfirm,
+    UiDisclosure,
+    UiDisclosureContent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './legal-documents.html',
   styleUrl: './legal-documents.scss',

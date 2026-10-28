@@ -18,58 +18,62 @@
     />
     @if (week().isPublished) {
       @for (session of sessions(); track session.key; let first = $first) {
-        <details class="session" [open]="first">
-          <summary>
-            <span class="day" i18n>Day {{ session.dayOffset + 1 }}</span
-            ><strong dir="auto">{{ session.name }}</strong
-            ><app-icon name="chevron-down" />
-          </summary>
-          <div class="session-body">
-            @if (session.coachNotes.trim()) {
-              <p class="note" dir="auto">{{ session.coachNotes }}</p>
-            }
-            @for (exercise of session.exercises; track exercise.key; let index = $index) {
-              <section class="exercise">
-                <h4>
-                  <span class="number">{{ index + 1 }}</span
-                  ><bdi dir="auto">{{ exercise.exerciseName }}</bdi>
-                </h4>
-                @if (exercise.coachNotes.trim()) {
-                  <p class="note" dir="auto">{{ exercise.coachNotes }}</p>
-                }
-                <ol class="sets">
-                  @for (set of exercise.sets; track set.key; let setIndex = $index) {
-                    <li>
-                      <div class="prescription">
-                        <b i18n>Set {{ setIndex + 1 }}</b
-                        ><span>{{ typeLabel(set.setType) }}</span>
-                      </div>
-                      <p class="target">{{ summary(set) }}</p>
-                      @if (set.restSeconds !== null) {
-                        <span class="meta" i18n>Rest {{ set.restSeconds }} seconds</span>
-                      }
-                      @if (set.tempo.trim()) {
-                        <span class="meta" i18n>Tempo {{ set.tempo }}</span>
-                      }
-                      @if (set.coachNotes.trim()) {
-                        <p class="note" dir="auto">{{ set.coachNotes }}</p>
-                      }
-                    </li>
+        <app-disclosure
+          class="session"
+          variant="panel"
+          [label]="session.name"
+          hint="Day {{ session.dayOffset + 1 }}"
+          i18n-hint
+          [open]="first"
+        >
+          <ng-template appDisclosureContent>
+            <div class="session-body">
+              @if (session.coachNotes.trim()) {
+                <p class="note" dir="auto">{{ session.coachNotes }}</p>
+              }
+              @for (exercise of session.exercises; track exercise.key; let index = $index) {
+                <section class="exercise">
+                  <h4>
+                    <span class="number">{{ index + 1 }}</span
+                    ><bdi dir="auto">{{ exercise.exerciseName }}</bdi>
+                  </h4>
+                  @if (exercise.coachNotes.trim()) {
+                    <p class="note" dir="auto">{{ exercise.coachNotes }}</p>
                   }
-                </ol>
-                @if (
-                  !exercise.isMainLift &&
-                  exercise.modificationPolicy === 'CoachApprovedSwap' &&
-                  exercise.approvedAlternativeExerciseIds.length > 0
-                ) {
-                  <p class="swaps" i18n>Approved swaps: {{ swaps(exercise) }}</p>
-                }
-              </section>
-            } @empty {
-              <p class="note" i18n>No exercises in this workout.</p>
-            }
-          </div>
-        </details>
+                  <ol class="sets">
+                    @for (set of exercise.sets; track set.key; let setIndex = $index) {
+                      <li>
+                        <div class="prescription">
+                          <b i18n>Set {{ setIndex + 1 }}</b
+                          ><span>{{ typeLabel(set.setType) }}</span>
+                        </div>
+                        <p class="target">{{ summary(set) }}</p>
+                        @if (set.restSeconds !== null) {
+                          <span class="meta" i18n>Rest {{ set.restSeconds }} seconds</span>
+                        }
+                        @if (set.tempo.trim()) {
+                          <span class="meta" i18n>Tempo {{ set.tempo }}</span>
+                        }
+                        @if (set.coachNotes.trim()) {
+                          <p class="note" dir="auto">{{ set.coachNotes }}</p>
+                        }
+                      </li>
+                    }
+                  </ol>
+                  @if (
+                    !exercise.isMainLift &&
+                    exercise.modificationPolicy === 'CoachApprovedSwap' &&
+                    exercise.approvedAlternativeExerciseIds.length > 0
+                  ) {
+                    <p class="swaps" i18n>Approved swaps: {{ swaps(exercise) }}</p>
+                  }
+                </section>
+              } @empty {
+                <p class="note" i18n>No exercises in this workout.</p>
+              }
+            </div>
+          </ng-template>
+        </app-disclosure>
       } @empty {
         <p class="empty" i18n>No workouts this week.</p>
       }

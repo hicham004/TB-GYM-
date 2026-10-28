@@ -20,6 +20,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { UiSelect, type SelectOption } from '../../ui/select';
@@ -36,7 +37,16 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 @Component({
   selector: 'app-client-coach',
-  imports: [ReactiveFormsModule, Button, Control, Field, FormSummary, UiSelect],
+  imports: [
+    ReactiveFormsModule,
+    Button,
+    Control,
+    Field,
+    FormSummary,
+    UiDisclosure,
+    UiDisclosureContent,
+    UiSelect,
+  ],
   templateUrl: './client-coach.html',
   styleUrl: './client-coach.scss',
 })

@@ -9,7 +9,7 @@ import type { ProgressDashboardView as ProgressDashboardContract } from '../../c
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { press, query, settle } from '../../../testing/dom';
+import { press, query, settle, toggleFold } from '../../../testing/dom';
 import { ProgressDashboardView } from './progress-dashboard';
 import { UiSheet } from '../../ui/sheet';
 import { mapProgressDashboard, previewAssetIds } from './progress-dashboard.models';
@@ -523,6 +523,7 @@ describe('ProgressDashboardView states', () => {
     ).toBe('true');
     expect(getMyProgress.mock.calls.length).toBeGreaterThan(2);
     expect(host.textContent).toContain('Showing all recorded weight entries');
+    await toggleFold(fixture, host, 'All entries');
     expect(host.querySelectorAll('.all-entries li')).toHaveLength(2);
   });
 });
@@ -761,12 +762,13 @@ describe('ProgressDashboardView logging', () => {
   });
 
   it('sends the measurements and photos panels to their own tab of the entries page', async () => {
-    const host = await render(answerRead());
+    const { fixture, host } = await renderWith(answerRead());
 
     const link = (words: string) =>
       Array.from(host.querySelectorAll('a')).find((item) => item.textContent?.trim() === words);
     expect(link('Manage')?.getAttribute('href')).toBe('/progress?tab=measurements');
     expect(link('View all')?.getAttribute('href')).toBe('/progress?tab=photos');
+    await toggleFold(fixture, host, 'All entries');
     expect(link('Open the full entry history and corrections')?.getAttribute('href')).toBe(
       '/progress',
     );

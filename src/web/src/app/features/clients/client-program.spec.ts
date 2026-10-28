@@ -33,6 +33,7 @@ import {
   query,
   selectField,
   settle,
+  toggleFold,
   type,
 } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
@@ -458,12 +459,15 @@ describe('a client’s Training', () => {
           actorUserId: 'owner-1',
         },
       ];
-      const { host } = await render({ program: coachProgram([cancelledBlock({ lifecycle })]) });
+      const { harness, host } = await render({
+        program: coachProgram([cancelledBlock({ lifecycle })]),
+      });
 
-      const fold = host.querySelector<HTMLDetailsElement>('.hero [data-program-history]')!;
-      expect(fold.open).toBe(false);
-      expect(textOf(fold.querySelector('summary'))).toBe('History (2)');
-      expect(all(fold, 'li').map(textOf)).toEqual([
+      const history = host.querySelector<HTMLElement>('.hero [data-program-history]')!;
+      expect(history.querySelector('details')?.open).toBe(false);
+      expect(textOf(history.querySelector('summary'))).toBe('History (2)');
+      await toggleFold(harness.fixture, history, 'History (2)');
+      expect(all(history, 'li').map(textOf)).toEqual([
         'Assigned Fri 1 May',
         'Cancelled Mon 11 May Moved to a gym program',
       ]);
@@ -1006,10 +1010,8 @@ describe('a client’s Training', () => {
       all(host.querySelector('.week.current')!, 'button.session')[2].click();
       await settle(harness.fixture);
       const sheet = dialog()!;
-      const swap = sheet.querySelector<HTMLDetailsElement>('.swap')!;
-      swap.open = true;
-      swap.dispatchEvent(new Event('toggle'));
-      await settle(harness.fixture);
+      const swap = sheet.querySelector<HTMLElement>('.swap')!;
+      await toggleFold(harness.fixture, swap, 'Swap this workout');
       expect(textOf(swap)).toContain('It stays on Thu 1 Oct');
       await chooseOption(harness.fixture, swap, 'Saved workout', 'Lower A (saved)');
       press(sheet, 'Swap workout');
@@ -1054,10 +1056,8 @@ describe('a client’s Training', () => {
       all(host.querySelector('.week.current')!, 'button.session')[2].click();
       await settle(harness.fixture);
       const sheet = dialog()!;
-      const swap = sheet.querySelector<HTMLDetailsElement>('.swap')!;
-      swap.open = true;
-      swap.dispatchEvent(new Event('toggle'));
-      await settle(harness.fixture);
+      const swap = sheet.querySelector<HTMLElement>('.swap')!;
+      await toggleFold(harness.fixture, swap, 'Swap this workout');
       expect(textOf(formSummary(swap))).toBe('');
 
       press(sheet, 'Swap workout');

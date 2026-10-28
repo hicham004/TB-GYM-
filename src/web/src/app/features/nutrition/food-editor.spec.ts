@@ -4,7 +4,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FoodItemView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
-import { button, chooseOption, fill, formSummary, settle } from '../../../testing/dom';
+import { button, chooseOption, fill, formSummary, settle, toggleFold } from '../../../testing/dom';
 import { CHICKEN_FOOD, OATS_FOOD } from '../../../testing/food-fixtures';
 import { FoodApi } from './food-api';
 import { FoodEditor } from './food-editor';
@@ -178,6 +178,8 @@ describe('the food sheet', () => {
     expect(textOf(host.querySelector('details .tb-field__support--error'))).toBe(
       'Fibre and sugar alcohols are part of the carbs, so together they can’t be more than the carbs.',
     );
+    // Opened before focus moves, so the refused box itself takes it (critique B2b).
+    expect(document.activeElement).toBe(host.querySelector('input[name="fibre"]'));
   });
 
   it('saves the unit chosen from its list as what the amounts are measured in', async () => {
@@ -235,6 +237,7 @@ describe('the food sheet', () => {
   it('copies a USDA food as the coach’s own, naming what USDA left out', async () => {
     const { fixture, host, api } = await render('copy', CHICKEN_FOOD);
     expect(host.querySelector<HTMLDetailsElement>('details')!.open).toBe(false);
+    await toggleFold(fixture, host, 'Fibre, sugar alcohols, alcohol and label calories');
     expect(textOf(host.querySelector('details .note'))).toBe(
       'USDA didn’t report fibre, sugar alcohols or alcohol, so they were saved as 0. Check the label if you have it.',
     );

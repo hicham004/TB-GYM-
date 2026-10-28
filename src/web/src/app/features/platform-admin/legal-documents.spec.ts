@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
-import { fill, press, query, settle, tick } from '../../../testing/dom';
+import { fill, press, query, settle, tick, toggleFold } from '../../../testing/dom';
 import { type LegalVersion, toLegalVersion } from './legal-documents.models';
 import { LegalDocuments } from './legal-documents';
 import { PlatformAdminApi } from './platform-admin-api';
@@ -77,7 +77,7 @@ describe('LegalDocuments', () => {
   });
 
   it('lists each document with the version in force, who is asked and what it replaced', async () => {
-    const { host } = await render([() => of([REPLACED, CURRENT])]);
+    const { fixture, host } = await render([() => of([REPLACED, CURRENT])]);
 
     expect(textOf(host.querySelector('h1'))).toBe('Legal documents');
     expect(host.textContent).toContain(
@@ -92,6 +92,7 @@ describe('LegalDocuments', () => {
     expect(textOf(current.querySelector('.statement'))).toBe('“Placeholder sentence to tick.”');
     expect(current.querySelector('a')?.getAttribute('href')).toBe('/legal/terms-2');
     expect(textOf(terms.querySelector('details summary'))).toBe('Earlier versions (1)');
+    await toggleFold(fixture, terms, 'Earlier versions (1)');
     expect(textOf(terms.querySelector('details li'))).toContain(
       'Version 2026-10 Once per person · In force 1 Oct 2025 to 1 Nov 2025 · Accepted once',
     );

@@ -19,6 +19,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Button, ButtonLink } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
@@ -45,6 +46,8 @@ const PAGE = 100;
     RouterLink,
     Skeleton,
     StatusPill,
+    UiDisclosure,
+    UiDisclosureContent,
   ],
   templateUrl: './checkin-forms.html',
   styleUrl: './checkin-forms.scss',

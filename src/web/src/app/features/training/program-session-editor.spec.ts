@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { settle, tick } from '../../../testing/dom';
+import { settle, tick, toggleFold } from '../../../testing/dom';
 import { ProgramSessionEditor } from './program-session-editor';
 import { emptyExercise, emptySession } from './training-builder.models';
 
@@ -19,6 +19,8 @@ async function render() {
   fixture.componentInstance.edited.subscribe(edited);
   await settle(fixture);
   const host = fixture.nativeElement as HTMLElement;
+  // The rest box is under Rest, tempo & notes, made when the fold first opens.
+  await toggleFold(fixture, host, 'Rest, tempo & notes');
   // The page bumps the revision on every edit so the sheet redraws in place; do the same here.
   let revision = 0;
   const redraw = async () => {

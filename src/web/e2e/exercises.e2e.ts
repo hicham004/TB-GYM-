@@ -171,7 +171,9 @@ for (const width of [390, 1440]) {
     await axe(page);
     await page.screenshot({ path: `test-results/r51b-library-${width}.png`, fullPage: true });
 
-    await page.getByRole('button', { name: 'List', exact: true }).click();
+    // The kit's segmented control (critique B2b): a choice of how to show the page, not a chip.
+    await page.getByRole('radio', { name: 'List', exact: true }).check();
+    await expect(page.getByRole('radio', { name: 'List', exact: true })).toBeChecked();
     await expect(page).toHaveURL(/view=list/);
     await expect(page.locator('.exercises')).toHaveClass(/as-list/);
     await expectNoHorizontalOverflow(page);

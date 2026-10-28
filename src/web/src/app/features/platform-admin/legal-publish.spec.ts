@@ -13,6 +13,7 @@ import {
   selectShows,
   settle,
   tick,
+  toggleFold,
 } from '../../../testing/dom';
 import { blankStart, type LegalVersion, toLegalVersion } from './legal-documents.models';
 import { LegalPublish } from './legal-publish';
@@ -125,6 +126,7 @@ describe('LegalPublish', () => {
     await fillVersion(sheet);
     expect(dirty.at(-1)).toBe(true);
     // The text as people will read it: a blank line starts a paragraph.
+    await toggleFold(fixture, host, 'Preview as people will read it');
     expect(Array.from(host.querySelectorAll('[data-preview] p')).map((p) => p.textContent)).toEqual(
       ['Section 1', 'Placeholder text written for a test.'],
     );

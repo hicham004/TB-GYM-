@@ -123,6 +123,36 @@
   color: var(--tb-on-accent);
 }
 
+// A short window (critique B2b, coach-shell.scss says why 760): tighter groups and rows, and under about
+// 640 px the group labels go out of sight; screen readers still read them, and the gap between groups
+// still shows where one ends.
+@media (max-height: 760px) {
+  .coach-nav {
+    gap: var(--space-16);
+  }
+
+  .group {
+    gap: var(--space-4);
+  }
+
+  .item {
+    // 36px rows, not a control-height token.
+    min-block-size: 36px;
+    padding-block: calc((36px - var(--text-compact-line-height)) / 2);
+  }
+}
+
+@media (max-height: 640px) {
+  .group-label {
+    block-size: 1px;
+    clip-path: inset(50%);
+    inline-size: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+  }
+}
+
 // Selection must survive forced colours, where fills are dropped: the system selection colours
 // replace the teal, and a border keeps the row's edge.
 @media (forced-colors: active) {

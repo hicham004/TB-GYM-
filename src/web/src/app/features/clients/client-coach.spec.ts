@@ -18,6 +18,7 @@ import {
   selectShows,
   settle,
   text,
+  toggleFold,
 } from '../../../testing/dom';
 import { TeamApi } from '../team/team-api';
 import { ClientCoach } from './client-coach';
@@ -232,9 +233,11 @@ describe('ClientCoach', () => {
     await settle(fixture);
 
     expect(api.getCoachAssignments).toHaveBeenCalledWith('client-1');
-    const history = host.querySelector<HTMLDetailsElement>('dialog [data-coach-history]')!;
-    expect(history.open).toBe(false);
+    const dialog = host.querySelector<HTMLElement>('dialog')!;
+    const history = host.querySelector<HTMLElement>('dialog [data-coach-history]')!;
+    expect(history.querySelector('details')?.open).toBe(false);
     expect(history.querySelector('summary')?.textContent?.trim()).toBe('Coach history (3)');
+    await toggleFold(fixture, dialog, 'Coach history (3)');
     const rows = Array.from(history.querySelectorAll('li')).map((row) =>
       (row.textContent ?? '').replace(/\s+/g, ' ').trim(),
     );

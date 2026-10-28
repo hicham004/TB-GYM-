@@ -32,6 +32,7 @@ import { Icon } from '../../ui/icon';
 import { UiMenu } from '../../ui/menu';
 import type { ModalSurface } from '../../ui/modal-surface';
 import { SectionNav } from '../../ui/section-nav';
+import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { UiToast } from '../../ui/toast';
@@ -76,6 +77,7 @@ const GRANT_BATCH = 32;
     Field,
     Icon,
     SectionNav,
+    SegmentedControl,
     Skeleton,
     UiConfirm,
     UiMenu,
@@ -109,6 +111,11 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
   protected readonly closeLabel = $localize`Close`;
   protected readonly searchLabel = $localize`Search exercises`;
   protected readonly searchPlaceholder = $localize`Search by name or tag…`;
+  /** Cards or List (critique B2b): each with its glyph and its word; the choice stays in the address. */
+  protected readonly viewOptions: readonly SegmentOption[] = [
+    { value: 'grid', label: $localize`Cards`, icon: 'grid' },
+    { value: 'list', label: $localize`List`, icon: 'list' },
+  ];
 
   private readonly params = toSignal(
     this.route.queryParamMap.pipe(

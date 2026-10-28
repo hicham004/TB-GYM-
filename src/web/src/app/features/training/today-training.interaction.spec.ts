@@ -17,7 +17,7 @@ import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { button, field, fill, press, query, settle } from '../../../testing/dom';
+import { button, field, fill, fold, press, query, settle, toggleFold } from '../../../testing/dom';
 import { personalRecord, programSummary } from '../../../testing/share-card-fixtures';
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { ShareCardMaker } from '../share-cards/share-card-maker';
@@ -191,7 +191,7 @@ describe('TodayTraining interactions', () => {
     // The coach prescribed kilograms, so the workout's choice starts there.
     expect(field(host, 'kg').checked).toBe(true);
     fill(host, 'Actual repetitions', '8');
-    query<HTMLElement>(host, '.set-note summary').click();
+    await toggleFold(fixture, host, 'More options');
     fill(host, 'Actual RPE', '8.5');
     fill(host, 'Note for your coach', 'Felt heavy.');
     await settle(fixture);
@@ -391,7 +391,7 @@ describe('TodayTraining interactions', () => {
   it('adds a workout note and clears the box', async () => {
     const { fixture, host, api } = await render();
 
-    query<HTMLElement>(host, '.workout-footer summary').click();
+    await toggleFold(fixture, host, 'Note for your coach');
     fill(host, 'Workout note', 'Knee felt fine today.');
     await settle(fixture);
 
@@ -406,9 +406,9 @@ describe('TodayTraining interactions', () => {
   });
 
   it('offers no note button until something has been typed', async () => {
-    const { host } = await render();
+    const { fixture, host } = await render();
 
-    query<HTMLElement>(host, '.workout-footer summary').click();
+    await toggleFold(fixture, host, 'Note for your coach');
     expect(button(host, 'Send note').disabled).toBe(true);
   });
 
@@ -1312,7 +1312,7 @@ describe('TodayTraining, the audit’s player fixes', () => {
       const { fixture, host, api } = await render();
       field(host, 'lb').click();
       await settle(fixture);
-      query<HTMLElement>(host, '.workout-footer summary').click();
+      await toggleFold(fixture, host, 'Note for your coach');
       fill(host, 'Workout note', 'Only pound plates here.');
       await settle(fixture);
       press(host, 'Send note');
@@ -1445,7 +1445,7 @@ describe('TodayTraining, the audit’s player fixes', () => {
 
     it('is asked by a workspace switch or a sign-out about a note not sent', async () => {
       const { fixture, host } = await render();
-      query<HTMLElement>(host, '.workout-footer summary').click();
+      await toggleFold(fixture, host, 'Note for your coach');
       fill(host, 'Workout note', 'Knee felt fine today.');
       await settle(fixture);
 
@@ -1560,7 +1560,7 @@ describe('TodayTraining, the audit’s player fixes', () => {
   describe('effort (CLIENT-5, CLIENT-9)', () => {
     it('logs reps left when that is how the client counts effort', async () => {
       const { fixture, host, api } = await render();
-      query<HTMLElement>(host, '.set-note summary').click();
+      await toggleFold(fixture, host, 'More options');
       fill(host, 'Actual RPE', '8');
       await settle(fixture);
       // One or the other is sent (STR-003): reps left typed after RPE takes its place.
@@ -1577,9 +1577,25 @@ describe('TodayTraining, the audit’s player fixes', () => {
       );
     });
 
+    it('opens More options again on a refused effort, with the box and its reason (critique B2b)', async () => {
+      const { fixture, host, api } = await render();
+      await toggleFold(fixture, host, 'More options');
+      fill(host, 'Actual RPE', '8.3');
+      await settle(fixture);
+      await toggleFold(fixture, host, 'More options', false);
+
+      press(host, 'Log set');
+      await settle(fixture);
+
+      expect(api.recordMyTrainingSet).not.toHaveBeenCalled();
+      expect(fold(host, 'More options').open).toBe(true);
+      expect(field(host, 'Actual RPE').getAttribute('aria-invalid')).toBe('true');
+      expect(document.activeElement).toBe(query(host, '#training-error-summary'));
+    });
+
     it('says the RPE range before the save, and sends nothing outside it', async () => {
       const { fixture, host, api } = await render();
-      query<HTMLElement>(host, '.set-note summary').click();
+      await toggleFold(fixture, host, 'More options');
       fill(host, 'Actual RPE', '8.3');
       await settle(fixture);
       const rpe = field(host, 'Actual RPE');
@@ -1609,7 +1625,7 @@ describe('TodayTraining, the audit’s player fixes', () => {
 
     it('says the range of reps left before the save', async () => {
       const { fixture, host, api } = await render();
-      query<HTMLElement>(host, '.set-note summary').click();
+      await toggleFold(fixture, host, 'More options');
       fill(host, 'Actual reps left', '6');
       await settle(fixture);
       press(host, 'Log set');

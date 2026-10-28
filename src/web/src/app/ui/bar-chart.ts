@@ -1,4 +1,5 @@
 import { Component, input } from '@angular/core';
+import { UiDisclosure, UiDisclosureContent } from './disclosure';
 
 export interface ChartBar {
   label: string;
@@ -8,6 +9,7 @@ export interface ChartBar {
 
 @Component({
   selector: 'app-bar-chart',
+  imports: [UiDisclosure, UiDisclosureContent],
   template: `
     <div class="bars" role="img" [attr.aria-label]="label()">
       @for (bar of bars(); track bar.label) {
@@ -20,32 +22,33 @@ export interface ChartBar {
         </div>
       }
     </div>
-    <details>
-      <summary i18n>Training counts</summary>
-      <table>
-        <caption>
-          {{
-            label()
-          }}
-        </caption>
-        <thead>
-          <tr>
-            <th i18n>Period</th>
-            <th i18n>Completed</th>
-            <th i18n>Scheduled</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (bar of bars(); track bar.label) {
+    <app-disclosure class="values" label="Training counts" i18n-label>
+      <ng-template appDisclosureContent>
+        <table>
+          <caption>
+            {{
+              label()
+            }}
+          </caption>
+          <thead>
             <tr>
-              <th>{{ bar.label }}</th>
-              <td>{{ bar.value }}</td>
-              <td>{{ bar.total }}</td>
+              <th i18n>Period</th>
+              <th i18n>Completed</th>
+              <th i18n>Scheduled</th>
             </tr>
-          }
-        </tbody>
-      </table>
-    </details>
+          </thead>
+          <tbody>
+            @for (bar of bars(); track bar.label) {
+              <tr>
+                <th>{{ bar.label }}</th>
+                <td>{{ bar.value }}</td>
+                <td>{{ bar.total }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </ng-template>
+    </app-disclosure>
   `,
   styles: [
     `
@@ -78,17 +81,11 @@ export interface ChartBar {
         border-radius: inherit;
         background: var(--tb-accent-ink, #153d33);
       }
-      details {
+      .values {
         margin-block-start: 0.75rem;
-        font-size: 0.8rem;
-        max-inline-size: 100%;
-        overflow-x: auto;
-      }
-      summary {
-        cursor: pointer;
-        min-block-size: 2rem;
       }
       table {
+        font-size: 0.8rem;
         display: block;
         max-inline-size: 100%;
         overflow-x: auto;

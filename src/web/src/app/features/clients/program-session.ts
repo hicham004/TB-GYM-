@@ -19,6 +19,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { FormSummary } from '../../ui/form-summary';
 import { UiSelect, type SelectOption } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
@@ -44,7 +45,17 @@ import { ClientWorkspaceContext } from './client-workspace.context';
  */
 @Component({
   selector: 'app-program-session',
-  imports: [Button, CoachWorkout, ExerciseDemo, FormSummary, Skeleton, StatusPill, UiSelect],
+  imports: [
+    Button,
+    CoachWorkout,
+    ExerciseDemo,
+    FormSummary,
+    Skeleton,
+    StatusPill,
+    UiDisclosure,
+    UiDisclosureContent,
+    UiSelect,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="sheet">
@@ -108,47 +119,53 @@ import { ClientWorkspaceContext } from './client-workspace.context';
       </section>
 
       @if (canSwap()) {
-        <details class="swap" (toggle)="swapToggled($event)">
-          <summary i18n>Swap this workout</summary>
-          <div class="swap-body">
-            <p class="muted" i18n>
-              Replace it with one of your saved workouts. It stays on {{ session().day }}: only this
-              workout changes, and the rest of the program stays as it is.
-            </p>
-            <app-select
-              [label]="savedLabel"
-              [placeholder]="savedPlaceholder"
-              [options]="savedOptions()"
-              [errors]="swapError() ? [swapError()!] : null"
-              [(value)]="chosenId"
-            />
-            @if (savedLoaded() && saved().length === 0) {
+        <app-disclosure
+          class="swap"
+          label="Swap this workout"
+          i18n-label
+          (openChange)="swapToggled($event)"
+        >
+          <ng-template appDisclosureContent>
+            <div class="swap-body">
               <p class="muted" i18n>
-                You have no saved workouts yet. Save one from the program builder first.
+                Replace it with one of your saved workouts. It stays on {{ session().day }}: only
+                this workout changes, and the rest of the program stays as it is.
               </p>
-            }
-            <app-form-summary>
-              @if (error(); as message) {
-                {{ message }}
+              <app-select
+                [label]="savedLabel"
+                [placeholder]="savedPlaceholder"
+                [options]="savedOptions()"
+                [errors]="swapError() ? [swapError()!] : null"
+                [(value)]="chosenId"
+              />
+              @if (savedLoaded() && saved().length === 0) {
+                <p class="muted" i18n>
+                  You have no saved workouts yet. Save one from the program builder first.
+                </p>
               }
-            </app-form-summary>
-            <div class="actions">
-              <button
-                appButton
-                type="button"
-                [loading]="busy()"
-                [disabled]="saved().length === 0"
-                (click)="swap()"
-              >
-                @if (busy()) {
-                  <ng-container i18n>Swapping…</ng-container>
-                } @else {
-                  <ng-container i18n>Swap workout</ng-container>
+              <app-form-summary>
+                @if (error(); as message) {
+                  {{ message }}
                 }
-              </button>
+              </app-form-summary>
+              <div class="actions">
+                <button
+                  appButton
+                  type="button"
+                  [loading]="busy()"
+                  [disabled]="saved().length === 0"
+                  (click)="swap()"
+                >
+                  @if (busy()) {
+                    <ng-container i18n>Swapping…</ng-container>
+                  } @else {
+                    <ng-container i18n>Swap workout</ng-container>
+                  }
+                </button>
+              </div>
             </div>
-          </div>
-        </details>
+          </ng-template>
+        </app-disclosure>
       }
     </div>
   `,
@@ -251,20 +268,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
 
     .swap {
       border-block-start: 1px solid var(--tb-line);
-      padding-block-start: 0.75rem;
-    }
-
-    .swap summary {
-      color: var(--tb-accent-ink);
-      cursor: pointer;
-      font-weight: 600;
-      min-block-size: 2.75rem;
-      padding-block: 0.625rem;
-    }
-
-    .swap summary:focus-visible {
-      outline: 3px solid var(--tb-focus);
-      outline-offset: 2px;
+      padding-block-start: 0.5rem;
     }
 
     .swap-body {
@@ -365,8 +369,8 @@ export class ProgramSession {
   }
 
   /** The saved sessions are read the first time the swap is opened, not for every session looked at. */
-  protected swapToggled(event: Event): void {
-    if (!(event.target as HTMLDetailsElement).open || this.savedLoaded()) return;
+  protected swapToggled(open: boolean): void {
+    if (!open || this.savedLoaded()) return;
     void this.scope.run('saved', async (owner) => {
       try {
         this.saved.set(await owner.wait(firstValueFrom(this.api.listSavedSessions())));

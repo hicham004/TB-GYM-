@@ -17,6 +17,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
 import { ClientWorkspaceContext } from '../clients/client-workspace.context';
@@ -84,6 +85,8 @@ const PLAN_TONES: Record<PlanState, StatusPillTone> = {
     Skeleton,
     StatusPill,
     TargetsResult,
+    UiDisclosure,
+    UiDisclosureContent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './client-nutrition.html',

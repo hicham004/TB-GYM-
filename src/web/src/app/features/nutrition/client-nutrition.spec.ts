@@ -19,7 +19,7 @@ import {
   workspace,
 } from '../../../testing/client-nutrition-fixtures';
 import { enrollment, plansOverview } from '../../../testing/client-service-fixtures';
-import { fill, press, settle, tick } from '../../../testing/dom';
+import { fill, fold, press, settle, tick, toggleFold } from '../../../testing/dom';
 import { mayaWeighIns, progressView } from '../../../testing/progress-fixtures';
 import type { ClientCommercialOverview, CoachClientDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -148,7 +148,7 @@ describe('A client’s Nutrition tab', () => {
 
   describe('what it shows', () => {
     it('shows the latest targets with their macros and how they were worked out', async () => {
-      const { host } = await render();
+      const { fixture, host } = await render();
 
       const targets = card(host, 'targets');
       expect(textOf(targets.querySelector('.calories'))).toBe('2,155 calories a day');
@@ -164,6 +164,8 @@ describe('A client’s Nutrition tab', () => {
         ['Carbs', '264 g', '49%'],
         ['Fat', '60 g', '25%'],
       ]);
+      expect(fold(targets, 'How this was worked out').open).toBe(false);
+      await toggleFold(fixture, targets, 'How this was worked out');
       expect(textOf(targets.querySelector('.chain'))).toContain('1,444');
       expect(textOf(targets.querySelector('.from'))).toBe(
         'Worked out from 70 kg, 168 cm, 30 years, female, seated work, 8,000 steps a day.',
@@ -231,7 +233,7 @@ describe('A client’s Nutrition tab', () => {
     });
 
     it('keeps a plan that ended or was stopped in a closed list, never hidden', async () => {
-      const { host } = await render({
+      const { fixture, host } = await render({
         api: {
           plans: vi.fn(() =>
             of([
@@ -256,6 +258,8 @@ describe('A client’s Nutrition tab', () => {
 
       const others = host.querySelector('[data-earlier-plans]')!;
       expect(textOf(others.querySelector('summary'))).toBe('Other meal plans (2)');
+      expect(fold(host, 'Other meal plans (2)').open).toBe(false);
+      await toggleFold(fixture, host, 'Other meal plans (2)');
       expect(Array.from(others.querySelectorAll('li')).map((item) => textOf(item))).toEqual([
         'Maintenance Wed 16 Sep – Wed 30 Sep Stopped 2,155 calories',
         'Lean bulk Tue 1 Sep – Mon 14 Sep Ended 2,155 calories',
@@ -554,7 +558,7 @@ describe('A client’s Nutrition tab', () => {
     });
 
     it('says when the latest targets are the coach’s own, and why', async () => {
-      const { host } = await render({
+      const { fixture, host } = await render({
         api: {
           calculations: vi.fn(() => of([adjustedRecord(), calculationRecord(), earlierRecord()])),
         },
@@ -566,6 +570,7 @@ describe('A client’s Nutrition tab', () => {
       expect(textOf(targets.querySelector('[data-why]'))).toBe(
         'Why you changed them More protein while she cuts',
       );
+      await toggleFold(fixture, targets, 'How this was worked out');
       const step = (name: string) =>
         [`[data-step="${name}"] dt`, `[data-step="${name}"] dd`].map((selector) =>
           textOf(targets.querySelector(selector)),
@@ -630,9 +635,10 @@ describe('A client’s Nutrition tab', () => {
       ]);
 
     it('offers Stop on the plan running and on one coming, and says why one was stopped', async () => {
-      const { host } = await render({ api: { plans: vi.fn(plans) } });
+      const { fixture, host } = await render({ api: { plans: vi.fn(plans) } });
 
       expect(host.querySelector('[data-current-plan] [data-stop-current]')).not.toBeNull();
+      await toggleFold(fixture, host, 'Other meal plans (2)');
       const others = Array.from(host.querySelectorAll('[data-earlier-plans] li'));
       expect(others.map((item) => item.getAttribute('data-plan'))).toEqual(['coming', 'stopped']);
       expect(others[0].querySelector('[data-stop-other]')?.getAttribute('aria-label')).toBe(
@@ -683,6 +689,7 @@ describe('A client’s Nutrition tab', () => {
       expect(textOf(host.querySelector('[data-no-plan]'))).toContain(
         'Rana has no meal plan running or coming.',
       );
+      await toggleFold(fixture, host, 'Other meal plans (1)');
       expect(textOf(host.querySelector('[data-stop-reason]'))).toBe('Stopped today: Wrong dates');
     });
 

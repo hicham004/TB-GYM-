@@ -60,22 +60,24 @@
         </ul>
 
         @if (cards().stopped.length > 0) {
-          <details class="stopped">
-            <summary>
-              <span i18n>No longer sold ({{ cards().stopped.length }})</span>
-              <app-icon name="chevron-down" />
-            </summary>
-            <ul class="cards" role="list">
-              @for (card of cards().stopped; track card.id) {
-                <li class="card off">
-                  <ng-container
-                    [ngTemplateOutlet]="planCard"
-                    [ngTemplateOutletContext]="{ $implicit: card }"
-                  />
-                </li>
-              }
-            </ul>
-          </details>
+          <app-disclosure
+            class="stopped"
+            label="No longer sold ({{ cards().stopped.length }})"
+            i18n-label
+          >
+            <ng-template appDisclosureContent>
+              <ul class="cards" role="list">
+                @for (card of cards().stopped; track card.id) {
+                  <li class="card off">
+                    <ng-container
+                      [ngTemplateOutlet]="planCard"
+                      [ngTemplateOutletContext]="{ $implicit: card }"
+                    />
+                  </li>
+                }
+              </ul>
+            </ng-template>
+          </app-disclosure>
         }
       }
     }
@@ -130,22 +132,24 @@
   }
 
   @if (card.retired.length > 0) {
-    <details class="retired">
-      <summary>
-        <span i18n>Old price options ({{ card.retired.length }})</span>
-        <app-icon name="chevron-down" />
-      </summary>
-      <ul class="options" role="list">
-        @for (row of card.retired; track row.id) {
-          <li class="option off">
-            <ng-container
-              [ngTemplateOutlet]="optionRow"
-              [ngTemplateOutletContext]="{ $implicit: row, card: card }"
-            />
-          </li>
-        }
-      </ul>
-    </details>
+    <app-disclosure
+      class="retired"
+      label="Old price options ({{ card.retired.length }})"
+      i18n-label
+    >
+      <ng-template appDisclosureContent>
+        <ul class="options" role="list">
+          @for (row of card.retired; track row.id) {
+            <li class="option off">
+              <ng-container
+                [ngTemplateOutlet]="optionRow"
+                [ngTemplateOutletContext]="{ $implicit: row, card: card }"
+              />
+            </li>
+          }
+        </ul>
+      </ng-template>
+    </app-disclosure>
   }
 
   @if (card.isActive) {

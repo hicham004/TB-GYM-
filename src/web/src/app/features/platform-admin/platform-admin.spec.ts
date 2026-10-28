@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, press, settle, toggleFold } from '../../../testing/dom';
 import {
   gymRequests,
   NOW,
@@ -202,7 +202,7 @@ describe('Platform billing', () => {
   });
 
   it('shows the price plan in force with each of its terms, and the earlier versions', async () => {
-    const { host } = await render();
+    const { fixture, host } = await render();
 
     const section = host.querySelector('[data-price-plan]')!;
     expect(textOf(section.querySelector('.panel-head .quiet'))).toBe(
@@ -221,9 +221,10 @@ describe('Platform billing', () => {
       ['Read-only', '7 days after it is due'],
     ]);
     expect(textOf(section)).toContain('“Launch prices”');
-    const earlier = section.querySelector<HTMLDetailsElement>('details.versions')!;
-    expect(earlier.open).toBe(false);
+    const earlier = section.querySelector<HTMLElement>('.versions')!;
+    expect(earlier.querySelector('details')?.open).toBe(false);
     expect(textOf(earlier.querySelector('summary'))).toBe('Earlier versions (1)');
+    await toggleFold(fixture, section, 'Earlier versions (1)');
     expect(textOf(earlier.querySelector('[data-plan="1"]'))).toBe(
       'v1 Sep 1, 2026 $12.00 a seat · 5 included · $2.00 extra · $10.00 gym fee — Placeholder',
     );

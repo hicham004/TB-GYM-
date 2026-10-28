@@ -34,6 +34,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { isoWeekdayOfName } from '../../ui/calendar';
 import { DateField } from '../../ui/date-field';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
@@ -83,6 +84,8 @@ import {
     RouterLink,
     SegmentedControl,
     Skeleton,
+    UiDisclosure,
+    UiDisclosureContent,
     UiSelect,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -188,41 +191,45 @@ import {
               />
             </app-field>
 
-            <details class="loads">
-              <summary>
-                <span class="loads-title" i18n>Load settings</span>
-                <span class="loads-now">{{ loadSummary() }}</span>
-              </summary>
-              <div class="loads-body">
-                <app-segmented-control
-                  [label]="unitText"
-                  [options]="unitOptions"
-                  [selected]="unit()"
-                  (selectedChange)="chooseUnit($event)"
-                />
-                <app-field
-                  [label]="incrementLabel"
-                  [help]="incrementHelp"
-                  [errors]="shows('loadIncrement') ? errors()['loadIncrement'] : null"
-                >
-                  <input
-                    appControl
-                    type="number"
-                    min="0.01"
-                    step="0.25"
-                    [value]="increment() ?? ''"
-                    (input)="setIncrement($any($event.target).valueAsNumber)"
-                    (blur)="attempt.touch('loadIncrement')"
+            <app-disclosure
+              class="loads"
+              label="Load settings"
+              i18n-label
+              [hint]="loadSummary()"
+              [(open)]="loadsOpen"
+            >
+              <ng-template appDisclosureContent>
+                <div class="loads-body">
+                  <app-segmented-control
+                    [label]="unitText"
+                    [options]="unitOptions"
+                    [selected]="unit()"
+                    (selectedChange)="chooseUnit($event)"
                   />
-                </app-field>
-                <app-segmented-control
-                  [label]="roundingText"
-                  [options]="roundingOptions"
-                  [selected]="rounding()"
-                  (selectedChange)="rounding.set($any($event))"
-                />
-              </div>
-            </details>
+                  <app-field
+                    [label]="incrementLabel"
+                    [help]="incrementHelp"
+                    [errors]="shows('loadIncrement') ? errors()['loadIncrement'] : null"
+                  >
+                    <input
+                      appControl
+                      type="number"
+                      min="0.01"
+                      step="0.25"
+                      [value]="increment() ?? ''"
+                      (input)="setIncrement($any($event.target).valueAsNumber)"
+                      (blur)="attempt.touch('loadIncrement')"
+                    />
+                  </app-field>
+                  <app-segmented-control
+                    [label]="roundingText"
+                    [options]="roundingOptions"
+                    [selected]="rounding()"
+                    (selectedChange)="rounding.set($any($event))"
+                  />
+                </div>
+              </ng-template>
+            </app-disclosure>
 
             @if (maxes().length > 0) {
               <fieldset class="maxes">
@@ -422,36 +429,11 @@ import {
       padding-block: 0.25rem;
     }
 
-    .loads summary {
-      align-items: baseline;
-      cursor: pointer;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.125rem 0.75rem;
-      min-block-size: 2.75rem;
-      padding-block: 0.5rem;
-    }
-
-    .loads summary:focus-visible {
-      outline: 3px solid var(--tb-focus);
-      outline-offset: 2px;
-    }
-
-    .loads-title {
-      color: var(--tb-ink);
-      font-weight: 600;
-    }
-
-    .loads-now {
-      color: var(--tb-muted);
-      font-size: 0.875rem;
-    }
-
     .loads-body {
       display: flex;
       flex-direction: column;
       gap: 1rem;
-      padding-block: 0.5rem 0.75rem;
+      padding-block-end: 0.75rem;
     }
 
     .maxes {
@@ -574,6 +556,8 @@ export class ProgramAssign {
   protected readonly unit = signal<TrainingLoadUnit>('Kilogram');
   protected readonly increment = signal<number | null>(2.5);
   protected readonly rounding = signal<TrainingLoadRoundingMode>('Nearest');
+  /** Load settings is folded; a refused rounding opens it, so the reason and the box can be seen. */
+  protected readonly loadsOpen = signal(false);
   protected readonly maxes = signal<MaxRow[]>([]);
   /** What the program's own name is replaced by in the client's copy; empty keeps it (TRN-002). */
   protected readonly name = signal('');
@@ -884,6 +868,7 @@ export class ProgramAssign {
     this.attempt.attempt();
     if (this.problemCount() > 0) {
       this.error.set(null);
+      if ((this.errors()['loadIncrement'] ?? []).length > 0) this.loadsOpen.set(true);
       afterNextRender(
         () => this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
         { injector: this.injector },

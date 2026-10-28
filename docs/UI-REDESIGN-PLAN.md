@@ -1393,7 +1393,7 @@ Tokens are theme-ready from R1, so this costs little later.
   - Shell and navigation: `AppShell` (coach sidebar / client tab bar), `PageHeader`, `Tabs`,
     `SegmentedControl`.
   - Surfaces: `Card`, `StatTile` (value + delta + sparkline), `Sheet` (mobile bottom sheet),
-    `Dialog`, `Drawer`, `Menu`, `Tooltip`, `Toast`.
+    `Dialog`, `Drawer`, `Menu`, `Tooltip`, `Toast`, `Disclosure` (every fold, critique B2b).
   - Controls: `Button` set, `IconButton`, `Input`, `NumberStepper`, `Combobox`, `DatePicker` and
     `DayStrip` (never a raw `<input type="date">`), `Checkbox`, `Switch`, `FileDrop`.
   - People and status: `Avatar`, `AvatarStack`, `StatusPill`, `Badge`.
@@ -1454,6 +1454,21 @@ Tokens are theme-ready from R1, so this costs little later.
     below its other edge, else above, 8 px from the window's edges, pushed inside them only when
     nothing fits; it follows its button when anything scrolls and closes once the button has scrolled
     out of sight. Specs find an open menu's items with `menuChoices` (`src/testing/dom.ts`).
+- Built in critique B2b: the fold, the sidebar on short windows, and Cards / List.
+  - `UiDisclosure` (`ui/disclosure.ts`), the one fold: a native `<details>` whose 44 px row holds the
+    label, an optional hint and count, and the kit's chevron at its end, turned over while open (200 ms,
+    none for less motion); the browser's triangle is hidden in every engine, the row has a hover fill
+    and its focus ring inside it. Its content, `<ng-template appDisclosureContent>`, is made on first
+    open and kept; `[(open)]` lets a screen open it when a field inside is refused. `variant="panel"`
+    draws a card whose body opens under a hairline. Every fold of the app uses it (thirty in October
+    2026); specs find one with `fold` and open it with `toggleFold` (`src/testing/dom.ts`).
+  - The coach sidebar under 760 px of window height (nine rows, Team included, need about 741 px at full
+    spacing; the plan said about 700 for eight): groups 16 px apart, rows 36 px, labels 4 px above their
+    rows, the sidebar's padding and gaps 16 px, the space's name on one line; under about 640 px the
+    group labels are hidden from sight only. Where it still scrolls, the bar is thin and drawn for the
+    dark green, its gutter kept.
+  - `SegmentedControl` options take an `icon`, drawn before the word, never instead of it. The exercise
+    library's Cards / List is one, with the new `grid` and `list` glyphs.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves

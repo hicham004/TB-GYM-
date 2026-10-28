@@ -128,73 +128,80 @@
     </app-field>
   </fieldset>
 
-  <details class="extras" [open]="extrasOpen()" (toggle)="extrasOpen.set($any($event.target).open)">
-    <summary i18n>Fibre, sugar alcohols, alcohol and label calories</summary>
-    @if (unreported(); as missing) {
-      <p class="note">{{ missing }}&ngsp;<span i18n>Check the label if you have it.</span></p>
-    }
-    <div class="extra-grid">
-      <app-field label="Fibre (g)" i18n-label density="compact" [errors]="shown('more')">
-        <input
-          appControl
-          type="number"
-          inputmode="decimal"
-          name="fibre"
-          data-field="more"
-          min="0"
-          step="any"
-          [ngModel]="current.fibre"
-          (ngModelChange)="setNumber('fibre', $event)"
-          (blur)="attempt.touch('more')"
-        />
-      </app-field>
-      <app-field label="Sugar alcohols (g)" i18n-label density="compact">
-        <input
-          appControl
-          type="number"
-          inputmode="decimal"
-          name="polyols"
-          min="0"
-          step="any"
-          [ngModel]="current.polyols"
-          (ngModelChange)="setNumber('polyols', $event)"
-          (blur)="attempt.touch('more')"
-        />
-      </app-field>
-      <app-field label="Alcohol (g)" i18n-label density="compact">
-        <input
-          appControl
-          type="number"
-          inputmode="decimal"
-          name="alcohol"
-          min="0"
-          step="any"
-          [ngModel]="current.alcohol"
-          (ngModelChange)="setNumber('alcohol', $event)"
-          (blur)="attempt.touch('more')"
-        />
-      </app-field>
-      <app-field
-        label="Calories on the label"
-        i18n-label
-        density="compact"
-        help="Optional. The food is flagged if they’re far from what the macros add up to."
-        i18n-help
-      >
-        <input
-          appControl
-          type="number"
-          inputmode="decimal"
-          name="labelCalories"
-          min="0"
-          step="any"
-          [ngModel]="current.labelCalories"
-          (ngModelChange)="setNumber('labelCalories', $event)"
-          (blur)="attempt.touch('more')"
-        />
-      </app-field>
-    </div>
-  </details>
+  <app-disclosure
+    class="extras"
+    variant="panel"
+    label="Fibre, sugar alcohols, alcohol and label calories"
+    i18n-label
+    [(open)]="extrasOpen"
+  >
+    <ng-template appDisclosureContent>
+      @if (unreported(); as missing) {
+        <p class="note">{{ missing }}&ngsp;<span i18n>Check the label if you have it.</span></p>
+      }
+      <div class="extra-grid">
+        <app-field label="Fibre (g)" i18n-label density="compact" [errors]="shown('more')">
+          <input
+            appControl
+            type="number"
+            inputmode="decimal"
+            name="fibre"
+            data-field="more"
+            min="0"
+            step="any"
+            [ngModel]="current.fibre"
+            (ngModelChange)="setNumber('fibre', $event)"
+            (blur)="attempt.touch('more')"
+          />
+        </app-field>
+        <app-field label="Sugar alcohols (g)" i18n-label density="compact">
+          <input
+            appControl
+            type="number"
+            inputmode="decimal"
+            name="polyols"
+            min="0"
+            step="any"
+            [ngModel]="current.polyols"
+            (ngModelChange)="setNumber('polyols', $event)"
+            (blur)="attempt.touch('more')"
+          />
+        </app-field>
+        <app-field label="Alcohol (g)" i18n-label density="compact">
+          <input
+            appControl
+            type="number"
+            inputmode="decimal"
+            name="alcohol"
+            min="0"
+            step="any"
+            [ngModel]="current.alcohol"
+            (ngModelChange)="setNumber('alcohol', $event)"
+            (blur)="attempt.touch('more')"
+          />
+        </app-field>
+        <app-field
+          label="Calories on the label"
+          i18n-label
+          density="compact"
+          help="Optional. The food is flagged if they’re far from what the macros add up to."
+          i18n-help
+        >
+          <input
+            appControl
+            type="number"
+            inputmode="decimal"
+            name="labelCalories"
+            min="0"
+            step="any"
+            [ngModel]="current.labelCalories"
+            (ngModelChange)="setNumber('labelCalories', $event)"
+            (blur)="attempt.touch('more')"
+          />
+        </app-field>
+      </div>
+    </ng-template>
+  </app-disclosure>
 
   <fieldset class="allergens">
     <legend i18n>Contains</legend>

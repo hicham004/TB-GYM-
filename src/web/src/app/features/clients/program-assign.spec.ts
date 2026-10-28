@@ -14,6 +14,7 @@ import {
   chooseOption,
   field,
   fill,
+  fold,
   formSummary,
   press,
   query,
@@ -22,6 +23,7 @@ import {
   selectShows,
   settle,
   tick,
+  toggleFold,
 } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ProgramAssign } from './program-assign';
@@ -268,9 +270,9 @@ describe('Assign program', () => {
     const { host } = await render();
 
     expect(textOf(query(host, 'app-date-field .value'))).toBe('Thu, Oct 1, 2026');
-    expect(textOf(host.querySelector('.loads-title'))).toBe('Load settings');
-    expect(textOf(host.querySelector('.loads-now'))).toBe('kg · rounded to the nearest 2.5');
-    expect(host.querySelector<HTMLDetailsElement>('.loads')?.open).toBe(false);
+    const loads = fold(host, 'Load settings');
+    expect(textOf(loads.querySelector('.hint'))).toBe('kg · rounded to the nearest 2.5');
+    expect(loads.open).toBe(false);
   });
 
   it('starts on the day a plan that has not begun starts', async () => {
@@ -435,6 +437,7 @@ describe('Assign program', () => {
       programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
     });
     await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
+    await toggleFold(fixture, host, 'Load settings');
     tick(host, 'lb');
     await settle(fixture);
 
@@ -581,12 +584,15 @@ describe('Assign program', () => {
     const { fixture, host } = await render();
     await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
+    await toggleFold(fixture, host, 'Load settings');
     tick(host, 'lb');
     await settle(fixture);
 
     expect(query<HTMLInputElement>(host, 'fieldset.maxes input').value).toBe('');
     expect(textOf(host.querySelector('.unit'))).toBe('lb');
-    expect(textOf(host.querySelector('.loads-now'))).toBe('lb · rounded to the nearest 2.5');
+    expect(textOf(fold(host, 'Load settings').querySelector('.hint'))).toBe(
+      'lb · rounded to the nearest 2.5',
+    );
   });
 
   it('says where the program would run, and warns when that is past the end of the plan', async () => {
@@ -616,6 +622,22 @@ describe('Assign program', () => {
     const program = query<HTMLButtonElement>(selectField(host, 'Program'), 'button.trigger');
     expect(program.getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(program);
+  });
+
+  it('opens Load settings when its rounding is refused, with focus on the box (critique B2b)', async () => {
+    const { fixture, host, api } = await render();
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
+    await toggleFold(fixture, host, 'Load settings');
+    fill(host, 'Round loads to', '0');
+    await toggleFold(fixture, host, 'Load settings', false);
+
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    expect(api['assignClientMesocycle']).not.toHaveBeenCalled();
+    expect(fold(host, 'Load settings').open).toBe(true);
+    expect(textOf(host)).toContain('Enter a number above 0, such as 2.5.');
+    expect(document.activeElement).toBe(field(host, 'Round loads to'));
   });
 
   it('asks for a max before it assigns a program that needs one', async () => {

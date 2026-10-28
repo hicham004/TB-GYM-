@@ -393,69 +393,76 @@
                         }
                         @if (!readOnly && !collapsed(set)) {
                           @let effort = effortProblem(draft);
-                          <details class="set-note">
-                            <summary i18n>More options</summary>
-                            <!-- How hard it was, as RPE or as reps left (STR-003); one is sent, the
-                                 ranges are said before the save (CLIENT-5, CLIENT-9). -->
-                            <div class="effort">
+                          <app-disclosure
+                            class="set-note"
+                            label="More options"
+                            i18n-label
+                            [open]="optionsShown(set)"
+                            (openChange)="optionsToggled(set, $event)"
+                          >
+                            <ng-template appDisclosureContent>
+                              <!-- How hard it was, as RPE or as reps left (STR-003); one is sent, the
+                                   ranges are said before the save (CLIENT-5, CLIENT-9). -->
+                              <div class="effort">
+                                <label
+                                  ><span i18n>RPE (optional)</span
+                                  ><input
+                                    type="number"
+                                    min="5"
+                                    max="10"
+                                    step="0.5"
+                                    inputmode="decimal"
+                                    aria-label="Actual RPE"
+                                    i18n-aria-label
+                                    [attr.aria-describedby]="'rpe-hint-' + set.performanceId"
+                                    [attr.aria-invalid]="effort === 'rpe' || null"
+                                    [ngModel]="draft?.actualRpe"
+                                    (ngModelChange)="
+                                      updateSetDraft(set, { actualRpe: $event, actualRir: null })
+                                    "
+                                  /><small
+                                    class="hint"
+                                    [class.hint-wrong]="effort === 'rpe'"
+                                    [id]="'rpe-hint-' + set.performanceId"
+                                    i18n
+                                    >5 to 10, in half steps</small
+                                  ></label
+                                >
+                                <label
+                                  ><span i18n>Reps left (optional)</span
+                                  ><input
+                                    type="number"
+                                    min="0"
+                                    max="5"
+                                    step="0.5"
+                                    inputmode="decimal"
+                                    aria-label="Actual reps left"
+                                    i18n-aria-label
+                                    [attr.aria-describedby]="'rir-hint-' + set.performanceId"
+                                    [attr.aria-invalid]="effort === 'rir' || null"
+                                    [ngModel]="draft?.actualRir"
+                                    (ngModelChange)="
+                                      updateSetDraft(set, { actualRir: $event, actualRpe: null })
+                                    "
+                                  /><small
+                                    class="hint"
+                                    [class.hint-wrong]="effort === 'rir'"
+                                    [id]="'rir-hint-' + set.performanceId"
+                                    i18n
+                                    >0 to 5, in half steps</small
+                                  ></label
+                                >
+                              </div>
                               <label
-                                ><span i18n>RPE (optional)</span
+                                ><span i18n>Note for your coach</span
                                 ><input
-                                  type="number"
-                                  min="5"
-                                  max="10"
-                                  step="0.5"
-                                  inputmode="decimal"
-                                  aria-label="Actual RPE"
-                                  i18n-aria-label
-                                  [attr.aria-describedby]="'rpe-hint-' + set.performanceId"
-                                  [attr.aria-invalid]="effort === 'rpe' || null"
-                                  [ngModel]="draft?.actualRpe"
-                                  (ngModelChange)="
-                                    updateSetDraft(set, { actualRpe: $event, actualRir: null })
-                                  "
-                                /><small
-                                  class="hint"
-                                  [class.hint-wrong]="effort === 'rpe'"
-                                  [id]="'rpe-hint-' + set.performanceId"
-                                  i18n
-                                  >5 to 10, in half steps</small
-                                ></label
-                              >
-                              <label
-                                ><span i18n>Reps left (optional)</span
-                                ><input
-                                  type="number"
-                                  min="0"
-                                  max="5"
-                                  step="0.5"
-                                  inputmode="decimal"
-                                  aria-label="Actual reps left"
-                                  i18n-aria-label
-                                  [attr.aria-describedby]="'rir-hint-' + set.performanceId"
-                                  [attr.aria-invalid]="effort === 'rir' || null"
-                                  [ngModel]="draft?.actualRir"
-                                  (ngModelChange)="
-                                    updateSetDraft(set, { actualRir: $event, actualRpe: null })
-                                  "
-                                /><small
-                                  class="hint"
-                                  [class.hint-wrong]="effort === 'rir'"
-                                  [id]="'rir-hint-' + set.performanceId"
-                                  i18n
-                                  >0 to 5, in half steps</small
-                                ></label
-                              >
-                            </div>
-                            <label
-                              ><span i18n>Note for your coach</span
-                              ><input
-                                dir="auto"
-                                maxlength="1000"
-                                [ngModel]="draft?.clientNote"
-                                (ngModelChange)="updateSetDraft(set, { clientNote: $event })"
-                            /></label>
-                          </details>
+                                  dir="auto"
+                                  maxlength="1000"
+                                  [ngModel]="draft?.clientNote"
+                                  (ngModelChange)="updateSetDraft(set, { clientNote: $event })"
+                              /></label>
+                            </ng-template>
+                          </app-disclosure>
                         }
                         @if (set.performanceId && setErrors()[set.performanceId]; as setError) {
                           <p class="player-error">{{ setError }}</p>
@@ -508,25 +515,26 @@
           @if (workout.workoutExecutionId) {
             <footer class="workout-footer">
               @if (!readOnly) {
-                <details>
-                  <summary i18n>Note for your coach</summary>
-                  <label
-                    ><span i18n>Workout note</span
-                    ><textarea
-                      dir="auto"
-                      [(ngModel)]="workoutNotes[workout.sessionId]"
-                      maxlength="2000"
-                    ></textarea>
-                  </label>
-                  <button
-                    type="button"
-                    [disabled]="!workoutNotes[workout.sessionId] || busy()"
-                    (click)="addNote(workout)"
-                    i18n
-                  >
-                    Send note
-                  </button>
-                </details>
+                <app-disclosure label="Note for your coach" i18n-label>
+                  <ng-template appDisclosureContent>
+                    <label
+                      ><span i18n>Workout note</span
+                      ><textarea
+                        dir="auto"
+                        [(ngModel)]="workoutNotes[workout.sessionId]"
+                        maxlength="2000"
+                      ></textarea>
+                    </label>
+                    <button
+                      type="button"
+                      [disabled]="!workoutNotes[workout.sessionId] || busy()"
+                      (click)="addNote(workout)"
+                      i18n
+                    >
+                      Send note
+                    </button>
+                  </ng-template>
+                </app-disclosure>
               }
               @for (note of workout.notes; track note.id) {
                 <p class="note-history">

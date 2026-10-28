@@ -5,6 +5,7 @@ import { ProgressEntries } from '../progress/progress-entries';
 import { ClientProgram } from './client-program';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { drawnTogether } from '../../ui/drawn-together';
 
 /**
@@ -59,7 +60,7 @@ export class ClientNutritionSection {
  */
 @Component({
   selector: 'app-client-progress-section',
-  imports: [ProgressDashboardView, ProgressEntries],
+  imports: [ProgressDashboardView, ProgressEntries, UiDisclosure, UiDisclosureContent],
   template: `
     <app-progress-dashboard
       [clientId]="context.clientId()"
@@ -67,26 +68,22 @@ export class ClientNutritionSection {
       (answered)="dashboardAnswered.set(true)"
     />
     @if (!context.isFormer()) {
-      <details
+      <app-disclosure
         class="entries"
         [class.entries--waiting]="!entriesDrawn()"
-        (toggle)="entriesToggled($event)"
+        variant="panel"
+        label="Entries and corrections"
+        i18n-label
+        hint="Record a weigh-in or measurement, fix a mistake, add or remove photos."
+        i18n-hint
       >
-        <summary>
-          <span class="entries-title" i18n>Entries and corrections</span>
-          <span class="entries-hint" i18n
-            >Record a weigh-in or measurement, fix a mistake, add or remove photos.</span
-          >
-        </summary>
-        @if (entriesOpened()) {
-          <div class="entries-body">
-            <app-progress-entries
-              [clientId]="context.clientId()"
-              [clientName]="context.profile()?.firstName ?? null"
-            />
-          </div>
-        }
-      </details>
+        <ng-template appDisclosureContent>
+          <app-progress-entries
+            [clientId]="context.clientId()"
+            [clientName]="context.profile()?.firstName ?? null"
+          />
+        </ng-template>
+      </app-disclosure>
     }
   `,
   styles: `
@@ -99,59 +96,18 @@ export class ClientNutritionSection {
     }
 
     .entries {
-      background: var(--tb-surface);
-      border: 1px solid var(--tb-line);
-      border-radius: var(--tb-radius-card);
-      box-shadow: var(--tb-shadow-card);
       margin-block-start: 1rem;
-      overflow: hidden;
-    }
-
-    summary {
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      gap: 0.125rem;
-      min-block-size: 2.75rem;
-      padding: 0.875rem 1.25rem;
-    }
-
-    summary:focus-visible {
-      outline: 3px solid var(--tb-focus);
-      outline-offset: -3px;
-    }
-
-    .entries-title {
-      color: var(--tb-ink);
-      font-weight: 600;
-    }
-
-    .entries-hint {
-      color: var(--tb-muted);
-      font-size: 0.875rem;
-    }
-
-    .entries-body {
-      background: var(--tb-surface);
-      border-block-start: 1px solid var(--tb-line);
-      color: var(--tb-ink);
-      padding: 1rem 1.25rem 1.25rem;
     }
   `,
 })
 export class ClientProgressSection {
   protected readonly context = inject(ClientWorkspaceContext);
-  protected readonly entriesOpened = signal(false);
   protected readonly dashboardAnswered = signal(false);
   /** The fold waits for the charts above it, which would push it down as they land (audit UIQ-5). */
   protected readonly entriesDrawn = drawnTogether(
     () => true,
     () => this.dashboardAnswered(),
   );
-
-  protected entriesToggled(event: Event): void {
-    if ((event.target as HTMLDetailsElement).open) this.entriesOpened.set(true);
-  }
 }
 
 /**

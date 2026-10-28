@@ -116,7 +116,7 @@ for (const width of [390, 1440]) {
     await expect(sheet).toHaveCount(0);
     const online = page.locator('.plans > .cards > .card').first();
     await expect(online.locator(':scope > .options .price')).toHaveText(['USD 130', 'USD 360']);
-    await expect(online.locator('details.retired > summary')).toHaveText(/Old price options \(2\)/);
+    await expect(online.locator('.retired summary')).toHaveText(/Old price options \(2\)/);
     await expect(page.getByText('New price saved.')).toBeVisible();
     expect(requests).toEqual([
       { priceAmount: 360, version: 1, idempotencyKey: expect.any(String) },

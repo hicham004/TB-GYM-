@@ -95,6 +95,9 @@
 // the full sidebar width with 24px inline and 8px end padding, so a row's 5px focus ring (2px gap
 // + 3px ring) is never clipped by the scroll edge.
 .sidebar-nav {
+  // Where the rows must still scroll, a thin bar drawn for the dark green, never the browser's light
+  // one (critique B2b); its gutter is kept, so the rows never narrow when it appears.
+  color-scheme: dark;
   flex: 1 1 auto;
   min-block-size: 0;
   overflow-x: hidden;
@@ -102,6 +105,26 @@
   padding-block: var(--space-8);
   padding-inline: var(--space-24);
   scroll-padding-block: var(--space-8);
+  scrollbar-color: var(--tb-on-brand-muted) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+// A short window (critique B2b): a laptop at 1366 × 768 leaves about 633 px, at 125 % scaling about
+// 489. The sidebar tightens with the rows (coach-nav.scss), so they fit without a scroll where they can.
+// Nine rows (Team included) need about 741 px at full spacing, hence 760 rather than the plan's 700.
+@media (max-height: 760px) {
+  .sidebar {
+    gap: var(--space-16);
+    padding-block: var(--space-16);
+  }
+
+  // One line, so a long name ends in an ellipsis rather than pushing the rows down.
+  .brand-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .identity {

@@ -83,8 +83,7 @@ textarea {
   font: inherit;
 }
 button,
-a,
-summary {
+a {
   touch-action: manipulation;
 }
 button {
@@ -101,8 +100,7 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-textarea:focus-visible,
-summary:focus-visible {
+textarea:focus-visible {
   outline: 3px solid var(--tb-accent, #d9ed94);
   outline-offset: 3px;
 }
@@ -181,10 +179,6 @@ summary:focus-visible {
 .previous-performance strong {
   color: #fff;
   font-variant-numeric: tabular-nums;
-}
-.workout-footer summary {
-  font-size: 0.78rem;
-  cursor: pointer;
 }
 .workout-footer label {
   display: grid;

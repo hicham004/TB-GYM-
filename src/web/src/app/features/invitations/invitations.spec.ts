@@ -8,7 +8,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { fill, press, settle, type } from '../../../testing/dom';
+import { fill, fold, press, settle, toggleFold, type } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { atlasInvitations, invitation, NOW } from '../../../testing/invitation-fixtures';
 import { Invitations } from './invitations';
@@ -69,7 +69,9 @@ describe('Invitations', () => {
   });
 
   it('lists who is waiting to join first, with what happens next, and the rest behind a closed disclosure', async () => {
-    const { host } = await render({ getInvitations: vi.fn(() => of(atlasInvitations())) });
+    const { fixture, host } = await render({
+      getInvitations: vi.fn(() => of(atlasInvitations())),
+    });
 
     expect(textOf(host.querySelector('h1'))).toBe('Invitations');
     expect(textOf(host.querySelector('[data-waiting] h2'))).toBe('Waiting to join 2');
@@ -84,9 +86,9 @@ describe('Invitations', () => {
       'Sent twice · the newest link works until Tue 13 Oct',
     );
 
-    const earlier = host.querySelector<HTMLDetailsElement>('[data-earlier]')!;
-    expect(earlier.open).toBe(false);
-    expect(textOf(earlier.querySelector('summary'))).toBe('Earlier invitations (3)');
+    const earlier = host.querySelector<HTMLElement>('[data-earlier]')!;
+    expect(fold(host, 'Earlier invitations (3)').open).toBe(false);
+    await toggleFold(fixture, host, 'Earlier invitations (3)');
     expect(names(host, '[data-earlier]')).toEqual(['Lynn Bou Khalil', 'Maya Fakhoury', 'Ali Nasr']);
     expect(Array.from(earlier.querySelectorAll('app-status-pill')).map(textOf)).toEqual([
       'Link ran out',
@@ -411,6 +413,7 @@ describe('Invitations', () => {
     const { fixture, host } = await render({
       getInvitations: vi.fn(() => of(atlasInvitations())),
     });
+    await toggleFold(fixture, host, 'Earlier invitations (3)');
     const joined = host.querySelector('[data-invitation="invitation-3"]')!;
     expect(joined.querySelector('button')).toBeNull();
 

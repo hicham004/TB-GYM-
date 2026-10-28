@@ -178,7 +178,24 @@ describe('the shared program set editor', () => {
     fixture.componentInstance.focus(invalid.key);
     await settle(fixture);
     expect((document.activeElement as HTMLInputElement).value).toBe('-1');
-    expect(host.querySelector<HTMLDetailsElement>('.more')?.open).toBe(true);
+    expect(host.querySelector<HTMLDetailsElement>('.more details')?.open).toBe(true);
     expect(document.activeElement?.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('opens Rest, tempo & notes it never drew for a refused rest, with focus on it (critique B2b)', async () => {
+    const { fixture, host, exercise } = await render();
+    const invalid = exercise.sets[1];
+    invalid.restSeconds = 4000;
+
+    // The second set's fields, and its fold's boxes, are not drawn until it is asked for.
+    expect(host.querySelector(`[data-set-key="${invalid.key}"] .more`)).toBeNull();
+    fixture.componentInstance.focus(invalid.key);
+    await settle(fixture);
+
+    const more = query<HTMLDetailsElement>(host, `[data-set-key="${invalid.key}"] .more details`);
+    expect(more.open).toBe(true);
+    expect(document.activeElement).toBe(field(more, 'Rest (seconds)'));
+    expect(document.activeElement?.getAttribute('aria-invalid')).toBe('true');
+    expect(more.textContent).toContain('rest must be between 0 and 3600 seconds.');
   });
 });

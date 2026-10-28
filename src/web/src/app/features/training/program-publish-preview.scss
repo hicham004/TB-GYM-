@@ -39,34 +39,6 @@
 .hero span {
   font-size: 0.875rem;
 }
-.session {
-  background: var(--tb-surface);
-  border: 1px solid var(--tb-line);
-  border-radius: var(--tb-radius-card-small);
-}
-.session summary {
-  align-items: center;
-  cursor: pointer;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.875rem;
-}
-.session summary::-webkit-details-marker {
-  display: none;
-}
-.session summary strong {
-  flex: 1 1 9rem;
-  overflow-wrap: anywhere;
-}
-.day {
-  color: var(--tb-muted);
-  font-size: 0.8125rem;
-}
-.session-body {
-  border-block-start: 1px solid var(--tb-line);
-  padding: 0.875rem;
-}
 .exercise + .exercise {
   margin-block-start: 1.25rem;
 }
@@ -137,9 +109,4 @@
   color: var(--tb-muted);
   margin: 0;
   padding: 1rem;
-}
-summary:focus-visible {
-  border-radius: 8px;
-  outline: 2px solid var(--tb-focus);
-  outline-offset: -2px;
 }

@@ -1,5 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import {
   formulaName,
   inputsLine,
@@ -18,7 +19,7 @@ import {
  */
 @Component({
   selector: 'app-targets-result',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, UiDisclosure, UiDisclosureContent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './targets-result.html',
   styleUrl: './targets-result.scss',

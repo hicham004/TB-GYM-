@@ -86,21 +86,27 @@
               </ol>
               <!-- The program's history, closed by default (§2 rule 7): a cancel's reason is seen again (LOST-6). -->
               @if (block.history.length > 0) {
-                <details class="history" data-program-history>
-                  <summary i18n>History ({{ block.history.length }})</summary>
-                  <ol class="history-rows">
-                    @for (row of block.history; track row.id) {
-                      <li>
-                        <span class="history-what" dir="auto">{{ row.what }}</span
-                        >&ngsp;
-                        <span class="history-day">{{ row.day }}</span>
-                        @if (row.reason; as reason) {
-                          &ngsp;<q class="history-reason" dir="auto">{{ reason }}</q>
-                        }
-                      </li>
-                    }
-                  </ol>
-                </details>
+                <app-disclosure
+                  class="history"
+                  data-program-history
+                  label="History ({{ block.history.length }})"
+                  i18n-label
+                >
+                  <ng-template appDisclosureContent>
+                    <ol class="history-rows">
+                      @for (row of block.history; track row.id) {
+                        <li>
+                          <span class="history-what" dir="auto">{{ row.what }}</span
+                          >&ngsp;
+                          <span class="history-day">{{ row.day }}</span>
+                          @if (row.reason; as reason) {
+                            &ngsp;<q class="history-reason" dir="auto">{{ reason }}</q>
+                          }
+                        </li>
+                      }
+                    </ol>
+                  </ng-template>
+                </app-disclosure>
               }
             </section>
             <app-program-maxes

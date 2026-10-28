@@ -83,22 +83,28 @@
                   Record a max
                 </button>
               </div>
-              <details class="history" data-history>
-                <summary i18n>All {{ view.history.length }} on record</summary>
-                <ul class="entries">
-                  @for (row of view.history; track row.entry.id) {
-                    <li class="entry">
-                      <span class="entry-when">{{ row.day }}</span
-                      >&ngsp;<strong class="entry-value">{{ row.value }}</strong
-                      >&ngsp;<span class="entry-kind">{{ row.entry.kindLabel }}</span
-                      >&ngsp;<span class="entry-source" dir="auto">{{ row.entry.source }}</span>
-                      @if (row.entry.note) {
-                        &ngsp;<span class="entry-note" dir="auto">{{ row.entry.note }}</span>
-                      }
-                    </li>
-                  }
-                </ul>
-              </details>
+              <app-disclosure
+                class="history"
+                data-history
+                label="All {{ view.history.length }} on record"
+                i18n-label
+              >
+                <ng-template appDisclosureContent>
+                  <ul class="entries">
+                    @for (row of view.history; track row.entry.id) {
+                      <li class="entry">
+                        <span class="entry-when">{{ row.day }}</span
+                        >&ngsp;<strong class="entry-value">{{ row.value }}</strong
+                        >&ngsp;<span class="entry-kind">{{ row.entry.kindLabel }}</span
+                        >&ngsp;<span class="entry-source" dir="auto">{{ row.entry.source }}</span>
+                        @if (row.entry.note) {
+                          &ngsp;<span class="entry-note" dir="auto">{{ row.entry.note }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                </ng-template>
+              </app-disclosure>
             </li>
           }
         </ul>

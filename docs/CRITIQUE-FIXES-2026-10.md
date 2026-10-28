@@ -18,7 +18,7 @@ request or commit, Built, not merged, or Blocked (with the question).
 | --- | --- | --- | --- |
 | B1 | Words | Every rename on the word list except the Clients filter chips, which wait for the filters' rework (2026-10-27). One Reps box. "Workouts", not "sessions", on coach screens. | Done · 2026-10-27 · PR #1 |
 | B2a | Kit · The sheet's footer and menus | A footer outside the scroll, in the kit, for every sheet (not the one-line fix). Menus fixed in the kit, the meal plan's day menu included. | Done · 2026-10-28 · PR #4 |
-| B2b | Kit · Folds, the sidebar and the view switch | One fold look everywhere. Tighter sidebar rows on short windows, with a thin dark scrollbar only where still needed. Cards / List with an icon and the word. Before it starts, the dark mode switch still uncommitted in the owner's tree is committed or dropped, since it changes the coach shell too. | Open |
+| B2b | Kit · Folds, the sidebar and the view switch | One fold look everywhere. Tighter sidebar rows on short windows, with a thin dark scrollbar only where still needed. Cards / List with an icon and the word. Before it starts, the dark mode switch still uncommitted in the owner's tree is committed or dropped, since it changes the coach shell too. | Done · 2026-10-28 · built locally, committed to main (the owner's word); the short-window spacing starts under 760 px, since nine rows need about 741 |
 | B3a | Team | A Team row in the sidebar. The seats line and the invite's seat sentence (yes, 2026-10-27, once explained). A read-only Team page for coaches (yes, against the recommendation). A Coach filter on Clients. Chats stay private: the owner sees every client and their data, never a coach's chats (ADR 0026, confirmed 2026-10-27). | Open |
 | B3b | Messages and check-ins | Saved replies at the top of Messages. One Unread filter with Mark as unread, as in WhatsApp, and Waiting for reply removed (2026-10-27). Check-ins opens on To review, with a line saying what a check-in is (the owner's note). | Open |
 | B4a | The Clients table | The table the owner described (2026-10-27): age and goal; status joined with the last 7 days; the plan with what's included, its price and its end; last check-in; last activity. The filter chips wait. A plan's end keeps its own status. The overdue check-in signal. | Open |
@@ -125,7 +125,8 @@ done or not verified, the screenshots, and the next row.
 
 **The owner's own steps.**
 
-- Before B2b: commit or drop the dark mode switch in the owner's tree, which changes the coach shell too.
+- Before B2b: commit or drop the dark mode switch in the owner's tree, which changes the coach shell too
+  (done 2026-10-28: committed, a1c189b).
 - Before B8c: Toufic and a dietitian review energy v2's table and its words.
 - Before B10b: ask Toufic how long his packs stay valid, his no-show and late-cancel rule, whether single sessions
   are paid in cash on the day, and whether one pack ever mixes kinds of session; and whether the macro PDF on his

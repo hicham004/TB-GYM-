@@ -48,21 +48,27 @@
       <!-- The history the note above is kept in (audit COACH-16), newest first. -->
       @if (history(); as rows) {
         @if (rows.length > 0) {
-          <details class="history" data-coach-history>
-            <summary i18n>Coach history ({{ rows.length }})</summary>
-            <ol class="history-rows">
-              @for (row of rows; track row.id) {
-                <li [class.current]="row.current">
-                  <span class="history-coach" dir="auto">{{ row.coach }}</span
-                  >&ngsp;
-                  <span class="history-line" dir="auto">{{ row.line }}</span>
-                  @if (row.note; as note) {
-                    &ngsp;<q class="history-note" dir="auto">{{ note }}</q>
-                  }
-                </li>
-              }
-            </ol>
-          </details>
+          <app-disclosure
+            class="history"
+            data-coach-history
+            label="Coach history ({{ rows.length }})"
+            i18n-label
+          >
+            <ng-template appDisclosureContent>
+              <ol class="history-rows">
+                @for (row of rows; track row.id) {
+                  <li [class.current]="row.current">
+                    <span class="history-coach" dir="auto">{{ row.coach }}</span
+                    >&ngsp;
+                    <span class="history-line" dir="auto">{{ row.line }}</span>
+                    @if (row.note; as note) {
+                      &ngsp;<q class="history-note" dir="auto">{{ note }}</q>
+                    }
+                  </li>
+                }
+              </ol>
+            </ng-template>
+          </app-disclosure>
         }
       } @else if (historyFailed()) {
         <p class="history-failed tb-text-compact" i18n>The coach history couldn’t be loaded.</p>

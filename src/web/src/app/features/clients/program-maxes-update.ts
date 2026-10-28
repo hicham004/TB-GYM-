@@ -25,6 +25,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { ModalFooter } from '../../ui/modal-footer';
@@ -59,7 +60,17 @@ import {
  */
 @Component({
   selector: 'app-program-maxes-update',
-  imports: [Button, Checkbox, Control, Field, FormSummary, ModalFooter, Skeleton],
+  imports: [
+    Button,
+    Checkbox,
+    Control,
+    Field,
+    FormSummary,
+    ModalFooter,
+    Skeleton,
+    UiDisclosure,
+    UiDisclosureContent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="body">
@@ -120,10 +131,11 @@ import {
                                     <span class="delta">{{ delta }}</span>
                                   }
                                 </span>
-                                <details class="how">
-                                  <summary i18n>How it is worked out</summary>
-                                  <p dir="auto">{{ set.explanation }}</p>
-                                </details>
+                                <app-disclosure class="how" label="How it is worked out" i18n-label>
+                                  <ng-template appDisclosureContent>
+                                    <p dir="auto">{{ set.explanation }}</p>
+                                  </ng-template>
+                                </app-disclosure>
                               </li>
                             }
                           </ul>
@@ -459,18 +471,6 @@ import {
 
     .how {
       grid-column: 1 / -1;
-    }
-
-    .how summary {
-      color: var(--tb-accent-ink);
-      cursor: pointer;
-      font-size: 0.8125rem;
-      min-block-size: 1.75rem;
-    }
-
-    .how summary:focus-visible {
-      outline: 3px solid var(--tb-focus);
-      outline-offset: 2px;
     }
 
     .how p {

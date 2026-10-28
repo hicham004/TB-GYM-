@@ -89,8 +89,7 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible,
-summary:focus-visible {
+select:focus-visible {
   outline: 3px solid var(--tb-focus, #153d33);
   outline-offset: 3px;
 }
@@ -130,8 +129,7 @@ summary:focus-visible {
   font-size: 0.85rem;
 }
 .hero-card,
-.panel,
-.all-entries {
+.panel {
   background: var(--tb-surface, #fff);
   border: 1px solid var(--tb-line, #d9dfd1);
   border-radius: 1.15rem;
@@ -301,15 +299,9 @@ app-trend-chart {
   color: var(--tb-muted, #4f6057);
   padding-block: 1rem;
 }
-.all-entries summary {
-  cursor: pointer;
-  font-weight: 700;
-  min-block-size: 2.75rem;
-  display: flex;
-  align-items: center;
-}
 .all-entries ol {
   list-style: none;
+  margin-block-start: 0;
   padding: 0;
   max-block-size: 25rem;
   overflow-y: auto;

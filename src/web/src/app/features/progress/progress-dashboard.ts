@@ -33,6 +33,7 @@ import { Button } from '../../ui/button';
 import { addDays, deviceToday } from '../../ui/calendar';
 import { TrendChart } from '../../ui/trend-chart';
 import { BarChart } from '../../ui/bar-chart';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { PhotoCompare } from '../../ui/photo-compare';
 import { BeforeAfterButton } from '../share-cards/before-after-button';
 import { EntrySheets } from './entry-sheets';
@@ -50,6 +51,8 @@ import { weighInRows, type Audience } from './progress-entries.models';
     TrendChart,
     BarChart,
     PhotoCompare,
+    UiDisclosure,
+    UiDisclosureContent,
   ],
   templateUrl: './progress-dashboard.html',
   styleUrl: './progress-dashboard.scss',

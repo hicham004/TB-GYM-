@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoachClientDetails } from '../../core/api/api.models';
-import { settle } from '../../../testing/dom';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
+import { fold, settle, toggleFold } from '../../../testing/dom';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { ClientProgressSection } from './client-workspace-sections';
 
@@ -30,7 +31,7 @@ class EntriesStub {
 async function render(release: CoachClientDetails['release'] = null) {
   TestBed.configureTestingModule({ providers: [ClientWorkspaceContext] });
   TestBed.overrideComponent(ClientProgressSection, {
-    set: { imports: [DashboardStub, EntriesStub] },
+    set: { imports: [DashboardStub, EntriesStub, UiDisclosure, UiDisclosureContent] },
   });
   const context = TestBed.inject(ClientWorkspaceContext);
   context.clientId.set('client-1');
@@ -53,34 +54,32 @@ describe('ClientProgressSection', () => {
 
   it('keeps the entry tools collapsed, and does not load them until they are opened', async () => {
     const { fixture, host } = await render();
-    const details = host.querySelector('details')!;
+    const entries = fold(host, 'Entries and corrections');
 
-    expect(details.open).toBe(false);
-    expect(host.querySelector('summary')?.textContent).toContain('Entries and corrections');
+    expect(entries.open).toBe(false);
+    expect(entries.querySelector('summary .hint')?.textContent).toBe(
+      'Record a weigh-in or measurement, fix a mistake, add or remove photos.',
+    );
     expect(host.querySelector('app-progress-entries')).toBeNull();
 
-    details.open = true;
-    details.dispatchEvent(new Event('toggle'));
-    await settle(fixture);
+    await toggleFold(fixture, host, 'Entries and corrections');
     expect(host.querySelector('app-progress-entries')?.textContent).toBe(
       'entries for client-1 / Maya',
     );
 
     // Closing it again keeps what it loaded, so reopening is instant and nothing is lost.
-    details.open = false;
-    details.dispatchEvent(new Event('toggle'));
-    await settle(fixture);
+    await toggleFold(fixture, host, 'Entries and corrections', false);
     expect(host.querySelector('app-progress-entries')).not.toBeNull();
   });
 
   it('draws the entry tools once the charts above them have answered, so they are not pushed down (audit UIQ-5)', async () => {
     const { fixture, host } = await render();
-    expect(host.querySelector('details')?.classList).toContain('entries--waiting');
+    expect(host.querySelector('app-disclosure')?.classList).toContain('entries--waiting');
 
     fixture.debugElement.query(By.directive(DashboardStub)).componentInstance.answered.emit();
     await settle(fixture);
 
-    expect(host.querySelector('details')?.classList).not.toContain('entries--waiting');
+    expect(host.querySelector('app-disclosure')?.classList).not.toContain('entries--waiting');
   });
 
   it('offers no entry tools for a former client, whose record is read-only', async () => {

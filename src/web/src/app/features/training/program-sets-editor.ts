@@ -12,6 +12,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { trainingLoadStrategyLabel, trainingSetTypeLabel } from '../../core/i18n/display-labels';
 import { Button, IconButton } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
@@ -27,10 +28,28 @@ import {
 const WORKING_HINT = $localize`Top, back-off, drop and failure sets are working sets too; a warm-up never counts in the summary or the records.`;
 const PERCENTAGE_HINT = $localize`Of this client’s training max, set when you assign the program.`;
 
+/** Whether a set's problem is a box under Rest, tempo & notes (a direct load says its own above). */
+function refusedUnderMore(set: DraftSet): boolean {
+  const field = setIssue(set)?.field;
+  return (
+    field === 'restSeconds' || (field === 'manualLoadOverride' && set.loadStrategy !== 'Direct')
+  );
+}
+
 /** The same set editor on the grid and in the session sheet; all edits reach the owned draft. */
 @Component({
   selector: 'app-program-sets-editor',
-  imports: [Button, Control, Field, FormsModule, Icon, IconButton, UiMenu],
+  imports: [
+    Button,
+    Control,
+    Field,
+    FormsModule,
+    Icon,
+    IconButton,
+    UiDisclosure,
+    UiDisclosureContent,
+    UiMenu,
+  ],
   templateUrl: './program-sets-editor.html',
   styleUrl: './program-sets-editor.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -43,6 +62,8 @@ export class ProgramSetsEditor {
   private readonly injector = inject(Injector);
   protected readonly chosenSet = signal<string | null>(null);
   protected readonly checked = signal<ReadonlySet<string>>(new Set());
+  /** The sets whose Rest, tempo & notes is open; a refused box in it opens it (critique B2b). */
+  protected readonly moreOpen = signal<ReadonlySet<string>>(new Set());
   protected readonly summary = setSummary;
   protected readonly typeLabel = trainingSetTypeLabel;
   protected readonly strategyLabel = trainingLoadStrategyLabel;
@@ -120,6 +141,15 @@ export class ProgramSetsEditor {
 
   protected check(set: DraftSet): void {
     this.checked.update((keys) => new Set([...keys, set.key]));
+  }
+
+  protected moreToggled(set: DraftSet, open: boolean): void {
+    this.moreOpen.update((keys) => {
+      const next = new Set(keys);
+      if (open) next.add(set.key);
+      else next.delete(set.key);
+      return next;
+    });
   }
 
   protected errors(set: DraftSet, field: SetIssue['field']): string[] | null {
@@ -224,6 +254,9 @@ export class ProgramSetsEditor {
   focus(key: string): void {
     this.chosenSet.set(key);
     this.checked.update((keys) => new Set([...keys, key]));
+    // The fold's boxes are made when it opens, so it opens before the refused one is looked for.
+    const set = this.exercise().sets.find((item) => item.key === key);
+    if (set && refusedUnderMore(set)) this.moreToggled(set, true);
     afterNextRender(
       () => {
         const row = Array.from(
@@ -232,8 +265,6 @@ export class ProgramSetsEditor {
         const field =
           row?.querySelector<HTMLInputElement>('input[aria-invalid="true"]') ??
           row?.querySelector<HTMLInputElement>('input');
-        const details = field?.closest('details');
-        if (details) details.open = true;
         field?.focus();
       },
       { injector: this.injector },

@@ -25,6 +25,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import type { GirthUnit, MassUnit } from '../../core/units/body-units';
 import { Button } from '../../ui/button';
 import { addDays, deviceToday, isoWeekdayOfName } from '../../ui/calendar';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
@@ -90,6 +91,8 @@ const GIRTH_UNITS: readonly SegmentOption[] = [
     RouterLink,
     SegmentedControl,
     Skeleton,
+    UiDisclosure,
+    UiDisclosureContent,
     UiMenu,
     UiTabPane,
     UiTabs,

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
-import { settle } from '../../../testing/dom';
+import { fold, settle, toggleFold } from '../../../testing/dom';
 import { LIBRARY, versionView } from '../../../testing/program-builder-fixtures';
 import { libraryExercise } from './program-builder.models';
 import { ProgramPublishPreview } from './program-publish-preview';
@@ -27,7 +27,12 @@ describe('the program’s client preview', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('shows each set exactly, preserves overrides and notes, and makes no invented load or date', async () => {
-    const { host, program } = await render();
+    const { fixture, host, program } = await render();
+    // The first workout starts open; each other one opens on a press.
+    expect(fold(host, program.weeks[0].sessions[0].name).open).toBe(true);
+    for (const session of program.weeks[0].sessions.slice(1)) {
+      await toggleFold(fixture, host, session.name);
+    }
     const text = host.textContent!;
     expect(text).toContain('80 lb fixed load');
     expect(text).toContain('82.5% of training max');

@@ -133,6 +133,26 @@
             <p class="lab-caption" i18n>Past weeks stay here when you need them.</p>
           </ng-template>
         </app-tabs>
+        <app-segmented-control
+          label="Show as"
+          [options]="viewOptions"
+          [(selected)]="selectedView"
+        />
+        <h3 class="lab-group-title" i18n>Fold away what is rarely needed</h3>
+        <app-disclosure label="Earlier maxes" hint="Back squat, bench press" [count]="2">
+          <ng-template appDisclosureContent>
+            <p class="lab-caption" i18n>Made the first time the fold opens, then kept.</p>
+          </ng-template>
+        </app-disclosure>
+        <app-disclosure
+          label="Entries and corrections"
+          hint="Record a weigh-in or measurement, fix a mistake."
+          variant="panel"
+        >
+          <ng-template appDisclosureContent>
+            <p class="lab-caption" i18n>A panel opens its body under a hairline.</p>
+          </ng-template>
+        </app-disclosure>
       </div>
     </div>
 

@@ -33,9 +33,10 @@ import { Checkbox } from '../../ui/checkbox';
 import { EmptyState } from '../../ui/empty-state';
 import { Control, Field } from '../../ui/field';
 import { UiDialog } from '../../ui/dialog';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Icon } from '../../ui/icon';
 import { ProgressRing } from '../../ui/progress-ring';
-import { SegmentedControl } from '../../ui/segmented-control';
+import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { UiSelect } from '../../ui/select';
 import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
@@ -91,6 +92,8 @@ export const LAB_SAVE_DELAY_MS = 1200;
     StatusLabel,
     StatusPill,
     TimeInput,
+    UiDisclosure,
+    UiDisclosureContent,
     UiSelect,
     UiTabPane,
     UiTabs,
@@ -134,6 +137,11 @@ export class UiLab {
   ];
   protected readonly selectedPeriod = signal('week');
   protected readonly selectedKitTab = signal<string | undefined>('overview');
+  protected readonly viewOptions: readonly SegmentOption[] = [
+    { value: 'grid', label: 'Cards', icon: 'grid' },
+    { value: 'list', label: 'List', icon: 'list' },
+  ];
+  protected readonly selectedView = signal('grid');
 
   /** The direction links are current only for their exact query string. */
   protected readonly exactLink: IsActiveMatchOptions = {

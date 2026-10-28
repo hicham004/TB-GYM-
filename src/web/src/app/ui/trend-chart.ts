@@ -1,5 +1,6 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, input } from '@angular/core';
+import { UiDisclosure, UiDisclosureContent } from './disclosure';
 
 export interface TrendPoint {
   date: string;
@@ -31,7 +32,7 @@ const HEIGHT = 240;
 
 @Component({
   selector: 'app-trend-chart',
-  imports: [DatePipe, DecimalPipe],
+  imports: [DatePipe, DecimalPipe, UiDisclosure, UiDisclosureContent],
   template: `
     <div class="trend-chart">
       @if (hasData()) {
@@ -111,33 +112,34 @@ const HEIGHT = 240;
       } @else {
         <p class="empty" i18n>Log a few weights to see your trend.</p>
       }
-      <details>
-        <summary i18n>Chart values</summary>
-        <table>
-          <caption>
-            <ng-container i18n>Bodyweight observations and trend estimates</ng-container>
-            ({{
-              unit()
-            }})
-          </caption>
-          <thead>
-            <tr>
-              <th i18n>Date</th>
-              <th i18n>Weight</th>
-              <th i18n>Trend</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (point of visibleRows(); track point.date) {
+      <app-disclosure class="values" label="Chart values" i18n-label>
+        <ng-template appDisclosureContent>
+          <table>
+            <caption>
+              <ng-container i18n>Bodyweight observations and trend estimates</ng-container>
+              ({{
+                unit()
+              }})
+            </caption>
+            <thead>
               <tr>
-                <th>{{ point.date }}</th>
-                <td>{{ point.value ?? '—' }}</td>
-                <td>{{ point.estimate ?? '—' }}</td>
+                <th i18n>Date</th>
+                <th i18n>Weight</th>
+                <th i18n>Trend</th>
               </tr>
-            }
-          </tbody>
-        </table>
-      </details>
+            </thead>
+            <tbody>
+              @for (point of visibleRows(); track point.date) {
+                <tr>
+                  <th>{{ point.date }}</th>
+                  <td>{{ point.value ?? '—' }}</td>
+                  <td>{{ point.estimate ?? '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </ng-template>
+      </app-disclosure>
     </div>
   `,
   styles: [
@@ -264,17 +266,11 @@ const HEIGHT = 240;
         border-radius: 50%;
         inline-size: 0.6rem;
       }
-      details {
+      .values {
         margin-block-start: 0.6rem;
-        font-size: 0.8rem;
-        max-inline-size: 100%;
-        overflow-x: auto;
-      }
-      summary {
-        cursor: pointer;
-        min-block-size: 2rem;
       }
       table {
+        font-size: 0.8rem;
         display: block;
         max-inline-size: 100%;
         overflow-x: auto;

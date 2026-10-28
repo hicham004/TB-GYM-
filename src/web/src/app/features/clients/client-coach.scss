@@ -53,27 +53,14 @@
 // The coach history (COACH-16): closed until asked for, so the dialog stays one decision.
 .history {
   border-block-start: 1px solid var(--tb-line);
-  padding-block-start: 0.75rem;
-}
-
-.history summary {
-  color: var(--tb-ink);
-  cursor: pointer;
-  font-weight: 600;
-  min-block-size: 1.5rem;
-}
-
-.history summary:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--tb-focus);
-  outline-offset: 2px;
+  padding-block-start: 0.5rem;
 }
 
 .history-rows {
   display: grid;
   gap: 0.625rem;
   list-style: none;
-  margin: 0.625rem 0 0;
+  margin: 0;
   padding: 0;
 }
 
