@@ -112,6 +112,9 @@ for (const [width, height] of [
     await expect(maya).toContainText('Sent 18 hours ago');
     await expect(maya).toContainText('3 of 4');
     await expect(maya).toContainText('Coached by Lea Khoury');
+    // Critique B4c: the plan's name as it was booked leads its column, or its card's Plan line.
+    await expect(maya.locator('.plan-line').first()).toHaveText('Online coaching');
+    await expect(clientRow(page, 'Rita Daher').locator('.plan-name')).toHaveText('Postnatal reset');
     await expect(clientRow(page, 'Rita Daher').locator('.plan-end')).toHaveText('Ends tomorrow');
     // The column names show only where there are columns.
     await expect(page.locator('.list-head')).toBeVisible({ visible: width >= 1440 });
@@ -174,6 +177,40 @@ test('Clients reads right to left', async ({ page }) => {
   await expectNoHorizontalOverflow(page);
   await axe(page);
   await page.screenshot({ path: 'test-results/r33a-clients-rtl-1440.png', fullPage: true });
+});
+
+test('a plan’s name reads in its own writing direction, whichever way the page reads', async ({
+  page,
+}) => {
+  const view = clientListView();
+  view.clients = view.clients.map((client) =>
+    client.client.firstName === 'Rita' && client.plan
+      ? { ...client, plan: { ...client.plan, name: 'إعادة تأهيل بعد الولادة' } }
+      : client,
+  );
+  await openClients(page, 1440, 900, { view });
+
+  // The name's own direction, and which edge of its line it starts from: the cell's start edge.
+  const reading = (name: string) =>
+    clientRow(page, name)
+      .locator('.plan-name > bdi')
+      .evaluate((text) => {
+        const line = text.parentElement!.getBoundingClientRect();
+        const box = text.getBoundingClientRect();
+        const edge =
+          Math.abs(box.left - line.left) < 1
+            ? 'left'
+            : Math.abs(box.right - line.right) < 1
+              ? 'right'
+              : 'neither';
+        return [getComputedStyle(text).direction, edge];
+      });
+  expect(await reading('Rita Daher')).toEqual(['rtl', 'left']);
+  expect(await reading('Maya Fakhoury')).toEqual(['ltr', 'left']);
+  await useRtl(page);
+  expect(await reading('Rita Daher')).toEqual(['rtl', 'right']);
+  expect(await reading('Maya Fakhoury')).toEqual(['ltr', 'right']);
+  await expectNoHorizontalOverflow(page);
 });
 
 for (const width of [390, 1440]) {

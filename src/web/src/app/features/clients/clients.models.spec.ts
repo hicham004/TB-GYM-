@@ -209,10 +209,11 @@ describe('client list (C2, critique B4a)', () => {
     expect([...stronger.filters]).toEqual(['all', 'maxes']);
   });
 
-  it('sums up the plan whose end it shows: what it includes, its length, its price and its end', () => {
+  it('sums up the plan whose end it shows: its name, what it includes, its length, its price and its end', () => {
     const { Maya, Rita, Sara, Rami, Hiba, Elie, Ziad } = rows();
 
     expect(Maya.plan).toEqual({
+      name: 'Online coaching',
       includes: 'Training, Nutrition, Check-ins, Messaging',
       terms: '12 weeks · USD 330',
       end: 'Ends Sun 20 Dec',
@@ -221,6 +222,7 @@ describe('client list (C2, critique B4a)', () => {
     });
     // Ending soon is the server's flag, drawn warm, with its day in words.
     expect(Rita.plan).toMatchObject({
+      name: 'Postnatal reset',
       includes: 'Training, Check-ins',
       terms: '28 days · USD 120',
       end: 'Ends tomorrow',
@@ -229,11 +231,31 @@ describe('client list (C2, critique B4a)', () => {
     });
     // The price is exact, in its own currency.
     expect(Sara.plan).toMatchObject({ terms: '8 weeks · EUR 250.50', end: 'Ends Mon 12 Oct' });
-    expect(Rami.plan.terms).toBe('12 weeks · Free');
+    expect(Rami.plan).toMatchObject({ name: 'Team training', terms: '12 weeks · Free' });
     // Another year gets its year.
     expect(Hiba.plan.end).toBe('Ends 15 Jan 2027');
-    expect(Elie.plan.end).toBe('Ended Sun 27 Sep');
-    expect(Ziad.plan).toMatchObject({ includes: 'Training, Nutrition', end: 'Payment due' });
+    // An ended plan, or one waiting for payment, still goes by its name.
+    expect(Elie.plan).toMatchObject({ name: 'Meet prep', end: 'Ended Sun 27 Sep' });
+    expect(Ziad.plan).toMatchObject({
+      name: 'Online coaching',
+      includes: 'Training, Nutrition',
+      end: 'Payment due',
+    });
+  });
+
+  it('names the plan as it was booked, whatever script it is written in', () => {
+    const name = (planName: string) =>
+      planCell(
+        overviewRow(coachClient('c-p', 'Ali', 'Fares'), {
+          plan: planSummary({ name: planName }),
+        }),
+        COACH_TODAY,
+        'en-US',
+      ).name;
+
+    expect(name('  Student rate  ')).toBe('Student rate');
+    expect(name('تدريب أونلاين')).toBe('تدريب أونلاين');
+    expect(name(' ')).toBeNull();
   });
 
   it('says since when a plan is paused and when it still ends, a pause having no end of its own', () => {
@@ -274,6 +296,7 @@ describe('client list (C2, critique B4a)', () => {
     expect(end({ planState: 'Blocked' }).end).toBe('Access blocked');
     expect(end({ planState: 'Running', planEndsOn: COACH_TODAY }).end).toBe('Ends today');
     expect(end({ planState: 'None', plan: null, planEndsOn: null })).toEqual({
+      name: null,
       includes: null,
       terms: null,
       end: 'No plan yet',

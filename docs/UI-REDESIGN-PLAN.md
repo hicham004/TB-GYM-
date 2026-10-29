@@ -1629,8 +1629,9 @@ limited to the coach's assigned clients.
     today, goal); Status · last 7 days (the reasons as warning tags with their counts, each a link to where it
     is handled, an overdue check-in to the client's check-ins; the plan's own pill, On track, Plan paused, Plan
     ends soon or No active plan; the strip as ✓ done, × missed, – still due, with its legend under the head or,
-    on a phone, above the list); Plan (what it includes, its length and exact price, its end or "Paused since …
-    · ends …", "+1 more plan"); Last check-in ("Sent 2 days ago", "None sent yet", "Not in plan"); Last
+    on a phone, above the list); Plan (its name as it was booked, in its own writing direction, first since
+    critique B4c; what it includes, its length and exact price, its end or "Paused since … · ends …", "+1 more
+    plan"); Last check-in ("Sent 2 days ago", "None sent yet", "Not in plan"); Last
     activity ("Trained Lower A · 2 hours ago"); a chevron. A phone card names each fact. The lede counts what the
     chips count, for a chosen coach too, and with a coach chosen an empty list speaks for that coach's clients
     and keeps the coach. "How these statuses work" (a sheet, beside the chips and under Today's Needs you)

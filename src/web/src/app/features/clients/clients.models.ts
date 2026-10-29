@@ -77,6 +77,8 @@ export interface ReasonTag {
 
 /** The plan whose end the row shows (critique B4a), in short lines. */
 export interface PlanCell {
+  /** Its name as it was booked, "Online coaching" (critique B4c); null without a plan. */
+  name: string | null;
   /** What it includes, "Training, Nutrition, Check-ins"; null without a plan. */
   includes: string | null;
   /** Its length as sold and its price, "12 weeks · USD 330"; null without a plan. */
@@ -559,9 +561,10 @@ export function stripMark(mark: DayMark, date: string, today: string): StripMark
 }
 
 /**
- * The plan whose end the row shows (R3.5b's plan), as what it includes, its length as sold, its exact
- * price in its own currency, and its end, or since when it is paused, a pause having no end of its own
- * (SUB-006). Other plans beside it are counted, never added to its price.
+ * The plan whose end the row shows (R3.5b's plan), as its name as it was booked (critique B4c), what it
+ * includes, its length as sold, its exact price in its own currency, and its end, or since when it is
+ * paused, a pause having no end of its own (SUB-006). Other plans beside it are counted, never added to
+ * its price.
  */
 export function planCell(
   row: Pick<
@@ -577,6 +580,7 @@ export function planCell(
   const others = Number(row.otherPlanCount);
   const price = plan ? Number(plan.priceAmount) : 0;
   return {
+    name: plan?.name.trim() || null,
     includes: plan
       ? new Intl.ListFormat(locale, { style: 'short', type: 'unit' }).format(
           featureLabels(plan.features),

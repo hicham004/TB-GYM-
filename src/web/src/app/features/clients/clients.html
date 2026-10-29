@@ -221,6 +221,12 @@
                 <div class="fact plan">
                   <span class="cell-label" i18n>Plan</span>&ngsp;
                   <span class="fact-value">
+                    <!-- The name reads in its own direction and keeps the cell's alignment. -->
+                    @if (row.plan.name) {
+                      <span class="plan-line plan-name"
+                        ><bdi>{{ row.plan.name }}</bdi></span
+                      >&ngsp;
+                    }
                     @if (row.plan.includes) {
                       <span class="plan-line plan-includes">{{ row.plan.includes }}</span
                       >&ngsp;

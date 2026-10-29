@@ -131,7 +131,7 @@ describe('Clients', () => {
       '3 of 4 workouts done in the last 7 days',
     );
     expect(squash(maya.querySelector('.plan')?.textContent)).toBe(
-      'Plan Training, Nutrition, Check-ins, Messaging 12 weeks · USD 330 Ends Sun 20 Dec +1 more plan',
+      'Plan Online coaching Training, Nutrition, Check-ins, Messaging 12 weeks · USD 330 Ends Sun 20 Dec +1 more plan',
     );
     expect(squash(maya.querySelector('.checkin')?.textContent)).toBe(
       'Last check-in Sent 18 hours ago',
@@ -184,6 +184,42 @@ describe('Clients', () => {
       'Plan ends soon',
     );
     expect(row(host, 'Rita Daher').querySelector('.plan-end')?.classList).toContain('soon');
+  });
+
+  it('leads the plan with its name as it was booked, in its own writing direction (critique B4c)', async () => {
+    const view = clientListView();
+    const { host } = await render({
+      getOverview: () =>
+        of({
+          ...view,
+          clients: view.clients.map((client) =>
+            client.client.firstName === 'Rita' && client.plan
+              ? { ...client, plan: { ...client.plan, name: 'إعادة تأهيل بعد الولادة' } }
+              : client.client.firstName === 'Lynn'
+                ? { ...client, planState: 'None' as const, plan: null, planEndsOn: null }
+                : client,
+          ),
+        }),
+    });
+
+    const lines = (name: string) =>
+      Array.from(row(host, name).querySelectorAll('.plan-line')).map((line) =>
+        squash(line.textContent),
+      );
+    expect(lines('Maya Fakhoury')).toEqual([
+      'Online coaching',
+      'Training, Nutrition, Check-ins, Messaging',
+      '12 weeks · USD 330',
+      'Ends Sun 20 Dec',
+      '+1 more plan',
+    ]);
+    // Isolated in a <bdi>, so a name in another script keeps its order and the line its alignment.
+    expect(lines('Rita Daher')[0]).toBe('إعادة تأهيل بعد الولادة');
+    expect(row(host, 'Rita Daher').querySelector('.plan-name > bdi')?.textContent).toBe(
+      'إعادة تأهيل بعد الولادة',
+    );
+    // A client with no plan has no name to show, only where they stand.
+    expect(lines('Lynn Bou Khalil')).toEqual(['No plan yet']);
   });
 
   it('says why check-ins show nothing: none sent yet, or not in the plan', async () => {
