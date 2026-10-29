@@ -492,17 +492,34 @@ export function macroShares(numbers: {
 }
 
 /**
- * The server's protein warning in a coach's words. It keeps the server's numbers (the range is its
- * rule, not ours), and anything it says that is not the known sentence is shown as it came.
+ * The server's protein and fat warnings (NUT-008; fat since critique B5c2) in a coach's words. They keep
+ * the server's numbers (the ranges are its rules, not ours), and anything it says that is not a known
+ * sentence is shown as it came.
  */
 export function warningWords(warning: string): string {
-  const match =
+  const protein =
     /^Protein is ([\d.]+) g\/kg\/day, outside the [^.]*? range of ([\d.]+)-([\d.]+) g\/kg\/day\./.exec(
       warning,
     );
-  if (!match) return warning;
-  const [, actual, low, high] = match;
-  return $localize`Protein works out at ${actual}:actual: g for each kilogram a day, outside the usual ${low}:low: to ${high}:high: range. This is a flag for you to look at, not a rule.`;
+  if (protein) {
+    const [, actual, low, high] = protein;
+    return $localize`Protein works out at ${actual}:actual: g for each kilogram a day, outside the usual ${low}:low: to ${high}:high: range. This is a flag for you to look at, not a rule.`;
+  }
+  const share =
+    /^Fat is ([\d.]+)% of calories, under the coaching review floor of ([\d.]+)%\./.exec(warning);
+  if (share) {
+    const [, actual, floor] = share;
+    return $localize`Fat is ${actual}:actual:% of the calories, under the usual ${floor}:floor:%. This is a flag for you to look at, not a rule.`;
+  }
+  const perKg =
+    /^Fat is ([\d.]+) g\/kg\/day, under the coaching review floor of ([\d.]+) g\/kg\/day\./.exec(
+      warning,
+    );
+  if (perKg) {
+    const [, actual, floor] = perKg;
+    return $localize`Fat works out at ${actual}:actual: g for each kilogram a day, under the usual ${floor}:floor: g. This is a flag for you to look at, not a rule.`;
+  }
+  return warning;
 }
 
 /** The workspace's calendar day of an instant. */

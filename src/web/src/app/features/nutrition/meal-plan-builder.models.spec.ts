@@ -87,7 +87,13 @@ describe('meal-plan builder models', () => {
         ['chicken-v1', 1],
         ['lentils-v1', 2],
       ]);
-      expect(plan.targets).toEqual({ calories: 2000, protein: 150, carbs: 200, fat: 67 });
+      expect(plan.targets).toEqual({
+        calories: 2000,
+        protein: 150,
+        carbs: 200,
+        fat: 67,
+        fatShare: null,
+      });
     });
 
     it('still counts a choice whose recipe the library no longer lists, from what it was saved with', () => {
@@ -185,7 +191,13 @@ describe('meal-plan builder models', () => {
 
       expect(plan.days).toHaveLength(7);
       expect(plan.days.every((day) => day.meals.length === 0)).toBe(true);
-      expect(plan.targets).toEqual({ calories: null, protein: null, carbs: null, fat: null });
+      expect(plan.targets).toEqual({
+        calories: null,
+        protein: null,
+        carbs: null,
+        fat: null,
+        fatShare: null,
+      });
     });
 
     it('grows a plan by a copy of its last day, or of its last week', () => {
@@ -556,7 +568,7 @@ describe('a recipe published again since the plan took it (R4.4d)', () => {
     });
     return {
       name: 'Lean bulk',
-      targets: { calories: 2000, protein: 150, carbs: 200, fat: 67 },
+      targets: { calories: 2000, protein: 150, carbs: 200, fat: 67, fatShare: null },
       days: [
         {
           key: 'd1',

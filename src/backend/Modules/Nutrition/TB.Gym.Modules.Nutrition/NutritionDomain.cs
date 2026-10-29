@@ -913,9 +913,14 @@ public sealed class MealPlanTemplate : TenantEntity
         NormalizedName = Name.ToUpperInvariant();
     }
 
-    public MealPlanTemplateVersion AddDraft(int dayCount, decimal targetCalories, decimal targetProtein, decimal targetCarbohydrate, decimal targetFat, IEnumerable<MealSlotInput> slots)
+    /// <param name="targetFatPercentage">
+    /// The share of the calories the fat was filled in at (critique B5c2): the fat and carbohydrate are
+    /// then the NUT-008 split's for these calories and protein, which the version names. Null when the
+    /// coach typed them.
+    /// </param>
+    public MealPlanTemplateVersion AddDraft(int dayCount, decimal targetCalories, decimal targetProtein, decimal targetCarbohydrate, decimal targetFat, IEnumerable<MealSlotInput> slots, decimal? targetFatPercentage = null)
     {
-        var version = MealPlanTemplateVersion.Create(TenantId, Id, ++CurrentRevision, dayCount, targetCalories, targetProtein, targetCarbohydrate, targetFat, slots);
+        var version = MealPlanTemplateVersion.Create(TenantId, Id, ++CurrentRevision, dayCount, targetCalories, targetProtein, targetCarbohydrate, targetFat, slots, targetFatPercentage);
         versions.Add(version);
         return version;
     }
@@ -933,7 +938,7 @@ public sealed class MealPlanTemplateVersion : TenantEntity
     {
     }
 
-    private MealPlanTemplateVersion(Guid tenantId, Guid templateId, int revision, int dayCount, decimal targetCalories, decimal targetProtein, decimal targetCarbohydrate, decimal targetFat, IEnumerable<MealSlotInput> slotInputs)
+    private MealPlanTemplateVersion(Guid tenantId, Guid templateId, int revision, int dayCount, decimal targetCalories, decimal targetProtein, decimal targetCarbohydrate, decimal targetFat, IEnumerable<MealSlotInput> slotInputs, decimal? targetFatPercentage)
         : base(tenantId)
     {
         MealPlanTemplateId = templateId;
@@ -943,6 +948,20 @@ public sealed class MealPlanTemplateVersion : TenantEntity
         TargetProteinGrams = NutritionRules.NonNegative(targetProtein, nameof(targetProtein));
         TargetCarbohydrateGrams = NutritionRules.NonNegative(targetCarbohydrate, nameof(targetCarbohydrate));
         TargetFatGrams = NutritionRules.NonNegative(targetFat, nameof(targetFat));
+        if (targetFatPercentage is { } share)
+        {
+            // Filled in (critique B5c2): the grams must be the split's own, so the share it names is true.
+            var split = MacroTargetCalculator.Calculate(new MacroTargetInput(TargetCalories, TargetProteinGrams, share));
+            if (split.FatGrams != TargetFatGrams || split.CarbohydrateGrams != TargetCarbohydrateGrams)
+            {
+                throw new ArgumentException("The daily fat and carbohydrate are not the macro split's for these calories and protein.", nameof(targetFatPercentage));
+            }
+
+            TargetFatPercentage = share;
+            TargetMacroMethodKey = split.MethodKey;
+            TargetMacroMethodVersion = split.MethodVersion;
+        }
+
         Status = PublicationStatus.Draft;
         var inputs = slotInputs.OrderBy(item => item.DayOffset).ThenBy(item => item.Order).ToArray();
         if (inputs.Length == 0 || inputs.Any(item => item.DayOffset < 0 || item.DayOffset >= DayCount))
@@ -971,6 +990,18 @@ public sealed class MealPlanTemplateVersion : TenantEntity
     public decimal TargetProteinGrams { get; private set; }
     public decimal TargetCarbohydrateGrams { get; private set; }
     public decimal TargetFatGrams { get; private set; }
+
+    /// <summary>
+    /// The share of the calories the fat was filled in at, when the fat and carbohydrate are the macro
+    /// split's (NUT-008, critique B5c2); null when the coach typed them.
+    /// </summary>
+    public decimal? TargetFatPercentage { get; private set; }
+
+    /// <summary>The macro split that worked the fat and carbohydrate out; null when typed.</summary>
+    public string? TargetMacroMethodKey { get; private set; }
+
+    public string? TargetMacroMethodVersion { get; private set; }
+
     public IReadOnlyCollection<MealPlanSlot> Slots => slots;
 
     public void Publish(DateTimeOffset now, Guid userId)
@@ -985,8 +1016,8 @@ public sealed class MealPlanTemplateVersion : TenantEntity
         PublishedByUserId = userId;
     }
 
-    internal static MealPlanTemplateVersion Create(Guid tenantId, Guid templateId, int revision, int dayCount, decimal targetCalories, decimal targetProtein, decimal targetCarbohydrate, decimal targetFat, IEnumerable<MealSlotInput> slots) =>
-        new(tenantId, templateId, revision, dayCount, targetCalories, targetProtein, targetCarbohydrate, targetFat, slots);
+    internal static MealPlanTemplateVersion Create(Guid tenantId, Guid templateId, int revision, int dayCount, decimal targetCalories, decimal targetProtein, decimal targetCarbohydrate, decimal targetFat, IEnumerable<MealSlotInput> slots, decimal? targetFatPercentage) =>
+        new(tenantId, templateId, revision, dayCount, targetCalories, targetProtein, targetCarbohydrate, targetFat, slots, targetFatPercentage);
 }
 
 public sealed class MealPlanSlot : TenantEntity

@@ -6,6 +6,7 @@ import type {
   PreparationBasis,
   RecipeDetail,
   RecipeIngredientRequest,
+  RecipeListStatus,
   RecipeSummary,
 } from '../../core/api/generated';
 import { numeric } from '../training/training-builder.models';
@@ -558,6 +559,37 @@ export function sourceWord(source: FoodSource): string {
 /** "380 kcal per 100 g" for a food in the search. */
 export function foodMeasure(food: RecipeFood, locale: string): string {
   return $localize`${kcal(food.calories, locale)}:calories: per ${formatNumber(food.basisQuantity, locale, '1.0-2')}:quantity: ${unitWord(food.unit)}:unit:`;
+}
+
+// ---------- the list's filter (critique B5c2) ----------
+
+/** The address's name for the filter: `?status=published` or `?status=drafts`; All is no value. */
+export const RECIPE_STATUS_QUERY = 'status';
+
+export const RECIPE_STATUSES: readonly RecipeListStatus[] = ['All', 'Published', 'Drafts'];
+
+/** The filter an address asks for; anything it does not know is All. */
+export function recipeListStatus(value: string | null): RecipeListStatus {
+  return value === 'published' ? 'Published' : value === 'drafts' ? 'Drafts' : 'All';
+}
+
+/** The filter as the address writes it; null for All, which the address leaves out. */
+export function recipeStatusQuery(status: RecipeListStatus): string | null {
+  return status === 'Published' ? 'published' : status === 'Drafts' ? 'drafts' : null;
+}
+
+/** Why a filtered list holds nothing, in words: the search and the filter it was asked for. */
+export function recipeNoMatch(status: RecipeListStatus, search: string): string {
+  if (search) {
+    return status === 'Drafts'
+      ? $localize`No drafts match “${search}:search:”.`
+      : status === 'Published'
+        ? $localize`No published recipes match “${search}:search:”.`
+        : $localize`No recipes match “${search}:search:”.`;
+  }
+  return status === 'Drafts'
+    ? $localize`No drafts: every recipe is published.`
+    : $localize`No published recipes yet. Publish one to use it in your meal plans.`;
 }
 
 // ---------- cards ----------

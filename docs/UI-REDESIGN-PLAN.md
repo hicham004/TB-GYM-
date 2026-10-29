@@ -1938,7 +1938,13 @@ limited to the coach's assigned clients.
   and only the last day has Delete day; a week's menu (beside "Week 2") duplicates or deletes the whole
   week, so later weeks move by seven days. Each says what changed with an Undo, and Publish's refusal of
   an empty day offers "Copy a day here". A phone shows one day at a time from a row of day chips. Changes keep themselves as the coach's draft (NUT-013, as the program
-  builder's do); Publish makes the next version; Versions lists them.
+  builder's do); Publish makes the next version; Versions lists them. Since critique B5c2 the daily
+  target has **Fill in fat and carbs** (a sheet with the calories, the protein and the fat box with the
+  20 · 25 · 30 · 35 picks, the server's NUT-008 split) and **Start from a client's targets** (a sheet of
+  the coach's own clients with Nutrition, the owner's every one with "Coached by …", each with their
+  latest targets); under the boxes the card says "From Maya Fakhoury's targets, worked out Mon 26 Oct.",
+  "Fat is 25% of the calories, 56 g, and carbs are the rest, 225 g." and the server's warnings in words,
+  each with an Undo. While the targets are the server's, the boxes show them whole.
 - Built in R4.4b: **Recipes** (`/nutrition/recipes`) shows the recipes as cards (a row each on a
   phone): the cover photo's thumbnail or the recipe's initials, one serving's calories, a
   protein/carbs/fat bar with the grams, the servings, the allergens its foods declare, and "Draft" or
@@ -1953,7 +1959,9 @@ limited to the coach's assigned clients.
   (AI, ADR 0035): the suggestion fills the name and lines that each wait for a food, suggested grams
   carry over, and a failure is said and focused beside the button. Leaving with changes asks first.
   On a phone a bar keeps one serving's numbers in sight once its card scrolls away. The older page
-  is now **Foods**, without its recipe form or AI section.
+  is now **Foods**, without its recipe form or AI section. Since critique B5c2 the kit's segmented
+  control beside the search reads **All · Published · Drafts (n)**, filtered on the server and kept in
+  the address (`?status=published`, `?status=drafts`); the lede counts the drafts of the whole library.
 - Built in R4.4c: **Foods** (`/nutrition/foods`; the old address leads there) has one search over the
   workspace's foods and USDA's. Your foods come first, each row with its source, raw or cooked, the
   amount its numbers are for, calories, a protein/carbs/fat bar and grams, allergens, and a flag when the

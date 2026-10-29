@@ -42,23 +42,34 @@
           >
         </app-empty-state>
       } @else {
-        <div class="search">
-          <app-icon name="search" />
-          <input
-            type="search"
-            [value]="search()"
-            (input)="typed($any($event.target).value)"
-            placeholder="Search recipes…"
-            i18n-placeholder
-            autocomplete="off"
-            aria-label="Search recipes"
-            i18n-aria-label
-            enterkeyhint="search"
+        <div class="tools">
+          <div class="search">
+            <app-icon name="search" />
+            <input
+              type="search"
+              [value]="search()"
+              (input)="typed($any($event.target).value)"
+              placeholder="Search recipes…"
+              i18n-placeholder
+              autocomplete="off"
+              aria-label="Search recipes"
+              i18n-aria-label
+              enterkeyhint="search"
+            />
+          </div>
+          <!-- Critique B5c2: the drafts apart from what meal plans may use, filtered on the server. -->
+          <app-segmented-control
+            class="status"
+            [label]="statusLabel"
+            [hideLabel]="true"
+            [options]="statusOptions()"
+            [selected]="status()"
+            (selectedChange)="choose($event)"
           />
         </div>
-        @if (cards().length === 0) {
+        @if (noMatch(); as words) {
           <div class="panel pad load-failed">
-            <p role="status" i18n>No recipes match “{{ searched() }}”.</p>
+            <p role="status">{{ words }}</p>
             <button appButton type="button" variant="text" (click)="clearSearch()" i18n>
               Show all recipes
             </button>

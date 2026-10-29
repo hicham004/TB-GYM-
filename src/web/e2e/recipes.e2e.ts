@@ -94,7 +94,13 @@ async function openRecipes(
     memberships: [COACH_MEMBERSHIP],
     extra: {
       'GET /api/nutrition/recipes': (route: Route) =>
-        json(route, 200, { items: RECIPES, total: RECIPES.length, skip: 0, take: 48 }),
+        json(route, 200, {
+          items: RECIPES,
+          total: RECIPES.length,
+          skip: 0,
+          take: 48,
+          counts: { all: 3, published: 2, drafts: 1 },
+        }),
       'GET /api/nutrition/recipes/recipe-oats': (route: Route) => json(route, 200, recipeDetail()),
       'GET /api/nutrition/recipes/recipe-new': (route: Route) =>
         json(route, 200, recipeDetail({ id: 'recipe-new', name: 'Oats & yogurt' })),

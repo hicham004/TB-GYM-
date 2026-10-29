@@ -2,7 +2,9 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type { Observable } from 'rxjs';
 import type {
+  ClientTargetsList,
   CreateMealPlanDraftRequest,
+  MacroSplitView,
   MealPlanDraftSaveView,
   MealPlanDraftSummary,
   MealPlanDraftView,
@@ -84,4 +86,35 @@ export class MealPlanApi {
       request,
     );
   }
+
+  /**
+   * "Fill in fat and carbs" (critique B5c2): the server's macro split (NUT-008) for the daily target,
+   * worked out and recorded nowhere. A client's weight, when the coach started from their targets,
+   * adds the warnings that need it.
+   */
+  macroSplit(request: MacroSplitRequest): Observable<MacroSplitView> {
+    let params = new HttpParams()
+      .set('calorieTarget', request.calorieTarget)
+      .set('proteinGrams', request.proteinGrams)
+      .set('fatPercentage', request.fatPercentage);
+    if (request.bodyweightKilograms !== null) {
+      params = params.set('bodyweightKilograms', request.bodyweightKilograms);
+    }
+    if (request.isEnergyDeficit) params = params.set('isEnergyDeficit', true);
+    return this.http.get<MacroSplitView>('/api/nutrition/macro-split', { params });
+  }
+
+  /** "Start from a client's targets": the caller's current clients with Nutrition, each with their latest targets. */
+  listClientTargets(): Observable<ClientTargetsList> {
+    return this.http.get<ClientTargetsList>('/api/nutrition/client-targets');
+  }
+}
+
+/** What "Fill in fat and carbs" asks the server; the weight is a client's, when one was started from. */
+export interface MacroSplitRequest {
+  calorieTarget: number;
+  proteinGrams: number;
+  fatPercentage: number;
+  bodyweightKilograms: number | null;
+  isEnergyDeficit: boolean;
 }

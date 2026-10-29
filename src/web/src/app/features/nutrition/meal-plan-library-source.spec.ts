@@ -103,6 +103,7 @@ describe('the recipe library source (WEA-14)', () => {
       skip: 0,
       take: 48,
       items: [recipe({ versionId: 'theirs-v1', name: 'Their stew' })],
+      counts: { all: 1, published: 1, drafts: 0 },
     });
     late.complete();
     expect(await answer).toBeNull();

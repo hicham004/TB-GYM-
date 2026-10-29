@@ -28,7 +28,11 @@ public interface INutritionApplicationService
     /// Only recipes with a published version, each summarized at its newest published one: what a
     /// meal plan may hold (the meal-plan builder's recipe panel).
     /// </param>
-    Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, CancellationToken cancellationToken);
+    /// <param name="status">
+    /// The Recipes page's filter (critique B5c2), each recipe still summarized at its newest version: those
+    /// with a published version, or the drafts, never published.
+    /// </param>
+    Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, RecipeListStatus status, CancellationToken cancellationToken);
     Task<RecipeDetail?> GetRecipeAsync(Guid recipeId, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CreateRecipeAsync(CreateRecipeRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddRecipeVersionAsync(Guid recipeId, AddRecipeVersionRequest request, CancellationToken cancellationToken);
@@ -65,6 +69,18 @@ public interface INutritionApplicationService
     /// </summary>
     Task<NutritionCommandResult> PublishMealPlanDraftAsync(Guid draftId, PublishMealPlanDraftRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CalculateTargetsAsync(Guid clientProfileId, CalculateNutritionTargetsRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The macro split (NUT-008) for a meal plan's daily target, worked out and recorded nowhere: what
+    /// "Fill in fat and carbs" writes into the builder's boxes (critique B5c2).
+    /// </summary>
+    NutritionCommandResult PreviewMacroSplit(decimal? calorieTarget, decimal? proteinGrams, decimal? fatPercentage, decimal? bodyweightKilograms, bool isEnergyDeficit);
+
+    /// <summary>
+    /// The caller's current clients whose Nutrition is open, each with their latest targets (critique
+    /// B5c2): a coach's own, every client for the owner (ADR 0026).
+    /// </summary>
+    Task<ClientTargetsList> ListClientTargetsAsync(CancellationToken cancellationToken);
     Task<NutritionCommandResult> OverrideMacrosAsync(Guid clientProfileId, Guid calculationSnapshotId, CreateMacroOverrideRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> ReplaceClientAllergensAsync(Guid clientProfileId, ReplaceClientAllergensRequest request, CancellationToken cancellationToken);
 
@@ -315,7 +331,23 @@ public sealed record RecipeIngredientView(
     CookingFactorView? YieldFactor = null,
     CookingFactorView? RetentionFactor = null);
 
-public sealed record RecipePage(int Total, int Skip, int Take, IReadOnlyList<RecipeSummary> Items);
+/// <param name="Total">How many recipes match the search and the status asked for.</param>
+/// <param name="Counts">How many match the search in each status, whichever was asked for.</param>
+public sealed record RecipePage(int Total, int Skip, int Take, IReadOnlyList<RecipeSummary> Items, RecipeListCounts Counts);
+
+/// <summary>
+/// The Recipes page's filter (critique B5c2): every recipe, those with a published version, which meal
+/// plans may use, or the drafts, never published.
+/// </summary>
+public enum RecipeListStatus
+{
+    All = 1,
+    Published = 2,
+    Drafts = 3,
+}
+
+/// <summary>"All · Published · Drafts (n)": every recipe matching the search, split by whether it has a published version.</summary>
+public sealed record RecipeListCounts(int All, int Published, int Drafts);
 
 public sealed record MealPlanChoiceRequest(Guid RecipeVersionId, decimal Servings);
 
@@ -365,6 +397,10 @@ public sealed record MealPlanVersionSummary(
 /// A version as the builder opens it: the daily targets and every day's meals in order, each choice
 /// with the macros it was saved with, plus the recipes those choices name.
 /// </summary>
+/// <param name="TargetFatPercentage">
+/// The share of the calories the fat was filled in at, when the fat and carbohydrate are the macro
+/// split's (NUT-008, critique B5c2), with the split that worked them out; all three null when typed.
+/// </param>
 public sealed record MealPlanVersionView(
     Guid Id,
     Guid MealPlanTemplateId,
@@ -376,7 +412,10 @@ public sealed record MealPlanVersionView(
     decimal TargetCarbohydrateGrams,
     decimal TargetFatGrams,
     IReadOnlyList<MealPlanVersionSlotView> Slots,
-    IReadOnlyList<RecipeSummary> Recipes);
+    IReadOnlyList<RecipeSummary> Recipes,
+    decimal? TargetFatPercentage,
+    string? TargetMacroMethodKey,
+    string? TargetMacroMethodVersion);
 
 public sealed record MealPlanVersionSlotView(int DayOffset, int Order, string Name, IReadOnlyList<MealPlanVersionChoiceView> Choices);
 
@@ -495,6 +534,53 @@ public sealed record MacroAdjustmentView(
     decimal FromProteinGrams,
     decimal FromCarbohydrateGrams,
     decimal FromFatGrams);
+
+/// <summary>
+/// The macro split (NUT-008) for a meal plan's daily target: what "Fill in fat and carbs" writes into
+/// the builder's boxes (critique B5c2). The grams are unrounded; rounding is only for display. Nothing is
+/// recorded: the builder keeps the share in its draft, and Publish works the split out again.
+/// </summary>
+public sealed record MacroSplitView(
+    decimal CalorieTarget,
+    decimal ProteinGrams,
+    decimal FatPercentage,
+    decimal FatGrams,
+    decimal CarbohydrateGrams,
+    string MethodKey,
+    string MethodVersion,
+    IReadOnlyList<string> Warnings);
+
+/// <summary>
+/// "Start from a client's targets" (critique B5c2): the caller's current clients (ADR 0026: a coach's
+/// own, every client for the owner) whose Nutrition is open, each with their latest targets, by name.
+/// At most <paramref name="Limit"/> are listed; <paramref name="Total"/> counts them all.
+/// </summary>
+public sealed record ClientTargetsList(IReadOnlyList<ClientTargetsItem> Items, int Total, int Limit);
+
+/// <param name="CoachUserId">The client's coach, so the owner's list can say "Coached by …" on a team coach's client.</param>
+/// <param name="FatPercentage">
+/// The share of the calories the fat was worked out at when the macro split made these targets; null when
+/// they are a coach's own macros (<see cref="CoachMacroOverride"/>).
+/// </param>
+/// <param name="BodyweightKilograms">The weight they were worked out with; null when an older row's numbers cannot be read back.</param>
+/// <param name="IsEnergyDeficit">Whether they eat below what they burn, which widens the protein range (NUT-008).</param>
+/// <param name="Warnings">The targets' warnings, worked out again from the stored numbers, as the calculations read does.</param>
+public sealed record ClientTargetsItem(
+    Guid ClientProfileId,
+    string FirstName,
+    string LastName,
+    Guid CoachUserId,
+    string CoachName,
+    Guid CalculationId,
+    DateTimeOffset CalculatedAtUtc,
+    decimal CalorieTarget,
+    decimal ProteinGrams,
+    decimal CarbohydrateGrams,
+    decimal FatGrams,
+    decimal? FatPercentage,
+    decimal? BodyweightKilograms,
+    bool IsEnergyDeficit,
+    IReadOnlyList<string> Warnings);
 
 /// <summary>
 /// A coach's read about one client: answered, or refused as 404 when the client is not in the
@@ -620,7 +706,8 @@ public sealed record NutritionCommandResult(
     MealPlanDraftSaveView? MealPlanDraft = null,
     IReadOnlyDictionary<string, string[]>? Errors = null,
     string? Code = null,
-    string? Message = null);
+    string? Message = null,
+    MacroSplitView? MacroSplit = null);
 
 public enum NutritionCommandStatus
 {

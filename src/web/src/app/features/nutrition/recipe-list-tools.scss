@@ -1,0 +1,17 @@
+// The search and the filter beside it (critique B5c2: All · Published · Drafts), in one row that wraps.
+// Kept apart from the page's own styles, near the component style budget's warning.
+
+.tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.tools .search {
+  flex: 1 1 16rem;
+}
+
+.tools .status {
+  flex: none;
+}

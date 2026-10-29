@@ -828,6 +828,9 @@ Every save is a new version, optionally published in the same transaction. A sav
 newest revision the editor opened, and a later save since then is refused (`recipe_changed`),
 not overwritten. Renaming a recipe changes the library's name only; meal-plan versions and
 client plans keep the name they copied.
+The Recipes page filters on the server (critique B5c2): All, Published (a recipe with a published
+version, which meal plans may use, its newest version shown even when changes wait) or Drafts (never
+published), with how many of each the search finds.
 
 **NUT-003** Direct recipe import uses a licensed/authorized nutrition or recipe provider,
 structured data, or user-supplied URL where terms permit. Generic Google scraping is not a
@@ -952,6 +955,14 @@ targets it adjusts and names the override. Its calorie target is what the grams 
 kcal a gram, and its goal adjustment the distance from the same TDEE, so the target still equals TDEE
 plus adjustment. The next meal plan assigned with them carries them; a plan assigned before keeps its own
 (NUT-009). The protein range still only warns.
+Fat has a coaching review floor beside the protein range (critique B5c2), warnings and never refusals,
+worked out again on every read like the protein one: under 20 % of the calories (the bottom of the
+AMDR's 20 to 35 %), and, when the weight is known, under 0.5 g a kilogram (Kerksick 2018). A share
+typed under 20 % is still worked out. The meal-plan builder's "Fill in fat and carbs" runs this split
+on the server (`GET /api/nutrition/macro-split`, recorded nowhere) from the daily calories, protein and
+a fat share with the 20 / 25 / 30 / 35 picks; "Start from a client's targets" lists the caller's current
+clients whose Nutrition is open (ADR 0026: a coach's own, the owner's every one) with their latest
+targets, and the weight they were worked out with feeds the fill's per-kilogram warning.
 
 **NUT-009** If the coach enters no calorie target, calculations use the current approved TDEE
 estimate. Entering a target creates a new calculation snapshot; old diet assignments retain
@@ -1015,7 +1026,14 @@ Nothing shifts (critique B5c, 2026-10-27): a plan's days are numbered from its s
 never inserts a day or deletes one in the middle. A day's meals are copied to other days, replaced by a
 copy of another day's, or cleared, each day keeping its number; only the last day is deleted; Duplicate
 week and Delete week move the later weeks by seven days, so every day keeps its weekday. Publish still
-refuses a day with no meals and offers to copy a day there.
+refuses a day with no meals and offers to copy a day there; the server's refusal says it in the
+builder's words (critique B5c2).
+Filled-in targets keep their provenance (critique B5c2): while fat and carbs are the macro split's answer
+(NUT-008), the draft holds the fat share beside them, and Publish works the split out again from the
+draft's calories, protein and share. When the draft's grams are its answer, to a thousandth of a gram,
+the version keeps the split's own unrounded grams and names the share, `Nut008MacroSplit` and its
+version; grams changed since are kept as typed and name nothing. The builder shows them whole while
+they are the server's, and the first typed target keeps them as shown and drops the share.
 
 ## 7. Bodyweight and progress
 
@@ -2077,6 +2095,7 @@ At minimum, later migrations should enforce:
 | Valid macro inputs                                                                                                   | Non-negative checks; aggregate validation in domain transaction                                       |
 | A coach's own macros name their override, once, and only theirs do (INV-2)                                           | Composite FK `(TenantId, MacroOverrideAuditId)`, filtered unique, check on `MacroMethodKey`            |
 | A meal's choices in the coach's order, one to a place, published and copied alike (NUT-005)                          | Unique `(TenantId, slot, Order)` on both choice tables, check `Order >= 0`                            |
+| A meal plan's filled-in fat names its share and the split together, 0 to 100 (NUT-013)                               | Check `CK_MealPlanTemplateVersions_TargetSplit`: all three null, or all set and the share in range    |
 | Tenant-safe child relationship                                                                                       | Composite FK including `TenantId` where practical                                                     |
 | One active owner per workspace                                                                                       | Partial unique `(TenantId)` where `Role = 'Owner' AND Status = 'Active'`                              |
 | A client's coach is active staff, and a coach change is recorded in the history                                      | Composite FK to memberships plus deferred constraint triggers on the client and the membership       |

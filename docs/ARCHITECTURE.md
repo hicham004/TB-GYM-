@@ -161,6 +161,15 @@ names it (`MacroOverrideAuditId`), so a plan's targets stay one snapshot referen
 before keeps its own; the plan list reads a stop's time and reason from `PlanLifecycleEvents`; the USDA
 adapter turns a transport failure, a timeout or an answer that is not its JSON into its `usda_*` failure
 codes; and every nutrition route that names a client answers 404 for one not in the workspace (SEC-8).
+Critique B5c2 (2026-10-29): the meal-plan builder's daily target reads two staff routes. `GET
+/api/nutrition/macro-split` works the NUT-008 split out and records nothing; `GET
+/api/nutrition/client-targets` lists the caller's current clients through `CoachClientScope`, never a
+released one, whose Nutrition `ICoachingFeatureAccessService.EvaluateManyAsync` finds open, each with their
+newest calculation snapshot. A `MealPlanTemplateVersion` filled in names its fat share and the split
+(`TargetFatPercentage`, `TargetMacroMethodKey`, `TargetMacroMethodVersion`, migration
+`MealPlanTargetSplit`, all three or none by a check); the draft content carries the share and Publish
+works the split out again. `GET /api/nutrition/recipes` takes `status` (All, Published, Drafts) beside
+the builder's `published=true` and answers with the search's counts of each.
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

@@ -225,7 +225,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         await A6AssertSqlRefusedAsync(connection, "UPDATE nutrition.\"MealPlanChoices\" SET \"Order\" = \"Order\" + 10 WHERE \"Id\" = @id", publishedBefore[0].Option, PostgresErrorCodes.CheckViolation);
         await A6AssertSqlRefusedAsync(connection, "UPDATE nutrition.\"ClientNutritionPlanChoices\" SET \"Order\" = \"Order\" + 10 WHERE \"Id\" = @id", clientBefore[0].Option, PostgresErrorCodes.CheckViolation);
 
-        // The client reads their meal in that order, and the coach's builder the plan in it.
+        // The client reads their meal in that order, and the coach's builder the plan in it, once every
+        // later migration is back as the app has them.
+        await migrator.MigrateAsync();
         var day = await ReadSliceAsync<ClientNutritionDayView>(maya, R44dDayUrl(start));
         CollectionAssert.AreEqual(clientBefore.Take(3).Select(row => row.Option).ToArray(), day.Slots[0].Choices.Select(choice => choice.Id).ToArray());
         var version = await ReadSliceAsync<MealPlanVersionView>(owner, R44aVersionUrl(plan.VersionId));

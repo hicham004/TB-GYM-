@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace TB.Gym.Modules.Nutrition;
 
 public enum FormulaSex
@@ -278,6 +280,12 @@ public static class MacroTargetCalculator
     public const string Key = "Nut008MacroSplit";
     public const string CurrentVersion = "1.0";
 
+    /// <summary>The share of calories under which fat is flagged.</summary>
+    public const decimal MinimumFatPercentage = 20m;
+
+    /// <summary>The grams of fat a kilogram a day under which fat is flagged, when the weight is known.</summary>
+    public const decimal MinimumFatGramsPerKilogram = 0.5m;
+
     public static MacroTargetResult Calculate(MacroTargetInput input)
     {
         if (input.CalorieTarget <= 0m)
@@ -310,7 +318,11 @@ public static class MacroTargetCalculator
             throw new InvalidOperationException("Calculated macro grams cannot be negative.");
         }
 
-        var warnings = ProteinWarnings(input.ProteinGrams, input.BodyweightKilograms, input.IsEnergyDeficit);
+        IReadOnlyList<string> warnings =
+        [
+            .. ProteinWarnings(input.ProteinGrams, input.BodyweightKilograms, input.IsEnergyDeficit),
+            .. FatWarnings(input.FatPercentage, fatGrams, input.BodyweightKilograms),
+        ];
         return new MacroTargetResult(
             input.CalorieTarget,
             input.ProteinGrams,
@@ -345,6 +357,41 @@ public static class MacroTargetCalculator
         return gramsPerKilogram is < 1.4m || gramsPerKilogram > upper
             ? [$"Protein is {gramsPerKilogram:0.##} g/kg/day, outside the Phase 4 coaching review range of 1.4-{upper:0.#} g/kg/day. This is a warning, not a clinical determination."]
             : [];
+    }
+
+    /// <summary>
+    /// Fat's coaching review floor (critique B5c2), warnings and never refusals, as for protein: under
+    /// 20 % of the calories, the bottom of the acceptable range for adults (AMDR 20-35 %), and, when the
+    /// weight is known, under 0.5 g a kilogram, the floor a cut keeps (Kerksick 2018). A typed share
+    /// below 20 % is still worked out.
+    /// </summary>
+    public static IReadOnlyList<string> FatWarnings(decimal fatPercentage, decimal fatGrams, decimal? bodyweightKilograms)
+    {
+        var warnings = new List<string>(2);
+        if (fatPercentage < MinimumFatPercentage)
+        {
+            warnings.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Fat is {fatPercentage:0.##}% of calories, under the coaching review floor of {MinimumFatPercentage:0}%. This is a warning, not a clinical determination."));
+        }
+
+        if (bodyweightKilograms is { } weight)
+        {
+            if (weight is <= 0m or > 500m)
+            {
+                throw new ArgumentOutOfRangeException(nameof(bodyweightKilograms), "Bodyweight must be positive and no more than 500 kg.");
+            }
+
+            var gramsPerKilogram = fatGrams / weight;
+            if (gramsPerKilogram < MinimumFatGramsPerKilogram)
+            {
+                warnings.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Fat is {gramsPerKilogram:0.##} g/kg/day, under the coaching review floor of {MinimumFatGramsPerKilogram:0.0} g/kg/day. This is a warning, not a clinical determination."));
+            }
+        }
+
+        return warnings;
     }
 }
 

@@ -1,0 +1,39 @@
+// The daily target's tools (critique B5c2): Fill in fat and carbs and Start from a client's targets
+// under the boxes, and what the server's last answer said. Kept apart from the builder's own styles,
+// which are past the component style budget's warning.
+
+.target-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  min-inline-size: 0;
+}
+
+.target-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+
+.target-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.target-line,
+.target-warning {
+  font-size: 0.8125rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.target-line {
+  color: var(--tb-ink);
+}
+
+.target-warning {
+  color: var(--tb-warm-ink);
+  font-weight: 600;
+}

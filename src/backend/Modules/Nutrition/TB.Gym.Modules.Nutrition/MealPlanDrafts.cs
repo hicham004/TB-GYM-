@@ -108,13 +108,19 @@ public sealed class MealPlanDraft : TenantEntity
 /// The meal plan as the builder holds it: a name, the daily targets and each day's meals in order.
 /// Values are kept as typed, so a target being typed may be missing; Publish checks them.
 /// </summary>
+/// <param name="TargetFatPercentage">
+/// The share of the calories "Fill in fat and carbs" worked the fat out at (NUT-008, critique B5c2), while
+/// the fat and carbohydrate are still its answer; null when the coach typed them. Publish works the split
+/// out again and keeps the share on the version only when its grams are these.
+/// </param>
 public sealed record MealPlanDraftContent(
     string? Name,
     decimal? TargetCalories,
     decimal? TargetProteinGrams,
     decimal? TargetCarbohydrateGrams,
     decimal? TargetFatGrams,
-    IReadOnlyList<MealPlanDraftDay>? Days);
+    IReadOnlyList<MealPlanDraftDay>? Days,
+    decimal? TargetFatPercentage = null);
 
 /// <summary>One day of the plan; its meals in the order the client sees them.</summary>
 public sealed record MealPlanDraftDay(IReadOnlyList<MealPlanDraftMeal>? Meals);

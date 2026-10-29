@@ -15,6 +15,7 @@ import type {
   MediaAssetView,
   ProviderFoodSearchPage,
   RecipeDetail,
+  RecipeListStatus,
   RecipePage,
   RecipeSummary,
   ReviewAiMealDraftRequest,
@@ -29,11 +30,19 @@ import type {
 export class RecipeApi {
   private readonly http = inject(HttpClient);
 
-  /** Every recipe at its newest version, drafts included, by name. */
-  listRecipes(query: string, skip: number, take: number): Observable<RecipePage> {
-    return this.http.get<RecipePage>('/api/nutrition/recipes', {
-      params: new HttpParams().set('query', query).set('skip', skip).set('take', take),
-    });
+  /**
+   * The recipes at their newest version, by name: every one, those with a published version, or the
+   * drafts never published (critique B5c2), with how many of each the search finds.
+   */
+  listRecipes(
+    query: string,
+    skip: number,
+    take: number,
+    status: RecipeListStatus = 'All',
+  ): Observable<RecipePage> {
+    let params = new HttpParams().set('query', query).set('skip', skip).set('take', take);
+    if (status !== 'All') params = params.set('status', status);
+    return this.http.get<RecipePage>('/api/nutrition/recipes', { params });
   }
 
   getRecipe(recipeId: string): Observable<RecipeDetail> {

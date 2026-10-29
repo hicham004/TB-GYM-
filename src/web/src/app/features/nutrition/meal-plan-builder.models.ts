@@ -59,6 +59,11 @@ export interface PlanTargets {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  /**
+   * The share of the calories "Fill in fat and carbs" worked the fat out at (NUT-008, critique B5c2),
+   * while fat and carbs are still the server's answer; null once any target is typed.
+   */
+  fatShare: number | null;
 }
 
 /** The meal plan as the builder holds it: what its draft (NUT-013) and Publish are made from. */
@@ -127,7 +132,7 @@ export function initialsOf(name: string): string {
 export function emptyPlan(): MealPlanModel {
   return {
     name: '',
-    targets: { calories: null, protein: null, carbs: null, fat: null },
+    targets: { calories: null, protein: null, carbs: null, fat: null, fatShare: null },
     days: Array.from({ length: DAYS_PER_WEEK }, () => ({ key: key(), meals: [] })),
   };
 }
@@ -141,6 +146,7 @@ export function planFromDraft(view: MealPlanDraftView): MealPlanModel {
       protein: nullableNumber(content.targetProteinGrams),
       carbs: nullableNumber(content.targetCarbohydrateGrams),
       fat: nullableNumber(content.targetFatGrams),
+      fatShare: nullableNumber(content.targetFatPercentage),
     },
     days: (content.days ?? []).map((day) => ({
       key: key(),
@@ -183,6 +189,7 @@ export function planFromVersion(view: MealPlanVersionView, name: string): MealPl
       protein: numeric(view.targetProteinGrams),
       carbs: numeric(view.targetCarbohydrateGrams),
       fat: numeric(view.targetFatGrams),
+      fatShare: nullableNumber(view.targetFatPercentage),
     },
     days,
   };
@@ -224,6 +231,7 @@ export function toDraftContent(plan: MealPlanModel): MealPlanDraftContent {
     targetProteinGrams: plan.targets.protein,
     targetCarbohydrateGrams: plan.targets.carbs,
     targetFatGrams: plan.targets.fat,
+    targetFatPercentage: plan.targets.fatShare,
     days: plan.days.map((day) => ({
       meals: day.meals.map((meal) => ({
         name: meal.name,
@@ -335,7 +343,9 @@ export interface MacroSplit {
 }
 
 /** The targets' macros as shares of their own calories (4/4/9); null until all three are set. */
-export function macroSplit(targets: PlanTargets): MacroSplit | null {
+export function macroSplit(
+  targets: Pick<PlanTargets, 'calories' | 'protein' | 'carbs' | 'fat'>,
+): MacroSplit | null {
   const { protein, carbs, fat } = targets;
   if (protein === null || carbs === null || fat === null) return null;
   const calories = protein * 4 + carbs * 4 + fat * 9;

@@ -249,9 +249,20 @@ public sealed partial class GymDbContext
             entity.Property(item => item.TargetProteinGrams).HasPrecision(18, 6);
             entity.Property(item => item.TargetCarbohydrateGrams).HasPrecision(18, 6);
             entity.Property(item => item.TargetFatGrams).HasPrecision(18, 6);
+            // Filled in (critique B5c2): the share the fat was worked out at and the split that did it.
+            entity.Property(item => item.TargetFatPercentage).HasPrecision(7, 4);
+            entity.Property(item => item.TargetMacroMethodKey).HasMaxLength(100);
+            entity.Property(item => item.TargetMacroMethodVersion).HasMaxLength(50);
             entity.HasIndex(item => new { item.TenantId, item.MealPlanTemplateId, item.Revision }).IsUnique();
             entity.HasMany(item => item.Slots).WithOne().HasForeignKey(item => new { item.TenantId, item.MealPlanTemplateVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
-            entity.ToTable(table => table.HasCheckConstraint("CK_MealPlanTemplateVersions_Valid", "\"DayCount\" >= 1 AND \"DayCount\" <= 365 AND \"TargetCalories\" > 0 AND \"TargetProteinGrams\" >= 0 AND \"TargetCarbohydrateGrams\" >= 0 AND \"TargetFatGrams\" >= 0"));
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_MealPlanTemplateVersions_Valid", "\"DayCount\" >= 1 AND \"DayCount\" <= 365 AND \"TargetCalories\" > 0 AND \"TargetProteinGrams\" >= 0 AND \"TargetCarbohydrateGrams\" >= 0 AND \"TargetFatGrams\" >= 0");
+                // A share names the split that used it, or neither is there: the coach typed the grams.
+                table.HasCheckConstraint(
+                    "CK_MealPlanTemplateVersions_TargetSplit",
+                    "(\"TargetFatPercentage\" IS NULL AND \"TargetMacroMethodKey\" IS NULL AND \"TargetMacroMethodVersion\" IS NULL) OR (\"TargetFatPercentage\" IS NOT NULL AND \"TargetFatPercentage\" >= 0 AND \"TargetFatPercentage\" <= 100 AND \"TargetMacroMethodKey\" IS NOT NULL AND \"TargetMacroMethodVersion\" IS NOT NULL)");
+            });
             ConfigureTenantEntity(entity);
         });
 

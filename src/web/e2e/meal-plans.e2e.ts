@@ -73,7 +73,13 @@ async function openBuilder(
       'GET /api/nutrition/meal-plan-versions/plan-v3': (route: Route) =>
         json(route, 200, versionView({ id: 'plan-v3', revision: 3 })),
       'GET /api/nutrition/recipes': (route: Route) =>
-        json(route, 200, { items: RECIPES, total: RECIPES.length, skip: 0, take: 100 }),
+        json(route, 200, {
+          items: RECIPES,
+          total: RECIPES.length,
+          skip: 0,
+          take: 100,
+          counts: { all: RECIPES.length, published: RECIPES.length, drafts: 0 },
+        }),
       'POST /api/nutrition/meal-plan-drafts': (route: Route) => {
         const body = route.request().postDataJSON() as CreateMealPlanDraftRequest;
         sent.started.push(body);

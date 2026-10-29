@@ -1016,6 +1016,30 @@ export type ClientSummary = {
   assignedCoachName: string;
 };
 
+export type ClientTargetsItem = {
+  clientProfileId: string;
+  firstName: string;
+  lastName: string;
+  coachUserId: string;
+  coachName: string;
+  calculationId: string;
+  calculatedAtUtc: string;
+  calorieTarget: number | string;
+  proteinGrams: number | string;
+  carbohydrateGrams: number | string;
+  fatGrams: number | string;
+  fatPercentage: null | number | string;
+  bodyweightKilograms: null | number | string;
+  isEnergyDeficit: boolean;
+  warnings: Array<string>;
+};
+
+export type ClientTargetsList = {
+  items: Array<ClientTargetsItem>;
+  total: number | string;
+  limit: number | string;
+};
+
 export type ClientTrainingDayResult = {
   isAllowed: boolean;
   accessReason: string;
@@ -2200,6 +2224,17 @@ export type MacroAdjustmentView = {
   fromFatGrams: number | string;
 };
 
+export type MacroSplitView = {
+  calorieTarget: number | string;
+  proteinGrams: number | string;
+  fatPercentage: number | string;
+  fatGrams: number | string;
+  carbohydrateGrams: number | string;
+  methodKey: string;
+  methodVersion: string;
+  warnings: Array<string>;
+};
+
 export type ManualPaymentMethod = 'Cash' | 'BankTransfer' | 'Card' | 'MobileWallet' | 'Other';
 
 export type MealPlanChoiceRequest = {
@@ -2214,6 +2249,7 @@ export type MealPlanDraftContent = {
   targetCarbohydrateGrams: null | number | string;
   targetFatGrams: null | number | string;
   days: null | Array<MealPlanDraftDay>;
+  targetFatPercentage?: null | number | string;
 };
 
 export type MealPlanDraftDay = {
@@ -2321,6 +2357,9 @@ export type MealPlanVersionView = {
   targetFatGrams: number | string;
   slots: Array<MealPlanVersionSlotView>;
   recipes: Array<RecipeSummary>;
+  targetFatPercentage: null | number | string;
+  targetMacroMethodKey: null | string;
+  targetMacroMethodVersion: null | string;
 };
 
 export type MeasurementType = 'Waist' | 'Chest' | 'Hips' | 'Thigh' | 'Arm' | 'BodyFatPercentage';
@@ -3173,11 +3212,20 @@ export type RecipeIngredientView = {
   retentionFactor?: null | CookingFactorView;
 };
 
+export type RecipeListCounts = {
+  all: number | string;
+  published: number | string;
+  drafts: number | string;
+};
+
+export type RecipeListStatus = 'All' | 'Published' | 'Drafts';
+
 export type RecipePage = {
   total: number | string;
   skip: number | string;
   take: number | string;
   items: Array<RecipeSummary>;
+  counts: RecipeListCounts;
 };
 
 export type RecipeSummary = {
@@ -8106,6 +8154,7 @@ export type ListRecipesData = {
     skip?: number | string;
     take?: number | string;
     published?: boolean;
+    status?: RecipeListStatus;
   };
   url: '/api/nutrition/recipes';
 };
@@ -8486,6 +8535,55 @@ export type PublishMealPlanDraftResponses = {
 
 export type PublishMealPlanDraftResponse =
   PublishMealPlanDraftResponses[keyof PublishMealPlanDraftResponses];
+
+export type PreviewMacroSplitData = {
+  body?: never;
+  path?: never;
+  query?: {
+    calorieTarget?: number | string;
+    proteinGrams?: number | string;
+    fatPercentage?: number | string;
+    bodyweightKilograms?: number | string;
+    isEnergyDeficit?: boolean;
+  };
+  url: '/api/nutrition/macro-split';
+};
+
+export type PreviewMacroSplitErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type PreviewMacroSplitError = PreviewMacroSplitErrors[keyof PreviewMacroSplitErrors];
+
+export type PreviewMacroSplitResponses = {
+  /**
+   * OK
+   */
+  200: MacroSplitView;
+};
+
+export type PreviewMacroSplitResponse =
+  PreviewMacroSplitResponses[keyof PreviewMacroSplitResponses];
+
+export type ListClientTargetsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/client-targets';
+};
+
+export type ListClientTargetsResponses = {
+  /**
+   * OK
+   */
+  200: ClientTargetsList;
+};
+
+export type ListClientTargetsResponse =
+  ListClientTargetsResponses[keyof ListClientTargetsResponses];
 
 export type ListClientNutritionCalculationsData = {
   body?: never;

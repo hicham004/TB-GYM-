@@ -84,52 +84,74 @@
           <h2 id="targets-title" class="panel-title" i18n>Daily target</h2>
           <p class="targets-help" i18n>Every day of the plan is measured against it.</p>
         </div>
-        <div class="target-fields">
-          <app-field label="Calories (kcal)" i18n-label density="compact">
-            <input
-              appControl
-              type="number"
-              inputmode="numeric"
-              min="1"
-              max="100000"
-              step="1"
-              [ngModel]="current.targets.calories"
-              (ngModelChange)="setTarget('calories', $event)"
-            />
-          </app-field>
-          <app-field label="Protein (g)" i18n-label density="compact">
-            <input
-              appControl
-              type="number"
-              inputmode="numeric"
-              min="0"
-              step="1"
-              [ngModel]="current.targets.protein"
-              (ngModelChange)="setTarget('protein', $event)"
-            />
-          </app-field>
-          <app-field label="Carbs (g)" i18n-label density="compact">
-            <input
-              appControl
-              type="number"
-              inputmode="numeric"
-              min="0"
-              step="1"
-              [ngModel]="current.targets.carbs"
-              (ngModelChange)="setTarget('carbs', $event)"
-            />
-          </app-field>
-          <app-field label="Fat (g)" i18n-label density="compact">
-            <input
-              appControl
-              type="number"
-              inputmode="numeric"
-              min="0"
-              step="1"
-              [ngModel]="current.targets.fat"
-              (ngModelChange)="setTarget('fat', $event)"
-            />
-          </app-field>
+        <div class="target-entry">
+          <!-- While they are the server's answer, the boxes show the targets whole (NUT-008). -->
+          <div class="target-fields">
+            <app-field label="Calories (kcal)" i18n-label density="compact">
+              <input
+                appControl
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="100000"
+                step="1"
+                [ngModel]="shownTarget(current.targets.calories)"
+                (ngModelChange)="setTarget('calories', $event)"
+              />
+            </app-field>
+            <app-field label="Protein (g)" i18n-label density="compact">
+              <input
+                appControl
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                [ngModel]="shownTarget(current.targets.protein)"
+                (ngModelChange)="setTarget('protein', $event)"
+              />
+            </app-field>
+            <app-field label="Carbs (g)" i18n-label density="compact">
+              <input
+                appControl
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                [ngModel]="shownTarget(current.targets.carbs)"
+                (ngModelChange)="setTarget('carbs', $event)"
+              />
+            </app-field>
+            <app-field label="Fat (g)" i18n-label density="compact">
+              <input
+                appControl
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                [ngModel]="shownTarget(current.targets.fat)"
+                (ngModelChange)="setTarget('fat', $event)"
+              />
+            </app-field>
+          </div>
+          <!-- Critique B5c2: the server's macro split, and a client's own targets to start from. -->
+          <div class="target-tools">
+            <button appButton type="button" variant="outlined" (click)="openFill()" i18n>
+              Fill in fat and carbs
+            </button>
+            <button appButton type="button" variant="text" (click)="openClientTargets()" i18n>
+              Start from a client’s targets
+            </button>
+          </div>
+          @if (targetNote(); as note) {
+            <div class="target-note" data-target-note>
+              @for (line of note.lines; track $index) {
+                <p class="target-line" dir="auto">{{ line }}</p>
+              }
+              @for (warning of note.warnings; track $index) {
+                <p class="target-warning">{{ warning }}</p>
+              }
+            </div>
+          }
         </div>
         @if (split(); as shares) {
           <div class="split">
@@ -620,6 +642,23 @@
       (cancelled)="sheet.close()"
     />
   }
+</ng-template>
+
+<ng-template #fillSheet let-sheet>
+  @if (fillStart(); as start) {
+    <app-meal-plan-fill-targets
+      [start]="start"
+      (filled)="applyFill($event, sheet)"
+      (cancelled)="sheet.close()"
+    />
+  }
+</ng-template>
+
+<ng-template #clientTargetsSheet let-sheet>
+  <app-meal-plan-client-targets
+    (picked)="applyClientTargets($event, sheet)"
+    (cancelled)="sheet.close()"
+  />
 </ng-template>
 
 <ng-template #historySheet let-sheet>

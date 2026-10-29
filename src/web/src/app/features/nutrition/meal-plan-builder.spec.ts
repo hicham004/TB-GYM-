@@ -6,7 +6,9 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { of, throwError, type Observable } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ClientTargetsList,
   CreateMealPlanDraftRequest,
+  MacroSplitView,
   MealPlanDraftSaveView,
   MealPlanDraftView,
   MealPlanTemplateDetail,
@@ -15,12 +17,14 @@ import type {
   RecipeSummary,
   SaveMealPlanDraftRequest,
 } from '../../core/api/generated';
+import { AuthStore } from '../../core/auth/auth.store';
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { UiToast } from '../../ui/toast';
-import { field, fill, menuChoices, settle, tick } from '../../../testing/dom';
+import { field, fill, menuChoices, segment, settle, tick } from '../../../testing/dom';
 import {
   CHICKEN,
   draftContent,
@@ -37,7 +41,7 @@ import {
   versionView,
 } from '../../../testing/meal-plan-fixtures';
 import type { AutosaveTiming } from '../training/program-autosave';
-import { MealPlanApi } from './meal-plan-api';
+import { MealPlanApi, type MacroSplitRequest } from './meal-plan-api';
 import { MEAL_PLAN_AUTOSAVE_TIMING, MealPlanBuilder } from './meal-plan-builder';
 
 @Component({ template: '' })
@@ -57,7 +61,54 @@ interface Options {
   createDraft?: () => Observable<MealPlanDraftSaveView>;
   saveDraft?: () => Observable<MealPlanDraftSaveView>;
   publishDraft?: () => Observable<MealPlanTemplateSummary>;
+  macroSplit?: (request: MacroSplitRequest) => Observable<MacroSplitView>;
+  listClientTargets?: () => Observable<ClientTargetsList>;
   timing?: AutosaveTiming;
+}
+
+/**
+ * The server's macro split (NUT-008) for a request, worked out here only to stand in for the server:
+ * fat its share of the calories, carbs what protein and fat leave.
+ */
+function splitOf(request: MacroSplitRequest, warnings: string[] = []): MacroSplitView {
+  const fatCalories = (request.calorieTarget * request.fatPercentage) / 100;
+  return {
+    calorieTarget: request.calorieTarget,
+    proteinGrams: request.proteinGrams,
+    fatPercentage: request.fatPercentage,
+    fatGrams: fatCalories / 9,
+    carbohydrateGrams: (request.calorieTarget - request.proteinGrams * 4 - fatCalories) / 4,
+    methodKey: 'Nut008MacroSplit',
+    methodVersion: '1.0',
+    warnings,
+  };
+}
+
+/** Maya, Lea's client, whose targets the split made at 25 %: 62 kg, eating below what she burns. */
+function clientTargets(): ClientTargetsList {
+  return {
+    items: [
+      {
+        clientProfileId: 'client-maya',
+        firstName: 'Maya',
+        lastName: 'Fakhoury',
+        coachUserId: 'user-lea',
+        coachName: 'Lea Khoury',
+        calculationId: 'calculation-maya',
+        calculatedAtUtc: '2026-10-26T09:30:00Z',
+        calorieTarget: 1802.35,
+        proteinGrams: 120,
+        carbohydrateGrams: 217.94,
+        fatGrams: 50.07,
+        fatPercentage: 25,
+        bodyweightKilograms: 62,
+        isEnergyDeficit: true,
+        warnings: [],
+      },
+    ],
+    total: 1,
+    limit: 500,
+  };
 }
 
 async function render(options: Options = {}) {
@@ -77,6 +128,10 @@ async function render(options: Options = {}) {
     publishDraft: vi.fn(
       options.publishDraft ?? (() => of(planSummary({ revision: 3, versionId: 'plan-v3' }))),
     ),
+    macroSplit: vi.fn<(request: MacroSplitRequest) => Observable<MacroSplitView>>(
+      options.macroSplit ?? ((request) => of(splitOf(request))),
+    ),
+    listClientTargets: vi.fn(options.listClientTargets ?? (() => of(clientTargets()))),
   };
   const toast = { show: vi.fn(() => ({ dismiss: vi.fn() })) };
   TestBed.configureTestingModule({
@@ -95,6 +150,15 @@ async function render(options: Options = {}) {
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
       { provide: MEAL_PLAN_AUTOSAVE_TIMING, useValue: options.timing ?? AT_ONCE },
       { provide: LIBRARY_SEARCH_PAUSE, useValue: 0 },
+      { provide: AuthStore, useValue: { user: signal({ id: 'user-lea' }) } },
+      {
+        provide: WorkspaceCalendar,
+        useValue: {
+          today: signal('2026-10-29'),
+          timeZone: signal('Asia/Beirut'),
+          resolveToday: () => Promise.resolve('2026-10-29'),
+        },
+      },
     ],
   });
   const harness = await RouterTestingHarness.create();
@@ -741,6 +805,138 @@ describe('the meal-plan builder', () => {
     await settle(harness.fixture);
     expect(mealsOf(days(host)[0])).toEqual(['Breakfast']);
     expect(alerts(host)).toEqual([]);
+  });
+
+  it('fills in fat and carbs through the server’s split, keeps its share and says the arithmetic (critique B5c2)', async () => {
+    const lowFat =
+      'Fat is 15% of calories, under the coaching review floor of 20%. This is a warning, not a clinical determination.';
+    const { host, harness, api, toast } = await render({
+      macroSplit: (request) => of(splitOf(request, request.fatPercentage < 20 ? [lowFat] : [])),
+    });
+
+    named(host, 'Fill in fat and carbs').click();
+    const sheet = await dialogNamed(harness.fixture, 'Fill in fat and carbs');
+    await settle(harness.fixture);
+    expect(field(sheet, 'Calories (kcal)').value).toBe('2000');
+    expect(field(sheet, 'Protein (g)').value).toBe('150');
+    expect(field(sheet, 'Fat (percent of calories)').value).toBe('25');
+    named(sheet, 'Fill in fat and carbs').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+
+    expect(api.macroSplit).toHaveBeenCalledWith({
+      calorieTarget: 2000,
+      proteinGrams: 150,
+      fatPercentage: 25,
+      bodyweightKilograms: null,
+      isEnergyDeficit: false,
+    });
+    // The boxes show whole grams; the draft keeps the server's own, with the share they came from.
+    expect(field(host, 'Fat (g)').value).toBe('56');
+    expect(field(host, 'Carbs (g)').value).toBe('225');
+    expect(all(host, '[data-target-note] p').map(textOf)).toEqual([
+      'Fat is 25% of the calories, 56 g, and carbs are the rest, 225 g.',
+    ]);
+    const saved = api.createDraft.mock.calls.at(-1)![0].content;
+    expect([saved.targetFatPercentage, saved.targetCarbohydrateGrams]).toEqual([25, 225]);
+    expect(saved.targetFatGrams).toBeCloseTo(55.5556, 4);
+    const [message, undo] = lastUndo(toast);
+    expect(message).toBe('Fat and carbs filled in, fat at 25% of the calories.');
+
+    // A share under the floor is worked out, and its warning is said in the card.
+    named(host, 'Fill in fat and carbs').click();
+    const again = await dialogNamed(harness.fixture, 'Fill in fat and carbs');
+    await settle(harness.fixture);
+    expect(field(again, 'Fat (percent of calories)').value).toBe('25');
+    fill(again, 'Fat (percent of calories)', '15');
+    named(again, 'Fill in fat and carbs').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(all(host, '[data-target-note] p').map(textOf)).toEqual([
+      'Fat is 15% of the calories, 33 g, and carbs are the rest, 275 g.',
+      'Fat is 15% of the calories, under the usual 20%. This is a flag for you to look at, not a rule.',
+    ]);
+
+    // A typed target is the coach's own: the share, the sentence and the warning go.
+    fill(host, 'Fat (g)', '40');
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(host.querySelector('[data-target-note]')).toBeNull();
+    const [, typed] = api.saveDraft.mock.calls.at(-1)!;
+    expect([typed.content.targetFatPercentage, typed.content.targetFatGrams]).toEqual([null, 40]);
+
+    // Undo puts back what the first fill replaced: the targets as published.
+    undo();
+    await settle(harness.fixture);
+    expect([field(host, 'Fat (g)').value, field(host, 'Carbs (g)').value]).toEqual(['67', '200']);
+    expect(host.querySelector('[data-target-note]')).toBeNull();
+  });
+
+  it('starts from a client’s latest targets, whose weight a fill then uses (critique B5c2)', async () => {
+    const { host, harness, api, toast } = await render();
+
+    named(host, 'Start from a client’s targets').click();
+    const sheet = await dialogNamed(harness.fixture, 'Start from a client’s targets');
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(api.listClientTargets).toHaveBeenCalledTimes(1);
+    sheet.querySelector<HTMLButtonElement>('.row')!.click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+
+    expect(
+      ['Calories (kcal)', 'Protein (g)', 'Carbs (g)', 'Fat (g)'].map(
+        (label) => field(host, label).value,
+      ),
+    ).toEqual(['1802', '120', '218', '50']);
+    expect(all(host, '[data-target-note] p').map(textOf)).toEqual([
+      'From Maya Fakhoury’s targets, worked out Mon 26 Oct.',
+      'Fat is 25% of the calories, 50 g, and carbs are the rest, 218 g.',
+    ]);
+    expect(lastUndo(toast)[0]).toBe('Maya Fakhoury’s targets are the daily target now.');
+    const saved = api.createDraft.mock.calls.at(-1)![0].content;
+    expect([
+      saved.targetCalories,
+      saved.targetCarbohydrateGrams,
+      saved.targetFatPercentage,
+    ]).toEqual([1802.35, 217.94, 25]);
+
+    // A fill now says whose weight its warnings use, and sends it.
+    named(host, 'Fill in fat and carbs').click();
+    const fillSheet = await dialogNamed(harness.fixture, 'Fill in fat and carbs');
+    await settle(harness.fixture);
+    expect(textOf(fillSheet.querySelector('[data-weight]'))).toBe(
+      'The warnings use Maya Fakhoury’s weight, 62 kg.',
+    );
+    segment(fillSheet, 'Share of calories from fat', '30').click();
+    named(fillSheet, 'Fill in fat and carbs').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(api.macroSplit).toHaveBeenLastCalledWith({
+      calorieTarget: 1802,
+      proteinGrams: 120,
+      fatPercentage: 30,
+      bodyweightKilograms: 62,
+      isEnergyDeficit: true,
+    });
+    // Fat and carbs are no longer hers, so only the fill's sentence stays.
+    expect(all(host, '[data-target-note] p').map(textOf)).toEqual([
+      'Fat is 30% of the calories, 60 g, and carbs are the rest, 195 g.',
+    ]);
+
+    // Typed, the targets are the coach's own: what the boxes showed is what is kept, whole.
+    fill(host, 'Protein (g)', '125');
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    const [, typed] = api.saveDraft.mock.calls.at(-1)!;
+    expect([
+      typed.content.targetCalories,
+      typed.content.targetProteinGrams,
+      typed.content.targetCarbohydrateGrams,
+      typed.content.targetFatGrams,
+      typed.content.targetFatPercentage,
+    ]).toEqual([1802, 125, 195, 60, null]);
+    expect(host.querySelector('[data-target-note]')).toBeNull();
   });
 
   it('adds a recipe without dragging: + chooses it, and every place it can go offers Add here (B5b)', async () => {

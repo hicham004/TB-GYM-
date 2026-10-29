@@ -92,7 +92,10 @@ internal sealed partial class NutritionApplicationService
             version.TargetCarbohydrateGrams,
             version.TargetFatGrams,
             slots,
-            recipes);
+            recipes,
+            version.TargetFatPercentage,
+            version.TargetMacroMethodKey,
+            version.TargetMacroMethodVersion);
     }
 
     public async Task<IReadOnlyList<MealPlanDraftSummary>> ListMealPlanDraftsAsync(CancellationToken cancellationToken)
@@ -256,13 +259,15 @@ internal sealed partial class NutritionApplicationService
                 existing.Rename(name);
             }
 
+            var targets = PublishTargets(content);
             var version = template.AddDraft(
                 content.Days!.Count,
-                content.TargetCalories!.Value,
-                content.TargetProteinGrams!.Value,
-                content.TargetCarbohydrateGrams!.Value,
-                content.TargetFatGrams!.Value,
-                slots);
+                targets.Calories,
+                targets.Protein,
+                targets.Carbohydrate,
+                targets.Fat,
+                slots,
+                targets.FatPercentage);
             version.Publish(clock.UtcNow, RequireUserId());
             // Added explicitly, with every meal and choice under it: keys are made here, so rows found
             // only through a navigation could be taken for rows already stored.
@@ -331,13 +336,21 @@ internal sealed partial class NutritionApplicationService
             .Where(version => recipeIds.Contains(version.Id) && version.Status == PublicationStatus.Published)
             .Select(version => version.Id)
             .ToListAsync(cancellationToken);
+        var filled = days.Any(day => (day.Meals ?? []).Count > 0);
         for (var dayIndex = 0; dayIndex < days.Count; dayIndex++)
         {
             var meals = days[dayIndex].Meals ?? [];
             var day = dayIndex + 1;
             if (meals.Count == 0)
             {
-                return Invalid("days", $"Day {day} has no meals yet. Add one, or remove the day.");
+                // The builder's words (critique B5c): nothing shifts, so only the last day can be deleted, and
+                // another day's meals can be copied here once one day has some.
+                var last = dayIndex > 0 && dayIndex == days.Count - 1;
+                return Invalid("days", !filled
+                    ? $"Day {day} has no meals yet. Add a meal to it."
+                    : last
+                        ? $"Day {day} has no meals yet. Add a meal, copy a day here, or delete the day."
+                        : $"Day {day} has no meals yet. Add a meal, or copy a day here.");
             }
 
             for (var mealIndex = 0; mealIndex < meals.Count; mealIndex++)
@@ -369,6 +382,42 @@ internal sealed partial class NutritionApplicationService
 
         return null;
     }
+
+    /// <summary>
+    /// The daily targets a version keeps. Filled in (critique B5c2), the split is worked out again: when the
+    /// draft's fat and carbohydrate are its answer, to the browser's precision, the version keeps the split's
+    /// own grams and names the share; otherwise they were changed since, and are kept as typed.
+    /// </summary>
+    private static (decimal Calories, decimal Protein, decimal Carbohydrate, decimal Fat, decimal? FatPercentage) PublishTargets(MealPlanDraftContent content)
+    {
+        var calories = content.TargetCalories!.Value;
+        var protein = content.TargetProteinGrams!.Value;
+        var carbohydrate = content.TargetCarbohydrateGrams!.Value;
+        var fat = content.TargetFatGrams!.Value;
+        if (content.TargetFatPercentage is { } share and >= 0m and <= 100m)
+        {
+            try
+            {
+                var split = MacroTargetCalculator.Calculate(new MacroTargetInput(calories, protein, share));
+                if (Math.Abs(split.FatGrams - fat) <= FilledInTolerance && Math.Abs(split.CarbohydrateGrams - carbohydrate) <= FilledInTolerance)
+                {
+                    return (calories, protein, split.CarbohydrateGrams, split.FatGrams, share);
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Protein and fat beyond the calories: these grams cannot be the split's.
+            }
+        }
+
+        return (calories, protein, carbohydrate, fat, null);
+    }
+
+    /// <summary>
+    /// How far a filled-in gram may be from the split's own and still be its answer: the builder holds the
+    /// server's grams as a browser's numbers, and a version read back holds them to six decimals.
+    /// </summary>
+    private const decimal FilledInTolerance = 0.001m;
 
     private static MealPlanSlotRequest[] ToSlotRequests(MealPlanDraftContent content) =>
         (content.Days ?? [])

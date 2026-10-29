@@ -20,7 +20,8 @@ internal sealed partial class NutritionApplicationService(
     ICoachingFeatureAccessService featureAccessService,
     INutritionDataProvider nutritionDataProvider,
     IAiMealDraftProvider aiMealDraftProvider,
-    IOptions<NutritionAiAllowanceOptions> aiAllowance) : INutritionApplicationService
+    IOptions<NutritionAiAllowanceOptions> aiAllowance,
+    CoachClientScope coachClientScope) : INutritionApplicationService
 {
     private const string AiSchemaVersion = "meal-draft-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -495,30 +496,45 @@ internal sealed partial class NutritionApplicationService(
             ConstraintName: { } constraint,
         } && constraint.StartsWith("IX_CookingFactors_", StringComparison.Ordinal);
 
-    public async Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, CancellationToken cancellationToken)
+    public async Task<RecipePage> ListRecipesAsync(string? query, int skip, int take, bool publishedOnly, RecipeListStatus status, CancellationToken cancellationToken)
     {
-        var source = dbContext.Recipes.AsNoTracking();
+        var matching = dbContext.Recipes.AsNoTracking();
         foreach (var pattern in LikePattern.EachWord(query))
         {
-            source = source.Where(item => EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter));
+            matching = matching.Where(item => EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter));
         }
 
-        if (publishedOnly)
+        // The counts are the search's, whatever status is asked for, so each choice can say how many it holds.
+        var all = await matching.CountAsync(cancellationToken);
+        var withPublished = await matching.CountAsync(item => item.Versions.Any(version => version.Status == PublicationStatus.Published), cancellationToken);
+        var source = matching;
+        var total = all;
+        if (publishedOnly || status == RecipeListStatus.Published)
         {
             source = source.Where(item => item.Versions.Any(version => version.Status == PublicationStatus.Published));
+            total = withPublished;
         }
 
-        var total = await source.CountAsync(cancellationToken);
+        if (status == RecipeListStatus.Drafts)
+        {
+            source = source.Where(item => !item.Versions.Any(version => version.Status == PublicationStatus.Published));
+            total = publishedOnly ? 0 : all - withPublished;
+        }
         var recipes = await source
             .OrderBy(item => EF.Functions.Collate(item.Name, NameOrder.Collation)).ThenBy(item => item.Id)
             .Skip(skip).Take(take)
             .Include(item => item.Versions).ThenInclude(item => item.Allergens)
             .AsSplitQuery().ToListAsync(cancellationToken);
-        return new RecipePage(total, skip, take, recipes.Select(recipe =>
-        {
-            var published = recipe.Versions.Where(version => version.Status == PublicationStatus.Published).MaxBy(version => version.Revision);
-            return ToRecipeSummary(recipe, publishedOnly ? published! : recipe.Versions.MaxBy(version => version.Revision)!, published?.Id);
-        }).ToArray());
+        return new RecipePage(
+            total,
+            skip,
+            take,
+            recipes.Select(recipe =>
+            {
+                var published = recipe.Versions.Where(version => version.Status == PublicationStatus.Published).MaxBy(version => version.Revision);
+                return ToRecipeSummary(recipe, publishedOnly ? published! : recipe.Versions.MaxBy(version => version.Revision)!, published?.Id);
+            }).ToArray(),
+            new RecipeListCounts(all, withPublished, all - withPublished));
     }
 
     public async Task<NutritionCommandResult> CreateRecipeAsync(CreateRecipeRequest request, CancellationToken cancellationToken)
@@ -1793,35 +1809,53 @@ internal sealed partial class NutritionApplicationService(
 
     private static NutritionCalculationRecord ToCalculationRecord(NutritionCalculationSnapshot item, MacroAdjustmentView? adjustment)
     {
-        CalculateNutritionTargetsRequest? inputs = null;
+        var inputs = ReadCalculationInputs(item.InputJson);
+        var warnings = CalculationWarnings(item.CalorieTarget, item.ProteinGrams, item.TdeeEstimate, item.MacroOverrideAuditId is not null, inputs);
+        return new NutritionCalculationRecord(ToCalculationView(item, warnings), inputs, item.CreatedAtUtc, adjustment);
+    }
+
+    /// <summary>What a calculation was worked out from; null for an older row whose numbers cannot be read back.</summary>
+    private static CalculateNutritionTargetsRequest? ReadCalculationInputs(string inputJson)
+    {
         try
         {
-            inputs = JsonSerializer.Deserialize<CalculateNutritionTargetsRequest>(item.InputJson, JsonOptions);
+            return JsonSerializer.Deserialize<CalculateNutritionTargetsRequest>(inputJson, JsonOptions);
         }
         catch (JsonException)
         {
             // An older row whose numbers cannot be read back still lists its result.
+            return null;
         }
+    }
 
-        // The warning depends only on numbers that were stored, so it is worked out again, never kept.
-        // A coach's own macros are flagged on the same protein range, eating below what they burn when
-        // the target is under the TDEE estimate.
-        IReadOnlyList<string> warnings = [];
-        if (inputs is not null)
+    /// <summary>
+    /// The warning depends only on numbers that were stored, so it is worked out again, never kept. A
+    /// coach's own macros are flagged on the same protein range, eating below what they burn when the
+    /// target is under the TDEE estimate.
+    /// </summary>
+    private static IReadOnlyList<string> CalculationWarnings(
+        decimal calorieTarget,
+        decimal proteinGrams,
+        decimal tdeeEstimate,
+        bool isCoachMacros,
+        CalculateNutritionTargetsRequest? inputs)
+    {
+        if (inputs is null)
         {
-            try
-            {
-                warnings = item.MacroOverrideAuditId is null
-                    ? MacroTargetCalculator.Calculate(new MacroTargetInput(item.CalorieTarget, item.ProteinGrams, inputs.FatPercentage, inputs.WeightKilograms, inputs.IsEnergyDeficit)).Warnings
-                    : MacroTargetCalculator.ProteinWarnings(item.ProteinGrams, inputs.WeightKilograms, item.CalorieTarget < item.TdeeEstimate);
-            }
-            catch (ArgumentException)
-            {
-                // The result stays; only its warning is left out.
-            }
+            return [];
         }
 
-        return new NutritionCalculationRecord(ToCalculationView(item, warnings), inputs, item.CreatedAtUtc, adjustment);
+        try
+        {
+            return isCoachMacros
+                ? MacroTargetCalculator.ProteinWarnings(proteinGrams, inputs.WeightKilograms, calorieTarget < tdeeEstimate)
+                : MacroTargetCalculator.Calculate(new MacroTargetInput(calorieTarget, proteinGrams, inputs.FatPercentage, inputs.WeightKilograms, inputs.IsEnergyDeficit)).Warnings;
+        }
+        catch (ArgumentException)
+        {
+            // The result stays; only its warning is left out.
+            return [];
+        }
     }
 
     private static AiMealDraftView ToAiDraftView(AiMealDraftOperation item, Guid? recipeVersionId = null, Guid? recipeId = null) =>

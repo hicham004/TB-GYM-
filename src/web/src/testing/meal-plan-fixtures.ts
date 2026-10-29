@@ -67,7 +67,8 @@ export function searchRecipes(library: readonly RecipeSummary[] = RECIPES) {
     const found = library
       .filter((item) => words.every((word) => item.name.toLowerCase().includes(word)))
       .sort((a, b) => a.name.localeCompare(b.name, 'en'));
-    return of({ total: found.length, skip, take, items: found.slice(skip, skip + take) });
+    const counts = { all: found.length, published: found.length, drafts: 0 };
+    return of({ total: found.length, skip, take, items: found.slice(skip, skip + take), counts });
   };
 }
 
@@ -180,6 +181,9 @@ export function versionView(overrides: Partial<MealPlanVersionView> = {}): MealP
       },
     ],
     recipes: RECIPES,
+    targetFatPercentage: null,
+    targetMacroMethodKey: null,
+    targetMacroMethodVersion: null,
     ...overrides,
   };
 }

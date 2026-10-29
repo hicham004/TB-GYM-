@@ -116,7 +116,15 @@ import {
   weeksOf,
   whereItWent,
 } from './meal-plan-builder.models';
+import {
+  type ClientTargetsPick,
+  type FilledSplit,
+  fillSentence,
+  fromClientLine,
+} from './daily-target.models';
+import { MealPlanClientTargets } from './meal-plan-client-targets';
 import { type CopyWeek, MealPlanDayCopy } from './meal-plan-day-copy';
+import { type FillStart, MealPlanFillTargets } from './meal-plan-fill-targets';
 import { MealPlanLibrary } from './meal-plan-library';
 import { RecipeLibrarySource } from './meal-plan-library-source';
 import { MealPlanMealEditor } from './meal-plan-meal-editor';
@@ -220,6 +228,21 @@ interface WeekRow {
 
 type TargetField = 'calories' | 'protein' | 'carbs' | 'fat';
 
+const TARGET_FIELDS: readonly TargetField[] = ['calories', 'protein', 'carbs', 'fat'];
+
+/**
+ * The daily target as the server last answered it (critique B5c2): a fill, or a client's targets, with
+ * its warnings in words and, for a client's, whose they were.
+ */
+interface TargetAnswer {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  warnings: readonly string[];
+  from: ClientTargetsPick | null;
+}
+
 /** How long leaving waits for the last changes to reach the server before it asks instead. */
 const LEAVE_WAIT_MS = 8000;
 
@@ -256,7 +279,9 @@ const RING = 2 * Math.PI * 16;
     Field,
     FormsModule,
     Icon,
+    MealPlanClientTargets,
     MealPlanDayCopy,
+    MealPlanFillTargets,
     MealPlanLibrary,
     MealPlanMealEditor,
     ModalFooter,
@@ -272,6 +297,7 @@ const RING = 2 * Math.PI * 16;
     './meal-plan-days.scss',
     './meal-plan-options.scss',
     './meal-plan-week-tools.scss',
+    './meal-plan-targets.scss',
     '../training/builder-adding.scss',
     './meal-plan-adding.scss',
   ],
@@ -305,6 +331,9 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
   private readonly chooseSheet = viewChild.required<TemplateRef<unknown>>('chooseSheet');
   private readonly historySheet = viewChild.required<TemplateRef<unknown>>('historySheet');
   private readonly copySheet = viewChild.required<TemplateRef<unknown>>('copySheet');
+  private readonly fillSheet = viewChild.required<TemplateRef<unknown>>('fillSheet');
+  private readonly clientTargetsSheet =
+    viewChild.required<TemplateRef<unknown>>('clientTargetsSheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private libraryTenant: string | null = null;
   private loadedKey: string | null = null;
@@ -368,6 +397,12 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
   protected readonly picking = signal<PickTarget | null>(null);
   /** The day a copy sheet is open for (critique B5c). */
   protected readonly copying = signal<DayCopyTarget | null>(null);
+  /** What the fill sheet opens with (critique B5c2), while it is open. */
+  protected readonly fillStart = signal<FillStart | null>(null);
+  /** The client the daily target last started from, whose weight a fill's warnings use. */
+  private readonly targetSource = signal<ClientTargetsPick | null>(null);
+  /** The server's last answer for the daily target, said while the targets are still its own. */
+  private readonly lastAnswer = signal<TargetAnswer | null>(null);
   /** The recipe chosen with +, while the grid offers Add here for it (critique B5b). */
   protected readonly adding = signal<PlanRecipe | null>(null);
   /** What a screen reader is told when a recipe is chosen, or let go without an add. */
@@ -420,6 +455,31 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     return difference > 0
       ? $localize`Protein, carbs and fat add up to ${formatNumber(split.calories, this.locale, '1.0-0')}:total: kcal, ${amount}:difference: more than the calorie target.`
       : $localize`Protein, carbs and fat add up to ${formatNumber(split.calories, this.locale, '1.0-0')}:total: kcal, ${amount}:difference: less than the calorie target.`;
+  });
+
+  /**
+   * Where the daily target came from, in words (critique B5c2): a client's targets while the boxes are
+   * still theirs, the fill's arithmetic while fat and carbs are the split's, and the server's warnings
+   * for those very numbers.
+   */
+  protected readonly targetNote = computed(() => {
+    const { calories, protein, carbs, fat, fatShare } = this.plan().targets;
+    const answer = this.lastAnswer();
+    const still =
+      answer !== null &&
+      answer.calories === calories &&
+      answer.protein === protein &&
+      answer.carbs === carbs &&
+      answer.fat === fat
+        ? answer
+        : null;
+    const lines: string[] = [];
+    if (still?.from) lines.push(fromClientLine(still.from));
+    if (fatShare !== null && fat !== null && carbs !== null) {
+      lines.push(fillSentence(fatShare, fat, carbs, this.locale));
+    }
+    const warnings = still?.warnings ?? [];
+    return lines.length > 0 || warnings.length > 0 ? { lines, warnings } : null;
   });
 
   protected readonly grid = computed(() =>
@@ -704,8 +764,90 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
 
   protected setTarget(field: TargetField, value: number | string | null): void {
     const number = value === null || value === '' ? null : Number(value);
-    this.plan().targets[field] = number !== null && Number.isFinite(number) ? number : null;
+    const targets = this.plan().targets;
+    // A typed target is the coach's own: fat and carbs are no longer the split's answer (critique
+    // B5c2), and the server's numbers are kept as the boxes showed them, whole.
+    if (targets.fatShare !== null) {
+      for (const key of TARGET_FIELDS) {
+        const kept = targets[key];
+        targets[key] = kept === null ? null : Math.round(kept);
+      }
+      targets.fatShare = null;
+    }
+    targets[field] = number !== null && Number.isFinite(number) ? number : null;
     this.touched();
+  }
+
+  /**
+   * While the targets are the server's answer (filled in, or a client's), the boxes show them whole:
+   * rounding is for display only, and the plan keeps them unrounded (NUT-008). Typed, as typed.
+   */
+  protected shownTarget(value: number | null): number | null {
+    return value !== null && this.plan().targets.fatShare !== null ? Math.round(value) : value;
+  }
+
+  /** "Fill in fat and carbs" (critique B5c2): the sheet starts from the card's calories and protein, as shown. */
+  protected openFill(): void {
+    const { calories, protein, fatShare } = this.plan().targets;
+    const source = this.targetSource();
+    this.fillStart.set({
+      calories: this.shownTarget(calories),
+      protein: this.shownTarget(protein),
+      share: fatShare ?? source?.share ?? null,
+      client: source
+        ? { name: source.name, weight: source.weight, isEnergyDeficit: source.isEnergyDeficit }
+        : null,
+    });
+    const sheet = this.sheets.open(this.fillSheet(), {
+      title: $localize`Fill in fat and carbs`,
+      closeLabel: this.closeLabel,
+    });
+    sheet.closed.subscribe(() => this.fillStart.set(null));
+  }
+
+  /** The server's split goes in the boxes, with the share it used, and an Undo. */
+  protected applyFill(split: FilledSplit, sheet: Closable): void {
+    sheet.close();
+    const before = this.plan();
+    const targets = {
+      calories: split.calories,
+      protein: split.protein,
+      carbs: split.carbs,
+      fat: split.fat,
+      fatShare: split.share,
+    };
+    this.lastAnswer.set({ ...targets, warnings: split.warnings, from: null });
+    this.commit({ ...before, targets });
+    const share = formatNumber(split.share, this.locale, '1.0-2');
+    this.offerUndo(
+      $localize`Fat and carbs filled in, fat at ${share}:share:% of the calories.`,
+      before,
+    );
+  }
+
+  /** "Start from a client's targets": the coach's own clients with Nutrition (ADR 0026). */
+  protected openClientTargets(): void {
+    this.sheets.open(this.clientTargetsSheet(), {
+      title: $localize`Start from a client’s targets`,
+      closeLabel: this.closeLabel,
+    });
+  }
+
+  /** A client's latest targets become the daily target, with an Undo; their weight stays for a fill. */
+  protected applyClientTargets(pick: ClientTargetsPick, sheet: Closable): void {
+    sheet.close();
+    const before = this.plan();
+    const targets = {
+      calories: pick.calories,
+      protein: pick.protein,
+      carbs: pick.carbs,
+      fat: pick.fat,
+      fatShare: pick.share,
+    };
+    this.targetSource.set(pick);
+    this.lastAnswer.set({ ...targets, warnings: pick.warnings, from: pick });
+    this.commit({ ...before, targets });
+    this.offerUndo($localize`${pick.name}:name:’s targets are the daily target now.`, before);
   }
 
   protected dropped(event: CdkDragDrop<PlanDropTarget, unknown, PlanDragItem>): void {
@@ -1668,6 +1810,8 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
 
   private adopt(plan: MealPlanModel): void {
     this.plan.set(plan);
+    this.targetSource.set(null);
+    this.lastAnswer.set(null);
     this.problem.set(null);
     this.saveError.set(null);
     this.newerVersion.set(null);
@@ -1742,6 +1886,9 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     this.editing.set(null);
     this.picking.set(null);
     this.copying.set(null);
+    this.fillStart.set(null);
+    this.targetSource.set(null);
+    this.lastAnswer.set(null);
     this.adding.set(null);
     this.addingStatus.set('');
   }

@@ -73,10 +73,11 @@ public static class NutritionEndpoints
             return ToResult(await service.CreateCookingConversionAsync(request, token));
         }).WithName("CreateCookingConversion").Produces<CookingConversionView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict);
 
-        coach.MapGet("/recipes", async (string? query, int? skip, int? take, bool? published, INutritionApplicationService service, CancellationToken token) =>
+        // published=true is the meal-plan builder's panel; status is the Recipes page's filter (critique B5c2).
+        coach.MapGet("/recipes", async (string? query, int? skip, int? take, bool? published, RecipeListStatus? status, INutritionApplicationService service, CancellationToken token) =>
         {
             var page = Page(skip, take);
-            return Results.Ok(await service.ListRecipesAsync(query, page.Skip, page.Take, published == true, token));
+            return Results.Ok(await service.ListRecipesAsync(query, page.Skip, page.Take, published == true, status ?? RecipeListStatus.All, token));
         }).WithName("ListRecipes").Produces<RecipePage>();
         coach.MapGet("/recipes/{recipeId:guid}", async (Guid recipeId, INutritionApplicationService service, CancellationToken token) =>
         {
@@ -150,6 +151,15 @@ public static class NutritionEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.PublishMealPlanDraftAsync(draftId, request, token));
         }).WithName("PublishMealPlanDraft").Produces<MealPlanTemplateSummary>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+
+        // The meal-plan builder's daily target (critique B5c2): the macro split worked out, recorded
+        // nowhere, and the caller's clients' latest targets to start from (ADR 0026).
+        coach.MapGet("/macro-split", (decimal? calorieTarget, decimal? proteinGrams, decimal? fatPercentage, decimal? bodyweightKilograms, bool? isEnergyDeficit, INutritionApplicationService service) =>
+            ToResult(service.PreviewMacroSplit(calorieTarget, proteinGrams, fatPercentage, bodyweightKilograms, isEnergyDeficit == true)))
+            .WithName("PreviewMacroSplit").Produces<MacroSplitView>().ProducesValidationProblem();
+        coach.MapGet("/client-targets", async (INutritionApplicationService service, CancellationToken token) =>
+            Results.Ok(await service.ListClientTargetsAsync(token)))
+            .WithName("ListClientTargets").Produces<ClientTargetsList>();
 
         // A client that is not in the workspace is 404 on every route that names one (SEC-8), as in the
         // other modules; a client whose Nutrition is closed is 403.
@@ -243,7 +253,7 @@ public static class NutritionEndpoints
 
     private static IResult ToResult(NutritionCommandResult result) => result.Status switch
     {
-        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingConversion ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? result.MealPlanDraft),
+        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingConversion ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? (object?)result.MealPlanDraft ?? result.MacroSplit),
         NutritionCommandStatus.NotFound => Results.NotFound(),
         NutritionCommandStatus.Forbidden => Results.Forbid(),
         NutritionCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),

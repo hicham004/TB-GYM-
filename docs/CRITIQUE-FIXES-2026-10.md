@@ -536,3 +536,34 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   week 3. The weeks after it moved on a week." and "Week 2 deleted. The weeks after it moved up a week."; the
   captions "g per kg" and "% of calories"; the protein help without a weight "Type the grams. With their weight
   above, you can pick grams for each kilogram." Recommendation: keep.
+- B5c2 · Where Fill in fat and carbs lives. Built: a button under the Daily target's boxes, beside "Start from a
+  client's targets", opening a sheet with the calories, the protein and the fat box with the 20 · 25 · 30 · 35
+  picks under it (the targets sheet's block); the card then says the arithmetic in one sentence, with the
+  warnings and an Undo. Other way: the picks in the card itself, each filling at once. Recommendation: keep: the
+  card stays four boxes on a phone, and a share under 20 % can be typed.
+- B5c2 · The fat warnings elsewhere. Built: they are NUT-008's own (beside the protein range), so a client's
+  targets (Work out, and their Nutrition tab's latest) warn the same way under 20 % fat or 0.5 g a kilogram.
+  Other way: the builder's fill only. Recommendation: keep: one rule, one set of warnings.
+- B5c2 · Whose clients the owner starts from. Built: every current client with Nutrition and targets, as ADR 0026
+  gives the owner every client and as To review lists them (B3b), a team coach's marked "Coached by …"; a coach
+  sees their own only. Other way: the clients assigned to the owner only. Recommendation: keep.
+- B5c2 · What a client's targets fill. Built: all four targets, with the share when the split made them; the
+  client's weight stays on the page, never in the plan (which every coach of the workspace reads), for the
+  fill's per-kilogram warning. Other way: their calories and protein only. Recommendation: keep.
+- B5c2 · Typing after a fill. Built: the boxes show the server's numbers whole, and the first typed target keeps
+  all four as shown and drops the share and its sentence; Undo brings back what the fill replaced. Other way:
+  keep the share and work fat and carbs out again whenever calories or protein change. Recommendation: keep: a
+  fill is an action, not a binding.
+- B5c2 · Drafts and "Changes not published". Built: Drafts are the recipes never published (the "Draft" pill
+  and the lede's "still drafts"); a published recipe with changes waiting stays under Published, which meal
+  plans may use, with its "Changes not published" pill. Other way: list it under Drafts too. Recommendation:
+  keep until B5d's "In progress".
+- B5c2 · Words the row did not give. Built: "Fat takes the share of the calories you pick, and carbs what protein
+  and fat leave."; "Fat is 25% of the calories, 56 g, and carbs are the rest, 225 g."; "From Maya Fakhoury's
+  targets, worked out Mon 26 Oct." (": your macros, set …" for a coach's own); "The warnings use Maya Fakhoury's
+  weight, 62 kg."; the toasts "Fat and carbs filled in, fat at 25% of the calories." and "Maya Fakhoury's
+  targets are the daily target now."; "Fat is 15% of the calories, under the usual 20%. This is a flag for you to
+  look at, not a rule." and its per-kilogram twin; "None of your clients with Nutrition in their plan has
+  targets yet. Work them out on a client's Nutrition tab."; "No drafts: every recipe is published.", "No
+  published recipes yet. Publish one to use it in your meal plans." and "No drafts match “oat”.".
+  Recommendation: keep.

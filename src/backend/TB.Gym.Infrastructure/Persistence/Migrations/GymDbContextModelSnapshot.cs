@@ -6602,6 +6602,18 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
 
+                    b.Property<decimal?>("TargetFatPercentage")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)");
+
+                    b.Property<string>("TargetMacroMethodKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TargetMacroMethodVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<decimal>("TargetProteinGrams")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
@@ -6630,6 +6642,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("MealPlanTemplateVersions", "nutrition", t =>
                         {
+                            t.HasCheckConstraint("CK_MealPlanTemplateVersions_TargetSplit", "(\"TargetFatPercentage\" IS NULL AND \"TargetMacroMethodKey\" IS NULL AND \"TargetMacroMethodVersion\" IS NULL) OR (\"TargetFatPercentage\" IS NOT NULL AND \"TargetFatPercentage\" >= 0 AND \"TargetFatPercentage\" <= 100 AND \"TargetMacroMethodKey\" IS NOT NULL AND \"TargetMacroMethodVersion\" IS NOT NULL)");
+
                             t.HasCheckConstraint("CK_MealPlanTemplateVersions_Valid", "\"DayCount\" >= 1 AND \"DayCount\" <= 365 AND \"TargetCalories\" > 0 AND \"TargetProteinGrams\" >= 0 AND \"TargetCarbohydrateGrams\" >= 0 AND \"TargetFatGrams\" >= 0");
                         });
                 });

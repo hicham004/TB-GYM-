@@ -256,6 +256,21 @@ describe('what was worked out', () => {
     ).toBe(
       'Protein works out at 2.38 g for each kilogram a day, outside the usual 1.4 to 2 range. This is a flag for you to look at, not a rule.',
     );
+    // Fat's floors (critique B5c2): under 20 % of the calories, and under half a gram a kilogram.
+    expect(
+      warningWords(
+        'Fat is 15% of calories, under the coaching review floor of 20%. This is a warning, not a clinical determination.',
+      ),
+    ).toBe(
+      'Fat is 15% of the calories, under the usual 20%. This is a flag for you to look at, not a rule.',
+    );
+    expect(
+      warningWords(
+        'Fat is 0.42 g/kg/day, under the coaching review floor of 0.5 g/kg/day. This is a warning, not a clinical determination.',
+      ),
+    ).toBe(
+      'Fat works out at 0.42 g for each kilogram a day, under the usual 0.5 g. This is a flag for you to look at, not a rule.',
+    );
     expect(warningWords('Something else the server said.')).toBe('Something else the server said.');
   });
 
