@@ -140,6 +140,11 @@ R4.4b gives each `RecipeVersion` an optional cover photo, `PhotoMediaAssetId`, a
 same workspace by composite key (MED-014). Media owns the upload (`POST /api/media/recipe-photo`, new
 `RecipePhoto` purpose) and the staff-only read; Infrastructure checks the photo when a version is
 saved, as it checks the workspace logo. A recipe save can publish in the same transaction.
+Critique B5d adds `nutrition."RecipeDrafts"` (NUT-014), the recipe editor's working copies, shaped and
+guarded as the meal-plan builder's (ADR 0033), with the photo and the AI suggestion a new recipe began
+from kept as columns beside the content, by composite key; `POST /api/nutrition/recipe-drafts/{id}/publish`
+makes the next `RecipeVersion` (published, or kept as a draft version) and approves the suggestion in the
+same transaction. The unused-photo sweep counts a draft's photo as named.
 R4.4c: the USDA adapter searches by POST with the data types in the body (basic foods, or packaged
 products when asked; USDA's edge refused about half the GET searches naming "Survey (FNDDS)"), and
 each match carries its brand and nutrients per 100 g. `Nutrition:AiAllowance` is TB Gym's ceiling on

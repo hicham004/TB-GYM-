@@ -173,6 +173,9 @@ internal sealed class MediaPurgeService(
                 item.CreatedAtUtc <= uploadedBefore &&
                 !context.RecipeVersions.IgnoreQueryFilters().Any(version =>
                     version.TenantId == item.TenantId && version.PhotoMediaAssetId == item.Id) &&
+                // A coach's working draft keeps its photo until they publish or discard it (critique B5d).
+                !context.RecipeDrafts.IgnoreQueryFilters().Any(draft =>
+                    draft.TenantId == item.TenantId && draft.PhotoMediaAssetId == item.Id) &&
                 !context.ClientNutritionPlanRecipes.IgnoreQueryFilters().Any(copy =>
                     copy.TenantId == item.TenantId && copy.PhotoMediaAssetId == item.Id));
 

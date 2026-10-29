@@ -1,4 +1,4 @@
-import { DOCUMENT } from '@angular/common';
+import { DOCUMENT, formatDate, Location } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
@@ -8,6 +8,7 @@ import {
   effect,
   ElementRef,
   inject,
+  InjectionToken,
   Injector,
   LOCALE_ID,
   signal,
@@ -20,7 +21,13 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom, type Observable } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
-import type { RecipeDetail } from '../../core/api/generated';
+import type {
+  CreateRecipeDraftRequest,
+  RecipeDetail,
+  RecipeDraftContent,
+  RecipeDraftView,
+  RecipeSummary,
+} from '../../core/api/generated';
 import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -36,6 +43,12 @@ import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { UiToast } from '../../ui/toast';
+import {
+  AUTOSAVE_TIMING,
+  type AutosaveTiming,
+  DraftAutosave,
+  type SaveOutcome,
+} from '../training/program-autosave';
 import { numeric } from '../training/training-builder.models';
 import { type Conversion, conversionWords } from './cooking-conversion.models';
 import { RecipeApi } from './recipe-api';
@@ -44,12 +57,12 @@ import { RecipeFoodSearch } from './recipe-food-search';
 import {
   allergenText,
   draftFromDetail,
-  draftSignature,
+  draftFromStored,
   type EditorLine,
   emptyDraft,
   energySplit,
   grams,
-  ingredientRequests,
+  IN_PROGRESS,
   kcal,
   keepsAmount,
   lineForFood,
@@ -70,6 +83,7 @@ import {
   recipeTotal,
   servingsLabel,
   sourceWord,
+  toDraftContent,
   unitWord,
   weighable,
   weighCooked,
@@ -81,17 +95,38 @@ import {
 const PHOTO_TYPES = ['image/jpeg', 'image/png'];
 const PHOTO_MAX_BYTES = 15 * 1024 * 1024;
 const AI_PROMPT_MAX = 6000;
+/** How long leaving waits for the last changes to reach the server before it asks. */
+const LEAVE_WAIT_MS = 8000;
+
+/** The editor's autosave timing; a spec provides its own to save at once or to hold saves back. */
+export const RECIPE_AUTOSAVE_TIMING = new InjectionToken<AutosaveTiming>('RECIPE_AUTOSAVE_TIMING', {
+  factory: () => AUTOSAVE_TIMING,
+});
 
 type SaveKind = 'publish' | 'draft';
+
+/** The coach's draft on the server (NUT-014): its id and the version the next save carries. */
+interface StoredDraft {
+  id: string;
+  version: number;
+}
+
+interface SaveProblem {
+  kind: 'stale' | 'refused' | 'closed';
+  message: string;
+}
 
 /**
  * The recipe editor (C7, R4.4b): the ingredients from a food search with each serving's calories and
  * macros adding up as they are typed, the method, a cover photo, and Publish, which puts the recipe
- * in the meal plans' recipe panel. Save as draft keeps it out of them. A new recipe can start from
- * an AI suggestion, whose ingredients the coach matches to real foods first (NUT-004).
+ * in the meal plans' recipe panel. A new recipe can start from an AI suggestion, whose ingredients
+ * the coach matches to real foods first (NUT-004).
  *
- * Every save is a new version on the server; a version already published never changes, so meal
- * plans and clients keep what they were given (ADR 0008).
+ * Since critique B5d the coach's changes are kept as they type in their own draft on the server
+ * (NUT-014, ADR 0033), which follows them to any device and nobody else sees: unfinished, "In
+ * progress". Publish turns it into a new version for meal plans; Save as draft into a complete one
+ * the team sees and meal plans do not use. A version already made never changes, so meal plans and
+ * clients keep what they were given (ADR 0008).
  */
 @Component({
   selector: 'app-recipe-editor',
@@ -115,6 +150,7 @@ type SaveKind = 'publish' | 'draft';
   styleUrl: './recipe-editor.scss',
   host: {
     '(window:beforeunload)': 'onBeforeUnload($event)',
+    '(document:visibilitychange)': 'onVisibilityChange()',
   },
 })
 export class RecipeEditor implements HoldsUnsavedWork {
@@ -124,6 +160,7 @@ export class RecipeEditor implements HoldsUnsavedWork {
   private readonly tenants = inject(TenantStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
   private readonly dialogs = inject(UiDialog);
   private readonly toast = inject(UiToast);
   private readonly injector = inject(Injector);
@@ -143,9 +180,17 @@ export class RecipeEditor implements HoldsUnsavedWork {
   private readonly params = toSignal(this.route.paramMap, {
     initialValue: this.route.snapshot.paramMap,
   });
+  private readonly query = toSignal(this.route.queryParamMap, {
+    initialValue: this.route.snapshot.queryParamMap,
+  });
   private loadedKey: string | null = null;
-  private savedSignature = draftSignature(emptyDraft());
   private csrfReady: Promise<void> | null = null;
+  private stored: StoredDraft | null = null;
+  /** Moves whenever the page lets go of its draft, so a save landing afterwards changes nothing. */
+  private draftEpoch = 0;
+  /** The recipe's newest revision as read, which a new draft of it records (NUT-014). */
+  private readNewest = 0;
+  private announcedTrouble = false;
 
   protected readonly closeLabel = $localize`Close`;
   protected readonly loadingLabel = $localize`Loading the recipe…`;
@@ -165,22 +210,38 @@ export class RecipeEditor implements HoldsUnsavedWork {
     const id = this.params().get('recipeId');
     return id && id !== 'new' ? id : null;
   });
+  /** A new recipe not saved yet, reopened from its draft (`/nutrition/recipes/new?draft=`). */
+  private readonly requestedDraft = computed(() => this.query().get('draft'));
   protected readonly state = signal<'loading' | 'ready' | 'missing' | 'error'>('loading');
   protected readonly detail = signal<RecipeDetail | null>(null);
   protected readonly draft = signal<RecipeDraft>(emptyDraft());
   protected readonly saving = signal<SaveKind | null>(null);
   protected readonly problem = signal<RecipeProblem | null>(null);
   protected readonly saveError = signal<string | null>(null);
-  /** Someone saved the recipe since it opened here (409 `recipe_changed`). */
-  protected readonly stale = signal(false);
+  /** Why the changes stopped reaching the server, and what the coach can do about it. */
+  protected readonly saveProblem = signal<SaveProblem | null>(null);
+  /** Someone saved a version after these changes began; the next save asks to go on anyway. */
+  protected readonly newerVersion = signal<{ message: string; kind: SaveKind } | null>(null);
+  protected readonly hasDraft = signal(false);
+  protected readonly draftSavedAt = signal<string | null>(null);
+  protected readonly draftStartedAt = signal(0);
+  protected readonly autosave = new DraftAutosave(
+    () => this.sendDraft(),
+    inject(RECIPE_AUTOSAVE_TIMING),
+  );
   /** A short, polite sentence for screen readers after a change the page shows in place. */
   protected readonly announced = signal('');
+  /** What a screen reader is told about saving: a failure, and the save that ends it. */
+  protected readonly liveStatus = signal('');
   protected readonly photoUrl = signal<string | null>(null);
   protected readonly photoBusy = signal(false);
   protected readonly photoError = signal<string | null>(null);
-  protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
-    null,
-  );
+  protected readonly asking = signal<{
+    title: string;
+    message: string;
+    confirm: string;
+    cancel: string;
+  } | null>(null);
 
   // AI suggestions (a new recipe only).
   protected readonly aiConfigured = signal<boolean | null>(null);
@@ -192,7 +253,13 @@ export class RecipeEditor implements HoldsUnsavedWork {
   protected readonly aiOperationId = signal<string | null>(null);
 
   protected readonly isNew = computed(() => this.recipeId() === null);
-  protected readonly dirty = computed(() => draftSignature(this.draft()) !== this.savedSignature);
+  protected readonly unsaved = computed(() => this.autosave.status() !== 'saved');
+  protected readonly troubled = computed(() =>
+    ['retrying', 'refused', 'stopped'].includes(this.autosave.status()),
+  );
+  /** Changes not made a version yet: the coach's draft, or edits on their way to it. */
+  protected readonly pending = computed(() => this.hasDraft() || this.unsaved());
+  protected readonly inProgressLabel = IN_PROGRESS;
   protected readonly total = computed(() => recipeTotal(this.draft().lines));
   protected readonly serving = computed(() => perServing(this.total(), this.draft().servings));
   /** At least one line counts: a food with an amount. Until then there is no serving to show. */
@@ -214,49 +281,102 @@ export class RecipeEditor implements HoldsUnsavedWork {
   protected readonly pageTitle = computed(
     () => this.draft().name.trim() || (this.isNew() ? $localize`New recipe` : $localize`Recipe`),
   );
-  /** Where the recipe stands, said once beside its actions. */
-  protected readonly standing = computed<{ label: string; tone: 'neutral' | 'success' | 'warm' }>(
-    () => {
-      const detail = this.detail();
-      if (!detail) return { label: $localize`New recipe`, tone: 'neutral' };
-      if (detail.latest.status === 'Published') {
-        return this.dirty()
-          ? { label: $localize`Changes not published`, tone: 'warm' }
-          : { label: $localize`Published`, tone: 'success' };
-      }
-      return detail.publishedVersionId
-        ? { label: $localize`Changes not published`, tone: 'warm' }
-        : { label: $localize`Draft`, tone: 'neutral' };
-    },
-  );
+  /**
+   * Where the recipe stands for the team, said once beside its actions: published, a complete draft
+   * version, or a new recipe; the coach's own changes in progress are said beside it (critique B5d).
+   */
+  protected readonly standing = computed<{
+    label: string;
+    tone: 'neutral' | 'success' | 'warm';
+  } | null>(() => {
+    const detail = this.detail();
+    if (!detail) return this.pending() ? null : { label: $localize`New recipe`, tone: 'neutral' };
+    if (detail.latest.status === 'Published') {
+      return { label: $localize`Published`, tone: 'success' };
+    }
+    return detail.publishedVersionId
+      ? { label: $localize`Changes not published`, tone: 'warm' }
+      : { label: $localize`Draft`, tone: 'neutral' };
+  });
   protected readonly standingNote = computed(() => {
     const detail = this.detail();
-    if (!detail) return $localize`Publish it to use it in meal plans.`;
-    if (detail.latest.status === 'Published' && !this.dirty()) {
+    if (this.pending()) {
+      if (!detail) return $localize`Only you see it until you publish it.`;
+      return detail.publishedVersionId
+        ? $localize`Only you see these changes. Meal plans use the published version until you publish them.`
+        : $localize`Only you see these changes. Not in meal plans until you publish it.`;
+    }
+    if (!detail)
+      return $localize`Your changes save as you type. Publish it to use it in meal plans.`;
+    if (detail.latest.status === 'Published') {
       return $localize`In your meal plans’ recipes. Changes become a new version; plans keep the one they have.`;
     }
     return detail.publishedVersionId
       ? $localize`Meal plans use the published version until you publish these changes.`
       : $localize`Not in meal plans until you publish it.`;
   });
+  /** How the coach's changes stand on the server; nothing while there are none. */
+  protected readonly statusLine = computed(() => {
+    switch (this.autosave.status()) {
+      case 'pending':
+      case 'saving':
+        return $localize`Saving…`;
+      case 'retrying':
+        return $localize`Not saved yet. Trying again…`;
+      case 'refused':
+      case 'stopped':
+        return $localize`Not saved`;
+    }
+    return this.hasDraft() ? this.savedLine(this.draftSavedAt()) : null;
+  });
+  /** A version saved by someone else since these changes began (NUT-014). */
+  protected readonly behindLine = computed(() => {
+    const detail = this.detail();
+    const started = this.draftStartedAt();
+    if (!detail || !this.hasDraft() || started === 0 || this.newerVersion()) return null;
+    const newest = numeric(detail.currentRevision);
+    return newest > started
+      ? $localize`Version ${newest}:number: of this recipe was saved after you started these changes. Publishing yours makes it the newest version.`
+      : null;
+  });
   /** Published and unchanged: Publish has nothing to do, as the status beside it says. */
   protected readonly nothingToPublish = computed(
-    () => this.detail()?.latest.status === 'Published' && !this.dirty(),
+    () => this.detail()?.latest.status === 'Published' && !this.pending(),
   );
   protected readonly moreItems = computed<UiMenuItem[]>(() => [
     {
-      label: $localize`Save as draft (complete, not published)`,
-      hint: $localize`Kept here, out of meal plans`,
+      label: $localize`Save as draft`,
+      hint: $localize`Your team sees it; meal plans don’t`,
       action: 'draft',
     },
   ]);
 
   constructor() {
     const unregister = inject(UnsavedWork).register(this);
-    inject(DestroyRef).onDestroy(() => unregister());
+    inject(DestroyRef).onDestroy(() => {
+      unregister();
+      this.autosave.dispose();
+    });
     this.scope.onReset(() => {
       this.loadedKey = null;
+      this.csrfReady = null;
+      this.forgetDraft();
       this.state.set('loading');
+    });
+    // Autosave runs at every pause, so only a failure, and the save that ends it, is announced.
+    effect(() => {
+      const troubled = this.troubled();
+      const status = this.autosave.status();
+      const line = this.statusLine();
+      untracked(() => {
+        if (troubled) {
+          this.announcedTrouble = true;
+          this.liveStatus.set(line ?? '');
+        } else if (status === 'saved' && this.announcedTrouble) {
+          this.announcedTrouble = false;
+          this.liveStatus.set($localize`Your changes are saved now.`);
+        }
+      });
     });
     // The phone's serving bar shows only while the One serving card is scrolled away.
     let observer: IntersectionObserver | null = null;
@@ -277,12 +397,16 @@ export class RecipeEditor implements HoldsUnsavedWork {
       this.scope.epoch();
       const tenantId = this.tenants.selectedTenantId();
       const id = this.recipeId();
-      const key = `${tenantId}:${id ?? 'new'}`;
-      if (tenantId && key !== this.loadedKey) {
+      const draftId = id ? null : this.requestedDraft();
+      if (!tenantId) return;
+      const key = this.addressKey(tenantId, id, draftId);
+      if (key !== this.loadedKey) {
         this.loadedKey = key;
         // A sheet left open over the recipe before (Back to another one) would weigh a line no longer here.
-        untracked(() => this.cookingSheets()?.close());
-        void this.load(id);
+        untracked(() => {
+          this.cookingSheets()?.close();
+          void this.load(id, draftId);
+        });
       }
     });
   }
@@ -290,23 +414,53 @@ export class RecipeEditor implements HoldsUnsavedWork {
   // ---------- loading ----------
 
   protected retry(): void {
-    void this.load(this.recipeId());
+    void this.load(this.recipeId(), this.recipeId() ? null : this.requestedDraft());
   }
 
-  private async load(recipeId: string | null): Promise<void> {
+  /**
+   * Opens the recipe, with the coach's own draft of it when they have one, or a new recipe's draft, or
+   * an empty new recipe. Changes still on their way from what was open go first.
+   */
+  private async load(recipeId: string | null, draftId: string | null): Promise<void> {
     return this.scope.run('load', async (owner) => {
+      // The address changed under the page (Back, a link): changes still on their way go first.
+      if (this.autosave.hasUnsaved) await owner.wait(this.sendRemaining());
+      this.forgetDraft();
       this.state.set('loading');
       this.problem.set(null);
       this.saveError.set(null);
-      this.stale.set(false);
       try {
         if (recipeId) {
           const detail = await owner.wait(firstValueFrom(this.api.getRecipe(recipeId)));
-          this.show(detail);
-          await owner.wait(this.grantPhoto(detail.latest.photoMediaAssetId));
+          this.readNewest = numeric(detail.currentRevision);
+          if (detail.draft) {
+            // The coach's own changes win over the version: they are never set aside unasked.
+            const view = await owner.wait(firstValueFrom(this.api.getDraft(detail.draft.id)));
+            this.detail.set(detail);
+            this.adoptStored(view);
+          } else {
+            this.show(detail);
+          }
+          this.state.set('ready');
+          await owner.wait(this.grantPhoto(this.draft().photoId));
+        } else if (draftId) {
+          const view = await owner.wait(firstValueFrom(this.api.getDraft(draftId)));
+          if (view.recipeId) {
+            // Changes to a saved recipe open with that recipe.
+            await owner.wait(
+              this.router.navigate(['/nutrition/recipes', view.recipeId], { replaceUrl: true }),
+            );
+            return;
+          }
+          this.detail.set(null);
+          this.readNewest = 0;
+          this.adoptStored(view);
+          this.state.set('ready');
+          await owner.wait(Promise.all([this.grantPhoto(this.draft().photoId), this.checkAi()]));
         } else {
           this.detail.set(null);
-          this.setDraft(emptyDraft());
+          this.readNewest = 0;
+          this.setDraft(emptyDraft(), null);
           this.photoUrl.set(null);
           this.state.set('ready');
           await owner.wait(this.checkAi());
@@ -323,13 +477,23 @@ export class RecipeEditor implements HoldsUnsavedWork {
 
   private show(detail: RecipeDetail): void {
     this.detail.set(detail);
-    this.setDraft(draftFromDetail(detail));
+    this.setDraft(draftFromDetail(detail), null);
     this.state.set('ready');
   }
 
-  private setDraft(draft: RecipeDraft): void {
+  /** The coach's stored draft becomes what the editor holds, and the next save carries its version. */
+  private adoptStored(view: RecipeDraftView): void {
+    this.stored = { id: view.id, version: numeric(view.version) };
+    this.hasDraft.set(true);
+    this.draftSavedAt.set(view.updatedAtUtc);
+    this.draftStartedAt.set(numeric(view.startedAtRevision));
+    const stored = draftFromStored(view);
+    this.setDraft(stored.draft, stored.aiOperationId);
+  }
+
+  private setDraft(draft: RecipeDraft, aiOperationId: string | null): void {
     this.draft.set(draft);
-    this.savedSignature = draftSignature(draft);
+    this.aiOperationId.set(aiOperationId);
   }
 
   private async grantPhoto(photoId: string | null): Promise<void> {
@@ -357,9 +521,12 @@ export class RecipeEditor implements HoldsUnsavedWork {
 
   // ---------- editing ----------
 
+  /** Every edit, typed or chosen: kept in the coach's draft on the server once they pause (NUT-014). */
   protected change(patch: Partial<RecipeDraft>): void {
     this.draft.update((draft) => ({ ...draft, ...patch }));
     this.clearProblemIfSolved();
+    this.saveError.set(null);
+    this.autosave.changed();
   }
 
   protected servingsTyped(value: string): void {
@@ -671,11 +838,14 @@ export class RecipeEditor implements HoldsUnsavedWork {
     });
   }
 
-  /** Drops the suggested ingredients not matched yet, and turns the suggestion down on the server. */
+  /**
+   * Drops the suggested ingredients not matched yet, and turns the suggestion down on the server: the
+   * draft lets go of it, so the recipe is the coach's own lines (ADR 0035).
+   */
   protected async dropSuggestion(): Promise<void> {
     const operationId = this.aiOperationId();
-    this.change({ lines: this.draft().lines.filter((line) => line.food || !line.suggestion) });
     this.aiOperationId.set(null);
+    this.change({ lines: this.draft().lines.filter((line) => line.food || !line.suggestion) });
     if (!operationId) return;
     return this.scope.run('reject', async (owner) => {
       try {
@@ -715,10 +885,14 @@ export class RecipeEditor implements HoldsUnsavedWork {
     if (action === 'draft') void this.save('draft');
   }
 
+  /**
+   * Publish, or Save as draft: everything on screen is stored first, then the coach's draft becomes the
+   * recipe's next version, checked by every rule (NUT-014). A draft version opened unchanged is
+   * published as it is, with no new version.
+   */
   protected async save(kind: SaveKind): Promise<void> {
     if (this.saving()) return;
-    const draft = this.draft();
-    const problem = recipeProblem(draft);
+    const problem = recipeProblem(this.draft());
     this.problem.set(problem);
     this.saveError.set(null);
     if (problem) {
@@ -726,14 +900,16 @@ export class RecipeEditor implements HoldsUnsavedWork {
       return;
     }
     const detail = this.detail();
-    const publish = kind === 'publish';
-    // Nothing changed: publishing an existing draft needs no new version, and a draft is kept already.
-    if (detail && !this.dirty()) {
-      if (!publish) {
+    const keepAsDraft = kind === 'draft';
+    // Asked once already: the coach goes on although someone saved a version since they began.
+    const replaceNewer = this.newerVersion() !== null;
+    this.newerVersion.set(null);
+    if (!this.pending()) {
+      if (keepAsDraft) {
         this.toast.show($localize`No changes to save.`);
         return;
       }
-      if (detail.latest.status === 'Published') {
+      if (detail?.latest.status === 'Published') {
         this.toast.show($localize`This recipe is already published.`);
         return;
       }
@@ -742,90 +918,81 @@ export class RecipeEditor implements HoldsUnsavedWork {
     return this.scope.run('save', async (owner) => {
       this.saving.set(kind);
       try {
-        let recipeId: string;
-        if (detail && !this.dirty()) {
-          await this.write(owner, () => this.api.publishVersion(detail.latest.id));
-          recipeId = detail.id;
-        } else if (detail) {
-          const renamed = draft.name.trim() !== detail.name;
-          const saved = await this.write(owner, () =>
-            this.api.addVersion(detail.id, {
-              instructions: draft.instructions.trim(),
-              servings: draft.servings ?? 1,
-              ingredients: ingredientRequests(draft.lines),
-              name: renamed ? draft.name.trim() : null,
-              photoMediaAssetId: draft.photoId,
-              publish,
-              baseRevision: numeric(detail.currentRevision),
-              prepMinutes: draft.prepMinutes,
-              cookMinutes: draft.cookMinutes,
-            }),
-          );
-          recipeId = saved.id;
-        } else if (this.aiOperationId()) {
-          const operationId = this.aiOperationId()!;
-          const view = await this.write(owner, () =>
-            this.api.review(operationId, {
-              approved: true,
-              reason: 'Coach matched every ingredient to a food and checked the amounts.',
-              recipeName: draft.name.trim(),
-              instructions: draft.instructions.trim(),
-              servings: draft.servings ?? 1,
-              ingredientMappings: ingredientRequests(draft.lines),
-              photoMediaAssetId: draft.photoId,
-              publish,
-              prepMinutes: draft.prepMinutes,
-              cookMinutes: draft.cookMinutes,
-            }),
-          );
-          recipeId = view.createdRecipeId ?? '';
-          this.aiOperationId.set(null);
+        let saved: RecipeSummary;
+        if (detail && !this.pending()) {
+          saved = await this.write(owner, () => this.api.publishVersion(detail.latest.id));
         } else {
-          const saved = await this.write(owner, () =>
-            this.api.createRecipe({
-              name: draft.name.trim(),
-              instructions: draft.instructions.trim(),
-              servings: draft.servings ?? 1,
-              ingredients: ingredientRequests(draft.lines),
-              photoMediaAssetId: draft.photoId,
-              publish,
-              prepMinutes: draft.prepMinutes,
-              cookMinutes: draft.cookMinutes,
+          if (!(await owner.wait(this.autosave.flush())) || !this.stored) {
+            this.saveError.set(
+              this.saveProblem()?.message ??
+                (keepAsDraft
+                  ? $localize`Your latest changes could not be saved, so nothing was saved as a draft. Check your connection and try again.`
+                  : $localize`Your latest changes could not be saved, so nothing was published. Check your connection and try again.`),
+            );
+            return;
+          }
+          const stored: StoredDraft = this.stored;
+          saved = await this.write(owner, () =>
+            this.api.publishDraft(stored.id, {
+              version: stored.version,
+              replaceNewer,
+              keepAsDraft,
             }),
           );
-          recipeId = saved.id;
+          this.forgetDraft();
         }
 
-        const fresh = await owner.wait(firstValueFrom(this.api.getRecipe(recipeId)));
-        this.loadedKey = `${owner.tenantId}:${recipeId}`;
+        const fresh = await owner.wait(firstValueFrom(this.api.getRecipe(saved.id)));
+        this.loadedKey = this.addressKey(owner.tenantId, saved.id, null);
+        this.readNewest = numeric(fresh.currentRevision);
         this.show(fresh);
         if (!detail) {
           await owner.wait(
-            this.router.navigate(['/nutrition/recipes', recipeId], { replaceUrl: true }),
+            this.router.navigate(['/nutrition/recipes', saved.id], { replaceUrl: true }),
           );
         }
         this.toast.show(
-          publish
-            ? $localize`Published. It’s in your meal plans’ recipes now.`
-            : $localize`Saved as a draft. It stays out of meal plans until you publish it.`,
+          keepAsDraft
+            ? $localize`Saved as a draft. Your team sees it; meal plans don’t until you publish it.`
+            : $localize`Published. It’s in your meal plans’ recipes now.`,
           { tone: 'success' },
         );
       } catch (error) {
         if (!owner.current) return;
-        this.saveRefused(error);
+        await this.saveRefused(owner, error, kind);
       } finally {
         if (owner.current) this.saving.set(null);
       }
     });
   }
 
-  private saveRefused(error: unknown): void {
+  private async saveRefused(owner: TenantOperation, error: unknown, kind: SaveKind): Promise<void> {
     const body =
       error instanceof HttpErrorResponse
         ? (error.error as { code?: unknown; errors?: Record<string, string[]> } | null)
         : null;
-    if (body?.code === 'recipe_changed') {
-      this.stale.set(true);
+    if (body?.code === 'newer_recipe_version') {
+      const id = this.recipeId();
+      try {
+        if (id) this.detail.set(await owner.wait(firstValueFrom(this.api.getRecipe(id))));
+      } catch {
+        // The sentence below still holds without the number.
+      }
+      const newest = numeric(this.detail()?.currentRevision ?? 0);
+      this.newerVersion.set({
+        kind,
+        message:
+          newest > 0
+            ? $localize`Version ${newest}:number: of this recipe was saved after you started these changes. Make yours the newest version? Version ${newest}:number: stays in the recipe’s history.`
+            : $localize`A newer version of this recipe was saved after you started these changes. Make yours the newest version? The other one stays in the recipe’s history.`,
+      });
+      return;
+    }
+    if (
+      error instanceof HttpErrorResponse &&
+      (error.status === 404 || body?.code === 'recipe_draft_stale')
+    ) {
+      this.saveOutcome(error);
       return;
     }
     if (body?.errors?.['photoMediaAssetId']) {
@@ -834,15 +1001,200 @@ export class RecipeEditor implements HoldsUnsavedWork {
     this.saveError.set(
       apiErrorMessage(
         error,
-        $localize`The recipe could not be saved. Your changes are still here; try again.`,
+        kind === 'draft'
+          ? $localize`The recipe could not be saved as a draft. Your changes are kept; try again.`
+          : $localize`The recipe could not be published. Your changes are kept; try again.`,
       ),
     );
   }
 
-  /** Reloads the newest version after another save, dropping the changes made here. */
-  protected reloadNewest(): void {
+  // ---------- keeping changes (NUT-014) ----------
+
+  /**
+   * One autosave: the recipe as it stands now, to the coach's draft. Its first save starts the draft;
+   * every later one carries the version it read, so two tabs never overwrite each other.
+   */
+  private sendDraft(): Promise<SaveOutcome> {
+    return this.scope.run(
+      'autosave',
+      async (owner) => {
+        // Read before anything is awaited, so the content matches the edits the autosave counted.
+        const content = toDraftContent(this.draft(), this.aiOperationId());
+        const stored = this.stored;
+        const epoch = this.draftEpoch;
+        try {
+          const saved = await this.write(owner, () =>
+            stored
+              ? this.api.saveDraft(stored.id, { content, version: stored.version })
+              : this.api.createDraft(this.startRequest(content)),
+          );
+          if (epoch !== this.draftEpoch) return 'stopped';
+          this.stored = { id: saved.id, version: numeric(saved.version) };
+          this.hasDraft.set(true);
+          this.draftSavedAt.set(saved.updatedAtUtc);
+          this.saveProblem.set(null);
+          if (!stored && this.detail() === null) {
+            this.showDraftInAddress(saved.id);
+          } else if (!stored) {
+            this.draftStartedAt.set(this.readNewest);
+          }
+          return 'saved';
+        } catch (error) {
+          return owner.current && epoch === this.draftEpoch ? this.saveOutcome(error) : 'stopped';
+        }
+      },
+      'stopped',
+    );
+  }
+
+  private startRequest(content: RecipeDraftContent): CreateRecipeDraftRequest {
+    const detail = this.detail();
+    return detail
+      ? { recipeId: detail.id, recipeRevision: this.readNewest, content }
+      : { recipeId: null, recipeRevision: null, content };
+  }
+
+  /** What a failed save means for the next one, said in coach words where the coach must act. */
+  private saveOutcome(error: unknown): SaveOutcome {
+    if (!(error instanceof HttpErrorResponse)) return 'retry';
+    const body = error.error as { code?: unknown; errors?: Record<string, string[]> } | null;
+    if (error.status === 0 || error.status === 429 || error.status >= 500) return 'retry';
+    if (error.status === 400 || body?.code === 'recipe_draft_limit') {
+      if (body?.errors?.['photoMediaAssetId']) {
+        this.photoError.set($localize`This photo can’t be used. Choose it again.`);
+      }
+      this.saveProblem.set({
+        kind: 'refused',
+        message: apiErrorMessage(error, $localize`Your latest changes could not be saved.`),
+      });
+      return 'refused';
+    }
+    if (error.status === 401 || error.status === 403) {
+      this.saveProblem.set({
+        kind: 'closed',
+        message: apiErrorMessage(
+          error,
+          $localize`Your changes can’t be saved right now. Copy anything you need before you leave.`,
+        ),
+      });
+      return 'stopped';
+    }
+    // Gone or moved on: published or discarded elsewhere, or saved in another tab since this read.
+    this.saveProblem.set({
+      kind: 'stale',
+      message: $localize`This recipe was changed in another tab or on another device. Reload to continue with the latest changes.`,
+    });
+    return 'stopped';
+  }
+
+  /** Discard: the coach's changes go, and the recipe as last saved comes back. */
+  protected async discard(): Promise<void> {
+    const isNew = this.detail() === null;
+    const agreed = await this.ask({
+      title: isNew ? $localize`Discard this recipe?` : $localize`Discard your changes?`,
+      message: isNew
+        ? $localize`It was never saved, so no meal plan has it. This can’t be undone.`
+        : $localize`The recipe goes back to how it was last saved. This can’t be undone.`,
+      confirm: isNew ? $localize`Discard recipe` : $localize`Discard changes`,
+      cancel: $localize`Keep editing`,
+    });
+    if (!agreed) return;
+    return this.scope.run('discard', async (owner) => {
+      await owner.wait(this.autosave.hold());
+      const stored = this.stored;
+      try {
+        if (stored) {
+          await this.write(owner, () => this.api.discardDraft(stored.id, stored.version));
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        // A draft already gone (made a version or discarded in another tab) needs no discarding.
+        if (!(error instanceof HttpErrorResponse && error.status === 404)) {
+          this.autosave.release();
+          if (
+            error instanceof HttpErrorResponse &&
+            (error.error as { code?: unknown } | null)?.code === 'recipe_draft_stale'
+          ) {
+            this.saveOutcome(error);
+          } else {
+            this.saveError.set(
+              apiErrorMessage(error, $localize`Your changes could not be discarded. Try again.`),
+            );
+          }
+          return;
+        }
+      }
+      this.forgetDraft();
+      const detail = this.detail();
+      if (!detail) {
+        this.loadedKey = null;
+        // Said before the page goes: once it has, nothing of it is left to say it.
+        this.toast.show($localize`Recipe discarded.`);
+        await owner.wait(this.router.navigate(['/nutrition/recipes']));
+        return;
+      }
+      try {
+        const fresh = await owner.wait(firstValueFrom(this.api.getRecipe(detail.id)));
+        this.readNewest = numeric(fresh.currentRevision);
+        this.show(fresh);
+        this.toast.show($localize`Changes discarded.`);
+        await owner.wait(this.grantPhoto(fresh.latest.photoMediaAssetId));
+      } catch {
+        if (owner.current) this.state.set('error');
+      }
+    });
+  }
+
+  /** After another tab moved on: the page reads the recipe again, as the server now has it. */
+  protected reloadLatest(): void {
+    const id = this.recipeId();
+    const draftId = id ? null : (this.stored?.id ?? this.requestedDraft());
     this.loadedKey = null;
-    void this.load(this.recipeId());
+    this.forgetDraft();
+    void this.load(id, draftId);
+  }
+
+  /** The page no longer holds a draft: opened afresh, made a version or discarded. */
+  private forgetDraft(): void {
+    this.draftEpoch += 1;
+    this.autosave.reset();
+    this.stored = null;
+    this.hasDraft.set(false);
+    this.draftSavedAt.set(null);
+    this.draftStartedAt.set(0);
+    this.saveProblem.set(null);
+    this.newerVersion.set(null);
+    this.announcedTrouble = false;
+    this.liveStatus.set('');
+  }
+
+  private addressKey(tenant: string, id: string | null, draftId: string | null): string {
+    return `${tenant}|${id ?? 'new'}|${draftId ?? ''}`;
+  }
+
+  /**
+   * A new recipe's draft goes into the address, so a refresh reopens it. Not through the router: a
+   * navigation scrolls the page to the top, and this happens mid-edit, at the first autosave.
+   */
+  private showDraftInAddress(draftId: string): void {
+    this.location.replaceState('/nutrition/recipes/new', `draft=${encodeURIComponent(draftId)}`);
+  }
+
+  private savedLine(savedAt: string | null): string {
+    if (!savedAt) return $localize`Changes saved, not published yet`;
+    const day = formatDate(savedAt, 'yyyy-MM-dd', this.locale);
+    const today = formatDate(new Date(), 'yyyy-MM-dd', this.locale);
+    return day === today
+      ? $localize`Saved at ${formatDate(savedAt, 'HH:mm', this.locale)}:time:, not published yet`
+      : $localize`Saved on ${formatDate(savedAt, 'EEE d MMM', this.locale)}:date:, not published yet`;
+  }
+
+  /** Sends what is not on the server yet, waiting a few seconds at most. */
+  private sendRemaining(): Promise<boolean> {
+    return Promise.race([
+      this.autosave.flush(),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), LEAVE_WAIT_MS)),
+    ]);
   }
 
   private focusProblem(problem: RecipeProblem): void {
@@ -871,30 +1223,50 @@ export class RecipeEditor implements HoldsUnsavedWork {
 
   // ---------- leaving ----------
 
+  /**
+   * Asked before the page goes (the route guard, a workspace switch, a sign-out). Changes not on the
+   * server yet are sent first; only when that fails does the coach choose.
+   */
   async canLeave(): Promise<boolean> {
-    if (!this.dirty() || this.state() !== 'ready') return true;
+    if (!this.autosave.hasUnsaved || (await this.sendRemaining())) return true;
     return this.ask({
-      message: $localize`Your changes to this recipe aren’t saved. If you leave now, they are lost.`,
+      title: $localize`Leave without saving?`,
+      message:
+        this.saveProblem()?.message ??
+        $localize`Your latest changes have not reached the server yet. If you leave now, they are lost.`,
       confirm: $localize`Leave without saving`,
       cancel: $localize`Stay`,
     });
   }
 
+  /** A reload or a closed tab cannot wait for a save, so the browser asks first. */
   protected onBeforeUnload(event: BeforeUnloadEvent): void {
-    if (this.dirty() && this.state() === 'ready') {
+    if (this.autosave.hasUnsaved) {
       event.preventDefault();
       event.returnValue = '';
     }
   }
 
+  /** Changes go as the tab is hidden, while it can still send them (a phone locking, a new tab). */
+  protected onVisibilityChange(): void {
+    const status = this.autosave.status();
+    if (
+      this.document.visibilityState === 'hidden' &&
+      (status === 'pending' || status === 'retrying')
+    ) {
+      void this.autosave.flush();
+    }
+  }
+
   private async ask(question: {
+    title: string;
     message: string;
     confirm: string;
     cancel: string;
   }): Promise<boolean> {
     this.asking.set(question);
     const dialog = this.dialogs.open<boolean>(this.confirmDialog(), {
-      title: $localize`Leave without saving?`,
+      title: question.title,
       closeLabel: this.closeLabel,
       closeOnNavigation: false,
     });

@@ -1635,6 +1635,12 @@ export type CreateProgramDraftRequest = {
   content: ProgramDraftContent;
 };
 
+export type CreateRecipeDraftRequest = {
+  recipeId: null | string;
+  recipeRevision: null | number | string;
+  content: RecipeDraftContent;
+};
+
 export type CreateRecipeRequest = {
   name: string;
   instructions: string;
@@ -1801,6 +1807,10 @@ export type DiscardMealPlanDraftRequest = {
 };
 
 export type DiscardProgramDraftRequest = {
+  version: number | string;
+};
+
+export type DiscardRecipeDraftRequest = {
   version: number | string;
 };
 
@@ -3144,6 +3154,12 @@ export type PublishProgramDraftRequest = {
   replaceNewer: boolean;
 };
 
+export type PublishRecipeDraftRequest = {
+  version: number | string;
+  replaceNewer: boolean;
+  keepAsDraft?: boolean;
+};
+
 export type RealtimeAcknowledgementResult = {
   conversationId: string;
   accepted: number | string;
@@ -3181,6 +3197,69 @@ export type RecipeDetail = {
   currentRevision: number | string;
   publishedVersionId: null | string;
   latest: RecipeVersionView;
+  draft?: null | RecipeDraftSummary;
+};
+
+export type RecipeDraftContent = {
+  name: null | string;
+  servings: null | number | string;
+  instructions: null | string;
+  lines: null | Array<RecipeDraftLine>;
+  photoMediaAssetId?: null | string;
+  prepMinutes?: null | number | string;
+  cookMinutes?: null | number | string;
+  aiMealDraftOperationId?: null | string;
+};
+
+export type RecipeDraftFoodView = {
+  foodItemId: string;
+  name: string;
+  provenance: FoodProvenance;
+  version: FoodVersionView;
+  newerFood: null | FoodItemView;
+};
+
+export type RecipeDraftLine = {
+  foodItemVersionId: null | string;
+  quantity: null | number | string;
+  yieldFactorId?: null | string;
+  retentionFactorId?: null | string;
+  suggestion?: null | RecipeDraftSuggestion;
+  convertedRawGrams?: null | number | string;
+  convertedCookedGrams?: null | number | string;
+};
+
+export type RecipeDraftSaveView = {
+  id: string;
+  updatedAtUtc: string;
+  version: number | string;
+};
+
+export type RecipeDraftSuggestion = {
+  name: null | string;
+  quantity: null | number | string;
+  unit: null | string;
+  uncertain: boolean;
+};
+
+export type RecipeDraftSummary = {
+  id: string;
+  recipeId: null | string;
+  name: string;
+  lineCount: number | string;
+  photoMediaAssetId: null | string;
+  updatedAtUtc: string;
+};
+
+export type RecipeDraftView = {
+  id: string;
+  recipeId: null | string;
+  startedAtRevision: number | string;
+  updatedAtUtc: string;
+  version: number | string;
+  content: RecipeDraftContent;
+  foods: Array<RecipeDraftFoodView>;
+  cookingFactors: Array<CookingFactorView>;
 };
 
 export type RecipeIngredientRequest = {
@@ -3242,6 +3321,7 @@ export type RecipeSummary = {
   declaredAllergens: Array<AllergenCode>;
   photoMediaAssetId?: null | string;
   publishedVersionId?: null | string;
+  draft?: null | RecipeDraftSummary;
 };
 
 export type RecipeVersionView = {
@@ -3492,6 +3572,11 @@ export type SaveMealPlanDraftRequest = {
 
 export type SaveProgramDraftRequest = {
   content: ProgramDraftContent;
+  version: number | string;
+};
+
+export type SaveRecipeDraftRequest = {
+  content: RecipeDraftContent;
   version: number | string;
 };
 
@@ -8281,6 +8366,186 @@ export type PublishRecipeVersionResponses = {
 
 export type PublishRecipeVersionResponse =
   PublishRecipeVersionResponses[keyof PublishRecipeVersionResponses];
+
+export type ListRecipeDraftsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    query?: string;
+  };
+  url: '/api/nutrition/recipe-drafts';
+};
+
+export type ListRecipeDraftsResponses = {
+  /**
+   * OK
+   */
+  200: Array<RecipeDraftSummary>;
+};
+
+export type ListRecipeDraftsResponse = ListRecipeDraftsResponses[keyof ListRecipeDraftsResponses];
+
+export type CreateRecipeDraftData = {
+  body: CreateRecipeDraftRequest;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/recipe-drafts';
+};
+
+export type CreateRecipeDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CreateRecipeDraftError = CreateRecipeDraftErrors[keyof CreateRecipeDraftErrors];
+
+export type CreateRecipeDraftResponses = {
+  /**
+   * OK
+   */
+  200: RecipeDraftSaveView;
+};
+
+export type CreateRecipeDraftResponse =
+  CreateRecipeDraftResponses[keyof CreateRecipeDraftResponses];
+
+export type GetRecipeDraftData = {
+  body?: never;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/recipe-drafts/{draftId}';
+};
+
+export type GetRecipeDraftErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetRecipeDraftResponses = {
+  /**
+   * OK
+   */
+  200: RecipeDraftView;
+};
+
+export type GetRecipeDraftResponse = GetRecipeDraftResponses[keyof GetRecipeDraftResponses];
+
+export type SaveRecipeDraftData = {
+  body: SaveRecipeDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/recipe-drafts/{draftId}';
+};
+
+export type SaveRecipeDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SaveRecipeDraftError = SaveRecipeDraftErrors[keyof SaveRecipeDraftErrors];
+
+export type SaveRecipeDraftResponses = {
+  /**
+   * OK
+   */
+  200: RecipeDraftSaveView;
+};
+
+export type SaveRecipeDraftResponse = SaveRecipeDraftResponses[keyof SaveRecipeDraftResponses];
+
+export type DiscardRecipeDraftData = {
+  body: DiscardRecipeDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/recipe-drafts/{draftId}/discard';
+};
+
+export type DiscardRecipeDraftErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type DiscardRecipeDraftError = DiscardRecipeDraftErrors[keyof DiscardRecipeDraftErrors];
+
+export type DiscardRecipeDraftResponses = {
+  /**
+   * No Content
+   */
+  204: void;
+};
+
+export type DiscardRecipeDraftResponse =
+  DiscardRecipeDraftResponses[keyof DiscardRecipeDraftResponses];
+
+export type PublishRecipeDraftData = {
+  body: PublishRecipeDraftRequest;
+  path: {
+    draftId: string;
+  };
+  query?: never;
+  url: '/api/nutrition/recipe-drafts/{draftId}/publish';
+};
+
+export type PublishRecipeDraftErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PublishRecipeDraftError = PublishRecipeDraftErrors[keyof PublishRecipeDraftErrors];
+
+export type PublishRecipeDraftResponses = {
+  /**
+   * OK
+   */
+  200: RecipeSummary;
+};
+
+export type PublishRecipeDraftResponse =
+  PublishRecipeDraftResponses[keyof PublishRecipeDraftResponses];
 
 export type ListMealPlanTemplatesData = {
   body?: never;

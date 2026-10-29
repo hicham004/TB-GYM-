@@ -1962,6 +1962,12 @@ limited to the coach's assigned clients.
   is now **Foods**, without its recipe form or AI section. Since critique B5c2 the kit's segmented
   control beside the search reads **All · Published · Drafts (n)**, filtered on the server and kept in
   the address (`?status=published`, `?status=drafts`); the lede counts the drafts of the whole library.
+  Since critique B5d the editor keeps the coach's changes as they type in their own draft (NUT-014): an
+  **In progress** pill beside the recipe's status, "Only you see these changes…", a "Saved at 14:02, not
+  published yet" line, **Discard changes**, and the newer-version question at Publish replace Reload
+  recipe; a new recipe's draft is kept in the address (`?draft=`); Save as draft makes the team's complete
+  draft version. Recipes leads with the coach's new recipes in progress (under All and Drafts) and marks a
+  saved recipe they are changing "In progress".
 - Built in R4.4c: **Foods** (`/nutrition/foods`; the old address leads there) has one search over the
   workspace's foods and USDA's. Your foods come first, each row with its source, raw or cooked, the
   amount its numbers are for, calories, a protein/carbs/fat bar and grams, allergens, and a flag when the

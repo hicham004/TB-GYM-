@@ -155,8 +155,18 @@ h1 {
   letter-spacing: -0.02em;
 }
 
-.pill {
-  align-self: flex-start;
+// The shared status and, beside it, the coach's own work in progress (critique B5d).
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+  margin: 0;
+}
+
+.note {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  margin: 0;
 }
 
 // One column on a phone: each card is a row, a square photo beside its numbers, so a screen holds

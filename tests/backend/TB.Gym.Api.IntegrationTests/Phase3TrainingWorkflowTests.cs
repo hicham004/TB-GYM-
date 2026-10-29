@@ -161,10 +161,12 @@ public sealed partial class Phase3TrainingWorkflowTests
                 services.RemoveAll<IAiMealDraftProvider>();
                 services.AddSingleton<IClock>(clock);
                 // The launch provider answers the AI tests (F2), the recipe editor's AI test (R4.4b), the
-                // AI ceiling's (R4.4c) and the review race and availability (A6).
+                // AI ceiling's (R4.4c), the review race and availability (A6) and a recipe draft's
+                // suggestion (critique B5d).
                 services.AddSingleton<IAiMealDraftProvider>(TestContext.TestName is { } testName &&
                     (testName.StartsWith("F2", StringComparison.Ordinal) || testName.StartsWith("R44bAnAi", StringComparison.Ordinal) ||
-                        testName.StartsWith("R44cAi", StringComparison.Ordinal) || testName.StartsWith("A6Ai", StringComparison.Ordinal))
+                        testName.StartsWith("R44cAi", StringComparison.Ordinal) || testName.StartsWith("A6Ai", StringComparison.Ordinal) ||
+                        testName.StartsWith("B5dAi", StringComparison.Ordinal))
                     ? launchAiProvider
                     : new InvalidSchemaAiMealDraftProvider());
                 if (realUsdaProvider)

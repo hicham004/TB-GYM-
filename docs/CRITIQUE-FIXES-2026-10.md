@@ -567,3 +567,36 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   targets yet. Work them out on a client's Nutrition tab."; "No drafts: every recipe is published.", "No
   published recipes yet. Publish one to use it in your meal plans." and "No drafts match “oat”.".
   Recommendation: keep.
+- B5d · Where "In progress" shows on Recipes. Built: a coach's new recipes in progress lead the list
+  under All and Drafts and count in Drafts (n), and the lede adds ", 1 in progress"; a saved recipe they
+  are changing keeps its card, with "In progress" beside its own status, under its own filter; nobody
+  else sees either, the owner included. Other way: a fourth chip, "In progress (n)", or a strip of work
+  in progress above the cards. Recommendation: keep: the owner chose three chips (B5c2), and a recipe
+  never published is a draft to its coach either way.
+- B5d · Save as draft. Built: "Save as draft", hinted "Your team sees it; meal plans don’t" (B1's
+  "(complete, not published)" was until B5d), making the next version from the coach's draft, checked
+  like Publish, and saying "Saved as a draft. Your team sees it; meal plans don’t until you publish
+  it."; with nothing changed it says "No changes to save." as before. Other way: keep B1's words, or
+  "Share with my team". Recommendation: keep.
+- B5d · A draft's photo. Built: the unused-photo sweep counts a working draft's photo as named (MED-014
+  amended), so a photo added to a recipe in progress stays as long as the draft does. Other way: the 48
+  hours apply to it too, and the coach adds the photo again. Recommendation: keep: a draft kept for a
+  week would otherwise lose its photo without a word.
+- B5d · An AI suggestion in a draft. Built: a new recipe's draft carries the suggestion it began from
+  and its first version approves it; one turned down since (Remove the suggestions left) leaves the
+  recipe the coach's own lines; Discard leaves a carried suggestion awaiting review, as leaving the
+  editor did before. Other way: Discard turns it down too. Recommendation: keep: the suggestion was
+  paid for when it was made, and its review only says whether a recipe came of it.
+- B5d · Words the row did not give. Built: the "In progress" pill in the kit's blue (info), beside
+  Published, Draft or Changes not published; "Only you see it until you publish it." and "Only you see
+  these changes. Meal plans use the published version until you publish them." (or "… Not in meal
+  plans until you publish it."); before the first pause "New recipe" and "Your changes save as you type.
+  Publish it to use it in meal plans."; the builders' save line ("Saved at 19:49, not published yet",
+  "Saving…", "Not saved yet. Trying again…", "Not saved") and Discard changes ("Discard your changes?",
+  "Discard this recipe?", "Changes discarded.", "Recipe discarded."); "Version 2 of this recipe was saved
+  after you started these changes. Publishing yours makes it the newest version." and at Publish "… Make
+  yours the newest version? Version 2 stays in the recipe’s history." with "Publish mine as the newest"
+  (or "Save mine as the newest") and "Discard mine"; "This recipe was changed in another tab or on
+  another device. Reload to continue with the latest changes." with Reload recipe; the cards' "Only you
+  see it until you publish it. Changed Thu 29 Oct.", "Untitled recipe", "1 ingredient" and "No
+  ingredients yet". Recommendation: keep: they are the meal-plan builder's words wherever it has them.

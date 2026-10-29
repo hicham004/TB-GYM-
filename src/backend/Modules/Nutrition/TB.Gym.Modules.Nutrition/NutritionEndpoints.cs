@@ -13,6 +13,8 @@ public static class NutritionEndpoints
     /// <summary>A draft as the builder sends it, with room for the nulls it writes out in full.</summary>
     private const long MaximumDraftRequestBytes = MealPlanDraftShape.MaximumContentLength * 3L;
 
+    private const long MaximumRecipeDraftRequestBytes = RecipeDraftShape.MaximumContentLength * 3L;
+
     public static IEndpointRouteBuilder MapNutritionModule(this IEndpointRouteBuilder endpoints)
     {
         var coach = endpoints.MapGroup("/api/nutrition").RequireAuthorization(AuthorizationPolicies.TenantCoach).WithTags(NutritionModule.Name);
@@ -99,6 +101,39 @@ public static class NutritionEndpoints
             await antiforgery.ValidateRequestAsync(context);
             return ToResult(await service.PublishRecipeVersionAsync(recipeVersionId, token));
         }).WithName("PublishRecipeVersion").Produces<RecipeSummary>().ProducesProblem(StatusCodes.Status409Conflict);
+
+        // The recipe editor's working copies (NUT-014, critique B5d), kept as the builders keep theirs.
+        coach.MapGet("/recipe-drafts", async (string? query, INutritionApplicationService service, CancellationToken token) =>
+            Results.Ok(await service.ListRecipeDraftsAsync(query, token)))
+            .WithName("ListRecipeDrafts").Produces<RecipeDraftSummary[]>();
+        coach.MapGet("/recipe-drafts/{draftId:guid}", async (Guid draftId, INutritionApplicationService service, CancellationToken token) =>
+        {
+            var draft = await service.GetRecipeDraftAsync(draftId, token);
+            return draft is null ? Results.NotFound() : Results.Ok(draft);
+        }).WithName("GetRecipeDraft").Produces<RecipeDraftView>().Produces(StatusCodes.Status404NotFound);
+        coach.MapPost("/recipe-drafts", async (CreateRecipeDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.CreateRecipeDraftAsync(request, token));
+        }).WithName("CreateRecipeDraft").WithMetadata(new RequestSizeLimitAttribute(MaximumRecipeDraftRequestBytes))
+            .Produces<RecipeDraftSaveView>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+        coach.MapPut("/recipe-drafts/{draftId:guid}", async (Guid draftId, SaveRecipeDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.SaveRecipeDraftAsync(draftId, request, token));
+        }).WithName("SaveRecipeDraft").WithMetadata(new RequestSizeLimitAttribute(MaximumRecipeDraftRequestBytes))
+            .Produces<RecipeDraftSaveView>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+        coach.MapPost("/recipe-drafts/{draftId:guid}/discard", async (Guid draftId, DiscardRecipeDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.DiscardRecipeDraftAsync(draftId, request, token);
+            return result.Status == NutritionCommandStatus.Success ? Results.NoContent() : ToResult(result);
+        }).WithName("DiscardRecipeDraft").Produces(StatusCodes.Status204NoContent).Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+        coach.MapPost("/recipe-drafts/{draftId:guid}/publish", async (Guid draftId, PublishRecipeDraftRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.PublishRecipeDraftAsync(draftId, request, token));
+        }).WithName("PublishRecipeDraft").Produces<RecipeSummary>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
 
         coach.MapGet("/meal-plans", async (int? skip, int? take, INutritionApplicationService service, CancellationToken token) =>
         {
@@ -253,7 +288,7 @@ public static class NutritionEndpoints
 
     private static IResult ToResult(NutritionCommandResult result) => result.Status switch
     {
-        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingConversion ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? (object?)result.MealPlanDraft ?? result.MacroSplit),
+        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingConversion ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? (object?)result.MealPlanDraft ?? (object?)result.MacroSplit ?? result.RecipeDraft),
         NutritionCommandStatus.NotFound => Results.NotFound(),
         NutritionCommandStatus.Forbidden => Results.Forbid(),
         NutritionCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),

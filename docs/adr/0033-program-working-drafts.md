@@ -52,3 +52,15 @@ an immutable version (ADR 0008). `MealPlanDraft` (NUT-013), owned by the Nutriti
 every save, and Publish in one transaction that asks first about a newer version. The old library's
 "Create plan draft" and "Publish and lock" for meal plans go; a version the old screen saved as a draft
 stays in history, and the builder opens it and publishes it as the next version.
+
+## Extended to recipes (critique B5d, 2026-10-29)
+
+The recipe editor follows this decision too: its "Save as draft" demanded everything Publish did, so a
+coach could not put an unfinished recipe away (critique T12). `RecipeDraft` (NUT-014), owned by the
+Nutrition module, mirrors `MealPlanDraft`: one per person and recipe, 20 new recipes per person, values
+unchecked, the row version on every save, private to its membership, and never in a meal plan. Recipes
+differ in two ways. The shared, complete draft version stays beside it: the editor's **Save as draft**
+makes the next version unpublished, the team sees it and meal plans do not, so the private draft is
+called **In progress**. And a new recipe's draft carries the AI suggestion it began from (ADR 0035), which
+making its first version approves in the same transaction, once. Its photo is a reference kept beside the
+content, so the unused-photo sweep leaves it alone while a draft names it (MED-014).

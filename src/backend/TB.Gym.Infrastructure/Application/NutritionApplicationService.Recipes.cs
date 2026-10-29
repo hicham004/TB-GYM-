@@ -95,6 +95,8 @@ internal sealed partial class NutritionApplicationService
                 Factor(item.YieldFactorId),
                 Factor(item.RetentionFactorId)))
             .ToArray();
+        // The caller's own changes not made a version yet (critique B5d), which the editor opens instead.
+        var drafts = await OwnDraftsByRecipeAsync([recipe.Id], cancellationToken);
         return new RecipeDetail(
             recipe.Id,
             recipe.Name,
@@ -115,7 +117,8 @@ internal sealed partial class NutritionApplicationService
                 latest.Allergens.Select(item => item.Code).Order().ToArray(),
                 ingredients,
                 latest.PrepMinutes,
-                latest.CookMinutes));
+                latest.CookMinutes),
+            drafts.GetValueOrDefault(recipe.Id));
     }
 
     /// <summary>
@@ -145,10 +148,11 @@ internal sealed partial class NutritionApplicationService
             throw new NutritionInputException("photoMediaAssetId", "Choose a photo uploaded for this recipe.");
         }
 
-        // An upload no version names is removed 48 hours after it was uploaded; a save stops taking
-        // one an hour before that, so the sweep can never remove a photo a save is naming.
+        // An upload no version or working draft names is removed 48 hours after it was uploaded; a save
+        // stops taking one an hour before that, so the sweep can never remove a photo a save is naming.
         if (asset!.CreatedAtUtc <= clock.UtcNow - MediaRetentionPolicy.UnusedRecipePhotoSaveWindow &&
-            !await dbContext.RecipeVersions.AsNoTracking().AnyAsync(item => item.PhotoMediaAssetId == assetId, cancellationToken))
+            !await dbContext.RecipeVersions.AsNoTracking().AnyAsync(item => item.PhotoMediaAssetId == assetId, cancellationToken) &&
+            !await dbContext.RecipeDrafts.AsNoTracking().AnyAsync(item => item.PhotoMediaAssetId == assetId, cancellationToken))
         {
             throw new NutritionInputException("photoMediaAssetId", "This photo was uploaded two days ago and is no longer kept. Add it again.");
         }

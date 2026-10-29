@@ -13,7 +13,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import type { RecipeListStatus, RecipeSummary } from '../../core/api/generated';
+import type { RecipeDraftSummary, RecipeListStatus, RecipeSummary } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -28,6 +28,8 @@ import { numeric } from '../training/training-builder.models';
 import { NUTRITION_SECTIONS } from './nutrition-sections';
 import { RecipeApi } from './recipe-api';
 import {
+  IN_PROGRESS,
+  inProgressCard,
   recipeCard,
   recipeListStatus,
   recipeNoMatch,
@@ -44,7 +46,8 @@ const SEARCH_DELAY_MS = 250;
 /**
  * Recipes (C7, R4.4b): the workspace's recipes as cards, a photo and a serving's calories and macros
  * on each, opening in the editor. New recipe comes first (plan §2 rule 1); an empty library is
- * invited to write its first one.
+ * invited to write its first one. The coach's own work in progress (critique B5d) is marked on its
+ * recipe, and a new recipe not saved yet leads the list.
  */
 @Component({
   selector: 'app-recipe-list',
@@ -85,6 +88,11 @@ export class RecipeList {
     recipeListStatus(this.query().get(RECIPE_STATUS_QUERY)),
   );
   private readonly recipes = signal<RecipeSummary[]>([]);
+  /**
+   * The coach's own new recipes not saved yet (critique B5d), which the search finds; never published,
+   * so they are drafts too. Changes to a saved recipe ride its card.
+   */
+  private readonly newDrafts = signal<RecipeDraftSummary[]>([]);
   private readonly total = signal(0);
   /** How many recipes the search finds of each kind, whichever is shown. */
   private readonly counts = signal({ all: 0, published: 0, drafts: 0 });
@@ -93,9 +101,10 @@ export class RecipeList {
     { value: 'Published' satisfies RecipeListStatus, label: $localize`Published` },
     {
       value: 'Drafts' satisfies RecipeListStatus,
-      label: $localize`Drafts (${this.counts().drafts}:count:)`,
+      label: $localize`Drafts (${this.counts().drafts + this.newDrafts().length}:count:)`,
     },
   ]);
+  protected readonly inProgressLabel = IN_PROGRESS;
   /** Thumbnail addresses by photo, once granted; a card without one shows its initials. */
   private readonly thumbnails = signal<ReadonlyMap<string, string>>(new Map());
   protected readonly search = signal('');
@@ -107,33 +116,57 @@ export class RecipeList {
 
   protected readonly cards = computed(() => {
     const thumbnails = this.thumbnails();
-    return this.recipes().map((recipe) => {
-      const card = recipeCard(recipe, this.locale);
-      return { ...card, thumbnail: card.photoId ? (thumbnails.get(card.photoId) ?? null) : null };
-    });
+    // New recipes in progress come first, under All and Drafts, as a meal plan's do on Meal plans.
+    const started =
+      this.status() === 'Published'
+        ? []
+        : this.newDrafts().map((draft) => inProgressCard(draft, this.locale));
+    return [...started, ...this.recipes().map((recipe) => recipeCard(recipe, this.locale))].map(
+      (card) => ({
+        ...card,
+        thumbnail: card.photoId ? (thumbnails.get(card.photoId) ?? null) : null,
+      }),
+    );
   });
   protected readonly hasMore = computed(() => this.recipes().length < this.total());
   /** No recipe at all, as opposed to none matching a search or the filter. */
-  protected readonly recipesEmpty = computed(() => this.counts().all === 0 && !this.searched());
+  protected readonly recipesEmpty = computed(
+    () => this.counts().all === 0 && this.newDrafts().length === 0 && !this.searched(),
+  );
   /** Why the filtered list is empty, in words; null while it shows recipes. */
   protected readonly noMatch = computed(() =>
     this.cards().length === 0 ? recipeNoMatch(this.status(), this.searched()) : null,
   );
   protected readonly summary = computed(() => {
     const { all: count, drafts } = this.counts();
-    if (count === 0 || this.searched()) return '';
+    const started = this.newDrafts().length;
+    if ((count === 0 && started === 0) || this.searched()) return '';
+    const inProgress =
+      started === 0
+        ? ''
+        : started === 1
+          ? $localize`, 1 in progress`
+          : $localize`, ${started}:count: in progress`;
+    if (count === 0) {
+      return started === 1
+        ? $localize`1 recipe in progress`
+        : $localize`${started}:count: recipes in progress`;
+    }
     const recipes = count === 1 ? $localize`1 recipe` : $localize`${count}:count: recipes`;
-    return drafts === 0
-      ? $localize`${recipes}:recipes:, all ready for meal plans`
-      : drafts === 1
-        ? $localize`${recipes}:recipes:, 1 still a draft`
-        : $localize`${recipes}:recipes:, ${drafts}:drafts: still drafts`;
+    const kept =
+      drafts === 0
+        ? $localize`${recipes}:recipes:, all ready for meal plans`
+        : drafts === 1
+          ? $localize`${recipes}:recipes:, 1 still a draft`
+          : $localize`${recipes}:recipes:, ${drafts}:drafts: still drafts`;
+    return kept + inProgress;
   });
 
   constructor() {
     this.scope.onReset(() => {
       this.loadedTenantId = null;
       this.recipes.set([]);
+      this.newDrafts.set([]);
       this.total.set(0);
       this.counts.set({ all: 0, published: 0, drafts: 0 });
       this.thumbnails.set(new Map());
@@ -194,10 +227,14 @@ export class RecipeList {
       const status = this.status();
       if (this.state() !== 'ready') this.state.set('loading');
       try {
-        const page = await owner.wait(
-          firstValueFrom(this.api.listRecipes(query, 0, PAGE_SIZE, status)),
+        const [page, drafts] = await owner.wait(
+          Promise.all([
+            firstValueFrom(this.api.listRecipes(query, 0, PAGE_SIZE, status)),
+            firstValueFrom(this.api.listDrafts(query)),
+          ]),
         );
         this.recipes.set([...page.items]);
+        this.newDrafts.set(drafts.filter((draft) => !draft.recipeId));
         this.total.set(numeric(page.total));
         this.counts.set({
           all: numeric(page.counts.all),
@@ -206,7 +243,7 @@ export class RecipeList {
         });
         this.searched.set(query);
         this.state.set('ready');
-        await owner.wait(this.grant(page.items));
+        await owner.wait(this.grant([...page.items, ...this.newDrafts()]));
       } catch {
         if (owner.current) this.state.set('error');
       }
@@ -239,7 +276,7 @@ export class RecipeList {
    * content route needs a short-lived grant cookie (MED-004). A failure leaves those cards with their
    * initials rather than failing the page.
    */
-  private async grant(recipes: readonly RecipeSummary[]): Promise<void> {
+  private async grant(recipes: readonly (RecipeSummary | RecipeDraftSummary)[]): Promise<void> {
     const known = this.thumbnails();
     const ids = [
       ...new Set(

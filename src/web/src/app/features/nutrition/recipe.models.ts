@@ -1,10 +1,14 @@
-import { formatNumber } from '@angular/common';
+import { formatDate, formatNumber } from '@angular/common';
 import type {
   AllergenCode,
   FoodItemView,
   FoodQuantityUnit,
   PreparationBasis,
   RecipeDetail,
+  RecipeDraftContent,
+  RecipeDraftFoodView,
+  RecipeDraftSummary,
+  RecipeDraftView,
   RecipeIngredientRequest,
   RecipeListStatus,
   RecipeSummary,
@@ -501,6 +505,123 @@ export function ingredientRequests(lines: readonly EditorLine[]): RecipeIngredie
   );
 }
 
+// ---------- the coach's working draft on the server (NUT-014, critique B5d) ----------
+
+/**
+ * The recipe as the server keeps it mid-edit: every value as typed, each line its food version, its
+ * amount, the conversion it is weighed cooked through and what a suggestion said of it. Nothing is
+ * checked here; Publish checks it all.
+ */
+export function toDraftContent(
+  draft: RecipeDraft,
+  aiOperationId: string | null,
+): RecipeDraftContent {
+  return {
+    name: draft.name,
+    servings: finiteOrNull(draft.servings),
+    instructions: draft.instructions,
+    lines: draft.lines.map((line) => ({
+      foodItemVersionId: line.food?.versionId ?? null,
+      quantity: finiteOrNull(line.quantity),
+      yieldFactorId: line.cooked?.yieldId ?? null,
+      retentionFactorId: line.cooked?.retentionId ?? null,
+      suggestion: line.suggestion
+        ? {
+            name: line.suggestion.name,
+            quantity: finiteOrNull(line.suggestion.quantity),
+            unit: line.suggestion.unit,
+            uncertain: line.suggestion.uncertain,
+          }
+        : null,
+      convertedRawGrams: line.converted?.raw ?? null,
+      convertedCookedGrams: line.converted?.cooked ?? null,
+    })),
+    photoMediaAssetId: draft.photoId,
+    prepMinutes: finiteOrNull(draft.prepMinutes),
+    cookMinutes: finiteOrNull(draft.cookMinutes),
+    aiMealDraftOperationId: aiOperationId,
+  };
+}
+
+/**
+ * The editor's recipe from the coach's stored draft: each line's food as its version holds it, the
+ * conversion it names and the food now when newer. A line whose food this workspace does not hold
+ * waits for a food again, as a suggested one does.
+ */
+export function draftFromStored(view: RecipeDraftView): {
+  draft: RecipeDraft;
+  aiOperationId: string | null;
+} {
+  const content = view.content;
+  const foods = new Map(view.foods.map((item) => [item.version.id, item]));
+  const factors = new Map(view.cookingFactors.map((item) => [item.id, item]));
+  const lines = (content.lines ?? []).map((line): EditorLine => {
+    const stored = line.foodItemVersionId ? foods.get(line.foodItemVersionId) : undefined;
+    const yieldFactor = line.yieldFactorId ? factors.get(line.yieldFactorId) : undefined;
+    const retention = line.retentionFactorId ? factors.get(line.retentionFactorId) : undefined;
+    const raw = nullableNumber(line.convertedRawGrams);
+    const cooked = nullableNumber(line.convertedCookedGrams);
+    const suggestion = line.suggestion;
+    return {
+      key: lineKey(),
+      food: stored ? foodFromStored(stored) : null,
+      quantity: nullableNumber(line.quantity),
+      suggestion: suggestion
+        ? {
+            name: suggestion.name ?? '',
+            quantity: nullableNumber(suggestion.quantity) ?? 0,
+            unit: suggestion.unit ?? '',
+            uncertain: suggestion.uncertain,
+          }
+        : null,
+      cooked:
+        stored && yieldFactor && retention ? conversionFromFactors(yieldFactor, retention) : null,
+      converted: raw !== null && cooked !== null ? { raw, cooked } : null,
+      newer: stored?.newerFood ? foodFromView(stored.newerFood) : null,
+    };
+  });
+  return {
+    draft: {
+      name: content.name ?? '',
+      servings: nullableNumber(content.servings),
+      instructions: content.instructions ?? '',
+      lines,
+      photoId: content.photoMediaAssetId ?? null,
+      prepMinutes: nullableNumber(content.prepMinutes),
+      cookMinutes: nullableNumber(content.cookMinutes),
+    },
+    aiOperationId: content.aiMealDraftOperationId ?? null,
+  };
+}
+
+/** A food version a draft's line names, as an ingredient line knows a food. */
+function foodFromStored(stored: RecipeDraftFoodView): RecipeFood {
+  const version = stored.version;
+  return {
+    foodId: stored.foodItemId,
+    versionId: version.id,
+    name: stored.name,
+    source: stored.provenance,
+    basisQuantity: numeric(version.basisQuantity),
+    unit: version.basisUnit,
+    basis: version.preparationBasis,
+    calories: numeric(version.computedCalories),
+    protein: numeric(version.proteinGrams),
+    carbs: numeric(version.carbohydrateGrams),
+    fat: numeric(version.fatGrams),
+    allergens: version.declaredAllergens,
+  };
+}
+
+/** A number the server can keep: a box being typed may hold none, or more than a number can say. */
+function finiteOrNull(value: number | null): number | null {
+  return value !== null && Number.isFinite(value) ? value : null;
+}
+
+function nullableNumber(value: number | string | null | undefined): number | null {
+  return value === null || value === undefined ? null : numeric(value);
+}
+
 /** What the editor compares to know whether anything changed since it opened or saved. */
 export function draftSignature(draft: RecipeDraft): string {
   return JSON.stringify({
@@ -599,13 +720,53 @@ export interface RecipeCard {
   name: string;
   initials: string;
   photoId: string | null;
-  /** Calories in one serving, as the card's headline. */
-  kcal: string;
+  /** Where the card opens: the recipe, or a recipe not saved yet through its draft. */
+  link: readonly string[];
+  query: Record<string, string> | null;
+  /** Calories in one serving, as the card's headline; null for a recipe not saved yet. */
+  kcal: string | null;
   macros: string;
   split: { protein: number; carbs: number; fat: number } | null;
   servings: string;
   allergens: string;
   status: { label: string; tone: 'neutral' | 'warm' } | null;
+  /** The coach's own changes not made a version yet (critique B5d), said beside the status. */
+  inProgress: boolean;
+  /** For a recipe not saved yet: who sees it and when it last changed. */
+  note: string | null;
+}
+
+/** "In progress": the coach's own unfinished work, which only they see (NUT-014). */
+export const IN_PROGRESS = $localize`In progress`;
+
+/**
+ * A new recipe kept as its coach's draft (critique B5d): theirs alone until it is published or saved as
+ * a draft, its values unchecked, so the card says what it holds rather than any calories.
+ */
+export function inProgressCard(draft: RecipeDraftSummary, locale: string): RecipeCard {
+  const name = draft.name.trim() || $localize`Untitled recipe`;
+  const lines = numeric(draft.lineCount);
+  return {
+    id: draft.id,
+    name,
+    initials: initialsOf(name),
+    photoId: draft.photoMediaAssetId ?? null,
+    link: ['/nutrition/recipes', 'new'],
+    query: { draft: draft.id },
+    kcal: null,
+    macros: '',
+    split: null,
+    servings:
+      lines === 0
+        ? $localize`No ingredients yet`
+        : lines === 1
+          ? $localize`1 ingredient`
+          : $localize`${lines}:count: ingredients`,
+    allergens: '',
+    status: null,
+    inProgress: true,
+    note: $localize`Only you see it until you publish it. Changed ${formatDate(draft.updatedAtUtc, 'EEE d MMM', locale)}:date:.`,
+  };
 }
 
 export function recipeCard(recipe: RecipeSummary, locale: string): RecipeCard {
@@ -622,6 +783,8 @@ export function recipeCard(recipe: RecipeSummary, locale: string): RecipeCard {
     name: recipe.name,
     initials: initialsOf(recipe.name),
     photoId: recipe.photoMediaAssetId ?? null,
+    link: ['/nutrition/recipes', recipe.id],
+    query: null,
     kcal: $localize`${kcal(serving.calories, locale)}:calories: a serving`,
     macros: $localize`P ${grams(serving.protein, locale)}:protein: · C ${grams(serving.carbs, locale)}:carbs: · F ${grams(serving.fat, locale)}:fat:`,
     split: energySplit(serving),
@@ -633,6 +796,8 @@ export function recipeCard(recipe: RecipeSummary, locale: string): RecipeCard {
         : published
           ? { label: $localize`Changes not published`, tone: 'warm' }
           : { label: $localize`Draft`, tone: 'neutral' },
+    inProgress: !!recipe.draft,
+    note: null,
   };
 }
 

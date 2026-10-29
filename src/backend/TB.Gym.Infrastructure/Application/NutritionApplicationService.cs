@@ -525,6 +525,10 @@ internal sealed partial class NutritionApplicationService(
             .Skip(skip).Take(take)
             .Include(item => item.Versions).ThenInclude(item => item.Allergens)
             .AsSplitQuery().ToListAsync(cancellationToken);
+        // The Recipes page marks the caller's own changes in progress (critique B5d); a meal plan's panel has none.
+        Dictionary<Guid, RecipeDraftSummary> drafts = publishedOnly
+            ? []
+            : await OwnDraftsByRecipeAsync(recipes.Select(recipe => recipe.Id).ToArray(), cancellationToken);
         return new RecipePage(
             total,
             skip,
@@ -532,7 +536,7 @@ internal sealed partial class NutritionApplicationService(
             recipes.Select(recipe =>
             {
                 var published = recipe.Versions.Where(version => version.Status == PublicationStatus.Published).MaxBy(version => version.Revision);
-                return ToRecipeSummary(recipe, publishedOnly ? published! : recipe.Versions.MaxBy(version => version.Revision)!, published?.Id);
+                return ToRecipeSummary(recipe, publishedOnly ? published! : recipe.Versions.MaxBy(version => version.Revision)!, published?.Id, drafts.GetValueOrDefault(recipe.Id));
             }).ToArray(),
             new RecipeListCounts(all, withPublished, all - withPublished));
     }
@@ -1782,8 +1786,8 @@ internal sealed partial class NutritionApplicationService(
     private static string ConversionNotFound(string foodName) =>
         $"The cooking conversion for “{foodName}” was not found in this coaching space. Choose it again.";
 
-    private static RecipeSummary ToRecipeSummary(Recipe item, RecipeVersion version, Guid? publishedVersionId) =>
-        new(item.Id, version.Id, version.Revision, item.Name, version.Status, version.Servings, version.Calories, version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, version.Allergens.Select(allergen => allergen.Code).Order().ToArray(), version.PhotoMediaAssetId, publishedVersionId);
+    private static RecipeSummary ToRecipeSummary(Recipe item, RecipeVersion version, Guid? publishedVersionId, RecipeDraftSummary? draft = null) =>
+        new(item.Id, version.Id, version.Revision, item.Name, version.Status, version.Servings, version.Calories, version.ProteinGrams, version.CarbohydrateGrams, version.FatGrams, version.Allergens.Select(allergen => allergen.Code).Order().ToArray(), version.PhotoMediaAssetId, publishedVersionId, draft);
 
     private static NutritionCommandResult RecipeChanged() =>
         Conflict("recipe_changed", "This recipe was saved again after you opened it. Reload it to see the newer version.");

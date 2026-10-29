@@ -93,16 +93,26 @@
                   }
                 </div>
                 <div class="body">
-                  @if (card.status; as status) {
-                    <app-status-pill class="pill" [label]="status.label" [tone]="status.tone" />
+                  <!-- Critique B5d: the coach's own work in progress, beside the shared status. -->
+                  @if (card.status || card.inProgress) {
+                    <p class="pills">
+                      @if (card.status; as status) {
+                        <app-status-pill [label]="status.label" [tone]="status.tone" />&ngsp;
+                      }
+                      @if (card.inProgress) {
+                        <app-status-pill [label]="inProgressLabel" tone="info" />
+                      }
+                    </p>
                   }
                   <h2 class="card-name" dir="auto">
                     <!-- The whole card is the link (a stretched link), named by the recipe. -->
-                    <a class="stretched" [routerLink]="['/nutrition/recipes', card.id]">{{
+                    <a class="stretched" [routerLink]="card.link" [queryParams]="card.query">{{
                       card.name
                     }}</a>
                   </h2>
-                  <p class="kcal">{{ card.kcal }}</p>
+                  @if (card.kcal; as kcal) {
+                    <p class="kcal">{{ kcal }}</p>
+                  }
                   @if (card.split; as split) {
                     <span class="split-bar" aria-hidden="true">
                       <span class="protein" [style.flex-grow]="split.protein"></span>
@@ -110,7 +120,12 @@
                       <span class="fat" [style.flex-grow]="split.fat"></span>
                     </span>
                   }
-                  <p class="macros">{{ card.macros }}</p>
+                  @if (card.macros) {
+                    <p class="macros">{{ card.macros }}</p>
+                  }
+                  @if (card.note; as note) {
+                    <p class="note">{{ note }}</p>
+                  }
                   <p class="meta">
                     <span>{{ card.servings }}</span>
                     @if (card.allergens) {

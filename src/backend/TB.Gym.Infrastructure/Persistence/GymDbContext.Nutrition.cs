@@ -175,6 +175,55 @@ public sealed partial class GymDbContext
             entity.HasIndex(item => new { item.TenantId, item.RecipeVersionId, item.Code }).IsUnique();
             ConfigureTenantEntity(entity);
         });
+
+        // A coach's working copy of a recipe (NUT-014, critique B5d): one per person and recipe, plus recipes
+        // not saved yet, each belonging to a membership of its workspace. Its photo and the AI suggestion it
+        // began from are this workspace's own (composite keys).
+        builder.Entity<RecipeDraft>(entity =>
+        {
+            entity.ToTable("RecipeDrafts", "nutrition", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_RecipeDrafts_Recipe",
+                    "(\"RecipeId\" IS NULL AND \"StartedAtRevision\" = 0) OR (\"RecipeId\" IS NOT NULL AND \"StartedAtRevision\" >= 1)");
+                table.HasCheckConstraint("CK_RecipeDrafts_LineCount", $"\"LineCount\" BETWEEN 0 AND {RecipeDraftShape.MaximumLines}");
+                // An AI suggestion starts a new recipe only (ADR 0035).
+                table.HasCheckConstraint("CK_RecipeDrafts_Suggestion", "\"AiMealDraftOperationId\" IS NULL OR \"RecipeId\" IS NULL");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(RecipeDraftShape.MaximumNameLength).IsRequired();
+            entity.Property(item => item.ContentJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.OwnerUserId, item.RecipeId })
+                .IsUnique()
+                .HasFilter("\"RecipeId\" IS NOT NULL")
+                .HasDatabaseName(DatabaseConstraintNames.OneRecipeDraftPerPersonAndRecipe);
+            entity.HasIndex(item => new { item.TenantId, item.OwnerUserId, item.UpdatedAtUtc });
+            entity.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(item => item.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.OwnerUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Recipe>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.RecipeId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<MediaAsset>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.PhotoMediaAssetId })
+                .HasPrincipalKey(asset => new { asset.TenantId, asset.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AiMealDraftOperation>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.AiMealDraftOperationId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            ConfigureTenantEntity(entity);
+        });
     }
 
     private void ConfigureCalculationSnapshots(ModelBuilder builder)

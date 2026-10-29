@@ -230,6 +230,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<RecipeVersionAllergen> RecipeVersionAllergens => Set<RecipeVersionAllergen>();
 
+    public DbSet<RecipeDraft> RecipeDrafts => Set<RecipeDraft>();
+
     public DbSet<NutritionCalculationSnapshot> NutritionCalculationSnapshots => Set<NutritionCalculationSnapshot>();
 
     public DbSet<MacroOverrideAudit> MacroOverrideAudits => Set<MacroOverrideAudit>();

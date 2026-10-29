@@ -830,7 +830,8 @@ not overwritten. Renaming a recipe changes the library's name only; meal-plan ve
 client plans keep the name they copied.
 The Recipes page filters on the server (critique B5c2): All, Published (a recipe with a published
 version, which meal plans may use, its newest version shown even when changes wait) or Drafts (never
-published), with how many of each the search finds.
+published), with how many of each the search finds. Since critique B5d the editor keeps the coach's
+changes as they type in their own working draft (NUT-014), and a save is made only from it.
 
 **NUT-003** Direct recipe import uses a licensed/authorized nutrition or recipe provider,
 structured data, or user-supplied URL where terms permit. Generic Google scraping is not a
@@ -1034,6 +1035,25 @@ draft's calories, protein and share. When the draft's grams are its answer, to a
 the version keeps the split's own unrounded grams and names the share, `Nut008MacroSplit` and its
 version; grams changed since are kept as typed and name nothing. The builder shows them whole while
 they are the server's, and the first typed target keeps them as shown and drops the share.
+
+**NUT-014** Recipe working drafts (critique B5d, 2026-10-29, ADR 0033). The recipe editor keeps each
+coach's changes as a `RecipeDraft` on the server as they type: one per person and recipe, plus up to 20
+new recipes per person not saved yet. Only its owner reads or writes it, the workspace owner included;
+it never reaches a meal plan or a client. It holds the recipe as the editor has it (the name, servings,
+method, times, photo, and each ingredient line's food version, amount, cooking conversion and what an AI
+suggestion said of it) with values unchecked, so a line still waiting for a food or a half-typed amount
+is kept, bounded only by a version's shape (500 lines, the same text lengths) and a total size. Each save
+carries the row version, so a second tab is told to reload instead of overwriting. Two references are
+checked on every save, being this workspace's rows: the photo, named only as a version may name it
+(MED-014), and the AI suggestion, which only a new recipe carries. Publish, or Save as draft, checks every
+rule a save has (NUT-002), makes the recipe's next version (published, or complete and unpublished, the
+team's shared Draft), renames the recipe when its name changed, approves a suggestion still awaiting
+review (one already approved refuses, BEA-7; one turned down since leaves the recipe the coach's own
+lines) and removes the draft, in one transaction; it asks first when someone saved a version after the
+draft began. Discard removes the draft and leaves the recipe as last saved. The Recipes page marks a
+recipe its coach is changing "In progress" beside its own status, and lists their new recipes in progress
+first, under All and Drafts, counted in Drafts (n). Drafts are staff writes, so an unpaid workspace keeps
+them readable but not writable (ADR 0028).
 
 ## 7. Bodyweight and progress
 
@@ -2012,7 +2032,8 @@ photo belongs to the version, so a published version keeps the photo it was publ
 coach library neither lists nor deletes recipe photos. An upload no version names is tombstoned 48
 hours after it was uploaded (decided 2026-10-07, Discourse's default grace for orphan uploads, built in
 R4.4d) and purged on the same sweep; a save may name such an upload only until 47 hours after it, so the
-sweep never removes a photo a save is naming. A client reads a recipe photo only through their own copy
+sweep never removes a photo a save is naming. A coach's working draft of a recipe (NUT-014) counts as
+naming its photo, so the photo stays while the draft does and its version may take it later. A client reads a recipe photo only through their own copy
 of a recipe in an active plan of theirs (NUT-006), while their nutrition access lasts, and nothing else.
 
 **MED-015** One asset per video link (R5.1b, decided 2026-10-09). A workspace holds one media asset per
@@ -2096,6 +2117,7 @@ At minimum, later migrations should enforce:
 | A coach's own macros name their override, once, and only theirs do (INV-2)                                           | Composite FK `(TenantId, MacroOverrideAuditId)`, filtered unique, check on `MacroMethodKey`            |
 | A meal's choices in the coach's order, one to a place, published and copied alike (NUT-005)                          | Unique `(TenantId, slot, Order)` on both choice tables, check `Order >= 0`                            |
 | A meal plan's filled-in fat names its share and the split together, 0 to 100 (NUT-013)                               | Check `CK_MealPlanTemplateVersions_TargetSplit`: all three null, or all set and the share in range    |
+| One working draft per person and recipe; an AI suggestion only on a new recipe's (NUT-014)                           | Filtered unique `(TenantId, OwnerUserId, RecipeId)`, check `CK_RecipeDrafts_Suggestion`, composite FK |
 | Tenant-safe child relationship                                                                                       | Composite FK including `TenantId` where practical                                                     |
 | One active owner per workspace                                                                                       | Partial unique `(TenantId)` where `Role = 'Owner' AND Status = 'Active'`                              |
 | A client's coach is active staff, and a coach change is recorded in the history                                      | Composite FK to memberships plus deferred constraint triggers on the client and the membership       |

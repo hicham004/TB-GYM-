@@ -8,23 +8,29 @@ import type {
   CookingConversionPage,
   CookingConversionView,
   CreateCookingConversionRequest,
+  CreateRecipeDraftRequest,
   CreateRecipeRequest,
   FoodItemPage,
   FoodItemView,
   MediaAccessBatchView,
   MediaAssetView,
   ProviderFoodSearchPage,
+  PublishRecipeDraftRequest,
   RecipeDetail,
+  RecipeDraftSaveView,
+  RecipeDraftSummary,
+  RecipeDraftView,
   RecipeListStatus,
   RecipePage,
   RecipeSummary,
   ReviewAiMealDraftRequest,
+  SaveRecipeDraftRequest,
 } from '../../core/api/generated';
 
 /**
- * The recipe pages' reads and writes (C7, R4.4b): recipes, their photos (MED-014), the food search
- * behind ingredients, and AI suggestions. Kept out of `ApiClient`, like `MealPlanApi`, so they load
- * only with these pages.
+ * The recipe pages' reads and writes (C7, R4.4b): recipes, the coach's working drafts of them (B5d),
+ * their photos (MED-014), the food search behind ingredients, and AI suggestions. Kept out of
+ * `ApiClient`, like `MealPlanApi`, so they load only with these pages.
  */
 @Injectable({ providedIn: 'root' })
 export class RecipeApi {
@@ -60,6 +66,44 @@ export class RecipeApi {
 
   publishVersion(versionId: string): Observable<RecipeSummary> {
     return this.http.post<RecipeSummary>(`/api/nutrition/recipe-versions/${versionId}/publish`, {});
+  }
+
+  // ---------- the coach's own working drafts (NUT-014, critique B5d) ----------
+
+  /** The caller's own drafts, newest change first; with `query`, those whose name holds every word. */
+  listDrafts(query = ''): Observable<RecipeDraftSummary[]> {
+    return this.http.get<RecipeDraftSummary[]>('/api/nutrition/recipe-drafts', {
+      params: new HttpParams().set('query', query),
+    });
+  }
+
+  getDraft(draftId: string): Observable<RecipeDraftView> {
+    return this.http.get<RecipeDraftView>(`/api/nutrition/recipe-drafts/${draftId}`);
+  }
+
+  /** Starts the draft at the first change; `recipe_draft_exists` when another tab already has one. */
+  createDraft(request: CreateRecipeDraftRequest): Observable<RecipeDraftSaveView> {
+    return this.http.post<RecipeDraftSaveView>('/api/nutrition/recipe-drafts', request);
+  }
+
+  /** Every later save carries the version it read; `recipe_draft_stale` when another tab moved on. */
+  saveDraft(draftId: string, request: SaveRecipeDraftRequest): Observable<RecipeDraftSaveView> {
+    return this.http.put<RecipeDraftSaveView>(`/api/nutrition/recipe-drafts/${draftId}`, request);
+  }
+
+  discardDraft(draftId: string, version: number): Observable<void> {
+    return this.http.post<void>(`/api/nutrition/recipe-drafts/${draftId}/discard`, { version });
+  }
+
+  /**
+   * The draft as the recipe's next version, published or kept as a draft version, checked by every rule
+   * a save has; `newer_recipe_version` when someone saved one after it began, unless `replaceNewer`.
+   */
+  publishDraft(draftId: string, request: PublishRecipeDraftRequest): Observable<RecipeSummary> {
+    return this.http.post<RecipeSummary>(
+      `/api/nutrition/recipe-drafts/${draftId}/publish`,
+      request,
+    );
   }
 
   /** Uploads a cover photo; the server re-encodes it with a thumbnail and keeps it for its uploader. */

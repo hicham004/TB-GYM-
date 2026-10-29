@@ -79,6 +79,13 @@ internal static class DatabaseConstraintNames
         "IX_MealPlanDrafts_TenantId_OwnerUserId_MealPlanTemplateId";
 
     /// <summary>
+    /// One working copy per person and recipe (NUT-014, critique B5d), as for meal plans: a second tab that
+    /// starts one loses the race and is told to reload.
+    /// </summary>
+    public const string OneRecipeDraftPerPersonAndRecipe =
+        "IX_RecipeDrafts_TenantId_OwnerUserId_RecipeId";
+
+    /// <summary>
     /// One recipe version per revision: two saves of a recipe racing for the same next revision
     /// (R4.4b) leave the second told to reload.
     /// </summary>

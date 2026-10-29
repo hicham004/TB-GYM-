@@ -138,9 +138,22 @@ p {
   gap: 0.375rem 0.625rem;
 }
 
+// Where the coach's changes stand on the server (critique B5d), quiet unless they did not get there.
+.save-status {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+
+  &.troubled {
+    color: var(--tb-warning);
+    font-weight: 600;
+  }
+}
+
 .actions {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 

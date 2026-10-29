@@ -52,12 +52,26 @@
               (ngModelChange)="change({ name: $event })"
             />
           </app-field>
+          <!-- Critique B5d: the recipe as the team has it, and beside it the coach's own changes. -->
           <p class="standing">
-            <app-status-pill [label]="standing().label" [tone]="standing().tone" />
+            @if (standing(); as own) {
+              <app-status-pill [label]="own.label" [tone]="own.tone" />&ngsp;
+            }
+            @if (pending()) {
+              <app-status-pill [label]="inProgressLabel" tone="info" />&ngsp;
+            }
             <span>{{ standingNote() }}</span>
           </p>
+          @if (statusLine(); as line) {
+            <p class="save-status" [class.troubled]="troubled()">{{ line }}</p>
+          }
         </div>
         <div class="actions">
+          @if (pending()) {
+            <button appButton type="button" variant="text" (click)="discard()" i18n>
+              Discard changes
+            </button>
+          }
           <app-menu
             label="More save options"
             i18n-label
@@ -74,7 +88,7 @@
           >
             @if (saving() === 'publish') {
               <span i18n>Publishing…</span>
-            } @else if (detail() && !dirty() && detail()!.latest.status === 'Draft') {
+            } @else if (detail() && !pending() && detail()!.latest.status === 'Draft') {
               <span i18n>Publish</span>
             } @else if (detail()?.publishedVersionId) {
               <span i18n>Publish changes</span>
@@ -86,15 +100,36 @@
       </header>
 
       <p class="tb-visually-hidden" role="status">{{ announced() }}</p>
-      @if (stale()) {
+      <!-- Autosave runs at every pause, so only a failure (and its recovery) is announced. -->
+      <p class="tb-visually-hidden save-live" role="status">{{ liveStatus() }}</p>
+      @if (behindLine(); as line) {
+        <p class="banner info" dir="auto">{{ line }}</p>
+      }
+      @if (newerVersion(); as newer) {
         <div class="banner warn" role="alert">
-          <p i18n>
-            This recipe was saved again after you opened it, perhaps in another tab. Reload to see
-            the newest version; the changes made here are not kept.
-          </p>
-          <button appButton type="button" variant="outlined" (click)="reloadNewest()" i18n>
-            Reload recipe
-          </button>
+          <p dir="auto">{{ newer.message }}</p>
+          <div class="row-actions">
+            <button appButton type="button" variant="outlined" (click)="save(newer.kind)">
+              @if (newer.kind === 'draft') {
+                <span i18n>Save mine as the newest</span>
+              } @else {
+                <span i18n>Publish mine as the newest</span>
+              }
+            </button>
+            <button appButton type="button" variant="text" (click)="discard()" i18n>
+              Discard mine
+            </button>
+          </div>
+        </div>
+      }
+      @if (saveProblem(); as trouble) {
+        <div class="banner warn" role="alert">
+          <p dir="auto">{{ trouble.message }}</p>
+          @if (trouble.kind === 'stale') {
+            <button appButton type="button" variant="outlined" (click)="reloadLatest()" i18n>
+              Reload recipe
+            </button>
+          }
         </div>
       }
       @if (problem(); as shown) {

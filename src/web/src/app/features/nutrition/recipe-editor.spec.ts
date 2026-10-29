@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -9,11 +10,18 @@ import type {
   AddRecipeVersionRequest,
   AiMealDraftView,
   CookingConversionView,
+  CreateRecipeDraftRequest,
   CreateRecipeRequest,
+  PublishRecipeDraftRequest,
   RecipeDetail,
+  RecipeDraftContent,
+  RecipeDraftSaveView,
+  RecipeDraftView,
   ProviderFoodSearchPage,
   RecipeIngredientView,
+  RecipeSummary,
   ReviewAiMealDraftRequest,
+  SaveRecipeDraftRequest,
 } from '../../core/api/generated';
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -28,21 +36,30 @@ import {
 import { field, fill, menuChoices, press, settle } from '../../../testing/dom';
 import { provideMediaUploads } from '../../../testing/media-uploads';
 import {
+  draftSaved,
   OATS_FOOD,
   recipeDetail,
+  recipeDraftView,
   recipeSummary,
   YOGURT_FOOD,
 } from '../../../testing/recipe-fixtures';
+import type { AutosaveTiming } from '../training/program-autosave';
 import { RecipeApi } from './recipe-api';
-import { RecipeEditor } from './recipe-editor';
+import { RECIPE_AUTOSAVE_TIMING, RecipeEditor } from './recipe-editor';
 
 @Component({ template: '' })
 class RecipesStub {}
 
+/** Every change goes to the coach's draft on the next tick; a failed save waits ten minutes. */
+const AT_ONCE: AutosaveTiming = { quietMs: 0, maxWaitMs: 0, retryMs: 600_000, retryMaxMs: 600_000 };
+
 interface Options {
   url?: string;
   getRecipe?: () => Observable<RecipeDetail>;
-  addVersion?: () => Observable<unknown>;
+  getDraft?: () => Observable<RecipeDraftView>;
+  createDraft?: () => Observable<RecipeDraftSaveView>;
+  saveDraft?: () => Observable<RecipeDraftSaveView>;
+  publishDraft?: () => Observable<RecipeSummary>;
   aiConfigured?: boolean;
   /** The workspace's raw-to-cooked conversions; white rice boiled unless given. */
   conversions?: CookingConversionView[];
@@ -50,15 +67,34 @@ interface Options {
 }
 
 async function render(options: Options = {}) {
+  const isNew = (options.url ?? '').startsWith('/nutrition/recipes/new');
   const api = {
     getRecipe: vi.fn(options.getRecipe ?? (() => of(recipeDetail()))),
+    // The editor saves only through the coach's draft since critique B5d; these stay unsent.
     createRecipe: vi.fn<(request: CreateRecipeRequest) => Observable<unknown>>(() =>
       of(recipeSummary({ id: 'recipe-new' })),
     ),
-    addVersion: vi.fn<(id: string, request: AddRecipeVersionRequest) => Observable<unknown>>(
-      options.addVersion ?? (() => of(recipeSummary())),
+    addVersion: vi.fn<(id: string, request: AddRecipeVersionRequest) => Observable<unknown>>(() =>
+      of(recipeSummary()),
     ),
     publishVersion: vi.fn(() => of(recipeSummary())),
+    listDrafts: vi.fn(() => of([])),
+    getDraft: vi.fn(options.getDraft ?? (() => of(recipeDraftView()))),
+    createDraft: vi.fn<(request: CreateRecipeDraftRequest) => Observable<RecipeDraftSaveView>>(
+      options.createDraft ?? (() => of(draftSaved(isNew ? 'draft-new' : 'draft-1', 1))),
+    ),
+    saveDraft: vi.fn<
+      (id: string, request: SaveRecipeDraftRequest) => Observable<RecipeDraftSaveView>
+    >(options.saveDraft ?? (() => of(draftSaved(isNew ? 'draft-new' : 'draft-1', 2)))),
+    discardDraft: vi.fn<(id: string, version: number) => Observable<undefined>>(() =>
+      of(undefined),
+    ),
+    publishDraft: vi.fn<
+      (id: string, request: PublishRecipeDraftRequest) => Observable<RecipeSummary>
+    >(
+      options.publishDraft ??
+        (() => of(isNew ? recipeSummary({ id: 'recipe-new' }) : recipeSummary())),
+    ),
     uploadPhoto: vi.fn(() => of({ id: 'photo-new' })),
     grantPhotos: vi.fn(() =>
       of({
@@ -130,6 +166,7 @@ async function render(options: Options = {}) {
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       { provide: UiToast, useValue: toast },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      { provide: RECIPE_AUTOSAVE_TIMING, useValue: AT_ONCE },
       provideMediaUploads(options.uploadsOff),
     ],
   });
@@ -140,8 +177,29 @@ async function render(options: Options = {}) {
     api,
     toast,
     router: TestBed.inject(Router),
+    location: TestBed.inject(Location),
   };
 }
+
+/** What the coach's draft last held, as the newest save sent it. */
+function lastContent(api: Awaited<ReturnType<typeof render>>['api']): RecipeDraftContent {
+  const saved = api.saveDraft.mock.calls.at(-1)?.[1].content;
+  const started = api.createDraft.mock.calls.at(-1)?.[0].content;
+  const content = saved ?? started;
+  if (!content) throw new Error('Nothing was saved to the draft.');
+  return content;
+}
+
+/** A line as the draft keeps it: its food, its amount and nothing else. */
+const keptLine = (foodItemVersionId: string, quantity: number) => ({
+  foodItemVersionId,
+  quantity,
+  yieldFactorId: null,
+  retentionFactorId: null,
+  suggestion: null,
+  convertedRawGrams: null,
+  convertedCookedGrams: null,
+});
 
 const RecipeHarness = {
   async create(url: string): Promise<RouterTestingHarness> {
@@ -266,14 +324,18 @@ describe('the recipe editor', () => {
     expect(all(host, '.macro dd').map(textOf)).toEqual(['15.2 g', '31.2 g', '4.8 g']);
     expect(textOf(host.querySelector('.allergens'))).toBe('Contains gluten, milk');
     expect(textOf(host.querySelector('.standing'))).toContain('Published');
-    // Nothing changed since it was published, so there is nothing to publish.
+    expect(textOf(host.querySelector('.standing'))).not.toContain('In progress');
+    expect(host.querySelector('.save-status')).toBeNull();
+    // Nothing changed since it was published, so there is nothing to publish or discard.
     expect(named(host, 'Publish changes').disabled).toBe(true);
-    // Until working drafts (B5d), a draft asks for everything Publish does, and says so.
+    expect(host.textContent).not.toContain('Discard changes');
+    // Unfinished work is kept as it is typed (B5d), so a draft version is the team's complete one.
     named(host, 'More save options').click();
     await settle(harness.fixture);
-    expect(
-      textOf(menuChoices(named(host, 'More save options'))[0].querySelector('.item-title')),
-    ).toBe('Save as draft (complete, not published)');
+    const [saveAsDraft] = menuChoices(named(host, 'More save options'));
+    expect(textOf(saveAsDraft.querySelector('.item-title'))).toBe('Save as draft');
+    expect(textOf(saveAsDraft)).toContain('Your team sees it; meal plans don’t');
+    expect(api.getDraft).not.toHaveBeenCalled();
     expect(api.grantPhotos).toHaveBeenCalledWith(['photo-1']);
     expect(host.querySelector('.photo img')?.getAttribute('src')).toBe(
       '/api/media/photo-1/content',
@@ -324,14 +386,42 @@ describe('the recipe editor', () => {
     typeInto(host.querySelector<HTMLInputElement>('#recipe-servings')!, '4');
     await settle(harness.fixture);
     expect(serving(host)).toBe('187 kcal');
-    expect(textOf(host.querySelector('.standing'))).toContain('Changes not published');
+    // The recipe is still published for the team; the changes are the coach's own, in progress.
+    expect(textOf(host.querySelector('.standing'))).toContain('Published');
+    expect(textOf(host.querySelector('.standing'))).toContain('In progress');
+    expect(textOf(host.querySelector('.standing'))).toContain(
+      'Only you see these changes. Meal plans use the published version until you publish them.',
+    );
   });
 
-  it('builds a new recipe from the food search and publishes it in one save', async () => {
-    const { harness, host, api, router, toast } = await render({ url: '/nutrition/recipes/new' });
+  it('keeps a new recipe as the coach types, then publishes it from the draft', async () => {
+    const { harness, host, api, router, toast, location } = await render({
+      url: '/nutrition/recipes/new',
+    });
 
     expect(api.getRecipe).not.toHaveBeenCalled();
+    expect(textOf(host.querySelector('.standing'))).toContain(
+      'New recipe Your changes save as you type. Publish it to use it in meal plans.',
+    );
     typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Oats & yogurt');
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+    // The first pause starts the coach's draft, which the address keeps for a refresh.
+    expect(api.createDraft.mock.calls[0][0]).toMatchObject({
+      recipeId: null,
+      recipeRevision: null,
+      content: { name: 'Oats & yogurt', servings: 1, lines: [] },
+    });
+    await until(
+      harness.fixture,
+      () => location.path() === '/nutrition/recipes/new?draft=draft-new',
+    );
+    expect(textOf(host.querySelector('.standing'))).toContain(
+      'In progress Only you see it until you publish it.',
+    );
+    expect(textOf(host.querySelector('.save-status'))).toMatch(
+      /^Saved (at|on) .+, not published yet$/,
+    );
+
     await addIngredient(harness, host, 'oats');
     await addIngredient(harness, host, 'yogurt');
     expect(lines(host)).toEqual(['Rolled oats', 'Greek yogurt']);
@@ -345,37 +435,31 @@ describe('the recipe editor', () => {
     named(host, 'Publish').click();
     await until(harness.fixture, () => router.url === '/nutrition/recipes/recipe-new');
 
-    expect(api.createRecipe).toHaveBeenCalledWith({
+    // Every save after the first carries the version the last one answered.
+    expect(api.saveDraft.mock.calls.every(([id]) => id === 'draft-new')).toBe(true);
+    expect(api.saveDraft.mock.calls[0][1].version).toBe(1);
+    expect(lastContent(api)).toEqual({
       name: 'Oats & yogurt',
-      instructions: 'Stir and chill.',
       servings: 1,
-      ingredients: [
-        {
-          foodItemVersionId: 'oats-food-v1',
-          quantity: 100,
-          unit: 'Gram',
-          basis: 'AsSold',
-          yieldFactorId: null,
-          retentionFactorId: null,
-        },
-        {
-          foodItemVersionId: 'yogurt-food-v1',
-          quantity: 100,
-          unit: 'Gram',
-          basis: 'AsSold',
-          yieldFactorId: null,
-          retentionFactorId: null,
-        },
-      ],
+      instructions: 'Stir and chill.',
+      lines: [keptLine('oats-food-v1', 100), keptLine('yogurt-food-v1', 100)],
       photoMediaAssetId: null,
-      publish: true,
       prepMinutes: 5,
       cookMinutes: 0,
+      aiMealDraftOperationId: null,
     });
+    expect(api.publishDraft).toHaveBeenCalledWith('draft-new', {
+      version: 2,
+      replaceNewer: false,
+      keepAsDraft: false,
+    });
+    expect(api.createRecipe).not.toHaveBeenCalled();
     expect(api.getRecipe).toHaveBeenCalledWith('recipe-new');
     expect(toast.show).toHaveBeenCalledWith('Published. It’s in your meal plans’ recipes now.', {
       tone: 'success',
     });
+    // Made a version, the recipe has no draft left: nothing is in progress.
+    expect(textOf(host.querySelector('.standing'))).not.toContain('In progress');
   });
 
   it('says what stops a save and takes the coach there, sending nothing', async () => {
@@ -393,6 +477,8 @@ describe('the recipe editor', () => {
     await settle(harness.fixture);
     expect(textOf(host.querySelector('.banner.danger'))).toBe('Add at least one ingredient.');
     expect(document.activeElement?.id).toBe('add-ingredient');
+    // The name is kept in the coach's draft as typed; nothing becomes a version.
+    expect(api.publishDraft).not.toHaveBeenCalled();
     expect(api.createRecipe).not.toHaveBeenCalled();
   });
 
@@ -422,27 +508,38 @@ describe('the recipe editor', () => {
     }
   });
 
-  it('saves changes as a new version, renamed, from the revision it opened', async () => {
-    const { harness, host, api } = await render();
+  it('keeps changes in the coach’s draft of the recipe, from the revision it opened, and publishes them', async () => {
+    const { harness, host, api, toast } = await render();
 
     typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Berry oats');
     typeInto(host.querySelector<HTMLInputElement>('#recipe-cook')!, '15');
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+    expect(api.createDraft.mock.calls[0][0]).toMatchObject({
+      recipeId: 'recipe-oats',
+      recipeRevision: 1,
+    });
     await settle(harness.fixture);
+    expect(named(host, 'Discard changes')).toBeTruthy();
     named(host, 'Publish changes').click();
-    await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
+    await until(harness.fixture, () => api.publishDraft.mock.calls.length === 1);
 
-    const [id, request] = api.addVersion.mock.calls[0];
-    expect(id).toBe('recipe-oats');
-    expect(request).toMatchObject({
+    expect(lastContent(api)).toMatchObject({
       name: 'Berry oats',
       photoMediaAssetId: 'photo-1',
-      publish: true,
-      baseRevision: 1,
       servings: 2,
       prepMinutes: null,
       cookMinutes: 15,
     });
-    expect(request.ingredients.map((line) => line.quantity)).toEqual([80, 200]);
+    expect(lastContent(api).lines?.map((line) => line.quantity)).toEqual([80, 200]);
+    expect(api.publishDraft.mock.calls[0]).toEqual([
+      'draft-1',
+      { version: expect.any(Number), replaceNewer: false, keepAsDraft: false },
+    ]);
+    expect(api.addVersion).not.toHaveBeenCalled();
+    await until(harness.fixture, () => toast.show.mock.calls.length > 0);
+    expect(toast.show).toHaveBeenCalledWith('Published. It’s in your meal plans’ recipes now.', {
+      tone: 'success',
+    });
   });
 
   it('offers a food’s new numbers to the lines that copied it before it was edited', async () => {
@@ -478,9 +575,8 @@ describe('the recipe editor', () => {
     );
 
     named(host, 'Publish changes').click();
-    await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
-    const [, request] = api.addVersion.mock.calls[0];
-    expect(request.ingredients.map((line) => [line.foodItemVersionId, line.quantity])).toEqual([
+    await until(harness.fixture, () => api.publishDraft.mock.calls.length === 1);
+    expect(lastContent(api).lines?.map((line) => [line.foodItemVersionId, line.quantity])).toEqual([
       ['oats-food-v1', 80],
       ['yogurt-food-v2', 200],
     ]);
@@ -522,14 +618,16 @@ describe('the recipe editor', () => {
     expect(named(host, 'Change conversion: White rice, raw')).toBeTruthy();
 
     named(host, 'Publish changes').click();
-    await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
-    expect(api.addVersion.mock.calls[0][1].ingredients[1]).toEqual({
+    await until(harness.fixture, () => api.publishDraft.mock.calls.length === 1);
+    // The draft keeps the raw grams the cooked amount came from, so weighing it raw again is exact.
+    expect(lastContent(api).lines?.[1]).toEqual({
       foodItemVersionId: 'rice-v1',
       quantity: 290,
-      unit: 'Gram',
-      basis: 'Cooked',
       yieldFactorId: 'y-rice',
       retentionFactorId: 'r-rice',
+      suggestion: null,
+      convertedRawGrams: 100,
+      convertedCookedGrams: 290,
     });
   });
 
@@ -574,17 +672,8 @@ describe('the recipe editor', () => {
     );
 
     named(host, 'Publish changes').click();
-    await until(harness.fixture, () => api.addVersion.mock.calls.length === 1);
-    expect(api.addVersion.mock.calls[0][1].ingredients).toEqual([
-      {
-        foodItemVersionId: 'rice-v1',
-        quantity: 60,
-        unit: 'Gram',
-        basis: 'Raw',
-        yieldFactorId: null,
-        retentionFactorId: null,
-      },
-    ]);
+    await until(harness.fixture, () => api.publishDraft.mock.calls.length === 1);
+    expect(lastContent(api).lines).toEqual([keptLine('rice-v1', 60)]);
   });
 
   it('asks before a conversion typed in the sheet is lost, and keeps the line as it was', async () => {
@@ -656,21 +745,87 @@ describe('the recipe editor', () => {
     expect(host.querySelector('.line-cooking')).toBeNull();
   });
 
-  it('tells the coach when someone saved the recipe since it opened', async () => {
-    const { harness, host } = await render({
-      addVersion: () =>
+  it('asks before replacing a version someone saved after the changes began', async () => {
+    let publishes = 0;
+    const { harness, host, api } = await render({
+      // Someone saved version 2 while the coach's changes were open.
+      getRecipe: () => of(recipeDetail({ currentRevision: publishes === 0 ? 1 : 2 })),
+      publishDraft: () =>
+        ++publishes === 1
+          ? throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 409,
+                  error: { code: 'newer_recipe_version', message: 'x' },
+                }),
+            )
+          : of(recipeSummary({ revision: 3 })),
+    });
+
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Berry oats');
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+    named(host, 'Publish changes').click();
+    await until(harness.fixture, () => host.querySelector('.banner.warn') !== null);
+    // The recipe is read again for the number; nothing of the coach's is set aside.
+    expect(textOf(host.querySelector('.banner.warn p'))).toBe(
+      'Version 2 of this recipe was saved after you started these changes. Make yours the newest version? Version 2 stays in the recipe’s history.',
+    );
+    expect(named(host, 'Discard mine')).toBeTruthy();
+    expect((host.querySelector('#recipe-name') as HTMLInputElement).value).toBe('Berry oats');
+
+    named(host, 'Publish mine as the newest').click();
+    await until(harness.fixture, () => api.publishDraft.mock.calls.length === 2);
+    expect(api.publishDraft.mock.calls[1][1]).toMatchObject({
+      replaceNewer: true,
+      keepAsDraft: false,
+    });
+  });
+
+  it('says when another tab moved on, and reloads the recipe as the server has it', async () => {
+    const { harness, host, api } = await render({
+      createDraft: () =>
         throwError(
           () =>
-            new HttpErrorResponse({ status: 409, error: { code: 'recipe_changed', message: 'x' } }),
+            new HttpErrorResponse({
+              status: 409,
+              error: { code: 'recipe_draft_exists', message: 'x' },
+            }),
         ),
     });
 
     typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Berry oats');
-    await settle(harness.fixture);
-    named(host, 'Publish changes').click();
     await until(harness.fixture, () => host.querySelector('.banner.warn') !== null);
-    expect(textOf(host.querySelector('.banner.warn'))).toContain('saved again after you opened it');
-    expect(named(host, 'Reload recipe')).toBeTruthy();
+    expect(textOf(host.querySelector('.banner.warn'))).toContain(
+      'This recipe was changed in another tab or on another device.',
+    );
+    expect(textOf(host.querySelector('.save-status'))).toBe('Not saved');
+    // A screen reader hears the trouble once, not every pause's save.
+    expect(textOf(host.querySelector('.save-live'))).toBe('Not saved');
+
+    // Reloading reads the recipe again and opens the draft the other tab started.
+    api.getRecipe.mockReturnValue(
+      of(
+        recipeDetail({
+          draft: {
+            id: 'draft-1',
+            recipeId: 'recipe-oats',
+            name: 'Berry oats',
+            lineCount: 2,
+            photoMediaAssetId: 'photo-1',
+            updatedAtUtc: '2026-10-20T08:00:00Z',
+          },
+        }),
+      ),
+    );
+    named(host, 'Reload recipe').click();
+    await until(harness.fixture, () => api.getDraft.mock.calls.length === 1);
+    await settle(harness.fixture);
+    expect(api.getDraft).toHaveBeenCalledWith('draft-1');
+    expect(host.querySelector('.banner.warn')).toBeNull();
+    expect(all(host, '.amount input').map((input) => (input as HTMLInputElement).value)).toEqual([
+      '120',
+      '200',
+    ]);
   });
 
   it('publishes an unchanged draft as it is, without a new version', async () => {
@@ -728,16 +883,52 @@ describe('the recipe editor', () => {
 
     named(host, 'Publish').click();
     await until(harness.fixture, () => router.url === '/nutrition/recipes/recipe-new');
-    const [operation, request] = api.review.mock.calls[0];
-    expect(operation).toBe('ai-1');
-    expect(request).toMatchObject({ approved: true, recipeName: 'Oat bowl', publish: true });
-    expect(
-      request.ingredientMappings.map((line) => [line.foodItemVersionId, line.quantity]),
-    ).toEqual([
+    // The draft carried the suggestion all along; making its version approves it on the server
+    // (ADR 0035), so the editor sends no review of its own.
+    expect(api.createDraft.mock.calls[0][0].content).toMatchObject({
+      name: 'Oat bowl',
+      aiMealDraftOperationId: 'ai-1',
+      lines: [
+        { foodItemVersionId: null, suggestion: { name: 'oats', quantity: 80, unit: 'g' } },
+        { foodItemVersionId: null, suggestion: { name: 'yogurt', uncertain: true } },
+      ],
+    });
+    expect(lastContent(api)).toMatchObject({ name: 'Oat bowl', aiMealDraftOperationId: 'ai-1' });
+    expect(lastContent(api).lines?.map((line) => [line.foodItemVersionId, line.quantity])).toEqual([
       ['oats-food-v1', 80],
       ['yogurt-food-v1', 150],
     ]);
+    expect(api.publishDraft).toHaveBeenCalledWith('draft-new', {
+      version: 2,
+      replaceNewer: false,
+      keepAsDraft: false,
+    });
+    expect(api.review).not.toHaveBeenCalled();
     expect(api.createRecipe).not.toHaveBeenCalled();
+  });
+
+  it('lets go of a suggestion the coach turns down, in the draft as on the server', async () => {
+    const { harness, host, api } = await render({
+      url: '/nutrition/recipes/new',
+      aiConfigured: true,
+    });
+
+    named(host, 'Describe a meal').click();
+    await settle(harness.fixture);
+    typeInto(host.querySelector<HTMLTextAreaElement>('.ai textarea')!, 'oat bowl with yogurt');
+    await settle(harness.fixture);
+    named(host, 'Suggest ingredients').click();
+    await until(harness.fixture, () => all(host, '.line.unmatched').length === 2);
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+
+    named(host, 'Remove the suggestions left').click();
+    await until(harness.fixture, () => api.review.mock.calls.length === 1);
+    expect(api.review.mock.calls[0]).toEqual([
+      'ai-1',
+      expect.objectContaining({ approved: false }),
+    ]);
+    await until(harness.fixture, () => api.saveDraft.mock.calls.length > 0);
+    expect(lastContent(api)).toMatchObject({ lines: [], aiMealDraftOperationId: null });
   });
 
   it('explains AI suggestions are not set up, beside where they would be', async () => {
@@ -746,17 +937,219 @@ describe('the recipe editor', () => {
     expect(host.querySelector('.ai button')).toBeNull();
   });
 
-  it('asks before leaving with changes not saved, and stays when asked to', async () => {
-    const { harness, host, router } = await render();
+  it('sends the last changes before leaving, and asks only when they cannot be saved', async () => {
+    const { harness, host, router, api } = await render({
+      createDraft: () => throwError(() => new HttpErrorResponse({ status: 503 })),
+    });
 
     typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Changed');
-    await settle(harness.fixture);
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+    expect(textOf(host.querySelector('.save-status'))).toBe('Not saved yet. Trying again…');
     const leaving = router.navigateByUrl('/nutrition/recipes');
     await until(harness.fixture, () => document.querySelector('[role="dialog"]') !== null);
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(textOf(dialog)).toContain('Your changes to this recipe aren’t saved.');
+    expect(textOf(dialog)).toContain(
+      'Your latest changes have not reached the server yet. If you leave now, they are lost.',
+    );
     named(dialog, 'Stay').click();
     expect(await leaving).toBe(false);
+    // Leaving tried once more before it asked.
+    expect(api.createDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves without asking once the changes are in the coach’s draft', async () => {
+    const { harness, host, router, api } = await render();
+
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Changed');
+    await settle(harness.fixture);
+    expect(await router.navigateByUrl('/nutrition/recipes')).toBe(true);
+    expect(api.createDraft).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('reopens the coach’s own draft of a recipe, and keeps saving it from its version', async () => {
+    const { harness, host, api } = await render({
+      getRecipe: () =>
+        of(
+          recipeDetail({
+            draft: {
+              id: 'draft-1',
+              recipeId: 'recipe-oats',
+              name: 'Berry oats',
+              lineCount: 2,
+              photoMediaAssetId: 'photo-1',
+              updatedAtUtc: '2026-10-20T08:00:00Z',
+            },
+          }),
+        ),
+    });
+
+    expect(api.getDraft).toHaveBeenCalledWith('draft-1');
+    expect((host.querySelector('#recipe-name') as HTMLInputElement).value).toBe('Berry oats');
+    expect(all(host, '.amount input').map((input) => (input as HTMLInputElement).value)).toEqual([
+      '120',
+      '200',
+    ]);
+    expect(textOf(host.querySelector('.standing'))).toContain('Published In progress');
+    expect(textOf(host.querySelector('.save-status'))).toBe(
+      'Saved on Tue 20 Oct, not published yet',
+    );
+    expect(named(host, 'Publish changes').disabled).toBe(false);
+    expect(named(host, 'Discard changes')).toBeTruthy();
+
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-cook')!, '5');
+    await until(harness.fixture, () => api.saveDraft.mock.calls.length === 1);
+    expect(api.saveDraft.mock.calls[0][0]).toBe('draft-1');
+    expect(api.saveDraft.mock.calls[0][1].version).toBe(4);
+    expect(api.createDraft).not.toHaveBeenCalled();
+  });
+
+  it('says a version saved since the changes began, before Publish asks', async () => {
+    const { host } = await render({
+      getRecipe: () =>
+        of(
+          recipeDetail({
+            currentRevision: 3,
+            draft: {
+              id: 'draft-1',
+              recipeId: 'recipe-oats',
+              name: 'Berry oats',
+              lineCount: 2,
+              photoMediaAssetId: 'photo-1',
+              updatedAtUtc: '2026-10-20T08:00:00Z',
+            },
+          }),
+        ),
+    });
+
+    expect(textOf(host.querySelector('.banner.info'))).toBe(
+      'Version 3 of this recipe was saved after you started these changes. Publishing yours makes it the newest version.',
+    );
+  });
+
+  it('reopens a new recipe from the draft in its address', async () => {
+    const { host, api } = await render({
+      url: '/nutrition/recipes/new?draft=draft-new',
+      getDraft: () =>
+        of(
+          recipeDraftView({
+            id: 'draft-new',
+            recipeId: null,
+            startedAtRevision: 0,
+            content: {
+              name: 'Lentil soup',
+              servings: null,
+              instructions: '',
+              lines: [
+                {
+                  foodItemVersionId: null,
+                  quantity: null,
+                  suggestion: { name: 'lentils', quantity: 200, unit: 'g', uncertain: false },
+                },
+              ],
+              photoMediaAssetId: null,
+              prepMinutes: 2.5,
+              cookMinutes: null,
+              aiMealDraftOperationId: 'ai-7',
+            },
+            foods: [],
+          }),
+        ),
+    });
+
+    expect(api.getDraft).toHaveBeenCalledWith('draft-new');
+    expect(api.getRecipe).not.toHaveBeenCalled();
+    // Kept as typed: no servings yet, half a minute, a suggested ingredient still waiting for a food.
+    expect((host.querySelector('#recipe-name') as HTMLInputElement).value).toBe('Lentil soup');
+    expect(field(host, 'Servings it makes').value).toBe('');
+    expect(field(host, 'Prep time (min)').value).toBe('2.5');
+    expect(all(host, '.line.unmatched .line-suggested').map(textOf)).toEqual([
+      'Suggested: 200 g lentils',
+    ]);
+    expect(textOf(host.querySelector('.standing'))).toContain(
+      'In progress Only you see it until you publish it.',
+    );
+    expect(textOf(host.querySelector('.standing'))).not.toContain('New recipe');
+  });
+
+  it('opens a saved recipe’s draft with its recipe', async () => {
+    const { harness, router, api } = await render({
+      url: '/nutrition/recipes/new?draft=draft-1',
+    });
+
+    await until(harness.fixture, () => router.url === '/nutrition/recipes/recipe-oats');
+    expect(api.getRecipe).toHaveBeenCalledWith('recipe-oats');
+  });
+
+  it('discards the coach’s changes, and the recipe as last saved comes back', async () => {
+    const { harness, host, api, toast } = await render();
+
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Berry oats');
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+    await settle(harness.fixture);
+    named(host, 'Discard changes').click();
+    await until(harness.fixture, () => confirmQuestion() !== null);
+    expect(textOf(confirmQuestion())).toContain(
+      'The recipe goes back to how it was last saved. This can’t be undone.',
+    );
+    press(confirmQuestion()!, 'Discard changes');
+    await until(harness.fixture, () => api.discardDraft.mock.calls.length === 1);
+    expect(api.discardDraft).toHaveBeenCalledWith('draft-1', 1);
+    await until(harness.fixture, () => toast.show.mock.calls.length > 0);
+    expect(toast.show).toHaveBeenCalledWith('Changes discarded.');
+    expect((host.querySelector('#recipe-name') as HTMLInputElement).value).toBe('Overnight oats');
+    expect(textOf(host.querySelector('.standing'))).not.toContain('In progress');
+  });
+
+  it('discards a new recipe never saved and goes back to the recipes', async () => {
+    const { harness, host, api, router, toast } = await render({ url: '/nutrition/recipes/new' });
+
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Lentil soup');
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+    await settle(harness.fixture);
+    named(host, 'Discard changes').click();
+    await until(harness.fixture, () => confirmQuestion() !== null);
+    expect(textOf(confirmQuestion())).toContain(
+      'It was never saved, so no meal plan has it. This can’t be undone.',
+    );
+    press(confirmQuestion()!, 'Discard recipe');
+    await until(harness.fixture, () => router.url === '/nutrition/recipes');
+    expect(api.discardDraft).toHaveBeenCalledWith('draft-new', 1);
+    expect(toast.show).toHaveBeenCalledWith('Recipe discarded.');
+  });
+
+  it('saves as a draft version the team sees, through the coach’s draft', async () => {
+    const { harness, host, api, toast } = await render({
+      publishDraft: () => of(recipeSummary({ status: 'Draft', revision: 2, versionId: 'oats-v2' })),
+    });
+
+    typeInto(host.querySelector<HTMLInputElement>('#recipe-name')!, 'Berry oats');
+    await until(harness.fixture, () => api.createDraft.mock.calls.length === 1);
+    named(host, 'More save options').click();
+    await settle(harness.fixture);
+    menuChoices(named(host, 'More save options'))[0].click();
+    await until(harness.fixture, () => api.publishDraft.mock.calls.length === 1);
+    expect(api.publishDraft.mock.calls[0]).toEqual([
+      'draft-1',
+      { version: 1, replaceNewer: false, keepAsDraft: true },
+    ]);
+    await until(harness.fixture, () => toast.show.mock.calls.length > 0);
+    expect(toast.show).toHaveBeenCalledWith(
+      'Saved as a draft. Your team sees it; meal plans don’t until you publish it.',
+      { tone: 'success' },
+    );
+  });
+
+  it('says there is nothing to save as a draft when nothing changed', async () => {
+    const { harness, host, api, toast } = await render();
+
+    named(host, 'More save options').click();
+    await settle(harness.fixture);
+    menuChoices(named(host, 'More save options'))[0].click();
+    await settle(harness.fixture);
+    expect(toast.show).toHaveBeenCalledWith('No changes to save.');
+    expect(api.publishDraft).not.toHaveBeenCalled();
+    expect(api.createDraft).not.toHaveBeenCalled();
   });
 
   it('says a recipe that is not here is not here', async () => {

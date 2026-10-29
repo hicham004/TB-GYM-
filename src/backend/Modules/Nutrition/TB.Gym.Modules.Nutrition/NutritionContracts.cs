@@ -37,6 +37,26 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> CreateRecipeAsync(CreateRecipeRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> AddRecipeVersionAsync(Guid recipeId, AddRecipeVersionRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> PublishRecipeVersionAsync(Guid recipeVersionId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The caller's own recipe drafts in this workspace (NUT-014, critique B5d), newest change first; with
+    /// <paramref name="query"/>, those whose name holds every word of it.
+    /// </summary>
+    Task<IReadOnlyList<RecipeDraftSummary>> ListRecipeDraftsAsync(string? query, CancellationToken cancellationToken);
+
+    /// <summary>One of the caller's own recipe drafts with its content; null for anyone else's or none.</summary>
+    Task<RecipeDraftView?> GetRecipeDraftAsync(Guid draftId, CancellationToken cancellationToken);
+
+    Task<NutritionCommandResult> CreateRecipeDraftAsync(CreateRecipeDraftRequest request, CancellationToken cancellationToken);
+    Task<NutritionCommandResult> SaveRecipeDraftAsync(Guid draftId, SaveRecipeDraftRequest request, CancellationToken cancellationToken);
+    Task<NutritionCommandResult> DiscardRecipeDraftAsync(Guid draftId, DiscardRecipeDraftRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The draft becomes the recipe's next version, checked by every rule a save has, published or kept as
+    /// a draft version, and is removed, in one transaction; a new recipe is created by its first version and
+    /// approves the AI suggestion it began from.
+    /// </summary>
+    Task<NutritionCommandResult> PublishRecipeDraftAsync(Guid draftId, PublishRecipeDraftRequest request, CancellationToken cancellationToken);
     Task<MealPlanTemplatePage> ListMealPlansAsync(int skip, int take, CancellationToken cancellationToken);
 
     /// <summary>
@@ -268,6 +288,7 @@ public sealed record AddRecipeVersionRequest(
 
 /// <summary>A recipe at one of its versions, totals for the whole recipe.</summary>
 /// <param name="PublishedVersionId">The newest published version, or null while none is published.</param>
+/// <param name="Draft">The caller's own changes to it not made a version yet (NUT-014), on the Recipes page's read only.</param>
 public sealed record RecipeSummary(
     Guid Id,
     Guid VersionId,
@@ -281,15 +302,18 @@ public sealed record RecipeSummary(
     decimal FatGrams,
     IReadOnlyList<AllergenCode> DeclaredAllergens,
     Guid? PhotoMediaAssetId = null,
-    Guid? PublishedVersionId = null);
+    Guid? PublishedVersionId = null,
+    RecipeDraftSummary? Draft = null);
 
 /// <summary>One recipe for its editor (R4.4b): its newest version in full.</summary>
+/// <param name="Draft">The caller's own changes to it not made a version yet (NUT-014), which the editor opens instead.</param>
 public sealed record RecipeDetail(
     Guid Id,
     string Name,
     int CurrentRevision,
     Guid? PublishedVersionId,
-    RecipeVersionView Latest);
+    RecipeVersionView Latest,
+    RecipeDraftSummary? Draft = null);
 
 /// <summary>A recipe version with its ingredient lines; totals are for the whole recipe.</summary>
 public sealed record RecipeVersionView(
@@ -348,6 +372,60 @@ public enum RecipeListStatus
 
 /// <summary>"All · Published · Drafts (n)": every recipe matching the search, split by whether it has a published version.</summary>
 public sealed record RecipeListCounts(int All, int Published, int Drafts);
+
+/// <param name="RecipeId">The recipe it changes; null to start a new recipe.</param>
+/// <param name="RecipeRevision">The recipe's newest revision as the editor read it; null for a new recipe.</param>
+public sealed record CreateRecipeDraftRequest(Guid? RecipeId, int? RecipeRevision, RecipeDraftContent Content);
+
+public sealed record SaveRecipeDraftRequest(RecipeDraftContent Content, uint Version);
+
+public sealed record DiscardRecipeDraftRequest(uint Version);
+
+/// <param name="ReplaceNewer">
+/// Make the version even though someone saved one after this draft began; theirs stays in the recipe's
+/// history.
+/// </param>
+/// <param name="KeepAsDraft">
+/// Save as draft: the version is complete but not published, the shared Draft the team sees and meal
+/// plans do not use (critique B5d keeps it beside the private draft).
+/// </param>
+public sealed record PublishRecipeDraftRequest(uint Version, bool ReplaceNewer, bool KeepAsDraft = false);
+
+/// <param name="Name">The name as typed, trimmed; it may be empty.</param>
+/// <param name="PhotoMediaAssetId">The photo the draft names, for its card's thumbnail.</param>
+public sealed record RecipeDraftSummary(
+    Guid Id,
+    Guid? RecipeId,
+    string Name,
+    int LineCount,
+    Guid? PhotoMediaAssetId,
+    DateTimeOffset UpdatedAtUtc);
+
+/// <param name="Foods">
+/// The food versions the lines name, from this workspace's foods, each with the food as it is now when it
+/// was edited since; an id from anywhere else names nothing.
+/// </param>
+/// <param name="CookingFactors">The yield and retention factors the lines name, from this workspace.</param>
+public sealed record RecipeDraftView(
+    Guid Id,
+    Guid? RecipeId,
+    int StartedAtRevision,
+    DateTimeOffset UpdatedAtUtc,
+    uint Version,
+    RecipeDraftContent Content,
+    IReadOnlyList<RecipeDraftFoodView> Foods,
+    IReadOnlyList<CookingFactorView> CookingFactors);
+
+/// <summary>A food version a draft's line names, under the food's name now, and the food now when newer.</summary>
+public sealed record RecipeDraftFoodView(
+    Guid FoodItemId,
+    string Name,
+    FoodProvenance Provenance,
+    FoodVersionView Version,
+    FoodItemView? NewerFood);
+
+/// <summary>What a draft save answers: small, since the editor already holds the content.</summary>
+public sealed record RecipeDraftSaveView(Guid Id, DateTimeOffset UpdatedAtUtc, uint Version);
 
 public sealed record MealPlanChoiceRequest(Guid RecipeVersionId, decimal Servings);
 
@@ -707,7 +785,8 @@ public sealed record NutritionCommandResult(
     IReadOnlyDictionary<string, string[]>? Errors = null,
     string? Code = null,
     string? Message = null,
-    MacroSplitView? MacroSplit = null);
+    MacroSplitView? MacroSplit = null,
+    RecipeDraftSaveView? RecipeDraft = null);
 
 public enum NutritionCommandStatus
 {

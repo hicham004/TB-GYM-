@@ -1,6 +1,10 @@
 import type {
   FoodItemView,
   RecipeDetail,
+  RecipeDraftFoodView,
+  RecipeDraftSaveView,
+  RecipeDraftSummary,
+  RecipeDraftView,
   RecipeIngredientView,
   RecipeSummary,
 } from '../app/core/api/generated';
@@ -136,4 +140,64 @@ export function recipeSummary(overrides: Partial<RecipeSummary> = {}): RecipeSum
     publishedVersionId: 'oats-v1',
     ...overrides,
   };
+}
+
+/** A food version as a draft's line names it (critique B5d), with the food now when it was edited since. */
+export function draftFood(
+  item: FoodItemView,
+  newerFood: FoodItemView | null = null,
+): RecipeDraftFoodView {
+  return {
+    foodItemId: item.id,
+    name: item.name,
+    provenance: item.provenance,
+    version: item.currentVersion,
+    newerFood,
+  };
+}
+
+/**
+ * The coach's own draft of the overnight oats (NUT-014): renamed "Berry oats", the oats raised to
+ * 120 g, saved at version 4 from the recipe's revision 1.
+ */
+export function recipeDraftView(overrides: Partial<RecipeDraftView> = {}): RecipeDraftView {
+  return {
+    id: 'draft-1',
+    recipeId: 'recipe-oats',
+    startedAtRevision: 1,
+    updatedAtUtc: '2026-10-20T08:00:00Z',
+    version: 4,
+    content: {
+      name: 'Berry oats',
+      servings: 2,
+      instructions: 'Stir everything together and chill overnight.',
+      lines: [
+        { foodItemVersionId: 'oats-food-v1', quantity: 120 },
+        { foodItemVersionId: 'yogurt-food-v1', quantity: 200 },
+      ],
+      photoMediaAssetId: 'photo-1',
+      prepMinutes: null,
+      cookMinutes: null,
+      aiMealDraftOperationId: null,
+    },
+    foods: [draftFood(OATS_FOOD), draftFood(YOGURT_FOOD)],
+    cookingFactors: [],
+    ...overrides,
+  };
+}
+
+export function draftSummary(overrides: Partial<RecipeDraftSummary> = {}): RecipeDraftSummary {
+  return {
+    id: 'draft-new',
+    recipeId: null,
+    name: 'Lentil soup',
+    lineCount: 3,
+    photoMediaAssetId: null,
+    updatedAtUtc: '2026-10-20T08:00:00Z',
+    ...overrides,
+  };
+}
+
+export function draftSaved(id = 'draft-1', version = 5): RecipeDraftSaveView {
+  return { id, updatedAtUtc: '2026-10-20T08:01:00Z', version };
 }

@@ -1,25 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHICKEN_GRILLED,
+  conversionView,
   cookedRiceLine,
   RAW_RICE,
   RAW_RICE_FOOD,
   RICE_BOILED,
 } from '../../../testing/cooking-fixtures';
 import {
+  draftFood,
+  draftSummary,
   OATS_FOOD,
   recipeDetail,
+  recipeDraftView,
   recipeSummary,
   YOGURT_FOOD,
 } from '../../../testing/recipe-fixtures';
 import {
   allergenText,
   draftFromDetail,
+  draftFromStored,
   draftSignature,
   emptyDraft,
   energySplit,
   foodFromView,
   ingredientRequests,
+  inProgressCard,
   keepsAmount,
   lineForFood,
   lineMacros,
@@ -31,6 +37,7 @@ import {
   recipeCard,
   recipeProblem,
   recipeTotal,
+  toDraftContent,
   useNewerFood,
   weighable,
   weighCooked,
@@ -396,5 +403,142 @@ describe('a recipe card', () => {
       label: 'Changes not published',
       tone: 'warm',
     });
+  });
+});
+
+describe('the coach’s working draft (critique B5d)', () => {
+  it('keeps every value as typed, a suggested line waiting for its food included', () => {
+    const [waiting] = linesFromSuggestion([
+      { name: 'chickpeas', quantity: 200, unit: 'g', uncertain: true },
+    ]);
+    const content = toDraftContent(
+      {
+        ...emptyDraft(),
+        name: '  Hummus ',
+        servings: null,
+        instructions: '',
+        prepMinutes: 2.5,
+        cookMinutes: Number.POSITIVE_INFINITY,
+        lines: [waiting, { ...lineForFood(OATS), quantity: null }],
+      },
+      'ai-1',
+    );
+
+    expect(content).toEqual({
+      name: '  Hummus ',
+      servings: null,
+      instructions: '',
+      lines: [
+        {
+          foodItemVersionId: null,
+          quantity: null,
+          yieldFactorId: null,
+          retentionFactorId: null,
+          suggestion: { name: 'chickpeas', quantity: 200, unit: 'g', uncertain: true },
+          convertedRawGrams: null,
+          convertedCookedGrams: null,
+        },
+        {
+          foodItemVersionId: 'oats-food-v1',
+          quantity: null,
+          yieldFactorId: null,
+          retentionFactorId: null,
+          suggestion: null,
+          convertedRawGrams: null,
+          convertedCookedGrams: null,
+        },
+      ],
+      photoMediaAssetId: null,
+      prepMinutes: 2.5,
+      // More than a number can say is no number at all, never Infinity on the wire.
+      cookMinutes: null,
+      aiMealDraftOperationId: 'ai-1',
+    });
+  });
+
+  it('reads a stored draft back into the editor as it was sent', () => {
+    const cooked = weighCooked({ ...lineForFood(RAW_RICE), quantity: 100 }, RICE_BOILED);
+    const rice = conversionView();
+    const sent = toDraftContent({ ...emptyDraft(), name: 'Rice bowl', lines: [cooked] }, null);
+    const { draft, aiOperationId } = draftFromStored(
+      recipeDraftView({
+        content: sent,
+        foods: [draftFood(RAW_RICE_FOOD)],
+        cookingFactors: [rice.yield, rice.retention],
+      }),
+    );
+
+    expect(aiOperationId).toBeNull();
+    expect(draft.name).toBe('Rice bowl');
+    const [line] = draft.lines;
+    expect(line.food).toEqual(RAW_RICE);
+    expect(line.quantity).toBe(290);
+    expect(line.cooked).toEqual(RICE_BOILED);
+    // Weighing it raw again starts from the 100 g it came from, as before the reload.
+    expect(weighRaw(line).quantity).toBe(100);
+    expect(lineMacros(line)).toEqual(lineMacros(cooked));
+  });
+
+  it('offers a stored line’s food its new numbers, and lets a food it cannot find wait for one', () => {
+    const edited = {
+      ...YOGURT_FOOD,
+      currentVersion: { ...YOGURT_FOOD.currentVersion, id: 'yogurt-food-v2' },
+    };
+    const { draft } = draftFromStored(
+      recipeDraftView({
+        content: {
+          name: 'Bowl',
+          servings: '2',
+          instructions: null,
+          lines: [
+            { foodItemVersionId: 'yogurt-food-v1', quantity: '150' },
+            { foodItemVersionId: 'another-workspace', quantity: 10 },
+          ],
+          prepMinutes: null,
+          cookMinutes: null,
+        },
+        foods: [draftFood(YOGURT_FOOD, edited)],
+      }),
+    );
+
+    expect(draft.servings).toBe(2);
+    expect(draft.instructions).toBe('');
+    expect(draft.lines[0].quantity).toBe(150);
+    expect(draft.lines[0].newer?.versionId).toBe('yogurt-food-v2');
+    expect(draft.lines[1].food).toBeNull();
+    expect(draft.lines[1].quantity).toBe(10);
+    // A content written without the fields a later editor added reads them as not given.
+    expect(draft.photoId).toBeNull();
+  });
+
+  it('shows a new recipe in progress by what it holds, opening through its draft', () => {
+    const card = inProgressCard(draftSummary({ photoMediaAssetId: 'photo-9' }), 'en-US');
+    expect(card).toMatchObject({
+      id: 'draft-new',
+      name: 'Lentil soup',
+      initials: 'LS',
+      photoId: 'photo-9',
+      link: ['/nutrition/recipes', 'new'],
+      query: { draft: 'draft-new' },
+      kcal: null,
+      servings: '3 ingredients',
+      status: null,
+      inProgress: true,
+      note: 'Only you see it until you publish it. Changed Tue 20 Oct.',
+    });
+    expect(inProgressCard(draftSummary({ name: ' ', lineCount: 1 }), 'en-US')).toMatchObject({
+      name: 'Untitled recipe',
+      servings: '1 ingredient',
+    });
+  });
+
+  it('marks a saved recipe the coach is changing as in progress beside its own status', () => {
+    const draft = draftSummary({ id: 'draft-1', recipeId: 'recipe-oats' });
+    expect(recipeCard(recipeSummary({ draft }), 'en-US')).toMatchObject({
+      status: null,
+      inProgress: true,
+      link: ['/nutrition/recipes', 'recipe-oats'],
+    });
+    expect(recipeCard(recipeSummary(), 'en-US').inProgress).toBe(false);
   });
 });

@@ -5,11 +5,11 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, throwError, type Observable } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RecipeListStatus, RecipePage } from '../../core/api/generated';
+import type { RecipeDraftSummary, RecipeListStatus, RecipePage } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { segment, settle } from '../../../testing/dom';
-import { recipeSummary } from '../../../testing/recipe-fixtures';
+import { draftSummary, recipeSummary } from '../../../testing/recipe-fixtures';
 import { RecipeApi } from './recipe-api';
 import { RecipeList } from './recipe-list';
 
@@ -24,9 +24,13 @@ const page = (items = [recipeSummary()], total = items.length): RecipePage => {
   };
 };
 
-async function render(listRecipes: (query: string) => Observable<RecipePage> = () => of(page())) {
+async function render(
+  listRecipes: (query: string) => Observable<RecipePage> = () => of(page()),
+  listDrafts: (query: string) => Observable<RecipeDraftSummary[]> = () => of([]),
+) {
   const api = {
     listRecipes: vi.fn(listRecipes),
+    listDrafts: vi.fn(listDrafts),
     grantPhotos: vi.fn((ids: readonly string[]) =>
       of({
         items: ids.map((id) => ({
@@ -56,12 +60,14 @@ async function render(listRecipes: (query: string) => Observable<RecipePage> = (
 async function renderAt(
   url: string,
   listRecipes: (query: string, status: RecipeListStatus) => Observable<RecipePage>,
+  listDrafts: (query: string) => Observable<RecipeDraftSummary[]> = () => of([]),
 ) {
   const api = {
     listRecipes: vi.fn(
       (query: string, _skip: number, _take: number, status: RecipeListStatus = 'All') =>
         listRecipes(query, status),
     ),
+    listDrafts: vi.fn(listDrafts),
     grantPhotos: vi.fn(() => of({ items: [] })),
   };
   TestBed.configureTestingModule({
@@ -140,7 +146,77 @@ describe('the recipes page', () => {
     await settle(fixture);
 
     expect(api.listRecipes).toHaveBeenLastCalledWith('tahini', 0, 48, 'All');
+    // The coach's own recipes in progress are searched on the server the same way (critique B5d).
+    expect(api.listDrafts).toHaveBeenLastCalledWith('tahini');
     expect(textOf(host.querySelector('[role="status"]'))).toBe('No recipes match “tahini”.');
+  });
+
+  it('leads with the coach’s new recipes in progress and marks their changes to saved ones (critique B5d)', async () => {
+    const oats = recipeSummary({
+      draft: draftSummary({ id: 'draft-1', recipeId: 'recipe-oats', name: 'Berry oats' }),
+    });
+    const { host, api } = await render(
+      () => of(page([oats])),
+      () =>
+        of([
+          draftSummary(),
+          draftSummary({ id: 'draft-1', recipeId: 'recipe-oats', name: 'Berry oats' }),
+        ]),
+    );
+
+    expect(api.listDrafts).toHaveBeenCalledWith('');
+    const [soup, changed] = cards(host);
+    expect(cards(host)).toHaveLength(2);
+    // A recipe not saved yet: only its coach sees it, and it opens through its draft.
+    expect(textOf(soup.querySelector('.card-name'))).toBe('Lentil soup');
+    expect(textOf(soup.querySelector('.pills'))).toBe('In progress');
+    expect(soup.querySelector('.kcal')).toBeNull();
+    expect(textOf(soup.querySelector('.note'))).toBe(
+      'Only you see it until you publish it. Changed Tue 20 Oct.',
+    );
+    expect(textOf(soup.querySelector('.meta'))).toBe('3 ingredients');
+    expect(soup.querySelector('a')?.getAttribute('href')).toBe(
+      '/nutrition/recipes/new?draft=draft-new',
+    );
+    // A saved recipe with the coach's changes keeps its own card, with In progress beside its status.
+    expect(textOf(changed.querySelector('.card-name'))).toBe('Overnight oats');
+    expect(textOf(changed.querySelector('.pills'))).toBe('In progress');
+    expect(textOf(changed.querySelector('.kcal'))).toBe('222 kcal a serving');
+    expect(textOf(host.querySelector('.lede'))).toBe(
+      '1 recipe, all ready for meal plans, 1 in progress',
+    );
+    // Never published, a recipe in progress is a draft too.
+    expect(textOf(segment(host, 'Recipes to show', 'Drafts (1)').closest('label'))).toBe(
+      'Drafts (1)',
+    );
+  });
+
+  it('shows a coach’s recipes in progress before any is saved', async () => {
+    const { host } = await render(
+      () => of(page([])),
+      () => of([draftSummary(), draftSummary({ id: 'draft-2', name: '  ', lineCount: 0 })]),
+    );
+
+    expect(host.querySelector('app-empty-state')).toBeNull();
+    expect(textOf(host.querySelector('.lede'))).toBe('2 recipes in progress');
+    expect(cards(host).map((card) => textOf(card.querySelector('.card-name')))).toEqual([
+      'Lentil soup',
+      'Untitled recipe',
+    ]);
+    expect(textOf(cards(host)[1].querySelector('.meta'))).toBe('No ingredients yet');
+  });
+
+  it('leaves recipes in progress out of Published, which meal plans may use', async () => {
+    const { host } = await renderAt(
+      '/nutrition/recipes?status=published',
+      () => of({ ...page([recipeSummary()]), counts: { all: 1, published: 1, drafts: 0 } }),
+      () => of([draftSummary()]),
+    );
+
+    expect(cards(host).map((card) => textOf(card.querySelector('.card-name')))).toEqual([
+      'Overnight oats',
+    ]);
+    expect(segment(host, 'Recipes to show', 'Drafts (1)').checked).toBe(false);
   });
 
   it('counts the drafts of the whole library from the server, more pages or not', async () => {

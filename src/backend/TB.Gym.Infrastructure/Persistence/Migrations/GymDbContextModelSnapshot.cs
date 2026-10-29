@@ -5068,8 +5068,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("TenantId", "Id");
-
                     b.HasIndex("TenantId", "CreatedAtUtc");
 
                     b.ToTable("AiMealDraftOperations", "nutrition", t =>
@@ -6977,6 +6975,91 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "NormalizedName");
 
                     b.ToTable("Recipes", "nutrition");
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.RecipeDraft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AiMealDraftOperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PhotoMediaAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RecipeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("StartedAtRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "AiMealDraftOperationId");
+
+                    b.HasIndex("TenantId", "PhotoMediaAssetId");
+
+                    b.HasIndex("TenantId", "RecipeId");
+
+                    b.HasIndex("TenantId", "OwnerUserId", "RecipeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RecipeDrafts_TenantId_OwnerUserId_RecipeId")
+                        .HasFilter("\"RecipeId\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "OwnerUserId", "UpdatedAtUtc");
+
+                    b.ToTable("RecipeDrafts", "nutrition", t =>
+                        {
+                            t.HasCheckConstraint("CK_RecipeDrafts_LineCount", "\"LineCount\" BETWEEN 0 AND 500");
+
+                            t.HasCheckConstraint("CK_RecipeDrafts_Recipe", "(\"RecipeId\" IS NULL AND \"StartedAtRevision\" = 0) OR (\"RecipeId\" IS NOT NULL AND \"StartedAtRevision\" >= 1)");
+
+                            t.HasCheckConstraint("CK_RecipeDrafts_Suggestion", "\"AiMealDraftOperationId\" IS NULL OR \"RecipeId\" IS NULL");
+                        });
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.RecipeIngredient", b =>
@@ -12854,6 +12937,40 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Nutrition.RecipeDraft", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Nutrition.AiMealDraftOperation", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "AiMealDraftOperationId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OwnerUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Media.MediaAsset", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PhotoMediaAssetId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Nutrition.Recipe", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RecipeId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Nutrition.RecipeIngredient", b =>
