@@ -182,7 +182,8 @@ for (const width of [390, 1440]) {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     await expectNoHorizontalOverflow(page);
-    await expect(page.getByRole('link', { name: 'Maya Fakhoury' })).toBeVisible();
+    // Exact: since B4a her reason tag is a link too, "Maya Fakhoury: 1 check-in to review".
+    await expect(page.getByRole('link', { name: 'Maya Fakhoury', exact: true })).toBeVisible();
   });
 }
 
