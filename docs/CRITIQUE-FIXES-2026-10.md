@@ -12,7 +12,8 @@ definition of done) apply to every row.
 One row is one session and one pull request, in this order. A session builds the first row that is not Done,
 passing over rows marked "Open, not blocking", as section 2 describes it. The third column is the owner's word: an
 item it leaves out is not built. 🚦 marks a step that waits for the owner. A status reads Open, Done · date · pull
-request or commit, Built, not merged, or Blocked (with the question).
+request or commit, Built, not merged, or Blocked (with the question). A choice a row made that its spec did not
+settle, and an item it left out, wait for the owner in section 3.
 
 | Step | What | The owner's decisions and what is left out | Status |
 | --- | --- | --- | --- |
@@ -21,8 +22,9 @@ request or commit, Built, not merged, or Blocked (with the question).
 | B2b | Kit · Folds, the sidebar and the view switch | One fold look everywhere. Tighter sidebar rows on short windows, with a thin dark scrollbar only where still needed. Cards / List with an icon and the word. Before it starts, the dark mode switch still uncommitted in the owner's tree is committed or dropped, since it changes the coach shell too. | Done · 2026-10-28 · fad8ef7 (built locally, committed to main on the owner's word); the short-window spacing starts under 760 px, since nine rows need about 741 |
 | B3a | Team | A Team row in the sidebar. The seats line and the invite's seat sentence (yes, 2026-10-27, once explained). A read-only Team page for coaches (yes, against the recommendation). A Coach filter on Clients. Chats stay private: the owner sees every client and their data, never a coach's chats (ADR 0026, confirmed 2026-10-27). | Done · 2026-10-28 · eb35800 (built locally, committed to main on the owner's word); a coach opens the read-only Team from their Settings, after their own pages (the owner's choice of 2026-10-28), and the Clients chips count the chosen coach's clients |
 | B3b | Messages and check-ins | Saved replies at the top of Messages. One Unread filter with Mark as unread, as in WhatsApp, and Waiting for reply removed (2026-10-27). Check-ins opens on To review, with a line saying what a check-in is (the owner's note). | Done · 2026-10-29 · 6b2d82b and 7626501 (built locally in two slices, committed to main on the owner's word); the owner's To review lists every client's, a team coach's client marked "Coached by …", and a coach's only their own (the owner's choice of 2026-10-28); the client's face is their initials, as the kit's avatar draws them |
-| B4a | The Clients table | The table the owner described (2026-10-27): age and goal; status joined with the last 7 days; the plan with what's included, its price and its end; last check-in; last activity. The filter chips wait. A plan's end keeps its own status. The overdue check-in signal. | Done · 2026-10-29 · c44f365 (built overnight, committed to main on the owner's word); a paused plan says "Paused since … · ends …", since a pause has no end date (the owner's choice of 2026-10-29). Decided overnight, for the owner to confirm: the Plan column sums up the plan whose end it shows, with "+1 more plan"; an unsent check-in (a draft too) is overdue from 2 through 13 days after its due day; Remind only for the client's own coach with messaging in today's plan, See check-ins otherwise; ending soon at 13 days or fewer on every screen (the client page's prompt starts a day later); the table's overdue tag opens the client's check-ins; the plan's name is left out of the Plan column; "On track" is the plan's pill and can sit beside a reason |
-| B4b | Today | The layout the owner chose (2026-10-27): This month (money received, active clients, and the owner's coaches), plans ending soon with Renew and Message, ended plans with Renew and Release, the feed. Client workouts this week is removed. B10c adds the sessions number. | Built, not merged · 2026-10-29 · 62ae0ff on the local branch b4b, not pushed: it counts money, so the owner reviews it before `git merge b4b`. Decided overnight, for the owner to confirm: receipts only, each on the workspace day it arrived, for the coach the client had at that moment (SUB-016); a coach sees their own totals per currency, the owner the workspace's; active means a plan running today; the staff list is the owner's alone; Needs you stays as it was, so plan endings show twice; a cancelled plan is not "ended"; End coaching is the owner's; Record payment replaces Renew while a renewal waits for payment; a never-paid plan whose dates passed is listed as ended; Needs you with This month beside it, the plan lists side by side, the feed last; all three number tiles removed, not only the workouts tile |
+| B4a | The Clients table | The table the owner described (2026-10-27): age and goal; status joined with the last 7 days; the plan with what's included, its price and its end; last check-in; last activity. The filter chips wait. A plan's end keeps its own status. The overdue check-in signal. | Done · 2026-10-29 · c44f365 (built overnight, committed to main on the owner's word); a paused plan says "Paused since … · ends …", since a pause has no end date (the owner's choice of 2026-10-29). Decided overnight and confirmed by the owner on 2026-10-29: the Plan column sums up the plan whose end it shows, with "+1 more plan"; an unsent check-in (a draft too) is overdue from 2 through 13 days after its due day; Remind only for the client's own coach with messaging in today's plan, See check-ins otherwise; ending soon at 13 days or fewer on every screen (the client page's prompt starts a day later); the table's overdue tag opens the client's check-ins; "On track" is the plan's pill and can sit beside a reason. The plan's name, left out overnight, is shown after all (the owner, 2026-10-29): B4c |
+| B4b | Today | The layout the owner chose (2026-10-27): This month (money received, active clients, and the owner's coaches), plans ending soon with Renew and Message, ended plans with Renew and Release, the feed. Client workouts this week is removed. B10c adds the sessions number. | Done · 2026-10-29 · 62ae0ff (built overnight on the branch b4b, since it counts money, and merged into main on the owner's word of 2026-10-29). Decided overnight and confirmed by the owner on 2026-10-29: receipts only, each on the workspace day it arrived, for the coach the client had at that moment (SUB-016); a coach sees their own totals per currency, the owner the workspace's; active means a plan running today; the staff list is the owner's alone; Needs you stays as it was, so plan endings show twice; a cancelled plan is not "ended"; End coaching is the owner's; Record payment replaces Renew while a renewal waits for payment; a never-paid plan whose dates passed is listed as ended; Needs you with This month beside it, the plan lists side by side, the feed last; all three number tiles removed, not only the workouts tile |
+| B4c | The plan's name on Clients | The owner's change to B4a (2026-10-29): the Plan column shows the plan's name. | Open |
 | B5a | Meal options | Pick one of N, with the average calories and macros (the owner's note). Choose one for the client. The coach's option order kept. Left out: meals of several recipes (later). | Open |
 | B5b | Adding without dragging | Press +, then Add here, in both builders. | Open |
 | B5c | Days, targets and the drafts filter | Nothing shifts (2026-10-27): no Delete day in the middle, no Insert or Duplicate day, whole-week tools instead; no empty day in a published plan. Fill in fat and carbs, the targets sheet's two blocks, the Drafts filter. | Open |
@@ -35,9 +37,10 @@ request or commit, Built, not merged, or Blocked (with the question).
 | B8c | 🚦 Energy v2 · Switched on | After Toufic and a dietitian review the table and its words (the owner arranges it): version 2 becomes the default, shifted as a whole by up to 0.05 if they ask; the review is recorded in ADR 0008. | Open, not blocking: waits for the review |
 | B9 | The exercise library | The archived view. The full list of seven types with their meanings, Other asking for the coach's own name (2026-10-27). The Tag filter. The video tile opening the video. | Open |
 | B10a | Sessions · The client's plan page | Before the packs. | Open |
-| B10b | Sessions · Session packs | A sixth coaching feature. Every pack ends (90 days, 30 for one session, changeable per price). A no-show or late cancel can be charged, with a reason. A lapsed pack is never extended. A pause stops access only. A pack-only client is billable as today. Toufic's answers (section 1) change only the defaults. | Open |
+| B10b | Sessions · Session packs | A sixth coaching feature. Every pack ends (90 days, 30 for one session, changeable per price). A no-show or late cancel can be charged, with a reason. A lapsed pack is never extended. A pause stops access only. A pack-only client is billable as today. Toufic's answers (section 1) change only the defaults, so the row is built with the defaults above without waiting for them (the owner, 2026-10-29). | Open |
 | B10c | Sessions · For clients and on Today | The client's balance and notices; Today's sessions number; the client-row chip. | Open |
 | B10d | Sessions · This month | A coach sees their own; the owner sees each coach and the total; per currency. | Open |
+| B11 | Leftovers | Added on the owner's word (2026-10-29): the mocked Playwright suite run once and fixed, its stale screenshots included; "14 sessions a week" in DOMAIN-RULES; a blocked client's row on Clients; the check-in card and the overdue tag agreeing on when a check-in is late. | Open |
 
 Later, not rows: a one-tap "Nice work" from Today's feed (the roadmap, later); saved replies shared by the team
 (deferred); meals of several recipes eaten together (later); the weight-trend check (a roadmap row after go-live);
@@ -60,6 +63,15 @@ machine loses nothing. It opens one pull request into main with the session's Gi
 button to the owner. The same pull request sets the row's status: "Done · date · PR #n" once the session's checks
 below have passed (it reaches main only when the owner merges it, after CI), or "Built, not merged" with what is
 left. Locally the plan runner commits on the current branch, as it did for the audit.
+
+**The local runner** (the owner, 2026-10-29). `.\scripts\start-plan-runner.ps1 -Plan critique` builds the rest
+of the plan one fresh chat per row, with nobody watching. A chat that changed server code runs the full backend suite
+on the laptop before it commits, and fixes first, in its own commit, a failure an earlier row left. It commits on
+main and never pushes; the runner pushes each row that ends Done, while the repository is private and GitHub has
+nothing main lacks. A choice the row's spec does not settle is made the way closest to the owner's earlier choices,
+built and listed in section 3; a new money rule, legal wording or work outside the row is left out and listed there
+with a recommendation. No chat stops the run for a decision. A used-up weekly usage limit pauses the runner until it
+resets, and the run carries on.
 
 **Checks**, as AGENTS.md asks, in proportion to what changed:
 
@@ -128,9 +140,10 @@ done or not verified, the screenshots, and the next row.
 - Before B2b: commit or drop the dark mode switch in the owner's tree, which changes the coach shell too
   (done 2026-10-28: committed, a1c189b).
 - Before B8c: Toufic and a dietitian review energy v2's table and its words.
-- Before B10b: ask Toufic how long his packs stay valid, his no-show and late-cancel rule, whether single sessions
-  are paid in cash on the day, and whether one pack ever mixes kinds of session; and whether the macro PDF on his
-  page 8 is the owner's own plan document.
+- Ask Toufic how long his packs stay valid, his no-show and late-cancel rule, whether single sessions are paid in
+  cash on the day, and whether one pack ever mixes kinds of session; and whether the macro PDF on his page 8 is the
+  owner's own plan document. B10b does not wait for his answers (the owner, 2026-10-29): it is built with the
+  plan's defaults, which his answers can change later.
 - Before the next reviewer: the test copy's three fixes in section 6 of the critique.
 
 ## 2. What each row builds
@@ -248,6 +261,13 @@ done or not verified, the screenshots, and the next row.
 - "Client workouts this week" goes.
 - A payment counts for the coach the client had on the day it was received, from the append-only assignment
   history. Money is never added across currencies, and never called profit or earnings.
+
+### B4c · The plan's name on Clients
+
+- The owner's change to B4a (2026-10-29): the Plan column's first line, in the table and on a phone's card, is the
+  plan's name as it was booked (`ClientPlanSummary.Name`, which the server already sends), in its own writing
+  direction; then what's included, the length and price, and the end, as now. Web only: `planCell` in
+  `clients.models.ts`, its specs and the mocked Clients e2e.
 
 ### B5a · Meal options
 
@@ -429,3 +449,23 @@ done or not verified, the screenshots, and the next row.
 - A page: money received, sessions held, plans and packs sold, clients started and ended, this month and last, in
   the workspace's calendar. A coach sees their own; the owner sees each coach and the total. Per currency, never
   added across currencies, never called profit.
+
+### B11 · Leftovers
+
+- The mocked Playwright suite, run once in Chromium: what the critique rows broke is fixed (selectors, the sidebar's
+  rows, words), and the stale screenshot baselines are recorded again after looking at each one (the UI lab's eight
+  among them). The docs/design pictures a run rewrites are restored, and e2e/private's five known failures stay.
+- DOMAIN-RULES says "14 workouts a week" where it still says "14 sessions a week" (B1's words).
+- A blocked client's row on Clients no longer shows their plan beside "No active plan" (older than B4a): it says
+  their access is blocked.
+- The client page's Check-in card and the overdue tag agree on when an unsent check-in is late: from the second day
+  after its due day (CHK-015).
+
+## 3. Waiting for the owner
+
+A chat that meets an item adds one line here: the row, the question, what it built (or that it left the item out),
+the other way, and its recommendation. The owner answers in chat; the answer goes into the row's status and the
+line is removed, and a changed answer becomes a new row.
+
+Nothing is waiting. On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the plan's name, which
+B4c adds.

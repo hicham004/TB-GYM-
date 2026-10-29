@@ -3,22 +3,28 @@
 Runs a plan's status table unattended: one fresh Claude chat per row.
 
 .DESCRIPTION
--Plan audit (the default since 2026-10-19) runs the fix batches in section 0 of
-docs/FULL-AUDIT-2026-10.md; -Plan ui runs the section 0 table of docs/UI-REDESIGN-PLAN.md,
-which the owner marked complete on 2026-10-13; -Plan critique runs the rows in section 0 of
-docs/CRITIQUE-FIXES-2026-10.md, the fixes from Toufic's critique (2026-10-27).
+-Plan critique (the default since 2026-10-29) runs the rows in section 0 of
+docs/CRITIQUE-FIXES-2026-10.md, the fixes from Toufic's critique (2026-10-27); -Plan audit runs
+the fix batches in section 0 of docs/FULL-AUDIT-2026-10.md, all Done on 2026-10-23; -Plan ui
+runs the section 0 table of docs/UI-REDESIGN-PLAN.md, which the owner marked complete on
+2026-10-13.
 
 Each step is a new `claude -p` chat at max effort, on Opus unless -RowModels names another
 model for its row (the owner put R6.2 on Fable on 2026-10-11). It gets the plan's opening in
 $planPrompts plus the unattended-run rules in $sharedRules below. The owner decided on
 2026-10-11, and again for the audit on 2026-10-19, that such a chat commits its own step once
-every check AGENTS.md asks for is green. It never pushes: a deny rule blocks git push.
+every check AGENTS.md asks for is green. A chat never pushes: a deny rule blocks git push.
+The runner itself pushes the branch after each step that ends Done (the owner, 2026-10-29),
+only while GitHub hides the repository from the signed-out (404) and origin has no commit the
+branch lacks; -NoPush keeps the commits on this laptop.
 
 A chat that hits a usage limit is resumed where it stopped. A five-hour limit is waited out
 on the same model. A weekly limit (one resetting more than 12 hours away, the account's or one
 model's) moves the chat to -FallbackModel at once, and later rows stay on it until that limit
-resets (the owner, 2026-10-12: Fable first, then Opus 5.5). Claude Code's --fallback-model does
-the same for a model that is overloaded or unavailable.
+resets (the owner, 2026-10-12: Fable first, then Opus 5.5). When no other model can carry on,
+-OnWeeklyLimit wait (the owner, 2026-10-29: "use it all, then carry on") waits for the reset
+and resumes the chat; -OnWeeklyLimit stop ends the run instead. Claude Code's --fallback-model
+does the same for a model that is overloaded or unavailable. A STOP file ends any wait.
 
 A step starts only when no tracked file is changed, no chat in this folder has written
 for -IdleMinutes, and the next row is Open (not a gate, Optional, Built or Blocked).
@@ -41,7 +47,7 @@ with its context, instead of refusing to start on the changed tree.
 [CmdletBinding()]
 param(
     [ValidateSet('audit', 'ui', 'critique')]
-    [string]$Plan = 'audit',
+    [string]$Plan = 'critique',
     # A clock time such as 08:00: no step starts after its next occurrence (empty: no limit).
     [string]$NoNewStepAfter = '',
     # The session id of a chat a limit stopped: the first step resumes it, its changes still in the tree.
@@ -55,6 +61,11 @@ param(
     # After a weekly limit the chat carries on with this model, and so do later rows until that
     # limit resets (the owner, 2026-10-12). An empty string stops the runner instead.
     [string]$FallbackModel = 'claude-opus-5-5',
+    # A weekly limit no other model can take over from: wait for its reset, or stop the run.
+    [ValidateSet('wait', 'stop')]
+    [string]$OnWeeklyLimit = 'wait',
+    # Keep commits on this laptop instead of pushing after each step that ends Done.
+    [switch]$NoPush,
     [switch]$WaitForIdle,
     [switch]$DryRun,
     [switch]$SelfTest,
@@ -75,6 +86,8 @@ $model = 'claude-opus-5-5'
 $effort = 'max'
 # Models whose weekly limit is used up, with when to try them again; their rows run on $FallbackModel.
 $script:exhaustedUntil = @{}
+# Set when a push needs the owner (a public repository, or commits on origin that the branch lacks).
+$script:pushStop = $false
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $gateSign = [char]::ConvertFromUtf32(0x1F6A6)
 [IO.Directory]::CreateDirectory($logDir) | Out-Null
@@ -150,18 +163,27 @@ Traps on this laptop (your memory notes have more):
   on the day boundary: start it after 01:00 or rerun those two alone. The known flakes
   (the rate-limit test, the Redis-outage SignalR test, the Step3Renewal double tap) pass
   when rerun alone.
-- The live specs in src/web/e2e/live run against a fresh demo copy, never against the
-  owner's own API (port 5134), web (port 4200) or the tbgym database, which holds the
-  owner's accounts.
+- The live specs in src/web/e2e/live and your live pass run against a fresh demo in a
+  throwaway database of your own (ConnectionStrings__Database pointed at it), never
+  against the owner's own API (port 5134), web (port 4200) or the tbgym and tbgym_demo
+  databases. Never drop a database you did not create; name yours in your report.
 
-The owner's decisions for this run (2026-10-27):
+The owner's decisions for this run (2026-10-27, and 2026-10-29 for running unattended):
 - The owner chose every row's content on a decision page of sketches, so rows are built
   without another preview round: the owner judges the screenshots afterwards. The row's
   third column is the owner's word; an item it leaves out is not built.
-- A question the row and the docs do not settle: a technical one is yours (AGENTS.md).
-  A business question, a new money rule or legal wording is not delegated: leave that
-  item out, write it with your recommendation into the row's status and your report,
-  and build the rest of the row.
+- Never stop the run for a decision: the owner answers section 3 of the plan later.
+  A technical question is yours (AGENTS.md). A product choice the row and the docs do
+  not settle (words, layout, a default, an edge case): build the way closest to the
+  owner's earlier choices and the row's spec, and add a line to section 3, "Waiting for
+  the owner" (the row, the question, what you built, the other way, your
+  recommendation). A new money rule, legal wording or work outside the row: leave that
+  item out, add it to section 3 with your recommendation, and build the rest of the
+  row. The row's status says how many lines you added to section 3.
+- The full backend suite runs on this laptop before you commit whenever you changed
+  server code: scripts/TestPostgres.ps1 with a container name of your own, about 35
+  minutes with Docker. A failure an earlier row left is fixed first, in its own commit,
+  and named in your report.
 - A row too big to finish well in one chat: split it into parts (B5a1, B5a2), each with
   its scope, build and commit the first, and leave the others Open for the next chat.
 - Where a row changes a rule, update DOMAIN-RULES, the ADR or ARCHITECTURE in a few
@@ -175,8 +197,8 @@ $sharedRules = @'
   when web code changed, git diff --check, and a live pass of every new or changed screen),
   commit the step on the current branch, then record the hash in its status row in a
   second small commit, in the form section 0 uses. Stage only the files this step changed,
-  by explicit path. No co-author or "Generated with" lines. Never push, never create or
-  switch branches, never amend, rebase or reset commits.
+  by explicit path. No co-author or "Generated with" lines. Never push (<<PUSH>>),
+  never create or switch branches, never amend, rebase or reset commits.
 - If a check fails and you cannot fix it inside the step, do not commit. Set the row to
   "Built, not committed" with one line on what failed, and stop.
 
@@ -194,11 +216,15 @@ How an unattended run works:
   RUNNER-RESULT: done <<ROW>> <commit hash>
   RUNNER-RESULT: stopped <one-line reason>
 '@
-$stepPrompt = $planPrompts[$Plan] + "`n" + $sharedRules
+$pushNote = 'the runner pushes the branch once your step ends Done, and CI runs again there'
+if ($NoPush) { $pushNote = 'the owner pushes' }
+$stepPrompt = ($planPrompts[$Plan] + "`n" + $sharedRules).Replace('<<PUSH>>', $pushNote)
 
 $resumePrompt = 'The run stopped ({0}). Carry on with step {1} from where you stopped. The unattended-run rules in the first message still apply.'
 # For -ResumeSession: hours may have passed since the chat stopped, and its runner has exited.
 $stoppedResumePrompt = 'A usage limit stopped this chat and ended that run of the runner. The limit has reset and a new run resumes you now, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
+# After -OnWeeklyLimit wait: the same run waited, possibly for days, while the chat was stopped.
+$weeklyResumePrompt = 'A weekly usage limit stopped this chat, and the runner waited for it to reset, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
 
 function Write-Note([string]$Message) {
     $line = '{0:yyyy-MM-dd HH:mm}  {1}' -f (Get-Date), $Message
@@ -298,7 +324,7 @@ function Get-NextRow {
 }
 
 function Get-RowProblem($Row) {
-    if ($null -eq $Row) { return 'every row of the plan is Done' }
+    if ($null -eq $Row) { return 'no row is left to build: every row is Done or waits for the owner' }
     if ($Row.Gate) { return ('{0} is a gate: it needs the owner' -f $Row.Id) }
     if ($Row.Status -like 'Optional*') { return ('{0} is Optional: it needs the owner''s go' -f $Row.Id) }
     if ($Row.Status -notlike 'Open*') { return ('{0} is not Open: "{1}"' -f $Row.Id, (Get-ShortText $Row.Status 160)) }
@@ -517,15 +543,22 @@ function Test-Retryable($Run) {
     return (Get-ResultText $Run) -match '(?i)usage limit|limit reached|hit your limit|resets|overloaded|rate.?limit|\b(429|500|502|503|504|529)\b|timed? ?out|ECONN'
 }
 
+# The epoch second the chat's usage window resets, when its last rate-limit event or result says.
+function Get-ResetEpoch($Run) {
+    if ((Get-Field $Run.RateLimit 'status') -eq 'rejected') {
+        $resetsAt = Get-Field $Run.RateLimit 'resetsAt'
+        if ($resetsAt) { return [long]$resetsAt }
+    }
+    # Some limit messages carry the reset time themselves, as "...limit reached|<epoch seconds>".
+    if ((Get-ResultText $Run) -match '\|(\d{10})\b') { return [long]$Matches[1] }
+}
+
 # Seconds until the usage window named in the chat's last rate-limit event resets, or 30
 # minutes when it named none.
 function Get-ResumeDelay($Run) {
-    $resetsAt = $null
-    if ((Get-Field $Run.RateLimit 'status') -eq 'rejected') { $resetsAt = Get-Field $Run.RateLimit 'resetsAt' }
-    # Some limit messages carry the reset time themselves, as "...limit reached|<epoch seconds>".
-    if (-not $resetsAt -and (Get-ResultText $Run) -match '\|(\d{10})\b') { $resetsAt = $Matches[1] }
+    $resetsAt = Get-ResetEpoch $Run
     if ($resetsAt) {
-        $seconds = ([DateTimeOffset]::FromUnixTimeSeconds([long]$resetsAt) - [DateTimeOffset]::UtcNow).TotalSeconds + 120
+        $seconds = ([DateTimeOffset]::FromUnixTimeSeconds($resetsAt) - [DateTimeOffset]::UtcNow).TotalSeconds + 120
         if ($seconds -gt 60) { return [int]$seconds }
     }
     return 1800
@@ -549,6 +582,76 @@ function Get-UsageText($Run) {
     return (@($parts) -join ', ')
 }
 
+# Sleeps in steps of a minute at most; false as soon as the STOP file appears.
+function Wait-UnlessStopped([int]$Seconds) {
+    $until = (Get-Date).AddSeconds($Seconds)
+    while ((Get-Date) -lt $until) {
+        if (Test-Path $stopFile) { return $false }
+        $left = [int][Math]::Ceiling(($until - (Get-Date)).TotalSeconds)
+        Start-Sleep -Seconds ([Math]::Max(1, [Math]::Min(60, $left)))
+    }
+    return $true
+}
+
+# owner/name of origin on GitHub; nothing for another host.
+function Get-GitHubRepository {
+    $url = @(Invoke-Git remote get-url origin)[0]
+    if ($url -match 'github\.com[:/]+([^/]+/[^/]+?)(?:\.git)?/?$') { return $Matches[1] }
+}
+
+# $true while GitHub hides the repository from the signed-out (404), $false when anyone can read
+# it, $null when GitHub could not be asked.
+function Test-RepositoryPrivate([string]$Repository) {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri ('https://api.github.com/repos/{0}' -f $Repository) -UseBasicParsing -TimeoutSec 30 `
+            -Headers @{ 'User-Agent' = 'tb-gym-plan-runner' } | Out-Null
+        return $false
+    }
+    catch {
+        $response = $null
+        if ($_.Exception.PSObject.Properties['Response']) { $response = $_.Exception.Response }
+        if ($response -and [int]$response.StatusCode -eq 404) { return $true }
+        return $null
+    }
+}
+
+# Pushes the branch after a step ended Done (the owner, 2026-10-29). A public repository or
+# commits on origin the branch lacks stop the run for the owner; a passing failure (no network)
+# is noted and the next step's push carries this one's commits too.
+function Invoke-Push {
+    $branch = @(Invoke-Git rev-parse --abbrev-ref HEAD)[0]
+    $repository = Get-GitHubRepository
+    if (-not $repository) { return @{ Text = 'not pushed: origin is not on GitHub'; Stop = $true } }
+    $private = Test-RepositoryPrivate $repository
+    if ($private -eq $false) {
+        return @{ Text = ('not pushed: github.com/{0} is public, and the plan and critique stay private' -f $repository); Stop = $true }
+    }
+    if ($null -eq $private) {
+        return @{ Text = ('not pushed: GitHub did not say whether github.com/{0} is private; the next push tries again' -f $repository); Stop = $false }
+    }
+    # A credential prompt would hang an unattended run: fail instead.
+    $saved = @{ GCM_INTERACTIVE = $env:GCM_INTERACTIVE; GIT_TERMINAL_PROMPT = $env:GIT_TERMINAL_PROMPT }
+    $env:GCM_INTERACTIVE = 'never'
+    $env:GIT_TERMINAL_PROMPT = '0'
+    try {
+        try { Invoke-Git fetch --quiet origin $branch | Out-Null }
+        catch { return @{ Text = ('not pushed: fetching origin failed ({0}); the next push tries again' -f $_.Exception.Message); Stop = $false } }
+        $behind = 0
+        try { $behind = [int]@(Invoke-Git rev-list --count ('HEAD..origin/{0}' -f $branch))[0] } catch { }
+        if ($behind -gt 0) {
+            return @{ Text = ('not pushed: origin/{0} has {1} commits this branch lacks; merge them, then start the runner again' -f $branch, $behind); Stop = $true }
+        }
+        try { Invoke-Git push --quiet origin ('HEAD:refs/heads/{0}' -f $branch) | Out-Null }
+        catch { return @{ Text = ('not pushed: git push failed ({0}); the next push tries again' -f $_.Exception.Message); Stop = $false } }
+        return @{ Text = ('pushed {0} to github.com/{1} at {2}' -f $branch, $repository, @(Invoke-Git rev-parse --short HEAD)[0]); Stop = $false }
+    }
+    finally {
+        $env:GCM_INTERACTIVE = $saved.GCM_INTERACTIVE
+        $env:GIT_TERMINAL_PROMPT = $saved.GIT_TERMINAL_PROMPT
+    }
+}
+
 function Invoke-Step($Row, [string]$ResumeId = '') {
     $started = Get-Date
     $name = 'Plan runner ' + $Row.Id
@@ -568,6 +671,7 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
     $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ChatModel $stepModel -ResumeId $ResumeId
     $fallbackNotes = New-Object System.Collections.Generic.List[string]
     $waits = 0
+    $weeklyGiveUp = $null
     while ((Test-Retryable $run) -and $waits -lt $MaxLimitWaits -and -not (Test-Path $stopFile)) {
         $waits++
         $reason = Get-ShortText (Get-ResultText $run) 200
@@ -588,11 +692,27 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
                 $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ResumeId $run.SessionId -ChatModel $stepModel
                 continue
             }
+            if ($OnWeeklyLimit -eq 'wait') {
+                # Not counted in -MaxLimitWaits. Without a reset time, look again every hour; eight
+                # days at most, so an error misread as a weekly limit cannot hold the run for ever.
+                $waits--
+                if (-not (Get-ResetEpoch $run)) { $delay = 3600 }
+                if (-not $weeklyGiveUp) { $weeklyGiveUp = (Get-Date).AddDays(8) }
+                if ((Get-Date).AddSeconds($delay) -gt $weeklyGiveUp) {
+                    $run.Stopped = 'the weekly limit of {0} did not reset within 8 days' -f $stepModel
+                    break
+                }
+                Write-Note ('{0} hit a weekly limit ("{1}"). Waiting for its reset; the chat resumes at {2:ddd HH:mm}.' -f $stepModel, $reason, (Get-Date).AddSeconds($delay))
+                if (-not (Wait-UnlessStopped $delay)) { $run.Stopped = 'the STOP file ended the wait for the weekly limit'; break }
+                if ($run.SessionId) { $prompt = $weeklyResumePrompt -f $Row.Id }
+                $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ResumeId $run.SessionId -ChatModel $stepModel
+                continue
+            }
             $run.Stopped = 'the usage limit of {0} resets {1}, more than 12 hours away' -f $stepModel, $resetText
             break
         }
         Write-Note ('The chat stopped on "{0}". Resuming it at {1:HH:mm} ({2} of {3}).' -f $reason, (Get-Date).AddSeconds($delay), $waits, $MaxLimitWaits)
-        Start-Sleep -Seconds $delay
+        if (-not (Wait-UnlessStopped $delay)) { $run.Stopped = 'the STOP file ended the wait for the usage limit'; break }
         $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ResumeId $run.SessionId -ChatModel $stepModel
     }
 
@@ -629,6 +749,14 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
     $ok = $problems.Count -eq 0
     $outcome = 'stopped'
     if ($ok) { $outcome = 'done' }
+    $pushText = ''
+    $script:pushStop = $false
+    if ($ok -and -not $NoPush) {
+        $push = Invoke-Push
+        $pushText = $push.Text
+        $script:pushStop = $push.Stop
+        Write-Note ('{0}: {1}' -f $Row.Id, $pushText)
+    }
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add(('## {0}: {1}' -f $Row.Id, $outcome))
     $lines.Add(('- {0:yyyy-MM-dd HH:mm} to {1:HH:mm}, chat "{2}", session {3}, model {4}' -f $started, (Get-Date), $name, $run.SessionId, $run.Model))
@@ -636,6 +764,7 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
     if ($billed) { $lines.Add('- Models used: ' + (($billed.PSObject.Properties | ForEach-Object { $_.Name }) -join ', ')) }
     foreach ($note in $fallbackNotes) { $lines.Add('- Fallback: ' + $note) }
     foreach ($commit in $commits) { $lines.Add('- Commit: ' + $commit) }
+    if ($pushText) { $lines.Add('- Push: ' + $pushText) }
     foreach ($problem in $problems) { $lines.Add('- Problem: ' + $problem) }
     if ($newUntracked.Count -gt 0) { $lines.Add('- New untracked files: ' + ($newUntracked -join ', ')) }
     if ($marker) { $lines.Add('- The chat says: ' + $marker) }
@@ -681,10 +810,28 @@ function Get-CutoffText {
     return ''
 }
 
+function Get-RunRulesText {
+    $weekly = 'a weekly limit no other model takes over is waited out'
+    if ($OnWeeklyLimit -eq 'stop') { $weekly = 'a weekly limit no other model takes over stops the run' }
+    $push = 'the runner pushes after each step that ends Done'
+    if ($NoPush) { $push = 'nothing is pushed (-NoPush)' }
+    return ('{0}; {1}' -f $push, $weekly)
+}
+
 function Show-DryRun {
     Write-Note ('Claude: {0}' -f (Get-ClaudeExe))
     Write-Note ('Plan: {0} ({1}){2}.' -f $Plan, $planFiles[$Plan], (Get-CutoffText))
     Write-Note ('Each chat: --effort {0} ({1}), bypassPermissions, git push denied, at most {2} hours.' -f $effort, (Get-RowModelText), $StepHours)
+    Write-Note ('Runner: {0}.' -f (Get-RunRulesText))
+    if (-not $NoPush) {
+        $repository = Get-GitHubRepository
+        $private = $null
+        if ($repository) { $private = Test-RepositoryPrivate $repository }
+        $state = 'GitHub did not answer'
+        if ($private -eq $true) { $state = 'private, so pushes go ahead' }
+        elseif ($private -eq $false) { $state = 'PUBLIC, so the runner would refuse to push' }
+        Write-Note ('Push target: github.com/{0}, {1}.' -f $repository, $state)
+    }
     foreach ($note in @(Get-EnvironmentNotes)) { Write-Note ('Note: ' + $note) }
     foreach ($chat in @(Get-RecentChats)) {
         Write-Note ('Active in the last {0} min: "{1}" ({2}), {3} min ago' -f $IdleMinutes, $chat.Title, $chat.Id, $chat.Minutes)
@@ -714,7 +861,7 @@ if ($DryRun) {
 
 Enter-RunnerLock
 try {
-    Write-Note ('Runner started on the {0} plan: up to {1} steps{2}, each a new chat at {3} effort ({4}).' -f $Plan, $MaxSteps, (Get-CutoffText), $effort, (Get-RowModelText))
+    Write-Note ('Runner started on the {0} plan: up to {1} steps{2}, each a new chat at {3} effort ({4}); {5}.' -f $Plan, $MaxSteps, (Get-CutoffText), $effort, (Get-RowModelText), (Get-RunRulesText))
     foreach ($note in @(Get-EnvironmentNotes)) { Write-Note ('Note: ' + $note) }
     $steps = 0
     $lastBlocker = ''
@@ -741,7 +888,13 @@ try {
         if ($steps -ge $MaxSteps) { Write-Note ('Stopping after {0} steps (-MaxSteps). Next is {1}.' -f $steps, $row.Id); break }
         if ($stepCutoff -and (Get-Date) -gt $stepCutoff) { Write-Note ('Stopping: it is past {0:HH:mm} (-NoNewStepAfter). Next is {1}.' -f $stepCutoff, $row.Id); break }
         $steps++
-        if (-not (Invoke-Step $row $resumeId)) { Write-Note ('Stopped. Read {0}' -f $summaryPath); break }
+        if (-not (Invoke-Step $row $resumeId)) {
+            # A STOP file that ended a wait inside the step has done its job.
+            if (Test-Path $stopFile) { Remove-Item $stopFile }
+            Write-Note ('Stopped. Read {0}' -f $summaryPath)
+            break
+        }
+        if ($script:pushStop) { Write-Note ('Stopped before the next step: the push needs the owner. Read {0}' -f $summaryPath); break }
     }
 }
 finally {
