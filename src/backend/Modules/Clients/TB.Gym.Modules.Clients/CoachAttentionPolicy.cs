@@ -26,6 +26,12 @@ public static class CoachAttentionPolicy
     /// <summary>A renewal request stays in the queue this many days while the plan is still ended.</summary>
     public const int RenewalRequestDays = 30;
 
+    /// <summary>
+    /// A plan whose last day falls within this many days, today counted, ran out lately: Today lists it under Ended,
+    /// not renewed (CLI-020, critique B4b). A last day 29 days ago is listed, one 30 days ago is not.
+    /// </summary>
+    public const int PlanEndedWithinDays = 30;
+
     /// <summary>A client who joined within this many days is new.</summary>
     public const int NewClientDays = 14;
 
@@ -191,6 +197,24 @@ public static class CoachAttentionPolicy
     }
 
     public static bool IsNew(DateOnly joinedOn, DateOnly today) => joinedOn > today.AddDays(-NewClientDays);
+
+    /// <summary>The earliest last day of a plan that ran out lately (<see cref="PlanEndedWithinDays"/>).</summary>
+    public static DateOnly EndedLatelyFrom(DateOnly today) => today.AddDays(1 - PlanEndedWithinDays);
+
+    /// <summary>Whether a plan whose last covered day was <paramref name="lastDay"/> has run out, lately.</summary>
+    public static bool EndedLately(DateOnly lastDay, DateOnly today) =>
+        lastDay < today && lastDay >= EndedLatelyFrom(today);
+
+    /// <summary>
+    /// Whether the client's whole plan has lapsed (critique B4b): something ran out or waits for payment, and
+    /// nothing else runs, is paused, is paid and still to come, was cancelled or is blocked. Every feature's
+    /// decision is Expired, NoEntitlement or PaymentRequired: SUB-014's ended plan, or one whose next plan is
+    /// booked but not paid (SUB-008), which covers nothing until it is.
+    /// </summary>
+    public static bool IsLapsed(IReadOnlyCollection<FeatureAccessDecision> decisions) =>
+        decisions.Any(decision => decision.Reason is FeatureAccessReason.Expired or FeatureAccessReason.PaymentRequired) &&
+        decisions.All(decision => decision.Reason is
+            FeatureAccessReason.Expired or FeatureAccessReason.PaymentRequired or FeatureAccessReason.NoEntitlement);
 
     /// <summary>
     /// Most urgent kind first; within a kind, more missed sessions first, then whatever has waited

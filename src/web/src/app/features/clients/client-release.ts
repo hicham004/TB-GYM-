@@ -19,12 +19,19 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { Button } from '../../ui/button';
+import { Button, type ButtonVariant } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 
+/** What ending a client's coaching needs: who, and the version of their record the owner saw. */
+export type ReleasableClient = Pick<
+  CoachClientDetails,
+  'id' | 'firstName' | 'lastName' | 'version'
+>;
+
 /**
- * The owner's action to release a client from the workspace (ADR 0027).
+ * The owner's action to release a client from the workspace (ADR 0027), on Service & access and on
+ * Coach Today's Ended, not renewed (critique B4b).
  *
  * Confirmed in a dialog that says exactly what happens, with a required reason: a press without one
  * says so under the box and puts the cursor there (audit COACH-15). Nothing is sent until "End coaching
@@ -49,7 +56,11 @@ export class ClientRelease {
   private readonly summary = viewChild.required(FormSummary);
   private readonly injector = inject(Injector);
 
-  readonly client = input.required<CoachClientDetails>();
+  readonly client = input.required<ReleasableClient>();
+  /** The button's weight: quieter beside a row's main action, as on Today. */
+  readonly variant = input<ButtonVariant>('outlined');
+  /** Read after "End coaching" by screen readers where several clients' buttons share a screen. */
+  readonly forWhom = input<string | null>(null);
   readonly released = output<CoachClientDetails>();
 
   /** This server sends no email (audit LOST-1), so the dialog must not promise the goodbye email. */

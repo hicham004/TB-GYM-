@@ -4,18 +4,25 @@ import type {
   CoachActivityKind,
   CoachAttentionItemView,
   CoachAttentionKind,
+  CoachClientCountView,
   CoachClientRef,
   CoachMaxSuggestionView,
+  CoachMoneyReceivedView,
+  CoachMonthView,
+  CoachPlanEndedView,
+  CoachPlanEndingView,
   CoachTodayView,
 } from '../../core/api/generated';
 import { nearestLoadStep } from '../../core/units/load-steps';
 import { initialsOf } from '../../shell/initials';
+import { money } from '../clients/client-service.models';
 
 /**
- * Coach Today (C1) in coach words: the server's queue, feed and week (CLI-018) turned into rows a
- * template can draw. Ranking, gating and counting stay on the server; this only phrases them.
- * Workspace dates ("today", "tomorrow") are measured against the date the server sent, never the
- * browser's, and only elapsed time ("2 hours ago") uses the device clock.
+ * Coach Today (C1) in coach words: the server's queue, This month, the plans ending soon or ended
+ * and the feed (CLI-018, CLI-020) turned into rows a template can draw. Ranking, gating, counting
+ * and money stay on the server; this only phrases them, and never adds amounts. Workspace dates
+ * ("today", "tomorrow") are measured against the date the server sent, never the browser's, and
+ * only elapsed time ("2 hours ago") uses the device clock.
  */
 
 export type AttentionTone = 'review' | 'message' | 'renew' | 'ending' | 'share' | 'missed' | 'new';
@@ -62,17 +69,67 @@ export interface ActivityRow {
   link: string;
 }
 
-export interface WeekBar {
-  date: string;
-  label: string;
-  longLabel: string;
-  scheduled: number;
-  completed: number;
-  isToday: boolean;
-  isFuture: boolean;
-  /** Bar height against the busiest day, and the done share of that bar, both in percent. */
-  height: number;
-  done: number;
+/** Money received in one currency (SUB-016): one line each, never added to another currency. */
+export interface MoneyLine {
+  currency: string;
+  /** "USD 2,340", "USD 82.50": exact, the code first, as every amount in the app reads. */
+  amount: string;
+  /** How many payments made it up, part payments included: "7 payments". */
+  payments: string;
+}
+
+/** One member of the owner's team on This month, with their clients. */
+export interface StaffRow {
+  key: string;
+  /** "You" for the caller, else the member's name. */
+  name: string;
+  initials: string;
+  /** "4 of 5 clients active", or "No clients yet". */
+  clients: string;
+}
+
+/** This month (critique B4b, CLI-020), counted by the server for the workspace's calendar month. */
+export interface CoachMonth {
+  /** The month's name, "October". */
+  name: string;
+  /** Empty when nothing has arrived yet this month. */
+  money: MoneyLine[];
+  /** Whose money it is: a coach's own clients', the whole coaching space's for the owner. */
+  moneyFrom: string;
+  /** "9 of 12 clients": the clients whose plan runs today, out of every current client. */
+  active: string;
+  /** The owner's team, the owner first as "You"; null for a coach, who never sees it. */
+  staff: StaffRow[] | null;
+}
+
+/** What ending a client's coaching asks for (ADR 0027): who, and the version the owner saw. */
+export interface ReleaseTarget {
+  id: string;
+  firstName: string;
+  lastName: string;
+  version: number;
+  /** Read after "End coaching" by screen readers: "with Elie Azar". */
+  forWhom: string;
+}
+
+/** A plan ending soon, or one that ran out lately and was not renewed (critique B4b). */
+export interface PlanRow {
+  key: string;
+  clientId: string;
+  name: string;
+  initials: string;
+  /** The client's coach, shown to an Owner for a team member's client; null for the caller's own. */
+  coach: string | null;
+  /** The plan's name as it was sold, in the coach's own words; empty when it has none. */
+  plan: string;
+  /** When it ends or ended, then anything else to know: "Ended Sun 27 Sep · Asked to renew on …". */
+  detail: string;
+  /** Renew, or Record payment for a plan booked after it and still unpaid (BEB-7). */
+  action: CoachAction;
+  /** Message, only on a plan ending soon and only when the caller may message the client (CLI-013). */
+  message: CoachAction | null;
+  /** End coaching, on an ended plan and for the owner alone, who alone receives the version. */
+  release: ReleaseTarget | null;
 }
 
 export interface CoachToday {
@@ -82,17 +139,13 @@ export interface CoachToday {
   clientCount: number;
   /** Distinct clients with anything in the queue. */
   needsCount: number;
-  plansEndingSoon: number;
-  renewalRequests: number;
   attention: AttentionRow[];
+  month: CoachMonth;
+  /** The soonest end first, as the server ordered them. */
+  plansEnding: PlanRow[];
+  /** The latest end first, as the server ordered them. */
+  plansEnded: PlanRow[];
   activity: ActivityRow[];
-  week: {
-    from: string;
-    scheduled: number;
-    completed: number;
-    dueSoFar: number;
-    bars: WeekBar[];
-  };
 }
 
 export interface CoachTodayContext {
@@ -108,25 +161,187 @@ const NEW_CLIENT_DAYS = 14;
 
 export function mapCoachToday(view: CoachTodayView, context: CoachTodayContext): CoachToday {
   const attention = view.attention.map((item) => attentionRow(item, view.today, context));
-  const bars = weekBars(view, context.locale);
+  const clientCount = Number(view.clientCount);
   return {
     today: view.today,
     dateLabel: formatDate(view.today, 'EEEE d MMMM', context.locale),
     partOfDay: partOfDay(context.now, view.timeZoneId),
-    clientCount: Number(view.clientCount),
+    clientCount,
     needsCount: new Set(attention.map((row) => row.clientId)).size,
-    plansEndingSoon: Number(view.plansEndingSoonCount),
-    renewalRequests: Number(view.renewalRequestCount),
     attention,
+    month: thisMonth(view.month, clientCount, context.locale),
+    plansEnding: view.plansEndingSoon.map((item) => planEndingRow(item, view.today, context)),
+    plansEnded: view.plansEndedNotRenewed.map((item) => planEndedRow(item, view.today, context)),
     activity: view.activity.map((item) => activityRow(item, context)),
-    week: {
-      from: view.week.from,
-      scheduled: Number(view.week.scheduled),
-      completed: Number(view.week.completed),
-      dueSoFar: bars.filter((bar) => !bar.isFuture).reduce((sum, bar) => sum + bar.scheduled, 0),
-      bars,
-    },
   };
+}
+
+/**
+ * This month in words (SUB-016, CLI-020). Each currency keeps its own line with the server's exact
+ * total, never added to another; only the owner's answer carries the team, so it also says whose
+ * money the lines are.
+ */
+export function thisMonth(month: CoachMonthView, clientCount: number, locale: string): CoachMonth {
+  const owner = month.coaches !== null;
+  return {
+    name: formatDate(month.from, 'MMMM', locale),
+    money: month.moneyReceived.map((total) => moneyLine(total, locale)),
+    moneyFrom: owner
+      ? $localize`Received by your coaching space`
+      : $localize`Received from your clients`,
+    active: activeClients(Number(month.activeClientCount), clientCount),
+    staff: month.coaches?.map((member) => staffRow(member)) ?? null,
+  };
+}
+
+export function moneyLine(total: CoachMoneyReceivedView, locale: string): MoneyLine {
+  const payments = Number(total.paymentCount);
+  return {
+    currency: total.currency,
+    amount: money(Number(total.amount), total.currency, locale),
+    payments: payments === 1 ? $localize`1 payment` : $localize`${payments}:count: payments`,
+  };
+}
+
+/** "9 of 12 clients": active is a plan running today, out of every current client (CLI-020). */
+export function activeClients(active: number, total: number): string {
+  return total === 1
+    ? $localize`${active}:active: of 1 client`
+    : $localize`${active}:active: of ${total}:total: clients`;
+}
+
+function staffRow(member: CoachClientCountView): StaffRow {
+  const active = Number(member.activeClientCount);
+  const total = Number(member.clientCount);
+  return {
+    key: member.coachUserId,
+    name: member.isYou ? $localize`You` : member.name,
+    initials: initialsOf(member.name),
+    clients:
+      total === 0
+        ? $localize`No clients yet`
+        : total === 1
+          ? $localize`${active}:active: of 1 client active`
+          : $localize`${active}:active: of ${total}:total: clients active`,
+  };
+}
+
+/**
+ * A plan ending soon (CLI-018's flag): its last paid day, Renew, or Record payment for a renewal
+ * booked and still unpaid (BEB-7), and Message only when the caller may message the client.
+ */
+export function planEndingRow(
+  item: CoachPlanEndingView,
+  today: string,
+  context: CoachTodayContext,
+): PlanRow {
+  const date = shortDay(item.lastDay, context.locale);
+  const inDays = daysBetween(today, item.lastDay);
+  const name = fullName(item.client);
+  return {
+    ...planBase(item.client, item.planName, context),
+    detail: item.unpaidRenewalId
+      ? $localize`Paid until ${date}:date: · The renewal isn’t paid yet`
+      : inDays <= 0
+        ? $localize`Ends today`
+        : inDays === 1
+          ? $localize`Ends tomorrow`
+          : $localize`Ends ${date}:date:`,
+    action: renewOrPay(item.client, item.enrollmentId, item.unpaidRenewalId),
+    message: item.canMessage
+      ? {
+          label: $localize`Message`,
+          forWhom: name,
+          link: '/messages',
+          queryParams: item.chatId ? { conversation: item.chatId } : null,
+          // No chat yet: the button starts it, as the client page's Message does.
+          startsChatWith: item.chatId ? null : item.client.clientProfileId,
+        }
+      : null,
+    release: null,
+  };
+}
+
+/**
+ * A plan that ran out in the last 30 days with nothing after it (CLI-020): the day it ended, a plan
+ * booked after it and unpaid, the client's ask to renew, and, for the owner alone, End coaching.
+ */
+export function planEndedRow(
+  item: CoachPlanEndedView,
+  today: string,
+  context: CoachTodayContext,
+): PlanRow {
+  const notes = [
+    -daysBetween(today, item.lastDay) === 1
+      ? $localize`Ended yesterday`
+      : $localize`Ended ${shortDay(item.lastDay, context.locale)}:date:`,
+  ];
+  if (item.unpaidRenewalId) notes.push($localize`The next plan isn’t paid yet`);
+  if (item.renewalRequestedOn) {
+    notes.push(
+      $localize`Asked to renew on ${shortDay(item.renewalRequestedOn, context.locale)}:date:`,
+    );
+  }
+  const base = planBase(item.client, item.planName, context);
+  const version = item.clientVersion;
+  return {
+    ...base,
+    detail: notes.join(' · '),
+    action: renewOrPay(item.client, item.enrollmentId, item.unpaidRenewalId),
+    message: null,
+    release:
+      version === null || version === undefined
+        ? null
+        : {
+            id: item.client.clientProfileId,
+            firstName: item.client.firstName,
+            lastName: item.client.lastName,
+            version: Number(version),
+            forWhom: $localize`with ${base.name}:name:`,
+          },
+  };
+}
+
+function planBase(client: CoachClientRef, plan: string, context: CoachTodayContext) {
+  const name = fullName(client);
+  return {
+    key: client.clientProfileId,
+    clientId: client.clientProfileId,
+    name,
+    initials: initialsOf(name),
+    coach: coachOf(client, context),
+    plan: plan.trim(),
+  };
+}
+
+/**
+ * Renew opens the client's renew sheet; a plan booked after this one and still unpaid covers
+ * nothing until it is paid (SUB-008), so its payment is recorded instead of a second renewal.
+ */
+function renewOrPay(
+  client: CoachClientRef,
+  enrollmentId: string,
+  unpaidPlanId: string | null,
+): CoachAction {
+  const name = fullName(client);
+  return {
+    label: unpaidPlanId ? $localize`Record payment` : $localize`Renew`,
+    forWhom: $localize`for ${name}:name:`,
+    link: `/clients/${client.clientProfileId}/service`,
+    queryParams: unpaidPlanId ? { pay: unpaidPlanId } : { renew: enrollmentId },
+    startsChatWith: null,
+  };
+}
+
+/** The client's coach, named to an Owner on a team member's client (ADR 0026). */
+function coachOf(client: CoachClientRef, context: CoachTodayContext): string | null {
+  return context.userId !== null && client.assignedCoachUserId !== context.userId
+    ? client.assignedCoachName
+    : null;
+}
+
+function shortDay(date: string, locale: string): string {
+  return formatDate(date, 'EEE d MMM', locale);
 }
 
 export function attentionRow(
@@ -145,10 +360,7 @@ export function attentionRow(
     clientId: client.clientProfileId,
     name,
     initials: initialsOf(name),
-    coach:
-      context.userId !== null && client.assignedCoachUserId !== context.userId
-        ? client.assignedCoachName
-        : null,
+    coach: coachOf(client, context),
   };
   const forWhom = $localize`for ${name}:name:`;
   // Where the item is handled, which the Clients table's tag for it opens too.
@@ -471,27 +683,6 @@ export function activityRow(item: CoachActivityItemView, context: CoachTodayCont
     // The feed names one check-in, so it opens that check-in's review.
     link: item.subjectId ? `${clientPage}/checkins/${item.subjectId}` : `${clientPage}/checkins`,
   };
-}
-
-function weekBars(view: CoachTodayView, locale: string): WeekBar[] {
-  const days = view.week.days.map((day) => ({
-    date: day.date,
-    scheduled: Number(day.scheduled),
-    completed: Number(day.completed),
-  }));
-  const busiest = Math.max(1, ...days.map((day) => day.scheduled));
-  return days.map((day) => ({
-    ...day,
-    label: formatDate(day.date, 'EEE', locale),
-    longLabel: formatDate(day.date, 'EEEE d MMMM', locale),
-    isToday: day.date === view.today,
-    isFuture: day.date > view.today,
-    height: Math.round((100 * day.scheduled) / busiest),
-    done:
-      day.scheduled > 0
-        ? Math.round((100 * Math.min(day.completed, day.scheduled)) / day.scheduled)
-        : 0,
-  }));
 }
 
 /** When a new client joined, beside "no plan yet": "Today · no plan yet", "Mon 12 Oct · no plan yet". */

@@ -1,0 +1,213 @@
+// This month and the two plan lists (critique B4b): numbers that say what they count, and one row
+// per client with what to do about their plan.
+.panel-head .count {
+  background: var(--tb-surface-2);
+  border-radius: 999px;
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding: 0.125rem 0.5625rem;
+}
+
+// Focused after a release takes a row away, so a screen reader stays in the section.
+.panel-head h2:focus {
+  outline: none;
+}
+
+// ---------- This month ----------
+
+.month {
+  container-type: inline-size;
+}
+
+.month-parts {
+  display: grid;
+}
+
+@container (min-width: 40rem) {
+  .month-parts {
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  }
+}
+
+.month-part {
+  border-block-start: 1px solid var(--tb-line);
+  min-inline-size: 0;
+  padding: 0.875rem 1.25rem 1rem;
+}
+
+.month-label {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.month-label:lang(ar) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.money,
+.staff {
+  display: grid;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.money {
+  gap: 0.25rem;
+}
+
+.money-line {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.625rem;
+}
+
+.money-amount,
+.month-value {
+  color: var(--tb-ink);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.month-value {
+  margin: 0.5rem 0 0;
+}
+
+.money-count,
+.month-note,
+.staff-clients {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+}
+
+.month-note {
+  margin: 0.25rem 0 0;
+}
+
+.month-empty {
+  color: var(--tb-ink);
+  font-weight: 600;
+  margin: 0.5rem 0 0;
+}
+
+.staff {
+  gap: 0.625rem;
+}
+
+.staff-row {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.staff-copy {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.staff-name {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+// ---------- plans ending soon, and ended without a renewal ----------
+
+.plan-list {
+  container-type: inline-size;
+}
+
+.plan-row {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: grid;
+  gap: 0.5rem 0.875rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.75rem 1.25rem;
+}
+
+.plan-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  grid-column: 2;
+}
+
+// Wide enough, the actions sit at the row's end, as Needs you's do.
+@container (min-width: 34rem) {
+  .plan-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .plan-actions {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+}
+
+.plan-name {
+  color: var(--tb-ink);
+  font-size: 0.90625rem;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-coach {
+  color: var(--tb-muted);
+  font-weight: 400;
+}
+
+.plan-detail {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  margin: 0.125rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-title {
+  color: var(--tb-ink);
+}
+
+.list-empty {
+  border-block-start: 1px solid var(--tb-line);
+  color: var(--tb-muted);
+  font-size: 0.84375rem;
+  margin: 0;
+  padding: 1.25rem;
+}
+
+// ---------- the feed folded on a phone ----------
+
+// The fold's body already pads and draws the line under its row.
+.feed-fold .event {
+  padding-inline: 0;
+}
+
+.feed-fold .event:first-child {
+  border-block-start: 0;
+  padding-block-start: 0;
+}
+
+.feed-fold .feed-toggle {
+  margin-inline: 0;
+}
+
+.feed-fold .feed-empty {
+  border-block-start: 0;
+  padding: 0;
+}

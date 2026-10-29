@@ -1,7 +1,8 @@
 # ADR 0026: Coach team and client assignment
 
 Status: accepted, 2026-09-23; amended 2026-09-24 (a coach can resign, and their clients are told);
-amended 2026-10-20 (the owner's old thread closes too, audit COACH-13)
+amended 2026-10-20 (the owner's old thread closes too, audit COACH-13); amended 2026-10-29 (money received on
+Today, critique B4b, for the owner to confirm)
 
 ## Context
 
@@ -49,6 +50,10 @@ Business rules, decided by the product owner on 2026-09-23:
   delivery.
 - No other permission changed: coaches still create products, record payments and edit the shared
   libraries.
+- **Money received on Today** (critique B4b, 2026-10-29, for the owner to confirm): a coach sees this
+  month's money received that counts for them by each client's coach history (SUB-016), as totals per
+  currency with no client named; the owner sees the workspace's totals and every member of staff's
+  client counts, which no coach receives (CLI-020).
 
 Mechanism:
 

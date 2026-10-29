@@ -3,53 +3,240 @@ import {
   attentionItem,
   COACH_NOW,
   COACH_TODAY,
+  coachMonth,
+  coachOwnTodayView,
   coachTodayView,
+  ELIE,
+  LEA_ID,
   MAYA,
   OWNER_ID,
+  plansEndedNotRenewed,
+  plansEndingSoon,
   RAMI,
   SARA,
 } from '../../../testing/coach-today-fixtures';
 import {
+  activeClients,
   activityRow,
   ago,
   attentionRow,
   attentionTarget,
   daysBetween,
   mapCoachToday,
+  moneyLine,
   partOfDay,
+  planEndedRow,
+  planEndingRow,
+  thisMonth,
   type CoachTodayContext,
 } from './coach-today.models';
 
 const context: CoachTodayContext = { locale: 'en-US', now: new Date(COACH_NOW), userId: OWNER_ID };
 
 describe('Coach Today view model', () => {
-  it('reads the day, the people waiting and the week from the server', () => {
+  it('reads the day and the people waiting from the server', () => {
     const today = mapCoachToday(coachTodayView(), context);
 
     expect(today.dateLabel).toBe('Thursday 1 October');
     expect(today.partOfDay).toBe('afternoon');
-    expect([
-      today.clientCount,
-      today.needsCount,
-      today.plansEndingSoon,
-      today.renewalRequests,
-    ]).toEqual([12, 7, 3, 1]);
-    expect([today.week.completed, today.week.scheduled, today.week.dueSoFar]).toEqual([10, 27, 15]);
-    const thursday = today.week.bars[3];
-    expect(thursday).toMatchObject({
-      label: 'Thu',
-      isToday: true,
-      isFuture: false,
-      height: 67,
-      done: 25,
+    expect([today.clientCount, today.needsCount]).toEqual([12, 7]);
+    // The week's sessions left Today (critique B4b); a client's page keeps its own week.
+    expect(today).not.toHaveProperty('week');
+  });
+
+  describe('This month (SUB-016, CLI-020)', () => {
+    it('gives each currency its own line with its exact amount, never one total', () => {
+      const month = mapCoachToday(coachTodayView(), context).month;
+
+      expect(month.name).toBe('October');
+      expect(month.money).toEqual([
+        { currency: 'LBP', amount: 'LBP 4,500,000', payments: '1 payment' },
+        { currency: 'USD', amount: 'USD 2,340', payments: '7 payments' },
+      ]);
+      // Cents are kept, the code first, as every amount in the app reads; a decimal sent as text too.
+      expect(
+        [
+          { currency: 'USD', amount: 82.5, paymentCount: 2 },
+          { currency: 'USD', amount: '1234.05', paymentCount: '3' },
+          { currency: 'EUR', amount: '330.00', paymentCount: 1 },
+        ].map((total) => moneyLine(total, 'en-US')),
+      ).toEqual([
+        { currency: 'USD', amount: 'USD 82.50', payments: '2 payments' },
+        { currency: 'USD', amount: 'USD 1,234.05', payments: '3 payments' },
+        { currency: 'EUR', amount: 'EUR 330', payments: '1 payment' },
+      ]);
     });
-    expect(today.week.bars[4]).toMatchObject({
-      label: 'Fri',
-      isFuture: true,
-      height: 100,
-      done: 0,
+
+    it('says whose money it is: the whole coaching space for the owner, their own clients for a coach', () => {
+      expect(thisMonth(coachMonth(), 12, 'en-US').moneyFrom).toBe(
+        'Received by your coaching space',
+      );
+      expect(thisMonth(coachMonth({ coaches: null }), 2, 'en-US').moneyFrom).toBe(
+        'Received from your clients',
+      );
     });
-    expect(today.week.bars[0].longLabel).toBe('Monday 28 September');
+
+    it('leaves money empty when nothing arrived, with no line in any currency', () => {
+      const month = thisMonth(coachMonth({ moneyReceived: [] }), 12, 'en-US');
+
+      expect(month.money).toEqual([]);
+    });
+
+    it('says how many clients are active out of every current client', () => {
+      expect(mapCoachToday(coachTodayView(), context).month.active).toBe('9 of 12 clients');
+      expect([activeClients(1, 1), activeClients(0, 1), activeClients(0, 3)]).toEqual([
+        '1 of 1 client',
+        '0 of 1 client',
+        '0 of 3 clients',
+      ]);
+    });
+
+    it('lists the owner’s team, the owner first as You, with each one’s active clients', () => {
+      const staff = mapCoachToday(coachTodayView(), context).month.staff;
+
+      expect(staff?.map((member) => [member.name, member.initials, member.clients])).toEqual([
+        ['You', 'KH', '7 of 10 clients active'],
+        ['Lea Khoury', 'LK', '2 of 2 clients active'],
+        ['Omar Saleh', 'OS', 'No clients yet'],
+      ]);
+      const one = thisMonth(
+        coachMonth({
+          coaches: [
+            {
+              coachUserId: LEA_ID,
+              name: 'Lea Khoury',
+              isYou: false,
+              activeClientCount: 0,
+              clientCount: 1,
+            },
+          ],
+        }),
+        1,
+        'en-US',
+      );
+      expect(one.staff?.[0].clients).toBe('0 of 1 client active');
+    });
+
+    it('gives a coach no team: the server sends it to the owner alone', () => {
+      const month = mapCoachToday(coachOwnTodayView(), { ...context, userId: LEA_ID }).month;
+
+      expect(month.staff).toBeNull();
+      expect(month.money.map((line) => line.amount)).toEqual(['USD 82.50']);
+      expect(month.active).toBe('2 of 2 clients');
+    });
+  });
+
+  describe('Plans ending soon', () => {
+    const [rita, sara, maya] = plansEndingSoon();
+
+    it('names the plan and its last day, soonest first, with Renew opening the renew sheet', () => {
+      const rows = mapCoachToday(coachTodayView(), context).plansEnding;
+
+      expect(rows.map((row) => [row.name, row.plan, row.detail])).toEqual([
+        ['Rita Daher', 'Strength coaching', 'Ends tomorrow'],
+        ['Sara Mansour', 'Online coaching', 'Ends Wed 7 Oct'],
+        [
+          'Maya Fakhoury',
+          'Fat loss · 12 weeks',
+          'Paid until Fri 9 Oct · The renewal isn’t paid yet',
+        ],
+      ]);
+      expect(rows[0].action).toEqual({
+        label: 'Renew',
+        forWhom: 'for Rita Daher',
+        link: '/clients/c-rita/service',
+        queryParams: { renew: 'e-rita' },
+        startsChatWith: null,
+      });
+      expect(planEndingRow({ ...rita, lastDay: COACH_TODAY }, COACH_TODAY, context).detail).toBe(
+        'Ends today',
+      );
+    });
+
+    it('records the payment of a renewal already booked and unpaid instead of renewing again (BEB-7)', () => {
+      const row = planEndingRow(maya, COACH_TODAY, context);
+
+      expect(row.action).toMatchObject({
+        label: 'Record payment',
+        forWhom: 'for Maya Fakhoury',
+        link: '/clients/c-maya/service',
+        queryParams: { pay: 'e-maya-next' },
+      });
+      // Lea coaches Maya: the owner is told so, and may not message her (CLI-013).
+      expect([row.coach, row.message, row.release]).toEqual(['Lea Khoury', null, null]);
+    });
+
+    it('offers Message only when the caller may message the client, starting a chat if none exists', () => {
+      expect(planEndingRow(rita, COACH_TODAY, context).message).toEqual({
+        label: 'Message',
+        forWhom: 'Rita Daher',
+        link: '/messages',
+        queryParams: { conversation: 'conv-rita' },
+        startsChatWith: null,
+      });
+      expect(planEndingRow(sara, COACH_TODAY, context).message).toMatchObject({
+        label: 'Message',
+        queryParams: null,
+        startsChatWith: SARA.clientProfileId,
+      });
+      expect(
+        planEndingRow({ ...rita, canMessage: false }, COACH_TODAY, context).message,
+      ).toBeNull();
+    });
+
+    it('leaves out a plan name the server does not have', () => {
+      expect(planEndingRow({ ...rita, planName: '' }, COACH_TODAY, context).plan).toBe('');
+    });
+  });
+
+  describe('Ended, not renewed', () => {
+    const [elie, hadi] = plansEndedNotRenewed();
+
+    it('says when the plan ended and when the client asked to renew, with Renew', () => {
+      const rows = mapCoachToday(coachTodayView(), context).plansEnded;
+
+      expect(rows.map((row) => [row.name, row.plan, row.detail])).toEqual([
+        ['Elie Azar', 'Strength coaching', 'Ended Sun 27 Sep · Asked to renew on Tue 29 Sep'],
+        ['Hadi Nassar', 'Online coaching', 'Ended Sun 20 Sep · The next plan isn’t paid yet'],
+      ]);
+      expect(rows[0].action).toMatchObject({
+        label: 'Renew',
+        link: `/clients/${ELIE.clientProfileId}/service`,
+        queryParams: { renew: 'e-elie' },
+      });
+      expect(planEndedRow({ ...elie, lastDay: '2026-09-30' }, COACH_TODAY, context).detail).toBe(
+        'Ended yesterday · Asked to renew on Tue 29 Sep',
+      );
+    });
+
+    it('records the payment of the next plan booked and unpaid instead of renewing', () => {
+      expect(planEndedRow(hadi, COACH_TODAY, context).action).toMatchObject({
+        label: 'Record payment',
+        forWhom: 'for Hadi Nassar',
+        queryParams: { pay: 'e-hadi-next' },
+      });
+    });
+
+    it('lets the owner alone end coaching, with the version the owner saw, and never offers Message', () => {
+      const owner = planEndedRow(elie, COACH_TODAY, context);
+      expect(owner.release).toEqual({
+        id: ELIE.clientProfileId,
+        firstName: 'Elie',
+        lastName: 'Azar',
+        version: 4,
+        forWhom: 'with Elie Azar',
+      });
+      expect(owner.message).toBeNull();
+      expect(
+        planEndedRow({ ...elie, clientVersion: '12' }, COACH_TODAY, context).release?.version,
+      ).toBe(12);
+
+      // A coach's rows carry no version: Renew only (ADR 0027).
+      const coach = mapCoachToday(coachOwnTodayView(), { ...context, userId: LEA_ID }).plansEnded;
+      expect(coach.map((row) => [row.action.label, row.release, row.message])).toEqual([
+        ['Record payment', null, null],
+      ]);
+    });
   });
 
   it('counts a client once however many things they are waiting on', () => {

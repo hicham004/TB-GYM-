@@ -16,7 +16,10 @@ namespace TB.Gym.Modules.Clients;
 /// </remarks>
 public interface ICoachOverviewService
 {
-    /// <summary>Who needs the caller now, what their clients did lately, and this week's sessions.</summary>
+    /// <summary>
+    /// Who needs the caller now, this month's money received and active clients, the plans ending soon or ended
+    /// and not renewed, and what their clients did lately.
+    /// </summary>
     Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken);
 
     /// <summary>Every client the caller coaches, with status, last activity and the last seven days.</summary>
@@ -170,7 +173,7 @@ public sealed record CoachMaxSuggestionView(
 /// <summary>Sessions programmed and completed on one workspace day.</summary>
 public sealed record SessionDayCountView(DateOnly Date, int Scheduled, int Completed);
 
-/// <summary>This workspace week, counted over every client the caller coaches whose plan includes training.</summary>
+/// <summary>The workspace calendar week of one client's page (R3.3b), while their plan includes training.</summary>
 public sealed record CoachWeekView(
     DateOnly From,
     DateOnly ToExclusive,
@@ -199,17 +202,30 @@ public sealed record CoachActivityItemView(
     IReadOnlyList<CoachActivityRecordView> PersonalRecords);
 
 /// <summary>
-/// Coach Today (C1). Counts come with what they were counted over: the week's dates, and the
+/// Coach Today (C1). Counts come with what they were counted over: the month's dates, and the
 /// activity's <see cref="ActivityFromUtc"/>. The attention queue is complete and ranked; the activity
-/// feed is the newest <see cref="CoachAttentionPolicy.ActivityLimit"/> items since then.
+/// feed is the newest <see cref="CoachAttentionPolicy.ActivityLimit"/> items since then. Critique B4b
+/// took the workspace week's sessions off Today (a client's page keeps its own week) and added
+/// <see cref="Month"/> and the two plan lists (CLI-020).
 /// </summary>
+/// <param name="ClientCount">Every current client the caller coaches (CLI-013), never a former one.</param>
+/// <param name="PlansEndingSoon">
+/// Each client whose running plan raises the ending-soon flag (CLI-018), the soonest end first, then by name.
+/// </param>
+/// <param name="PlansEndedNotRenewed">
+/// Each client whose plan ran out in the last <see cref="CoachAttentionPolicy.PlanEndedWithinDays"/> days with
+/// nothing after it but, at most, a plan waiting for payment (<see cref="CoachAttentionPolicy.IsLapsed"/>), the
+/// latest end first, then by name. Never a cancelled plan, and never a former client.
+/// </param>
 public sealed record CoachTodayView(
     DateOnly Today,
     string TimeZoneId,
     int ClientCount,
     int PlansEndingSoonCount,
     int RenewalRequestCount,
-    CoachWeekView Week,
+    CoachMonthView Month,
+    IReadOnlyList<CoachPlanEndingView> PlansEndingSoon,
+    IReadOnlyList<CoachPlanEndedView> PlansEndedNotRenewed,
     IReadOnlyList<CoachAttentionItemView> Attention,
     DateTimeOffset ActivityFromUtc,
     IReadOnlyList<CoachActivityItemView> Activity,
@@ -217,6 +233,89 @@ public sealed record CoachTodayView(
     int AttentionRuleVersion,
     string TrainingRuleKey,
     int TrainingRuleVersion);
+
+/// <summary>
+/// This month on Coach Today (critique B4b), for the workspace's calendar month <c>[From, ToExclusive)</c>, of which
+/// <see cref="CoachTodayView.Today"/> is the last day so far.
+/// </summary>
+/// <param name="MoneyReceived">
+/// Money received this month by money received v1 (SUB-016, <see cref="MoneyRuleKey"/>), one total per currency in
+/// currency order, empty with none: never added, netted or converted across currencies, never profit or earnings.
+/// The Owner's is every receipt of the workspace; a Coach's only the receipts that count for them, with no client
+/// named.
+/// </param>
+/// <param name="ActiveClientCount">
+/// The current clients the caller coaches whose plan runs today (any feature granted), out of
+/// <see cref="CoachTodayView.ClientCount"/>.
+/// </param>
+/// <param name="Coaches">
+/// The Owner's alone, null for a Coach (CLI-013): every active member of staff, the Owner first as You, then by
+/// name, each with their current clients and how many of them are active.
+/// </param>
+public sealed record CoachMonthView(
+    DateOnly From,
+    DateOnly ToExclusive,
+    IReadOnlyList<CoachMoneyReceivedView> MoneyReceived,
+    int ActiveClientCount,
+    IReadOnlyList<CoachClientCountView>? Coaches,
+    string MoneyRuleKey,
+    int MoneyRuleVersion);
+
+/// <summary>Money received in one currency, exact, with how many payments (part payments included) made it up.</summary>
+public sealed record CoachMoneyReceivedView(string Currency, decimal Amount, int PaymentCount);
+
+/// <summary>One member of staff on the Owner's This month: their current clients and how many have a plan running.</summary>
+public sealed record CoachClientCountView(
+    Guid CoachUserId,
+    string Name,
+    bool IsYou,
+    int ActiveClientCount,
+    int ClientCount);
+
+/// <summary>
+/// A plan ending soon (critique B4b): the paid plan whose last covered day raised the flag (BEB-7), to renew.
+/// </summary>
+/// <param name="EnrollmentId">The paid plan ending last: the plan Renew renews.</param>
+/// <param name="UnpaidRenewalId">
+/// The first renewal already booked after it and still waiting for payment, null with none: it covers nothing until
+/// paid (SUB-008), so its payment is what to record rather than a second renewal.
+/// </param>
+/// <param name="CanMessage">
+/// The caller may message the client now: their own coach, with messaging in today's plan (CLI-013, ADR 0026).
+/// </param>
+/// <param name="ChatId">The caller's chat with the client, set only with <see cref="CanMessage"/> once one exists.</param>
+public sealed record CoachPlanEndingView(
+    CoachClientRef Client,
+    Guid EnrollmentId,
+    string PlanName,
+    DateOnly LastDay,
+    Guid? UnpaidRenewalId,
+    bool CanMessage,
+    Guid? ChatId);
+
+/// <summary>
+/// A plan that ran out lately and was not renewed (critique B4b).
+/// </summary>
+/// <param name="EnrollmentId">The plan that ran out, the one ending last: the plan Renew renews.</param>
+/// <param name="UnpaidRenewalId">
+/// A plan booked after it and still waiting for payment, null with none: the row records its payment instead of
+/// renewing.
+/// </param>
+/// <param name="RenewalRequestedOn">
+/// The workspace day the client asked to renew (ADR 0029), within the last
+/// <see cref="CoachAttentionPolicy.RenewalRequestDays"/> days, as Needs you's renewal request names it.
+/// </param>
+/// <param name="ClientVersion">
+/// The Owner's alone, null for a Coach: the client's version, which ending their coaching asks for (ADR 0027).
+/// </param>
+public sealed record CoachPlanEndedView(
+    CoachClientRef Client,
+    Guid EnrollmentId,
+    string PlanName,
+    DateOnly LastDay,
+    Guid? UnpaidRenewalId,
+    DateOnly? RenewalRequestedOn,
+    uint? ClientVersion);
 
 /// <summary>
 /// One client in the coach's list (C2). <see cref="RecentSessions"/> covers the view's recent days and

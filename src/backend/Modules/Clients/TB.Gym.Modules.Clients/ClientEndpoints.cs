@@ -200,7 +200,8 @@ public static class ClientEndpoints
         .Produces<ClientProfileOverviewView>()
         .Produces(StatusCodes.Status404NotFound);
 
-        // Coach Today (C1): who needs the coach now, what their clients did, and this week (R3.1).
+        // Coach Today (C1, R3.1, critique B4b): who needs the coach now, this month's money received and
+        // active clients, the plans ending soon or ended and not renewed, and what their clients did.
         endpoints.MapGet("/api/coach-today", async (
             ICoachOverviewService service,
             CancellationToken cancellationToken) =>

@@ -1586,6 +1586,14 @@ limited to the coach's assigned clients.
   - Coach Today follows dark mode; the client's Today at the same route does too since its dark
     pass in R5.4b.
   - Screenshots on the Atlas demo: `docs/design/r32-coach-today-*.png`.
+- Critique B4b (`docs/CRITIQUE-FIXES-2026-10.md`, CLI-020; decided overnight on 2026-10-29, for the owner to
+  confirm): the tiles and the week's bars are gone. From the top: Needs you as before, This month beside it
+  (money received, one line per currency with its payments, "Received from your clients" for a coach and "Received
+  by your coaching space" for the owner; "9 of 12 clients" with a plan running today; the owner's Coaches, You
+  first), then Plans ending soon (Renew, or Record payment for an unpaid renewal; Message only where the caller may
+  message) beside Ended, not renewed (Renew or Record payment, "Asked to renew on …", and the owner's End coaching
+  through the release dialog), then "What your clients did · Last 7 days", five rows then Show all. Below 48rem of
+  window the feed sits under Needs you in the kit's fold with its count, drawn once.
 
 **C2. Clients**
 - Job: "How is everyone doing, and who is slipping?"

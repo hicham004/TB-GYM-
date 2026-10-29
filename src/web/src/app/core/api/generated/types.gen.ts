@@ -1144,6 +1144,14 @@ export type CoachAttentionKind =
   | 'NoPlan'
   | 'CheckInOverdue';
 
+export type CoachClientCountView = {
+  coachUserId: string;
+  name: string;
+  isYou: boolean;
+  activeClientCount: number | string;
+  clientCount: number | string;
+};
+
 export type CoachClientDetails = {
   id: string;
   userId: null | string;
@@ -1213,6 +1221,42 @@ export type CoachMaxSuggestionView = {
   loadIncrement: number | string;
 };
 
+export type CoachMoneyReceivedView = {
+  currency: string;
+  amount: number | string;
+  paymentCount: number | string;
+};
+
+export type CoachMonthView = {
+  from: string;
+  toExclusive: string;
+  moneyReceived: Array<CoachMoneyReceivedView>;
+  activeClientCount: number | string;
+  coaches: null | Array<CoachClientCountView>;
+  moneyRuleKey: string;
+  moneyRuleVersion: number | string;
+};
+
+export type CoachPlanEndedView = {
+  client: CoachClientRef;
+  enrollmentId: string;
+  planName: string;
+  lastDay: string;
+  unpaidRenewalId: null | string;
+  renewalRequestedOn: null | string;
+  clientVersion: null | number | string;
+};
+
+export type CoachPlanEndingView = {
+  client: CoachClientRef;
+  enrollmentId: string;
+  planName: string;
+  lastDay: string;
+  unpaidRenewalId: null | string;
+  canMessage: boolean;
+  chatId: null | string;
+};
+
 export type CoachProgramBlockView = {
   id: string;
   enrollmentId: string;
@@ -1271,7 +1315,9 @@ export type CoachTodayView = {
   clientCount: number | string;
   plansEndingSoonCount: number | string;
   renewalRequestCount: number | string;
-  week: CoachWeekView;
+  month: CoachMonthView;
+  plansEndingSoon: Array<CoachPlanEndingView>;
+  plansEndedNotRenewed: Array<CoachPlanEndedView>;
   attention: Array<CoachAttentionItemView>;
   activityFromUtc: string;
   activity: Array<CoachActivityItemView>;

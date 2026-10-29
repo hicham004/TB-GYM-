@@ -51,8 +51,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         var view = await ReadSliceAsync<CoachTodayView>(coach, CoachTodayUrl);
         var queries = RequiredTodayQueryCounter.Count;
         Console.WriteLine($"R3.1 Coach Today: {queries} SQL commands for 4 clients.");
-        // Observed 22, sign-in and tenant checks included. A query per client would add four or more.
-        Assert.IsLessThanOrEqualTo(25, queries, "Coach Today must stay a fixed number of queries.");
+        // Sign-in and tenant checks included, at most what critique B4b measured in Today's busiest case (every read
+        // in use, B4bTodayQueryPin). A query per client would add four or more.
+        Assert.IsLessThanOrEqualTo(B4bTodayQueryPin, queries, "Coach Today must stay a fixed number of queries.");
 
         Assert.AreEqual((today, "Asia/Beirut", 4, 0, 0),
             (view.Today, view.TimeZoneId, view.ClientCount, view.PlansEndingSoonCount, view.RenewalRequestCount));
@@ -68,11 +69,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(today, view.Attention[2].Date, "A client with no program shows the day they joined.");
         Assert.AreEqual("Hicham Haddad", view.Attention[0].Client.AssignedCoachName);
 
-        // This week: Maya's one session today, done. Next week's session is not this week's.
-        Assert.AreEqual(DayOfWeek.Monday, view.Week.From.DayOfWeek);
-        Assert.AreEqual((7, 1, 1), (view.Week.Days.Count, view.Week.Scheduled, view.Week.Completed));
-        var todayCount = view.Week.Days.Single(day => day.Date == today);
-        Assert.AreEqual((1, 1), (todayCount.Scheduled, todayCount.Completed));
+        // This month (critique B4b, which took the week off Today): every plan here runs today and is free, so four
+        // active clients and no money received; the owner's team is the owner alone.
+        Assert.AreEqual((4, 0), (view.Month.ActiveClientCount, view.Month.MoneyReceived.Count));
+        var team = view.Month.Coaches ?? throw new AssertFailedException("The owner reads their team.");
+        Assert.AreEqual(("Hicham Haddad", true, 4, 4),
+            (team.Single().Name, team.Single().IsYou, team.Single().ActiveClientCount, team.Single().ClientCount));
 
         // Newest first; Maya's weigh-in is her last activity in the list, never a line of the feed.
         Assert.AreEqual("CheckInSubmitted, WorkoutCompleted", string.Join(", ", view.Activity.Select(item => item.Kind)));
@@ -154,8 +156,6 @@ public sealed partial class Phase3TrainingWorkflowTests
         await R25bFinishTodaysWorkoutAsync(client, 82.5m);
         view = await ReadSliceAsync<CoachTodayView>(coach, CoachTodayUrl);
         Assert.AreEqual(CoachAttentionKind.PlanEndingSoon, view.Attention.Single().Kind);
-        var day14 = view.Week.Days.Single(day => day.Date == start.AddDays(14));
-        Assert.AreEqual((1, 1), (day14.Scheduled, day14.Completed));
         row = (await ReadSliceAsync<ClientOverviewView>(coach, ClientOverviewUrl)).Clients.Single();
         Assert.AreEqual(ClientOverviewStatus.EndingSoon, row.Status);
         Assert.AreEqual((start.AddDays(14), 1, 1),
@@ -277,7 +277,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var view = await ReadSliceAsync<CoachTodayView>(coach, CoachTodayUrl);
         Assert.IsEmpty(view.Activity);
         Assert.IsEmpty(view.Attention);
-        Assert.AreEqual(0, view.Week.Scheduled);
+        Assert.AreEqual((1, 0), (view.ClientCount, view.Month.ActiveClientCount), "A blocked plan runs nothing today.");
 
         profile = await RequiredJsonAsync<TeamClientDetails>(await coach.GetAsync($"/api/clients/{clientId}"));
         await RefreshCsrfAsync(coach);

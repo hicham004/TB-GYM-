@@ -710,6 +710,21 @@ the client page read no more commands than before; in their tests' scenarios bot
 costs 24 commands whatever the client count, one more while some client's plan has ended (the renewal
 requests' read).
 
+Critique B4b gives the same Today read This month and two plan lists (CLI-020), with no schema change and no
+new endpoint, and takes the workspace week off it (`CoachTodayView` loses `Week` and gains `Month`,
+`PlansEndingSoon` and `PlansEndedNotRenewed`; the client page keeps its week, and Today's sessions read spans
+the missed-session lookback alone). Money received v1 (`MoneyReceivedPolicy` in Subscriptions, beside
+`PaymentDay`, SUB-016) is a pure rule: Infrastructure reads, in one query, the receipts whose instant falls
+within the workspace month's bounds widened by a day on each side (worked out in .NET from the workspace's
+zone, so a clock change at a month's edge loses nothing), each with its client's coach
+history as a collection (a coach's read narrowed to clients they ever coached), and the rule decides each
+receipt's day and coach and totals per currency. The owner's team is one more query, the owner's alone
+(`CoachClientScope.IsOwnerAsync` answers from the role it already reads). The lapsed plans' names ride on the
+plan-ends read, widened for Today alone to plans that ran out in the last 30 days, and the client's version on
+the clients read. Today's busiest case costs 28 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 25, the
+renewal requests' read, which runs only while some client's whole plan has run out, and This month's two. The
+client list and a client's page read nothing new.
+
 On the web (B4a) every screen shows the server's ending-soon flag and counts no days of its own: the list
 reads `planStatus`, the chat panel and the client's record the `PlanEndingSoon` item. The record's header
 therefore reads the client's overview too, once per page through `ClientWorkspaceContext.overviewForPage`,

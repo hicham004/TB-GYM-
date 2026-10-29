@@ -1,5 +1,8 @@
-<button #releaseTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
-  End coaching
+<button #releaseTrigger appButton [variant]="variant()" type="button" (click)="open()">
+  <ng-container i18n>End coaching</ng-container>
+  @if (forWhom(); as whom) {
+    <span class="tb-visually-hidden"> {{ whom }}</span>
+  }
 </button>
 
 <!-- Release is confirmed before anything is sent. Only "End coaching permanently" calls the API. -->

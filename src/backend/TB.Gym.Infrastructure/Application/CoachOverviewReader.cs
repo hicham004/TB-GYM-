@@ -6,6 +6,7 @@ using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Progress;
 using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
+using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
 using TB.Gym.SharedKernel;
 
@@ -39,32 +40,36 @@ internal sealed class CoachOverviewReader(
 
     internal const string RecentSetsTag = "Coach overview: the sets finished while the workouts shown began";
 
+    /// <summary>Names This month's two reads (critique B4b) in the SQL they send, for logs and for the tests that count them.</summary>
+    internal const string MoneyReceivedTag = "Coach overview: money received this month";
+
+    internal const string CoachesTag = "Coach overview: the owner's team";
+
     public async Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken)
     {
         var scope = await LoadScopeAsync(null, cancellationToken);
         var today = scope.Calendar.Today;
-        var weekFrom = StartOfWeek(today, scope.Calendar.WeekStartsOn);
+        // Critique B4b took the week's sessions off Today: missed sessions look back from today alone, and the plans
+        // that ran out lately come with the plans read for their ends.
         var states = await LoadStatesAsync(
             scope,
-            Earliest(today.AddDays(-TrainingAttentionPolicy.MissedLookbackDays), weekFrom),
-            Latest(today.AddDays(1), weekFrom.AddDays(7)),
+            today.AddDays(-TrainingAttentionPolicy.MissedLookbackDays),
+            today.AddDays(1),
+            CoachAttentionPolicy.EndedLatelyFrom(today),
             cancellationToken);
         var activityFromUtc = clock.UtcNow.AddDays(-CoachAttentionPolicy.ActivityDays);
         var activity = await LoadActivityAsync(scope, activityFromUtc, cancellationToken);
+        var month = await LoadMonthAsync(scope, states, cancellationToken);
 
-        var weekDays = Days(states.SelectMany(state => state.Sessions), weekFrom, 7);
         return new CoachTodayView(
             today,
             scope.Calendar.TimeZoneId,
             scope.Clients.Count,
             states.Count(state => state.Flags.Contains(CoachAttentionKind.PlanEndingSoon)),
             states.Count(state => state.Flags.Contains(CoachAttentionKind.RenewalRequested)),
-            new CoachWeekView(
-                weekFrom,
-                weekFrom.AddDays(7),
-                weekDays.Sum(day => day.Scheduled),
-                weekDays.Sum(day => day.Completed),
-                weekDays),
+            month,
+            PlansEndingSoon(states),
+            PlansEndedNotRenewed(scope, states),
             CoachAttentionPolicy.Rank(states.SelectMany(Items)),
             activityFromUtc,
             activity,
@@ -83,6 +88,7 @@ internal sealed class CoachOverviewReader(
             scope,
             Earliest(today.AddDays(-TrainingAttentionPolicy.MissedLookbackDays), recentFrom),
             today.AddDays(1),
+            endedFrom: null,
             cancellationToken);
         // List-only reads, kept out of LoadStatesAsync so Today and a client's page pay nothing for them.
         var (lastActivity, lastCheckIns) = await LoadLastActivityAsync(scope, cancellationToken);
@@ -129,7 +135,8 @@ internal sealed class CoachOverviewReader(
 
     /// <summary>
     /// One client's page (C3): the same state, status and attention items the list and Today derive,
-    /// for the one client, plus the workspace week's days counted as Today counts them.
+    /// for the one client, plus the workspace calendar week's sessions, scheduled and completed, day by
+    /// day, while training is in the plan (Today no longer counts the week, critique B4b).
     /// </summary>
     public async Task<ClientProfileOverviewView?> GetClientAsync(
         Guid clientProfileId,
@@ -147,6 +154,7 @@ internal sealed class CoachOverviewReader(
             scope,
             Earliest(today.AddDays(-TrainingAttentionPolicy.MissedLookbackDays), weekFrom),
             Latest(today.AddDays(1), weekFrom.AddDays(7)),
+            endedFrom: null,
             cancellationToken);
         var state = states.Single();
         var (lastActivity, _) = await LoadLastActivityAsync(scope, cancellationToken);
@@ -223,7 +231,8 @@ internal sealed class CoachOverviewReader(
                 client.CreatedAtUtc,
                 client.IsCoachBlocked,
                 client.OnboardingStatus,
-                client.BirthDate))
+                client.BirthDate,
+                client.Version))
             .ToListAsync(cancellationToken);
         var access = await featureAccessService.EvaluateManyAsync(
             tenantContext.TenantId,
@@ -233,18 +242,22 @@ internal sealed class CoachOverviewReader(
             calendar,
             TimeZoneInfo.FindSystemTimeZoneById(calendar.TimeZoneId),
             currentUser.UserId ?? Guid.Empty,
+            await coachClientScope.IsOwnerAsync(cancellationToken),
             clients,
             access);
     }
 
     /// <summary>
     /// Everything the attention rule and the status read about each client, with the sessions of
-    /// <c>[sessionsFrom, sessionsTo)</c> for clients whose plan includes training.
+    /// <c>[sessionsFrom, sessionsTo)</c> for clients whose plan includes training. With
+    /// <paramref name="endedFrom"/> (Today's alone), also each lapsed client's plan that ran out on or after that
+    /// day, for Ended, not renewed (critique B4b), read with the plans' ends at no extra query.
     /// </summary>
     private async Task<IReadOnlyList<ClientState>> LoadStatesAsync(
         Scope scope,
         DateOnly sessionsFrom,
         DateOnly sessionsTo,
+        DateOnly? endedFrom,
         CancellationToken cancellationToken)
     {
         var today = scope.Calendar.Today;
@@ -259,7 +272,7 @@ internal sealed class CoachOverviewReader(
         var checkInRows = await ReadCheckInsAsync(checkIns, today, cancellationToken);
         var chats = await ReadChatsAsync(scope.CallerUserId, messaging, cancellationToken);
         var renewals = await ReadRenewalRequestsAsync([.. endedPlans.Keys], today, cancellationToken);
-        var plans = await ReadPlanEndsAsync(scope.Ids, today, cancellationToken);
+        var plans = await ReadPlanEndsAsync(scope.Ids, today, endedFrom, cancellationToken);
         var blocks = await ReadOpenBlocksAsync(training, today, cancellationToken);
         var sessions = await ReadSessionsAsync(training, sessionsFrom, sessionsTo, cancellationToken);
         var lastStarts = await ReadLastWorkoutStartsAsync(training, cancellationToken);
@@ -316,7 +329,7 @@ internal sealed class CoachOverviewReader(
             // BEB-7 (the owner's decision of 2026-10-19): only a paid plan covers days, so a renewal still
             // waiting for payment neither moves the plan's end nor quiets Ending soon; it is counted instead,
             // for the item to ask for the payment. With nothing paid, the unpaid plan still names the plan.
-            var livePlans = plans[client.Id].ToArray();
+            var livePlans = plans[client.Id].Where(item => !item.Ended).ToArray();
             var runningPlan = livePlans.Where(item => item.Paid).MaxBy(item => item.EndDateExclusive)
                 ?? livePlans.MaxBy(item => item.EndDateExclusive);
             var unpaidRenewals = runningPlan is { Paid: true }
@@ -341,6 +354,31 @@ internal sealed class CoachOverviewReader(
                 ? []
                 : Suggestions(programs.Where(item => item.MesocycleId == lastProgram.MesocycleId));
             var joinedOn = scope.LocalDate(client.CreatedAtUtc);
+
+            // Ended, not renewed (critique B4b, CLI-020): the whole plan has lapsed and its plan that ran out last did
+            // so lately; SUB-014's ended plan when there is one, as the client's Ask to renew and Needs you name it.
+            // A plan booked after it and waiting for payment is named to record its payment instead of renewing.
+            EndedNotRenewed? notRenewed = null;
+            if (endedFrom is not null && CoachAttentionPolicy.IsLapsed(decisions))
+            {
+                var ranOut = plans[client.Id].Where(item => item.Ended).ToArray();
+                var lapsed = endedPlan is { } ended
+                    ? ranOut.FirstOrDefault(item => item.EnrollmentId == ended.EnrollmentId)
+                    : ranOut.MaxBy(item => (item.EndDateExclusive, item.EnrollmentId));
+                if (lapsed is not null && CoachAttentionPolicy.EndedLately(lapsed.EndDateExclusive.AddDays(-1), today))
+                {
+                    notRenewed = new EndedNotRenewed(
+                        lapsed.EnrollmentId,
+                        lapsed.PlanName,
+                        lapsed.EndDateExclusive.AddDays(-1),
+                        livePlans
+                            .Where(item => !item.Paid)
+                            .OrderBy(item => item.StartDate)
+                            .ThenBy(item => item.EnrollmentId)
+                            .FirstOrDefault()?.EnrollmentId);
+                }
+            }
+
             var signals = new ClientAttentionSignals(
                 checkIn.Length,
                 conversations.Sum(item => item.Count),
@@ -381,7 +419,8 @@ internal sealed class CoachOverviewReader(
                     ? clientChats.OrderBy(item => item.ConversationId).Select(item => (Guid?)item.ConversationId).FirstOrDefault()
                     : null,
                 pausedAtUtc is { } pausedAt ? scope.LocalDate(pausedAt) : null,
-                livePlans.Count(item => item.EnrollmentId != runningPlan?.EnrollmentId));
+                livePlans.Count(item => item.EnrollmentId != runningPlan?.EnrollmentId),
+                notRenewed);
         }).ToArray();
     }
 
@@ -462,6 +501,157 @@ internal sealed class CoachOverviewReader(
                 byDate[date].Count(),
                 byDate[date].Count(session => session.Workout == WorkoutExecutionStatus.Completed)))
             .ToArray();
+    }
+
+    // ---------- Today's This month and plan lists (critique B4b, CLI-020) ----------
+
+    /// <summary>Each client whose running plan raised the ending-soon flag, the soonest end first.</summary>
+    private static CoachPlanEndingView[] PlansEndingSoon(IEnumerable<ClientState> states) =>
+        [.. states
+            .Where(state => state.Flags.Contains(CoachAttentionKind.PlanEndingSoon) &&
+                            state.RunningEnrollmentId is not null &&
+                            state.PlanEndsOn is not null)
+            .Select(state => new CoachPlanEndingView(
+                state.Client.Ref,
+                state.RunningEnrollmentId!.Value,
+                state.RunningPlanName ?? string.Empty,
+                state.PlanEndsOn!.Value,
+                state.FirstUnpaidRenewalId,
+                state.CanMessage,
+                state.ChatId))
+            .OrderBy(row => row.LastDay)
+            .ThenBy(row => row.Client.LastName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.Client.FirstName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.Client.ClientProfileId)];
+
+    /// <summary>
+    /// Each lapsed client whose plan ran out lately, the latest end first. Only the owner ends a client's coaching
+    /// (ADR 0027), so only the owner's rows carry the client's version it asks for.
+    /// </summary>
+    private static CoachPlanEndedView[] PlansEndedNotRenewed(Scope scope, IEnumerable<ClientState> states) =>
+        [.. states
+            .Where(state => state.NotRenewed is not null)
+            .Select(state => new CoachPlanEndedView(
+                state.Client.Ref,
+                state.NotRenewed!.EnrollmentId,
+                state.NotRenewed.PlanName,
+                state.NotRenewed.LastDay,
+                state.NotRenewed.UnpaidPlanId,
+                state.Renewal?.RequestedOn,
+                scope.IsOwner ? state.Client.Version : null))
+            .OrderByDescending(row => row.LastDay)
+            .ThenBy(row => row.Client.LastName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.Client.FirstName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.Client.ClientProfileId)];
+
+    /// <summary>
+    /// This month: money received by money received v1 (SUB-016) in the workspace's calendar month, the clients
+    /// whose plan runs today, and for the owner alone the team with each member's clients. The owner reads every
+    /// receipt of the workspace; anyone else only the receipts that count for them, and no team.
+    /// </summary>
+    private async Task<CoachMonthView> LoadMonthAsync(
+        Scope scope,
+        IReadOnlyList<ClientState> states,
+        CancellationToken cancellationToken)
+    {
+        var (from, toExclusive) = MoneyReceivedPolicy.MonthOf(scope.Calendar.Today);
+        Guid? countsFor = scope.IsOwner ? null : scope.CallerUserId;
+        var (readFromUtc, readToUtc) = MoneyReceivedPolicy.ReadWindowUtc(from, toExclusive, scope.TimeZone);
+        var payments = await ReadPaymentsAsync(countsFor, readFromUtc, readToUtc, cancellationToken);
+        var received = MoneyReceivedPolicy.Totals(payments, from, toExclusive, scope.TimeZone, countsFor);
+        var active = states
+            .Where(state => state.PlanState == ClientPlanState.Running)
+            .Select(state => state.Client.Id)
+            .ToHashSet();
+        return new CoachMonthView(
+            from,
+            toExclusive,
+            [.. received.Select(total => new CoachMoneyReceivedView(total.CurrencyCode, total.Amount, total.PaymentCount))],
+            active.Count,
+            scope.IsOwner ? await ReadCoachesAsync(scope, active, cancellationToken) : null,
+            MoneyReceivedPolicy.Key,
+            MoneyReceivedPolicy.Version);
+    }
+
+    /// <summary>
+    /// In one read, the receipts whose instant falls in <c>[fromUtc, toUtc)</c>, the month and a day either side
+    /// (<see cref="MoneyReceivedPolicy.ReadWindowUtc"/>), each with the coach history of the client it was for
+    /// (ADR 0026). <see cref="MoneyReceivedPolicy"/> then decides each receipt's month, by its workspace day, and its
+    /// coach. A coach's read is narrowed to clients they ever coached; the rule decides which receipts are theirs.
+    /// Every client counts, a former one or one coached by someone else since included: the money arrived (ADR 0027
+    /// keeps payments).
+    /// </summary>
+    private async Task<IReadOnlyList<ReceivedPayment>> ReadPaymentsAsync(
+        Guid? coachUserId,
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken)
+    {
+        var rows = await (
+            from payment in dbContext.PaymentRecords.AsNoTracking()
+            join enrollment in dbContext.ClientEnrollments.AsNoTracking()
+                on new { payment.TenantId, Id = payment.EnrollmentId }
+                equals new { enrollment.TenantId, enrollment.Id }
+            where payment.Operation == PaymentOperation.Receipt &&
+                  payment.ReceivedAtUtc >= fromUtc &&
+                  payment.ReceivedAtUtc < toUtc &&
+                  (coachUserId == null || dbContext.ClientCoachAssignments.Any(entry =>
+                      entry.TenantId == enrollment.TenantId &&
+                      entry.ClientProfileId == enrollment.ClientProfileId &&
+                      entry.CoachUserId == coachUserId))
+            select new
+            {
+                payment.Amount,
+                payment.CurrencyCode,
+                payment.ReceivedAtUtc,
+                payment.Operation,
+                History = dbContext.ClientCoachAssignments
+                    .Where(entry =>
+                        entry.TenantId == enrollment.TenantId &&
+                        entry.ClientProfileId == enrollment.ClientProfileId)
+                    .Select(entry => new CoachHistoryEntry(entry.Sequence, entry.CoachUserId, entry.AssignedAtUtc))
+                    .ToList(),
+            })
+            .TagWith(MoneyReceivedTag)
+            .ToListAsync(cancellationToken);
+        return [.. rows.Select(row => new ReceivedPayment(
+            row.Amount,
+            row.CurrencyCode,
+            row.ReceivedAtUtc,
+            row.Operation,
+            row.History))];
+    }
+
+    /// <summary>
+    /// The owner's team on This month: every active owner and coach, the owner first, each with their current
+    /// clients and how many have a plan running today, counted from the clients already in scope.
+    /// </summary>
+    private async Task<CoachClientCountView[]> ReadCoachesAsync(
+        Scope scope,
+        HashSet<Guid> active,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenantContext.TenantId;
+        var staff = await (
+            from membership in dbContext.TenantMemberships.AsNoTracking()
+            join user in dbContext.Users.AsNoTracking() on membership.UserId equals user.Id
+            where membership.TenantId == tenantId &&
+                  membership.Status == MembershipStatus.Active &&
+                  (membership.Role == TenantRole.Owner || membership.Role == TenantRole.Coach)
+            select new { membership.UserId, user.DisplayName, membership.Role })
+            .TagWith(CoachesTag)
+            .ToListAsync(cancellationToken);
+        var clients = scope.Clients.ToLookup(client => client.CoachUserId);
+        return [.. staff
+            .OrderBy(member => member.Role == TenantRole.Owner ? 0 : 1)
+            .ThenBy(member => member.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(member => member.UserId)
+            .Select(member => new CoachClientCountView(
+                member.UserId,
+                member.DisplayName,
+                member.UserId == scope.CallerUserId,
+                clients[member.UserId].Count(client => active.Contains(client.Id)),
+                clients[member.UserId].Count()))];
     }
 
     // ---------- signal reads: one query each, over every client in scope ----------
@@ -595,20 +785,36 @@ internal sealed class CoachOverviewReader(
 
     /// <summary>
     /// Plans running now or still to come, each marked paid or not; the latest end of a paid one is the plan's
-    /// last covered day (BEB-7).
+    /// last covered day (BEB-7). With <paramref name="endedFrom"/>, in the same query, also the plans that ran out
+    /// with a last day on or after it, unless cancelled, marked <see cref="PlanEnd.Ended"/> (critique B4b).
     /// </summary>
     private async Task<ILookup<Guid, PlanEnd>> ReadPlanEndsAsync(
         Guid[] clientIds,
         DateOnly today,
-        CancellationToken cancellationToken) =>
-        clientIds.Length == 0
-            ? Empty<PlanEnd>()
-            : (await dbContext.ClientEnrollments.AsNoTracking()
-                .Where(item => clientIds.Contains(item.ClientProfileId) &&
-                               item.EndDateExclusive > today &&
-                               (item.Status == EnrollmentStatus.Active ||
-                                item.Status == EnrollmentStatus.PendingPayment ||
-                                item.Status == EnrollmentStatus.Paused))
+        DateOnly? endedFrom,
+        CancellationToken cancellationToken)
+    {
+        if (clientIds.Length == 0)
+        {
+            return Empty<PlanEnd>();
+        }
+
+        var plans = dbContext.ClientEnrollments.AsNoTracking().Where(item => clientIds.Contains(item.ClientProfileId));
+        plans = endedFrom is { } from
+            ? plans.Where(item =>
+                (item.EndDateExclusive > today &&
+                 (item.Status == EnrollmentStatus.Active ||
+                  item.Status == EnrollmentStatus.PendingPayment ||
+                  item.Status == EnrollmentStatus.Paused)) ||
+                (item.EndDateExclusive <= today &&
+                 item.EndDateExclusive > from &&
+                 item.Status != EnrollmentStatus.Cancelled))
+            : plans.Where(item =>
+                item.EndDateExclusive > today &&
+                (item.Status == EnrollmentStatus.Active ||
+                 item.Status == EnrollmentStatus.PendingPayment ||
+                 item.Status == EnrollmentStatus.Paused));
+        return (await plans
                 .Select(item => new PlanEnd(
                     item.ClientProfileId,
                     item.Id,
@@ -616,9 +822,11 @@ internal sealed class CoachOverviewReader(
                     item.EndDateExclusive,
                     item.ProductNameSnapshot,
                     item.Status != EnrollmentStatus.PendingPayment,
-                    item.Status == EnrollmentStatus.Paused ? item.PausedAtUtc : null))
+                    item.Status == EnrollmentStatus.Paused ? item.PausedAtUtc : null,
+                    item.EndDateExclusive <= today))
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.ClientProfileId);
+    }
 
     /// <summary>
     /// Blocks running or still to come, each with the weeks the unshared-week rule could flag (a row
@@ -1186,10 +1394,12 @@ internal sealed class CoachOverviewReader(
         _ => throw new InvalidOperationException($"Unknown offer duration unit {unit}."),
     };
 
+    /// <param name="IsOwner">The caller is the workspace's active Owner, who reads the workspace's money and team.</param>
     private sealed record Scope(
         WorkspaceCalendar Calendar,
         TimeZoneInfo TimeZone,
         Guid CallerUserId,
+        bool IsOwner,
         IReadOnlyList<ScopedClient> Clients,
         IReadOnlyDictionary<Guid, IReadOnlyList<FeatureAccessDecision>> Access)
     {
@@ -1226,7 +1436,8 @@ internal sealed class CoachOverviewReader(
         DateTimeOffset CreatedAtUtc,
         bool IsCoachBlocked,
         ClientOnboardingStatus OnboardingStatus,
-        DateOnly? BirthDate)
+        DateOnly? BirthDate,
+        uint Version)
     {
         public CoachClientRef Ref => new(
             Id,
@@ -1263,11 +1474,15 @@ internal sealed class CoachOverviewReader(
         bool CanMessage,
         Guid? ChatId,
         DateOnly? PlanPausedSince,
-        int OtherPlanCount)
+        int OtherPlanCount,
+        EndedNotRenewed? NotRenewed)
     {
         /// <summary>The plan the client's page names (R3.5b), whose last day is <see cref="PlanEndsOn"/>.</summary>
         public Guid? PlanEnrollmentId => RunningEnrollmentId ?? EndedPlan?.EnrollmentId;
     }
+
+    /// <summary>A lapsed client's plan that ran out lately, and any plan after it waiting for payment (critique B4b).</summary>
+    private sealed record EndedNotRenewed(Guid EnrollmentId, string PlanName, DateOnly LastDay, Guid? UnpaidPlanId);
 
     private sealed record WaitingCheckIn(Guid ClientProfileId, Guid AssignmentId, DateTimeOffset SubmittedAtUtc);
 
@@ -1294,6 +1509,7 @@ internal sealed class CoachOverviewReader(
 
     private sealed record RenewalAsk(Guid ClientProfileId, DateOnly RequestedOn, DateTimeOffset RequestedAtUtc);
 
+    /// <param name="Ended">The plan ran out (read for Today's Ended, not renewed alone); otherwise it runs or is to come.</param>
     private sealed record PlanEnd(
         Guid ClientProfileId,
         Guid EnrollmentId,
@@ -1301,7 +1517,8 @@ internal sealed class CoachOverviewReader(
         DateOnly EndDateExclusive,
         string PlanName,
         bool Paid,
-        DateTimeOffset? PausedAtUtc);
+        DateTimeOffset? PausedAtUtc,
+        bool Ended);
 
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);
 

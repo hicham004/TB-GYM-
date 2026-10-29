@@ -78,36 +78,8 @@
         </app-empty-state>
       }
     } @else {
-      <div class="tiles">
-        <app-stat-tile
-          label="Clients"
-          i18n-label
-          [value]="view.clientCount"
-          [context]="clientsContext()"
-        >
-          @if (waiting().length > 0) {
-            <app-avatar-stack
-              stat-tile-accessory
-              [people]="waiting()"
-              label="Clients with something for you"
-              i18n-label
-            />
-          }
-        </app-stat-tile>
-        <app-stat-tile
-          label="Workouts done this week"
-          i18n-label
-          [value]="sessionsValue()"
-          [context]="sessionsContext()"
-        />
-        <app-stat-tile
-          label="Plans ending in 14 days"
-          i18n-label
-          [value]="view.plansEndingSoon"
-          [context]="endingContext()"
-        />
-      </div>
-
+      <!-- From the top (critique B4b): Needs you, This month, the plans ending soon, the plans that
+           ended unrenewed, then the feed; on a phone the feed sits folded under Needs you. -->
       <div class="columns">
         <section class="panel queue" aria-labelledby="needs-heading">
           <header class="panel-head">
@@ -140,8 +112,8 @@
                       type="button"
                       class="need-action"
                       [variant]="first ? 'filled' : 'outlined'"
-                      [loading]="reminding() === clientId"
-                      (click)="remind(clientId)"
+                      [loading]="startingChat() === clientId"
+                      (click)="startChat(clientId)"
                     >
                       {{ row.action.label
                       }}<span class="tb-visually-hidden"> {{ row.action.forWhom }}</span>
@@ -175,110 +147,212 @@
           </footer>
         </section>
 
-        <section class="panel feed" aria-labelledby="activity-heading">
+        @if (phone()) {
+          <app-disclosure
+            class="feed-fold"
+            variant="panel"
+            label="What your clients did"
+            i18n-label
+            hint="Last 7 days"
+            i18n-hint
+            [count]="view.activity.length"
+          >
+            <ng-template appDisclosureContent>
+              <ng-container [ngTemplateOutlet]="feed" />
+            </ng-template>
+          </app-disclosure>
+        }
+
+        <section class="panel month" aria-labelledby="month-heading">
           <header class="panel-head">
-            <h2 id="activity-heading" i18n>Activity</h2>
-            <span class="panel-span" i18n>Last 7 days</span>
+            <h2 id="month-heading" i18n>This month</h2>
+            <span class="panel-span">{{ view.month.name }}</span>
           </header>
-          @if (view.activity.length > 0) {
-            <ul class="rows" role="list" id="coach-activity">
-              @for (row of activity(); track row.key) {
-                <li class="event">
-                  <app-avatar [initials]="row.initials" presentation="client" />
-                  <div class="event-copy">
-                    <a class="event-link" [routerLink]="row.link">{{ row.sentence }}</a>
-                    @if (row.records.length > 0) {
-                      <span class="records">
-                        @for (record of row.records; track $index) {
-                          <span class="record"
-                            ><span class="pr" i18n>PR</span
-                            ><span class="tb-visually-hidden" i18n>Personal record:</span>
-                            {{ record }}</span
-                          >
-                        }
-                        @if (row.moreRecords > 0) {
-                          <span class="more" i18n>{row.moreRecords, plural,
-                            =1 {and 1 more record}
-                            other {and {{ row.moreRecords }} more records}
-                          }</span>
-                        }
+          <div class="month-parts">
+            <div class="month-part">
+              <h3 class="month-label" i18n>Money received</h3>
+              @if (view.month.money.length > 0) {
+                <!-- One line per currency, each the server's exact total: never added together. -->
+                <ul class="money" role="list">
+                  @for (line of view.month.money; track line.currency) {
+                    <!-- The kept space reads "USD 2,340 7 payments", never "USD 2,3407". -->
+                    <li class="money-line">
+                      <span class="money-amount">{{ line.amount }}</span
+                      >&ngsp;<span class="money-count">{{ line.payments }}</span>
+                    </li>
+                  }
+                </ul>
+                <p class="month-note">{{ view.month.moneyFrom }}</p>
+              } @else {
+                <p class="month-empty" i18n>Nothing received yet this month</p>
+                <p class="month-note" i18n>
+                  Payments you record show up here on the day they arrived.
+                </p>
+              }
+            </div>
+            <div class="month-part">
+              <h3 class="month-label" i18n>Active clients</h3>
+              <p class="month-value">{{ view.month.active }}</p>
+              <p class="month-note" i18n>With a plan running today</p>
+            </div>
+            @if (view.month.staff; as staff) {
+              <div class="month-part">
+                <h3 class="month-label" i18n>Coaches</h3>
+                <ul class="staff" role="list">
+                  @for (member of staff; track member.key) {
+                    <li class="staff-row">
+                      <app-avatar [initials]="member.initials" presentation="coach-account" />
+                      <span class="staff-copy">
+                        <span class="staff-name">{{ member.name }}</span
+                        >&ngsp;<span class="staff-clients">{{ member.clients }}</span>
                       </span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+
+      <div class="plans">
+        <section class="panel plan-list" aria-labelledby="ending-heading">
+          <header class="panel-head">
+            <h2 id="ending-heading">
+              <ng-container i18n>Plans ending soon</ng-container>
+              @if (view.plansEnding.length > 0) {
+                &ngsp;<span class="count">{{ view.plansEnding.length }}</span>
+              }
+            </h2>
+            <span class="panel-span" i18n>Next 14 days</span>
+          </header>
+          @if (view.plansEnding.length > 0) {
+            <ul class="rows" role="list">
+              @for (row of view.plansEnding; track row.key) {
+                <li class="plan-row">
+                  <app-avatar [initials]="row.initials" presentation="client" />
+                  <div class="plan-copy">
+                    <p class="plan-name">
+                      {{ row.name }}
+                      @if (row.coach) {
+                        <span class="plan-coach" i18n>· Coached by {{ row.coach }}</span>
+                      }
+                    </p>
+                    <p class="plan-detail">
+                      @if (row.plan) {
+                        <bdi class="plan-title">{{ row.plan }}</bdi> ·
+                      }
+                      {{ row.detail }}
+                    </p>
+                  </div>
+                  <div class="plan-actions">
+                    <a
+                      appButton
+                      variant="outlined"
+                      [routerLink]="row.action.link"
+                      [queryParams]="row.action.queryParams"
+                      >{{ row.action.label
+                      }}<span class="tb-visually-hidden"> {{ row.action.forWhom }}</span></a
+                    >
+                    @if (row.message; as message) {
+                      @if (message.startsChatWith; as clientId) {
+                        <!-- No chat yet: starts it, then opens it, as the client page's Message does. -->
+                        <button
+                          appButton
+                          type="button"
+                          variant="text"
+                          [loading]="startingChat() === clientId"
+                          (click)="startChat(clientId)"
+                        >
+                          {{ message.label
+                          }}<span class="tb-visually-hidden"> {{ message.forWhom }}</span>
+                        </button>
+                      } @else {
+                        <a
+                          appButton
+                          variant="text"
+                          [routerLink]="message.link"
+                          [queryParams]="message.queryParams"
+                          >{{ message.label
+                          }}<span class="tb-visually-hidden"> {{ message.forWhom }}</span></a
+                        >
+                      }
                     }
-                    <time class="event-time" [attr.datetime]="row.occurredAt">{{ row.ago }}</time>
                   </div>
                 </li>
               }
             </ul>
-            @if (view.activity.length > feedPreview) {
-              <button
-                appButton
-                type="button"
-                variant="text"
-                class="feed-toggle"
-                aria-controls="coach-activity"
-                [attr.aria-expanded]="feedOpen()"
-                (click)="feedOpen.set(!feedOpen())"
-              >
-                @if (feedOpen()) {
-                  <ng-container i18n>Show less</ng-container>
-                } @else {
-                  <ng-container i18n>Show all {{ view.activity.length }}</ng-container>
-                }
-              </button>
-            }
           } @else {
-            <p class="feed-empty" i18n>
-              Finished workouts and sent check-ins from the last 7 days will show up here.
-            </p>
+            <p class="list-empty" i18n>No plan ends in the next 14 days.</p>
+          }
+        </section>
+
+        <section class="panel plan-list" aria-labelledby="ended-heading">
+          <header class="panel-head">
+            <h2 id="ended-heading" #endedHeading tabindex="-1">
+              <ng-container i18n>Ended, not renewed</ng-container>
+              @if (view.plansEnded.length > 0) {
+                &ngsp;<span class="count">{{ view.plansEnded.length }}</span>
+              }
+            </h2>
+            <span class="panel-span" i18n>Last 30 days</span>
+          </header>
+          @if (view.plansEnded.length > 0) {
+            <ul class="rows" role="list">
+              @for (row of view.plansEnded; track row.key) {
+                <li class="plan-row">
+                  <app-avatar [initials]="row.initials" presentation="client" />
+                  <div class="plan-copy">
+                    <p class="plan-name">
+                      {{ row.name }}
+                      @if (row.coach) {
+                        <span class="plan-coach" i18n>· Coached by {{ row.coach }}</span>
+                      }
+                    </p>
+                    <p class="plan-detail">
+                      @if (row.plan) {
+                        <bdi class="plan-title">{{ row.plan }}</bdi> ·
+                      }
+                      {{ row.detail }}
+                    </p>
+                  </div>
+                  <div class="plan-actions">
+                    <a
+                      appButton
+                      variant="outlined"
+                      [routerLink]="row.action.link"
+                      [queryParams]="row.action.queryParams"
+                      >{{ row.action.label
+                      }}<span class="tb-visually-hidden"> {{ row.action.forWhom }}</span></a
+                    >
+                    @if (row.release; as client) {
+                      <!-- The owner's alone (ADR 0027): asked first, with a reason, in the release dialog. -->
+                      <app-client-release
+                        [client]="client"
+                        variant="text"
+                        [forWhom]="client.forWhom"
+                        (released)="released($event)"
+                      />
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="list-empty" i18n>No plan ran out in the last 30 days without a renewal.</p>
           }
         </section>
       </div>
 
-      <section class="panel week" aria-labelledby="week-heading">
-        <div class="week-copy">
-          <h2 id="week-heading" class="week-label" i18n>This week</h2>
-          <p class="week-value">
-            <span class="week-number" i18n
-              >{{ view.week.completed }} of {{ view.week.scheduled }}</span
-            >
-            <span class="week-caption" i18n>workouts done so far</span>
-          </p>
-        </div>
-        <div class="bars" aria-hidden="true">
-          @for (bar of view.week.bars; track bar.date) {
-            <div class="bar" [class.is-today]="bar.isToday" [class.is-future]="bar.isFuture">
-              <span class="bar-track" [style.height.%]="bar.height">
-                <i class="bar-done" [style.height.%]="bar.done"></i>
-              </span>
-              <span class="bar-label">{{ bar.label }}</span>
-            </div>
-          }
-        </div>
-        <!-- A table ignores a 1px width, so the hidden wrapper is what clips it. -->
-        <div class="tb-visually-hidden">
-          <table>
-            <caption i18n>
-              Workouts this week, by day
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col" i18n>Day</th>
-                <th scope="col" i18n>Done</th>
-                <th scope="col" i18n>Scheduled</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (bar of view.week.bars; track bar.date) {
-                <tr>
-                  <th scope="row">{{ bar.longLabel }}</th>
-                  <td>{{ bar.completed }}</td>
-                  <td>{{ bar.scheduled }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      </section>
+      @if (!phone()) {
+        <section class="panel feed" aria-labelledby="activity-heading">
+          <header class="panel-head">
+            <h2 id="activity-heading" i18n>What your clients did</h2>
+            <span class="panel-span" i18n>Last 7 days</span>
+          </header>
+          <ng-container [ngTemplateOutlet]="feed" />
+        </section>
+      }
     }
   } @else if (failed()) {
     <div class="panel load-failed" role="alert">
@@ -286,11 +360,6 @@
       <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
     </div>
   } @else {
-    <div class="tiles">
-      @for (tile of [1, 2, 3]; track tile) {
-        <app-skeleton class="panel" label="Loading today" i18n-label [lines]="2" />
-      }
-    </div>
     <div class="columns">
       <app-skeleton
         class="panel"
@@ -299,7 +368,66 @@
         [lines]="5"
         [avatar]="true"
       />
-      <app-skeleton class="panel" label="Loading activity" i18n-label [lines]="5" [avatar]="true" />
+      <app-skeleton class="panel" label="Loading this month" i18n-label [lines]="4" />
+    </div>
+    <div class="plans">
+      <app-skeleton class="panel" label="Loading plans" i18n-label [lines]="3" [avatar]="true" />
+      <app-skeleton class="panel" label="Loading plans" i18n-label [lines]="3" [avatar]="true" />
     </div>
   }
 </section>
+
+<!-- The feed: the newest five, then the rest on request (critique T2). -->
+<ng-template #feed>
+  @if (activityCount() > 0) {
+    <ul class="rows" role="list" id="coach-activity">
+      @for (row of activity(); track row.key) {
+        <li class="event">
+          <app-avatar [initials]="row.initials" presentation="client" />
+          <div class="event-copy">
+            <a class="event-link" [routerLink]="row.link">{{ row.sentence }}</a>
+            @if (row.records.length > 0) {
+              <span class="records">
+                @for (record of row.records; track $index) {
+                  <span class="record"
+                    ><span class="pr" i18n>PR</span
+                    ><span class="tb-visually-hidden" i18n>Personal record:</span>
+                    {{ record }}</span
+                  >
+                }
+                @if (row.moreRecords > 0) {
+                  <span class="more" i18n>{row.moreRecords, plural,
+                    =1 {and 1 more record}
+                    other {and {{ row.moreRecords }} more records}
+                  }</span>
+                }
+              </span>
+            }
+            <time class="event-time" [attr.datetime]="row.occurredAt">{{ row.ago }}</time>
+          </div>
+        </li>
+      }
+    </ul>
+    @if (activityCount() > feedPreview) {
+      <button
+        appButton
+        type="button"
+        variant="text"
+        class="feed-toggle"
+        aria-controls="coach-activity"
+        [attr.aria-expanded]="feedOpen()"
+        (click)="feedOpen.set(!feedOpen())"
+      >
+        @if (feedOpen()) {
+          <ng-container i18n>Show less</ng-container>
+        } @else {
+          <ng-container i18n>Show all {{ activityCount() }}</ng-container>
+        }
+      </button>
+    }
+  } @else {
+    <p class="feed-empty" i18n>
+      Finished workouts and sent check-ins from the last 7 days will show up here.
+    </p>
+  }
+</ng-template>

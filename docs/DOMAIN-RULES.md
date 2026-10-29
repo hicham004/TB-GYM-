@@ -193,8 +193,8 @@ with their records (TRN-019), and sent check-ins of the last 7 days; a weigh-in 
 client's last activity. Counts carry their dates; no percentage is derived on the server.
 A client's own page (R3.3b, `GET /api/clients/{clientId}/overview`) reads the same rule for that one
 client: the same status, the same ranked items with what each one's action needs, the last activity,
-and the workspace calendar week's sessions counted as Today counts them (null when training is not in
-the plan). It answers 404 for a former client, another coach's client or an unknown one, so the page
+and the workspace calendar week's sessions, scheduled and done (null when training is not in the plan;
+critique B4b took the week off Today). It answers 404 for a former client, another coach's client or an unknown one, so the page
 can never say "nothing needs you" about a client the list flags.
 
 **CLI-019** A sign-in lasts 8 hours as a browser session, or 30 days when "Keep me signed in" is ticked
@@ -204,6 +204,23 @@ and a password change every session but the one that made it. Five wrong passwor
 for 15 minutes, and a locked account is told so with the time left, whichever password is typed. A
 session that ends while the app is open takes the person to sign-in, says why in one sentence, and
 brings them back to the page and the workspace they were in.
+
+**CLI-020** Coach Today (critique B4b; decided overnight on 2026-10-29, for the owner to confirm) shows, beside Needs
+you (CLI-018, unchanged) and the feed, three parts, all over the clients the caller coaches (CLI-013) and never a
+former client. **This month**: the money received by SUB-016; the active clients, current clients whose plan runs
+today (any feature granted), out of all their current clients; and for the owner alone every active member of staff,
+the owner first as You, then by name, each with their current clients and how many are active. A coach's Today
+carries no other coach's name, money or count. **Plans ending soon**: each client whose running plan raises CLI-018's
+ending-soon flag, with the plan's name and last paid day, the soonest first; a renewal booked after it and not paid
+yet is named, so its payment is recorded rather than a second renewal (BEB-7), and Message is offered only when the
+caller may message the client (CLI-013). **Ended, not renewed**: each client whose whole plan has lapsed (every
+feature's decision Expired, NoEntitlement or PaymentRequired: nothing runs, is paused, is paid and still to come,
+was cancelled or is blocked) and whose plan that ran out, SUB-014's ended plan or else the one ending last, had its
+last day within the last 30 days, today counted (a last day 29 days ago is listed, one 30 days ago is not), the
+latest end first. A plan booked after it and waiting for payment is named, to record its payment instead of Renew,
+and a renewal request from the last 30 days is shown. A cancelled plan is never listed. Ending a client's coaching
+(CLI-015) stays the owner's, so only the owner's rows carry the client's version it asks for. The workspace week's
+sessions left Today; a client's page keeps its week.
 
 ## 3. Products, enrollments, payments, programs, and access
 
@@ -313,6 +330,22 @@ booked to start later. A client counts once per option and once per product, how
 they hold. An option on sale also counts the clients of the options it replaced through Change price, who
 keep their old price (audit COACH-2); a retired option counts its own. It is a read for the coach; it
 decides no access.
+
+**SUB-016** Money received v1 (`MoneyReceived`, critique B4b; decided overnight on 2026-10-29, for the owner to
+confirm) is what Coach Today's This month counts (CLI-020). Only receipts count: no void, correction or refund exists
+yet (SUB-007), and a part payment counts as it arrives, though access waits for the full price (SUB-008). Each
+receipt counts on the workspace day it was received (SUB-007's day, read back in the workspace's time zone), inside
+the workspace's calendar month `[first day, first day of next month)`, and that day alone decides the month: the
+database read only narrows it, a day wider on each side, from midnights worked out in .NET from that zone (a midnight
+the clocks skip starts the day when they land, one they pass twice starts it at its first pass), so no clock change
+at midnight drops a receipt or counts it twice. A receipt counts for the coach the client had when it was received: the newest entry of the client's append-only coach
+history (ADR 0026) assigned at or before the receipt's instant (the moment it was recorded for a receipt of today,
+the workspace's midday for an earlier day); a receipt dated before the client's first entry counts for that entry's
+coach. A released client's receipts still count, for the coach they had then, and a client moved to another coach
+leaves their earlier receipts with the earlier coach. A coach reads only the totals that count for them, the owner
+the whole workspace's (a per-coach breakdown is critique B10d); each total is one currency's, exact, with how many
+payments made it up, never added, netted or converted across currencies, never called profit or earnings, and no
+client is named beside it.
 
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 

@@ -28,6 +28,7 @@ internal sealed class CoachClientScope(
 {
     private bool resolved;
     private Guid? restrictedCoachUserId;
+    private TenantRole? callerRole;
 
     /// <summary>
     /// The caller's user id when they are an active Coach (not the Owner) of this workspace, so their
@@ -42,7 +43,7 @@ internal sealed class CoachClientScope(
 
         if (currentUser.UserId is { } userId && tenantContext.HasTenant)
         {
-            var role = await dbContext.TenantMemberships
+            callerRole = await dbContext.TenantMemberships
                 .AsNoTracking()
                 .Where(membership =>
                     membership.TenantId == tenantContext.TenantId &&
@@ -50,11 +51,22 @@ internal sealed class CoachClientScope(
                     membership.Status == MembershipStatus.Active)
                 .Select(membership => (TenantRole?)membership.Role)
                 .SingleOrDefaultAsync(cancellationToken);
-            restrictedCoachUserId = role == TenantRole.Coach ? userId : null;
+            restrictedCoachUserId = callerRole == TenantRole.Coach ? userId : null;
         }
 
         resolved = true;
         return restrictedCoachUserId;
+    }
+
+    /// <summary>
+    /// Whether the caller is this workspace's active Owner, read with the role above (no second query). What only the
+    /// owner may read, such as the whole workspace's money or the team's client counts, asks this rather than taking
+    /// "not restricted" to mean the owner.
+    /// </summary>
+    public async Task<bool> IsOwnerAsync(CancellationToken cancellationToken)
+    {
+        await RestrictedCoachUserIdAsync(cancellationToken);
+        return callerRole == TenantRole.Owner;
     }
 
     /// <summary>

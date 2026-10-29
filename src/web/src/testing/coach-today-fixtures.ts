@@ -3,17 +3,22 @@ import type {
   CoachAttentionItemView,
   CoachAttentionKind,
   CoachClientRef,
+  CoachMonthView,
+  CoachPlanEndedView,
+  CoachPlanEndingView,
   CoachTodayView,
 } from '../app/core/api/generated';
 
 /**
  * Coach Today for Karim Haddad, owner of Atlas Performance, on Thu 1 Oct 2026 at 15:00 in Beirut
- * (12:00 UTC). Lea Khoury coaches Maya; everyone else is Karim's.
+ * (12:00 UTC). Lea Khoury coaches Maya and Hadi; Omar Saleh has no clients yet; everyone else is
+ * Karim's.
  */
 export const COACH_TODAY = '2026-10-01';
 export const COACH_NOW = '2026-10-01T12:00:00Z';
 export const OWNER_ID = '00000000-0000-4000-8000-0000000000a1';
 export const LEA_ID = '00000000-0000-4000-8000-0000000000a2';
+export const OMAR_ID = '00000000-0000-4000-8000-0000000000a3';
 
 export function coachClient(
   id: string,
@@ -38,6 +43,7 @@ export const NOUR = coachClient('c-nour', 'Nour', 'Hamdan');
 export const JAD = coachClient('c-jad', 'Jad', 'Karam');
 export const LYNN = coachClient('c-lynn', 'Lynn', 'Bou Khalil');
 export const RAMI = coachClient('c-rami', 'Rami', 'Tabet');
+export const HADI = coachClient('c-hadi', 'Hadi', 'Nassar', { id: LEA_ID, name: 'Lea Khoury' });
 
 export function attentionItem(
   kind: CoachAttentionKind,
@@ -121,21 +127,9 @@ export function coachTodayView(overrides: Partial<CoachTodayView> = {}): CoachTo
     clientCount: 12,
     plansEndingSoonCount: 3,
     renewalRequestCount: 1,
-    week: {
-      from: '2026-09-28',
-      toExclusive: '2026-10-05',
-      scheduled: 27,
-      completed: 10,
-      days: [
-        { date: '2026-09-28', scheduled: 3, completed: 3 },
-        { date: '2026-09-29', scheduled: 5, completed: 3 },
-        { date: '2026-09-30', scheduled: 3, completed: 3 },
-        { date: '2026-10-01', scheduled: 4, completed: 1 },
-        { date: '2026-10-02', scheduled: 6, completed: 0 },
-        { date: '2026-10-03', scheduled: 1, completed: 0 },
-        { date: '2026-10-04', scheduled: 5, completed: 0 },
-      ],
-    },
+    month: coachMonth(),
+    plansEndingSoon: plansEndingSoon(),
+    plansEndedNotRenewed: plansEndedNotRenewed(),
     attention,
     activityFromUtc: '2026-09-24T12:00:00Z',
     activity,
@@ -147,28 +141,152 @@ export function coachTodayView(overrides: Partial<CoachTodayView> = {}): CoachTo
   };
 }
 
+/**
+ * October so far, as the owner reads it (SUB-016, CLI-020): money received in two currencies, never
+ * added together, 9 of the 12 clients with a plan running today, and the team, Karim first as You.
+ */
+export function coachMonth(overrides: Partial<CoachMonthView> = {}): CoachMonthView {
+  return {
+    from: '2026-10-01',
+    toExclusive: '2026-11-01',
+    moneyReceived: [
+      { currency: 'LBP', amount: 4500000, paymentCount: 1 },
+      { currency: 'USD', amount: 2340, paymentCount: 7 },
+    ],
+    activeClientCount: 9,
+    coaches: [
+      {
+        coachUserId: OWNER_ID,
+        name: 'Karim Haddad',
+        isYou: true,
+        activeClientCount: 7,
+        clientCount: 10,
+      },
+      {
+        coachUserId: LEA_ID,
+        name: 'Lea Khoury',
+        isYou: false,
+        activeClientCount: 2,
+        clientCount: 2,
+      },
+      {
+        coachUserId: OMAR_ID,
+        name: 'Omar Saleh',
+        isYou: false,
+        activeClientCount: 0,
+        clientCount: 0,
+      },
+    ],
+    moneyRuleKey: 'MoneyReceived',
+    moneyRuleVersion: 1,
+    ...overrides,
+  };
+}
+
+/**
+ * Plans ending soon, the soonest first: Rita's (Karim's chat with her exists), Sara's (no chat yet)
+ * and Maya's, whose renewal is booked and not paid yet; Lea coaches Maya, so Karim may not message
+ * her (CLI-013).
+ */
+export function plansEndingSoon(): CoachPlanEndingView[] {
+  return [
+    {
+      client: RITA,
+      enrollmentId: 'e-rita',
+      planName: 'Strength coaching',
+      lastDay: '2026-10-02',
+      unpaidRenewalId: null,
+      canMessage: true,
+      chatId: 'conv-rita',
+    },
+    {
+      client: SARA,
+      enrollmentId: 'e-sara',
+      planName: 'Online coaching',
+      lastDay: '2026-10-07',
+      unpaidRenewalId: null,
+      canMessage: true,
+      chatId: null,
+    },
+    {
+      client: MAYA,
+      enrollmentId: 'e-maya',
+      planName: 'Fat loss · 12 weeks',
+      lastDay: '2026-10-09',
+      unpaidRenewalId: 'e-maya-next',
+      canMessage: false,
+      chatId: null,
+    },
+  ];
+}
+
+/**
+ * Plans that ran out lately and were not renewed, the latest end first: Elie's, who asked to renew,
+ * and Hadi's (Lea's client), whose next plan waits for payment. The owner's rows carry each client's
+ * version, which End coaching asks for (ADR 0027).
+ */
+export function plansEndedNotRenewed(): CoachPlanEndedView[] {
+  return [
+    {
+      client: ELIE,
+      enrollmentId: 'e-elie',
+      planName: 'Strength coaching',
+      lastDay: '2026-09-27',
+      unpaidRenewalId: null,
+      renewalRequestedOn: '2026-09-29',
+      clientVersion: 4,
+    },
+    {
+      client: HADI,
+      enrollmentId: 'e-hadi',
+      planName: 'Online coaching',
+      lastDay: '2026-09-20',
+      unpaidRenewalId: 'e-hadi-next',
+      renewalRequestedOn: null,
+      clientVersion: 9,
+    },
+  ];
+}
+
+/**
+ * Today as Lea Khoury, a coach, reads it: her own money and clients only, no team and no client's
+ * version, since only the owner ends a client's coaching (CLI-020, ADR 0027).
+ */
+export function coachOwnTodayView(): CoachTodayView {
+  return coachTodayView({
+    clientCount: 2,
+    month: coachMonth({
+      moneyReceived: [{ currency: 'USD', amount: 82.5, paymentCount: 1 }],
+      activeClientCount: 2,
+      coaches: null,
+    }),
+    plansEndingSoon: [{ ...plansEndingSoon()[2], canMessage: true }],
+    plansEndedNotRenewed: [{ ...plansEndedNotRenewed()[1], clientVersion: null }],
+  });
+}
+
 /** A coaching space with no clients yet. */
 export function emptyCoachTodayView(): CoachTodayView {
   return coachTodayView({
     clientCount: 0,
     plansEndingSoonCount: 0,
     renewalRequestCount: 0,
+    month: coachMonth({
+      moneyReceived: [],
+      activeClientCount: 0,
+      coaches: [
+        {
+          coachUserId: OWNER_ID,
+          name: 'Karim Haddad',
+          isYou: true,
+          activeClientCount: 0,
+          clientCount: 0,
+        },
+      ],
+    }),
+    plansEndingSoon: [],
+    plansEndedNotRenewed: [],
     attention: [],
     activity: [],
-    week: {
-      from: '2026-09-28',
-      toExclusive: '2026-10-05',
-      scheduled: 0,
-      completed: 0,
-      days: ['28', '29', '30']
-        .map((day) => ({ date: `2026-09-${day}`, scheduled: 0, completed: 0 }))
-        .concat(
-          ['01', '02', '03', '04'].map((day) => ({
-            date: `2026-10-${day}`,
-            scheduled: 0,
-            completed: 0,
-          })),
-        ),
-    },
   });
 }

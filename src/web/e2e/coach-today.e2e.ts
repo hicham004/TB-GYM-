@@ -78,11 +78,27 @@ for (const [width, height] of [
       'href',
       '/messages?conversation=conv-sara',
     );
+    // This month: each currency on its own line, never added together (critique B4b, SUB-016).
+    await expect(page.locator('section.month .money-line')).toHaveText([
+      /LBP 4,500,000\s*1 payment/,
+      /USD 2,340\s*7 payments/,
+    ]);
+    await expect(
+      page.getByRole('link', { name: 'Renew for Rita Daher', exact: true }),
+    ).toHaveAttribute('href', '/clients/c-rita/service?renew=e-rita');
+    await expect(
+      page.getByRole('button', { name: 'End coaching with Elie Azar', exact: true }),
+    ).toBeVisible();
+    if (width < 768) {
+      // On a phone the feed sits under Needs you, folded with its count.
+      const fold = page.locator('app-disclosure.feed-fold summary');
+      await expect(fold).toContainText('What your clients did');
+      await fold.click();
+    }
     await expect(page.locator('li.event').first()).toContainText(
       'Rami Tabet finished Lower A in 58 min',
     );
     await expect(page.locator('li.event').first()).toContainText('35 minutes ago');
-    await expect(page.locator('.bars .bar')).toHaveCount(7);
     await expectNoHorizontalOverflow(page);
     await axe(page);
     await page.screenshot({ path: `test-results/r32-coach-today-${width}.png`, fullPage: true });
@@ -159,7 +175,7 @@ test('an empty coaching space invites the first client instead of showing zeros'
     'href',
     '/invitations',
   );
-  await expect(page.locator('app-stat-tile')).toHaveCount(0);
+  await expect(page.locator('section.month')).toHaveCount(0);
   await axe(page);
 });
 
