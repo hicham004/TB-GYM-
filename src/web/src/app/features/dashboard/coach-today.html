@@ -133,15 +133,30 @@
                     </p>
                   </div>
                   <span class="tag" [attr.data-tone]="row.tone">{{ row.tag }}</span>
-                  <a
-                    appButton
-                    class="need-action"
-                    [variant]="first ? 'filled' : 'outlined'"
-                    [routerLink]="row.action.link"
-                    [queryParams]="row.action.queryParams"
-                    >{{ row.action.label
-                    }}<span class="tb-visually-hidden"> {{ row.action.forWhom }}</span></a
-                  >
+                  @if (row.action.startsChatWith; as clientId) {
+                    <!-- Remind with no chat yet: starts it, then opens it (critique B4a). -->
+                    <button
+                      appButton
+                      type="button"
+                      class="need-action"
+                      [variant]="first ? 'filled' : 'outlined'"
+                      [loading]="reminding() === clientId"
+                      (click)="remind(clientId)"
+                    >
+                      {{ row.action.label
+                      }}<span class="tb-visually-hidden"> {{ row.action.forWhom }}</span>
+                    </button>
+                  } @else {
+                    <a
+                      appButton
+                      class="need-action"
+                      [variant]="first ? 'filled' : 'outlined'"
+                      [routerLink]="row.action.link"
+                      [queryParams]="row.action.queryParams"
+                      >{{ row.action.label
+                      }}<span class="tb-visually-hidden"> {{ row.action.forWhom }}</span></a
+                    >
+                  }
                 </li>
               }
             </ul>
@@ -154,6 +169,10 @@
               <p class="caught-up-text" i18n>New check-ins and messages will appear here.</p>
             </div>
           }
+          <!-- What each reason means and when it clears, as on Clients (critique B4a). -->
+          <footer class="queue-foot">
+            <app-statuses-help />
+          </footer>
         </section>
 
         <section class="panel feed" aria-labelledby="activity-heading">

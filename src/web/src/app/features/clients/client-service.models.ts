@@ -14,8 +14,8 @@ import {
   addDays,
   currentEnrollment,
   daysBetween,
-  RENEWAL_PROMPT_DAYS,
   renewalPrompt,
+  type PlanEnding,
 } from './client-overview.models';
 
 /**
@@ -30,6 +30,8 @@ export interface ServiceContext {
   /** The workspace's today, `YYYY-MM-DD`; never the browser's. */
   readonly today: string;
   readonly firstName: string;
+  /** The server's flag for the plan ending soon (CLI-018), from the client's overview; none without it. */
+  readonly ending?: PlanEnding | null;
 }
 
 export interface PlanFact {
@@ -155,14 +157,14 @@ function isOver(plan: ClientEnrollment, today: string): boolean {
   return plan.storedStatus === 'Cancelled' || today >= plan.endDateExclusive;
 }
 
-function daysLeftPill(plan: ClientEnrollment, today: string): PlanPill {
+/** The days left, warm while the server flags this plan ending soon: the page counts none of its own. */
+function daysLeftPill(plan: ClientEnrollment, today: string, ending: PlanEnding | null): PlanPill {
   const left = daysBetween(today, plan.lastActiveDate);
-  if (left <= 0) return { label: $localize`Ends today`, tone: 'warm' };
-  if (left === 1) return { label: $localize`Ends tomorrow`, tone: 'warm' };
-  if (left <= RENEWAL_PROMPT_DAYS) {
-    return { label: $localize`Ends in ${left}:count: days`, tone: 'warm' };
-  }
-  return { label: $localize`Active · ${left}:count: days left`, tone: 'success' };
+  const tone = ending?.lastDay === plan.lastActiveDate ? 'warm' : 'success';
+  if (left <= 0) return { label: $localize`Ends today`, tone };
+  if (left === 1) return { label: $localize`Ends tomorrow`, tone };
+  if (tone === 'warm') return { label: $localize`Ends in ${left}:count: days`, tone };
+  return { label: $localize`Active · ${left}:count: days left`, tone };
 }
 
 function startsPill(plan: ClientEnrollment, today: string): PlanPill {
@@ -206,7 +208,10 @@ function planState(
   }
   return {
     eyebrow,
-    pill: today < plan.startDate ? startsPill(plan, today) : daysLeftPill(plan, today),
+    pill:
+      today < plan.startDate
+        ? startsPill(plan, today)
+        : daysLeftPill(plan, today, context.ending ?? null),
   };
 }
 
@@ -443,7 +448,7 @@ export function primaryAction(
   if (!card) return { id: 'start', label: $localize`Start a plan` };
   if (card.canPay) return { id: 'pay', label: $localize`Record payment` };
   if (card.canResume) return { id: 'resume', label: $localize`Resume plan` };
-  const prompt = renewalPrompt(plans, context.today);
+  const prompt = renewalPrompt(plans, context.today, context.ending ?? null);
   const nothingAfter = !plans.some(
     (plan) =>
       plan.id !== card.id && !isOver(plan, context.today) && plan.startDate >= context.today,

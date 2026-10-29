@@ -44,6 +44,7 @@ import { Sparkline } from '../../ui/sparkline';
 import { StatTile } from '../../ui/stat-tile';
 import { StatusLabel } from '../../ui/status-label';
 import { StatusPill } from '../../ui/status-pill';
+import { Tag } from '../../ui/tag';
 import { UiTabPane, UiTabs } from '../../ui/tabs';
 import { TimeInput } from '../../ui/time-input';
 import { UiToast } from '../../ui/toast';
@@ -91,6 +92,7 @@ export const LAB_SAVE_DELAY_MS = 1200;
     StatTile,
     StatusLabel,
     StatusPill,
+    Tag,
     TimeInput,
     UiDisclosure,
     UiDisclosureContent,

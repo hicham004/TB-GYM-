@@ -12,6 +12,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
+import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -22,6 +23,9 @@ import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
 import { StatTile } from '../../ui/stat-tile';
+import { UiToast } from '../../ui/toast';
+import { StatusesHelp } from '../clients/statuses-help';
+import { ConversationStarter } from '../messaging/conversation-starter';
 import { mapCoachToday, type CoachToday as CoachTodayModel } from './coach-today.models';
 
 /**
@@ -42,6 +46,7 @@ import { mapCoachToday, type CoachToday as CoachTodayModel } from './coach-today
     RouterLink,
     Skeleton,
     StatTile,
+    StatusesHelp,
   ],
   templateUrl: './coach-today.html',
   styleUrls: ['./coach-today.scss', './coach-today-lists.scss'],
@@ -51,10 +56,14 @@ export class CoachToday {
   private readonly locale = inject(LOCALE_ID);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
+  private readonly conversations = inject(ConversationStarter);
+  private readonly toast = inject(UiToast);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
   protected readonly today = signal<CoachTodayModel | null>(null);
+  /** The client whose chat Remind is starting, so its button waits and a second press does nothing. */
+  protected readonly reminding = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly failed = signal(false);
   /** The feed starts with the newest few, so it never outgrows the queue beside it (§2 rule 7). */
@@ -158,7 +167,30 @@ export class CoachToday {
     });
   }
 
+  /**
+   * Remind for an overdue check-in with no chat yet (critique B4a): starts the coach's chat with the
+   * client, as the client page's Message does, and opens it in Messages.
+   */
+  protected async remind(clientId: string): Promise<void> {
+    if (this.reminding() !== null) return;
+    this.reminding.set(clientId);
+    try {
+      await this.conversations.open(clientId);
+    } catch (error) {
+      this.toast.show(
+        apiErrorMessage(
+          error,
+          $localize`Couldn’t open this conversation. Check messaging access and retry.`,
+        ),
+        { tone: 'error' },
+      );
+    } finally {
+      this.reminding.set(null);
+    }
+  }
+
   private reset(): void {
+    this.reminding.set(null);
     this.feedOpen.set(false);
     this.today.set(null);
     this.loading.set(true);

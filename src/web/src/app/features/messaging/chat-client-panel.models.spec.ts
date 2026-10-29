@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { profileOverview } from '../../../testing/client-profile-fixtures';
-import { COACH_NOW, COACH_TODAY, MAYA } from '../../../testing/coach-today-fixtures';
+import { attentionItem, COACH_NOW, COACH_TODAY, MAYA } from '../../../testing/coach-today-fixtures';
 import { clientPanel } from './chat-client-panel.models';
 
 const context = { locale: 'en-US', now: new Date(COACH_NOW) };
@@ -31,13 +31,26 @@ describe('clientPanel', () => {
     });
   });
 
-  it('flags a plan in its last two weeks', () => {
-    const panel = clientPanel(profileOverview({ planEndsOn: '2026-10-10' }), context);
-
-    expect(panel.plan).toEqual({
+  it('flags a plan the server says ends soon, and counts no days of its own (critique B4a)', () => {
+    const flagged = clientPanel(
+      profileOverview({
+        planEndsOn: '2026-10-10',
+        attention: [attentionItem('PlanEndingSoon', MAYA, { date: '2026-10-10' })],
+      }),
+      context,
+    );
+    expect(flagged.plan).toEqual({
       name: 'Online coaching',
       label: 'Plan ends in 9 days',
       soon: true,
+    });
+
+    // Not flagged (a paid renewal follows, say): the date, never the warm words.
+    const quiet = clientPanel(profileOverview({ planEndsOn: '2026-10-10' }), context);
+    expect(quiet.plan).toEqual({
+      name: 'Online coaching',
+      label: 'Plan ends Sat 10 Oct',
+      soon: false,
     });
   });
 
@@ -104,5 +117,30 @@ describe('clientPanel', () => {
     expect(panel.needs.map((need) => need.kind)).toEqual(['CheckInToReview']);
     expect(panel.needs[0].heading).toBe('Check-in ready to review');
     expect(COACH_TODAY).toBe('2026-10-01');
+  });
+
+  it('sends an overdue check-in to the client’s check-ins, since the coach is in the chat already', () => {
+    const panel = clientPanel(
+      profileOverview({
+        attention: [
+          attentionItem('CheckInOverdue', MAYA, {
+            count: 1,
+            date: '2026-09-28',
+            subjectId: 'conversation-1',
+            canMessage: true,
+          }),
+        ],
+      }),
+      context,
+    );
+
+    expect(panel.needs).toEqual([
+      expect.objectContaining({
+        kind: 'CheckInOverdue',
+        heading: 'Check-in overdue',
+        detail: 'It was due Mon 28 Sep',
+        action: { label: 'See check-ins', link: '/clients/c-maya/checkins', queryParams: null },
+      }),
+    ]);
   });
 });

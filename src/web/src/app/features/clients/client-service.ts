@@ -48,6 +48,7 @@ import {
   type ServiceActionId,
   type ServiceContext,
 } from './client-service.models';
+import { planEnding } from './client-overview.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { AccessChange, PlanStatusChange } from './plan-dialogs';
 import { PlanPayment, PlanStart } from './plan-sheets';
@@ -143,6 +144,8 @@ export class ClientService extends GuardedSheets {
     locale: this.locale,
     today: this.today(),
     firstName: this.firstName(),
+    // The server says whether the plan ends soon (CLI-018); the page counts no days of its own.
+    ending: planEnding(this.context.overview()?.attention),
   }));
 
   private readonly openId = computed(() => {
@@ -260,19 +263,17 @@ export class ClientService extends GuardedSheets {
   protected load(): Promise<void> {
     return this.scope.run('load', async (owner) => {
       this.state.set('loading');
-      const clientId = this.context.clientId();
       const former = this.context.isFormer();
       try {
-        // The plans the record read for this page when it opened here, or a fresh read (audit UIQ-8).
+        // The plans and the overview the record read for this page when it opened here, or fresh reads
+        // (audit UIQ-8); the overview carries the client's request to renew and whether the plan ends soon.
         const [plans, catalog, overview] = await owner.wait(
           Promise.all([
             this.context.plansForPage(),
             former
               ? Promise.resolve(null)
               : firstValueFrom(this.api.getProductCatalog()).catch(() => null),
-            former
-              ? Promise.resolve(null)
-              : firstValueFrom(this.api.getClientOverview(clientId)).catch(() => null),
+            former ? Promise.resolve(null) : this.context.overviewForPage().catch(() => null),
           ]),
         );
         this.context.setPlans(plans);
@@ -440,6 +441,8 @@ export class ClientService extends GuardedSheets {
           ]),
         );
         this.context.setPlans(plans);
+        // The header reads it too, so a plan renewed here stops being flagged there.
+        if (overview) this.context.setOverview(overview);
         this.renewalRequest.set(renewalRequestOf(overview));
       } catch {
         if (!owner.current) return;

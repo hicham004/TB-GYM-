@@ -84,7 +84,11 @@ internal sealed class CoachOverviewReader(
             Earliest(today.AddDays(-TrainingAttentionPolicy.MissedLookbackDays), recentFrom),
             today.AddDays(1),
             cancellationToken);
-        var lastActivity = await LoadLastActivityAsync(scope, cancellationToken);
+        // List-only reads, kept out of LoadStatesAsync so Today and a client's page pay nothing for them.
+        var (lastActivity, lastCheckIns) = await LoadLastActivityAsync(scope, cancellationToken);
+        var plans = await ReadPlanSummariesAsync(
+            [.. states.Select(state => state.PlanEnrollmentId).OfType<Guid>()],
+            cancellationToken);
 
         var rows = states.Select(state =>
         {
@@ -101,7 +105,16 @@ internal sealed class CoachOverviewReader(
                 state.Flags,
                 last?.Kind,
                 last?.AtUtc,
-                state.TrainingIncluded ? Days(state.Sessions, recentFrom, CoachAttentionPolicy.RecentDays) : null);
+                state.TrainingIncluded ? Days(state.Sessions, recentFrom, CoachAttentionPolicy.RecentDays) : null,
+                state.Client.BirthDate,
+                CoachAttentionPolicy.PlanStatus(state.Flags, state.PlanState),
+                state.PlanEnrollmentId is { } enrollmentId ? plans.GetValueOrDefault(enrollmentId) : null,
+                state.OtherPlanCount,
+                state.PlanPausedSince,
+                scope.FeaturesToday(state.Client.Id),
+                CoachAttentionPolicy.Rank(Items(state)),
+                last?.Title,
+                lastCheckIns.TryGetValue(state.Client.Id, out var sentAtUtc) ? sentAtUtc : null);
         }).ToArray();
         return new ClientOverviewView(
             today,
@@ -136,7 +149,7 @@ internal sealed class CoachOverviewReader(
             Latest(today.AddDays(1), weekFrom.AddDays(7)),
             cancellationToken);
         var state = states.Single();
-        var lastActivity = await LoadLastActivityAsync(scope, cancellationToken);
+        var (lastActivity, _) = await LoadLastActivityAsync(scope, cancellationToken);
         lastActivity.TryGetValue(state.Client.Id, out var last);
         var planName = state.RunningPlanName ?? await ReadPlanNameAsync(state.EndedPlan?.EnrollmentId, cancellationToken);
         var lastWorkout = state.TrainingIncluded
@@ -209,7 +222,8 @@ internal sealed class CoachOverviewReader(
                 coach.DisplayName,
                 client.CreatedAtUtc,
                 client.IsCoachBlocked,
-                client.OnboardingStatus))
+                client.OnboardingStatus,
+                client.BirthDate))
             .ToListAsync(cancellationToken);
         var access = await featureAccessService.EvaluateManyAsync(
             tenantContext.TenantId,
@@ -242,8 +256,8 @@ internal sealed class CoachOverviewReader(
             .Where(item => item.Plan is not null)
             .ToDictionary(item => item.Id, item => item.Plan!);
 
-        var waiting = await ReadWaitingCheckInsAsync(checkIns, cancellationToken);
-        var unread = await ReadUnreadAsync(scope.CallerUserId, messaging, cancellationToken);
+        var checkInRows = await ReadCheckInsAsync(checkIns, today, cancellationToken);
+        var chats = await ReadChatsAsync(scope.CallerUserId, messaging, cancellationToken);
         var renewals = await ReadRenewalRequestsAsync([.. endedPlans.Keys], today, cancellationToken);
         var plans = await ReadPlanEndsAsync(scope.Ids, today, cancellationToken);
         var blocks = await ReadOpenBlocksAsync(training, today, cancellationToken);
@@ -270,8 +284,29 @@ internal sealed class CoachOverviewReader(
             var weekToShare = TrainingAttentionPolicy.WeekToShare(
                 clientBlocks.Where(row => row.Week is not null).Select(row => row.Week!),
                 today);
-            var checkIn = waiting[client.Id].OrderBy(item => item.SubmittedAtUtc).ToArray();
-            var conversations = unread[client.Id].OrderBy(item => item.OldestUnreadAtUtc).ToArray();
+            var clientCheckIns = checkInRows[client.Id].ToArray();
+            var checkIn = clientCheckIns
+                .Where(item => item.Status == CheckInResponseStatus.Submitted && item.SubmittedAtUtc is not null)
+                .Select(item => new WaitingCheckIn(item.ClientProfileId, item.AssignmentId, item.SubmittedAtUtc!.Value))
+                .OrderBy(item => item.SubmittedAtUtc)
+                .ToArray();
+            var late = clientCheckIns
+                .Where(item => CheckInAttentionPolicy.IsOverdue(item.DueDate, item.Status, checkIns.Contains(client.Id), today))
+                .OrderBy(item => item.DueDate)
+                .ThenBy(item => item.AssignmentId)
+                .ToArray();
+            var clientChats = chats[client.Id].ToArray();
+            var conversations = clientChats
+                .Where(item => item.UnreadCount > 0 && item.OldestUnreadAtUtc is not null)
+                .Select(item => new UnreadConversation(
+                    item.ClientProfileId,
+                    item.ConversationId,
+                    item.UnreadCount,
+                    item.OldestUnreadAtUtc!.Value))
+                .OrderBy(item => item.OldestUnreadAtUtc)
+                .ToArray();
+            // Only the client's own coach messages them, while messaging is in the plan (CLI-013, ADR 0026).
+            var canMessage = client.CoachUserId == scope.CallerUserId && messaging.Contains(client.Id);
             endedPlans.TryGetValue(client.Id, out var endedPlan);
             var renewal = endedPlan is null
                 ? null
@@ -290,6 +325,11 @@ internal sealed class CoachOverviewReader(
                     .OrderBy(item => item.StartDate)
                     .ToArray()
                 : [];
+            // A pause has no end of its own (SUB-006), so the list says since when the plan covering today was
+            // paused, and only while the plan is paused: another plan's pause is not this client's status.
+            var pausedAtUtc = planState == ClientPlanState.Paused
+                ? livePlans.Where(item => item.StartDate <= today).Min(item => item.PausedAtUtc)
+                : null;
             var programs = maxes[client.Id].ToArray();
             var clientMaxes = Suggestions(programs.Where(item => item.IsOpen));
 
@@ -310,7 +350,8 @@ internal sealed class CoachOverviewReader(
                 missed,
                 trainingIncluded && clientBlocks.Length == 0,
                 clientMaxes.Length,
-                joinedOn);
+                joinedOn,
+                late.Length);
             return new ClientState(
                 client,
                 joinedOn,
@@ -333,7 +374,14 @@ internal sealed class CoachOverviewReader(
                 clientSessions,
                 clientMaxes,
                 lastProgram?.MesocycleId,
-                carried);
+                carried,
+                late.FirstOrDefault(),
+                canMessage,
+                canMessage
+                    ? clientChats.OrderBy(item => item.ConversationId).Select(item => (Guid?)item.ConversationId).FirstOrDefault()
+                    : null,
+                pausedAtUtc is { } pausedAt ? scope.LocalDate(pausedAt) : null,
+                livePlans.Count(item => item.EnrollmentId != runningPlan?.EnrollmentId));
         }).ToArray();
     }
 
@@ -374,6 +422,10 @@ internal sealed class CoachOverviewReader(
                 subjectId: state.MaxSuggestions.MaxBy(item => item.LoggedAtUtc)!.MesocycleId,
                 maxes: MaxViews(state.MaxSuggestions)),
             CoachAttentionKind.NoPlan => Item(kind, state, date: state.JoinedOn),
+            // The oldest overdue sets the day; Remind opens the caller's own chat, which only their own coach has
+            // while messaging is in the plan (decided once, as CanMessage).
+            CoachAttentionKind.CheckInOverdue => Item(kind, state, date: state.OldestOverdue?.DueDate,
+                count: state.Signals.CheckInsOverdue, subjectId: state.CanMessage ? state.ChatId : null),
             _ => throw new InvalidOperationException($"Unknown attention kind {kind}."),
         });
 
@@ -387,7 +439,7 @@ internal sealed class CoachOverviewReader(
         Guid? subjectId = null,
         IReadOnlyList<CoachMaxSuggestionView>? maxes = null,
         DateTimeOffset? newestAt = null) =>
-        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, maxes, newestAt);
+        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, maxes, newestAt, state.CanMessage);
 
     private static CoachMaxSuggestionView[] MaxViews(IEnumerable<MaxSuggestionRow> rows) =>
         [.. rows.Select(item => new CoachMaxSuggestionView(
@@ -414,57 +466,111 @@ internal sealed class CoachOverviewReader(
 
     // ---------- signal reads: one query each, over every client in scope ----------
 
-    /// <summary>Submitted check-ins not yet reviewed, as the coach's review screen counts them.</summary>
-    private async Task<ILookup<Guid, WaitingCheckIn>> ReadWaitingCheckInsAsync(
+    /// <summary>
+    /// In one read, the check-ins the attention rule weighs: every sent one waiting for its review, as the
+    /// coach's review screen counts them, and every one due in the overdue window (CHK-015) with its response's
+    /// status, or none. Only whether and when a response was sent is read, never an answer or what a draft
+    /// holds (CHK-012, CHK-013); <see cref="CheckInAttentionPolicy.IsOverdue"/> decides which are overdue.
+    /// </summary>
+    private async Task<ILookup<Guid, CheckInRow>> ReadCheckInsAsync(
         Guid[] clientIds,
-        CancellationToken cancellationToken) =>
-        clientIds.Length == 0
-            ? Empty<WaitingCheckIn>()
-            : (await dbContext.CheckInResponses.AsNoTracking()
-                .Where(item => clientIds.Contains(item.ClientProfileId) &&
-                               item.Status == CheckInResponseStatus.Submitted &&
-                               item.SubmittedAtUtc != null)
-                .Select(item => new WaitingCheckIn(item.ClientProfileId, item.AssignmentId, item.SubmittedAtUtc!.Value))
-                .ToListAsync(cancellationToken))
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        if (clientIds.Length == 0)
+        {
+            return Empty<CheckInRow>();
+        }
+
+        var (firstDueDay, lastDueDay) = CheckInAttentionPolicy.OverdueDueDays(today);
+        var waiting =
+            from response in dbContext.CheckInResponses.AsNoTracking()
+            join assignment in dbContext.CheckInAssignments.AsNoTracking()
+                on new { response.TenantId, Id = response.AssignmentId }
+                equals new { assignment.TenantId, assignment.Id }
+            where clientIds.Contains(response.ClientProfileId) &&
+                  response.Status == CheckInResponseStatus.Submitted &&
+                  response.SubmittedAtUtc != null
+            select new
+            {
+                assignment.ClientProfileId,
+                AssignmentId = assignment.Id,
+                assignment.DueDate,
+                Status = (CheckInResponseStatus?)response.Status,
+                response.SubmittedAtUtc,
+            };
+        var due =
+            from assignment in dbContext.CheckInAssignments.AsNoTracking()
+            where clientIds.Contains(assignment.ClientProfileId) &&
+                  assignment.DueDate >= firstDueDay &&
+                  assignment.DueDate <= lastDueDay
+            from response in dbContext.CheckInResponses.AsNoTracking()
+                .Where(response => response.TenantId == assignment.TenantId && response.AssignmentId == assignment.Id)
+                .DefaultIfEmpty()
+            select new
+            {
+                assignment.ClientProfileId,
+                AssignmentId = assignment.Id,
+                assignment.DueDate,
+                Status = response == null ? null : (CheckInResponseStatus?)response.Status,
+                SubmittedAtUtc = response == null ? null : response.SubmittedAtUtc,
+            };
+
+        // A sent check-in due in the window comes from both halves; it is the same row.
+        return (await waiting.Concat(due).ToListAsync(cancellationToken))
+            .DistinctBy(item => item.AssignmentId)
+            .Select(item => new CheckInRow(
+                item.ClientProfileId,
+                item.AssignmentId,
+                item.DueDate,
+                item.Status,
+                item.SubmittedAtUtc))
             .ToLookup(item => item.ClientProfileId);
+    }
 
     /// <summary>
-    /// The caller's own unread messages, counted as their Messages badge counts messages: written by the
-    /// client, past the caller's read cursor and not removed, in a thread the caller still coaches. A
-    /// chat the caller marked unread (MSG-022) counts in the badge but holds no message to tell of, so
-    /// it is not here. Chats stay private (ADR 0026), so an Owner never sees another coach's
-    /// conversation counted here, nor their own old thread with a client they handed to a coach (COACH-13).
+    /// The caller's own chats with these clients, each with its unread messages counted as the Messages badge
+    /// counts messages: written by the client, past the caller's read cursor and not removed, in a thread the
+    /// caller still coaches. A chat with nothing unread is here too, for Remind to open (critique B4a). A chat
+    /// the caller marked unread (MSG-022) counts in the badge but holds no message to tell of, so it counts
+    /// none here. Chats stay private (ADR 0026), so an Owner never sees another coach's conversation here,
+    /// nor their own old thread with a client they handed to a coach (COACH-13).
     /// </summary>
-    private async Task<ILookup<Guid, UnreadConversation>> ReadUnreadAsync(
+    private async Task<ILookup<Guid, CallerChat>> ReadChatsAsync(
         Guid callerUserId,
         Guid[] clientIds,
         CancellationToken cancellationToken) =>
         clientIds.Length == 0
-            ? Empty<UnreadConversation>()
+            ? Empty<CallerChat>()
             : (await (
                 from participant in dbContext.ConversationParticipants.AsNoTracking()
                 join conversation in dbContext.Conversations.AsNoTracking()
                     on new { participant.TenantId, Id = participant.ConversationId }
                     equals new { conversation.TenantId, conversation.Id }
-                join message in dbContext.Messages.AsNoTracking()
-                    on new { participant.TenantId, participant.ConversationId }
-                    equals new { message.TenantId, message.ConversationId }
                 where participant.UserId == callerUserId &&
                       participant.Role == ConversationParticipantRole.Coach &&
                       conversation.CoachUserId == callerUserId &&
                       clientIds.Contains(conversation.ClientProfileId) &&
                       dbContext.ClientProfiles.Any(client =>
                           client.Id == conversation.ClientProfileId &&
-                          client.AssignedCoachUserId == callerUserId) &&
-                      message.SenderUserId != callerUserId &&
-                      message.DeletedAtUtc == null &&
-                      message.Sequence > participant.LastReadSequence
-                group message by new { conversation.Id, conversation.ClientProfileId } into grouped
-                select new UnreadConversation(
-                    grouped.Key.ClientProfileId,
-                    grouped.Key.Id,
-                    grouped.LongCount(),
-                    grouped.Min(message => message.SentAtUtc)))
+                          client.AssignedCoachUserId == callerUserId)
+                select new CallerChat(
+                    conversation.ClientProfileId,
+                    conversation.Id,
+                    dbContext.Messages.LongCount(message =>
+                        message.TenantId == participant.TenantId &&
+                        message.ConversationId == participant.ConversationId &&
+                        message.SenderUserId != callerUserId &&
+                        message.DeletedAtUtc == null &&
+                        message.Sequence > participant.LastReadSequence),
+                    dbContext.Messages
+                        .Where(message =>
+                            message.TenantId == participant.TenantId &&
+                            message.ConversationId == participant.ConversationId &&
+                            message.SenderUserId != callerUserId &&
+                            message.DeletedAtUtc == null &&
+                            message.Sequence > participant.LastReadSequence)
+                        .Min(message => (DateTimeOffset?)message.SentAtUtc)))
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.ClientProfileId);
 
@@ -509,7 +615,8 @@ internal sealed class CoachOverviewReader(
                     item.StartDate,
                     item.EndDateExclusive,
                     item.ProductNameSnapshot,
-                    item.Status != EnrollmentStatus.PendingPayment))
+                    item.Status != EnrollmentStatus.PendingPayment,
+                    item.Status == EnrollmentStatus.Paused ? item.PausedAtUtc : null))
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.ClientProfileId);
 
@@ -939,6 +1046,49 @@ internal sealed class CoachOverviewReader(
             records[workout.Id].ToArray());
     }
 
+    /// <summary>
+    /// What each plan includes, its length as it was sold and its price, exact, in its own currency (critique B4a),
+    /// in one read: the enrollment's own snapshots and entitlements (SUB-003), and the length of its offer, whose
+    /// terms never change (SUB-002). A label such as "Student rate" is not a length, so the offer's is read.
+    /// </summary>
+    private async Task<Dictionary<Guid, ClientPlanSummary>> ReadPlanSummariesAsync(
+        Guid[] enrollmentIds,
+        CancellationToken cancellationToken)
+    {
+        if (enrollmentIds.Length == 0)
+        {
+            return [];
+        }
+
+        var plans = await (
+            from enrollment in dbContext.ClientEnrollments.AsNoTracking()
+            join offer in dbContext.ProductOffers.AsNoTracking()
+                on new { enrollment.TenantId, Id = enrollment.OfferId }
+                equals new { offer.TenantId, offer.Id }
+            where enrollmentIds.Contains(enrollment.Id)
+            select new
+            {
+                enrollment.Id,
+                enrollment.ProductNameSnapshot,
+                Features = enrollment.Entitlements.Select(item => item.Feature).ToList(),
+                offer.DurationCount,
+                offer.DurationUnit,
+                enrollment.PriceAmount,
+                enrollment.PriceCurrency,
+            })
+            .ToListAsync(cancellationToken);
+        return plans.ToDictionary(
+            plan => plan.Id,
+            plan => new ClientPlanSummary(
+                plan.Id,
+                plan.ProductNameSnapshot,
+                [.. plan.Features.Distinct().Order()],
+                plan.DurationCount,
+                Length(plan.DurationUnit),
+                plan.PriceAmount,
+                plan.PriceCurrency));
+    }
+
     /// <summary>The name a plan was sold under, kept on the enrollment when it was booked.</summary>
     private async Task<string?> ReadPlanNameAsync(Guid? enrollmentId, CancellationToken cancellationToken) =>
         enrollmentId is not { } id
@@ -949,12 +1099,12 @@ internal sealed class CoachOverviewReader(
                 .SingleOrDefaultAsync(cancellationToken);
 
     /// <summary>
-    /// When each client last did something the coach may see: finished a workout or sent a check-in
-    /// (while the plan includes it), or logged a weigh-in (while the relationship is not blocked).
+    /// When each client last did something the coach may see: finished a workout, named by its session, or sent a
+    /// check-in (while the plan includes it), or logged a weigh-in (while the relationship is not blocked); and,
+    /// apart, when each last sent a check-in.
     /// </summary>
-    private async Task<Dictionary<Guid, LastActivity>> LoadLastActivityAsync(
-        Scope scope,
-        CancellationToken cancellationToken)
+    private async Task<(Dictionary<Guid, LastActivity> Last, Dictionary<Guid, DateTimeOffset> LastCheckIns)>
+        LoadLastActivityAsync(Scope scope, CancellationToken cancellationToken)
     {
         var training = scope.Allowed(CoachingFeature.Training);
         var checkIns = scope.Allowed(CoachingFeature.CheckIns);
@@ -964,23 +1114,33 @@ internal sealed class CoachOverviewReader(
         {
             candidates.AddRange((await dbContext.WorkoutExecutions.AsNoTracking()
                     .Where(item => training.Contains(item.ClientProfileId) &&
-                                   item.Status == WorkoutExecutionStatus.Completed)
+                                   item.Status == WorkoutExecutionStatus.Completed &&
+                                   item.CompletedAtUtc != null)
                     .GroupBy(item => item.ClientProfileId)
-                    .Select(group => new { group.Key, At = group.Max(item => item.CompletedAtUtc) })
+                    .Select(group => group
+                        .OrderByDescending(item => item.CompletedAtUtc)
+                        .ThenByDescending(item => item.Id)
+                        .Select(item => new { item.ClientProfileId, item.CompletedAtUtc, item.SessionNameSnapshot })
+                        .First())
                     .ToListAsync(cancellationToken))
-                .Where(item => item.At is not null)
-                .Select(item => (item.Key, new LastActivity(CoachActivityKind.WorkoutCompleted, item.At!.Value))));
+                .Select(item => (item.ClientProfileId, new LastActivity(
+                    CoachActivityKind.WorkoutCompleted,
+                    item.CompletedAtUtc!.Value,
+                    item.SessionNameSnapshot))));
         }
 
+        var lastCheckIns = new Dictionary<Guid, DateTimeOffset>();
         if (checkIns.Length > 0)
         {
-            candidates.AddRange((await dbContext.CheckInResponses.AsNoTracking()
+            lastCheckIns = (await dbContext.CheckInResponses.AsNoTracking()
                     .Where(item => checkIns.Contains(item.ClientProfileId) && item.SubmittedAtUtc != null)
                     .GroupBy(item => item.ClientProfileId)
                     .Select(group => new { group.Key, At = group.Max(item => item.SubmittedAtUtc) })
                     .ToListAsync(cancellationToken))
                 .Where(item => item.At is not null)
-                .Select(item => (item.Key, new LastActivity(CoachActivityKind.CheckInSubmitted, item.At!.Value))));
+                .ToDictionary(item => item.Key, item => item.At!.Value);
+            candidates.AddRange(lastCheckIns.Select(item =>
+                (item.Key, new LastActivity(CoachActivityKind.CheckInSubmitted, item.Value))));
         }
 
         if (unblocked.Length > 0)
@@ -995,9 +1155,10 @@ internal sealed class CoachOverviewReader(
                 .Select(item => (item.Key, new LastActivity(CoachActivityKind.WeighInLogged, item.At))));
         }
 
-        return candidates
+        var last = candidates
             .GroupBy(item => item.ClientProfileId)
             .ToDictionary(group => group.Key, group => group.MaxBy(item => item.Activity.AtUtc).Activity);
+        return (last, lastCheckIns);
     }
 
     // ---------- helpers ----------
@@ -1016,6 +1177,13 @@ internal sealed class CoachOverviewReader(
         TrainingLoadUnit.Kilogram => CoachActivityLoadUnit.Kilogram,
         TrainingLoadUnit.Pound => CoachActivityLoadUnit.Pound,
         _ => throw new InvalidOperationException($"Unknown load unit {unit}."),
+    };
+
+    private static ClientPlanLengthUnit Length(OfferDurationUnit unit) => unit switch
+    {
+        OfferDurationUnit.Day => ClientPlanLengthUnit.Day,
+        OfferDurationUnit.Week => ClientPlanLengthUnit.Week,
+        _ => throw new InvalidOperationException($"Unknown offer duration unit {unit}."),
     };
 
     private sealed record Scope(
@@ -1038,6 +1206,10 @@ internal sealed class CoachOverviewReader(
         /// <summary>Clients whose progress the coach may read: any relationship that is not blocked.</summary>
         public Guid[] Unblocked => [.. Clients.Where(client => !client.IsCoachBlocked).Select(client => client.Id)];
 
+        /// <summary>The features the client's plan grants today, in the features' own order.</summary>
+        public CoachingFeature[] FeaturesToday(Guid clientId) =>
+            [.. Access[clientId].Where(decision => decision.IsAllowed).Select(decision => decision.Feature).Distinct().Order()];
+
         public ScopedClient Client(Guid id) => byId[id];
 
         public DateOnly LocalDate(DateTimeOffset instant) =>
@@ -1053,7 +1225,8 @@ internal sealed class CoachOverviewReader(
         string? CoachName,
         DateTimeOffset CreatedAtUtc,
         bool IsCoachBlocked,
-        ClientOnboardingStatus OnboardingStatus)
+        ClientOnboardingStatus OnboardingStatus,
+        DateOnly? BirthDate)
     {
         public CoachClientRef Ref => new(
             Id,
@@ -1085,15 +1258,39 @@ internal sealed class CoachOverviewReader(
         IReadOnlyList<SessionRow> Sessions,
         IReadOnlyList<MaxSuggestionRow> MaxSuggestions,
         Guid? LastProgramId,
-        IReadOnlyList<MaxSuggestionRow> CarriedSuggestions);
+        IReadOnlyList<MaxSuggestionRow> CarriedSuggestions,
+        CheckInRow? OldestOverdue,
+        bool CanMessage,
+        Guid? ChatId,
+        DateOnly? PlanPausedSince,
+        int OtherPlanCount)
+    {
+        /// <summary>The plan the client's page names (R3.5b), whose last day is <see cref="PlanEndsOn"/>.</summary>
+        public Guid? PlanEnrollmentId => RunningEnrollmentId ?? EndedPlan?.EnrollmentId;
+    }
 
     private sealed record WaitingCheckIn(Guid ClientProfileId, Guid AssignmentId, DateTimeOffset SubmittedAtUtc);
+
+    /// <summary>A check-in as the attention rule reads it: its due day and its response's status, if any.</summary>
+    private sealed record CheckInRow(
+        Guid ClientProfileId,
+        Guid AssignmentId,
+        DateOnly DueDate,
+        CheckInResponseStatus? Status,
+        DateTimeOffset? SubmittedAtUtc);
 
     private sealed record UnreadConversation(
         Guid ClientProfileId,
         Guid ConversationId,
         long Count,
         DateTimeOffset OldestUnreadAtUtc);
+
+    /// <summary>The caller's own chat with a client, with what is unread in it.</summary>
+    private sealed record CallerChat(
+        Guid ClientProfileId,
+        Guid ConversationId,
+        long UnreadCount,
+        DateTimeOffset? OldestUnreadAtUtc);
 
     private sealed record RenewalAsk(Guid ClientProfileId, DateOnly RequestedOn, DateTimeOffset RequestedAtUtc);
 
@@ -1103,7 +1300,8 @@ internal sealed class CoachOverviewReader(
         DateOnly StartDate,
         DateOnly EndDateExclusive,
         string PlanName,
-        bool Paid);
+        bool Paid,
+        DateTimeOffset? PausedAtUtc);
 
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);
 
@@ -1134,5 +1332,5 @@ internal sealed class CoachOverviewReader(
         DateTimeOffset StartedAtUtc,
         DateTimeOffset CompletedAtUtc);
 
-    private sealed record LastActivity(CoachActivityKind Kind, DateTimeOffset AtUtc);
+    private sealed record LastActivity(CoachActivityKind Kind, DateTimeOffset AtUtc, string? Title = null);
 }

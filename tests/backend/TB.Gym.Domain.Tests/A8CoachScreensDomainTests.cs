@@ -5,7 +5,8 @@ namespace TB.Gym.Domain.Tests;
 /// <summary>
 /// The audit's batch A8, coach screens and sheets (docs/FULL-AUDIT-2026-10.md, section 11): Coach Today asks a
 /// coach to start a plan for a new client who has none (COACH-9, the owner's decision of 2026-10-19), ranked after
-/// a renewal request, and the attention rule says so as version 3 (CLI-018). Read on Thu 1 Oct 2026.
+/// a renewal request, and the attention rule said so as version 3 (CLI-018; version 4 is critique B4a's). Read on
+/// Thu 1 Oct 2026.
 /// </summary>
 [TestClass]
 public sealed class A8CoachScreensDomainTests
@@ -62,6 +63,7 @@ public sealed class A8CoachScreensDomainTests
                 CoachAttentionKind.PlanEndingSoon,
                 CoachAttentionKind.WeekNotShared,
                 CoachAttentionKind.MissedSessions,
+                CoachAttentionKind.CheckInOverdue,
                 CoachAttentionKind.NoProgram,
                 CoachAttentionKind.MaxesToReview,
             },
@@ -86,9 +88,10 @@ public sealed class A8CoachScreensDomainTests
     }
 
     [TestMethod]
-    public void TheAttentionRuleIsVersionThree()
+    public void TheAttentionRuleIsVersionFour()
     {
-        Assert.AreEqual(("CoachAttention", 3), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
+        // Version 3 came with audit A8's new client with no plan; version 4 with critique B4a's overdue check-in.
+        Assert.AreEqual(("CoachAttention", 4), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
     }
 
     private static ClientAttentionSignals Quiet() => new(0, 0, null, null, false, 0, false);

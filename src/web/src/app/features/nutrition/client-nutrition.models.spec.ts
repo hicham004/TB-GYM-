@@ -12,7 +12,6 @@ import { enrollment } from '../../../testing/client-service-fixtures';
 import {
   addDaysIso,
   adjustRefusal,
-  ageOn,
   allergenList,
   assignRefusal,
   canStop,
@@ -187,15 +186,6 @@ describe('the calculation sheet', () => {
     );
     expect([none.weight, none.height, none.age, none.steps]).toEqual([null, null, null, null]);
     expect(none.protein).toBe(140);
-  });
-
-  it('counts whole years from a birth date, and not a birthday not yet reached', () => {
-    expect(ageOn('1996-04-02', '2026-10-10')).toBe(30);
-    expect(ageOn('1996-10-10', '2026-10-10')).toBe(30);
-    expect(ageOn('1996-10-11', '2026-10-10')).toBe(29);
-    expect(ageOn('2026-10-11', '2026-10-10')).toBeNull();
-    expect(ageOn(null, '2026-10-10')).toBeNull();
-    expect(ageOn('not a date', '2026-10-10')).toBeNull();
   });
 
   it('works out grams from grams for each kilogram, and back', () => {

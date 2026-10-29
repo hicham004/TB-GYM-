@@ -24,6 +24,7 @@ import {
 import { attentionItem, COACH_NOW, COACH_TODAY, MAYA } from '../../../testing/coach-today-fixtures';
 import { field, press, settle } from '../../../testing/dom';
 import { DRAWN_TOGETHER_PATIENCE_MS } from '../../ui/drawn-together';
+import { ConversationStarter } from '../messaging/conversation-starter';
 import { ClientOverview } from './client-overview';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
@@ -93,6 +94,7 @@ async function render(
     api?: Partial<Record<keyof ApiClient, unknown>>;
     profile?: CoachClientDetails;
     plans?: ClientCommercialOverview;
+    starter?: { open: ReturnType<typeof vi.fn> };
   } = {},
 ) {
   vi.useFakeTimers({ now: new Date(COACH_NOW), toFake: ['Date'] });
@@ -128,6 +130,10 @@ async function render(
       provideRouter([]),
       ClientWorkspaceContext,
       { provide: ApiClient, useValue: api },
+      {
+        provide: ConversationStarter,
+        useValue: options.starter ?? { open: vi.fn().mockResolvedValue(true) },
+      },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       {
         provide: TenantStore,
@@ -252,6 +258,51 @@ describe('ClientOverview', () => {
     expect(needs.querySelectorAll('.tb-button--filled')).toHaveLength(1);
     expect(link(needs, 'Review').classList.contains('tb-button--filled')).toBe(true);
     expect(said(host)).not.toContain('Nothing needs you right now.');
+  });
+
+  it('reminds about an overdue check-in from Needs you, starting the chat when there is none (critique B4a)', async () => {
+    const starter = { open: vi.fn().mockResolvedValue(true) };
+    const { fixture, host, context } = await render({
+      starter,
+      api: {
+        getClientOverview: vi.fn(() =>
+          of(
+            profileOverview({
+              status: 'NeedsAttention',
+              attention: [
+                attentionItem('CheckInOverdue', MAYA, {
+                  count: 1,
+                  date: '2026-09-28',
+                  canMessage: true,
+                }),
+              ],
+            }),
+          ),
+        ),
+      },
+    });
+
+    const need = host.querySelector<HTMLElement>('li.need[data-kind="CheckInOverdue"]')!;
+    expect(said(need)).toBe('Check-in overdue It was due Mon 28 Sep Overdue Remind');
+    press(need, 'Remind');
+    await settle(fixture);
+    expect(starter.open).toHaveBeenCalledWith(MAYA.clientProfileId);
+
+    // A refusal is said where the header says its own.
+    starter.open.mockRejectedValueOnce(new Error('offline'));
+    press(need, 'Remind');
+    await settle(fixture);
+    expect(context.error()).toBe(
+      'Couldn’t open this conversation. Check messaging access and retry.',
+    );
+  });
+
+  it('reads the overview once with the header, from the record’s shared read', async () => {
+    const { api, context } = await render();
+
+    expect(api.getClientOverview).toHaveBeenCalledTimes(1);
+    // The header's flag for a plan ending soon comes from the same answer.
+    expect(context.overview()?.client.clientProfileId).toBe(MAYA.clientProfileId);
   });
 
   describe('drawn in one frame (audit UIQ-5)', () => {

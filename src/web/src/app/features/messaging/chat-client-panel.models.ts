@@ -68,7 +68,16 @@ export function clientPanel(
     link: `/clients/${id}`,
     status: statusPill(view.status),
     activity: activityLabel(view, { ...context, userId: null }),
-    plan: { name: view.planName?.trim() || null, ...planLabel(view, view.today, context.locale) },
+    plan: {
+      name: view.planName?.trim() || null,
+      // Whether it ends soon is the server's flag (CLI-018), never a count of the panel's own.
+      ...planLabel(
+        view,
+        view.today,
+        context.locale,
+        view.attention.some((item) => item.kind === 'PlanEndingSoon'),
+      ),
+    },
     lastWorkout: view.lastWorkout ? lastWorkout(view.lastWorkout, context) : null,
     trainingClosed: training ? null : trainingClosed(planStateReason(view.planState), firstName),
     week: view.week ? weekLine(Number(view.week.completed), Number(view.week.scheduled)) : null,
@@ -76,6 +85,18 @@ export function clientPanel(
       view.attention.filter((item) => item.kind !== 'UnreadMessages'),
       view.today,
       { ...context, clientId: id, firstName },
+    ).map((need) =>
+      // Remind would open this very chat, where the coach can already ask for it.
+      need.kind === 'CheckInOverdue'
+        ? {
+            ...need,
+            action: {
+              label: $localize`See check-ins`,
+              link: `/clients/${id}/checkins`,
+              queryParams: null,
+            },
+          }
+        : need,
     ),
   };
 }

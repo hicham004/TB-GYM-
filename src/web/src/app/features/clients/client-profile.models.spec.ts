@@ -300,6 +300,37 @@ describe('what needs the coach on a client’s page', () => {
     });
   });
 
+  it('asks for an overdue check-in in the coach’s own chat, else sends to the check-ins (critique B4a)', () => {
+    const overdue = (fields: Parameters<typeof attentionItem>[2]) =>
+      needRows([attentionItem('CheckInOverdue', MAYA, fields)], COACH_TODAY, context)[0];
+
+    const two = overdue({ count: 2, date: '2026-09-19', canMessage: true, subjectId: 'conv-1' });
+    expect(two).toEqual({
+      key: 'CheckInOverdue',
+      kind: 'CheckInOverdue',
+      tone: 'missed',
+      tag: 'Overdue',
+      heading: '2 check-ins overdue',
+      detail: 'The oldest was due Sat 19 Sep',
+      action: {
+        label: 'Remind',
+        link: '/messages',
+        queryParams: { conversation: 'conv-1' },
+        startsChat: false,
+      },
+    });
+    // No chat yet: Remind starts one, as the header's Message does.
+    const fresh = overdue({ count: 1, date: '2026-09-28', canMessage: true });
+    expect([fresh.heading, fresh.detail]).toEqual(['Check-in overdue', 'It was due Mon 28 Sep']);
+    expect(fresh.action).toMatchObject({ label: 'Remind', startsChat: true });
+    // Messaging not in the plan, or another coach's client (CLI-013): the client's check-ins.
+    expect(overdue({ count: 1, date: '2026-09-28', canMessage: false }).action).toEqual({
+      label: 'See check-ins',
+      link: `${page}/checkins`,
+      queryParams: null,
+    });
+  });
+
   it('says when an unshared week starts today, tomorrow or already started', () => {
     const starts = (date: string) =>
       needRows(

@@ -1,5 +1,5 @@
 import type { ClientEnrollment } from '../../core/api/api.models';
-import type { DayOfWeek, MesocycleSummary } from '../../core/api/generated';
+import type { CoachAttentionItemView, DayOfWeek, MesocycleSummary } from '../../core/api/generated';
 
 /**
  * What a client's page reads from data other screens already own. Everything here is a pure
@@ -17,9 +17,6 @@ const WEEKDAYS: readonly DayOfWeek[] = [
   'Friday',
   'Saturday',
 ];
-
-/** How close to its last day an active plan must be before the header offers a renewal. */
-export const RENEWAL_PROMPT_DAYS = 14;
 
 function dayNumber(date: string): number {
   const [year, month, day] = date.split('-').map(Number);
@@ -82,6 +79,26 @@ export function currentEnrollment(
   return ended[0] ?? null;
 }
 
+/**
+ * The server's flag for a plan ending soon (CLI-018 v4: its last covered day within 14 days, today
+ * counted; a renewal already paid moves that day, one still waiting for payment does not), read from
+ * the client's attention items. The client's page shows it and counts no days of its own (critique B4a).
+ */
+export interface PlanEnding {
+  /** The last covered day the flag is about. */
+  readonly lastDay: string;
+  /** The plan to renew, or null while a renewal of it still waits for its payment (BEB-7). */
+  readonly renewId: string | null;
+}
+
+export function planEnding(
+  attention: readonly CoachAttentionItemView[] | null | undefined,
+): PlanEnding | null {
+  const item = attention?.find((entry) => entry.kind === 'PlanEndingSoon');
+  if (!item?.date) return null;
+  return { lastDay: item.date, renewId: Number(item.count ?? 0) > 0 ? null : item.subjectId };
+}
+
 export interface RenewalPrompt {
   enrollment: ClientEnrollment;
   /** 0 on the plan's last day. */
@@ -89,19 +106,20 @@ export interface RenewalPrompt {
 }
 
 /**
- * Offer a renewal when an active plan's last day is at most {@link RENEWAL_PROMPT_DAYS} away and
- * nothing already follows it: no renewal of it, and no other live plan starting when it ends.
+ * Offer a renewal while the server flags the active plan ending soon ({@link PlanEnding}) and nothing
+ * already follows it: no renewal of it, and no other live plan starting when it ends.
  */
 export function renewalPrompt(
   enrollments: readonly ClientEnrollment[],
   today: string,
+  ending: PlanEnding | null,
 ): RenewalPrompt | null {
   const current = enrollments.find(
     (item) => item.effectiveStatus === 'Active' && covers(item, today),
   );
-  if (!current) return null;
+  if (!current || ending?.lastDay !== current.lastActiveDate) return null;
   const daysLeft = daysBetween(today, current.lastActiveDate);
-  if (daysLeft < 0 || daysLeft > RENEWAL_PROMPT_DAYS) return null;
+  if (daysLeft < 0) return null;
   const followed = enrollments.some(
     (item) =>
       item.id !== current.id &&

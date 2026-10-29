@@ -24,11 +24,17 @@ import {
   type ServiceContext,
 } from './client-service.models';
 
-const context: ServiceContext = { locale: 'en-US', today: SERVICE_TODAY, firstName: 'Maya' };
+// The server flags Maya's plan ending soon, its last day 11 days on (CLI-018).
+const context: ServiceContext = {
+  locale: 'en-US',
+  today: SERVICE_TODAY,
+  firstName: 'Maya',
+  ending: { lastDay: '2026-10-12', renewId: 'e-1' },
+};
 const labels = (items: ReturnType<typeof planMenu>) => items.map((item) => item.label);
 
 describe('the plan in front', () => {
-  it('tells a running plan by its days left, warm in the last two weeks', () => {
+  it('tells a running plan by its days left, warm while the server flags it ending soon', () => {
     const card = planCard(enrollment(), context);
 
     expect(card.eyebrow).toBe('Current plan');
@@ -136,6 +142,21 @@ describe('which plan, and the others', () => {
     expect(others.earlier.map((row) => [row.name, row.summary, row.pill.label])).toEqual([
       ['Starter', '4 weeks · Free', 'Cancelled'],
     ]);
+  });
+});
+
+describe('the server’s ending-soon flag (critique B4a)', () => {
+  it('decides the warm pill and the renewal, never a count of the page’s own', () => {
+    const unflagged = { ...context, ending: null };
+    const current = enrollment();
+
+    // 11 days left but not flagged (say a renewal is paid): no warm pill, no renewal asked for.
+    expect(planCard(current, unflagged).pill).toEqual({
+      label: 'Active · 11 days left',
+      tone: 'success',
+    });
+    expect(primaryAction(planCard(current, unflagged), [current], unflagged, false)).toBeNull();
+    expect(planCard(current, context).pill).toEqual({ label: 'Ends in 11 days', tone: 'warm' });
   });
 });
 

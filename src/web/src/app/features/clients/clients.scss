@@ -1,6 +1,6 @@
-// Clients (C2): one row per person, a face first (§2 rule 3), the whole row a link. A table of
-// columns on a wide screen, cards on a phone. Brand v2 tokens only, so it follows the coach's
-// brand and the person's mode.
+// Clients (C2, critique B4a): one row per person, a face first (§2 rule 3), the whole row a link. A
+// table of columns on a wide screen, a card per client on a phone. Brand v2 tokens only, so it follows
+// the coach's brand and the person's mode.
 :host {
   container-type: inline-size;
   display: block;
@@ -62,7 +62,7 @@ h1 {
   align-items: start;
   border-block-start: 1px solid var(--tb-line);
   display: grid;
-  gap: 0.5rem 0.875rem;
+  gap: 0.625rem 0.875rem;
   grid-template-columns: auto minmax(0, 1fr);
   padding: 0.875rem 1.25rem;
   position: relative;
@@ -77,11 +77,52 @@ h1 {
   background: var(--tb-surface-2);
 }
 
+// A card on a phone: the face, the name and the chevron, then each line across the card's width.
+.client-row:not(.former) {
+  grid-template-areas:
+    'face who chevron'
+    'state state state'
+    'plan plan plan'
+    'checkin checkin checkin'
+    'activity activity activity';
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.client-row:not(.former) > app-avatar {
+  grid-area: face;
+}
+
+.client-row:not(.former) {
+  > .who {
+    grid-area: who;
+  }
+
+  > .state {
+    grid-area: state;
+  }
+
+  > .plan {
+    grid-area: plan;
+  }
+
+  > .checkin {
+    grid-area: checkin;
+  }
+
+  > .activity {
+    grid-area: activity;
+  }
+}
+
+.former .who,
+.former .reason {
+  grid-column: 2;
+  min-inline-size: 0;
+}
+
 .who,
 .state,
-.facts,
-.reason {
-  grid-column: 2;
+.fact {
   min-inline-size: 0;
 }
 
@@ -113,12 +154,23 @@ h1 {
   outline-offset: -3px;
 }
 
+// The chevron says the row opens; it is the name's link that does it. Flipped for right-to-left, it
+// would paint above the link's row-wide layer and swallow the press, so it never takes one.
+.chevron {
+  align-self: center;
+  color: var(--tb-muted);
+  grid-area: chevron;
+  pointer-events: none;
+}
+
+.chevron:dir(rtl) {
+  transform: scaleX(-1);
+}
+
 .goal,
 .coach,
-.reasons,
 .reason,
-.activity,
-.plan {
+.fact {
   color: var(--tb-muted);
   font-size: 0.8125rem;
   line-height: 1.4;
@@ -128,6 +180,10 @@ h1 {
 
 .goal {
   margin-block-start: 0.125rem;
+}
+
+.age {
+  color: var(--tb-ink);
 }
 
 // Goals and reasons are typed by people and have no length cap here; the client's record shows
@@ -150,107 +206,49 @@ h1 {
   margin-block-start: 0.125rem;
 }
 
-.state {
-  align-items: center;
+// ---------- plan, last check-in, last activity ----------
+
+// On a phone a fact's name stands before it, and the value wraps under it when there is no room.
+.fact {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 0.625rem;
+  gap: 0.125rem 0.75rem;
 }
 
-.reasons {
-  color: var(--tb-ink);
-}
-
-// A client who never finished their profile (LOST-12): a quiet chip beside the status, not a status.
-.setup {
-  border: 1px solid var(--tb-line-strong);
-  border-radius: 999px;
+.cell-label {
   color: var(--tb-muted);
+  flex: 0 0 6.5rem;
   font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.4;
-  padding: 0.0625rem 0.5rem;
-  white-space: nowrap;
+  line-height: 1.6;
 }
 
-.facts {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem 1.25rem;
-}
-
-.activity {
+.fact-value {
   color: var(--tb-ink);
-}
-
-.week {
-  align-items: center;
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex: 1 1 11rem;
   min-inline-size: 0;
 }
 
-.strip {
-  align-items: flex-end;
-  block-size: 1.375rem;
-  display: inline-grid;
-  gap: 0.1875rem;
-  grid-template-columns: repeat(7, 0.5rem);
+.plan .fact-value {
+  display: flex;
+  flex-direction: column;
 }
 
-.day {
-  block-size: 100%;
-  border-radius: 3px;
-  box-sizing: border-box;
-  display: block;
-}
-
-.day[data-mark='rest'] {
-  background: var(--tb-line);
-  block-size: 0.25rem;
-}
-
-// Forest on light, the bright accent on dark, as on Coach Today's week.
-.day[data-mark='done'] {
-  background: var(--tb-accent-ink);
-}
-
-.day[data-mark='partial'] {
-  background: linear-gradient(to top, var(--tb-accent-ink) 50%, var(--tb-line) 50%);
-}
-
-.day[data-mark='missed'] {
-  border: 2px solid var(--tb-warning);
-}
-
-.day[data-mark='due'] {
-  border: 2px dashed var(--tb-line-strong);
-}
-
-.week-value {
-  color: var(--tb-ink);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.week-value.is-none,
-.no-training {
+.plan-line + .plan-line {
   color: var(--tb-muted);
-  font-size: 0.8125rem;
-  font-weight: 400;
 }
 
-.plan.soon {
+.plan-end.soon {
   color: var(--tb-warm-ink);
   font-weight: 600;
 }
 
+.fact-value.quiet {
+  color: var(--tb-muted);
+}
+
 // The column names: shown on a wide screen only, and hidden from screen readers, because each
-// cell already says what it is ("Trained 2 hours ago", "Plan ends in 9 days").
+// cell already says what it is.
 .list-head {
   display: none;
 }
@@ -260,12 +258,18 @@ h1 {
   .client-row:not(.former) {
     display: grid;
     gap: 0.5rem 1rem;
+    grid-template-areas: 'face who state plan checkin activity chevron';
     grid-template-columns:
-      2.5rem minmax(0, 2.2fr) minmax(0, 1.25fr) minmax(0, 1.2fr)
-      minmax(8.5rem, 1fr) minmax(0, 1.1fr);
+      2.5rem minmax(0, 1.5fr) minmax(0, 1.9fr) minmax(0, 1.4fr) minmax(0, 0.9fr)
+      minmax(0, 1.1fr) 1.25rem;
+  }
+
+  .legend-line {
+    display: none;
   }
 
   .list-head {
+    align-items: start;
     background: var(--tb-surface-2);
     border-block-end: 1px solid var(--tb-line);
     color: var(--tb-muted);
@@ -282,26 +286,38 @@ h1 {
   }
 
   .head-client {
-    grid-column: 1 / 3;
+    grid-column: face / who;
+  }
+
+  .head-status {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3125rem;
+    grid-column: state;
+  }
+
+  .list-head .legend {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
   }
 
   .client-row:not(.former) {
     align-items: center;
   }
 
-  .client-row:not(.former) .who {
-    grid-column: 2;
+  // On a wide screen each fact is its own column, named by the head above it.
+  .fact {
+    display: block;
   }
 
-  .client-row:not(.former) .state {
-    align-items: flex-start;
-    flex-direction: column;
-    grid-column: 3;
-  }
-
-  // On a wide screen each fact is its own column.
-  .client-row:not(.former) .facts {
-    display: contents;
+  .cell-label {
+    block-size: 1px;
+    clip-path: inset(50%);
+    inline-size: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
   }
 
   .former {

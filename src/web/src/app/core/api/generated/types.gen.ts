@@ -795,6 +795,15 @@ export type ClientOverviewRow = {
   lastActivityKind: null | CoachActivityKind;
   lastActivityAtUtc: null | string;
   recentSessions: null | Array<SessionDayCountView>;
+  birthDate: null | string;
+  planStatus: ClientPlanStatus;
+  plan: null | ClientPlanSummary;
+  otherPlanCount: number | string;
+  planPausedSince: null | string;
+  featuresToday: Array<CoachingFeature>;
+  attentionItems: Array<CoachAttentionItemView>;
+  lastActivityTitle: null | string;
+  lastCheckInSentAtUtc: null | string;
 };
 
 export type ClientOverviewStatus =
@@ -828,6 +837,8 @@ export type ClientPersonalRecordView = {
   ruleVersion: number | string;
 };
 
+export type ClientPlanLengthUnit = 'Day' | 'Week';
+
 export type ClientPlanRecipeIngredientView = {
   foodName: string;
   quantity: number | string;
@@ -848,6 +859,18 @@ export type ClientPlanRecipeView = {
 
 export type ClientPlanState =
   'Running' | 'Paused' | 'PaymentDue' | 'NotStarted' | 'Ended' | 'None' | 'Blocked';
+
+export type ClientPlanStatus = 'OnTrack' | 'Paused' | 'EndingSoon' | 'NoActivePlan';
+
+export type ClientPlanSummary = {
+  enrollmentId: string;
+  name: string;
+  features: Array<CoachingFeature>;
+  lengthCount: number | string;
+  lengthUnit: ClientPlanLengthUnit;
+  priceAmount: number | string;
+  priceCurrency: string;
+};
 
 export type ClientProfileOverviewView = {
   today: string;
@@ -1106,6 +1129,7 @@ export type CoachAttentionItemView = {
   subjectId: null | string;
   maxes?: null | Array<CoachMaxSuggestionView>;
   newestAt?: null | string;
+  canMessage?: boolean;
 };
 
 export type CoachAttentionKind =
@@ -1117,7 +1141,8 @@ export type CoachAttentionKind =
   | 'MissedSessions'
   | 'NoProgram'
   | 'MaxesToReview'
-  | 'NoPlan';
+  | 'NoPlan'
+  | 'CheckInOverdue';
 
 export type CoachClientDetails = {
   id: string;

@@ -4,6 +4,7 @@ import {
   addMonths,
   addYears,
   adultCutoff,
+  ageOn,
   clampIso,
   daysInMonth,
   deviceToday,
@@ -55,6 +56,28 @@ describe('calendar maths', () => {
     // Born 1 March 2010 is not 18 on 29 February 2028, but born 28 February 2010 is.
     expect(adultCutoff('2028-02-29')).toBe('2010-02-28');
     expect(adultCutoff('2028-03-01')).toBe('2010-03-01');
+  });
+
+  it('counts whole years from a birth date, and not a birthday not yet reached (CLI-005)', () => {
+    expect(ageOn('1996-04-02', '2026-10-10')).toBe(30);
+    expect(ageOn('1996-10-10', '2026-10-10')).toBe(30);
+    expect(ageOn('1996-10-11', '2026-10-10')).toBe(29);
+    expect(ageOn('2026-10-10', '2026-10-10')).toBe(0);
+    expect(ageOn('2026-10-11', '2026-10-10')).toBeNull();
+    expect(ageOn(null, '2026-10-10')).toBeNull();
+    expect(ageOn('not a date', '2026-10-10')).toBeNull();
+    expect(ageOn('1996-02-30', '2026-10-10')).toBeNull();
+  });
+
+  it('turns a 29 February birthday a year older on 28 February, as the server counts an adult', () => {
+    expect(ageOn('2008-02-29', '2026-02-27')).toBe(17);
+    expect(ageOn('2008-02-29', '2026-02-28')).toBe(18);
+    expect(ageOn('2008-02-29', '2026-03-01')).toBe(18);
+    expect(ageOn('2008-02-29', '2028-02-28')).toBe(19);
+    expect(ageOn('2008-02-29', '2028-02-29')).toBe(20);
+    // The latest birth date of an adult is, on that day, exactly 18 years old.
+    expect(ageOn(adultCutoff('2026-02-28'), '2026-02-28')).toBe(18);
+    expect(ageOn(adultCutoff('2028-02-29'), '2028-02-29')).toBe(18);
   });
 
   it('counts days in a month and finds the weekday', () => {

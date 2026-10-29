@@ -1,0 +1,158 @@
+<button
+  appButton
+  type="button"
+  variant="text"
+  class="opener"
+  aria-haspopup="dialog"
+  (click)="show()"
+  i18n
+>
+  How these statuses work
+</button>
+
+<ng-template #sheet>
+  <!-- Words alone, no control: focusable, so a keyboard can scroll the sheet (axe scrollable-region-focusable). -->
+  <div
+    class="statuses"
+    data-statuses-help
+    tabindex="0"
+    role="region"
+    aria-label="What each status means"
+    i18n-aria-label
+  >
+    <p class="lede" i18n>
+      Clients and Today follow the same rules. A reason counts only while the client’s plan includes
+      what it is about, so a plan that has ended shows none of its check-ins or workouts.
+    </p>
+
+    <h3 i18n>What needs you</h3>
+    <p class="note" i18n>
+      Each tag on a client’s row opens where you deal with it. Today lists the same reasons under
+      Needs you, in this order.
+    </p>
+    <dl class="defs">
+      <div>
+        <dt><app-tag i18n>Check-ins to review</app-tag></dt>
+        <dd i18n>They sent a check-in you haven’t reviewed. It clears once you review it.</dd>
+      </div>
+      <div>
+        <dt><app-tag i18n>Unread messages</app-tag></dt>
+        <dd i18n>
+          They wrote to you and you haven’t read it yet. Only your own chats count. It clears once
+          you read them.
+        </dd>
+      </div>
+      <div>
+        <dt><app-tag i18n>Asked to renew</app-tag></dt>
+        <dd i18n>
+          Their plan has ended and they asked to renew it in the last 30 days. It clears once a new
+          plan is booked, paid or not, or after 30 days.
+        </dd>
+      </div>
+      <div>
+        <dt><app-tag i18n>Joined, no plan yet</app-tag></dt>
+        <dd i18n>
+          They joined in the last 14 days and have no plan at all. It clears once you start one.
+        </dd>
+      </div>
+      <div>
+        <dt><app-tag i18n>Week not shared</app-tag></dt>
+        <dd i18n>
+          A week of their program has started, or starts within 2 days, and isn’t shared with them
+          yet. It clears once you share it.
+        </dd>
+      </div>
+      <div>
+        <dt><app-tag i18n>Missed workouts</app-tag></dt>
+        <dd i18n>
+          Two or more workouts were due and not started since the last day they started one,
+          counting back up to 14 days. It clears once they start a workout, a missed one done late
+          included.
+        </dd>
+      </div>
+      <div>
+        <dt><app-tag i18n>Check-ins overdue</app-tag></dt>
+        <dd i18n>
+          A check-in was due 2 to 13 days ago and they haven’t sent it; one they started but didn’t
+          send still counts. It clears once they send it, or on the 14th day after it was due.
+          Remind opens your chat with them when you coach them and messaging is in their plan.
+        </dd>
+      </div>
+      <div>
+        <dt><app-tag i18n>No program yet</app-tag></dt>
+        <dd i18n>
+          Training is in their plan, but no program is running or coming. It clears once you assign
+          one.
+        </dd>
+      </div>
+    </dl>
+
+    <h3 i18n>Their plan</h3>
+    <p class="note" i18n>
+      The plan’s own status sits beside the reasons. A plan ending soon is on Today’s list too, but
+      it doesn’t count as needing attention.
+    </p>
+    <dl class="defs">
+      <div>
+        <dt><app-status-pill label="On track" i18n-label tone="success" /></dt>
+        <dd i18n>The plan is running.</dd>
+      </div>
+      <div>
+        <dt><app-status-pill label="Plan ends soon" i18n-label tone="warm" /></dt>
+        <dd i18n>
+          Its last paid day is within 14 days, today included: 13 days away is soon, 14 is not. A
+          renewal that is paid moves that day; one waiting for payment doesn’t.
+        </dd>
+      </div>
+      <div>
+        <dt><app-status-pill label="Plan paused" i18n-label tone="info" /></dt>
+        <dd i18n>It was paused. It still ends on its last day.</dd>
+      </div>
+      <div>
+        <dt><app-status-pill label="No active plan" i18n-label /></dt>
+        <dd i18n>
+          Nothing covers today: the plan ended, hasn’t started, is waiting for payment or is
+          blocked, or there is no plan yet.
+        </dd>
+      </div>
+    </dl>
+
+    <h3 i18n>Last 7 days</h3>
+    <dl class="defs marks">
+      <div>
+        <dt><app-day-mark mark="done" /><span i18n>Done</span></dt>
+        <dd i18n>Every workout due that day was finished.</dd>
+      </div>
+      <div>
+        <dt><app-day-mark mark="missed" /><span i18n>Missed</span></dt>
+        <dd i18n>
+          A workout due that day wasn’t finished: not started, or started and not finished.
+        </dd>
+      </div>
+      <div>
+        <dt><app-day-mark mark="due" /><span i18n>Still due</span></dt>
+        <dd i18n>Today’s workout, not finished yet.</dd>
+      </div>
+    </dl>
+    <p class="note" i18n>
+      A dot is a day with no workout. “3 of 4” counts the workouts finished of those due in the 7
+      days. Missed workouts counts back up to 14 days and never a started workout, so it can differ
+      from the marks.
+    </p>
+
+    <h3 i18n>On the chips too</h3>
+    <dl class="defs">
+      <div>
+        <dt i18n>New</dt>
+        <dd i18n>Joined in the last 14 days.</dd>
+      </div>
+      <div>
+        <dt i18n>Maxes to review</dt>
+        <dd i18n>
+          Their logged sets suggest a new training max. It’s good news, so it doesn’t count as
+          needing attention.
+        </dd>
+      </div>
+    </dl>
+  </div>
+</ng-template>

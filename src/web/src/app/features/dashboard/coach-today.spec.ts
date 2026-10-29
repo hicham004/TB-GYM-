@@ -10,15 +10,21 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, settle } from '../../../testing/dom';
 import {
+  attentionItem,
   coachTodayView,
   emptyCoachTodayView,
+  JAD,
+  MAYA,
   OWNER_ID,
+  SARA,
 } from '../../../testing/coach-today-fixtures';
+import { ConversationStarter } from '../messaging/conversation-starter';
 import { CoachToday } from './coach-today';
 
 async function render(
   getCoachToday: () => unknown = () => of(coachTodayView()),
   role: 'Owner' | 'Coach' = 'Owner',
+  starter: { open: ReturnType<typeof vi.fn> } = { open: vi.fn().mockResolvedValue(true) },
 ) {
   const tenant = signal<string | null>('tenant-1');
   const membership = signal({ tenantId: 'tenant-1', tenantName: 'Atlas Performance', role });
@@ -28,6 +34,7 @@ async function render(
     providers: [
       provideRouter([]),
       { provide: ApiClient, useValue: api },
+      { provide: ConversationStarter, useValue: starter },
       {
         provide: TenantStore,
         useValue: { selectedTenantId: tenant, selectedMembership: membership },
@@ -50,8 +57,13 @@ async function render(
   };
 }
 
+const squash = (value: string | null | undefined) => (value ?? '').replace(/\s+/g, ' ').trim();
+
 describe('CoachToday', () => {
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+    TestBed.resetTestingModule();
+  });
 
   it('greets the coach with the workspace date and how many clients are in Needs you', async () => {
     const { host, read } = await render();
@@ -125,6 +137,77 @@ describe('CoachToday', () => {
     expect(rows[0].textContent).toContain('Coached by Lea Khoury');
     expect(rows[1].textContent).not.toContain('Coached by');
     expect(host.querySelector('#needs-heading .badge')?.textContent?.trim()).toBe('7');
+  });
+
+  it('reminds about an overdue check-in in the coach’s own chat, starting it when there is none (critique B4a)', async () => {
+    const starter = { open: vi.fn().mockResolvedValue(true) };
+    const view = coachTodayView({
+      attention: [
+        attentionItem('CheckInOverdue', JAD, { count: 2, date: '2026-09-19', canMessage: true }),
+        attentionItem('CheckInOverdue', SARA, {
+          count: 1,
+          date: '2026-09-28',
+          canMessage: true,
+          subjectId: 'conv-sara',
+        }),
+        attentionItem('CheckInOverdue', MAYA, { count: 1, date: '2026-09-28', canMessage: false }),
+      ],
+    });
+    const { fixture, host } = await render(() => of(view), 'Owner', starter);
+    const rows = [...host.querySelectorAll<HTMLElement>('li.need')];
+
+    expect(squash(rows[0].querySelector('.need-heading')?.textContent)).toBe(
+      'Jad Karam has 2 check-ins overdue',
+    );
+    expect(squash(rows[0].querySelector('.need-detail')?.textContent)).toBe(
+      'The oldest was due Sat 19 Sep',
+    );
+    // No chat with Jad yet: Remind is a button that starts it, as the client page's Message does.
+    const remind = rows[0].querySelector<HTMLButtonElement>('button.need-action')!;
+    expect(squash(remind.textContent)).toBe('Remind Jad Karam');
+    remind.click();
+    await settle(fixture);
+    expect(starter.open).toHaveBeenCalledWith(JAD.clientProfileId);
+    // Sara's chat exists: Remind opens it.
+    expect(rows[1].querySelector('a.need-action')?.getAttribute('href')).toBe(
+      '/messages?conversation=conv-sara',
+    );
+    // Lea coaches Maya: the owner is sent to her check-ins and told whose client she is (CLI-013).
+    const maya = rows[2].querySelector('a.need-action');
+    expect(squash(maya?.textContent)).toBe('See check-ins for Maya Fakhoury');
+    expect(maya?.getAttribute('href')).toBe('/clients/c-maya/checkins');
+    expect(rows[2].textContent).toContain('Coached by Lea Khoury');
+  });
+
+  it('says so when Remind cannot open the chat', async () => {
+    const starter = { open: vi.fn().mockRejectedValue(new Error('offline')) };
+    const view = coachTodayView({
+      attention: [
+        attentionItem('CheckInOverdue', JAD, { count: 1, date: '2026-09-28', canMessage: true }),
+      ],
+    });
+    const { fixture, host } = await render(() => of(view), 'Owner', starter);
+
+    press(host, 'Remind Jad Karam');
+    await settle(fixture);
+
+    expect(squash(document.querySelector('.tb-toast__message')?.textContent)).toBe(
+      'Couldn’t open this conversation. Check messaging access and retry.',
+    );
+    // The button is pressable again.
+    expect(host.querySelector('button.need-action')?.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('explains how the statuses work from under Needs you (critique B4a)', async () => {
+    const { fixture, host } = await render();
+
+    expect(host.querySelector('.queue app-statuses-help')).not.toBeNull();
+    press(host, 'How these statuses work');
+    await settle(fixture);
+
+    const sheet = document.querySelector<HTMLElement>('[role="dialog"]');
+    expect(squash(sheet?.querySelector('h2')?.textContent)).toBe('How these statuses work');
+    expect(squash(sheet?.textContent)).toContain('A check-in was due 2 to 13 days ago');
   });
 
   it('writes the feed as sentences with records and links to the client', async () => {

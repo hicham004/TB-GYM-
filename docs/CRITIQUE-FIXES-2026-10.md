@@ -223,7 +223,8 @@ done or not verified, the screenshots, and the next row.
   counts in one warning tone, each a link to what it names: the review, the chat, Training, Service; the plan pills
   On track, Plan paused, Plan ends soon, No active plan; the 7-day strip with a legend, "✓ done · × missed · –
   still due", and "n of m"); **Plan** (what's included, the length, the price and currency, and its end date or
-  "Paused until …"); **Last check-in** (when the last one was sent); **Last activity** ("Trained Lower A · 2 days
+  "Paused since … · ends …", since a pause has no end date, the owner's choice of 2026-10-29); **Last check-in**
+  (when the last one was sent); **Last activity** ("Trained Lower A · 2 days
   ago"). A chevron ends each row. On a phone each client is a card with the same lines.
 - The filter chips stay as they are.
 - A "How these statuses work" sheet beside the chips and under Today's Needs you. The lede says "12 clients · 9

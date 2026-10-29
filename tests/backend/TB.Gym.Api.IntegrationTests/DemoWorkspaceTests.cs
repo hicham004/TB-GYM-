@@ -209,6 +209,19 @@ public sealed class DemoWorkspaceTests
         Assert.IsNotEmpty(suggested, "Clients who set personal bests show a heavier max to review.");
         Assert.IsTrue(suggested.All(item => item.max.Suggested > item.max.Current), "No demo client is weaker than their program.");
 
+        // Jad's check-in from last week is overdue (CHK-015): Omar, his coach, reminds him in their chat; the owner,
+        // who may not message another coach's client, is not offered it (critique B4a).
+        var omarToday = await requests.AsAsync<ICoachOverviewService, CoachTodayView>(
+            new DemoActor(people.OmarId, people.TenantId), service => service.GetTodayAsync(CancellationToken.None));
+        var overdue = omarToday.Attention.Single(item => item.Kind == CoachAttentionKind.CheckInOverdue);
+        Assert.AreEqual(("Jad", true, 1), (overdue.Client.FirstName, overdue.CanMessage, overdue.Count));
+        Assert.IsNotNull(overdue.SubjectId, "Remind opens Omar's chat with Jad.");
+        Assert.IsTrue(overdue.Date <= today.AddDays(-CheckInAttentionPolicy.OverdueAfterDays), $"Due {overdue.Date}.");
+        var ownersItem = ownerToday.Attention.Single(item => item.Kind == CoachAttentionKind.CheckInOverdue);
+        Assert.AreEqual(
+            (overdue.Client.ClientProfileId, overdue.Date, false, (Guid?)null),
+            (ownersItem.Client.ClientProfileId, ownersItem.Date, ownersItem.CanMessage, ownersItem.SubjectId));
+
         using var again = new StringWriter();
         Assert.AreEqual(2, await DemoWorkspaceCommand.RunAsync(
             factory.Services, DemoWorkspaceCommand.DefaultPassword, again, demo, CancellationToken.None));

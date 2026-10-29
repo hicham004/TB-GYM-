@@ -97,15 +97,22 @@ for (const [width, height] of [
     await openClients(page, width, height);
 
     await expect(page).toHaveTitle('Clients | TB Gym');
-    await expect(page.locator('.lede')).toHaveText('12 clients · 6 need attention');
+    await expect(page.locator('.lede')).toHaveText(
+      '12 clients · 6 need attention · 2 plans end soon',
+    );
     await expect(page.locator('li.client-row')).toHaveCount(12);
     const maya = clientRow(page, 'Maya Fakhoury');
-    await expect(maya).toContainText('Needs attention');
-    await expect(maya).toContainText('Check-in to review');
-    await expect(maya).toContainText('Trained 2 hours ago');
+    // Critique B4a: the reason as a link of its own, beside the plan's own status.
+    await expect(
+      maya.getByRole('link', { name: 'Maya Fakhoury: 1 check-in to review' }),
+    ).toHaveAttribute('href', '/clients/c-maya/checkins/a-maya');
+    await expect(maya).toContainText('On track');
+    await expect(maya).toContainText('Age 29');
+    await expect(maya).toContainText('Trained Lower A · 2 hours ago');
+    await expect(maya).toContainText('Sent 18 hours ago');
     await expect(maya).toContainText('3 of 4');
     await expect(maya).toContainText('Coached by Lea Khoury');
-    await expect(clientRow(page, 'Rita Daher').locator('.plan')).toHaveText('Plan ends tomorrow');
+    await expect(clientRow(page, 'Rita Daher').locator('.plan-end')).toHaveText('Ends tomorrow');
     // The column names show only where there are columns.
     await expect(page.locator('.list-head')).toBeVisible({ visible: width >= 1440 });
     await expectNoHorizontalOverflow(page);

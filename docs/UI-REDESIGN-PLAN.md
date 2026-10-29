@@ -1474,6 +1474,9 @@ Tokens are theme-ready from R1, so this costs little later.
     dark green, its gutter kept.
   - `SegmentedControl` options take an `icon`, drawn before the word, never instead of it. The exercise
     library's Cards / List is one, with the new `grid` and `list` glyphs.
+- Built in critique B4a: `Tag` (`ui/tag.ts`, `app-tag`), a reason with its count in the warning tone, "2
+  check-ins to review": with a `link` a link with a 24 px target and the kit's focus ring, without one the same
+  look where the reason is only named. A state that is not a reason to act stays a `StatusPill`.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves
@@ -1614,6 +1617,16 @@ limited to the coach's assigned clients.
   - Audit A8 (the owner's decision of 2026-10-19): a client who never finished their profile carries a quiet
     "Not set up yet" chip beside the status pill; it is not a column and not an attention reason.
   - Both lists follow dark mode. Screenshots on the Atlas demo: `docs/design/r33a-clients-*.png`.
+  - Critique B4a (`docs/CRITIQUE-FIXES-2026-10.md`): the table. Client (name, "Age 34" for the workspace's
+    today, goal); Status · last 7 days (the reasons as warning tags with their counts, each a link to where it
+    is handled, an overdue check-in to the client's check-ins; the plan's own pill, On track, Plan paused, Plan
+    ends soon or No active plan; the strip as ✓ done, × missed, – still due, with its legend under the head or,
+    on a phone, above the list); Plan (what it includes, its length and exact price, its end or "Paused since …
+    · ends …", "+1 more plan"); Last check-in ("Sent 2 days ago", "None sent yet", "Not in plan"); Last
+    activity ("Trained Lower A · 2 hours ago"); a chevron. A phone card names each fact. The lede counts what the
+    chips count, for a chosen coach too, and with a coach chosen an empty list speaks for that coach's clients
+    and keeps the coach. "How these statuses work" (a sheet, beside the chips and under Today's Needs you)
+    explains each reason, the pills and the marks.
 - Built in R5.3a at `/invitations` (follows dark mode): **Waiting to join** with a count, then one row per
   person (face, name and email, the status pill, "Sent once · the newest link works until Oct 16", Send again
   and Cancel); **Earlier invitations (n)** closed, newest first, each Joined, Link ran out or Cancelled, the last

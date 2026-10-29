@@ -267,11 +267,12 @@ test('the client joins, resumes the steps after a reload, and Lea finishes the s
   await lea.goto('/clients?show=new');
   const row = lea.locator('.clients li.client-row', { hasText: fullName });
   await expect(row).toBeVisible();
-  await expect(row.locator('.plan')).toHaveText('No plan yet');
+  await expect(row.locator('.plan-end')).toHaveText('No plan yet');
   // A new client with no plan asks for one, and one who has not finished setting up says so
-  // (audit COACH-9 and LOST-12, the owner's decision of 2026-10-19).
-  await expect(row.locator('app-status-pill')).toHaveText('Needs attention');
-  await expect(row.locator('.reasons')).toHaveText('Joined, no plan yet');
+  // (audit COACH-9 and LOST-12, the owner's decision of 2026-10-19); the plan's own status beside
+  // the reason (critique B4a).
+  await expect(row.locator('app-status-pill')).toHaveText('No active plan');
+  await expect(row.locator('.reason-tag')).toHaveText(`${fullName}: Joined, no plan yet`);
   await expect(row.locator('[data-not-set-up]')).toHaveText('Not set up yet');
   await lea.goto('/');
   const joined = lea.locator('li.need[data-kind="NoPlan"]', { hasText: fullName });

@@ -26,6 +26,11 @@ export interface CoachAction {
   forWhom: string;
   link: string;
   queryParams: Record<string, string> | null;
+  /**
+   * Remind with no chat yet (critique B4a): the action is a button that starts the coach's chat with
+   * this client and opens it, as the client page's Message does. Null for every link.
+   */
+  startsChatWith: string | null;
 }
 
 export interface AttentionRow {
@@ -145,18 +150,16 @@ export function attentionRow(
         ? client.assignedCoachName
         : null,
   };
-  const clientPage = `/clients/${client.clientProfileId}`;
   const forWhom = $localize`for ${name}:name:`;
-  const go = (
-    label: string,
-    link: string,
-    queryParams: Record<string, string> | null = null,
-  ): CoachAction => ({ label, forWhom, link, queryParams });
-  const renew = go(
-    $localize`Renew plan`,
-    `${clientPage}/service`,
-    item.subjectId ? { renew: item.subjectId } : null,
-  );
+  // Where the item is handled, which the Clients table's tag for it opens too.
+  const target = attentionTarget(item);
+  const go = (label: string): CoachAction => ({
+    label,
+    forWhom,
+    link: target.link,
+    queryParams: target.queryParams,
+    startsChatWith: null,
+  });
 
   switch (item.kind) {
     case 'CheckInToReview':
@@ -174,12 +177,7 @@ export function attentionRow(
         tag: $localize`Check-in`,
         tone: 'review',
         // One waiting opens straight at its review; several open the client's list of check-ins.
-        action: go(
-          $localize`Review`,
-          item.subjectId && count <= 1
-            ? `${clientPage}/checkins/${item.subjectId}`
-            : `${clientPage}/checkins`,
-        ),
+        action: go($localize`Review`),
       };
     case 'UnreadMessages':
       return {
@@ -194,11 +192,7 @@ export function attentionRow(
             : $localize`Sent ${ago(item.since, context)}:ago:`,
         tag: $localize`Message`,
         tone: 'message',
-        action: go(
-          $localize`Reply`,
-          '/messages',
-          item.subjectId ? { conversation: item.subjectId } : null,
-        ),
+        action: go($localize`Reply`),
       };
     case 'RenewalRequested':
       return {
@@ -207,7 +201,7 @@ export function attentionRow(
         detail: $localize`Plan ended ${date(item.date)}:date:`,
         tag: $localize`Renewal`,
         tone: 'renew',
-        action: renew,
+        action: go($localize`Renew plan`),
       };
     case 'PlanEndingSoon':
       // Only a paid plan covers days (BEB-7): with a renewal still waiting for payment, the item is
@@ -221,10 +215,7 @@ export function attentionRow(
             : $localize`Last day ${date(item.date)}:date:`,
         tag: $localize`Ending soon`,
         tone: 'ending',
-        action:
-          count > 0 && item.subjectId
-            ? go($localize`Record payment`, `${clientPage}/service`, { pay: item.subjectId })
-            : renew,
+        action: go(count > 0 && item.subjectId ? $localize`Record payment` : $localize`Renew plan`),
       };
     case 'WeekNotShared': {
       const week = Number(item.weekNumber ?? 0);
@@ -242,7 +233,7 @@ export function attentionRow(
                 : $localize`It started ${date(item.date)}:date:`,
         tag: $localize`Program`,
         tone: 'share',
-        action: go($localize`Share week`, `${clientPage}/training`),
+        action: go($localize`Share week`),
       };
     }
     case 'MissedSessions':
@@ -254,7 +245,29 @@ export function attentionRow(
           : $localize`No workout logged yet`,
         tag: $localize`Missed`,
         tone: 'missed',
-        action: go($localize`See training`, `${clientPage}/training`),
+        action: go($localize`See training`),
+      };
+    case 'CheckInOverdue':
+      // Never sent, so there is nothing to read (CHK-015): the action asks for it, in the chat only the
+      // client's own coach has while messaging is in the plan, else it opens their check-ins (CLI-013).
+      return {
+        ...base,
+        heading:
+          count > 1
+            ? $localize`${name}:name: has ${count}:count: check-ins overdue`
+            : $localize`${name}:name:'s check-in is overdue`,
+        detail: overdueDetail(count, date(item.date)),
+        tag: $localize`Overdue`,
+        tone: 'missed',
+        action: item.canMessage
+          ? {
+              label: $localize`Remind`,
+              forWhom: name,
+              link: '/messages',
+              queryParams: item.subjectId ? { conversation: item.subjectId } : null,
+              startsChatWith: item.subjectId ? null : client.clientProfileId,
+            }
+          : go($localize`See check-ins`),
       };
     case 'MaxesToReview': {
       // Named with both numbers, so the coach knows what happened before opening anything.
@@ -269,7 +282,7 @@ export function attentionRow(
         tag: $localize`Maxes`,
         tone: 'share',
         // Opens the client's Training with the Training maxes panel in view.
-        action: go($localize`Review maxes`, `${clientPage}/training`, { action: 'maxes' }),
+        action: go($localize`Review maxes`),
       };
     }
     case 'NoPlan':
@@ -281,7 +294,7 @@ export function attentionRow(
         tag: $localize`New`,
         tone: 'new',
         // Opens the client's Service & access with Start a plan already open.
-        action: go($localize`Start a plan`, `${clientPage}/service`, { action: 'start' }),
+        action: go($localize`Start a plan`),
       };
     case 'NoProgram': {
       const isNew = item.date !== null && -daysBetween(today, item.date) < NEW_CLIENT_DAYS;
@@ -299,10 +312,63 @@ export function attentionRow(
         tag: isNew ? $localize`New` : $localize`Program`,
         tone: 'new',
         // Opens the client's Training with the Assign program sheet already open (R3.4a).
-        action: go($localize`Assign program`, `${clientPage}/training`, { action: 'assign' }),
+        action: go($localize`Assign program`),
       };
     }
   }
+}
+
+/**
+ * Where an attention item is handled (CLI-018): what Today's action and the client page's open, and
+ * what the Clients table's tag for it links to (critique B4a). An overdue check-in's tag opens the
+ * client's check-ins, what it names; Remind is Today's and the client page's own action.
+ */
+export function attentionTarget(item: CoachAttentionItemView): {
+  link: string;
+  queryParams: Record<string, string> | null;
+} {
+  const page = `/clients/${item.client.clientProfileId}`;
+  const count = Number(item.count ?? 0);
+  const subject = item.subjectId;
+  switch (item.kind) {
+    case 'CheckInToReview':
+      // One waiting opens straight at its review; several open the client's list of check-ins.
+      return {
+        link: subject && count <= 1 ? `${page}/checkins/${subject}` : `${page}/checkins`,
+        queryParams: null,
+      };
+    case 'UnreadMessages':
+      return { link: '/messages', queryParams: subject ? { conversation: subject } : null };
+    case 'RenewalRequested':
+      return { link: `${page}/service`, queryParams: subject ? { renew: subject } : null };
+    case 'PlanEndingSoon':
+      // Only a paid plan covers days (BEB-7): with a renewal still unpaid, its payment is the action.
+      return {
+        link: `${page}/service`,
+        queryParams: subject ? (count > 0 ? { pay: subject } : { renew: subject }) : null,
+      };
+    case 'WeekNotShared':
+    case 'MissedSessions':
+      return { link: `${page}/training`, queryParams: null };
+    case 'CheckInOverdue':
+      return { link: `${page}/checkins`, queryParams: null };
+    case 'NoProgram':
+      // Opens the client's Training with the Assign program sheet already open (R3.4a).
+      return { link: `${page}/training`, queryParams: { action: 'assign' } };
+    case 'MaxesToReview':
+      // Opens the client's Training with the Training maxes panel in view.
+      return { link: `${page}/training`, queryParams: { action: 'maxes' } };
+    case 'NoPlan':
+      // Opens the client's Service & access with Start a plan already open.
+      return { link: `${page}/service`, queryParams: { action: 'start' } };
+  }
+}
+
+/** When an overdue check-in was due, the oldest one's day when there are several. */
+export function overdueDetail(count: number, dueDay: string): string {
+  return count > 1
+    ? $localize`The oldest was due ${dueDay}:date:`
+    : $localize`It was due ${dueDay}:date:`;
 }
 
 /**

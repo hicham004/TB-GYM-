@@ -13,6 +13,7 @@ import {
   activityRow,
   ago,
   attentionRow,
+  attentionTarget,
   daysBetween,
   mapCoachToday,
   partOfDay,
@@ -364,6 +365,105 @@ describe('Coach Today view model', () => {
     expect([quiet.heading, quiet.detail]).toEqual([
       'Sara Mansour has no program running',
       'Joined Sun 1 Mar',
+    ]);
+  });
+
+  describe('an overdue check-in (CHK-015, critique B4a)', () => {
+    const overdue = (fields: Parameters<typeof attentionItem>[2]) =>
+      attentionRow(attentionItem('CheckInOverdue', SARA, fields), COACH_TODAY, context);
+
+    it('says how many are overdue and when the oldest was due', () => {
+      const two = overdue({
+        count: 2,
+        date: '2026-09-19',
+        canMessage: true,
+        subjectId: 'conv-sara',
+      });
+      expect([two.heading, two.detail, two.tag, two.tone]).toEqual([
+        'Sara Mansour has 2 check-ins overdue',
+        'The oldest was due Sat 19 Sep',
+        'Overdue',
+        'missed',
+      ]);
+      const one = overdue({
+        count: 1,
+        date: '2026-09-28',
+        canMessage: true,
+        subjectId: 'conv-sara',
+      });
+      expect([one.heading, one.detail]).toEqual([
+        "Sara Mansour's check-in is overdue",
+        'It was due Mon 28 Sep',
+      ]);
+    });
+
+    it('reminds in the coach’s own chat, starting it when there is none yet', () => {
+      expect(
+        overdue({ count: 1, date: '2026-09-28', canMessage: true, subjectId: 'conv-sara' }).action,
+      ).toEqual({
+        label: 'Remind',
+        forWhom: 'Sara Mansour',
+        link: '/messages',
+        queryParams: { conversation: 'conv-sara' },
+        startsChatWith: null,
+      });
+      expect(overdue({ count: 1, date: '2026-09-28', canMessage: true }).action).toMatchObject({
+        label: 'Remind',
+        startsChatWith: SARA.clientProfileId,
+      });
+    });
+
+    it('opens the client’s check-ins for anyone who may not message them (CLI-013)', () => {
+      const owner = overdue({ count: 1, date: '2026-09-28', canMessage: false });
+      expect(owner.action).toEqual({
+        label: 'See check-ins',
+        forWhom: 'for Sara Mansour',
+        link: `/clients/${SARA.clientProfileId}/checkins`,
+        queryParams: null,
+        startsChatWith: null,
+      });
+      // A team coach's client names its coach to the owner, beside it.
+      const theirs = attentionRow(
+        attentionItem('CheckInOverdue', MAYA, { count: 1, date: '2026-09-28', canMessage: false }),
+        COACH_TODAY,
+        context,
+      );
+      expect([theirs.coach, theirs.action.label]).toEqual(['Lea Khoury', 'See check-ins']);
+    });
+  });
+
+  it('links every reason to where it is handled, as the Clients table’s tags do', () => {
+    const target = (kind: Parameters<typeof attentionItem>[0], fields = {}) =>
+      attentionTarget(attentionItem(kind, SARA, fields));
+    const page = `/clients/${SARA.clientProfileId}`;
+
+    expect([
+      target('CheckInToReview', { count: 1, subjectId: 'a-1' }),
+      target('CheckInToReview', { count: 3, subjectId: 'a-1' }),
+      target('UnreadMessages', { subjectId: 'conv-1' }),
+      target('RenewalRequested', { subjectId: 'e-1' }),
+      target('PlanEndingSoon', { subjectId: 'e-1' }),
+      target('PlanEndingSoon', { count: 1, subjectId: 'renewal-1' }),
+      target('WeekNotShared'),
+      target('MissedSessions', { count: 2 }),
+      target('CheckInOverdue', { count: 2, subjectId: 'conv-1' }),
+      target('NoProgram'),
+      target('MaxesToReview'),
+      target('NoPlan'),
+    ]).toEqual([
+      { link: `${page}/checkins/a-1`, queryParams: null },
+      { link: `${page}/checkins`, queryParams: null },
+      { link: '/messages', queryParams: { conversation: 'conv-1' } },
+      { link: `${page}/service`, queryParams: { renew: 'e-1' } },
+      { link: `${page}/service`, queryParams: { renew: 'e-1' } },
+      { link: `${page}/service`, queryParams: { pay: 'renewal-1' } },
+      { link: `${page}/training`, queryParams: null },
+      { link: `${page}/training`, queryParams: null },
+      // What it names: the client's check-ins, whoever may message them.
+      { link: `${page}/checkins`, queryParams: null },
+      { link: `${page}/training`, queryParams: { action: 'assign' } },
+      { link: `${page}/training`, queryParams: { action: 'maxes' } },
+      { link: `${page}/service`, queryParams: { action: 'start' } },
     ]);
   });
 

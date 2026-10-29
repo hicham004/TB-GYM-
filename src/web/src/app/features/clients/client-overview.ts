@@ -12,7 +12,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import { featureAccessReason } from '../../core/api/api-error';
+import { apiErrorMessage, featureAccessReason } from '../../core/api/api-error';
 import type {
   CheckInAssignmentListItem,
   ClientPersonalRecordsResult,
@@ -31,6 +31,7 @@ import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
 import { Sparkline } from '../../ui/sparkline';
 import { StatusPill } from '../../ui/status-pill';
+import { ConversationStarter } from '../messaging/conversation-starter';
 import {
   mapProgressDashboard,
   type ProgressDashboard,
@@ -103,6 +104,7 @@ export class ClientOverview {
   private readonly tenants = inject(TenantStore);
   private readonly formBuilder = inject(FormBuilder);
   private readonly locale = inject(LOCALE_ID);
+  private readonly conversations = inject(ConversationStarter);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
   /** The device clock, read when the page loads, for elapsed time ("2 hours ago") only. */
@@ -116,6 +118,8 @@ export class ClientOverview {
   protected readonly checkIns = signal<Part<CheckInAssignmentListItem[]>>(loading());
   protected readonly blocks = signal<Part<MesocycleSummary[]>>(loading());
   protected readonly editingNote = signal(false);
+  /** Remind is starting the chat: its button waits, and a second press does nothing (critique B4a). */
+  protected readonly reminding = signal(false);
   protected readonly noteForm = this.formBuilder.nonNullable.group({
     notes: ['', Validators.maxLength(8000)],
   });
@@ -272,9 +276,8 @@ export class ClientOverview {
   }
 
   protected loadOverview(): Promise<void> {
-    return this.loadPart('overview', this.overview, () =>
-      firstValueFrom(this.api.getClientOverview(this.context.clientId())),
-    );
+    // The record's header reads it too, for whether the plan ends soon: one read serves both.
+    return this.loadPart('overview', this.overview, () => this.context.overviewForPage());
   }
 
   protected loadDashboard(): Promise<void> {
@@ -353,6 +356,28 @@ export class ClientOverview {
     });
   }
 
+  /**
+   * Remind for an overdue check-in with no chat yet (critique B4a): starts the chat as the header's
+   * Message does and opens it; a refusal is said where the header says its own.
+   */
+  protected async remind(): Promise<void> {
+    if (this.reminding()) return;
+    this.reminding.set(true);
+    this.context.clearMessages();
+    try {
+      await this.conversations.open(this.context.clientId());
+    } catch (error) {
+      this.context.error.set(
+        apiErrorMessage(
+          error,
+          $localize`Couldn’t open this conversation. Check messaging access and retry.`,
+        ),
+      );
+    } finally {
+      this.reminding.set(false);
+    }
+  }
+
   protected noteErrors(): string[] | null {
     const control = this.noteForm.controls.notes;
     return control.touched && control.hasError('maxlength')
@@ -389,6 +414,7 @@ export class ClientOverview {
   }
 
   private reset(): void {
+    this.reminding.set(false);
     this.loadedKey = null;
     this.overview.set(loading());
     this.dashboard.set(loading());

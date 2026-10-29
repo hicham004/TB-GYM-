@@ -64,6 +64,19 @@ export function adultCutoff(today: IsoDate): IsoDate {
   return addYears(next, 18) <= today ? next : cutoff;
 }
 
+/**
+ * Whole years from a birth date to a day (CLI-005: age is worked out for a given day, never stored), by
+ * the server's rule: a year counts once the birth date plus that many years, a 29 February landing on
+ * the 28th, is no later than the day. Null without a real birth date, or before it. The one age helper:
+ * the Clients table and nutrition count with it, each for the workspace's today.
+ */
+export function ageOn(birthDate: string | null | undefined, today: IsoDate): number | null {
+  if (!isIsoDate(birthDate) || !isIsoDate(today)) return null;
+  const years = Number(today.slice(0, 4)) - Number(birthDate.slice(0, 4));
+  const reached = addYears(birthDate, years) <= today ? years : years - 1;
+  return reached >= 0 ? reached : null;
+}
+
 export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }

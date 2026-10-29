@@ -123,17 +123,41 @@
             </label>
           }
         </fieldset>
+        <!-- What each status means and when it clears (critique B4a). -->
+        <app-statuses-help class="help" />
       </div>
       <p class="tb-visually-hidden" role="status">{{ resultSummary() }}</p>
 
       @if (visible().length > 0) {
         <div class="panel">
+          <!-- The strip's marks, said once above the list; on a wide screen under its column's name. -->
+          <ng-template #legend>
+            <span class="legend" aria-hidden="true">
+              <span class="legend-item"><app-day-mark mark="done" /><span i18n>done</span></span>
+              <span class="legend-dot">·</span>
+              <span class="legend-item"
+                ><app-day-mark mark="missed" /><span i18n>missed</span></span
+              >
+              <span class="legend-dot">·</span>
+              <span class="legend-item"
+                ><app-day-mark mark="due" /><span i18n>still due</span></span
+              >
+            </span>
+          </ng-template>
+          <p class="legend-line" aria-hidden="true">
+            <span class="legend-name" i18n>Last 7 days</span>
+            <ng-container [ngTemplateOutlet]="legend" />
+          </p>
+          <!-- The column names, for sight only: each cell says what it is to a screen reader. -->
           <div class="list-head" aria-hidden="true">
             <span class="head-client" i18n>Client</span>
-            <span i18n>Status</span>
-            <span i18n>Last activity</span>
-            <span i18n>Last 7 days</span>
+            <span class="head-status">
+              <span i18n>Status · last 7 days</span>
+              <ng-container [ngTemplateOutlet]="legend" />
+            </span>
             <span i18n>Plan</span>
+            <span i18n>Last check-in</span>
+            <span i18n>Last activity</span>
           </div>
           <ul class="rows" role="list">
             @for (row of visible(); track row.id) {
@@ -141,37 +165,42 @@
                 <app-avatar [initials]="row.initials" presentation="client" />
                 <div class="who">
                   <a class="name" [routerLink]="row.link" dir="auto">{{ row.name }}</a>
-                  @if (row.goal) {
-                    <p class="goal" dir="auto">{{ row.goal }}</p>
+                  @if (row.age || row.goal) {
+                    <p class="goal" dir="auto">
+                      @if (row.age) {
+                        <span class="age">{{ row.age }}</span>
+                      }
+                      @if (row.age && row.goal) {
+                        <span aria-hidden="true"> · </span>
+                      }
+                      {{ row.goal }}
+                    </p>
                   }
                   @if (row.coach) {
                     <p class="coach" i18n>Coached by {{ row.coach }}</p>
                   }
                 </div>
                 <div class="state">
-                  <app-status-pill [label]="row.status.label" [tone]="row.status.tone" />
-                  @if (row.notSetUp) {
-                    <!-- The client has not finished their profile; the Intake says what is missing. -->
-                    <span class="setup" data-not-set-up i18n>Not set up yet</span>
-                  }
-                  @if (row.reasons) {
-                    <p class="reasons">{{ row.reasons }}</p>
-                  }
-                </div>
-                <div class="facts">
-                  <p class="activity">
-                    @if (row.activityAt) {
-                      <time [attr.datetime]="row.activityAt">{{ row.activity }}</time>
-                    } @else {
-                      {{ row.activity }}
+                  <div class="flags">
+                    <!-- Each reason opens where it is handled; above the row's own link. -->
+                    @for (tag of row.tags; track tag.kind) {
+                      <app-tag class="reason-tag" [link]="tag.link" [queryParams]="tag.queryParams"
+                        ><span class="tb-visually-hidden">{{ row.name }}: </span
+                        >{{ tag.label }}</app-tag
+                      >
                     }
-                  </p>
+                    <app-status-pill [label]="row.planPill.label" [tone]="row.planPill.tone" />
+                    @if (row.notSetUp) {
+                      <!-- The client has not finished their profile; the Intake says what is missing. -->
+                      <span class="setup" data-not-set-up i18n>Not set up yet</span>
+                    }
+                  </div>
                   <div class="week">
                     @if (row.week; as week) {
                       @if (week.days.length > 0) {
                         <span class="strip" aria-hidden="true">
                           @for (day of week.days; track day.date) {
-                            <i class="day" [attr.data-mark]="day.mark"></i>
+                            <app-day-mark [mark]="day.mark" />
                           }
                         </span>
                       }
@@ -187,8 +216,48 @@
                       <span class="no-training" i18n>Training not in plan</span>
                     }
                   </div>
-                  <p class="plan" [class.soon]="row.plan.soon">{{ row.plan.label }}</p>
                 </div>
+                <!-- On a phone each fact carries its name; on a wide screen the column's head does. -->
+                <div class="fact plan">
+                  <span class="cell-label" i18n>Plan</span>&ngsp;
+                  <span class="fact-value">
+                    @if (row.plan.includes) {
+                      <span class="plan-line plan-includes">{{ row.plan.includes }}</span
+                      >&ngsp;
+                    }
+                    @if (row.plan.terms) {
+                      <span class="plan-line">{{ row.plan.terms }}</span
+                      >&ngsp;
+                    }
+                    <span class="plan-line plan-end" [class.soon]="row.plan.soon">{{
+                      row.plan.end
+                    }}</span>
+                    @if (row.plan.more) {
+                      <span class="plan-line plan-more">&ngsp;{{ row.plan.more }}</span>
+                    }
+                  </span>
+                </div>
+                <p class="fact checkin">
+                  <span class="cell-label" i18n>Last check-in</span>&ngsp;
+                  @if (row.checkInAt) {
+                    <time class="fact-value" [attr.datetime]="row.checkInAt">{{
+                      row.checkIn
+                    }}</time>
+                  } @else {
+                    <span class="fact-value quiet">{{ row.checkIn }}</span>
+                  }
+                </p>
+                <p class="fact activity">
+                  <span class="cell-label" i18n>Last activity</span>&ngsp;
+                  @if (row.activityAt) {
+                    <time class="fact-value" [attr.datetime]="row.activityAt" dir="auto">{{
+                      row.activity
+                    }}</time>
+                  } @else {
+                    <span class="fact-value quiet">{{ row.activity }}</span>
+                  }
+                </p>
+                <app-icon class="chevron" name="chevron-right" />
               </li>
             }
           </ul>

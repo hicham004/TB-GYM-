@@ -94,30 +94,121 @@ function squash(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim();
 }
 
+/** Each piece of text on its own, a space between them: Angular drops the spaces between elements. */
+function said(host: Node): string {
+  const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+  const pieces: string[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const piece = squash(node.textContent);
+    if (piece) pieces.push(piece);
+  }
+  return pieces.join(' ');
+}
+
 describe('Clients', () => {
   afterEach(() => {
     vi.useRealTimers();
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
     TestBed.resetTestingModule();
   });
 
-  it('lists everyone with a face, goal, status and the whole row as a link', async () => {
+  it('lists everyone with a face, age, goal, status, plan, last check-in and last activity', async () => {
     const { host } = await render();
 
     expect(names(host)).toHaveLength(12);
     const maya = row(host, 'Maya Fakhoury');
     expect(squash(maya.querySelector('app-avatar')?.textContent)).toBe('MF');
-    expect(maya.querySelector('.goal')?.textContent).toContain('wedding in December');
-    expect(squash(maya.querySelector('app-status-pill')?.textContent)).toBe('Needs attention');
-    expect(squash(maya.querySelector('.reasons')?.textContent)).toBe('Check-in to review');
-    expect(squash(maya.querySelector('.activity')?.textContent)).toBe('Trained 2 hours ago');
+    expect(squash(maya.querySelector('.goal')?.textContent)).toBe(
+      'Age 29 · Lose 6 kg and feel strong for my wedding in December.',
+    );
+    // The reason and the plan's own status, then the last 7 days with its words for screen readers.
+    expect(squash(maya.querySelector('.reason-tag')?.textContent)).toBe(
+      'Maya Fakhoury: 1 check-in to review',
+    );
+    expect(squash(maya.querySelector('app-status-pill')?.textContent)).toBe('On track');
+    expect(maya.querySelectorAll('.strip app-day-mark')).toHaveLength(7);
     expect(squash(maya.querySelector('.week')?.textContent)).toContain(
       '3 of 4 workouts done in the last 7 days',
     );
-    expect(squash(maya.querySelector('.plan')?.textContent)).toBe('Plan ends Sun 20 Dec');
-    // One link per row, on the name; its overlay makes the whole row clickable.
-    expect(maya.querySelectorAll('a')).toHaveLength(1);
-    expect(query<HTMLAnchorElement>(maya, 'a.name').getAttribute('href')).toBe('/clients/c-maya');
-    expect(squash(query(host, '.lede').textContent)).toBe('12 clients · 6 need attention');
+    expect(squash(maya.querySelector('.plan')?.textContent)).toBe(
+      'Plan Training, Nutrition, Check-ins, Messaging 12 weeks · USD 330 Ends Sun 20 Dec +1 more plan',
+    );
+    expect(squash(maya.querySelector('.checkin')?.textContent)).toBe(
+      'Last check-in Sent 18 hours ago',
+    );
+    expect(squash(maya.querySelector('.activity')?.textContent)).toBe(
+      'Last activity Trained Lower A · 2 hours ago',
+    );
+    // The name's link covers the row; each reason is its own link above it; a chevron ends the row.
+    expect(Array.from(maya.querySelectorAll('a')).map((link) => link.getAttribute('href'))).toEqual(
+      ['/clients/c-maya', '/clients/c-maya/checkins/a-maya'],
+    );
+    expect(maya.querySelector('app-icon.chevron')).not.toBeNull();
+    expect(squash(query(host, '.lede').textContent)).toBe(
+      '12 clients · 6 need attention · 2 plans end soon',
+    );
+  });
+
+  it('heads the columns and draws the strip’s legend, which a phone shows above the list', async () => {
+    const { host } = await render();
+
+    const head = query(host, '.list-head');
+    expect(head.getAttribute('aria-hidden')).toBe('true');
+    expect(said(head)).toBe(
+      'Client Status · last 7 days done · missed · still due Plan Last check-in Last activity',
+    );
+    expect(said(query(host, '.legend-line'))).toBe('Last 7 days done · missed · still due');
+    expect(
+      Array.from(query(host, '.legend-line').querySelectorAll('app-day-mark')).map((mark) =>
+        mark.getAttribute('data-mark'),
+      ),
+    ).toEqual(['done', 'missed', 'due']);
+  });
+
+  it('links each reason to where it is handled, the plan’s end having its own pill', async () => {
+    const { host } = await render();
+
+    const tags = (name: string) =>
+      Array.from(row(host, name).querySelectorAll<HTMLAnchorElement>('.reason-tag a')).map(
+        (tag) => [squash(tag.textContent), tag.getAttribute('href')],
+      );
+    expect(tags('Jad Karam')).toEqual([
+      ['Jad Karam: 3 missed workouts', '/clients/c-jad/training'],
+      ['Jad Karam: 2 check-ins overdue', '/clients/c-jad/checkins'],
+    ]);
+    expect(tags('Sara Mansour')).toEqual([
+      ['Sara Mansour: 2 unread messages', '/messages?conversation=conv-sara'],
+    ]);
+    expect(tags('Rita Daher')).toEqual([]);
+    expect(squash(row(host, 'Rita Daher').querySelector('app-status-pill')?.textContent)).toBe(
+      'Plan ends soon',
+    );
+    expect(row(host, 'Rita Daher').querySelector('.plan-end')?.classList).toContain('soon');
+  });
+
+  it('says why check-ins show nothing: none sent yet, or not in the plan', async () => {
+    const { host } = await render();
+
+    expect(squash(row(host, 'Lynn Bou Khalil').querySelector('.checkin')?.textContent)).toBe(
+      'Last check-in None sent yet',
+    );
+    expect(squash(row(host, 'Rami Tabet').querySelector('.checkin')?.textContent)).toBe(
+      'Last check-in Not in plan',
+    );
+    expect(squash(row(host, 'Karl Saade').querySelector('.plan-end')?.textContent)).toBe(
+      'Paused since Sun 20 Sep · ends Sun 20 Dec',
+    );
+  });
+
+  it('explains how the statuses work beside the chips (critique B4a)', async () => {
+    const { host, harness } = await render();
+
+    press(host, 'How these statuses work');
+    await settle(harness.fixture);
+
+    const sheet = document.querySelector<HTMLElement>('[role="dialog"]');
+    expect(squash(sheet?.querySelector('h2')?.textContent)).toBe('How these statuses work');
+    expect(squash(sheet?.textContent)).toContain('13 days away is soon, 14 is not');
   });
 
   it('shows none of the old columns: phone, onboarding or an "Open profile" link', async () => {
@@ -197,8 +288,40 @@ describe('Clients', () => {
       'Coach: Lea Khoury',
     );
     expect(squash(query(host, '[role="status"]').textContent)).toBe('Showing 1 of 12 clients');
-    // Each chip counts the chosen coach's clients, not the whole list's.
+    // Each chip counts the chosen coach's clients, not the whole list's, and so does the lede.
     expect(squash(query(host, '.chips .chip').textContent)).toBe('All 1');
+    expect(squash(query(host, '.lede').textContent)).toBe('1 client · 1 needs attention');
+  });
+
+  it('speaks for the chosen coach’s clients when none of theirs matches, and keeps the coach (review of B3a)', async () => {
+    const { host, harness } = await render({
+      isOwner: true,
+      url: `/clients?coach=${LEA_ID}&show=paused`,
+    });
+
+    // Lea's only client, Maya, is not paused; the rest of the list may well hold one.
+    expect(names(host)).toEqual([]);
+    expect(squash(host.querySelector('app-empty-state h2')?.textContent)).toBe(
+      'None of Lea Khoury’s clients has a paused plan',
+    );
+    press(host, 'Show all of Lea Khoury’s clients');
+    await settle(harness.fixture);
+
+    expect(names(host)).toEqual(['Maya Fakhoury']);
+    expect(TestBed.inject(Router).url).toBe(`/clients?coach=${LEA_ID}`);
+  });
+
+  it('says “your clients” when the owner chose their own', async () => {
+    const { host, harness } = await render({
+      isOwner: true,
+      url: `/clients?coach=${OWNER_ID}`,
+    });
+
+    fill(host, 'Search clients', 'zzz');
+    await settle(harness.fixture);
+    expect(squash(host.querySelector('app-empty-state h2')?.textContent)).toBe(
+      'None of your clients matches “zzz”',
+    );
   });
 
   it('opens on the coach named in the address, and narrows nothing for a coach it does not hold', async () => {

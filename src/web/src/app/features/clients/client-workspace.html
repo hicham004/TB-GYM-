@@ -20,7 +20,12 @@
             }
             <div class="plan-row">
               @if (planStatus(); as status) {
-                <app-status-pill [label]="status.label" [tone]="status.tone" />
+                @if (status === 'pending') {
+                  <!-- The pill's place while the server says whether the plan ends soon. -->
+                  <span class="bone pill-bone" aria-hidden="true"></span>
+                } @else {
+                  <app-status-pill [label]="status.label" [tone]="status.tone" />
+                }
               }
               @if (planLine(); as line) {
                 <span class="plan-line" dir="auto">{{ line }}</span>

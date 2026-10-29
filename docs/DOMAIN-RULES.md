@@ -111,7 +111,8 @@ who joined before a version was published are not asked yet.
 **CLI-011** The owner invites coaches by email; accepting creates an active Coach membership (or
 reactivates a removed coach's). Only the owner manages coach invitations and removes coaches, and a
 workspace has exactly one active owner. Every member of staff may read who is on the team: each
-active owner and coach's name, role and joining day, and nothing else (critique B3a). See
+active owner and coach's name, role and joining day (for a coach invited back, the day they returned),
+and nothing else (critique B3a). See
 `docs/adr/0026-coach-team-and-client-assignment.md`.
 
 **CLI-012** Every client has exactly one coach, an active Owner or Coach of the workspace: whoever
@@ -152,7 +153,7 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v3 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8) is what Coach Today asks a
+**CLI-018** Coach attention v4 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a) is what Coach Today asks a
 coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
 their own, the Owner all) and never a former client. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
@@ -163,17 +164,31 @@ coach's chat is never counted, not even for the Owner); a renewal request from t
 while the whole plan is still ended (ADR 0029); a new client with no plan at all, while they are new ("Joined,
 start a plan"; an ended, unpaid, coming, paused or blocked plan is not "no plan"; audit COACH-9, the owner's
 decision of 2026-10-19); a running plan whose last covered day is within 14
-days, counting paid renewals already in place: a renewal still waiting for payment covers nothing
+days, today counted (a last day 13 days on is, one 14 days on is not; screens show this flag and count no days
+of their own, critique B4a), counting paid renewals already in place: a renewal still waiting for payment covers nothing
 (SUB-008), so the item names it to record its payment (audit BEB-7, the owner's decision of 2026-10-19);
 a week not shared (TRN-021); two or more missed sessions
-(TRN-021); training in the plan but no block running or coming, which names the client's latest
+(TRN-021); a check-in overdue by CHK-015 (critique B4a: not sent, due 2 to 13 days ago, while check-ins are in
+today's plan), worked out from the missing submission alone: an absence is not an answer, so nothing is read into
+it (CHK-012), and its Remind opens the chat, started if need be, only when the caller is the client's own coach
+and messaging is in the plan, else the client's check-ins (CLI-013); training in the plan but no block running or
+coming, which names the client's latest
 program and what its logged sets suggest for the next one (STR-014); and, last, the lifts of a running or
 coming block whose logged sets suggest a new max (STR-012, after any keep, STR-013), named with the max
 in use and the suggestion. The status is Needs attention for any of those but the plan's end and maxes
-to review (a client getting stronger is good news), else Paused, Ending soon, On track for a running
-plan, or No active plan. A client is new for 14 days after joining. The list also says which clients have not
+to review (a client getting stronger is good news), else the plan's own status: Paused, Ending soon, On track for
+a running plan, or No active plan. That plan status is also shown on its own beside the reasons, whatever they are
+(critique B4a: a plan's end keeps its own status, outside Needs attention). A client is new for 14 days after
+joining. The list also says which clients have not
 finished setting up their profile ("Not set up yet", audit LOST-12); that is shown beside the status and is not
-an attention reason. The activity feed holds finished workouts,
+an attention reason. Each row also carries (critique B4a) the current profile's date of birth, the age worked out on
+screen for the workspace's today (CLI-005; a returning client's new profile never takes the old one's, CLI-016); the
+plan whose last day the row shows, which the client's page names (R3.5b), as what it includes, its length as sold
+and its price, exact, in its own currency, with how many other plans run or are booked beside it, their prices never
+added to it; while the plan is paused, the workspace day it was paused, as a pause has no end of its own (SUB-006);
+the features today's plan grants; when the client last sent a check-in, while check-ins are in today's plan
+(CHK-011); a last workout's session name; and its attention as Today's items, each with what its link needs and
+whether the caller may message the client. The activity feed holds finished workouts,
 with their records (TRN-019), and sent check-ins of the last 7 days; a weigh-in counts only as a
 client's last activity. Counts carry their dates; no percentage is derived on the server.
 A client's own page (R3.3b, `GET /api/clients/{clientId}/overview`) reads the same rule for that one
@@ -231,7 +246,8 @@ enrollment periods; they are not independently copied inputs.
 are explicit domain methods with optimistic concurrency. The calendar date is authoritative:
 an enrollment is effectively expired at `endDateExclusive` even before an asynchronous
 projection persists `Expired`. A cancelled enrollment carries the workspace day it was cancelled,
-which screens say instead of a last day that may still be to come (audit COACH-20).
+which screens say instead of a last day that may still be to come (audit COACH-20). A pause has no
+end of its own, and resuming does not move the plan's end: a paused plan still ends on its last day.
 
 **SUB-007** Payment registration is append-only. Each receipt retains amount, currency,
 received instant, method, optional reference/note, source, idempotency key, registering user,
@@ -2241,6 +2257,13 @@ whose plan includes check-ins now: a Coach's own, every one for the Owner (the o
 the workspace-local day it was sent and how many days after its due day (CHK-012), at most 500 with
 the total. A client whose plan no longer includes check-ins is left out rather than listed to be
 refused; reviewing one (CHK-009) takes it off.
+
+**CHK-015** Overdue check-ins v1 (`CheckInAttentionPolicy`, critique B4a): a check-in is overdue while the client has
+not sent it (no response, or only their draft, CHK-005) and its due day was 2 to 13 days ago on the workspace's
+calendar; on the 14th day it stops asking, and sending it, however late, ends it. It is read only while the client's
+plan includes check-ins today, judged by today's plan as every CLI-018 signal is. An absence is not an answer: it is
+worked out from the missing submission alone, never stored, and never from an answer or what a draft holds
+(CHK-012, CHK-013). Coach attention (CLI-018) ranks it after missed sessions.
 
 ## 14. The public website
 

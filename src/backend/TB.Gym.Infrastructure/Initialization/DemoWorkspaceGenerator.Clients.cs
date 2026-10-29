@@ -538,7 +538,9 @@ internal sealed partial class DemoWorkspaceGenerator
         return due switch
         {
             > 0 => null,
-            _ when due == lastPastDue && client.CheckInOverdue => null,
+            // A client behind skips their last two: last week's is overdue (CHK-015 asks from two days late on),
+            // and yesterday's is a day late.
+            _ when client.CheckInOverdue && due >= lastPastDue - 7 => null,
             _ when due == lastPastDue && client.SubmitsTodayAgo is { } ago => calendar.EarlierToday(ago),
             0 => null,
             // A late answer that would only arrive later today is on time instead, not missing.

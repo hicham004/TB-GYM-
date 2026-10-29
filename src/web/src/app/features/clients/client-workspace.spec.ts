@@ -37,6 +37,19 @@ class PlansTab {
   }
 }
 
+/** A tab that asks the record for this page's overview, as the Overview and Service & access do. */
+@Component({ selector: 'app-overview-tab', template: '{{ kinds() }}' })
+class OverviewTab {
+  private readonly context = inject(ClientWorkspaceContext);
+  protected readonly kinds = signal('');
+
+  constructor() {
+    void this.context
+      .overviewForPage()
+      .then((overview) => this.kinds.set(overview.attention.map((item) => item.kind).join(',')));
+  }
+}
+
 const OWNER_ID = 'owner-1';
 
 const PROFILE = {
@@ -92,6 +105,8 @@ async function render(
     isOwner?: boolean;
     api?: Record<string, unknown>;
     sections?: Routes;
+    /** The last day the server flags as ending soon (CLI-018), when it flags one. */
+    endingSoon?: string | null;
   } = {},
 ) {
   const overview: ClientCommercialOverview = {
@@ -105,6 +120,20 @@ async function render(
     getClientCommercialOverview: vi.fn(() => of(overview)),
     getWorkspace: vi.fn(() =>
       of({ timeZoneId: 'Asia/Beirut', weekStartsOn: 'Monday', currentDate: '2026-09-20' }),
+    ),
+    getClientOverview: vi.fn(() =>
+      of({
+        attention: options.endingSoon
+          ? [
+              {
+                kind: 'PlanEndingSoon',
+                date: options.endingSoon,
+                subjectId: 'enrollment-1',
+                count: null,
+              },
+            ]
+          : [],
+      }),
     ),
     ...options.api,
   };
@@ -229,6 +258,19 @@ describe('ClientWorkspace', () => {
     expect(api.getClientCommercialOverview).toHaveBeenCalledTimes(2);
   });
 
+  it('shares the header’s read of the overview with a tab that opens with it (critique B4a)', async () => {
+    const { harness, host, api } = await render({
+      endingSoon: '2026-09-29',
+      enrollments: [plan({ lastActiveDate: '2026-09-29', endDateExclusive: '2026-09-30' })],
+      sections: [{ path: '', component: OverviewTab }],
+    });
+    await settle(harness.fixture);
+
+    expect(host.querySelector('app-overview-tab')?.textContent).toBe('PlanEndingSoon');
+    expect(api.getClientOverview).toHaveBeenCalledTimes(1);
+    expect(pill(host)).toBe('Plan ends in 9 days');
+  });
+
   it('reads the plans again for a tab when the record could not read them', async () => {
     const getClientCommercialOverview = vi
       .fn()
@@ -257,22 +299,49 @@ describe('ClientWorkspace', () => {
     expect(document.activeElement).toBe(host.querySelector('h1'));
   });
 
-  it('warns in the pill when the plan ends within 14 days, in days, tomorrow and today', async () => {
-    const ends = async (lastActiveDate: string) => {
+  it('warns in the pill while the server flags the plan ending soon, in days, tomorrow and today', async () => {
+    const ends = async (lastActiveDate: string, flagged: boolean) => {
       TestBed.resetTestingModule();
       const day = new Date(Date.parse(`${lastActiveDate}T00:00:00Z`) + 86_400_000);
       const { host } = await render({
         enrollments: [plan({ lastActiveDate, endDateExclusive: day.toISOString().slice(0, 10) })],
+        endingSoon: flagged ? lastActiveDate : null,
       });
       return pill(host);
     };
 
-    expect(await ends('2026-09-29')).toBe('Plan ends in 9 days');
-    expect(await ends('2026-09-21')).toBe('Plan ends tomorrow');
-    expect(await ends('2026-09-20')).toBe('Plan ends today');
-    // Far enough away it counts the days left instead.
-    expect(await ends('2026-10-04')).toBe('Plan ends in 14 days');
-    expect(await ends('2026-10-05')).toBe('Active · 15 days left');
+    expect(await ends('2026-09-29', true)).toBe('Plan ends in 9 days');
+    expect(await ends('2026-09-21', true)).toBe('Plan ends tomorrow');
+    expect(await ends('2026-09-20', true)).toBe('Plan ends today');
+    // The server flags a last day 13 days on and not one 14 days on (critique B4a): the page shows
+    // its flag and counts no days of its own, so the warm pill starts a day later than it did.
+    expect(await ends('2026-10-03', true)).toBe('Plan ends in 13 days');
+    expect(await ends('2026-10-04', false)).toBe('Active · 14 days left');
+    expect(await ends('2026-10-05', false)).toBe('Active · 15 days left');
+  });
+
+  it('keeps the pill’s place until the server says whether the plan ends soon', async () => {
+    const overview = new Subject<unknown>();
+    const { harness, host } = await render({
+      api: { getClientOverview: vi.fn(() => overview) },
+    });
+
+    expect(host.querySelector('.plan-row .pill-bone')).not.toBeNull();
+    expect(host.querySelector('app-status-pill')).toBeNull();
+
+    overview.next({ attention: [] });
+    overview.complete();
+    await settle(harness.fixture);
+    expect(host.querySelector('.plan-row .pill-bone')).toBeNull();
+    expect(pill(host)).toBe('Active · 55 days left');
+  });
+
+  it('says how long is left in the pill when the overview cannot be read', async () => {
+    const { host } = await render({
+      api: { getClientOverview: vi.fn(() => throwError(() => new Error('offline'))) },
+    });
+
+    expect(pill(host)).toBe('Active · 55 days left');
   });
 
   it('names where each other kind of plan stands, with the right tone', async () => {
@@ -309,7 +378,7 @@ describe('ClientWorkspace', () => {
   });
 
   it('offers only the kept sections for a former client, and no message action', async () => {
-    const { host, harness } = await render({
+    const { host, harness, api } = await render({
       profile: {
         ...PROFILE,
         release: {
@@ -322,6 +391,8 @@ describe('ClientWorkspace', () => {
     });
 
     expect(pill(host)).toBe('Former client');
+    // A former client has no overview to read (it would answer 404).
+    expect(api.getClientOverview).not.toHaveBeenCalled();
     expect(sectionNames(host)).toEqual(['Overview', 'Progress', 'Service & access']);
     expect(host.textContent).not.toContain('Message Maya');
     expect(host.querySelector('.plan-line')).toBeNull();
@@ -411,9 +482,10 @@ describe('ClientWorkspace', () => {
     ]);
   });
 
-  it('turns Plan and payments into Renew plan, with its target, in the last 14 days', async () => {
+  it('turns Plan and payments into Renew plan, with its target, while the server flags the plan', async () => {
     const { host, harness } = await render({
       enrollments: [plan({ lastActiveDate: '2026-09-29', endDateExclusive: '2026-09-30' })],
+      endingSoon: '2026-09-29',
     });
 
     press(host, 'Actions');

@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   afterNextRender,
   Component,
@@ -26,20 +27,25 @@ import { UiMenu } from '../../ui/menu';
 import { SectionLink, SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
+import { Tag } from '../../ui/tag';
 import { ClientListApi } from './client-list-api';
 import {
   CLIENT_FILTERS,
   CLIENT_FILTERS_WHEN_USED,
   coachChip,
+  emptyList,
   filterCounts,
   formerClientRow,
+  listSummary,
   mapClientList,
   matches,
   type ClientFilter,
   type ClientList,
   type FormerClientRow,
 } from './clients.models';
+import { DayMarkView } from './day-mark';
 import { FormerClientsApi } from './former-clients-api';
+import { StatusesHelp } from './statuses-help';
 
 const FILTER_LABELS: Record<ClientFilter, string> = {
   all: $localize`All`,
@@ -51,10 +57,11 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
 };
 
 /**
- * Clients (C2): how everyone is doing and who is slipping. One read, `GET /api/clients/overview`,
- * already limited to the clients this person coaches (CLI-013) and carrying each one's status
- * (CLI-018); the screen phrases it, filters and searches it, and links every row to the client.
- * The owner's `/clients/former` shows released clients (ADR 0027) in the same layout.
+ * Clients (C2, critique B4a): how everyone is doing and who is slipping, as a table of columns on a
+ * wide screen and a card per client on a phone. One read, `GET /api/clients/overview`, already limited
+ * to the clients this person coaches (CLI-013) and carrying each one's status, reasons and plan
+ * (CLI-018); the screen phrases it, filters and searches it, and links every row to the client and
+ * every reason to where it is handled. The owner's `/clients/former` shows released clients (ADR 0027).
  */
 @Component({
   selector: 'app-clients',
@@ -62,16 +69,21 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
     Avatar,
     Button,
     ButtonLink,
+    DayMarkView,
     EmptyState,
     Icon,
+    NgTemplateOutlet,
     RouterLink,
     SectionNav,
     Skeleton,
+    StatusesHelp,
     StatusPill,
+    Tag,
     UiMenu,
   ],
   templateUrl: './clients.html',
-  styleUrls: ['./clients.scss', './clients-toolbar.scss'],
+  // The status cell's sheet first, so the wide layout's rules in clients.scss come after it.
+  styleUrls: ['./clients-status.scss', './clients.scss', './clients-toolbar.scss'],
 })
 export class Clients {
   private readonly listApi = inject(ClientListApi);
@@ -114,13 +126,16 @@ export class Clients {
   /** The chosen coach while the list still has them; an address naming anyone else narrows nothing. */
   private readonly chosenCoach = computed(() => (this.coachChip()?.active ? this.coach() : ''));
 
-  protected readonly chips = computed(() => {
+  /** What each chip holds: narrowed to one coach, that coach's clients (critique B3a). */
+  private readonly counts = computed(() => {
     const coach = this.chosenCoach();
-    // Narrowed to one coach, each chip counts that coach's clients (critique B3a).
-    const counts =
-      coach === ''
-        ? this.list()?.counts
-        : filterCounts((this.list()?.rows ?? []).filter((row) => row.coachId === coach));
+    return coach === ''
+      ? this.list()?.counts
+      : filterCounts((this.list()?.rows ?? []).filter((row) => row.coachId === coach));
+  });
+
+  protected readonly chips = computed(() => {
+    const counts = this.counts();
     const chosen = this.filter();
     return CLIENT_FILTERS.map((value) => ({
       value,
@@ -151,40 +166,23 @@ export class Clients {
       : $localize`Showing ${shown}:shown: of ${total}:total: clients`;
   });
 
+  /** "12 clients · 9 need attention · 1 plan ends soon": what the chips count, for the chosen coach too. */
   protected readonly summary = computed(() => {
-    const counts = this.list()?.counts;
-    if (!counts || counts.all === 0) return '';
-    const clients =
-      counts.all === 1 ? $localize`1 client` : $localize`${counts.all}:count: clients`;
-    if (counts.attention === 0) return $localize`${clients}:clients: · nobody needs attention`;
-    return counts.attention === 1
-      ? $localize`${clients}:clients: · 1 needs attention`
-      : $localize`${clients}:clients: · ${counts.attention}:count: need attention`;
+    const counts = this.counts();
+    return counts ? listSummary(counts) : '';
   });
 
-  /** What an empty filtered list says, and the one action that brings rows back. */
-  protected readonly emptyFilter = computed(() => {
-    if (this.search().trim() !== '') {
-      return {
-        heading: $localize`No client matches “${this.search().trim()}:search:”`,
-        description: $localize`Search looks at names and goals.`,
-        action: $localize`Clear search`,
-      };
-    }
-    const headings: Record<ClientFilter, string> = {
-      all: '',
-      attention: $localize`Nobody needs attention right now`,
-      ending: $localize`No plan ends in the next 14 days`,
-      paused: $localize`No plan is paused`,
-      new: $localize`No new clients in the last 14 days`,
-      maxes: $localize`No logged sets suggest a new max right now`,
-    };
-    return {
-      heading: headings[this.filter()],
-      description: $localize`Clients will show up here when this changes.`,
-      action: $localize`Show all clients`,
-    };
-  });
+  /**
+   * What an empty filtered list says, and the one action that brings rows back: for the chosen coach's
+   * clients while one is chosen, whose choice the action keeps (review of B3a).
+   */
+  protected readonly emptyFilter = computed(() =>
+    emptyList(
+      this.filter(),
+      this.search(),
+      this.chosenCoach() === '' ? null : (this.coachChip()?.chosen ?? null),
+    ),
+  );
 
   constructor() {
     this.scope.onReset(() => this.reset());

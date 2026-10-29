@@ -17,6 +17,7 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { Button } from '../../ui/button';
+import { ageOn } from '../../ui/calendar';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
@@ -26,7 +27,6 @@ import { ClientNutritionApi } from './client-nutrition-api';
 import { ClientNutritionSheets, type NutritionChange } from './client-nutrition-sheets';
 import {
   addDaysIso,
-  ageOn,
   allergenList,
   allergenName,
   canStop,

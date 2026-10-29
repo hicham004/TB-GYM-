@@ -13,11 +13,9 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
-import { filter, firstValueFrom, map } from 'rxjs';
-import { ApiClient } from '../../core/api/api-client';
+import { filter, map } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
-import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Avatar } from '../../ui/avatar';
@@ -25,13 +23,12 @@ import { Button, ButtonLink } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { SectionNav, type SectionLink } from '../../ui/section-nav';
 import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
-import { ConversationLaunch } from '../messaging/conversation-launch';
-import { mapConversationDetail } from '../messaging/messaging.models';
+import { ConversationStarter } from '../messaging/conversation-starter';
 import { ClientActions, type ClientAction } from './client-actions';
 import {
   currentEnrollment,
   daysBetween,
-  RENEWAL_PROMPT_DAYS,
+  planEnding,
   renewalPrompt,
 } from './client-overview.models';
 import { ClientWorkspaceContext, otherCoachName } from './client-workspace.context';
@@ -60,16 +57,13 @@ import { ClientWorkspaceContext, otherCoachName } from './client-workspace.conte
   styleUrl: './client-workspace.scss',
 })
 export class ClientWorkspace {
-  private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
-  private readonly csrf = inject(CsrfService);
   private readonly router = inject(Router);
-  private readonly conversationLaunch = inject(ConversationLaunch);
+  private readonly conversations = inject(ConversationStarter);
   private readonly injector = inject(Injector);
   private readonly locale = inject(LOCALE_ID);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
-  private readonly conversationKeys = new Map<string, string>();
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedKey: string | null = null;
   private focusedHeading = false;
@@ -117,8 +111,17 @@ export class ClientWorkspace {
     return workspace && plans ? currentEnrollment(plans.enrollments, workspace.currentDate) : null;
   });
 
-  /** Where the plan stands, with the days left while it runs. */
-  protected readonly planStatus = computed<{ label: string; tone: StatusPillTone } | null>(() => {
+  /** The server's flag for a plan ending soon (CLI-018), from this page's read of the client. */
+  private readonly ending = computed(() => planEnding(this.context.overview()?.attention));
+
+  /**
+   * Where the plan stands, with the days left while it runs. Whether it ends soon is the server's
+   * flag (critique B4a: within 14 days, today counted), never a count of the page's own, so the pill
+   * waits for that read rather than change its words once it lands.
+   */
+  protected readonly planStatus = computed<
+    { label: string; tone: StatusPillTone } | 'pending' | null
+  >(() => {
     if (this.context.isFormer()) return { label: $localize`Former client`, tone: 'neutral' };
     const workspace = this.context.workspace();
     if (!workspace || !this.context.plans()) return null;
@@ -126,12 +129,15 @@ export class ClientWorkspace {
     if (!enrollment) return { label: $localize`No plan yet`, tone: 'neutral' };
     switch (enrollment.effectiveStatus) {
       case 'Active': {
+        if (this.context.overviewPending()) return 'pending';
         const daysLeft = daysBetween(workspace.currentDate, enrollment.lastActiveDate);
-        if (daysLeft <= 0) return { label: $localize`Plan ends today`, tone: 'warm' };
-        if (daysLeft === 1) return { label: $localize`Plan ends tomorrow`, tone: 'warm' };
-        if (daysLeft <= RENEWAL_PROMPT_DAYS) {
+        if (this.ending()?.lastDay === enrollment.lastActiveDate) {
+          if (daysLeft <= 0) return { label: $localize`Plan ends today`, tone: 'warm' };
+          if (daysLeft === 1) return { label: $localize`Plan ends tomorrow`, tone: 'warm' };
           return { label: $localize`Plan ends in ${daysLeft}:count: days`, tone: 'warm' };
         }
+        if (daysLeft <= 0) return { label: $localize`Active · last day today`, tone: 'success' };
+        if (daysLeft === 1) return { label: $localize`Active · 1 day left`, tone: 'success' };
         return { label: $localize`Active · ${daysLeft}:count: days left`, tone: 'success' };
       }
       case 'Paused':
@@ -217,8 +223,11 @@ export class ClientWorkspace {
     }
     const workspace = this.context.workspace();
     const plans = this.context.plans();
+    // Offered while the server flags the plan ending soon and nothing follows it yet (CLI-018).
     const renewal =
-      workspace && plans ? renewalPrompt(plans.enrollments, workspace.currentDate) : null;
+      workspace && plans
+        ? renewalPrompt(plans.enrollments, workspace.currentDate, this.ending())
+        : null;
     const service: ClientAction = renewal
       ? {
           label: $localize`Renew plan`,
@@ -301,31 +310,20 @@ export class ClientWorkspace {
 
   protected async messageClient(): Promise<void> {
     return this.scope.run('messageClient', async (owner) => {
-      const tenantId = this.tenants.selectedTenantId();
-      if (!tenantId || this.startingConversation()) return;
-      const key = this.conversationKeys.get(tenantId) ?? crypto.randomUUID();
-      this.conversationKeys.set(tenantId, key);
+      if (!this.tenants.selectedTenantId() || this.startingConversation()) return;
       this.startingConversation.set(true);
       this.context.clearMessages();
       try {
-        await owner.wait(this.csrf.refresh());
-        if (tenantId !== this.tenants.selectedTenantId()) return;
-        const detail = mapConversationDetail(
-          await owner.wait(firstValueFrom(this.api.createDirectConversation(this.clientId, key))),
-        );
-        if (tenantId !== this.tenants.selectedTenantId()) return;
-        this.conversationLaunch.open(tenantId, detail.conversation);
-        await owner.wait(this.router.navigateByUrl('/messages'));
+        // Starts the chat when there is none, then opens it in Messages (shared with Remind, B4a).
+        await owner.wait(this.conversations.open(this.clientId));
       } catch (error) {
         if (!owner.current) return;
-        if (tenantId === this.tenants.selectedTenantId()) {
-          this.context.error.set(
-            apiErrorMessage(
-              error,
-              $localize`Couldn’t open this conversation. Check messaging access and retry.`,
-            ),
-          );
-        }
+        this.context.error.set(
+          apiErrorMessage(
+            error,
+            $localize`Couldn’t open this conversation. Check messaging access and retry.`,
+          ),
+        );
       } finally {
         if (owner.current) {
           this.startingConversation.set(false);
@@ -337,7 +335,6 @@ export class ClientWorkspace {
   private resetTenantState(): void {
     this.loadedKey = null;
     this.focusedHeading = false;
-    this.conversationKeys.clear();
     this.startingConversation.set(false);
   }
 }

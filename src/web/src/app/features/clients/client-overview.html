@@ -124,14 +124,28 @@
                       <p class="need-detail">{{ row.detail }}</p>
                     </div>
                     <span class="tag" [attr.data-tone]="row.tone">{{ row.tag }}</span>
-                    <a
-                      appButton
-                      class="need-action"
-                      [variant]="first ? 'filled' : 'outlined'"
-                      [routerLink]="row.action.link"
-                      [queryParams]="row.action.queryParams"
-                      >{{ row.action.label }}</a
-                    >
+                    @if (row.action.startsChat) {
+                      <!-- Remind with no chat yet: starts it, then opens it (critique B4a). -->
+                      <button
+                        appButton
+                        type="button"
+                        class="need-action"
+                        [variant]="first ? 'filled' : 'outlined'"
+                        [loading]="reminding()"
+                        (click)="remind()"
+                      >
+                        {{ row.action.label }}
+                      </button>
+                    } @else {
+                      <a
+                        appButton
+                        class="need-action"
+                        [variant]="first ? 'filled' : 'outlined'"
+                        [routerLink]="row.action.link"
+                        [queryParams]="row.action.queryParams"
+                        >{{ row.action.label }}</a
+                      >
+                    }
                   </li>
                 }
               </ul>

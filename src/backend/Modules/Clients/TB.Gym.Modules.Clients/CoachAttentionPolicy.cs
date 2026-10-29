@@ -3,16 +3,21 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// Coach attention v3 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
-/// plan): which of a client's signals ask the coach to act, how the queue is ranked, and the one status the client
-/// list shows. The signals arrive already gated by the client's plan, so this rule only weighs them.
+/// Coach attention v4 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
+/// plan, v4 in critique B4a an overdue check-in and the plan's own status): which of a client's signals ask the
+/// coach to act, how the queue is ranked, the one status the client list shows and the plan's status beside it.
+/// The signals arrive already gated by the client's plan, so this rule only weighs them; what makes a check-in
+/// overdue is the CheckIns module's rule (CHK-015, overdue check-ins v1), counted here.
 /// </summary>
 public static class CoachAttentionPolicy
 {
     public const string Key = "CoachAttention";
-    public const int Version = 3;
+    public const int Version = 4;
 
-    /// <summary>A running plan whose last covered day falls within this many days is ending soon.</summary>
+    /// <summary>
+    /// A running plan whose last covered day falls within this many days, today counted, is ending soon: a last
+    /// day 13 days from today is, one 14 days from today is not. The screens show the flag, never their own count.
+    /// </summary>
     public const int PlanEndingWithinDays = 14;
 
     /// <summary>Missed sessions since the last workout (TRN-021) that ask for the coach.</summary>
@@ -44,6 +49,7 @@ public static class CoachAttentionPolicy
         CoachAttentionKind.PlanEndingSoon,
         CoachAttentionKind.WeekNotShared,
         CoachAttentionKind.MissedSessions,
+        CoachAttentionKind.CheckInOverdue,
         CoachAttentionKind.NoProgram,
         CoachAttentionKind.MaxesToReview,
     ];
@@ -98,6 +104,11 @@ public static class CoachAttentionPolicy
             flags.Add(CoachAttentionKind.MissedSessions);
         }
 
+        if (signals.CheckInsOverdue > 0)
+        {
+            flags.Add(CoachAttentionKind.CheckInOverdue);
+        }
+
         if (signals.HasNoProgram)
         {
             flags.Add(CoachAttentionKind.NoProgram);
@@ -112,20 +123,35 @@ public static class CoachAttentionPolicy
     }
 
     /// <summary>
-    /// Anything to act on besides a plan ending or maxes to review makes a client Needs attention; otherwise a
-    /// paused plan shows Paused, a plan ending soon Ending soon, a running plan On track, and anything else
-    /// (ended, unpaid, not started, none, blocked) No active plan. A client whose sets suggest heavier maxes is
-    /// doing well, so that alone never turns them to Needs attention.
+    /// Anything to act on besides a plan ending or maxes to review makes a client Needs attention; otherwise the
+    /// plan's own status (<see cref="PlanStatus"/>). A client whose sets suggest heavier maxes is doing well, so
+    /// that alone never turns them to Needs attention.
     /// </summary>
     public static ClientOverviewStatus Status(
         IReadOnlyCollection<CoachAttentionKind> flags,
         ClientPlanState planState) =>
         flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.MaxesToReview))
             ? ClientOverviewStatus.NeedsAttention
-        : planState == ClientPlanState.Paused ? ClientOverviewStatus.Paused
-        : flags.Contains(CoachAttentionKind.PlanEndingSoon) ? ClientOverviewStatus.EndingSoon
-        : planState == ClientPlanState.Running ? ClientOverviewStatus.OnTrack
-        : ClientOverviewStatus.NoActivePlan;
+            : PlanStatus(flags, planState) switch
+            {
+                ClientPlanStatus.Paused => ClientOverviewStatus.Paused,
+                ClientPlanStatus.EndingSoon => ClientOverviewStatus.EndingSoon,
+                ClientPlanStatus.OnTrack => ClientOverviewStatus.OnTrack,
+                _ => ClientOverviewStatus.NoActivePlan,
+            };
+
+    /// <summary>
+    /// The plan's own status, whatever else waits for the coach (critique B4a: a plan's end keeps its own status,
+    /// outside Needs attention): a paused plan Paused, a plan ending soon Ending soon, a running plan On track, and
+    /// anything else (ended, unpaid, not started, none, blocked) No active plan.
+    /// </summary>
+    public static ClientPlanStatus PlanStatus(
+        IReadOnlyCollection<CoachAttentionKind> flags,
+        ClientPlanState planState) =>
+        planState == ClientPlanState.Paused ? ClientPlanStatus.Paused
+        : flags.Contains(CoachAttentionKind.PlanEndingSoon) ? ClientPlanStatus.EndingSoon
+        : planState == ClientPlanState.Running ? ClientPlanStatus.OnTrack
+        : ClientPlanStatus.NoActivePlan;
 
     /// <summary>
     /// The plan read from the client's per-feature decisions: one feature granted keeps it Running;
@@ -199,6 +225,10 @@ public static class CoachAttentionPolicy
 /// <param name="HasNoProgram">Training is in the plan but no block is running or coming.</param>
 /// <param name="MaxesToReview">Lifts of a running block whose logged sets suggest a new max (STR-012).</param>
 /// <param name="JoinedOn">The workspace day the client joined, for a new client with no plan (audit COACH-9).</param>
+/// <param name="CheckInsOverdue">
+/// Check-ins the client has not sent that are overdue by the CheckIns module's rule (CHK-015): due 2 to 13 days ago,
+/// read only while check-ins are in the plan.
+/// </param>
 public sealed record ClientAttentionSignals(
     int CheckInsToReview,
     long UnreadMessages,
@@ -208,4 +238,5 @@ public sealed record ClientAttentionSignals(
     int MissedSinceLastWorkout,
     bool HasNoProgram,
     int MaxesToReview = 0,
-    DateOnly? JoinedOn = null);
+    DateOnly? JoinedOn = null,
+    int CheckInsOverdue = 0);

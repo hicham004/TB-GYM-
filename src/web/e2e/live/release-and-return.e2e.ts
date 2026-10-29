@@ -211,7 +211,7 @@ test('the owner ends coaching: read-only record, no access, invited back as a ne
   );
   await page.goto('/clients');
   await expect(
-    page.locator('.clients li.client-row', { hasText: fullName }).locator('.plan'),
+    page.locator('.clients li.client-row', { hasText: fullName }).locator('.plan-end'),
   ).toHaveText('No plan yet');
   await lea.close();
 });

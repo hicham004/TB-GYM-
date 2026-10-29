@@ -59,6 +59,8 @@ interface Options {
   renewalAskedAt?: string | null;
   /** The plan the request names; the client's plan that ran out. */
   renewalSubject?: string;
+  /** False when the server does not flag the running plan ending soon (CLI-018); it does by default. */
+  endingSoon?: boolean;
   url?: string;
   api?: Record<string, unknown>;
   /** This server sends no email (audit LOST-1). */
@@ -75,15 +77,21 @@ async function render(options: Options = {}) {
     getProductCatalog: vi.fn(() => of(catalog())),
     getClientOverview: vi.fn(() =>
       of({
-        attention: options.renewalAskedAt
-          ? [
-              {
-                kind: 'RenewalRequested',
-                since: options.renewalAskedAt,
-                subjectId: options.renewalSubject ?? 'e-1',
-              },
-            ]
-          : [],
+        attention: [
+          ...(options.renewalAskedAt
+            ? [
+                {
+                  kind: 'RenewalRequested',
+                  since: options.renewalAskedAt,
+                  subjectId: options.renewalSubject ?? 'e-1',
+                },
+              ]
+            : []),
+          // The server flags the plan running today ending soon, its last day 11 days on.
+          ...(options.endingSoon === false
+            ? []
+            : [{ kind: 'PlanEndingSoon', date: '2026-10-12', subjectId: 'e-1', count: null }]),
+        ],
       }),
     ),
     resumeEnrollment: vi.fn(() => of(enrollment())),
@@ -190,6 +198,16 @@ describe('a client’s Service & access', () => {
       ),
     ).toEqual([['Mon 20 Jul 2026', 'Cash', 'USD 330']]);
     expect(all(host, '.row-name').map(textOf)).toEqual(['Starter']);
+  });
+
+  it('asks for no renewal and draws no warm pill while the server does not flag the plan (critique B4a)', async () => {
+    const { host, context } = await render({ endingSoon: false });
+
+    // Its last day is 11 days on, but the page counts no days of its own: the flag decides.
+    expect(textOf(host.querySelector('.hero app-status-pill'))).toBe('Active · 11 days left');
+    expect(all(host, '.hero-actions > button')).toEqual([]);
+    // The header reads the same answer, so it says the same.
+    expect(context.overview()?.attention).toEqual([]);
   });
 
   it('keeps every other change behind Manage plan', async () => {

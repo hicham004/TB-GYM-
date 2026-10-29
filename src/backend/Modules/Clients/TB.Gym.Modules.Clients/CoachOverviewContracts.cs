@@ -1,3 +1,5 @@
+using TB.Gym.SharedKernel;
+
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
@@ -46,6 +48,12 @@ public enum CoachAttentionKind
     /// renewal request (<see cref="CoachAttentionPolicy.RankOf"/>), whatever its number.
     /// </summary>
     NoPlan = 9,
+
+    /// <summary>
+    /// A check-in the client has not sent, due 2 to 13 days ago, while check-ins are in the plan (CHK-015, critique
+    /// B4a). Ranked after missed sessions (<see cref="CoachAttentionPolicy.RankOf"/>).
+    /// </summary>
+    CheckInOverdue = 10,
 }
 
 /// <summary>The one status a client shows in the coach's list (CLI-018).</summary>
@@ -56,6 +64,18 @@ public enum ClientOverviewStatus
     EndingSoon = 3,
     OnTrack = 4,
     NoActivePlan = 5,
+}
+
+/// <summary>
+/// The plan's own status, shown beside whatever waits for the coach (critique B4a): a plan's end keeps its own
+/// status, outside Needs attention (<see cref="CoachAttentionPolicy.PlanStatus"/>).
+/// </summary>
+public enum ClientPlanStatus
+{
+    OnTrack = 1,
+    Paused = 2,
+    EndingSoon = 3,
+    NoActivePlan = 4,
 }
 
 /// <summary>Where the client's plan stands today, read from their feature access decisions.</summary>
@@ -113,7 +133,13 @@ public sealed record CoachClientRef(
 /// <item><c>MaxesToReview</c>: Count of lifts, Since the newest set behind them was logged, SubjectId the
 /// program, and Maxes each lift with its max and the suggestion.</item>
 /// <item><c>NoPlan</c>: Date the client joined.</item>
+/// <item><c>CheckInOverdue</c>: Count overdue, Date the oldest one's due day, SubjectId the caller's chat with the
+/// client for Remind, set only when <see cref="CanMessage"/> holds and that chat exists. With CanMessage and no
+/// chat yet, Remind starts it as the client page's Message does; without CanMessage (messaging not in the plan, or
+/// another coach's client, CLI-013) there is no chat to open, and the screen links to the client's check-ins.</item>
 /// </list>
+/// <see cref="CanMessage"/> is set on every item: the caller may message this client now, being the client's own
+/// coach with messaging in today's plan (CLI-013, ADR 0026).
 /// </summary>
 public sealed record CoachAttentionItemView(
     CoachAttentionKind Kind,
@@ -124,7 +150,8 @@ public sealed record CoachAttentionItemView(
     int? WeekNumber,
     Guid? SubjectId,
     IReadOnlyList<CoachMaxSuggestionView>? Maxes = null,
-    DateTimeOffset? NewestAt = null);
+    DateTimeOffset? NewestAt = null,
+    bool CanMessage = false);
 
 /// <summary>
 /// A lift whose max the client's logged sets suggest changing (STR-012), named with both numbers so the coach
@@ -197,6 +224,37 @@ public sealed record CoachTodayView(
 /// covers, past when it has ended. <see cref="OnboardingStatus"/> says whether the client has finished
 /// setting up their profile, for the list's "Not set up yet" (audit LOST-12).
 /// </summary>
+/// <param name="Attention">The kinds of <see cref="AttentionItems"/>, in the same order.</param>
+/// <param name="BirthDate">
+/// The current profile's date of birth, for the age worked out on screen for the view's today (CLI-005). A
+/// returning client's new profile has its own (CLI-016), never the old one's.
+/// </param>
+/// <param name="PlanStatus">The plan's own status, shown beside the reasons whatever they are (critique B4a).</param>
+/// <param name="Plan">
+/// The plan whose last day <see cref="PlanEndsOn"/> is, as the client's page names it (R3.5b): the paid plan running
+/// or booked that ends last, else an unpaid one, else the one that ran out. Null with none.
+/// </param>
+/// <param name="OtherPlanCount">
+/// Further plans running or booked beside <see cref="Plan"/>: plans at once (SUB-004), a renewal already booked,
+/// paid or waiting for payment. Their prices are never added to its price.
+/// </param>
+/// <param name="PlanPausedSince">
+/// While the plan is paused (<see cref="ClientPlanState.Paused"/>), the workspace day it was paused. A pause has no
+/// end of its own and resuming does not move the plan's end (SUB-006): the row says since when, never until when.
+/// </param>
+/// <param name="FeaturesToday">
+/// The features the client's plan grants today, by the shared access decision, so a check-in or week that is not
+/// shown reads as not in the plan rather than as nothing done (CHK-011).
+/// </param>
+/// <param name="AttentionItems">
+/// What waits for the coach about this client, as Today's items, ranked as Today ranks them, each with what its
+/// link needs. The plan's end is among them, though <see cref="PlanStatus"/> says it.
+/// </param>
+/// <param name="LastActivityTitle">The session's name when the last activity is a finished workout.</param>
+/// <param name="LastCheckInSentAtUtc">
+/// When the client last sent a check-in, read only while check-ins are in today's plan (CHK-011): null both when
+/// none was sent and when check-ins are not in the plan, which <see cref="FeaturesToday"/> tells apart.
+/// </param>
 public sealed record ClientOverviewRow(
     CoachClientRef Client,
     string? Goals,
@@ -209,7 +267,37 @@ public sealed record ClientOverviewRow(
     IReadOnlyList<CoachAttentionKind> Attention,
     CoachActivityKind? LastActivityKind,
     DateTimeOffset? LastActivityAtUtc,
-    IReadOnlyList<SessionDayCountView>? RecentSessions);
+    IReadOnlyList<SessionDayCountView>? RecentSessions,
+    DateOnly? BirthDate,
+    ClientPlanStatus PlanStatus,
+    ClientPlanSummary? Plan,
+    int OtherPlanCount,
+    DateOnly? PlanPausedSince,
+    IReadOnlyList<CoachingFeature> FeaturesToday,
+    IReadOnlyList<CoachAttentionItemView> AttentionItems,
+    string? LastActivityTitle,
+    DateTimeOffset? LastCheckInSentAtUtc);
+
+/// <summary>
+/// One enrollment as a client's row sums it up (critique B4a): its name, what it includes, its length as it was
+/// sold and its price, exact, in its own currency, all from what was booked (SUB-002, SUB-003). Never a total of
+/// several plans, and never converted between currencies.
+/// </summary>
+public sealed record ClientPlanSummary(
+    Guid EnrollmentId,
+    string Name,
+    IReadOnlyList<CoachingFeature> Features,
+    int LengthCount,
+    ClientPlanLengthUnit LengthUnit,
+    decimal PriceAmount,
+    string PriceCurrency);
+
+/// <summary>The unit a plan's length was sold in.</summary>
+public enum ClientPlanLengthUnit
+{
+    Day = 1,
+    Week = 2,
+}
 
 /// <summary>
 /// One client on their own page (C3): the status, what waits for the coach and the last activity the

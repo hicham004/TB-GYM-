@@ -837,6 +837,7 @@ internal sealed record DemoClient(
     int MissLastSessions = 0,
     TimeSpan? TrainedTodayAgo = null,
     bool CheckInWaiting = false,
+    // The last two weekly check-ins go unsent, so the older one is overdue on a fresh demo (CHK-015).
     bool CheckInOverdue = false,
     // The latest check-in arrives a day late, this long before the command ran.
     TimeSpan? SubmitsTodayAgo = null,

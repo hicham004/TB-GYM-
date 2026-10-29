@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { ClientEnrollment } from '../../core/api/api.models';
 import type { MesocycleSummary } from '../../core/api/generated';
+import { attentionItem, MAYA } from '../../../testing/coach-today-fixtures';
 import {
   activeBlock,
   addDays,
   bodyweightSummary,
   currentEnrollment,
   daysBetween,
+  planEnding,
   renewalPrompt,
   weekContaining,
 } from './client-overview.models';
@@ -103,19 +105,51 @@ describe('the plan the header describes', () => {
   });
 });
 
-describe('the renewal prompt (14 days, agreed 2026-09-25)', () => {
-  it('appears from 14 days before the last day through the last day itself', () => {
-    expect(renewalPrompt([enrollment({ lastActiveDate: '2026-10-04' })], TODAY)?.daysLeft).toBe(14);
-    expect(renewalPrompt([enrollment({ lastActiveDate: '2026-10-05' })], TODAY)).toBeNull();
+describe('the plan-ending flag the client page reads (CLI-018 v4, critique B4a)', () => {
+  it('names the plan to renew, or none while a renewal of it waits for its payment', () => {
+    const ending = (fields: Parameters<typeof attentionItem>[2]) =>
+      planEnding([attentionItem('PlanEndingSoon', MAYA, fields)]);
+
+    expect(ending({ date: '2026-09-30', subjectId: 'enrollment-1' })).toEqual({
+      lastDay: '2026-09-30',
+      renewId: 'enrollment-1',
+    });
+    expect(ending({ date: '2026-09-30', count: 1, subjectId: 'renewal-2' })).toEqual({
+      lastDay: '2026-09-30',
+      renewId: null,
+    });
+    expect(planEnding([attentionItem('MissedSessions', MAYA, { count: 2 })])).toBeNull();
+    expect(planEnding(null)).toBeNull();
+  });
+});
+
+describe('the renewal prompt, while the server flags the plan ending soon', () => {
+  const flag = (lastDay: string) => ({ lastDay, renewId: 'enrollment-1' });
+
+  it('follows the server’s flag and counts no days of its own: 13 days on is soon, 14 is not', () => {
+    // The server flags a last day 13 days on and leaves one 14 days on alone (critique B4a).
     expect(
-      renewalPrompt([enrollment({ lastActiveDate: TODAY, endDateExclusive: '2026-09-21' })], TODAY)
+      renewalPrompt([enrollment({ lastActiveDate: '2026-10-03' })], TODAY, flag('2026-10-03'))
         ?.daysLeft,
+    ).toBe(13);
+    expect(renewalPrompt([enrollment({ lastActiveDate: '2026-10-04' })], TODAY, null)).toBeNull();
+    expect(
+      renewalPrompt(
+        [enrollment({ lastActiveDate: TODAY, endDateExclusive: '2026-09-21' })],
+        TODAY,
+        flag(TODAY),
+      )?.daysLeft,
     ).toBe(0);
+    // A flag about another plan's last day is not about this one.
+    expect(renewalPrompt([enrollment()], TODAY, flag('2026-12-01'))).toBeNull();
   });
 
   it('is not offered for a plan that is not active or is already followed by another', () => {
-    expect(renewalPrompt([enrollment({ effectiveStatus: 'Paused' })], TODAY)).toBeNull();
-    expect(renewalPrompt([enrollment({ effectiveStatus: 'PendingPayment' })], TODAY)).toBeNull();
+    const soon = flag('2026-09-30');
+    expect(renewalPrompt([enrollment({ effectiveStatus: 'Paused' })], TODAY, soon)).toBeNull();
+    expect(
+      renewalPrompt([enrollment({ effectiveStatus: 'PendingPayment' })], TODAY, soon),
+    ).toBeNull();
 
     const renewal = enrollment({
       id: 'renewal',
@@ -124,7 +158,7 @@ describe('the renewal prompt (14 days, agreed 2026-09-25)', () => {
       endDateExclusive: '2027-01-01',
       effectiveStatus: 'PendingPayment',
     });
-    expect(renewalPrompt([enrollment(), renewal], TODAY)).toBeNull();
+    expect(renewalPrompt([enrollment(), renewal], TODAY, soon)).toBeNull();
 
     const nextCovering = enrollment({
       id: 'next',
@@ -133,11 +167,11 @@ describe('the renewal prompt (14 days, agreed 2026-09-25)', () => {
       effectiveStatus: 'Upcoming',
       features: ['Training'],
     });
-    expect(renewalPrompt([enrollment(), nextCovering], TODAY)).toBeNull();
+    expect(renewalPrompt([enrollment(), nextCovering], TODAY, soon)).toBeNull();
 
     // A cancelled renewal no longer follows the plan, so the prompt comes back.
     expect(
-      renewalPrompt([enrollment(), { ...renewal, effectiveStatus: 'Cancelled' }], TODAY),
+      renewalPrompt([enrollment(), { ...renewal, effectiveStatus: 'Cancelled' }], TODAY, soon),
     ).not.toBeNull();
   });
 });

@@ -697,6 +697,26 @@ self-service links, the coach's records read); the older entry, correction and p
 one collapsed "Entries and corrections" that loads only when opened, in a light scope. The chart
 pieces draw with `--tb-accent-ink` and a new `--tb-chart-band` token, so they read on dark.
 
+Critique B4a widens the same list read for the Clients table, with no schema change and no new endpoint.
+Each row also carries the birth date (the age is worked out on screen for the workspace's today), the
+plan's own status beside the reasons (`ClientPlanStatus`), a summary of the plan whose end it shows (name,
+features, length as sold, exact price and currency, never added across plans) with how many other plans
+run or are booked, the pause's start, the features granted today, Today's attention items with what their
+links need, the last workout's name and the last check-in's sent time. Reads only the list needs run in
+`ListAsync`. The overdue check-in (CHK-015, `CheckInAttentionPolicy` in CheckIns, counted and ranked by
+Coach attention v4) rides on the waiting-check-ins read and its chat on the unread read, so Coach Today and
+the client page read no more commands than before; in their tests' scenarios both sit at their pinned limits
+(25 and 24), so a new shared read must merge into one of these or move the limit with a reason. The list
+costs 24 commands whatever the client count, one more while some client's plan has ended (the renewal
+requests' read).
+
+On the web (B4a) every screen shows the server's ending-soon flag and counts no days of its own: the list
+reads `planStatus`, the chat panel and the client's record the `PlanEndingSoon` item. The record's header
+therefore reads the client's overview too, once per page through `ClientWorkspaceContext.overviewForPage`,
+shared with the Overview tab (no second read there; one more on the other tabs when a record opens), and its
+plan pill waits for it. Remind with no chat yet starts the chat as the header's Message does, through the
+root `ConversationStarter` (one command key per workspace and client until it succeeds).
+
 R3.4a rebuilds the Training section of a client's record, with one new read and no schema change.
 `GET /api/training/clients/{clientProfileId}/program` (TRN-022) is the coach's counterpart of the
 client's `/program`: every block with its weeks and the state of each session from

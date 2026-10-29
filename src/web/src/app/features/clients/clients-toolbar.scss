@@ -76,6 +76,11 @@
   outline-offset: -4px;
 }
 
+// How these statuses work (critique B4a) ends the toolbar, after the chips it explains.
+.help {
+  margin-inline-start: auto;
+}
+
 .chips {
   border: 0;
   display: flex;

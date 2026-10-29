@@ -181,15 +181,6 @@ export function startingTargets(starting: Starting, last: WorkedOut | null): Tar
   return values;
 }
 
-/** Whole years on a day, from a birth date; null when there is no date to count from. */
-export function ageOn(birthDate: string | null | undefined, today: string): number | null {
-  if (!birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return null;
-  const years = Number(today.slice(0, 4)) - Number(birthDate.slice(0, 4));
-  // A birthday not yet reached this year has not added its year.
-  const reached = today.slice(5) >= birthDate.slice(5) ? years : years - 1;
-  return reached >= 0 ? reached : null;
-}
-
 /** Grams of protein for a body weight at a number of grams for each kilogram. */
 export function proteinFor(weightKg: number, perKg: number): number {
   return Math.round(weightKg * perKg);

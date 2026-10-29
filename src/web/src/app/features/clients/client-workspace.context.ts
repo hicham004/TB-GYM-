@@ -9,6 +9,7 @@ import type {
   CoachClientDetails,
   WorkspaceDetails,
 } from '../../core/api/api.models';
+import type { ClientProfileOverviewView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -48,6 +49,13 @@ export class ClientWorkspaceContext {
   readonly plans = signal<ClientCommercialOverview | null>(null);
   /** The workspace's own date, week start and time zone; never the browser's. */
   readonly workspace = signal<WorkspaceDetails | null>(null);
+  /**
+   * The client's overview (CLI-018): what needs the coach, the Overview's Needs you, and the server's
+   * flag for a plan ending soon, which the header shows (critique B4a). Null until read.
+   */
+  readonly overview = signal<ClientProfileOverviewView | null>(null);
+  /** The record's own read of the overview is under way: the header's plan pill waits for it. */
+  readonly overviewPending = signal(false);
   readonly loading = signal(false);
   readonly loadError = signal<string | null>(null);
   /**
@@ -71,6 +79,12 @@ export class ClientWorkspaceContext {
     clientId: string;
     page: number;
     request: Promise<ClientCommercialOverview | null>;
+  } | null = null;
+  /** The latest read of the overview and the page it was made for, shared as the plans are. */
+  private overviewRead: {
+    clientId: string;
+    page: number;
+    request: Promise<ClientProfileOverviewView>;
   } | null = null;
 
   constructor() {
@@ -99,6 +113,15 @@ export class ClientWorkspaceContext {
         this.profile.set(profile);
         this.plans.set(plans);
         this.workspace.set(workspace);
+        // A former client has no overview (404), and a blocked one's header says so without it.
+        if (!profile.release && plans?.isRelationshipBlocked !== true) {
+          this.overviewPending.set(true);
+          void this.overviewForPage()
+            .catch(() => null)
+            .finally(() => {
+              if (owner.current) this.overviewPending.set(false);
+            });
+        }
       } catch (error) {
         if (!owner.current) return;
         if (error instanceof HttpErrorResponse && error.status === 404) {
@@ -144,6 +167,35 @@ export class ClientWorkspaceContext {
         // The header keeps what it had; the Service & access tab reports its own failures.
       }
     });
+  }
+
+  /**
+   * The client's overview for the page on screen, read once per page as the plans are: the header and
+   * the Overview that opens with it share one read, and a later page reads it afresh. A failed read is
+   * not kept, so Try again reads again.
+   */
+  async overviewForPage(): Promise<ClientProfileOverviewView> {
+    const clientId = this.clientId();
+    const read = this.overviewRead;
+    if (read !== null && read.clientId === clientId && read.page === this.page) {
+      return read.request;
+    }
+    const request = firstValueFrom(this.api.getClientOverview(clientId));
+    const mine = { clientId, page: this.page, request };
+    this.overviewRead = mine;
+    try {
+      const overview = await request;
+      if (clientId === this.clientId()) this.overview.set(overview);
+      return overview;
+    } catch (error) {
+      if (this.overviewRead === mine) this.overviewRead = null;
+      throw error;
+    }
+  }
+
+  /** An overview a tab read for itself (Service & access reads its own after a change): the header follows. */
+  setOverview(overview: ClientProfileOverviewView): void {
+    this.overview.set(overview);
   }
 
   setProfile(profile: CoachClientDetails): void {
@@ -203,6 +255,9 @@ export class ClientWorkspaceContext {
 
   private reset(): void {
     this.plansRead = null;
+    this.overviewRead = null;
+    this.overview.set(null);
+    this.overviewPending.set(false);
     this.profile.set(null);
     this.plans.set(null);
     this.workspace.set(null);

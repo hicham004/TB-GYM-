@@ -10,7 +10,12 @@ import type {
   MesocycleSummary,
 } from '../../core/api/generated';
 import type { StatusPillTone } from '../../ui/status-pill';
-import { ago, carriedMaxDetail, suggestedMaxDetail } from '../dashboard/coach-today.models';
+import {
+  ago,
+  carriedMaxDetail,
+  overdueDetail,
+  suggestedMaxDetail,
+} from '../dashboard/coach-today.models';
 import type {
   DashboardNutrition,
   DashboardSection,
@@ -39,6 +44,11 @@ export interface PageAction {
   label: string;
   link: string;
   queryParams: Record<string, string> | null;
+  /**
+   * Remind with no chat yet (critique B4a): a button that starts the coach's chat with the client and
+   * opens it, as the header's Message does, rather than a link.
+   */
+  startsChat?: boolean;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -181,6 +191,25 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
           ? $localize`Last trained ${date(item.date)}:date:`
           : $localize`No workout logged yet`,
         action: { label: $localize`See training`, link: `${page}/training`, queryParams: null },
+      };
+    case 'CheckInOverdue':
+      // Never sent, so there is nothing to read (CHK-015). Only the client's own coach messages them,
+      // while messaging is in the plan; anyone else is sent to the client's check-ins (CLI-013).
+      return {
+        ...base,
+        tone: 'missed',
+        tag: $localize`Overdue`,
+        heading:
+          count > 1 ? $localize`${count}:count: check-ins overdue` : $localize`Check-in overdue`,
+        detail: overdueDetail(count, date(item.date)),
+        action: item.canMessage
+          ? {
+              label: $localize`Remind`,
+              link: '/messages',
+              queryParams: item.subjectId ? { conversation: item.subjectId } : null,
+              startsChat: !item.subjectId,
+            }
+          : { label: $localize`See check-ins`, link: `${page}/checkins`, queryParams: null },
       };
     case 'MaxesToReview': {
       const lifts = item.maxes ?? [];
