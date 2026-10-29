@@ -1008,9 +1008,10 @@ public sealed class MealPlanSlot : TenantEntity
             throw new ArgumentException("Each meal slot requires 1 to 100 choices.", nameof(input));
         }
 
-        foreach (var choice in input.Choices)
+        // The options keep the coach's order (NUT-005): option 1 is what the client sees first.
+        foreach (var (choice, order) in input.Choices.Select((choice, order) => (choice, order)))
         {
-            choices.Add(MealPlanChoice.Create(tenantId, Id, choice));
+            choices.Add(MealPlanChoice.Create(tenantId, Id, order, choice));
         }
 
         AverageCalories = choices.Average(item => item.Calories);
@@ -1038,9 +1039,10 @@ public sealed class MealPlanChoice : TenantEntity
     {
     }
 
-    private MealPlanChoice(Guid tenantId, Guid slotId, MealChoiceInput input) : base(tenantId)
+    private MealPlanChoice(Guid tenantId, Guid slotId, int order, MealChoiceInput input) : base(tenantId)
     {
         MealPlanSlotId = slotId;
+        Order = order >= 0 ? order : throw new ArgumentOutOfRangeException(nameof(order));
         RecipeVersionId = input.RecipeVersionId;
         RecipeName = NutritionRules.RequiredText(input.RecipeName, 300, nameof(input.RecipeName));
         Servings = NutritionRules.Positive(input.Servings, 1_000m, nameof(input.Servings));
@@ -1051,6 +1053,9 @@ public sealed class MealPlanChoice : TenantEntity
     }
 
     public Guid MealPlanSlotId { get; private set; }
+
+    /// <summary>The option's place in its meal, from 0: the coach's option 1 is 0.</summary>
+    public int Order { get; private set; }
     public Guid RecipeVersionId { get; private set; }
     public string RecipeName { get; private set; } = string.Empty;
     public decimal Servings { get; private set; }
@@ -1059,7 +1064,7 @@ public sealed class MealPlanChoice : TenantEntity
     public decimal CarbohydrateGrams { get; private set; }
     public decimal FatGrams { get; private set; }
 
-    internal static MealPlanChoice Create(Guid tenantId, Guid slotId, MealChoiceInput input) => new(tenantId, slotId, input);
+    internal static MealPlanChoice Create(Guid tenantId, Guid slotId, int order, MealChoiceInput input) => new(tenantId, slotId, order, input);
 }
 
 public sealed class ClientNutritionPlan : TenantEntity
@@ -1256,9 +1261,9 @@ public sealed class ClientNutritionPlanSlot : TenantEntity
         ClientNutritionPlanDayId = dayId;
         Order = input.Order;
         Name = NutritionRules.RequiredText(input.Name, 200, nameof(input.Name));
-        foreach (var choice in input.Choices)
+        foreach (var (choice, order) in input.Choices.Select((choice, order) => (choice, order)))
         {
-            choices.Add(ClientNutritionPlanChoice.Create(tenantId, Id, choice));
+            choices.Add(ClientNutritionPlanChoice.Create(tenantId, Id, order, choice));
         }
     }
 
@@ -1276,9 +1281,10 @@ public sealed class ClientNutritionPlanChoice : TenantEntity
     {
     }
 
-    private ClientNutritionPlanChoice(Guid tenantId, Guid slotId, MealChoiceInput input) : base(tenantId)
+    private ClientNutritionPlanChoice(Guid tenantId, Guid slotId, int order, MealChoiceInput input) : base(tenantId)
     {
         ClientNutritionPlanSlotId = slotId;
+        Order = order >= 0 ? order : throw new ArgumentOutOfRangeException(nameof(order));
         SourceRecipeVersionId = input.RecipeVersionId;
         RecipeName = input.RecipeName;
         Servings = input.Servings;
@@ -1289,6 +1295,9 @@ public sealed class ClientNutritionPlanChoice : TenantEntity
     }
 
     public Guid ClientNutritionPlanSlotId { get; private set; }
+
+    /// <summary>The option's place in its meal, from 0, as the plan it was copied from ordered it.</summary>
+    public int Order { get; private set; }
     public Guid SourceRecipeVersionId { get; private set; }
     public string RecipeName { get; private set; } = string.Empty;
     public decimal Servings { get; private set; }
@@ -1297,7 +1306,7 @@ public sealed class ClientNutritionPlanChoice : TenantEntity
     public decimal CarbohydrateGrams { get; private set; }
     public decimal FatGrams { get; private set; }
 
-    internal static ClientNutritionPlanChoice Create(Guid tenantId, Guid slotId, MealChoiceInput input) => new(tenantId, slotId, input);
+    internal static ClientNutritionPlanChoice Create(Guid tenantId, Guid slotId, int order, MealChoiceInput input) => new(tenantId, slotId, order, input);
 }
 
 /// <summary>A recipe version as a client's plan copies it: what the client reads, never the library's.</summary>

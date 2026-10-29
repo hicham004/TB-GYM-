@@ -69,7 +69,7 @@ internal sealed partial class NutritionApplicationService
                 slot.DayOffset,
                 slot.Order,
                 slot.Name,
-                slot.Choices.Select(choice => new MealPlanVersionChoiceView(
+                slot.Choices.OrderBy(choice => choice.Order).Select(choice => new MealPlanVersionChoiceView(
                     choice.RecipeVersionId,
                     choice.RecipeName,
                     choice.Servings,

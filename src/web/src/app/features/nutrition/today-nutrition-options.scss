@@ -1,0 +1,160 @@
+// A meal's options on the client's day (critique B5a): "Choose one" and a row per option, the coach's
+// option 1 first and chosen until the client picks another. The native radio stays in the page, so
+// the keyboard and a screen reader come free; its look moves to the row, as a check-in's answers do.
+// Kept apart from the page's own styles so each stays under the component style budget.
+
+.options {
+  border: 0;
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 0;
+  margin-inline: 3.5rem 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.choose-one {
+  color: var(--tb-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-block-end: 0.25rem;
+  padding: 0;
+}
+
+// The real control, kept focusable and announced, drawn by its row instead.
+.choice-input {
+  block-size: 1px;
+  border: 0;
+  inline-size: 1px;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  margin: 0;
+  min-height: 0;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+}
+
+.option {
+  align-items: center;
+  background: var(--tb-surface-2);
+  border: 2px solid transparent;
+  border-radius: var(--tb-radius-control);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.25rem;
+  padding-inline-end: 0.25rem;
+}
+
+.option:hover {
+  border-color: var(--tb-line-strong);
+}
+
+.option:has(:checked) {
+  background: var(--tb-accent-soft);
+  border-color: var(--tb-accent-ink);
+}
+
+.option:has(.choice-input:focus-visible) {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.option-pick {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 12rem;
+  gap: 0.75rem;
+  min-block-size: 3.5rem;
+  min-inline-size: 0;
+  padding: 0.6rem 0.75rem;
+  position: relative;
+}
+
+.option-mark {
+  block-size: 1.375rem;
+  border: 2px solid var(--tb-line-strong);
+  border-radius: 50%;
+  display: block;
+  flex: none;
+  inline-size: 1.375rem;
+}
+
+.option:has(:checked) .option-mark {
+  background: var(--tb-accent-ink);
+  border-color: var(--tb-accent-ink);
+  box-shadow: inset 0 0 0 3px var(--tb-accent-soft);
+}
+
+.option-photo {
+  block-size: 2.75rem;
+  border-radius: var(--tb-radius-control);
+  flex: none;
+  inline-size: 2.75rem;
+  object-fit: cover;
+}
+
+.option-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-inline-size: 0;
+}
+
+.option-copy strong {
+  color: var(--tb-ink);
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.option-amount {
+  color: var(--tb-muted);
+  font-size: 0.85rem;
+}
+
+// The option's recipe, a tap away from the row that picks it.
+.option-recipe {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-accent-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  gap: 0.1rem;
+  margin-inline-start: auto;
+  min-block-size: 2.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.option-recipe:hover {
+  background: var(--tb-surface);
+}
+
+.option-recipe:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.options:disabled .option-pick {
+  cursor: progress;
+}
+
+@media (max-width: 36rem) {
+  .options {
+    margin-inline-start: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .option:has(:checked) {
+    border-color: Highlight;
+  }
+
+  .option:has(:checked) .option-mark {
+    background: Highlight;
+    border-color: Highlight;
+  }
+}

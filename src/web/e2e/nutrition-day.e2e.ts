@@ -156,9 +156,14 @@ async function openNutrition(page: Page, width: number, height: number) {
       'PUT /api/nutrition/me/choices': (route: Route) => {
         const body = route.request().postDataJSON();
         const slot = state.slots.find((item) => item.id === body.planSlotId)!;
+        const choice = slot.choices.find((item) => item.id === body.choiceId)!;
         slot.selectedChoiceId = body.choiceId;
         slot.actualServings = body.actualServings;
-        state.selectedCalories += slot.choices.find((item) => item.id === body.choiceId)!.calories;
+        // The calories of the amount logged, as the server says them (CLIENT-10).
+        Object.assign(slot, {
+          loggedCalories: (choice.calories * body.actualServings) / choice.servings,
+        });
+        state.selectedCalories += choice.calories;
         state.dailyLogVersion++;
         return json(route, 200, state);
       },
@@ -231,8 +236,18 @@ test('Nutrition day at 390px shows the plan and logs a meal in one tap', async (
   await axe(page);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await docsPicture(page, 'r24-nutrition-390.png', { fullPage: true });
-  await page.getByRole('button', { name: 'Ate as planned' }).first().click();
+  // Lunch offers two recipes: the client picks one from its rows, the coach's option 1 chosen first,
+  // and "I ate this" logs the one picked (B5a).
+  const lunch = page.locator('.meal-card', { hasText: 'Lunch' });
+  await expect(lunch.getByRole('group', { name: 'Choose one' })).toBeVisible();
+  await expect(lunch.getByRole('radio', { name: /Chicken, rice & greens/ })).toBeChecked();
+  await lunch.locator('.option-pick', { hasText: 'Salmon and potatoes' }).click();
+  await expect(lunch.getByRole('radio', { name: /Salmon and potatoes/ })).toBeChecked();
+  await lunch.getByRole('button', { name: 'I ate this' }).click();
   await expect(page.getByText('2 of 3 planned meals logged')).toBeVisible();
+  await expect(lunch.locator('[data-logged-amount]')).toHaveText('1 serving · 720 kcal logged');
+  await expect(lunch.getByRole('button', { name: 'I ate this' })).toHaveCount(0);
+  await expect(lunch.getByRole('button', { name: 'Change servings' })).toBeVisible();
   await page.getByRole('button', { name: 'Add food' }).click();
   await page.getByLabel('Food name').fill('Apple');
   await page.getByLabel('Amount eaten').fill('150');
@@ -266,16 +281,14 @@ test('A meal’s recipe opens in a sheet at 390px, in light and dark, and reflow
   page,
 }) => {
   await openNutrition(page, 390, 844);
-  await expect(page.getByRole('button', { name: 'Overnight oats & berries Recipe' })).toHaveCount(
-    0,
-  );
-  // The lunch card leads with its recipe's photo; a meal without one shows none.
-  const cardPhoto = page.locator('.meal-card img.meal-photo');
+  await expect(page.getByRole('button', { name: /Overnight oats & berries/ })).toHaveCount(0);
+  // Lunch's option 1 leads its row with its recipe's photo; an option without one shows none.
+  const cardPhoto = page.locator('.meal-card img.option-photo');
   await expect(cardPhoto).toHaveCount(1);
   await expect
     .poll(() => cardPhoto.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBe(4);
-  await page.getByRole('button', { name: 'Chicken, rice & greens Recipe' }).click();
+  await page.getByRole('button', { name: 'Recipe for Chicken, rice & greens' }).click();
 
   const sheet = page.getByRole('dialog', { name: 'Chicken, rice & greens' });
   await expect(sheet.locator('.facts li')).toHaveText([

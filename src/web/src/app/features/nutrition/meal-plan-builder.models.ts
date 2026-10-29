@@ -263,6 +263,8 @@ export interface MealTotal {
   macros: Macros;
   /** True when the meal offers options: its total is their average, for planning only (NUT-005). */
   isAverage: boolean;
+  /** How many options the total counts: one still without servings or a recipe is left out. */
+  counted: number;
 }
 
 /** A meal's macros: its one option's, or the average of its options. */
@@ -270,9 +272,13 @@ export function mealTotal(meal: PlanMeal, book: RecipeBook): MealTotal {
   const counted = meal.choices
     .map((choice) => choiceMacros(choice, book))
     .filter((macros): macros is Macros => macros !== null);
-  if (counted.length === 0) return { macros: ZERO, isAverage: false };
+  if (counted.length === 0) return { macros: ZERO, isAverage: false, counted: 0 };
   const sum = counted.reduce(add, ZERO);
-  return { macros: scale(sum, 1 / counted.length), isAverage: counted.length > 1 };
+  return {
+    macros: scale(sum, 1 / counted.length),
+    isAverage: counted.length > 1,
+    counted: counted.length,
+  };
 }
 
 export interface DayTotal {
@@ -607,6 +613,27 @@ export function applyPlanDrop(
     : addMeal(plan, target.dayKey, item.recipe).plan;
 }
 
+/**
+ * Where a dropped recipe went, said once it is in the plan: another option of a meal (the last, as
+ * options keep the order they were added in) or a new meal at the end of a day.
+ */
+export function whereItWent(plan: MealPlanModel, target: PlanDropTarget): string | null {
+  if (target.kind === 'options') {
+    const meal = findMeal(plan, target.ref);
+    if (!meal) return null;
+    const name = meal.name.trim() || $localize`the meal`;
+    const count = meal.choices.length;
+    return count === 1
+      ? $localize`Added to ${name}:meal:.`
+      : $localize`Added as option ${count}:option: of ${name}:meal:: the client picks one.`;
+  }
+  if (target.kind !== 'new-meal') return null;
+  const index = plan.days.findIndex((day) => day.key === target.dayKey);
+  const meal = plan.days[index]?.meals.at(-1);
+  if (!meal) return null;
+  return $localize`Added as a new meal, ${meal.name}:meal:, on day ${index + 1}:day:.`;
+}
+
 // ---------- before publishing ----------
 
 export interface PlanProblem {
@@ -710,6 +737,15 @@ export function kcalText(calories: number, locale: string): string {
 export function macroLine(macros: Macros, locale: string): string {
   const grams = (value: number) => formatNumber(Math.round(value), locale, '1.0-0');
   return $localize`P ${grams(macros.protein)}:protein: · C ${grams(macros.carbs)}:carbs: · F ${grams(macros.fat)}:fat:`;
+}
+
+/**
+ * What a meal with options counts for, after its calories: "protein 32 g · carbs 60 g · fat 18 g,
+ * the average of 3 options" (NUT-005: for planning, never what the client ate).
+ */
+export function averageLine(macros: Macros, options: number, locale: string): string {
+  const grams = (value: number) => formatNumber(Math.round(value), locale, '1.0-0');
+  return $localize`protein ${grams(macros.protein)}:protein: g · carbs ${grams(macros.carbs)}:carbs: g · fat ${grams(macros.fat)}:fat: g, the average of ${options}:count: options`;
 }
 
 /** "1 serving", "1.5 servings". */

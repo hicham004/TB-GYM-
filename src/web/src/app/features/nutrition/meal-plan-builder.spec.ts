@@ -162,12 +162,26 @@ describe('the meal-plan builder', () => {
     const [first, second] = days(host);
     expect(mealsOf(first)).toEqual(['Breakfast', 'Lunch']);
     expect(mealsOf(second)).toEqual(['Breakfast']);
-    // Lunch offers two recipes: the client eats one, so the day counts their average.
-    const lunch = all(first, '.meal-card')[1];
+    // Lunch offers two recipes: the client picks one, option 1 first, so the day counts their
+    // average, which the card says with its macros (B5a).
+    const [breakfast, lunch] = all(first, '.meal-card');
+    expect(textOf(lunch.querySelector('.pick-one'))).toBe('Pick one of 2');
     expect(all(lunch, '.option-row').map(textOf)).toEqual([
-      'Chicken & rice 1 serving · 600 kcal',
-      'or Lentil soup 2 servings · 600 kcal',
+      'Option 1 Chicken & rice 1 serving · 600 kcal',
+      'Option 2 Lentil soup 2 servings · 600 kcal',
     ]);
+    expect(lunch.querySelector('ol.option-list')).not.toBeNull();
+    expect(textOf(lunch.querySelector('.meal-average'))).toBe(
+      '≈ 600 kcal · protein 43 g · carbs 75 g · fat 12 g, the average of 2 options',
+    );
+    // A meal of one recipe is no choice: no count, no number, its calories alone.
+    expect(breakfast.querySelector('.pick-one')).toBeNull();
+    expect(breakfast.querySelector('.option-number')).toBeNull();
+    expect(all(breakfast, '.option-row').map(textOf)).toEqual([
+      'Overnight oats 1 serving · 400 kcal',
+    ]);
+    expect(breakfast.querySelector('.meal-average')).toBeNull();
+    expect(textOf(breakfast.querySelector('.meal-kcal'))).toBe('400 kcal');
     expect(textOf(first.querySelector('.day-kcal'))).toBe('≈ 1,000 kcal');
     expect(textOf(first.querySelector('.day-against'))).toBe('1,000 kcal under');
     expect(textOf(first.querySelector('.day-macros'))).toBe('P 73 · C 125 · F 21');

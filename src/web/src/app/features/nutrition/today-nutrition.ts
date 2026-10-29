@@ -1,11 +1,10 @@
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe, DecimalPipe, formatNumber } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import {
   Component,
   computed,
   effect,
   inject,
-  LOCALE_ID,
   signal,
   type TemplateRef,
   untracked,
@@ -48,7 +47,7 @@ function dayOf(answer: Observable<ClientNutritionDayView>): Promise<NutritionDay
   selector: 'app-today-nutrition',
   imports: [ClientRecipeSheet, DatePipe, DecimalPipe, FormsModule, Icon, ProgressRing, UiSelect],
   templateUrl: './today-nutrition.html',
-  styleUrl: './today-nutrition.scss',
+  styleUrls: ['./today-nutrition.scss', './today-nutrition-options.scss'],
 })
 export class TodayNutrition {
   private readonly api = inject(ApiClient);
@@ -56,7 +55,6 @@ export class TodayNutrition {
   private readonly tenants = inject(TenantStore);
   private readonly access = inject(ClientAccessStore);
   private readonly calendar = inject(WorkspaceCalendar);
-  private readonly locale = inject(LOCALE_ID);
   private readonly sheets = inject(UiSheet);
   private readonly recipeSheet = viewChild.required<TemplateRef<unknown>>('recipeSheet');
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
@@ -93,20 +91,6 @@ export class TodayNutrition {
   protected readonly loggedCount = computed(
     () => this.day()?.slots.filter((slot) => slot.selectedChoiceId !== null).length ?? 0,
   );
-  /** Each meal's options as the select lists them: the recipe and its calories, by meal. */
-  protected readonly choiceOptions = computed(() => {
-    const options = new Map<string, SelectOption[]>();
-    for (const slot of this.day()?.slots ?? []) {
-      options.set(
-        slot.id,
-        slot.choices.map((choice) => ({
-          value: choice.id,
-          label: $localize`${choice.recipeName}:recipe: · ${formatNumber(choice.calories, this.locale, '1.0-0')}:calories: kcal`,
-        })),
-      );
-    }
-    return options;
-  });
   protected readonly unitOptions: SelectOption[] = [
     { value: 'Gram', label: $localize`g` },
     { value: 'Millilitre', label: $localize`ml` },
@@ -147,14 +131,22 @@ export class TodayNutrition {
     return this.drafts.get(slotId);
   }
 
+  /**
+   * An option picked from the meal's rows, at its planned servings. Picking the option the meal
+   * already stands at (the one logged, or option 1 when none is) leaves nothing to save.
+   */
   protected updateChoice(slotId: string, choiceId: string): void {
     const day = this.day();
     const slot = day?.slots.find((candidate) => candidate.id === slotId);
     const choice = slot?.choices.find((candidate) => candidate.id === choiceId);
-    this.drafts.update(slotId, {
-      choiceId,
-      ...(choice ? { servings: String(choice.servings) } : {}),
-    });
+    if (slot && choiceId === (slot.selectedChoiceId ?? slot.choices[0]?.id)) {
+      this.drafts.restore(slot);
+    } else {
+      this.drafts.update(slotId, {
+        choiceId,
+        ...(choice ? { servings: String(choice.servings) } : {}),
+      });
+    }
     this.bumpDrafts();
   }
 
@@ -222,9 +214,9 @@ export class TodayNutrition {
     });
   }
 
-  /** The option chosen in a meal's editor, so its recipe can be opened before it is saved. */
-  protected draftChoice(slot: NutritionSlot, choiceId: string | null): NutritionChoice | undefined {
-    return slot.choices.find((choice) => choice.id === choiceId);
+  /** An option row's recipe button: "Recipe" on screen, the recipe's name for a screen reader too. */
+  protected recipeLabel(choice: NutritionChoice): string {
+    return $localize`Recipe for ${choice.recipeName}:recipe:`;
   }
 
   protected removeFoodLabel(name: string): string {

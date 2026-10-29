@@ -177,13 +177,17 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
   const sent = await openBuilder(page, 1440, 1000);
   await page.getByRole('button', { name: 'Hide recipes' }).waitFor();
 
-  // A recipe dropped under day 2 starts a meal there, named after the day's next usual meal.
+  // A recipe dropped under day 2 starts a meal there, named after the day's next usual meal, and
+  // says so (B5a).
   await drag(
     page,
     page.locator('app-meal-plan-library .lib-item', { hasText: 'Chicken & rice' }),
     day(page, 1).locator('.new-meal'),
   );
   await expect(day(page, 1).locator('.meal-name')).toHaveText(['Breakfast', 'Lunch']);
+  await expect(
+    page.locator('.tb-toast__message', { hasText: 'Added as a new meal, Lunch, on day 2.' }),
+  ).toBeVisible();
   await expect(page.locator('.status')).toHaveText(/^Saved at \d\d:\d\d, not published yet$/);
   expect(sent.started[0]).toMatchObject({
     mealPlanTemplateId: 'plan-1',
@@ -191,15 +195,25 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
     templateRevision: 2,
   });
 
-  // A recipe dropped onto day 1's Breakfast becomes another option of it.
+  // A recipe dropped onto day 1's Breakfast becomes its option 2: the card says the client picks
+  // one, numbers the options and ends with what they average (B5a).
   await drag(
     page,
     page.locator('app-meal-plan-library .lib-item', { hasText: 'Lentil soup' }),
     day(page, 0).locator('.meal-card', { hasText: 'Breakfast' }).locator('.option-list'),
   );
+  const breakfast = day(page, 0).locator('.meal-card', { hasText: 'Breakfast' });
+  await expect(breakfast.locator('.option-row')).toHaveCount(2);
   await expect(
-    day(page, 0).locator('.meal-card', { hasText: 'Breakfast' }).locator('.option-row'),
-  ).toHaveCount(2);
+    page.locator('.tb-toast__message', {
+      hasText: 'Added as option 2 of Breakfast: the client picks one.',
+    }),
+  ).toBeVisible();
+  await expect(breakfast.locator('.pick-one')).toHaveText('Pick one of 2');
+  await expect(breakfast.locator('.option-number')).toHaveText(['Option 1', 'Option 2']);
+  await expect(breakfast.locator('.meal-average')).toHaveText(
+    '≈ 350 kcal · protein 24 g · carbs 45 g · fat 8 g, the average of 2 options',
+  );
 
   // Day 1's Lunch moves to day 2 by its grip.
   await drag(
@@ -253,6 +267,8 @@ test('a phone shows one day at a time, in dark, right to left and at 200% text',
   await picker.getByRole('button', { name: 'Add Chicken & rice' }).click();
   await expect(picker).toBeHidden();
   await expect(editor.locator('.option')).toHaveCount(2);
+  // The sheet numbers the options in the order the client sees them (B5a).
+  await expect(editor.locator('.option-number')).toHaveText(['Option 1', 'Option 2']);
   await editor.getByRole('button', { name: 'Done' }).click();
 
   await useRtl(page);

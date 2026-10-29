@@ -402,8 +402,13 @@
                                 {{ meal.name }}
                               </button>
                             </div>
-                            <ul
+                            @if (meal.pickOne; as pickOne) {
+                              <p class="pick-one">{{ pickOne }}</p>
+                            }
+                            <!-- The client sees the options in this order, option 1 first (NUT-005). -->
+                            <ol
                               class="option-list"
+                              role="list"
                               cdkDropList
                               [id]="meal.listId"
                               [cdkDropListConnectedTo]="dropIds()"
@@ -411,19 +416,26 @@
                               [cdkDropListEnterPredicate]="canEnter"
                               (cdkDropListDropped)="dropped($event)"
                             >
-                              @for (option of meal.options; track option.key; let first = $first) {
+                              @for (option of meal.options; track option.key) {
                                 <!-- &ngsp; keeps the words apart for a screen reader. -->
                                 <li class="option-row" [class.missing]="option.missing">
-                                  @if (!first) {
-                                    <span class="option-or" i18n>or</span>&ngsp;
-                                  }
-                                  <span class="option-name" dir="auto">{{ option.name }}</span
-                                  >&ngsp;<span class="option-line">{{ option.line }}</span>
+                                  <!-- The number sits by the name, so the line under it keeps the row's width. -->
+                                  <span class="option-head">
+                                    @if (option.number; as number) {
+                                      <span class="option-number"
+                                        ><span class="tb-visually-hidden" i18n>Option</span>&ngsp;{{
+                                          number
+                                        }}</span
+                                      >&ngsp;
+                                    }
+                                    <span class="option-name" dir="auto">{{ option.name }}</span>
+                                  </span>
+                                  &ngsp;<span class="option-line">{{ option.line }}</span>
                                 </li>
                               } @empty {
                                 <li class="drop-hint" i18n>Drop a recipe here</li>
                               }
-                            </ul>
+                            </ol>
                             <!-- The menu sits by the total, so the meal's name keeps the whole top row. -->
                             <div class="meal-foot">
                               <app-menu
@@ -433,7 +445,13 @@
                                 [items]="meal.menu"
                                 (chosen)="onMealAction(meal.ref, $event)"
                               />
-                              <span class="meal-kcal">{{ meal.kcal }}</span>
+                              @if (meal.average; as average) {
+                                <p class="meal-average">
+                                  <span class="meal-kcal">{{ meal.kcal }}</span> · {{ average }}
+                                </p>
+                              } @else {
+                                <span class="meal-kcal">{{ meal.kcal }}</span>
+                              }
                             </div>
                           </li>
                         }

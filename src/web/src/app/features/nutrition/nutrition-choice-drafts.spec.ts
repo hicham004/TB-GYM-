@@ -128,6 +128,34 @@ describe('NutritionChoiceDrafts', () => {
     });
   });
 
+  it('restores a meal as it stands: the option logged at its servings, or option 1 as planned (B5a)', () => {
+    const drafts = new NutritionChoiceDrafts();
+    const logged = day('choice-a2', 1.5);
+    drafts.reconcile(logged);
+    drafts.update('slot-a', { choiceId: 'choice-a1', servings: '1' });
+    drafts.update('slot-b', { servings: '3' });
+
+    drafts.restore(logged.slots[0]);
+
+    expect(drafts.get('slot-a')).toMatchObject({
+      choiceId: 'choice-a2',
+      servings: '1.5',
+      dirty: false,
+      error: null,
+    });
+    expect(drafts.get('slot-b')?.dirty).toBe(true);
+    const fresh = day();
+    drafts.reconcile(fresh);
+    drafts.update('slot-a', { choiceId: 'choice-a2', servings: '1' });
+    drafts.restore(fresh.slots[0]);
+    expect(drafts.get('slot-a')).toMatchObject({
+      choiceId: 'choice-a1',
+      servings: '1',
+      dirty: false,
+    });
+    expect(() => drafts.restore({ ...fresh.slots[0], id: 'slot-z' })).toThrow();
+  });
+
   it('removes only drafts whose prescribed slot disappeared', () => {
     const drafts = new NutritionChoiceDrafts();
     const current = day();

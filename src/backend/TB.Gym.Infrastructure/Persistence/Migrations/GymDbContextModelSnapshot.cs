@@ -5310,6 +5310,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
 
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("ProteinGrams")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
@@ -5345,13 +5348,17 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ClientNutritionPlanSlotId");
-
                     b.HasIndex("TenantId", "SourceRecipeVersionId");
+
+                    b.HasIndex("TenantId", "ClientNutritionPlanSlotId", "Order")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ClientNutritionPlanChoices_OnePerPlace");
 
                     b.ToTable("ClientNutritionPlanChoices", "nutrition", t =>
                         {
                             t.HasCheckConstraint("CK_ClientNutritionPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0");
+
+                            t.HasCheckConstraint("CK_ClientNutritionPlanChoices_Order", "\"Order\" >= 0");
                         });
                 });
 
@@ -6297,6 +6304,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("MealPlanSlotId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("ProteinGrams")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)");
@@ -6334,13 +6344,17 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasAlternateKey("TenantId", "Id");
 
-                    b.HasIndex("TenantId", "MealPlanSlotId");
-
                     b.HasIndex("TenantId", "RecipeVersionId");
+
+                    b.HasIndex("TenantId", "MealPlanSlotId", "Order")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MealPlanChoices_OnePerPlace");
 
                     b.ToTable("MealPlanChoices", "nutrition", t =>
                         {
                             t.HasCheckConstraint("CK_MealPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0");
+
+                            t.HasCheckConstraint("CK_MealPlanChoices_Order", "\"Order\" >= 0");
                         });
                 });
 

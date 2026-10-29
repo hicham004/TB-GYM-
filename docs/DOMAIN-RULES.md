@@ -884,6 +884,13 @@ choices. The system distinguishes:
 specific choice was recorded. A recorded choice carries the calories of the amount recorded (the
 choice's own scaled by the servings eaten), which the client's day shows on that meal beside the plan's
 serving (CLIENT-10); the day's totals count the same numbers.
+A meal's choices are ordered (critique B5a, 2026-10-29): the coach's order, kept in each published
+version and copied unchanged into a client's plan (`Order` from 0, one choice to a place). The coach's
+card says "Pick one of 3", numbers the options and ends with their average calories and macros; the
+client's meal says "Choose one" and lists them in that order, option 1 chosen until they pick another,
+and "I ate this" records the one picked. Until the day is completed a client may change a logged meal,
+its option or its servings: the new record replaces the old one. Choices published before B5a keep the
+order they were read in, which was their stored order.
 
 **NUT-011** Stored carbohydrate is total carbohydrate including fibre and polyols, matching
 USDA "Carbohydrate, by difference" and printed labels. Energy policies derive available
@@ -2064,6 +2071,7 @@ At minimum, later migrations should enforce:
 | One completion per assigned day                                                                                      | Unique `(TenantId, AssignmentDayId, ClientId)`                                                        |
 | Valid macro inputs                                                                                                   | Non-negative checks; aggregate validation in domain transaction                                       |
 | A coach's own macros name their override, once, and only theirs do (INV-2)                                           | Composite FK `(TenantId, MacroOverrideAuditId)`, filtered unique, check on `MacroMethodKey`            |
+| A meal's choices in the coach's order, one to a place, published and copied alike (NUT-005)                          | Unique `(TenantId, slot, Order)` on both choice tables, check `Order >= 0`                            |
 | Tenant-safe child relationship                                                                                       | Composite FK including `TenantId` where practical                                                     |
 | One active owner per workspace                                                                                       | Partial unique `(TenantId)` where `Role = 'Owner' AND Status = 'Active'`                              |
 | A client's coach is active staff, and a coach change is recorded in the history                                      | Composite FK to memberships plus deferred constraint triggers on the client and the membership       |

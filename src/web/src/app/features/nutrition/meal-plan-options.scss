@@ -1,0 +1,86 @@
+// A meal's recipes on the builder's cards (C7, critique B5a): each an option the client picks from.
+// A meal of several is a choice, "Pick one of 3", its options numbered in the order the client sees
+// them, and the card ends with what they average. Kept apart from the days' styles so each stays under
+// the component style budget.
+
+.pick-one {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin: 0;
+  padding-inline: 0.25rem;
+}
+
+.option-row {
+  background: var(--tb-surface-2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.3125rem 0.5rem;
+}
+
+.option-row.missing {
+  box-shadow: inset 3px 0 0 var(--tb-danger);
+}
+
+.option-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.375rem;
+  min-inline-size: 0;
+}
+
+// Positioned, so its hidden "Option" stays inside the week's sideways scroll instead of widening the
+// page: an absolute element whose containing block is outside a scroller escapes its clip.
+.option-number {
+  align-items: center;
+  background: var(--tb-surface);
+  block-size: 1.25rem;
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: var(--tb-ink);
+  display: inline-flex;
+  flex: none;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  inline-size: 1.25rem;
+  justify-content: center;
+  position: relative;
+}
+
+.option-name {
+  color: var(--tb-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+
+.option-line {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-foot:has(.meal-average) {
+  align-items: flex-start;
+}
+
+// What the options average, for planning only (NUT-005): the card's last words.
+.meal-average {
+  color: var(--tb-muted);
+  flex: 1;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  margin: 0;
+  min-inline-size: 0;
+  padding-block-start: 0.375rem;
+  padding-inline-end: 0.25rem;
+}
+
+.meal-average .meal-kcal {
+  padding-inline-end: 0;
+}

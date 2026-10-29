@@ -932,14 +932,15 @@ internal sealed partial class NutritionApplicationService(
             return Conflict("allergen_review_required", "One or more declared recipe allergens conflict with the client's structured declarations. Review and explicitly acknowledge the warning. TB Gym does not assert any recipe is safe.");
         }
 
+        // The client's options come in the coach's order (NUT-005), so their option 1 is the coach's.
         var slotInputs = template.Slots.Select(slot => new MealSlotInput(
             slot.DayOffset,
             slot.Order,
             slot.Name,
-            slot.Choices.Select(choice => new MealChoiceInput(choice.RecipeVersionId, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams)).ToArray())).ToArray();
+            slot.Choices.OrderBy(choice => choice.Order).Select(choice => new MealChoiceInput(choice.RecipeVersionId, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams)).ToArray())).ToArray();
 
         // The client gets their own copy of each recipe (NUT-006), named as the meal plan names it.
-        var planNames = template.Slots.OrderBy(slot => slot.DayOffset).ThenBy(slot => slot.Order).SelectMany(slot => slot.Choices)
+        var planNames = template.Slots.OrderBy(slot => slot.DayOffset).ThenBy(slot => slot.Order).SelectMany(slot => slot.Choices.OrderBy(choice => choice.Order))
             .GroupBy(choice => choice.RecipeVersionId).ToDictionary(group => group.Key, group => group.First().RecipeName);
         var recipeVersions = await dbContext.RecipeVersions.AsNoTracking().Include(item => item.Ingredients)
             .Where(item => recipeVersionIds.Contains(item.Id)).AsSplitQuery().ToListAsync(cancellationToken);
@@ -1146,7 +1147,15 @@ internal sealed partial class NutritionApplicationService(
         try
         {
             var multiplier = request.ActualServings / choice.Servings;
+            // A meal logged again replaces what was logged for it while the day is open (B5a): the old
+            // entry is deleted as a row, not left as an orphan EF refuses to save.
+            var replaced = log.Entries.SingleOrDefault(item => item.ClientNutritionPlanSlotId == request.PlanSlotId);
             var entry = log.Record(request.PlanSlotId, choice.Id, choice.RecipeName, request.ActualServings, choice.Calories * multiplier, choice.ProteinGrams * multiplier, choice.CarbohydrateGrams * multiplier, choice.FatGrams * multiplier);
+            if (replaced is not null)
+            {
+                dbContext.DailyNutritionLogEntries.Remove(replaced);
+            }
+
             dbContext.DailyNutritionLogEntries.Add(entry);
             log.StampUpdate(clock.UtcNow, currentUser.UserId);
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -1703,7 +1712,7 @@ internal sealed partial class NutritionApplicationService(
             slots.Select(slot =>
             {
                 entries.TryGetValue(slot.Id, out var entry);
-                return new NutritionSlotView(slot.Id, slot.Name, slot.Order, slot.Choices.Select(choice => new NutritionChoiceView(choice.Id, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.Id, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.PhotoMediaAssetId)).ToArray(), entry?.SelectedClientNutritionPlanChoiceId, entry?.Servings, entry?.Calories);
+                return new NutritionSlotView(slot.Id, slot.Name, slot.Order, slot.Choices.OrderBy(choice => choice.Order).Select(choice => new NutritionChoiceView(choice.Id, choice.RecipeName, choice.Servings, choice.Calories, choice.ProteinGrams, choice.CarbohydrateGrams, choice.FatGrams, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.Id, recipes.GetValueOrDefault(choice.SourceRecipeVersionId)?.PhotoMediaAssetId)).ToArray(), entry?.SelectedClientNutritionPlanChoiceId, entry?.Servings, entry?.Calories);
             }).ToArray(),
             log?.CustomFoods.Where(item => log.CustomFoodReversals.All(reversal => reversal.CustomFoodId != item.Id)).OrderBy(item => item.CreatedAtUtc).Select(item => new NutritionCustomFoodView(item.Id, item.Name, item.Amount, item.Unit, item.Calories, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams)).ToArray() ?? [],
             "Allergen declarations may be incomplete. Absence of a declared conflict is not evidence of absence; TB Gym does not assert any meal is safe.");

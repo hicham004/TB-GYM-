@@ -277,8 +277,15 @@ public sealed partial class GymDbContext
             entity.Property(item => item.Servings).HasPrecision(12, 4);
             ConfigureMacroPrecision(entity);
             entity.Property(item => item.Calories).HasPrecision(18, 6);
+            // A meal's options in the coach's order (NUT-005), one option to a place.
+            entity.HasIndex(item => new { item.TenantId, item.MealPlanSlotId, item.Order }).IsUnique()
+                .HasDatabaseName("IX_MealPlanChoices_OnePerPlace");
             entity.HasOne<RecipeVersion>().WithMany().HasForeignKey(item => new { item.TenantId, item.RecipeVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
-            entity.ToTable(table => table.HasCheckConstraint("CK_MealPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_MealPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0");
+                table.HasCheckConstraint("CK_MealPlanChoices_Order", "\"Order\" >= 0");
+            });
             ConfigureTenantEntity(entity);
         });
 
@@ -391,8 +398,14 @@ public sealed partial class GymDbContext
             entity.Property(item => item.Servings).HasPrecision(12, 4);
             ConfigureMacroPrecision(entity);
             entity.Property(item => item.Calories).HasPrecision(18, 6);
+            entity.HasIndex(item => new { item.TenantId, item.ClientNutritionPlanSlotId, item.Order }).IsUnique()
+                .HasDatabaseName("IX_ClientNutritionPlanChoices_OnePerPlace");
             entity.HasOne<RecipeVersion>().WithMany().HasForeignKey(item => new { item.TenantId, item.SourceRecipeVersionId }).HasPrincipalKey(item => new { item.TenantId, item.Id }).OnDelete(DeleteBehavior.Restrict);
-            entity.ToTable(table => table.HasCheckConstraint("CK_ClientNutritionPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0"));
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_ClientNutritionPlanChoices_NonNegative", "\"Servings\" > 0 AND \"Calories\" >= 0 AND \"ProteinGrams\" >= 0 AND \"CarbohydrateGrams\" >= 0 AND \"FatGrams\" >= 0");
+                table.HasCheckConstraint("CK_ClientNutritionPlanChoices_Order", "\"Order\" >= 0");
+            });
             ConfigureTenantEntity(entity);
         });
 

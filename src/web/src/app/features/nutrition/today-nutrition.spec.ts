@@ -232,6 +232,27 @@ function dateDay(date: string, suffix: string, slotId = 'slot-1'): NutritionDay 
   });
 }
 
+/** The option rows of a meal card: each row's recipe name, and whether it is the one chosen. */
+function rows(card: ParentNode): { name: string; chosen: boolean }[] {
+  return Array.from(card.querySelectorAll<HTMLElement>('.option')).map((row) => ({
+    name: row.querySelector('strong')?.textContent?.trim() ?? '',
+    chosen: row.querySelector<HTMLInputElement>('input[type="radio"]')!.checked,
+  }));
+}
+
+/** Picks a meal's option the way a tap on its row does: its radio is checked and says so. */
+function pick(card: ParentNode, recipeName: string): HTMLInputElement {
+  const row = Array.from(card.querySelectorAll<HTMLElement>('.option')).find(
+    (candidate) => candidate.querySelector('strong')?.textContent?.trim() === recipeName,
+  );
+  if (!row) throw new Error(`No option is named "${recipeName}".`);
+  const radio = row.querySelector<HTMLInputElement>('input[type="radio"]')!;
+  if (radio.disabled) throw new Error(`"${recipeName}" cannot be picked now.`);
+  radio.checked = true;
+  radio.dispatchEvent(new Event('change'));
+  return radio;
+}
+
 function beginSave(component: TodayNutrition): Promise<void> {
   const current = component['day']()!;
   const currentSlot = current.slots[0];
@@ -260,12 +281,17 @@ describe('TodayNutrition', () => {
     expect(mapNutritionDay(served(afterSave()))).toEqual(afterSave());
   });
 
-  it('opens a meal’s recipe in a sheet, from the card or from the option chosen while editing', async () => {
-    const { fixture, host, api } = await render();
+  it('opens a meal’s recipe in a sheet, from its card or from an option’s row', async () => {
+    const lunch = slot({ id: 'slot-2', name: 'Lunch', order: 1, choices: [slot().choices[0]] });
+    const { fixture, host, api } = await render({}, day({ slots: [slot(), lunch] }));
     const sheet = () => document.querySelector<HTMLElement>('[role="dialog"]');
+    const [breakfast, single] = Array.from(host.querySelectorAll('.meal-card'));
 
-    const open = host.querySelector<HTMLButtonElement>('.meal-card .recipe-open')!;
-    expect(open.textContent?.replace(/\s+/g, ' ').trim()).toBe('Oats and whey Recipe');
+    // Each option's row opens its own recipe; one without a recipe offers none.
+    const open = query<HTMLButtonElement>(breakfast, '.option-recipe');
+    expect(breakfast.querySelectorAll('.option-recipe')).toHaveLength(1);
+    expect(open.textContent?.trim()).toBe('Recipe');
+    expect(open.getAttribute('aria-label')).toBe('Recipe for Oats and whey');
     open.click();
     await settle(fixture);
     await settle(fixture);
@@ -277,15 +303,86 @@ describe('TodayNutrition', () => {
     sheet()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
     await settle(fixture);
 
-    // Editing, the option chosen opens its own recipe; one without a recipe offers none.
-    press(host, 'Swap or adjust');
+    // A meal of one recipe is its card: the whole row opens it.
+    const whole = query<HTMLButtonElement>(single, '.recipe-open');
+    expect(whole.textContent?.replace(/\s+/g, ' ').trim()).toBe('Oats and whey Recipe');
+    whole.click();
     await settle(fixture);
-    expect(button(host, 'See the recipe')).toBeTruthy();
-    component(fixture)['updateChoice']('slot-1', 'choice-2');
     await settle(fixture);
+    expect(api.getMyPlanRecipe).toHaveBeenCalledTimes(2);
+  });
+
+  it('lists a meal’s options under “Choose one”, the coach’s option 1 chosen until another is picked (B5a)', async () => {
+    const { fixture, host, api } = await render();
+    const card = query(host, '.meal-card');
+
+    // The group is named for its meal too, which only a screen reader hears.
+    const legend = query(card, 'fieldset.options legend');
+    expect(legend.textContent?.replace(/\s+/g, ' ').trim()).toBe('Breakfast: Choose one');
+    expect(query(legend, '.tb-visually-hidden').textContent).toBe('Breakfast: ');
+    expect(rows(card)).toEqual([
+      { name: 'Oats and whey', chosen: true },
+      { name: 'Eggs and toast', chosen: false },
+    ]);
     expect(
-      Array.from(host.querySelectorAll('button')).map((item) => item.textContent?.trim()),
-    ).not.toContain('See the recipe');
+      Array.from(card.querySelectorAll('.option-amount')).map((line) =>
+        line.textContent?.replace(/\s+/g, ' ').trim(),
+      ),
+    ).toEqual(['1 serving · 520 kcal planned', '1 serving · 480 kcal planned']);
+    // One radio group per meal, so the arrow keys move between its options.
+    const names = new Set(
+      Array.from(card.querySelectorAll<HTMLInputElement>('input[type="radio"]')).map(
+        (radio) => radio.name,
+      ),
+    );
+    expect(names).toEqual(new Set(['meal-slot-1']));
+    expect(() => button(host, 'Ate as planned')).toThrow();
+    expect(() => button(host, 'Swap or adjust')).toThrow();
+    expect(() => selectField(host, 'What did you eat?')).toThrow();
+
+    pick(card, 'Eggs and toast');
+    await settle(fixture);
+    expect(rows(card).map((row) => row.chosen)).toEqual([false, true]);
+    press(host, 'I ate this');
+    await settle(fixture);
+
+    expect(api.recordMyNutritionChoice).toHaveBeenCalledWith({
+      planDayId: 'plan-day-1',
+      planSlotId: 'slot-1',
+      choiceId: 'choice-2',
+      actualServings: 1,
+      dailyLogVersion: 2,
+    });
+    // Logged: the option eaten stays chosen, with the amount logged, and nothing waits to be saved.
+    expect(rows(card)).toEqual([
+      { name: 'Oats and whey', chosen: false },
+      { name: 'Eggs and toast', chosen: true },
+    ]);
+    expect(query(card, '[data-logged-amount]').textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      '1.5 servings · 720 kcal logged',
+    );
+    expect(() => button(host, 'I ate this')).toThrow();
+    expect(button(host, 'Change servings')).toBeTruthy();
+  });
+
+  it('logs a meal again only for another option, and picking back the one logged leaves nothing to save', async () => {
+    const { fixture, host, api } = await render({}, afterSave());
+    const card = query(host, '.meal-card');
+
+    expect(rows(card).map((row) => row.chosen)).toEqual([false, true]);
+    expect(() => button(host, 'I ate this')).toThrow();
+
+    pick(card, 'Oats and whey');
+    await settle(fixture);
+    expect(button(host, 'I ate this')).toBeTruthy();
+    pick(card, 'Eggs and toast');
+    await settle(fixture);
+    expect(() => button(host, 'I ate this')).toThrow();
+
+    // Nothing was changed, so the day closes without asking to save first.
+    press(host, 'Complete day');
+    await settle(fixture);
+    expect(api.completeMyNutritionLog).toHaveBeenCalledWith('log-1', { version: 3 });
   });
 
   it('shows each option’s recipe photo on its meal card, granted in one call', async () => {
@@ -330,13 +427,16 @@ describe('TodayNutrition', () => {
       createMediaAccessBatch.mock.invocationCallOrder[0],
     );
     const cards = host.querySelectorAll('.meal-card');
-    const photo = cards[0].querySelector<HTMLImageElement>('.recipe-open img.meal-photo')!;
+    // Each option's row leads with its own photo.
+    const options = cards[0].querySelectorAll('.option');
+    const photo = options[0].querySelector<HTMLImageElement>('img.option-photo')!;
     expect(photo.getAttribute('src')).toBe('/api/media/photo-1/content/thumbnail?grant=1');
     expect(photo.alt).toBe('');
-    expect(cards[0].querySelector('.recipe-open')?.classList).toContain('with-photo');
+    expect(options[0].classList).toContain('with-photo');
+    expect(options[1].querySelector('img')).toBeNull();
     expect(cards[1].querySelector('img')).toBeNull();
 
-    // A grant that lapsed leaves the card without its photo instead of a broken image.
+    // A grant that lapsed leaves the row without its photo instead of a broken image.
     photo.dispatchEvent(new Event('error'));
     await settle(fixture);
     expect(cards[0].querySelector('img')).toBeNull();
@@ -352,9 +452,10 @@ describe('TodayNutrition', () => {
     await settle(fixture);
 
     expect(host.querySelector('.meal-card img')).toBeNull();
-    expect(
-      host.querySelector('.meal-card .recipe-open')?.textContent?.replace(/\s+/g, ' ').trim(),
-    ).toBe('Oats and whey Recipe');
+    expect(rows(query(host, '.meal-card')).map((row) => row.name)).toEqual([
+      'Oats and whey',
+      'Eggs and toast',
+    ]);
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 
@@ -367,13 +468,14 @@ describe('TodayNutrition', () => {
     const { fixture, host, api } = await render();
 
     // The planned choice is ready to log in one tap.
-    expect(button(host, 'Ate as planned').disabled).toBe(false);
+    expect(button(host, 'I ate this').disabled).toBe(false);
 
     // The second choice, deliberately: the draft opens on the first one, so picking that would be
     // indistinguishable from a choice that never reached the draft at all.
-    press(host, 'Swap or adjust');
+    pick(host, 'Eggs and toast');
     await settle(fixture);
-    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
+    press(host, 'Change servings');
+    await settle(fixture);
     fill(host, 'Actual servings', '1.5');
     await settle(fixture);
 
@@ -395,22 +497,26 @@ describe('TodayNutrition', () => {
 
   /** Picking a meal offers its own prescribed servings rather than leaving the client to guess. */
   it('offers the chosen meal’s prescribed servings', async () => {
-    const { fixture, host } = await render();
+    const twice = slot();
+    twice.choices[1].servings = 2;
+    const { fixture, host } = await render({}, day({ slots: [twice] }));
 
-    press(host, 'Swap or adjust');
+    press(host, 'Change servings');
     await settle(fixture);
-    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
-    await settle(fixture);
-
     expect(field(host, 'Actual servings').value).toBe('1');
+    pick(host, 'Eggs and toast');
+    await settle(fixture);
+
+    expect(field(host, 'Actual servings').value).toBe('2');
   });
 
   it('refuses to record a meal with no servings', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Swap or adjust');
+    pick(host, 'Eggs and toast');
     await settle(fixture);
-    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
+    press(host, 'Change servings');
+    await settle(fixture);
     fill(host, 'Actual servings', '0');
     await settle(fixture);
     press(host, 'Save meal');
@@ -438,9 +544,7 @@ describe('TodayNutrition', () => {
   it('refuses to complete the day while a meal is still unsaved', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Swap or adjust');
-    await settle(fixture);
-    await chooseOption(fixture, host, 'What did you eat?', 'Eggs and toast · 480 kcal');
+    pick(host, 'Eggs and toast');
     await settle(fixture);
     press(host, 'Complete day');
     await settle(fixture);
@@ -454,9 +558,12 @@ describe('TodayNutrition', () => {
   it('renders a completed day read-only', async () => {
     const { host } = await render({}, day({ logStatus: 'Completed' }));
 
-    expect(() => selectField(host, 'What did you eat?')).toThrow();
-    expect(() => button(host, 'Ate as planned')).toThrow();
+    // Nothing is left to choose: the meal shows the option eaten, or the coach's option 1.
+    expect(host.querySelector('input[type="radio"]')).toBeNull();
+    expect(() => button(host, 'I ate this')).toThrow();
+    expect(() => button(host, 'Change servings')).toThrow();
     expect(() => button(host, 'Complete day')).toThrow();
+    expect(query(host, '.meal-body strong').textContent?.trim()).toBe('Oats and whey');
     expect(host.textContent).toContain('Day completed');
   });
 
@@ -477,7 +584,7 @@ describe('TodayNutrition', () => {
       {},
       day({
         slots: [
-          slot({ id: 'one' }),
+          slot({ id: 'one', choices: [slot().choices[0]] }),
           slot({
             id: 'two',
             order: 1,
@@ -495,14 +602,27 @@ describe('TodayNutrition', () => {
   });
 
   it('says the calories of the amount logged on a logged meal, never the planned serving’s (CLIENT-10)', async () => {
+    const one = [slot().choices[0]];
     const { host } = await render(
       {},
       day({
         slots: [
-          slot({ selectedChoiceId: 'choice-1', actualServings: 1.5, loggedCalories: 780 }),
-          slot({ id: 'later', order: 1 }),
+          slot({
+            choices: one,
+            selectedChoiceId: 'choice-1',
+            actualServings: 1.5,
+            loggedCalories: 780,
+          }),
+          slot({ id: 'later', order: 1, choices: one }),
+          slot({
+            id: 'options',
+            order: 2,
+            selectedChoiceId: 'choice-2',
+            actualServings: 2,
+            loggedCalories: 960,
+          }),
         ],
-        selectedCalories: 780,
+        selectedCalories: 1740,
       }),
     );
 
@@ -511,7 +631,15 @@ describe('TodayNutrition', () => {
     );
     expect(lines[0]).toBe('1.5 servings · 780 kcal logged');
     expect(lines[1]).toBe('1 serving · 520 kcal planned');
-    expect(host.querySelectorAll('[data-logged-amount]')).toHaveLength(1);
+    // A meal with options says it on the option eaten; the others keep their planned amounts.
+    const options = Array.from(
+      host.querySelectorAll('.meal-card')[2].querySelectorAll('.option-amount'),
+    );
+    expect(options.map((item) => item.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      '1 serving · 520 kcal planned',
+      '2 servings · 960 kcal logged',
+    ]);
+    expect(host.querySelectorAll('[data-logged-amount]')).toHaveLength(2);
   });
 
   it('lays out three meals, or five or more, in rows of three and two or four in twos', async () => {
@@ -547,16 +675,15 @@ describe('TodayNutrition', () => {
     );
 
     const cards = host.querySelectorAll('.meal-card');
-    press(cards[0], 'Swap or adjust');
+    pick(cards[0], 'Eggs and toast');
+    pick(cards[1], 'Eggs and toast');
     await settle(fixture);
-    press(cards[1], 'Swap or adjust');
+    press(cards[1], 'Change servings');
     await settle(fixture);
-    await chooseOption(fixture, cards[0], 'What did you eat?', 'Eggs and toast · 480 kcal');
-    await chooseOption(fixture, cards[1], 'What did you eat?', 'Eggs and toast · 480 kcal');
     fill(cards[1], 'Actual servings', '2');
     await settle(fixture);
 
-    press(cards[0], 'Save meal');
+    press(cards[0], 'I ate this');
     await settle(fixture);
 
     expect(api.recordMyNutritionChoice).toHaveBeenCalledTimes(1);
@@ -565,7 +692,7 @@ describe('TodayNutrition', () => {
     );
     // The second meal's untouched edits survive the first meal's failure.
     const second = host.querySelectorAll('.meal-card')[1];
-    expect(selectShows(second, 'What did you eat?')).toBe('Eggs and toast · 480 kcal');
+    expect(rows(second).map((row) => row.chosen)).toEqual([false, true]);
     expect(field(second, 'Actual servings').value).toBe('2');
   });
 
@@ -655,7 +782,8 @@ describe('TodayNutrition', () => {
   it('logs the planned meal in one tap without opening the editor', async () => {
     const { fixture, host, api } = await render();
 
-    press(host, 'Ate as planned');
+    // A meal with options logs the coach's option 1 unless another is picked.
+    press(host, 'I ate this');
     await settle(fixture);
 
     expect(api.recordMyNutritionChoice).toHaveBeenCalledWith({
@@ -666,6 +794,26 @@ describe('TodayNutrition', () => {
       dailyLogVersion: 2,
     });
     expect(host.textContent).toContain('Meal logged.');
+  });
+
+  it('logs a meal of one recipe “as planned”, and offers to change its servings', async () => {
+    const { fixture, host, api } = await render(
+      {},
+      day({ slots: [slot({ choices: [slot().choices[0]] })] }),
+    );
+
+    expect(host.querySelector('fieldset.options')).toBeNull();
+    expect(button(host, 'Change servings')).toBeTruthy();
+    press(host, 'Ate as planned');
+    await settle(fixture);
+
+    expect(api.recordMyNutritionChoice).toHaveBeenCalledWith({
+      planDayId: 'plan-day-1',
+      planSlotId: 'slot-1',
+      choiceId: 'choice-1',
+      actualServings: 1,
+      dailyLogVersion: 2,
+    });
   });
 
   it('logs a client-entered food separately from the planned slot', async () => {
@@ -915,7 +1063,3 @@ describe('TodayNutrition', () => {
     expect(component['loading']()).toBe(false);
   });
 });
-
-function component(fixture: { componentInstance: TodayNutrition }): TodayNutrition {
-  return fixture.componentInstance;
-}

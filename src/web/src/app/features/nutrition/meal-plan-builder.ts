@@ -67,6 +67,7 @@ import {
   addMeal,
   addWeek,
   applyPlanDrop,
+  averageLine,
   choiceMacros,
   clearDay,
   copyDayToAll,
@@ -108,6 +109,7 @@ import {
   useNewestVersion,
   versionRecipes,
   weeksOf,
+  whereItWent,
 } from './meal-plan-builder.models';
 import { MealPlanLibrary } from './meal-plan-library';
 import { RecipeLibrarySource } from './meal-plan-library-source';
@@ -140,6 +142,8 @@ interface SaveProblem {
 
 interface OptionCell {
   key: string;
+  /** The option's place, from 1, when the meal offers more than one: the client sees 1 first. */
+  number: number | null;
   name: string;
   line: string;
   missing: boolean;
@@ -150,6 +154,10 @@ interface MealCell {
   ref: MealRef;
   name: string;
   kcal: string;
+  /** "Pick one of 3" over a meal's options; null for a meal of one recipe. */
+  pickOne: string | null;
+  /** What its options average, after the calories; null unless it counts more than one. */
+  average: string | null;
   listId: string;
   target: PlanDropTarget;
   drag: PlanDragItem;
@@ -232,7 +240,7 @@ const RING = 2 * Math.PI * 16;
     UiMenu,
   ],
   templateUrl: './meal-plan-builder.html',
-  styleUrls: ['./meal-plan-builder.scss', './meal-plan-days.scss'],
+  styleUrls: ['./meal-plan-builder.scss', './meal-plan-days.scss', './meal-plan-options.scss'],
   host: {
     '(window:beforeunload)': 'onBeforeUnload($event)',
     '(document:visibilitychange)': 'onVisibilityChange()',
@@ -654,6 +662,9 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
       return;
     }
     this.commit(next);
+    // A recipe dropped says where it went: another option the client picks from, or a new meal.
+    const went = event.item.data.kind === 'recipe' ? whereItWent(next, event.container.data) : null;
+    if (went) this.toast.show(went);
   }
 
   protected addDay(): void {
@@ -1186,12 +1197,18 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
           meals: day.meals.map((meal, index) => {
             const ref = { dayKey: day.key, mealKey: meal.key };
             const name = meal.name.trim() || $localize`Unnamed meal`;
-            const mealKcal = kcalText(mealTotal(meal, book).macros.calories, this.locale);
+            const total = mealTotal(meal, book);
+            const mealKcal = kcalText(total.macros.calories, this.locale);
+            const options = meal.choices.length;
             return {
               key: meal.key,
               ref,
               name,
-              kcal: meal.choices.length > 1 ? `≈ ${mealKcal}` : mealKcal,
+              kcal: options > 1 ? `≈ ${mealKcal}` : mealKcal,
+              pickOne: options > 1 ? $localize`Pick one of ${options}:count:` : null,
+              average: total.isAverage
+                ? averageLine(total.macros, total.counted, this.locale)
+                : null,
               listId: `options-${meal.key}`,
               target: { kind: 'options', ref },
               drag: { kind: 'meal', ref },
@@ -1212,11 +1229,12 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
                 },
                 { label: $localize`Delete meal`, action: 'delete', danger: true },
               ],
-              options: meal.choices.map((choice) => {
+              options: meal.choices.map((choice, place) => {
                 const recipe = book.get(choice.recipeVersionId);
                 const macros = choiceMacros(choice, book);
                 return {
                   key: choice.key,
+                  number: options > 1 ? place + 1 : null,
                   name: recipe?.name ?? $localize`Missing recipe`,
                   line:
                     choice.servings !== null && macros

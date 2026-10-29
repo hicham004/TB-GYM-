@@ -28,17 +28,18 @@
   <div class="options-head">
     <h3 class="section-title" i18n>Recipes</h3>
     <p class="hint" i18n>
-      The client eats one of them. With more than one, the day counts their average.
+      The client picks one of them, and sees option 1 first. With more than one, the day counts
+      their average.
     </p>
   </div>
   @if (rows().length === 0) {
     <p class="empty" i18n>No recipe yet. Add one, or drag one onto the meal from the recipes.</p>
   }
-  <ul class="options" role="list">
-    @for (row of rows(); track row.choice.key; let first = $first) {
+  <ol class="options" role="list">
+    @for (row of rows(); track row.choice.key; let place = $index) {
       <li class="option">
-        @if (!first) {
-          <span class="or" i18n>or</span>
+        @if (rows().length > 1) {
+          <span class="option-number" i18n>Option {{ place + 1 }}</span>
         }
         <div class="option-body">
           <span class="tile" aria-hidden="true">{{ row.initials }}</span>
@@ -82,7 +83,7 @@
         </div>
       </li>
     }
-  </ul>
+  </ol>
 
   @if (total(); as line) {
     <p class="total">{{ line }}</p>

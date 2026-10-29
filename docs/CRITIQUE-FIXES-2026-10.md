@@ -467,5 +467,17 @@ A chat that meets an item adds one line here: the row, the question, what it bui
 the other way, and its recommendation. The owner answers in chat; the answer goes into the row's status and the
 line is removed, and a changed answer becomes a new row.
 
-Nothing is waiting. On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the plan's name, which
-B4c adds.
+On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the plan's name, which B4c adds.
+
+- B5a · How a coach makes another option first. Built: options keep the order they were added in (a drop or "Add
+  another option" adds the last), so another option becomes option 1 only by removing and adding again. Other way:
+  "Make it option 1" or Move up in the meal sheet. Recommendation: wait until a coach asks; the order only decides
+  which option the client sees first and chosen.
+- B5a · The button on a meal of one recipe. Built: "Ate as planned", as before, since there is nothing to pick;
+  "I ate this" under a meal's options; "Change servings" on both. Other way: "I ate this" everywhere.
+  Recommendation: keep as built.
+- B5a · Words the row did not give. Built: the meal sheet labels its cards "Option 1", "Option 2" and says "The
+  client picks one of them, and sees option 1 first. With more than one, the day counts their average."; a recipe
+  dropped on a meal whose options were all removed says "Added to Breakfast."; each of the client's option rows has
+  a "Recipe" button. Other way: the sheet's "or" between options, as before. Recommendation: keep, so the card and
+  the sheet number options alike.

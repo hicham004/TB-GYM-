@@ -605,10 +605,10 @@ of the implemented R1.3 screens before production rollout.
   0036); (3) the coach's workout view kept its older look (plain "Target:"/"Actual:" lines and
   hand-built units; rebuilt in R5.3e); (4) the client sees notes on finished workouts in Training, not on Today after the day.
 - **Meal plans, left for later (from R4.4a, built 2026-10-07; screenshots `docs/design/r44a-*.png`).**
-  (1) A meal's recipes are equal options the client chooses between (NUT-005): a version stores no order
-  for them, so after Publish they come back in the order the server returns, and a day counts each meal's
-  options at their average ("≈ 1,792 kcal"). A "main option" would need an order column and an owner
-  decision. (2) Days are numbered, not weekdays: a plan runs from the day the coach picks when assigning
+  (1) A meal's recipes are equal options the client chooses between (NUT-005), and a day counts each meal's
+  options at their average ("≈ 1,792 kcal"). Since critique B5a (2026-10-29) a version keeps them in the
+  coach's order, the client sees option 1 first and chosen, and the card says "Pick one of 2", numbers
+  them and ends with their average calories and macros. (2) Days are numbered, not weekdays: a plan runs from the day the coach picks when assigning
   it, as many days as it holds, so a month is four weeks (Add week copies the last seven days). (3)
   Assigning a plan stays in the client's Nutrition section, which reads the same plans (rebuilt in R5.3d1). (4) Publish
   has no preview sheet: the grid with every day's total is the preview, and the checks run first, taking
@@ -2108,14 +2108,16 @@ limited to the coach's assigned clients.
 **M4. Nutrition day**
 - A **day strip** instead of a date input.
 - Macro rings, meals as cards, "Ate as planned" in one tap, swap to an alternative, and add a
-  custom food.
+  custom food. Since critique B5a (2026-10-29) a meal with options says "Choose one" and lists them as
+  rows, the coach's option 1 chosen, each with its recipe; "I ate this" logs the one picked, a logged
+  meal is logged again only for another option, and "Change servings" replaces "Swap or adjust".
 - Friendly states, e.g. "Your coach hasn't set a meal plan yet". Never "No authorized nutrition
   plan".
 - Built in R4.4d: a meal's recipe name opens the **recipe sheet**: the cover photo, prep and cook time
   and the yield as chips, "Your plan: 1 serving · 432 kcal" with its grams, the ingredients for the
   client's portion with "Amounts for: Your portion | Whole recipe" when the two differ (raw or cooked
-  said beside the amount) and the method as numbered steps, then **Print recipe**. Swap or adjust has
-  "See the recipe" for the option chosen. It reads the client's own copy (NUT-006). Raw or cooked is said
+  said beside the amount) and the method as numbered steps, then **Print recipe**. Each option's row has
+  its own Recipe button (B5a). It reads the client's own copy (NUT-006). Raw or cooked is said
   after an amount ("170 g cooked") unless the food's name says it. A meal card leads with its recipe's
   photo when it has one. The day now follows the person's light or dark setting (checked in dark), so it
   and its sheet always share one mode; paper is always light.

@@ -89,7 +89,8 @@
   position: relative;
 }
 
-.or {
+// Each option's place on its card's top edge, in the order the client sees them.
+.option-number {
   background: var(--tb-surface);
   color: var(--tb-muted);
   font-size: 0.75rem;

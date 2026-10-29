@@ -17,6 +17,7 @@ import {
   addMeal,
   addWeek,
   applyPlanDrop,
+  averageLine,
   clearDay,
   copyDayToAll,
   dayTotal,
@@ -45,6 +46,7 @@ import {
   useNewestVersion,
   versionRecipes,
   weeksOf,
+  whereItWent,
 } from './meal-plan-builder.models';
 
 const oats = planRecipe(OATS);
@@ -123,6 +125,7 @@ describe('meal-plan builder models', () => {
       const lunch = mealTotal(plan.days[0].meals[1], book);
 
       expect(lunch.isAverage).toBe(true);
+      expect(lunch.counted).toBe(2);
       expect(lunch.macros).toEqual({ calories: 600, protein: 43, carbs: 75, fat: 12 });
 
       const day = dayTotal(plan.days[0], book);
@@ -142,6 +145,7 @@ describe('meal-plan builder models', () => {
       expect(mealTotal(plan.days[0].meals[1], book)).toEqual({
         macros: { calories: 600, protein: 50, carbs: 70, fat: 12 },
         isAverage: false,
+        counted: 1,
       });
     });
 
@@ -295,6 +299,57 @@ describe('meal-plan builder models', () => {
       expect(offered.days[1].meals[0].choices).toHaveLength(2);
 
       expect(applyPlanDrop(plan, recipe, { kind: 'meals', dayKey: day }, 0)).toBe(plan);
+    });
+
+    it('says where a dropped recipe went: the option the client picks from, or a new meal (B5a)', () => {
+      const plan = opened();
+      const day = plan.days[1].key;
+      const recipe = { kind: 'recipe', recipe: chicken } as const;
+      const ref = { dayKey: day, mealKey: plan.days[1].meals[0].key };
+
+      const offered = applyPlanDrop(plan, recipe, { kind: 'options', ref }, 0);
+      expect(whereItWent(offered, { kind: 'options', ref })).toBe(
+        'Added as option 2 of Breakfast: the client picks one.',
+      );
+      // Options keep the order they were added in: the new one is the last.
+      const third = applyPlanDrop(
+        offered,
+        { kind: 'recipe', recipe: lentils },
+        { kind: 'options', ref },
+        0,
+      );
+      expect(third.days[1].meals[0].choices.map((choice) => choice.recipeVersionId)).toEqual([
+        'oats-v1',
+        'chicken-v1',
+        'lentils-v1',
+      ]);
+      expect(whereItWent(third, { kind: 'options', ref })).toBe(
+        'Added as option 3 of Breakfast: the client picks one.',
+      );
+
+      const started = applyPlanDrop(plan, recipe, { kind: 'new-meal', dayKey: day }, 0);
+      expect(whereItWent(started, { kind: 'new-meal', dayKey: day })).toBe(
+        'Added as a new meal, Lunch, on day 2.',
+      );
+
+      // A meal whose options were all taken out has one again: nothing to pick from.
+      const emptied = structuredClone(plan);
+      emptied.days[1].meals[0].choices = [];
+      const refilled = applyPlanDrop(emptied, recipe, { kind: 'options', ref }, 0);
+      expect(whereItWent(refilled, { kind: 'options', ref })).toBe('Added to Breakfast.');
+    });
+  });
+
+  describe('a meal with options (B5a)', () => {
+    it('says what its options average for after the calories, for planning only', () => {
+      const lunch = mealTotal(opened().days[0].meals[1], book);
+
+      expect(averageLine(lunch.macros, lunch.counted, 'en-US')).toBe(
+        'protein 43 g · carbs 75 g · fat 12 g, the average of 2 options',
+      );
+      expect(
+        averageLine({ calories: 2104, protein: 1234.4, carbs: 0.5, fat: 9 }, 12, 'en-US'),
+      ).toBe('protein 1,234 g · carbs 1 g · fat 9 g, the average of 12 options');
     });
   });
 

@@ -155,7 +155,71 @@
                   <span class="status" i18n>Logged</span>
                 }
               </div>
-              @if (displayChoice(slot); as choice) {
+              @if (plan.logStatus !== 'Completed' && slot.choices.length > 1) {
+                <!-- The coach's options in their order, option 1 first (NUT-005): the client picks one. -->
+                <fieldset class="options" [disabled]="entry.saving">
+                  <!-- The meal's name too, for a screen reader moving from one meal's options to the next. -->
+                  <legend class="choose-one">
+                    <span class="tb-visually-hidden">{{ slot.name }}: </span
+                    ><ng-container i18n>Choose one</ng-container>
+                  </legend>
+                  @for (choice of slot.choices; track choice.id) {
+                    @let photo = thumbnail(choice);
+                    <div class="option" [class.with-photo]="!!photo">
+                      <label class="option-pick">
+                        <input
+                          class="choice-input"
+                          type="radio"
+                          [name]="'meal-' + slot.id"
+                          [value]="choice.id"
+                          [checked]="entry.choiceId === choice.id"
+                          (change)="updateChoice(slot.id, choice.id)"
+                        />
+                        <span class="option-mark" aria-hidden="true"></span>
+                        @if (photo) {
+                          <img
+                            class="option-photo"
+                            [src]="photo"
+                            alt=""
+                            width="44"
+                            height="44"
+                            loading="lazy"
+                            (error)="dropThumbnail(choice)"
+                          />
+                        }
+                        <span class="option-copy">
+                          <strong>{{ choice.recipeName }}</strong>
+                          @if (
+                            choice.id === slot.selectedChoiceId && slot.loggedCalories !== null
+                          ) {
+                            <span class="option-amount" data-logged-amount i18n
+                              >{{ slot.actualServings | number: '1.0-2' }}
+                              {{ servingUnit(slot.actualServings) }} ·
+                              {{ slot.loggedCalories | number: '1.0-0' }} kcal logged</span
+                            >
+                          } @else {
+                            <span class="option-amount" i18n
+                              >{{ choice.servings | number: '1.0-2' }}
+                              {{ servingUnit(choice.servings) }} ·
+                              {{ choice.calories | number: '1.0-0' }} kcal planned</span
+                            >
+                          }
+                        </span>
+                      </label>
+                      @if (choice.recipeId) {
+                        <button
+                          type="button"
+                          class="option-recipe"
+                          [attr.aria-label]="recipeLabel(choice)"
+                          (click)="showRecipe(choice)"
+                        >
+                          <ng-container i18n>Recipe</ng-container><app-icon name="chevron-right" />
+                        </button>
+                      }
+                    </div>
+                  }
+                </fieldset>
+              } @else if (displayChoice(slot); as choice) {
                 @let shownServings = slot.selectedChoiceId ? slot.actualServings : choice.servings;
                 <div class="meal-body">
                   @if (choice.recipeId) {
@@ -206,25 +270,6 @@
               }
               @if (isEditing(slot.id)) {
                 <div class="meal-editor">
-                  <app-select
-                    label="What did you eat?"
-                    i18n-label
-                    size="touch"
-                    [options]="choiceOptions().get(slot.id) ?? []"
-                    [value]="entry.choiceId ?? ''"
-                    [disabled]="plan.logStatus === 'Completed' || entry.saving"
-                    (valueChange)="updateChoice(slot.id, $event)"
-                  />
-                  @if (draftChoice(slot, entry.choiceId)?.recipeId) {
-                    <button
-                      type="button"
-                      class="text-action recipe-inline"
-                      (click)="showRecipe(draftChoice(slot, entry.choiceId))"
-                      i18n
-                    >
-                      See the recipe
-                    </button>
-                  }
                   <label
                     ><span i18n>Actual servings</span>
                     <input
@@ -259,23 +304,23 @@
                 </div>
               } @else if (plan.logStatus !== 'Completed' && slot.choices.length) {
                 <div class="meal-actions">
-                  @if (!slot.selectedChoiceId) {
+                  <!-- Logged once, the meal is logged again only for another option picked above. -->
+                  @if (!slot.selectedChoiceId || entry.choiceId !== slot.selectedChoiceId) {
                     <button
                       type="button"
                       class="primary-action"
                       (click)="save(slot)"
                       [disabled]="entry.saving"
-                      i18n
                     >
-                      Ate as planned
+                      @if (slot.choices.length > 1) {
+                        <ng-container i18n>I ate this</ng-container>
+                      } @else {
+                        <ng-container i18n>Ate as planned</ng-container>
+                      }
                     </button>
                   }
-                  <button type="button" class="text-action" (click)="edit(slot.id)">
-                    @if (slot.selectedChoiceId) {
-                      <ng-container i18n>Change meal</ng-container>
-                    } @else {
-                      <ng-container i18n>Swap or adjust</ng-container>
-                    }
+                  <button type="button" class="text-action" (click)="edit(slot.id)" i18n>
+                    Change servings
                   </button>
                 </div>
               }

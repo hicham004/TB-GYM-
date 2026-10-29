@@ -330,43 +330,10 @@
   padding: 0;
 }
 
-.option-row {
-  background: var(--tb-surface-2);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  padding: 0.3125rem 0.5rem;
-}
-
-.option-row.missing {
-  box-shadow: inset 3px 0 0 var(--tb-danger);
-}
-
-.option-or {
-  color: var(--tb-muted);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.option-name {
-  color: var(--tb-ink);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.25;
-  overflow-wrap: break-word;
-}
-
-.option-line {
-  color: var(--tb-muted);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-
 .meal-foot {
   align-items: center;
   display: flex;
+  gap: 0.25rem;
   justify-content: space-between;
 }
 

@@ -1,4 +1,4 @@
-import { NutritionDay } from './nutrition.models';
+import { NutritionDay, NutritionSlot } from './nutrition.models';
 
 export interface NutritionChoiceDraft {
   slotId: string;
@@ -7,6 +7,23 @@ export interface NutritionChoiceDraft {
   dirty: boolean;
   saving: boolean;
   error: string | null;
+}
+
+/**
+ * A meal as it stands: the option logged, or the coach's option 1 when nothing is (NUT-005), at the
+ * servings logged or planned.
+ */
+function settled(slot: NutritionSlot): NutritionChoiceDraft {
+  const choiceId = slot.selectedChoiceId ?? slot.choices[0]?.id ?? '';
+  const chosen = slot.choices.find((choice) => choice.id === choiceId);
+  return {
+    slotId: slot.id,
+    choiceId,
+    servings: String(slot.actualServings ?? chosen?.servings ?? 1),
+    dirty: false,
+    saving: false,
+    error: null,
+  };
 }
 
 export class NutritionChoiceDrafts {
@@ -23,16 +40,7 @@ export class NutritionChoiceDrafts {
         continue;
       }
 
-      const defaultChoice = slot.selectedChoiceId ?? slot.choices[0]?.id ?? '';
-      const selected = slot.choices.find((choice) => choice.id === defaultChoice);
-      this.drafts.set(slot.id, {
-        slotId: slot.id,
-        choiceId: defaultChoice,
-        servings: String(slot.actualServings ?? selected?.servings ?? 1),
-        dirty: false,
-        saving: false,
-        error: null,
-      });
+      this.drafts.set(slot.id, settled(slot));
     }
 
     const valid = new Set(day.slots.map((slot) => slot.id));
@@ -49,6 +57,12 @@ export class NutritionChoiceDrafts {
   ): void {
     const current = this.require(slotId);
     this.drafts.set(slotId, { ...current, ...patch, dirty: true, error: null });
+  }
+
+  /** The meal back as it stands, when the option it already has is chosen again: nothing to save. */
+  restore(slot: NutritionSlot): void {
+    this.require(slot.id);
+    this.drafts.set(slot.id, settled(slot));
   }
 
   beginSave(slotId: string): NutritionChoiceDraft {
