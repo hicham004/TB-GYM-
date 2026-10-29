@@ -481,3 +481,26 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   dropped on a meal whose options were all removed says "Added to Breakfast."; each of the client's option rows has
   a "Recipe" button. Other way: the sheet's "or" between options, as before. Recommendation: keep, so the card and
   the sheet number options alike.
+- B5b · What ends a choice. Built: one Add here adds the row once and ends the choice, as a drop does; Escape, a
+  second press of + or the bar's Cancel end it without adding. Other way: the choice stays for more places (the same
+  recipe on several days) until Escape or Cancel. Recommendation: keep; a day's meals are copied from its menu.
+- B5b · On a phone. Built: where the library has no room beside the grid (a phone, a narrow window), a "Recipes" or
+  "Exercises" button opens it in a sheet; the row chosen there closes it and the grid offers Add here. A bar at the
+  foot of the grid, at every width, says "Adding Oat bowl: press Add here where it goes." with Cancel (a phone has no
+  Escape). Other way: the library above the grid on a phone. Recommendation: keep.
+- B5b · The first-use hint. Built: the kit's fold "How adding works" above the first row, open on a coach's first
+  visit to each builder (kept in the browser), folded by Got it, by its own row or by the first add, and opened
+  again from that row. Other way: a callout floating by the first row, as the critique sketched it.
+  Recommendation: keep: it covers no row and folds into the same row it is opened from.
+- B5b · The rows. Built: the + on saved workouts too, which land on any day as a copy (they are rows of the same
+  panel), and the grip moved to the row's start, as the grid's cards have it, so the + ends the row. Other way:
+  exercises only, the grip beside the +. Recommendation: keep.
+- B5b · Edit weeks, left out: the row names the two builders, so a client's program in Edit weeks keeps dragging
+  and its add sheets, with the same panel and no +. Recommendation: give it the same + and Add here in a small row,
+  since its panel and grid are the builder's.
+- B5b · Words the row did not give. Built: "Drag an exercise into a workout, or press + to add it." and "Drag a
+  saved workout onto a day, or press + to add it."; the tips ("Drop a recipe on a meal for another option, or under
+  a day for a new meal. Without dragging, press + on a recipe, then Add here." and the program's); "Already in this
+  meal" on a meal that offers the recipe; "Add here · Day 2" on a folded week; "Back Squat added to Lower A.",
+  "… added: a new workout on week 2, day 3." and "Full body added on week 1, day 1."; the sheets' "Choose a recipe,
+  then press Add here where it goes.". Recommendation: keep.

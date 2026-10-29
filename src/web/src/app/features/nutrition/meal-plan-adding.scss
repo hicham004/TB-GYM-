@@ -1,0 +1,26 @@
+// The meal-plan builder's days while something is added (critique B5b): the places a drag can land,
+// loud enough to find, and the Add here under a day. Over meal-plan-days.scss, kept apart so each
+// stays under the component style budget.
+
+// Each place that takes what is dragged is outlined, the one under the pointer filled. An outline,
+// so nothing moves while the pointer crosses the days.
+.meal-list.cdk-drop-list-receiving,
+.option-list.cdk-drop-list-receiving,
+.new-meal.cdk-drop-list-receiving {
+  background: color-mix(in srgb, var(--tb-accent-soft) 45%, transparent);
+  border-color: transparent;
+  outline: 2px dashed var(--tb-accent-ink);
+  outline-offset: -1px;
+}
+
+.meal-list.cdk-drop-list-dragging,
+.option-list.cdk-drop-list-dragging,
+.new-meal.cdk-drop-list-dragging {
+  background: var(--tb-accent-soft);
+  outline-style: solid;
+}
+
+// Under a day, Add here draws its own edge.
+.new-meal:has(> .add-here) {
+  border-color: transparent;
+}

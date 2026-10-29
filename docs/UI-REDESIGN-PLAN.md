@@ -523,7 +523,8 @@ of the implemented R1.3 screens before production rollout.
     Publish ("Publish the program first").
   - With five or more training days beside the library, a week scrolls sideways; closing the
     library to its rail (R6.3) gives the grid the page, and the weeks not being worked on fold.
-  - Edit weeks has the rail, the one-line rows and the rest strips (R6.3) but not the folding weeks.
+  - Edit weeks has the rail, the one-line rows and the rest strips (R6.3) but not the folding weeks,
+    nor the library's + and Add here (critique B5b named the two builders only).
   - On a phone, a session moves to another week only through a wide screen (there is no "Move to
     week" in its menu).
   - The Atlas demo has no exercise pictures, so its library shows initials (see "Demo data gaps").
@@ -1784,6 +1785,13 @@ limited to the coach's assigned clients.
     day starts a session there.
   - The keyboard and phone way: + on a rest day or a session opens an add sheet, and each card's
     menu offers Edit, Copy (to the next free day), Add to saved sessions and Delete.
+  - Adding without dragging (critique B5b, 2026-10-29): a + on every library row (exercises and
+    saved workouts) chooses it, and every place a drop could land offers Add here (each workout, each
+    rest day written downward, a folded week's first free day; any day for a saved workout); one add,
+    Escape, a second press or the bar's Cancel ends the choice. Where the library has no room beside
+    the grid, "Exercises" opens it in a sheet to choose from. A first-use "How adding works" fold
+    above the rows closes at the first add (kept in the browser, `tb.adding-tip:program`); the rows
+    lift on hover and the places a drag can land are outlined. Edit weeks keeps dragging only.
   - Sets × reps × load initially used the session sheet; R4.2b adds editing on the grid.
   - Save draft and Publish make a new version; Versions opens earlier ones. A save that lost a race
     says so and offers the newest version.
@@ -1922,7 +1930,9 @@ limited to the coach's assigned clients.
   under", "On target" within 5%), its meals as cards (name, each option and its servings, the meal's
   calories) and a strip under it that adds a meal. A recipe dragged onto a meal becomes another option,
   under a day a new meal (named after the day's next usual meal); meals move between days by their grip;
-  every drag has a button path (the meal sheet, the recipe sheet, each card's menu). A day's menu
+  every drag has a button path (the meal sheet, the recipe sheet, each card's menu), and since critique
+  B5b a recipe's + chooses it so each meal and each day offers Add here (a phone chooses in the Recipes
+  sheet), with a first-use "How adding works" fold (`tb.adding-tip:meal-plan`). A day's menu
   duplicates it, uses it for every day, clears it or deletes it, each with Undo. A phone shows one day at
   a time from a row of day chips. Changes keep themselves as the coach's draft (NUT-013, as the program
   builder's do); Publish makes the next version; Versions lists them.

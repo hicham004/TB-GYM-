@@ -240,10 +240,12 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
   const first = week(page, 0);
   const lower = first.locator('.session-card', { hasText: 'Lower A' });
 
-  // The library starts as a rail; opening it gives the grid the drags below.
+  // The library starts as a rail; opening it gives the grid the drags below. Its first-use tip
+  // (B5b) is folded first, so the rows are where a returning coach finds them.
   await expect(page.locator('app-program-library')).toHaveCount(0);
   await page.getByRole('button', { name: 'Exercises' }).click();
   await expect(page.locator('app-program-library')).toBeVisible();
+  await page.locator('app-program-library').getByRole('button', { name: 'Got it' }).click();
 
   // An exercise from the library onto the top of the second row of Lower A, which puts it there,
   // then reorder it by its grip.
@@ -383,6 +385,84 @@ test('a phone shows one week at a time and adds through the sheet', async ({ pag
 
   await expectNoHorizontalOverflow(page);
   await axe(page);
+});
+
+test('an exercise goes in without dragging: + chooses it, Add here takes it (B5b)', async ({
+  page,
+}) => {
+  const sent = await openBuilder(page, 1440, 900);
+  await page.locator('.library-rail').click();
+  const library = page.locator('app-program-library');
+  await expect(library.locator('.help')).toHaveText(
+    'Drag an exercise into a workout, or press + to add it.',
+  );
+  const how = library.locator('.how details');
+  await expect(how).toHaveAttribute('open', '');
+
+  const plus = library.getByRole('button', { name: 'Add Goblet squat' });
+  await plus.click();
+  await expect(plus).toHaveAttribute('aria-pressed', 'true');
+  const bar = page.locator('app-adding-bar');
+  await expect(bar).toContainText('Adding Goblet squat: press Add here where it goes.');
+  await expect(bar).toBeInViewport();
+  // Two workouts and five rest days a week, two weeks.
+  await expect(page.locator('.add-here')).toHaveCount(14);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+
+  // A second press lets it go.
+  await plus.click();
+  await expect(page.locator('.add-here')).toHaveCount(0);
+
+  await plus.click();
+  await week(page, 0).getByRole('button', { name: 'Add here: Upper A, week 1, day 3' }).click();
+  const upper = week(page, 0).locator('.session-card', { hasText: 'Upper A' });
+  await expect(upper.locator('.exercise-name')).toHaveText(['Bench press', 'Goblet squat']);
+  await expect(
+    page.locator('.tb-toast__message', { hasText: 'Goblet squat added to Upper A.' }),
+  ).toBeVisible();
+  await expect(how).not.toHaveAttribute('open', '');
+
+  // On a rest day it starts a workout there.
+  await library.getByRole('button', { name: 'Add Chest-supported row' }).click();
+  await week(page, 0)
+    .getByRole('button', { name: 'Add here: a new workout on week 1, day 5' })
+    .click();
+  await expect(week(page, 0).locator('.day').nth(4).locator('.session-name')).toHaveText(
+    'Training day',
+  );
+  await expect(page.locator('.status')).toHaveText(/^Saved at/);
+  expect(
+    sent.contents.at(-1)?.weeks?.[0].sessions?.map((session) => [session.dayOffset, session.name]),
+  ).toEqual([
+    [0, 'Lower A'],
+    [2, 'Upper A'],
+    [4, 'Training day'],
+  ]);
+  await axe(page);
+});
+
+test('a phone chooses an exercise in a sheet, then presses Add here (B5b)', async ({ page }) => {
+  await openBuilder(page, 390, 844, { colorScheme: 'dark' });
+
+  await page.getByRole('button', { name: 'Exercises' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Exercises' });
+  await expect(sheet).toContainText(
+    'Choose an exercise or a saved workout, then press Add here where it goes.',
+  );
+  await sheet.getByRole('button', { name: 'Add Bench press' }).click();
+  await expect(sheet).toBeHidden();
+
+  const bar = page.locator('app-adding-bar');
+  await expect(bar).toBeInViewport();
+  await expect(week(page, 0).locator('.add-here')).toHaveCount(7);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await week(page, 0).getByRole('button', { name: 'Add here: Lower A, week 1, day 1' }).click();
+  await expect(
+    week(page, 0).locator('.session-card', { hasText: 'Lower A' }).locator('.exercise-name'),
+  ).toHaveText([/Back squat/, 'Romanian deadlift', 'Bench press']);
+  await expect(bar).toHaveCount(0);
 });
 
 /** A one-pixel picture, so a demo opens without a media server. */

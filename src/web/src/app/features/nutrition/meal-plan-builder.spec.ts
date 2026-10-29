@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, throwError, type Observable } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   CreateMealPlanDraftRequest,
   MealPlanDraftSaveView,
@@ -147,6 +147,8 @@ const status = (host: HTMLElement) => textOf(host.querySelector('.status'));
 const alerts = (host: HTMLElement) => all(host, '.alert[role="alert"]').map(textOf);
 
 describe('the meal-plan builder', () => {
+  beforeEach(() => localStorage.removeItem('tb.adding-tip:meal-plan'));
+
   afterEach(() => {
     document.body
       .querySelectorAll('.cdk-overlay-container')
@@ -571,6 +573,176 @@ describe('the meal-plan builder', () => {
     undo[1].action.run();
     await settle(harness.fixture);
     expect(days(host)).toHaveLength(2);
+  });
+
+  it('adds a recipe without dragging: + chooses it, and every place it can go offers Add here (B5b)', async () => {
+    const { host, harness, api, toast } = await render();
+    const library = host.querySelector('app-meal-plan-library')!;
+    const plus = named(library, 'Add Lentil soup');
+    expect(plus.getAttribute('aria-pressed')).toBe('false');
+    expect(all(host, '.add-here')).toHaveLength(0);
+
+    plus.click();
+    await settle(harness.fixture);
+    expect(plus.getAttribute('aria-pressed')).toBe('true');
+    expect(plus.closest('.lib-item')!.classList).toContain('chosen');
+    expect(textOf(host.querySelector('app-adding-bar .text'))).toBe(
+      'Adding Lentil soup: press Add here where it goes.',
+    );
+    // Each meal takes it as another option, but Lunch offers it already; each day takes a new meal.
+    expect(all(host, '.add-here').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Add here: Breakfast, day 1',
+      'Add here: a new meal on day 1',
+      'Add here: Breakfast, day 2',
+      'Add here: a new meal on day 2',
+    ]);
+    const lunch = all(days(host)[0], '.meal-card')[1];
+    expect(textOf(lunch.querySelector('.add-here-note'))).toBe('Already in this meal');
+    expect(all(host, '.add-meal')).toHaveLength(0);
+
+    named(host, 'Add here: Breakfast, day 2').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    const breakfast = all(days(host)[1], '.meal-card')[0];
+    expect(all(breakfast, '.option-name').map(textOf)).toEqual(['Overnight oats', 'Lentil soup']);
+    expect(textOf(breakfast.querySelector('.pick-one'))).toBe('Pick one of 2');
+    expect(toast.show).toHaveBeenLastCalledWith(
+      'Added as option 2 of Breakfast: the client picks one.',
+    );
+    // One add ends the choice.
+    expect(plus.getAttribute('aria-pressed')).toBe('false');
+    expect(all(host, '.add-here')).toHaveLength(0);
+    expect(host.querySelector('app-adding-bar')).toBeNull();
+    expect(all(host, '.add-meal')).toHaveLength(2);
+
+    named(library, 'Add Chicken & rice').click();
+    await settle(harness.fixture);
+    named(host, 'Add here: a new meal on day 2').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(mealsOf(days(host)[1])).toEqual(['Breakfast', 'Lunch']);
+    expect(toast.show).toHaveBeenLastCalledWith('Added as a new meal, Lunch, on day 2.');
+    const saved = (api.saveDraft.mock.calls.at(-1) ?? api.createDraft.mock.calls.at(-1))!;
+    const content = (saved.at(-1) as { content: { days?: { meals?: unknown[] }[] } }).content;
+    expect(content.days?.[1].meals).toEqual([
+      {
+        name: 'Breakfast',
+        choices: [
+          { recipeVersionId: 'oats-v1', servings: 1.5 },
+          { recipeVersionId: 'lentils-v1', servings: 1 },
+        ],
+      },
+      { name: 'Lunch', choices: [{ recipeVersionId: 'chicken-v1', servings: 1 }] },
+    ]);
+  });
+
+  it('lets a chosen recipe go on a second press, Escape or Cancel, and keeps Escape for an open sheet', async () => {
+    const { host, harness, api } = await render();
+    const library = host.querySelector('app-meal-plan-library')!;
+    const plus = named(library, 'Add Overnight oats');
+    const addingStatus = () => textOf(all(host, '[role="status"]').at(-1));
+
+    plus.click();
+    await settle(harness.fixture);
+    expect(addingStatus()).toBe(
+      'Overnight oats chosen. Press Add here on a meal to offer it as another option, or under a day for a new meal.',
+    );
+    plus.click();
+    await settle(harness.fixture);
+    expect(plus.getAttribute('aria-pressed')).toBe('false');
+    expect(all(host, '.add-here')).toHaveLength(0);
+    expect(addingStatus()).toBe('Overnight oats not added.');
+
+    plus.click();
+    await settle(harness.fixture);
+    // An Escape something else took for itself (an open sheet or menu) leaves the choice alone.
+    const taken = (event: Event) => event.preventDefault();
+    document.body.addEventListener('keydown', taken);
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    document.body.removeEventListener('keydown', taken);
+    await settle(harness.fixture);
+    expect(plus.getAttribute('aria-pressed')).toBe('true');
+    // Escape from an Add here lets it go, and focus goes back to the recipe's +.
+    const here = named(host, 'Add here: Lunch, day 1');
+    here.focus();
+    here.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    await settle(harness.fixture);
+    expect(all(host, '.add-here')).toHaveLength(0);
+    expect(document.activeElement).toBe(plus);
+
+    plus.click();
+    await settle(harness.fixture);
+    named(host.querySelector('app-adding-bar')!, 'Cancel').click();
+    await settle(harness.fixture);
+    expect(host.querySelector('app-adding-bar')).toBeNull();
+    expect(document.activeElement).toBe(plus);
+    expect(api.createDraft).not.toHaveBeenCalled();
+  });
+
+  it('opens How adding works on a first visit, folds it at the first add, and keeps it folded', async () => {
+    const first = await render();
+    const how = () =>
+      first.host.querySelector<HTMLDetailsElement>('app-meal-plan-library .how details')!;
+    expect(how().open).toBe(true);
+    expect(textOf(how().querySelector('summary'))).toBe('How adding works');
+    expect(textOf(how().querySelector('.tip p'))).toBe(
+      'Drop a recipe on a meal for another option, or under a day for a new meal. Without dragging, press + on a recipe, then Add here.',
+    );
+    expect(textOf(first.host.querySelector('app-meal-plan-library .help'))).toBe(
+      'Drag a recipe onto a meal, or press + to add it.',
+    );
+
+    named(first.host, 'Add Chicken & rice').click();
+    await settle(first.harness.fixture);
+    expect(how().open).toBe(true);
+    named(first.host, 'Add here: a new meal on day 2').click();
+    await settle(first.harness.fixture);
+    expect(how().open).toBe(false);
+    expect(localStorage.getItem('tb.adding-tip:meal-plan')).toBe('closed');
+    // Opened again by the coach, a later add leaves it open.
+    how().querySelector('summary')!.click();
+    await settle(first.harness.fixture);
+    expect(how().open).toBe(true);
+    named(first.host, 'Add Lentil soup').click();
+    await settle(first.harness.fixture);
+    named(first.host, 'Add here: Breakfast, day 1').click();
+    await settle(first.harness.fixture);
+    expect(how().open).toBe(true);
+    // Got it folds it, and focus stays on its row.
+    named(how(), 'Got it').click();
+    await settle(first.harness.fixture);
+    expect(how().open).toBe(false);
+    expect(document.activeElement).toBe(how().querySelector('summary'));
+
+    TestBed.resetTestingModule();
+    const again = await render();
+    expect(
+      again.host.querySelector<HTMLDetailsElement>('app-meal-plan-library .how details')!.open,
+    ).toBe(false);
+  });
+
+  it('chooses in a sheet where the recipes have no room beside the grid, as on a phone', async () => {
+    const { host, harness } = await render();
+
+    named(host, 'Recipes').click();
+    const sheet = await dialogNamed(harness.fixture, 'Recipes');
+    expect(textOf(sheet.querySelector('.sheet-help'))).toBe(
+      'Choose a recipe, then press Add here where it goes.',
+    );
+    named(sheet, 'Add Lentil soup').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(textOf(host.querySelector('app-adding-bar .text'))).toBe(
+      'Adding Lentil soup: press Add here where it goes.',
+    );
+    named(host, 'Add here: a new meal on day 1').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(mealsOf(days(host)[0])).toEqual(['Breakfast', 'Lunch', 'Dinner']);
   });
 
   it('shows a phone one day at a time, chosen from the day chips', async () => {

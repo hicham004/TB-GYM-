@@ -242,6 +242,94 @@ test('the builder takes drags, keeps them as the coach’s draft, and publishes 
   expect(sent.published).toEqual([{ version: sent.contents.length, replaceNewer: false }]);
 });
 
+test('a recipe goes in without dragging: + chooses it, Add here takes it, Escape lets it go (B5b)', async ({
+  page,
+}) => {
+  const sent = await openBuilder(page, 1440, 900);
+  const library = page.locator('app-meal-plan-library');
+  await expect(library.locator('.help')).toHaveText(
+    'Drag a recipe onto a meal, or press + to add it.',
+  );
+  // The tip is open on a first visit, above the first row.
+  const how = library.locator('.how details');
+  await expect(how).toHaveAttribute('open', '');
+  await expect(how.locator('.tip')).toContainText('Without dragging, press + on a recipe');
+
+  const plus = library.getByRole('button', { name: 'Add Lentil soup' });
+  await plus.click();
+  await expect(plus).toHaveAttribute('aria-pressed', 'true');
+  const bar = page.locator('app-adding-bar');
+  await expect(bar).toContainText('Adding Lentil soup: press Add here where it goes.');
+  await expect(bar).toBeInViewport();
+  // Lunch offers the soup already; the other meals and both days take it.
+  await expect(page.locator('.add-here')).toHaveCount(4);
+  await expect(day(page, 0).locator('.add-here-note')).toHaveText('Already in this meal');
+  await axe(page);
+
+  // Escape lets it go, and focus is back on its +.
+  await page.getByRole('button', { name: 'Add here: Breakfast, day 2' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.add-here')).toHaveCount(0);
+  await expect(bar).toHaveCount(0);
+  await expect(plus).toBeFocused();
+  await expect(plus).toHaveAttribute('aria-pressed', 'false');
+
+  // Chosen again, Add here on day 2's Breakfast makes it option 2, and says so.
+  await plus.click();
+  await page.getByRole('button', { name: 'Add here: Breakfast, day 2' }).click();
+  const breakfast = day(page, 1).locator('.meal-card', { hasText: 'Breakfast' });
+  await expect(breakfast.locator('.option-name')).toHaveText(['Overnight oats', 'Lentil soup']);
+  await expect(
+    page.locator('.tb-toast__message', {
+      hasText: 'Added as option 2 of Breakfast: the client picks one.',
+    }),
+  ).toBeVisible();
+  await expect(page.locator('.add-here')).toHaveCount(0);
+  await expect(how).not.toHaveAttribute('open', '');
+  await expect(page.locator('.status')).toHaveText(/^Saved at/);
+  expect(sent.contents.at(-1)?.days?.[1].meals?.[0].choices).toEqual([
+    { recipeVersionId: 'oats-v1', servings: 1.5 },
+    { recipeVersionId: 'lentils-v1', servings: 1 },
+  ]);
+
+  // Folded, the tip stays folded on the next visit.
+  await page.reload();
+  await expect(page.locator('.meal-card').first()).toBeVisible();
+  await expect(page.locator('app-meal-plan-library .how details')).not.toHaveAttribute('open', '');
+});
+
+test('a phone chooses a recipe in a sheet, then presses Add here on the day (B5b)', async ({
+  page,
+}) => {
+  await openBuilder(page, 390, 844, 'dark');
+
+  await page.getByRole('button', { name: 'Recipes' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Recipes' });
+  await expect(sheet).toContainText('Choose a recipe, then press Add here where it goes.');
+  await axe(page);
+  await sheet.getByRole('button', { name: 'Add Chicken & rice' }).click();
+  await expect(sheet).toBeHidden();
+
+  const bar = page.locator('app-adding-bar');
+  await expect(bar).toBeInViewport();
+  // Day 1's Lunch offers the chicken already: Breakfast and a new meal take it.
+  await expect(page.locator('section.day:visible .add-here')).toHaveCount(2);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.getByRole('button', { name: 'Add here: a new meal on day 1' }).click();
+  await expect(day(page, 0).locator('.meal-name')).toHaveText(['Breakfast', 'Lunch', 'Dinner']);
+  await expect(bar).toHaveCount(0);
+
+  // Cancel, the way a phone without Escape lets a choice go.
+  await page.getByRole('button', { name: 'Recipes' }).click();
+  await page
+    .getByRole('dialog', { name: 'Recipes' })
+    .getByRole('button', { name: 'Add Overnight oats' })
+    .click();
+  await bar.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('.add-here')).toHaveCount(0);
+});
+
 test('a phone shows one day at a time, in dark, right to left and at 200% text', async ({
   page,
 }) => {

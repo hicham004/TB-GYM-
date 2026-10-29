@@ -62,6 +62,7 @@
           <p class="status" [class.unsaved]="troubled()">{{ statusLine() }}</p>
           <!-- Autosave runs at every pause, so only a failure (and its recovery) is announced. -->
           <p class="tb-visually-hidden" role="status">{{ liveStatus() }}</p>
+          <p class="tb-visually-hidden" role="status">{{ addingStatus() }}</p>
           <div class="save-buttons">
             @if (canDiscard()) {
               <button appButton type="button" variant="text" (click)="discard()" i18n>
@@ -164,8 +165,13 @@
             </div>
             <app-program-library
               mode="drag"
+              offerAdd
               [source]="library"
               [connectedTo]="dropIds()"
+              [chosen]="adding()"
+              [tip]="tipOpen()"
+              (choose)="choose($event)"
+              (tipChange)="tipChanged($event)"
               (retry)="loadLibrary()"
             />
           </aside>
@@ -186,6 +192,17 @@
           <div class="plan-tools">
             <h2 id="weeks-title" class="panel-title">{{ counts() }}</h2>
             <div class="plan-buttons">
+              <!-- Where the library has no room beside the grid, it opens in a sheet. -->
+              <button
+                appButton
+                class="library-sheet"
+                type="button"
+                variant="outlined"
+                (click)="openChooser()"
+              >
+                <app-icon name="plus" />
+                <span i18n>Exercises</span>
+              </button>
               @if (formula()) {
                 <app-menu
                   [label]="formulaLabel()"
@@ -288,6 +305,20 @@
                       (cdkDropListDropped)="dropped($event)"
                     >
                       <span class="week-summary">{{ row.summary }}</span>
+                      @if (fold.addHere; as label) {
+                        <!-- The days are folded away, so the button says which one. -->
+                        <button
+                          class="add-here"
+                          type="button"
+                          [attr.aria-label]="label"
+                          (click)="addHere(fold.target)"
+                        >
+                          <app-icon name="plus" />
+                          <span i18n>Add here</span>&ngsp;<span class="add-here-day"
+                            >· {{ fold.day }}</span
+                          >
+                        </button>
+                      }
                     </div>
                   } @else {
                     <div class="week-fold">
@@ -407,18 +438,40 @@
                               <li class="drop-hint" i18n>Drop exercises here</li>
                             }
                           </ol>
-                          <button
-                            class="add-exercise"
-                            type="button"
-                            [attr.aria-label]="session.addLabel"
-                            (click)="openPicker({ kind: 'session', ref: session.ref })"
-                          >
-                            <app-icon name="plus" />
-                            <span i18n>Exercise</span>
-                          </button>
+                          @if (session.addHere; as label) {
+                            <button
+                              class="add-here"
+                              type="button"
+                              [attr.aria-label]="label"
+                              (click)="addHere(session.target)"
+                            >
+                              <app-icon name="plus" />
+                              <span i18n>Add here</span>
+                            </button>
+                          } @else {
+                            <button
+                              class="add-exercise"
+                              type="button"
+                              [attr.aria-label]="session.addLabel"
+                              (click)="openPicker({ kind: 'session', ref: session.ref })"
+                            >
+                              <app-icon name="plus" />
+                              <span i18n>Exercise</span>
+                            </button>
+                          }
                         </article>
                       }
-                      @if (cell.sessions.length === 0) {
+                      @if (cell.addHere; as label) {
+                        <button
+                          class="add-here"
+                          type="button"
+                          [attr.aria-label]="label"
+                          (click)="addHere(cell.target)"
+                        >
+                          <app-icon name="plus" />
+                          <span i18n>Add here</span>
+                        </button>
+                      } @else if (cell.sessions.length === 0) {
                         <span class="rest-word" i18n>Rest</span>
                         <button
                           class="add-day"
@@ -435,6 +488,13 @@
               </section>
             }
           </div>
+          <!-- In the grid's column, so it never covers the library beside it. -->
+          @if (adding(); as item) {
+            <app-adding-bar
+              [name]="item.kind === 'library' ? item.exercise.name : item.saved.name"
+              (cancelled)="stopAdding()"
+            />
+          }
         </section>
       </div>
     }
@@ -476,6 +536,26 @@
     <p class="tb-visually-hidden" role="status">{{ announcement() }}</p>
     <ng-template appModalFooter>
       <button appButton type="button" (click)="sheet.close()" i18n>Done</button>
+    </ng-template>
+  </div>
+</ng-template>
+
+<ng-template #chooseSheet let-sheet>
+  <div class="picker">
+    <p class="sheet-help" i18n>
+      Choose an exercise or a saved workout, then press Add here where it goes.
+    </p>
+    <app-program-library
+      mode="pick"
+      [source]="library"
+      (pickExercise)="chooseFromSheet({ kind: 'library', exercise: $event }, sheet)"
+      (pickSaved)="chooseFromSheet({ kind: 'saved', saved: $event }, sheet)"
+      (retry)="loadLibrary()"
+    />
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="outlined" (click)="sheet.close()" i18n>
+        Cancel
+      </button>
     </ng-template>
   </div>
 </ng-template>

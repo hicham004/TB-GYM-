@@ -16,6 +16,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Icon } from '../../ui/icon';
 import { LIBRARY_SEARCH_PAUSE, PagedSearch } from '../../ui/paged-search';
 import { Skeleton } from '../../ui/skeleton';
@@ -45,15 +46,27 @@ let lists = 0;
 /**
  * The recipes beside the meal-plan grid (C7): search, and each published recipe with its calories
  * and macros per serving. Beside the grid (`drag`) every row can be dragged onto a meal or under a
- * day; in a sheet (`pick`) every row is a button, which is also how a keyboard or a phone adds one.
- * The rows are the first page the builder read once; a search asks the server, and Show more brings
- * the next page (WEA-14), so the recipes are never read whole.
+ * day, or chosen with its + so the grid offers Add here wherever it can go (critique B5b, the way
+ * without dragging), with a "How adding works" tip open until the coach's first add; in a sheet
+ * (`pick`) every row is a button, which is also how a keyboard or a phone adds one. The rows are the
+ * first page the builder read once; a search asks the server, and Show more brings the next page
+ * (WEA-14), so the recipes are never read whole.
  */
 @Component({
   selector: 'app-meal-plan-library',
-  imports: [Button, CdkDrag, CdkDragPlaceholder, CdkDropList, Icon, RouterLink, Skeleton],
+  imports: [
+    Button,
+    CdkDrag,
+    CdkDragPlaceholder,
+    CdkDropList,
+    Icon,
+    RouterLink,
+    Skeleton,
+    UiDisclosure,
+    UiDisclosureContent,
+  ],
   templateUrl: './meal-plan-library.html',
-  styleUrl: './meal-plan-library.scss',
+  styleUrls: ['./meal-plan-library.scss', '../training/library-adding.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MealPlanLibrary {
@@ -68,8 +81,15 @@ export class MealPlanLibrary {
   readonly connectedTo = input<string[]>([]);
   /** Recipes the open meal already offers, so a second tap is visible and changes nothing. */
   readonly added = input<ReadonlySet<string>>(new Set());
+  /** The recipe chosen with +, by version, while the grid offers Add here for it. */
+  readonly chosen = input<string | null>(null);
+  /** Whether "How adding works" is open beside the grid. */
+  readonly tip = input(false);
 
   readonly pickRecipe = output<PlanRecipe>();
+  /** A row's +: the builder chooses that recipe, or lets it go when it was already chosen. */
+  readonly choose = output<PlanRecipe>();
+  readonly tipChange = output<boolean>();
   readonly retry = output<void>();
 
   private readonly lane = `list-${++lists}`;
@@ -133,6 +153,12 @@ export class MealPlanLibrary {
 
   protected clear(): void {
     this.list.choose('');
+  }
+
+  /** "Got it" folds the tip, and focus stays on its row rather than on a button folded away. */
+  protected closeTip(): void {
+    this.tipChange.emit(false);
+    this.host.nativeElement.querySelector<HTMLElement>('.how summary')?.focus();
   }
 
   /**

@@ -169,13 +169,21 @@ describe('editing a client’s weeks', () => {
   });
 
   it('keeps the library as a rail until the coach opens it, as in the builder', async () => {
-    const { host, harness } = await render();
+    const { host, harness } = await render({ library: [exercise('row', 'Seated row')] });
 
     expect(host.querySelector('app-program-library')).toBeNull();
     named(host, 'Exercises').click();
     await settle(harness.fixture);
     expect(host.querySelector('app-program-library')).not.toBeNull();
     expect(localStorage.getItem('tb.program-library')).toBe('open');
+    // The builders' + and Add here (B5b) are not part of Edit weeks: its rows drag, as before.
+    await settle(harness.fixture);
+    expect(host.querySelector('app-program-library .lib-item')).not.toBeNull();
+    expect(host.querySelector('app-program-library .choose')).toBeNull();
+    expect(host.querySelector('app-program-library .how')).toBeNull();
+    expect(host.querySelector('app-program-library .help')?.textContent?.trim()).toBe(
+      'Drag an exercise into a workout, or onto an empty day.',
+    );
   });
 
   it('reads the program’s own lifts by id, so a row offers its demo without the whole library (WEA-14)', async () => {

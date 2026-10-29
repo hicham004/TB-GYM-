@@ -1,0 +1,63 @@
+// Adding without dragging (critique B5b), in both builders: while a library row chosen with + waits,
+// every place a drop could land offers Add here, and a phone opens the library in a sheet. Kept apart
+// so each builder's own stylesheets stay under the component style budget.
+
+.add-here {
+  align-items: center;
+  background: var(--tb-accent-soft);
+  border: 1px dashed var(--tb-accent-ink);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--tb-ink);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  gap: 0.25rem;
+  inline-size: 100%;
+  justify-content: center;
+  min-block-size: 2.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.add-here app-icon {
+  color: var(--tb-accent-ink);
+}
+
+.add-here:hover {
+  background: color-mix(in srgb, var(--tb-accent-ink) 16%, var(--tb-surface));
+  border-style: solid;
+}
+
+.add-here:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 1px;
+}
+
+.add-here-note {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  margin: 0;
+  padding: 0.25rem;
+  text-align: center;
+}
+
+.sheet-help {
+  color: var(--tb-muted);
+  margin: 0;
+}
+
+// The library opens in a sheet only where it has no room beside the grid.
+@container builder (min-width: 64rem) {
+  .library-sheet {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .add-here {
+    border: 2px solid ButtonText;
+  }
+}

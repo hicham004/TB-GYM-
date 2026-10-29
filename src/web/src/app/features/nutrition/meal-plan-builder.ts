@@ -52,6 +52,8 @@ import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { UiToast } from '../../ui/toast';
+import { AddingBar } from '../training/adding-bar';
+import { readTipClosed, writeTipClosed } from '../training/builder-preferences';
 import {
   AUTOSAVE_TIMING,
   type AutosaveTiming,
@@ -149,6 +151,12 @@ interface OptionCell {
   missing: boolean;
 }
 
+/**
+ * A meal while a recipe chosen with + waits (critique B5b): an Add here, named for the meal, or a
+ * note that it offers that recipe already; null when nothing is chosen or it holds all it can.
+ */
+type MealAddHere = { kind: 'add'; label: string } | { kind: 'offered' } | null;
+
 interface MealCell {
   key: string;
   ref: MealRef;
@@ -165,6 +173,7 @@ interface MealCell {
   openLabel: string;
   menuLabel: string;
   menu: UiMenuItem[];
+  addHere: MealAddHere;
 }
 
 interface DayCell {
@@ -179,6 +188,8 @@ interface DayCell {
   menu: UiMenuItem[];
   menuLabel: string;
   addLabel: string;
+  /** The name of the Add here under the day, a new meal, while a recipe is chosen and fits. */
+  addHere: string | null;
   kcal: string;
   against: string | null;
   macros: string;
@@ -207,7 +218,9 @@ const RING = 2 * Math.PI * 16;
  * The meal-plan builder (C7): the recipes beside a grid of days, each day with its meals and a ring
  * against the daily target. Recipes are dragged onto a meal (another option) or under a day (a new
  * meal), and meals between days (CDK drag and drop); every drag also has a button path, through the
- * recipe sheet, the meal sheet and each card's menu.
+ * recipe sheet, the meal sheet and each card's menu. Without dragging, a recipe's + chooses it and
+ * every place a drop could land offers Add here, the grid's own select-then-place way (critique B5b,
+ * WCAG 2.5.7); a phone, with no room for the recipes beside the grid, chooses in a sheet.
  *
  * Changes keep themselves (NUT-013, ADR 0033): a moment after the coach stops, the plan is sent to
  * their own draft on the server, which follows them to any device and nobody else sees. Publish
@@ -218,6 +231,7 @@ const RING = 2 * Math.PI * 16;
 @Component({
   selector: 'app-meal-plan-builder',
   imports: [
+    AddingBar,
     Button,
     ButtonLink,
     CdkDrag,
@@ -240,10 +254,17 @@ const RING = 2 * Math.PI * 16;
     UiMenu,
   ],
   templateUrl: './meal-plan-builder.html',
-  styleUrls: ['./meal-plan-builder.scss', './meal-plan-days.scss', './meal-plan-options.scss'],
+  styleUrls: [
+    './meal-plan-builder.scss',
+    './meal-plan-days.scss',
+    './meal-plan-options.scss',
+    '../training/builder-adding.scss',
+    './meal-plan-adding.scss',
+  ],
   host: {
     '(window:beforeunload)': 'onBeforeUnload($event)',
     '(document:visibilitychange)': 'onVisibilityChange()',
+    '(document:keydown.escape)': 'onEscape($event)',
   },
 })
 export class MealPlanBuilder implements HoldsUnsavedWork {
@@ -267,6 +288,7 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly mealSheet = viewChild.required<TemplateRef<unknown>>('mealSheet');
   private readonly pickerSheet = viewChild.required<TemplateRef<unknown>>('pickerSheet');
+  private readonly chooseSheet = viewChild.required<TemplateRef<unknown>>('chooseSheet');
   private readonly historySheet = viewChild.required<TemplateRef<unknown>>('historySheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private libraryTenant: string | null = null;
@@ -329,6 +351,13 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
 
   protected readonly editing = signal<MealRef | null>(null);
   protected readonly picking = signal<PickTarget | null>(null);
+  /** The recipe chosen with +, while the grid offers Add here for it (critique B5b). */
+  protected readonly adding = signal<PlanRecipe | null>(null);
+  /** What a screen reader is told when a recipe is chosen, or let go without an add. */
+  protected readonly addingStatus = signal('');
+  /** "How adding works" beside the recipes: open on a first visit here, until the first add. */
+  protected readonly tipOpen = signal(!readTipClosed('meal-plan'));
+  private tipClosedOnce = !this.tipOpen();
   protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
     null,
   );
@@ -376,7 +405,9 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
       : $localize`Protein, carbs and fat add up to ${formatNumber(split.calories, this.locale, '1.0-0')}:total: kcal, ${amount}:difference: less than the calorie target.`;
   });
 
-  protected readonly grid = computed(() => this.rows(this.plan(), this.book(), this.problem()));
+  protected readonly grid = computed(() =>
+    this.rows(this.plan(), this.book(), this.problem(), this.adding()),
+  );
   protected readonly shownWeek = computed(() => {
     const weeks = this.grid();
     const chosen = this.phoneWeek();
@@ -651,20 +682,98 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     if (event.previousContainer === event.container && event.previousIndex === event.currentIndex) {
       return;
     }
+    const item = event.item.data;
+    if (item.kind === 'recipe') {
+      this.place(item.recipe, event.container.data, event.currentIndex);
+      return;
+    }
+    this.commit(applyPlanDrop(this.plan(), item, event.container.data, event.currentIndex));
+  }
+
+  /** An Add here on the grid: the chosen recipe goes there, last, and focus stays on its day. */
+  protected addHere(target: PlanDropTarget): void {
+    const recipe = this.adding();
+    if (!recipe || !this.place(recipe, target, Number.MAX_SAFE_INTEGER)) return;
+    this.focusDay(target.kind === 'options' ? target.ref.dayKey : target.dayKey);
+  }
+
+  /**
+   * A recipe from the library into the plan, dropped or added with Add here. It says where it went
+   * (another option the client picks from, or a new meal), ends a choice made with +, and folds the
+   * first-use tip.
+   */
+  private place(recipe: PlanRecipe, target: PlanDropTarget, index: number): boolean {
     const before = this.plan();
-    const next = applyPlanDrop(before, event.item.data, event.container.data, event.currentIndex);
-    if (next === before && event.item.data.kind === 'recipe') {
+    const next = applyPlanDrop(before, { kind: 'recipe', recipe }, target, index);
+    if (next === before) {
       this.toast.show(
-        event.container.data.kind === 'options'
+        target.kind === 'options'
           ? $localize`That meal already offers this recipe, or holds as many as it can.`
           : $localize`That day holds as many meals as it can.`,
       );
+      return false;
+    }
+    this.adding.set(null);
+    this.addingStatus.set('');
+    this.commit(next);
+    if (!this.tipClosedOnce) this.tipChanged(false);
+    const went = whereItWent(next, target);
+    if (went) this.toast.show(went);
+    return true;
+  }
+
+  /** A row's + in the recipes: the grid offers Add here for it; a second press lets it go. */
+  protected choose(recipe: PlanRecipe): void {
+    if (this.adding()?.versionId === recipe.versionId) {
+      this.stopAdding();
       return;
     }
-    this.commit(next);
-    // A recipe dropped says where it went: another option the client picks from, or a new meal.
-    const went = event.item.data.kind === 'recipe' ? whereItWent(next, event.container.data) : null;
-    if (went) this.toast.show(went);
+    this.startAdding(recipe);
+  }
+
+  private startAdding(recipe: PlanRecipe): void {
+    this.adding.set(recipe);
+    this.addingStatus.set(
+      $localize`${recipe.name}:recipe: chosen. Press Add here on a meal to offer it as another option, or under a day for a new meal.`,
+    );
+  }
+
+  /**
+   * Escape, Cancel or a second press: nothing is added. Focus on an Add here or on Cancel, which go
+   * with the choice, moves to the recipe's + beside the grid, or to the day on a phone.
+   */
+  protected stopAdding(): void {
+    const recipe = this.adding();
+    if (!recipe) return;
+    const active = this.document.activeElement;
+    const losing = active instanceof HTMLElement && !!active.closest('.add-here, app-adding-bar');
+    this.adding.set(null);
+    this.addingStatus.set($localize`${recipe.name}:recipe: not added.`);
+    if (!losing) return;
+    const day = this.shownDay() ?? undefined;
+    afterNextRender(
+      () => {
+        const plus = this.host.nativeElement.querySelector<HTMLElement>(
+          `app-meal-plan-library [data-choose="${recipe.versionId}"]`,
+        );
+        plus?.focus();
+        if (!plus || this.document.activeElement !== plus) this.focusDay(day);
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /** Escape lets a chosen recipe go, unless an open sheet or menu took the key for itself. */
+  protected onEscape(event: Event): void {
+    if (this.adding() && !event.defaultPrevented) this.stopAdding();
+  }
+
+  /** "How adding works" opened or folded; folded once, it stays folded on later visits. */
+  protected tipChanged(open: boolean): void {
+    this.tipOpen.set(open);
+    if (open) return;
+    this.tipClosedOnce = true;
+    writeTipClosed('meal-plan');
   }
 
   protected addDay(): void {
@@ -785,6 +894,19 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
       this.picking.set(null);
       if (this.pickerRef === sheet) this.pickerRef = null;
     });
+  }
+
+  /** A phone's recipes, in a sheet: the one chosen closes it, and the day offers Add here. */
+  protected openChooser(): void {
+    this.sheets.open(this.chooseSheet(), {
+      title: $localize`Recipes`,
+      closeLabel: this.closeLabel,
+    });
+  }
+
+  protected chooseFromSheet(recipe: PlanRecipe, sheet: Closable): void {
+    sheet.close();
+    this.startAdding(recipe);
   }
 
   protected addToEditing(): void {
@@ -1141,7 +1263,12 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
 
   // ---------- drawing the grid ----------
 
-  private rows(plan: MealPlanModel, book: RecipeBook, problem: PlanProblem | null): WeekRow[] {
+  private rows(
+    plan: MealPlanModel,
+    book: RecipeBook,
+    problem: PlanProblem | null,
+    adding: PlanRecipe | null,
+  ): WeekRow[] {
     const target = plan.targets.calories;
     const single = plan.days.length <= 1;
     return weeksOf(plan).map((week) => ({
@@ -1163,6 +1290,10 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
           newMealTarget: { kind: 'new-meal', dayKey: day.key },
           menuLabel: $localize`More for day ${number}:day:`,
           addLabel: $localize`Add a meal to day ${number}:day:`,
+          addHere:
+            adding && day.meals.length < MAX_MEALS_PER_DAY
+              ? $localize`Add here: a new meal on day ${number}:day:`
+              : null,
           kcal: total.isAverage ? `≈ ${kcal}` : kcal,
           against: this.againstLine(place, difference),
           macros: macroLine(total.macros, this.locale),
@@ -1229,6 +1360,13 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
                 },
                 { label: $localize`Delete meal`, action: 'delete', danger: true },
               ],
+              addHere: !adding
+                ? null
+                : meal.choices.some((choice) => choice.recipeVersionId === adding.versionId)
+                  ? { kind: 'offered' }
+                  : meal.choices.length < MAX_CHOICES_PER_MEAL
+                    ? { kind: 'add', label: $localize`Add here: ${name}:meal:, day ${number}:day:` }
+                    : null,
               options: meal.choices.map((choice, place) => {
                 const recipe = book.get(choice.recipeVersionId);
                 const macros = choiceMacros(choice, book);
@@ -1434,5 +1572,7 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     this.saveError.set(null);
     this.editing.set(null);
     this.picking.set(null);
+    this.adding.set(null);
+    this.addingStatus.set('');
   }
 }

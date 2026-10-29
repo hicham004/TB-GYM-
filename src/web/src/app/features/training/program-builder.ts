@@ -57,6 +57,7 @@ import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { UiToast } from '../../ui/toast';
+import { AddingBar } from './adding-bar';
 import { ExerciseDemo } from './exercise-demo';
 import { DraftAutosave, PROGRAM_AUTOSAVE_TIMING, type SaveOutcome } from './program-autosave';
 import { ProgramBuilderApi } from './program-builder-api';
@@ -97,8 +98,15 @@ import {
   versionToOpen,
   withProgramFormula,
 } from './program-builder.models';
-import { readFolds, readLibraryOpen, writeFolds, writeLibraryOpen } from './builder-preferences';
-import { ProgramLibrary } from './program-library';
+import {
+  readFolds,
+  readLibraryOpen,
+  readTipClosed,
+  writeFolds,
+  writeLibraryOpen,
+  writeTipClosed,
+} from './builder-preferences';
+import { type ChosenItem, chosenKey, ProgramLibrary } from './program-library';
 import { ProgramLibrarySource } from './program-library-source';
 import { ProgramSessionEditor } from './program-session-editor';
 import { ProgramSetsEditor } from './program-sets-editor';
@@ -165,6 +173,8 @@ interface SessionCell {
   menu: UiMenuItem[];
   menuLabel: string;
   addLabel: string;
+  /** The name of its Add here while a chosen exercise waits (critique B5b); null otherwise. */
+  addHere: string | null;
 }
 
 interface DayCell {
@@ -175,6 +185,8 @@ interface DayCell {
   target: DropTarget;
   sessions: SessionCell[];
   addLabel: string;
+  /** The name of the day's Add here while what was chosen can land on it; null otherwise. */
+  addHere: string | null;
 }
 
 interface WeekRow {
@@ -191,8 +203,11 @@ interface WeekRow {
   foldLabel: string;
   /** "4 sessions · 20 exercises". */
   summary: string;
-  /** Where a drop on the folded week lands: its first free day; null when every day is taken. */
-  fold: { listId: string; target: DropTarget } | null;
+  /**
+   * Where a drop on the folded week lands: its first free day, with an Add here while what was
+   * chosen can land there; null when every day is taken.
+   */
+  fold: { listId: string; target: DropTarget; day: string; addHere: string | null } | null;
 }
 
 /** How long leaving waits for the last changes to reach the server before it asks instead. */
@@ -202,7 +217,10 @@ const LEAVE_WAIT_MS = 8000;
  * The program builder (C4): the exercise library beside a week × day grid. Exercises are dragged
  * from the library into a session or onto a rest day, sessions between days and weeks, and
  * exercises between sessions (CDK drag and drop); every drag also has a button path, through the
- * session sheet, the add sheet and each card's menu.
+ * session sheet, the add sheet and each card's menu. Without dragging, a library row's + chooses
+ * it and every place a drop could land offers Add here, the grid's own select-then-place way
+ * (critique B5b, WCAG 2.5.7); a phone, with no room for the library beside the grid, chooses in a
+ * sheet.
  *
  * Changes keep themselves (TRN-024, R4.2a): a moment after the coach stops, the program is sent to
  * their own draft on the server, which follows them to any device and nobody else sees. Publish
@@ -213,6 +231,7 @@ const LEAVE_WAIT_MS = 8000;
 @Component({
   selector: 'app-program-builder',
   imports: [
+    AddingBar,
     Button,
     ButtonLink,
     CdkDrag,
@@ -240,10 +259,17 @@ const LEAVE_WAIT_MS = 8000;
     UiMenu,
   ],
   templateUrl: './program-builder.html',
-  styleUrls: ['./program-builder.scss', './program-week.scss', './program-week-session.scss'],
+  styleUrls: [
+    './program-builder.scss',
+    './program-week.scss',
+    './program-week-session.scss',
+    './builder-adding.scss',
+    './program-adding.scss',
+  ],
   host: {
     '(window:beforeunload)': 'onBeforeUnload($event)',
     '(document:visibilitychange)': 'onVisibilityChange()',
+    '(document:keydown.escape)': 'onEscape($event)',
   },
 })
 export class ProgramBuilder implements HoldsUnsavedWork {
@@ -268,6 +294,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   protected readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
   protected readonly pickerSheet = viewChild.required<TemplateRef<unknown>>('pickerSheet');
+  private readonly chooseSheet = viewChild.required<TemplateRef<unknown>>('chooseSheet');
   protected readonly historySheet = viewChild.required<TemplateRef<unknown>>('historySheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private readonly previewSheet = viewChild.required<TemplateRef<unknown>>('previewSheet');
@@ -339,6 +366,13 @@ export class ProgramBuilder implements HoldsUnsavedWork {
   protected readonly picking = signal<PickTarget | null>(null);
   protected readonly addedInSheet = signal<ReadonlySet<string>>(new Set());
   protected readonly announcement = signal('');
+  /** The library row chosen with +, while the grid offers Add here for it (critique B5b). */
+  protected readonly adding = signal<ChosenItem | null>(null);
+  /** What a screen reader is told when a row is chosen, or let go without an add. */
+  protected readonly addingStatus = signal('');
+  /** "How adding works" beside the library: open on a first visit here, until the first add. */
+  protected readonly tipOpen = signal(!readTipClosed('program'));
+  private tipClosedOnce = !this.tipOpen();
   protected readonly savingSession = signal(false);
   /** The question the open confirmation dialog asks. */
   protected readonly asking = signal<{ message: string; confirm: string; cancel: string } | null>(
@@ -382,7 +416,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     return gridColumns(draft, session?.dayOffset ?? null);
   });
   protected readonly grid = computed(() =>
-    this.rows(this.draft(), this.hasDraft() || this.unsaved(), this.folded()),
+    this.rows(this.draft(), this.hasDraft() || this.unsaved(), this.folded(), this.adding()),
   );
   /**
    * Every list on the grid, by id. The lists are connected by name rather than by a
@@ -701,15 +735,134 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     if (event.previousContainer === event.container && event.previousIndex === event.currentIndex) {
       return;
     }
-    this.commit(
-      applyDrop(
-        this.draft(),
-        event.item.data,
-        event.container.data,
-        event.currentIndex,
-        this.newSessionName,
-      ),
+    const before = this.draft();
+    const item = event.item.data;
+    const next = applyDrop(
+      before,
+      item,
+      event.container.data,
+      event.currentIndex,
+      this.newSessionName,
     );
+    this.commit(next);
+    // A row from the library ends a choice made with +, and folds the first-use tip.
+    const fromLibrary = item.kind === 'library' || item.kind === 'saved';
+    if (fromLibrary && next !== before) this.addedFromLibrary();
+  }
+
+  /** An Add here on the grid: what was chosen goes there, last, and says where it went. */
+  protected addHere(target: DropTarget): void {
+    const item = this.adding();
+    if (!item) return;
+    const before = this.draft();
+    const week = before.weeks.find(
+      (row) => row.key === (target.kind === 'session' ? target.ref.weekKey : target.at.weekKey),
+    );
+    if (!week) return;
+    const index =
+      target.kind === 'session' ? Number.MAX_SAFE_INTEGER : daySessions(week, target.at.day).length;
+    const next = applyDrop(before, item, target, index, this.newSessionName);
+    if (next === before) return;
+    this.commit(next);
+    this.addedFromLibrary();
+    this.announce(this.whereItWent(item, target, before));
+    this.focusWeek(week.key);
+  }
+
+  /**
+   * "Back Squat added to Lower A.", or where the new workout or the copy is. Only an exercise goes
+   * into a workout; on a day, an exercise starts a workout and a saved workout is copied.
+   */
+  private whereItWent(item: ChosenItem, target: DropTarget, before: ProgramDraft): string {
+    if (target.kind === 'session') {
+      const name = findSession(before, target.ref)?.name.trim() || $localize`the workout`;
+      return $localize`${this.chosenName(item)}:exercise: added to ${name}:session:.`;
+    }
+    const week = this.weekNumber(target.at.weekKey);
+    const day = target.at.day + 1;
+    return item.kind === 'library'
+      ? $localize`${item.exercise.name}:exercise: added: a new workout on week ${week}:week:, day ${day}:day:.`
+      : $localize`${item.saved.name}:session: added on week ${week}:week:, day ${day}:day:.`;
+  }
+
+  private chosenName(item: ChosenItem): string {
+    return item.kind === 'library' ? item.exercise.name : item.saved.name;
+  }
+
+  private addedFromLibrary(): void {
+    this.adding.set(null);
+    this.addingStatus.set('');
+    if (!this.tipClosedOnce) this.tipChanged(false);
+  }
+
+  /** A row's + in the library: the grid offers Add here for it; a second press lets it go. */
+  protected choose(item: ChosenItem): void {
+    const chosen = this.adding();
+    if (chosen && chosenKey(chosen) === chosenKey(item)) {
+      this.stopAdding();
+      return;
+    }
+    this.startAdding(item);
+  }
+
+  private startAdding(item: ChosenItem): void {
+    this.adding.set(item);
+    this.addingStatus.set(
+      item.kind === 'library'
+        ? $localize`${item.exercise.name}:exercise: chosen. Press Add here on a workout, or on a rest day to start one.`
+        : $localize`${item.saved.name}:session: chosen. Press Add here on a day for a copy of it.`,
+    );
+  }
+
+  /**
+   * Escape, Cancel or a second press: nothing is added. Focus on an Add here or on Cancel, which go
+   * with the choice, moves to the row's + in the library, or to the week shown on a phone.
+   */
+  protected stopAdding(): void {
+    const item = this.adding();
+    if (!item) return;
+    const active = this.document.activeElement;
+    const losing = active instanceof HTMLElement && !!active.closest('.add-here, app-adding-bar');
+    this.adding.set(null);
+    this.addingStatus.set($localize`${this.chosenName(item)}:name: not added.`);
+    if (!losing) return;
+    const week = this.shownWeek() ?? undefined;
+    afterNextRender(
+      () => {
+        const plus = this.host.nativeElement.querySelector<HTMLElement>(
+          `app-program-library [data-choose="${chosenKey(item)}"]`,
+        );
+        plus?.focus();
+        if (!plus || this.document.activeElement !== plus) this.focusWeek(week);
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /** Escape lets a chosen row go, unless an open sheet or menu took the key for itself. */
+  protected onEscape(event: Event): void {
+    if (this.adding() && !event.defaultPrevented) this.stopAdding();
+  }
+
+  /** "How adding works" opened or folded; folded once, it stays folded on later visits. */
+  protected tipChanged(open: boolean): void {
+    this.tipOpen.set(open);
+    if (open) return;
+    this.tipClosedOnce = true;
+    writeTipClosed('program');
+  }
+
+  /** A phone's library, in a sheet: the row chosen closes it, and the grid offers Add here. */
+  protected openChooser(): void {
+    this.sheets.open(this.chooseSheet(), {
+      title: $localize`Exercises`,
+      closeLabel: this.closeLabel,
+    });
+  }
+
+  protected chooseFromSheet(item: ChosenItem, sheet: Closable): void {
+    sheet.close();
+    this.startAdding(item);
   }
 
   /** Opens or closes the library beside the grid, and keeps the choice for next time. */
@@ -1313,14 +1466,30 @@ export class ProgramBuilder implements HoldsUnsavedWork {
 
   // ---------- drawing the grid ----------
 
-  private rows(draft: ProgramDraft, changed: boolean, folded: ReadonlySet<string>): WeekRow[] {
+  private rows(
+    draft: ProgramDraft,
+    changed: boolean,
+    folded: ReadonlySet<string>,
+    adding: ChosenItem | null,
+  ): WeekRow[] {
     const last = draft.weeks.length - 1;
+    /** While a row chosen with + waits, the name of the Add here a day offers, where it can land. */
+    const dayAddHere = (target: DropTarget, week: number, day: number) =>
+      adding && accepts(adding, target)
+        ? adding.kind === 'library'
+          ? $localize`Add here: a new workout on week ${week}:week:, day ${day}:day:`
+          : $localize`Add here: week ${week}:week:, day ${day}:day:`
+        : null;
     return draft.weeks.map((week, index) => {
       const number = index + 1;
       const title = $localize`Week ${number}:number:`;
       const isFolded = folded.has(week.key);
       const taken = new Set(week.sessions.map((session) => session.dayOffset));
       const freeDay = DAYS.find((day) => !taken.has(day));
+      const foldTarget: DropTarget | null =
+        freeDay === undefined
+          ? null
+          : { kind: 'day', at: { weekKey: week.key, day: freeDay }, empty: true };
       const exercises = week.sessions.reduce((sum, session) => sum + session.exercises.length, 0);
       return {
         key: week.key,
@@ -1339,10 +1508,18 @@ export class ProgramBuilder implements HoldsUnsavedWork {
             : $localize`${week.sessions.length}:count: workouts`
         } · ${exercises === 1 ? $localize`1 exercise` : $localize`${exercises}:count: exercises`}`,
         fold:
-          isFolded && freeDay !== undefined
+          isFolded && foldTarget && freeDay !== undefined
             ? {
                 listId: `fold-${week.key}`,
-                target: { kind: 'day', at: { weekKey: week.key, day: freeDay }, empty: true },
+                target: foldTarget,
+                day: $localize`Day ${freeDay + 1}:day:`,
+                // The button shows "Add here · Day 2", so its name starts with those words.
+                addHere:
+                  adding && accepts(adding, foldTarget)
+                    ? adding.kind === 'library'
+                      ? $localize`Add here · Day ${freeDay + 1}:day: of week ${number}:week:, a new workout`
+                      : $localize`Add here · Day ${freeDay + 1}:day: of week ${number}:week:`
+                    : null,
               }
             : null,
         menu: [
@@ -1383,25 +1560,36 @@ export class ProgramBuilder implements HoldsUnsavedWork {
         days: DAYS.map((day) => {
           const sessions = daySessions(week, day);
           const at = { weekKey: week.key, day };
+          const target: DropTarget = { kind: 'day', at, empty: sessions.length === 0 };
           return {
             day,
             listId: `day-${week.key}-${day}`,
             label: $localize`Day ${day + 1}:day:`,
             at,
-            target: { kind: 'day', at, empty: sessions.length === 0 },
+            target,
             addLabel: $localize`Add to week ${number}:week:, day ${day + 1}:day:`,
-            sessions: sessions.map((session) => this.sessionCell(week, session, changed)),
+            addHere: dayAddHere(target, number, day + 1),
+            sessions: sessions.map((session) =>
+              this.sessionCell(week, session, changed, adding, number),
+            ),
           };
         }),
       };
     });
   }
 
-  private sessionCell(week: DraftWeek, session: DraftSession, changed: boolean): SessionCell {
+  private sessionCell(
+    week: DraftWeek,
+    session: DraftSession,
+    changed: boolean,
+    adding: ChosenItem | null,
+    weekNumber: number,
+  ): SessionCell {
     const ref = { weekKey: week.key, sessionKey: session.key };
     const name = session.name.trim() || $localize`Unnamed workout`;
     // A saved session is copied from a published version, so it waits for changes to be published.
     const canSave = Boolean(session.sourceId) && !changed;
+    const target: DropTarget = { kind: 'session', ref };
     return {
       key: session.key,
       listId: `exercises-${session.key}`,
@@ -1412,9 +1600,13 @@ export class ProgramBuilder implements HoldsUnsavedWork {
           : $localize`${session.exercises.length}:count: exercises`,
       ref,
       drag: { kind: 'session', ref },
-      target: { kind: 'session', ref },
+      target,
       menuLabel: $localize`More for ${name}:session:`,
       addLabel: $localize`Add exercise to ${name}:session:`,
+      addHere:
+        adding && accepts(adding, target)
+          ? $localize`Add here: ${name}:session:, week ${weekNumber}:week:, day ${session.dayOffset + 1}:day:`
+          : null,
       menu: [
         { label: $localize`Edit workout`, action: 'edit' },
         { label: $localize`Copy workout`, action: 'copy', hint: $localize`To the next free day` },
@@ -1605,5 +1797,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     this.saveError.set(null);
     this.editing.set(null);
     this.picking.set(null);
+    this.adding.set(null);
+    this.addingStatus.set('');
   }
 }

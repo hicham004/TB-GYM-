@@ -1,0 +1,64 @@
+// The program builder's grid while something is added (critique B5b): the places a drag can land,
+// loud enough to find, and the Add here a row chosen with + offers on a workout, a day or a folded
+// week. Over program-week.scss and program-week-session.scss, which Edit weeks shares unchanged;
+// kept apart so each stays under the component style budget.
+
+// Each place that takes what is dragged is outlined, the one under the pointer filled. An outline,
+// so nothing moves while the pointer crosses the days.
+.day.cdk-drop-list-receiving,
+.exercise-list.cdk-drop-list-receiving,
+.week-fold.cdk-drop-list-receiving {
+  background: color-mix(in srgb, var(--tb-accent-soft) 45%, transparent);
+  border-color: transparent;
+  outline: 2px dashed var(--tb-accent-ink);
+  outline-offset: -1px;
+}
+
+.day.cdk-drop-list-dragging,
+.exercise-list.cdk-drop-list-dragging,
+.week-fold.cdk-drop-list-dragging {
+  background: var(--tb-accent-soft);
+  outline-style: solid;
+}
+
+// Where + Exercise was, at the foot of a workout.
+.session-card > .add-here {
+  inline-size: auto;
+  margin: 0.125rem 0.375rem 0.25rem;
+}
+
+// Under a day's workouts, or filling a rest day's strip, written downward as the strip's own words.
+.day > .add-here {
+  flex: none;
+}
+
+.day.rest > .add-here {
+  flex: 1;
+  inline-size: auto;
+  min-block-size: 2rem;
+  padding: 0.5rem 0.25rem;
+  writing-mode: vertical-rl;
+}
+
+// On a folded week, at the end of its line, saying which day it is.
+.week-fold {
+  gap: 0.75rem;
+}
+
+.week-fold > .add-here {
+  flex: none;
+  inline-size: auto;
+  margin-inline-start: auto;
+}
+
+.add-here-day {
+  font-weight: 600;
+}
+
+// A narrow page lists the days one under another, a rest day as a row.
+@container builder (max-width: 47.99rem) {
+  .day.rest > .add-here {
+    min-block-size: 2.5rem;
+    writing-mode: horizontal-tb;
+  }
+}

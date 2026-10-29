@@ -1,0 +1,96 @@
+// What both builders' libraries share for adding (critique B5b): a row lifts under the pointer the
+// way it will follow it, a + chooses it for the grid's Add here, and "How adding works" sits above
+// the first row. Rows are copied whole into the drag preview, so their styles use one class each.
+
+.lib-item:active {
+  cursor: grabbing;
+}
+
+// Room for the + in a 17rem panel: the grip's box as narrow as its dots (7px), and closer gaps.
+.lib-item:not(.pick) {
+  gap: 0.5rem;
+}
+
+.grip {
+  inline-size: 0.75rem;
+  justify-content: center;
+}
+
+@media (hover: hover) {
+  .lib-item:not(.pick):hover {
+    box-shadow: var(--tb-shadow-overlay);
+  }
+}
+
+// Never moved under reduced motion. `translate`, not `transform`: the drag preview is a copy of the
+// row placed by its transform, which must never lag behind the pointer.
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .lib-item:not(.pick) {
+    transition:
+      box-shadow var(--tb-duration-fast) var(--tb-ease),
+      translate var(--tb-duration-fast) var(--tb-ease);
+  }
+
+  .lib-item:not(.pick):hover {
+    translate: 0 -1px;
+  }
+}
+
+// Chosen with +: the grid offers Add here for it.
+.lib-item.chosen {
+  background: var(--tb-accent-soft);
+  border-color: var(--tb-accent-ink);
+}
+
+.choose {
+  align-items: center;
+  background: var(--tb-surface);
+  block-size: 2.25rem;
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 999px;
+  color: var(--tb-accent-ink);
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  inline-size: 2.25rem;
+  justify-content: center;
+  padding: 0;
+}
+
+.choose:hover {
+  background: var(--tb-accent-soft);
+  border-color: var(--tb-accent-ink);
+}
+
+.choose:focus-visible {
+  outline: 2px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.choose[aria-pressed='true'] {
+  background: var(--tb-accent-ink);
+  border-color: var(--tb-accent-ink);
+  color: var(--tb-on-accent-ink);
+}
+
+.tip {
+  align-items: flex-start;
+  background: var(--tb-surface-2);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem 0.25rem;
+}
+
+.tip p {
+  color: var(--tb-ink);
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+@media (forced-colors: active) {
+  .choose[aria-pressed='true'] {
+    border-width: 3px;
+  }
+}

@@ -51,7 +51,25 @@
         </button>
       </div>
     } @else if (mode() === 'drag') {
-      <p class="help" i18n>Drag a recipe onto a meal, or under a day to start a meal.</p>
+      <p class="help" i18n>Drag a recipe onto a meal, or press + to add it.</p>
+      <!-- Open on a first visit, until the first add or Got it; folded, it stays to be opened again. -->
+      <app-disclosure
+        class="how"
+        label="How adding works"
+        i18n-label
+        [open]="tip()"
+        (openChange)="tipChange.emit($event)"
+      >
+        <ng-template appDisclosureContent>
+          <div class="tip">
+            <p i18n>
+              Drop a recipe on a meal for another option, or under a day for a new meal. Without
+              dragging, press + on a recipe, then Add here.
+            </p>
+            <button appButton type="button" variant="text" (click)="closeTip()" i18n>Got it</button>
+          </div>
+        </ng-template>
+      </app-disclosure>
       <ul
         class="items"
         role="list"
@@ -62,14 +80,17 @@
         [attr.aria-busy]="list.searching() || null"
       >
         @for (row of rows(); track row.recipe.versionId) {
+          @let isChosen = chosen() === row.recipe.versionId;
           <li
             class="lib-item"
+            [class.chosen]="isChosen"
             cdkDrag
             [cdkDragData]="row.drag"
             [cdkDragStartDelay]="dragDelay"
             cdkDragPreviewClass="tb-drag-preview"
           >
             <div *cdkDragPlaceholder class="drop-slot"></div>
+            <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
             <span class="tile" aria-hidden="true">{{ row.recipe.initials }}</span>
             <span class="text">
               <span class="name" dir="auto">{{ row.recipe.name }}</span
@@ -84,7 +105,17 @@
                 </span>
               }
             </span>
-            <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
+            <!-- Pressed while the grid offers Add here for it; a second press lets it go. -->
+            <button
+              class="choose"
+              type="button"
+              [attr.data-choose]="row.recipe.versionId"
+              [attr.aria-label]="row.addLabel"
+              [attr.aria-pressed]="isChosen"
+              (click)="choose.emit(row.recipe)"
+            >
+              <app-icon name="plus" />
+            </button>
           </li>
         }
       </ul>

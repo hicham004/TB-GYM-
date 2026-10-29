@@ -1,10 +1,31 @@
 /**
- * What the program builder and Edit weeks keep in this browser only: whether the exercise library
- * sits open beside the grid, and which weeks of a program are folded. Conveniences, so nothing
- * breaks when storage is missing or refused.
+ * What the builders and Edit weeks keep in this browser only: whether the exercise library sits
+ * open beside the grid, which weeks of a program are folded, and whether a builder's first-use tip
+ * on adding was closed. Conveniences, so nothing breaks when storage is missing or refused.
  */
 const LIBRARY_KEY = 'tb.program-library';
 const FOLDS_KEY = 'tb.program-folds:';
+const TIP_KEY = 'tb.adding-tip:';
+
+/** The builders with a "How adding works" tip beside their library (critique B5b). */
+export type TipBuilder = 'program' | 'meal-plan';
+
+/** True once the builder's tip was closed here, by the coach or by their first add. */
+export function readTipClosed(builder: TipBuilder): boolean {
+  try {
+    return localStorage.getItem(TIP_KEY + builder) === 'closed';
+  } catch {
+    return false;
+  }
+}
+
+export function writeTipClosed(builder: TipBuilder): void {
+  try {
+    localStorage.setItem(TIP_KEY + builder, 'closed');
+  } catch {
+    // Private windows and blocked storage: the tip opens again on the next visit.
+  }
+}
 
 /** The library starts closed as a rail until the coach opens it. */
 export function readLibraryOpen(): boolean {

@@ -1,6 +1,8 @@
 import { CdkDrag, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   afterNextRender,
+  booleanAttribute,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -17,6 +19,7 @@ import {
 import { RouterLink } from '@angular/router';
 import type { SavedSessionView } from '../../core/api/generated';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Icon } from '../../ui/icon';
 import { LIBRARY_SEARCH_PAUSE, PagedSearch } from '../../ui/paged-search';
 import { SegmentedControl } from '../../ui/segmented-control';
@@ -38,12 +41,23 @@ import {
 /** Gives each list a lane of its own, so the panel's searches and the sheet's never cancel each other. */
 let lists = 0;
 
+/** What a row's + chooses: an exercise, or a saved workout to copy onto a day. */
+export type ChosenItem = Extract<DragItem, { kind: 'library' | 'saved' }>;
+
+/** One row of the library, whichever tab it is on. */
+export function chosenKey(item: ChosenItem): string {
+  return item.kind === 'library' ? `exercise:${item.exercise.id}` : `saved:${item.saved.id}`;
+}
+
 /**
  * The exercise library beside the program grid (C4): search, chips by movement and the coach's
  * saved sessions. Beside the grid (`drag`) every row can be dragged into a session or onto a rest
- * day; in a sheet (`pick`) every row is a button, which is also how a keyboard or a phone adds one.
- * The rows are the first page the builder read once; a search or a chip asks the server, and Show
- * more brings the next page (WEA-14), so a library is never read whole.
+ * day; where the page offers it (`offerAdd`, the builder) a row's + chooses it too, so the grid
+ * offers Add here wherever it can go (critique B5b, the way without dragging), with a "How adding
+ * works" tip open until the coach's first add. In a sheet (`pick`) every row is a button, which is
+ * also how a keyboard or a phone adds one. The rows are the first page the builder read once; a
+ * search or a chip asks the server, and Show more brings the next page (WEA-14), so a library is
+ * never read whole.
  */
 @Component({
   selector: 'app-program-library',
@@ -53,12 +67,15 @@ let lists = 0;
     CdkDragPlaceholder,
     CdkDropList,
     Icon,
+    NgTemplateOutlet,
     RouterLink,
     SegmentedControl,
     Skeleton,
+    UiDisclosure,
+    UiDisclosureContent,
   ],
   templateUrl: './program-library.html',
-  styleUrl: './program-library.scss',
+  styleUrls: ['./program-library.scss', './library-adding.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProgramLibrary {
@@ -74,9 +91,18 @@ export class ProgramLibrary {
   readonly connectedTo = input<string[]>([]);
   /** Names the exercises already added from this sheet, so a second tap is visible. */
   readonly added = input<ReadonlySet<string>>(new Set());
+  /** A + on each row beside the grid; Edit weeks drags only. */
+  readonly offerAdd = input(false, { transform: booleanAttribute });
+  /** The row chosen with +, while the grid offers Add here for it. */
+  readonly chosen = input<ChosenItem | null>(null);
+  /** Whether "How adding works" is open beside the grid. */
+  readonly tip = input(false);
 
   readonly pickExercise = output<LibraryExercise>();
   readonly pickSaved = output<SavedSessionView>();
+  /** A row's +: the builder chooses that row, or lets it go when it was already chosen. */
+  readonly choose = output<ChosenItem>();
+  readonly tipChange = output<boolean>();
   readonly retry = output<void>();
 
   private readonly lane = `list-${++lists}`;
@@ -166,12 +192,27 @@ export class ProgramLibrary {
     );
   }
 
-  protected exerciseItem(exercise: LibraryExercise): DragItem {
+  /** "Got it" folds the tip, and focus stays on its row rather than on a button folded away. */
+  protected closeTip(): void {
+    this.tipChange.emit(false);
+    this.host.nativeElement.querySelector<HTMLElement>('.how summary')?.focus();
+  }
+
+  protected exerciseItem(exercise: LibraryExercise): ChosenItem {
     return { kind: 'library', exercise };
   }
 
-  protected savedItem(saved: SavedSessionView): DragItem {
+  protected savedItem(saved: SavedSessionView): ChosenItem {
     return { kind: 'saved', saved };
+  }
+
+  protected isChosen(item: ChosenItem): boolean {
+    const chosen = this.chosen();
+    return chosen !== null && chosenKey(chosen) === chosenKey(item);
+  }
+
+  protected savedAddLabel(saved: SavedSessionView): string {
+    return $localize`Add ${saved.name}:session:`;
   }
 
   protected savedLine(saved: SavedSessionView): string {

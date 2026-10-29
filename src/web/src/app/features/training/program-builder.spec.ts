@@ -10,10 +10,12 @@ import { ApiClient } from '../../core/api/api-client';
 import type {
   CreateProgramDraftRequest,
   PreviewWeekProgressionRequest,
+  ProgramDraftContent,
   ProgramDraftSaveView,
   ProgramDraftView,
   ProgramTemplateSummary,
   ProgramTemplateVersionView,
+  SavedSessionView,
   WeekProgressionPreviewView,
 } from '../../core/api/generated';
 import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
@@ -267,8 +269,9 @@ describe('the program builder', () => {
 
     expect(host.querySelector('app-program-library')).toBeNull();
     expect(host.querySelector('.workspace')?.classList.contains('with-library')).toBe(false);
-    const rail = named(host, 'Exercises');
-    expect(rail.classList.contains('library-rail')).toBe(true);
+    // Named as the phone's Exercises button, which only a narrow page shows (B5b).
+    const rail = host.querySelector<HTMLButtonElement>('.library-rail')!;
+    expect(textOf(rail)).toBe('Exercises');
     expect(rail.getAttribute('aria-expanded')).toBe('false');
 
     rail.click();
@@ -295,7 +298,7 @@ describe('the program builder', () => {
   it('lists the library with pictures where granted, searches it and groups it by movement', async () => {
     const { host, harness, csrf, api } = await render();
 
-    named(host, 'Exercises').click();
+    host.querySelector<HTMLButtonElement>('.library-rail')!.click();
     await settle(harness.fixture);
     const library = host.querySelector<HTMLElement>('app-program-library')!;
     expect(csrf.refresh).toHaveBeenCalled();
@@ -397,7 +400,7 @@ describe('the program builder', () => {
     // So the grid offers the deadlift's demo, though the library panel never showed it.
     expect(named(all(host, 'section.week')[0], 'Watch the Romanian deadlift demo')).toBeTruthy();
 
-    named(host, 'Exercises').click();
+    host.querySelector<HTMLButtonElement>('.library-rail')!.click();
     await settle(harness.fixture);
     const library = host.querySelector<HTMLElement>('app-program-library')!;
     expect(all(library, '.lib-item')).toHaveLength(48);
@@ -1090,6 +1093,221 @@ describe('the program builder', () => {
     lastToast()[1].action.run();
     await settle(harness.fixture);
     named(host, 'Weights from RPE: Epley curve');
+  });
+
+  describe('adding without dragging (B5b)', () => {
+    const plusOf = (host: HTMLElement, name: string) =>
+      named(host.querySelector('app-program-library')!, name);
+    const addHeres = (host: HTMLElement) =>
+      all(host, '.add-here').map((button) => button.getAttribute('aria-label'));
+
+    it('chooses an exercise with +, and adds it to a workout or starts one on a rest day', async () => {
+      localStorage.setItem('tb.program-library', 'open');
+      const { host, harness, programApi, toast } = await render();
+      const plus = plusOf(host, 'Add Goblet squat');
+      expect(textOf(host.querySelector('app-program-library .help'))).toBe(
+        'Drag an exercise into a workout, or press + to add it.',
+      );
+
+      plus.click();
+      await settle(harness.fixture);
+      expect(plus.getAttribute('aria-pressed')).toBe('true');
+      expect(textOf(host.querySelector('app-adding-bar .text'))).toBe(
+        'Adding Goblet squat: press Add here where it goes.',
+      );
+      // Every workout takes it, and every rest day starts a workout with it; a day with a workout
+      // does not, as a drop there would not.
+      const firstWeek = [
+        'Add here: Lower A, week 1, day 1',
+        'Add here: a new workout on week 1, day 2',
+        'Add here: Upper A, week 1, day 3',
+        'Add here: a new workout on week 1, day 4',
+        'Add here: a new workout on week 1, day 5',
+        'Add here: a new workout on week 1, day 6',
+        'Add here: a new workout on week 1, day 7',
+      ];
+      expect(addHeres(host)).toEqual([
+        ...firstWeek,
+        ...firstWeek.map((label) => label.replace('week 1', 'week 2')),
+      ]);
+      expect(all(host, '.add-exercise')).toHaveLength(0);
+
+      named(host, 'Add here: Upper A, week 1, day 3').click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+      const upper = all(all(host, 'section.week')[0], '.session-card')[1];
+      expect(all(upper, '.exercise-name').map(textOf)).toEqual(['Bench press', 'Goblet squat']);
+      expect(toast.show).toHaveBeenLastCalledWith('Goblet squat added to Upper A.', {
+        tone: 'success',
+      });
+      expect(plus.getAttribute('aria-pressed')).toBe('false');
+      expect(addHeres(host)).toEqual([]);
+      expect(host.querySelector('app-adding-bar')).toBeNull();
+
+      plusOf(host, 'Add Chest-supported row').click();
+      await settle(harness.fixture);
+      named(host, 'Add here: a new workout on week 2, day 5').click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+      const week2 = all(host, 'section.week')[1];
+      expect(all(dayOf(week2, 4), '.session-name').map(textOf)).toEqual(['Training day']);
+      expect(all(dayOf(week2, 4), '.exercise-name').map(textOf)).toEqual(['Chest-supported row']);
+      expect(toast.show).toHaveBeenLastCalledWith(
+        'Chest-supported row added: a new workout on week 2, day 5.',
+        { tone: 'success' },
+      );
+      // The first add started the draft; the second was saved into it.
+      const saves = programApi.saveDraft.mock.calls as unknown as [
+        string,
+        { content: ProgramDraftContent },
+      ][];
+      const content = saves.at(-1)![1].content;
+      expect(
+        content.weeks?.[1].sessions?.map((session) => [session.dayOffset, session.name]),
+      ).toEqual([
+        [0, 'Lower A'],
+        [2, 'Upper A'],
+        [4, 'Training day'],
+      ]);
+    });
+
+    it('copies a saved workout onto any day, after the workouts already there', async () => {
+      localStorage.setItem('tb.program-library', 'open');
+      const saved: SavedSessionView = {
+        id: 'saved-1',
+        name: 'Full body',
+        sourceTemplateVersionId: 'version-1',
+        sourceTemplateSessionId: 'session-1',
+        session: sessionView('session-1', 'Full body', 0, [
+          prescription('row', 'Chest-supported row'),
+        ]),
+      };
+      const { host, harness, toast } = await render({
+        api: { listSavedSessions: vi.fn(() => of([saved])) },
+      });
+      host
+        .querySelector<HTMLInputElement>('app-program-library input[type="radio"][value="saved"]')!
+        .click();
+      await settle(harness.fixture);
+      expect(textOf(host.querySelector('app-program-library .help'))).toBe(
+        'Drag a saved workout onto a day, or press + to add it.',
+      );
+
+      plusOf(host, 'Add Full body').click();
+      await settle(harness.fixture);
+      expect(addHeres(host)).toHaveLength(14);
+      expect(addHeres(host)[0]).toBe('Add here: week 1, day 1');
+      // A workout takes exercises only, so its own + Exercise stays.
+      expect(all(host, '.add-exercise')).toHaveLength(4);
+
+      named(host, 'Add here: week 1, day 1').click();
+      await settle(harness.fixture);
+      expect(sessionsOf(all(host, 'section.week')[0])).toEqual(['Lower A', 'Full body', 'Upper A']);
+      expect(toast.show).toHaveBeenLastCalledWith('Full body added on week 1, day 1.', {
+        tone: 'success',
+      });
+    });
+
+    it('lets the chosen row go on a second press, Escape or Cancel', async () => {
+      localStorage.setItem('tb.program-library', 'open');
+      const { host, harness, programApi } = await render();
+      const plus = plusOf(host, 'Add Bench press');
+      const addingStatus = () => textOf(all(host, '[role="status"]').at(-1));
+
+      plus.click();
+      await settle(harness.fixture);
+      expect(addingStatus()).toBe(
+        'Bench press chosen. Press Add here on a workout, or on a rest day to start one.',
+      );
+      plus.click();
+      await settle(harness.fixture);
+      expect(addHeres(host)).toEqual([]);
+      expect(addingStatus()).toBe('Bench press not added.');
+
+      plus.click();
+      await settle(harness.fixture);
+      const here = named(host, 'Add here: Lower A, week 1, day 1');
+      here.focus();
+      here.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+      await settle(harness.fixture);
+      expect(addHeres(host)).toEqual([]);
+      expect(document.activeElement).toBe(plus);
+
+      plus.click();
+      await settle(harness.fixture);
+      named(host.querySelector('app-adding-bar')!, 'Cancel').click();
+      await settle(harness.fixture);
+      expect(host.querySelector('app-adding-bar')).toBeNull();
+      expect(document.activeElement).toBe(plus);
+      expect(programApi.createDraft).not.toHaveBeenCalled();
+    });
+
+    it('offers Add here on a folded week, on its first free day', async () => {
+      localStorage.setItem('tb.program-library', 'open');
+      const { host, harness } = await render();
+      named(host, 'Fold week 2').click();
+      await settle(harness.fixture);
+
+      plusOf(host, 'Add Goblet squat').click();
+      await settle(harness.fixture);
+      const fold = all(host, 'section.week')[1].querySelector('.week-fold')!;
+      const here = fold.querySelector<HTMLButtonElement>('.add-here')!;
+      // Its name starts with the words it shows (WCAG 2.5.3).
+      expect(textOf(here)).toBe('Add here · Day 2');
+      expect(here.getAttribute('aria-label')).toBe('Add here · Day 2 of week 2, a new workout');
+      here.click();
+      await settle(harness.fixture);
+      expect(textOf(fold.querySelector('.week-summary'))).toBe('3 workouts · 4 exercises');
+    });
+
+    it('opens How adding works on a first visit, folds it at the first add, and keeps it folded', async () => {
+      localStorage.setItem('tb.program-library', 'open');
+      const first = await render();
+      const how = () =>
+        first.host.querySelector<HTMLDetailsElement>('app-program-library .how details')!;
+      expect(how().open).toBe(true);
+      expect(textOf(how().querySelector('.tip p'))).toBe(
+        'Drop an exercise in a workout or on a rest day, and a saved workout on any day. Without dragging, press + on a row, then Add here.',
+      );
+
+      plusOf(first.host, 'Add Bench press').click();
+      await settle(first.harness.fixture);
+      named(first.host, 'Add here: Lower A, week 1, day 1').click();
+      await settle(first.harness.fixture);
+      expect(how().open).toBe(false);
+      expect(localStorage.getItem('tb.adding-tip:program')).toBe('closed');
+
+      TestBed.resetTestingModule();
+      const again = await render();
+      expect(
+        again.host.querySelector<HTMLDetailsElement>('app-program-library .how details')!.open,
+      ).toBe(false);
+    });
+
+    it('chooses in a sheet where the library has no room beside the grid, as on a phone', async () => {
+      const { host, harness } = await render();
+
+      host.querySelector<HTMLButtonElement>('.library-sheet')!.click();
+      const chooser = await dialogNamed(harness.fixture, 'Exercises');
+      expect(textOf(chooser.querySelector('.sheet-help'))).toBe(
+        'Choose an exercise or a saved workout, then press Add here where it goes.',
+      );
+      named(chooser, 'Add Romanian deadlift').click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+      expect(textOf(host.querySelector('app-adding-bar .text'))).toBe(
+        'Adding Romanian deadlift: press Add here where it goes.',
+      );
+      named(host, 'Add here: Upper A, week 2, day 3').click();
+      await settle(harness.fixture);
+      const upper = all(all(host, 'section.week')[1], '.session-card')[1];
+      expect(all(upper, '.exercise-name').map(textOf)).toEqual([
+        'Bench press',
+        'Romanian deadlift',
+      ]);
+    });
   });
 
   it('says a program that is not there is not there', async () => {

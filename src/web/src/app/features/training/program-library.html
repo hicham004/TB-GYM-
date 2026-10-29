@@ -2,15 +2,41 @@
   <app-segmented-control class="tabs" label="Show" i18n-label [options]="tabs" [(selected)]="tab" />
 }
 
+<!-- Open on a first visit, until the first add or Got it; folded, it stays to be opened again. -->
+<ng-template #how>
+  <app-disclosure
+    class="how"
+    label="How adding works"
+    i18n-label
+    [open]="tip()"
+    (openChange)="tipChange.emit($event)"
+  >
+    <ng-template appDisclosureContent>
+      <div class="tip">
+        <p i18n>
+          Drop an exercise in a workout or on a rest day, and a saved workout on any day. Without
+          dragging, press + on a row, then Add here.
+        </p>
+        <button appButton type="button" variant="text" (click)="closeTip()" i18n>Got it</button>
+      </div>
+    </ng-template>
+  </app-disclosure>
+</ng-template>
+
 @if (tab() === 'saved' && showTabs()) {
   <p class="help">
-    @if (mode() === 'drag') {
-      <ng-container i18n>Drag a saved workout onto a day.</ng-container>
-    } @else {
+    @if (mode() === 'pick') {
       <ng-container i18n>Choose a saved workout to add a copy on this day.</ng-container>
+    } @else if (offerAdd()) {
+      <ng-container i18n>Drag a saved workout onto a day, or press + to add it.</ng-container>
+    } @else {
+      <ng-container i18n>Drag a saved workout onto a day.</ng-container>
     }
   </p>
   @if (mode() === 'drag') {
+    @if (offerAdd()) {
+      <ng-container [ngTemplateOutlet]="how" />
+    }
     <ul
       class="items"
       role="list"
@@ -20,20 +46,36 @@
       [cdkDropListEnterPredicate]="never"
     >
       @for (session of saved(); track session.id) {
+        @let item = savedItem(session);
+        @let picked = isChosen(item);
         <li
           class="lib-item"
+          [class.chosen]="picked"
           cdkDrag
-          [cdkDragData]="savedItem(session)"
+          [cdkDragData]="item"
           [cdkDragStartDelay]="dragDelay"
           cdkDragPreviewClass="tb-drag-preview"
         >
           <div *cdkDragPlaceholder class="drop-slot"></div>
+          <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
           <span class="tile saved" aria-hidden="true"><app-icon name="training" /></span>
           <span class="text">
             <span class="name" dir="auto">{{ session.name }}</span>
             <span class="detail">{{ savedLine(session) }}</span>
           </span>
-          <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
+          @if (offerAdd()) {
+            <!-- Pressed while the grid offers Add here for it; a second press lets it go. -->
+            <button
+              class="choose"
+              type="button"
+              [attr.data-choose]="'saved:' + session.id"
+              [attr.aria-label]="savedAddLabel(session)"
+              [attr.aria-pressed]="picked"
+              (click)="choose.emit(item)"
+            >
+              <app-icon name="plus" />
+            </button>
+          }
         </li>
       }
     </ul>
@@ -123,7 +165,12 @@
           </button>
         </div>
       } @else if (mode() === 'drag') {
-        <p class="help" i18n>Drag an exercise into a workout, or onto an empty day.</p>
+        @if (offerAdd()) {
+          <p class="help" i18n>Drag an exercise into a workout, or press + to add it.</p>
+          <ng-container [ngTemplateOutlet]="how" />
+        } @else {
+          <p class="help" i18n>Drag an exercise into a workout, or onto an empty day.</p>
+        }
         <ul
           class="items"
           role="list"
@@ -134,14 +181,18 @@
           [attr.aria-busy]="list.searching() || null"
         >
           @for (exercise of shown(); track exercise.id) {
+            @let item = exerciseItem(exercise);
+            @let picked = isChosen(item);
             <li
               class="lib-item"
+              [class.chosen]="picked"
               cdkDrag
-              [cdkDragData]="exerciseItem(exercise)"
+              [cdkDragData]="item"
               [cdkDragStartDelay]="dragDelay"
               cdkDragPreviewClass="tb-drag-preview"
             >
               <div *cdkDragPlaceholder class="drop-slot"></div>
+              <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
               @if (thumb(exercise); as src) {
                 <img
                   class="tile"
@@ -159,7 +210,19 @@
                 <span class="name" dir="auto">{{ exercise.name }}</span>
                 <span class="detail">{{ exercise.detail }}</span>
               </span>
-              <span class="grip" aria-hidden="true"><app-icon name="grip" /></span>
+              @if (offerAdd()) {
+                <!-- Pressed while the grid offers Add here for it; a second press lets it go. -->
+                <button
+                  class="choose"
+                  type="button"
+                  [attr.data-choose]="'exercise:' + exercise.id"
+                  [attr.aria-label]="addLabel(exercise)"
+                  [attr.aria-pressed]="picked"
+                  (click)="choose.emit(item)"
+                >
+                  <app-icon name="plus" />
+                </button>
+              }
             </li>
           }
         </ul>

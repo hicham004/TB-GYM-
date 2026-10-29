@@ -50,6 +50,7 @@
           <p class="status" [class.unsaved]="troubled()">{{ statusLine() }}</p>
           <!-- Autosave runs at every pause, so only a failure (and its recovery) is announced. -->
           <p class="tb-visually-hidden" role="status">{{ liveStatus() }}</p>
+          <p class="tb-visually-hidden" role="status">{{ addingStatus() }}</p>
           <div class="save-buttons">
             @if (canDiscard()) {
               <button appButton type="button" variant="text" (click)="discard()" i18n>
@@ -228,6 +229,10 @@
               mode="drag"
               [source]="library"
               [connectedTo]="dropIds()"
+              [chosen]="adding()?.versionId ?? null"
+              [tip]="tipOpen()"
+              (choose)="choose($event)"
+              (tipChange)="tipChanged($event)"
               (retry)="loadLibrary()"
             />
           </aside>
@@ -237,6 +242,17 @@
           <div class="plan-tools">
             <h2 id="days-title" class="panel-title">{{ counts() }}</h2>
             <div class="plan-buttons">
+              <!-- Where the recipes have no room beside the grid, they open in a sheet. -->
+              <button
+                appButton
+                class="library-sheet"
+                type="button"
+                variant="outlined"
+                (click)="openChooser()"
+              >
+                <app-icon name="plus" />
+                <span i18n>Recipes</span>
+              </button>
               <button
                 appButton
                 class="library-toggle"
@@ -436,6 +452,21 @@
                                 <li class="drop-hint" i18n>Drop a recipe here</li>
                               }
                             </ol>
+                            @if (meal.addHere; as here) {
+                              @if (here.kind === 'add') {
+                                <button
+                                  class="add-here"
+                                  type="button"
+                                  [attr.aria-label]="here.label"
+                                  (click)="addHere(meal.target)"
+                                >
+                                  <app-icon name="plus" />
+                                  <span i18n>Add here</span>
+                                </button>
+                              } @else {
+                                <p class="add-here-note" i18n>Already in this meal</p>
+                              }
+                            }
                             <!-- The menu sits by the total, so the meal's name keeps the whole top row. -->
                             <div class="meal-foot">
                               <app-menu
@@ -467,16 +498,28 @@
                         [cdkDropListEnterPredicate]="canEnter"
                         (cdkDropListDropped)="dropped($event)"
                       >
-                        <button
-                          class="add-meal"
-                          type="button"
-                          [attr.aria-label]="cell.addLabel"
-                          [disabled]="!canAddMealTo(cell.key)"
-                          (click)="openPicker({ kind: 'day', dayKey: cell.key })"
-                        >
-                          <app-icon name="plus" />
-                          <span i18n>Meal</span>
-                        </button>
+                        @if (cell.addHere; as label) {
+                          <button
+                            class="add-here"
+                            type="button"
+                            [attr.aria-label]="label"
+                            (click)="addHere(cell.newMealTarget)"
+                          >
+                            <app-icon name="plus" />
+                            <span i18n>Add here</span>
+                          </button>
+                        } @else {
+                          <button
+                            class="add-meal"
+                            type="button"
+                            [attr.aria-label]="cell.addLabel"
+                            [disabled]="!canAddMealTo(cell.key)"
+                            (click)="openPicker({ kind: 'day', dayKey: cell.key })"
+                          >
+                            <app-icon name="plus" />
+                            <span i18n>Meal</span>
+                          </button>
+                        }
                       </div>
                     </section>
                   }
@@ -484,6 +527,10 @@
               </section>
             }
           </div>
+          <!-- In the grid's column, so it never covers the recipes beside it. -->
+          @if (adding(); as recipe) {
+            <app-adding-bar [name]="recipe.name" (cancelled)="stopAdding()" />
+          }
         </section>
       </div>
     }
@@ -515,6 +562,23 @@
       [source]="library"
       [added]="pickedAlready()"
       (pickRecipe)="pickRecipe($event)"
+      (retry)="loadLibrary()"
+    />
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="outlined" (click)="sheet.close()" i18n>
+        Cancel
+      </button>
+    </ng-template>
+  </div>
+</ng-template>
+
+<ng-template #chooseSheet let-sheet>
+  <div class="picker">
+    <p class="sheet-help" i18n>Choose a recipe, then press Add here where it goes.</p>
+    <app-meal-plan-library
+      mode="pick"
+      [source]="library"
+      (pickRecipe)="chooseFromSheet($event, sheet)"
       (retry)="loadLibrary()"
     />
     <ng-template appModalFooter>
