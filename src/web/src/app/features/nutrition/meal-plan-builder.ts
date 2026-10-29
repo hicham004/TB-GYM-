@@ -72,9 +72,12 @@ import {
   averageLine,
   choiceMacros,
   clearDay,
-  copyDayToAll,
+  copyDayTo,
+  dayListWords,
   dayTotal,
-  duplicateDay,
+  deleteWeek,
+  duplicateWeek,
+  duplicateWeekRefusal,
   emptyPlan,
   findMeal,
   kcalText,
@@ -113,6 +116,7 @@ import {
   weeksOf,
   whereItWent,
 } from './meal-plan-builder.models';
+import { type CopyWeek, MealPlanDayCopy } from './meal-plan-day-copy';
 import { MealPlanLibrary } from './meal-plan-library';
 import { RecipeLibrarySource } from './meal-plan-library-source';
 import { MealPlanMealEditor } from './meal-plan-meal-editor';
@@ -130,6 +134,12 @@ interface Closable {
 
 /** Where the recipe sheet adds what the coach picks: a new meal on a day, or an option of a meal. */
 type PickTarget = { kind: 'day'; dayKey: string } | { kind: 'meal'; ref: MealRef };
+
+/** A copy sheet's day: its meals go to days picked (`to`), or it gets a picked day's (`from`). */
+interface DayCopyTarget {
+  mode: 'to' | 'from';
+  dayKey: string;
+}
 
 /** The coach's draft on the server (NUT-013): its id and the version the next save carries. */
 interface StoredDraft {
@@ -204,6 +214,8 @@ interface WeekRow {
   number: number;
   title: string;
   days: DayCell[];
+  menu: UiMenuItem[];
+  menuLabel: string;
 }
 
 type TargetField = 'calories' | 'protein' | 'carbs' | 'fat';
@@ -244,6 +256,7 @@ const RING = 2 * Math.PI * 16;
     Field,
     FormsModule,
     Icon,
+    MealPlanDayCopy,
     MealPlanLibrary,
     MealPlanMealEditor,
     ModalFooter,
@@ -258,6 +271,7 @@ const RING = 2 * Math.PI * 16;
     './meal-plan-builder.scss',
     './meal-plan-days.scss',
     './meal-plan-options.scss',
+    './meal-plan-week-tools.scss',
     '../training/builder-adding.scss',
     './meal-plan-adding.scss',
   ],
@@ -290,6 +304,7 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
   private readonly pickerSheet = viewChild.required<TemplateRef<unknown>>('pickerSheet');
   private readonly chooseSheet = viewChild.required<TemplateRef<unknown>>('chooseSheet');
   private readonly historySheet = viewChild.required<TemplateRef<unknown>>('historySheet');
+  private readonly copySheet = viewChild.required<TemplateRef<unknown>>('copySheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private libraryTenant: string | null = null;
   private loadedKey: string | null = null;
@@ -351,6 +366,8 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
 
   protected readonly editing = signal<MealRef | null>(null);
   protected readonly picking = signal<PickTarget | null>(null);
+  /** The day a copy sheet is open for (critique B5c). */
+  protected readonly copying = signal<DayCopyTarget | null>(null);
   /** The recipe chosen with +, while the grid offers Add here for it (critique B5b). */
   protected readonly adding = signal<PlanRecipe | null>(null);
   /** What a screen reader is told when a recipe is chosen, or let go without an add. */
@@ -499,6 +516,19 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     const ref = this.editing();
     return ref ? this.plan().days.findIndex((day) => day.key === ref.dayKey) + 1 : 0;
   });
+  /** The plan's days for a copy sheet, in its weeks, each with its meals and calories. */
+  protected readonly copyWeeks = computed<CopyWeek[]>(() =>
+    this.grid().map((week) => ({
+      key: week.key,
+      title: week.title,
+      days: week.days.map((day) => ({
+        key: day.key,
+        number: day.number,
+        meals: day.meals.map((meal) => meal.name),
+        kcal: day.kcal,
+      })),
+    })),
+  );
   /** The recipes the meal in the recipe sheet already offers. */
   protected readonly pickedAlready = computed<ReadonlySet<string>>(() => {
     const target = this.picking();
@@ -787,30 +817,114 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     this.focusDay(this.plan().days[before.days.length]?.key);
   }
 
+  /**
+   * A day's menu. Nothing shifts (critique B5c): a day's meals are copied, replaced or cleared in
+   * place, and only the last day is ever deleted, so no later day changes its number.
+   */
   protected onDayAction(dayKey: string, action: string): void {
     const before = this.plan();
     const index = before.days.findIndex((day) => day.key === dayKey);
     const number = index + 1;
     switch (action) {
-      case 'duplicate':
-        this.commit(duplicateDay(before, dayKey));
-        this.focusDay(this.plan().days[index + 1]?.key);
-        this.announce($localize`Day ${number}:day: copied to day ${number + 1}:next:.`);
-        return;
-      case 'everyday':
-        this.commit(copyDayToAll(before, dayKey));
-        this.offerUndo($localize`Every day now has day ${number}:day:’s meals.`, before);
-        return;
+      case 'copy-to':
+        return this.openDayCopy({ mode: 'to', dayKey });
+      case 'replace':
+        return this.openDayCopy({ mode: 'from', dayKey });
       case 'clear':
         this.commit(clearDay(before, dayKey));
-        this.offerUndo($localize`Day ${number}:day:’s meals removed.`, before);
+        this.offerUndo($localize`Day ${number}:day: cleared.`, before);
         return;
-      case 'delete':
-        this.commit(removeDay(before, dayKey));
-        this.focusDay(this.plan().days[Math.max(0, index - 1)]?.key);
+      case 'delete': {
+        const next = removeDay(before, dayKey);
+        if (next === before) return;
+        this.commit(next);
+        this.focusDay(next.days.at(-1)?.key);
         this.offerUndo($localize`Day ${number}:day: deleted.`, before);
         return;
+      }
     }
+  }
+
+  /**
+   * A week's menu: a copy straight after it, or the week gone. Later weeks move by a whole week, so
+   * every day keeps its weekday (critique B5c).
+   */
+  protected onWeekAction(week: number, action: string): void {
+    const before = this.plan();
+    const later = Math.ceil(before.days.length / 7) > week;
+    switch (action) {
+      case 'duplicate-week': {
+        const next = duplicateWeek(before, week);
+        if (next === before) return;
+        this.commit(next);
+        this.focusDay(next.days[week * 7]?.key);
+        this.offerUndo(
+          later
+            ? $localize`Week ${week}:week: duplicated as week ${week + 1}:copy:. The weeks after it moved on a week.`
+            : $localize`Week ${week}:week: duplicated as week ${week + 1}:copy:.`,
+          before,
+        );
+        return;
+      }
+      case 'delete-week': {
+        const next = deleteWeek(before, week);
+        if (next === before) return;
+        this.commit(next);
+        this.focusDay((next.days[(week - 1) * 7] ?? next.days.at(-1))?.key);
+        this.offerUndo(
+          later
+            ? $localize`Week ${week}:week: deleted. The weeks after it moved up a week.`
+            : $localize`Week ${week}:week: deleted.`,
+          before,
+        );
+        return;
+      }
+    }
+  }
+
+  /** "Copy this day to…", "Replace with a copy of…" and Publish's "Copy a day here". */
+  protected openDayCopy(target: DayCopyTarget): void {
+    const number = this.plan().days.findIndex((day) => day.key === target.dayKey) + 1;
+    if (number === 0) return;
+    this.copying.set(target);
+    const sheet = this.sheets.open(this.copySheet(), {
+      title:
+        target.mode === 'to'
+          ? $localize`Copy day ${number}:day: to…`
+          : $localize`Replace day ${number}:day: with a copy of…`,
+      closeLabel: this.closeLabel,
+    });
+    sheet.closed.subscribe(() => {
+      if (this.copying() === target) this.copying.set(null);
+    });
+  }
+
+  /** The days picked in a copy sheet get the meals, in place of their own, with an Undo. */
+  protected copyDays(keys: readonly string[], sheet: Closable): void {
+    const target = this.copying();
+    sheet.close();
+    if (!target) return;
+    const before = this.plan();
+    const numberOf = (dayKey: string) => before.days.findIndex((day) => day.key === dayKey) + 1;
+    const number = numberOf(target.dayKey);
+    if (target.mode === 'to') {
+      const next = copyDayTo(before, target.dayKey, keys);
+      if (next === before) return;
+      this.commit(next);
+      this.focusDay(target.dayKey);
+      const days = dayListWords(keys.map(numberOf).filter((value) => value > 0));
+      this.offerUndo($localize`Day ${number}:day:’s meals copied to ${days}:days:.`, before);
+      return;
+    }
+    const from = keys[0];
+    const next = from ? copyDayTo(before, from, [target.dayKey]) : before;
+    if (next === before) return;
+    this.commit(next);
+    this.focusDay(target.dayKey);
+    this.offerUndo(
+      $localize`Day ${number}:day: now has day ${numberOf(from!)}:from:’s meals.`,
+      before,
+    );
   }
 
   protected onMealAction(ref: MealRef, action: string): void {
@@ -1271,10 +1385,15 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
   ): WeekRow[] {
     const target = plan.targets.calories;
     const single = plan.days.length <= 1;
-    return weeksOf(plan).map((week) => ({
+    const lastKey = plan.days.at(-1)?.key;
+    const filledDays = plan.days.filter((day) => day.meals.length > 0).length;
+    const weeks = weeksOf(plan);
+    return weeks.map((week) => ({
       key: week.key,
       number: week.number,
       title: $localize`Week ${week.number}:number:`,
+      menuLabel: $localize`More for week ${week.number}:number:`,
+      menu: this.weekMenu(plan, week.number, weeks.length),
       days: week.days.map(({ day, number }) => {
         const total = dayTotal(day, book);
         const kcal = kcalText(total.macros.calories, this.locale);
@@ -1300,31 +1419,7 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
           standing: place,
           fill: target !== null && target > 0 ? Math.min(total.macros.calories / target, 1) : 0,
           isProblem: problem?.dayKey === day.key,
-          menu: [
-            {
-              label: $localize`Duplicate day`,
-              action: 'duplicate',
-              hint:
-                plan.days.length >= MAX_DAYS
-                  ? $localize`A meal plan holds up to ${MAX_DAYS}:count: days.`
-                  : $localize`A copy right after it`,
-              disabled: plan.days.length >= MAX_DAYS,
-            },
-            {
-              label: $localize`Use for every day`,
-              action: 'everyday',
-              hint: $localize`Every other day gets these meals`,
-              disabled: single || day.meals.length === 0,
-            },
-            { label: $localize`Clear meals`, action: 'clear', disabled: day.meals.length === 0 },
-            {
-              label: $localize`Delete day`,
-              action: 'delete',
-              danger: true,
-              disabled: single,
-              hint: single ? $localize`A meal plan keeps at least one day.` : undefined,
-            },
-          ],
+          menu: this.dayMenu(day.meals.length, single, filledDays, day.key === lastKey),
           meals: day.meals.map((meal, index) => {
             const ref = { dayKey: day.key, mealKey: meal.key };
             const name = meal.name.trim() || $localize`Unnamed meal`;
@@ -1386,6 +1481,80 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
         };
       }),
     }));
+  }
+
+  /**
+   * A day's menu (critique B5c): its meals copied out, replaced or cleared where it stands. Delete day
+   * is on the last day only, so no later day moves; Duplicate day and Insert a day are gone for the
+   * same reason.
+   */
+  private dayMenu(meals: number, single: boolean, filledDays: number, last: boolean): UiMenuItem[] {
+    const othersFilled = filledDays - (meals > 0 ? 1 : 0) > 0;
+    const items: UiMenuItem[] = [
+      {
+        label: $localize`Copy this day to…`,
+        action: 'copy-to',
+        hint: single
+          ? $localize`The plan has no other day yet`
+          : meals === 0
+            ? $localize`Add a meal to it first`
+            : $localize`Pick the days; their meals are replaced`,
+        disabled: single || meals === 0,
+      },
+      {
+        label: $localize`Replace with a copy of…`,
+        action: 'replace',
+        hint: othersFilled
+          ? $localize`Another day’s meals, in place of these`
+          : $localize`No other day has meals yet`,
+        disabled: !othersFilled,
+      },
+      {
+        label: $localize`Clear meals`,
+        action: 'clear',
+        hint: $localize`Keeps the day, empties it`,
+        disabled: meals === 0,
+      },
+    ];
+    if (last) {
+      items.push({
+        label: $localize`Delete day`,
+        action: 'delete',
+        danger: true,
+        disabled: single,
+        hint: single ? $localize`A meal plan keeps at least one day.` : undefined,
+      });
+    }
+    return items;
+  }
+
+  /** A week's menu: whole weeks only, so the days after it keep their weekdays (critique B5c). */
+  private weekMenu(plan: MealPlanModel, week: number, weeks: number): UiMenuItem[] {
+    const refusal = duplicateWeekRefusal(plan, week);
+    return [
+      {
+        label: $localize`Duplicate week`,
+        action: 'duplicate-week',
+        hint:
+          refusal ??
+          (week < weeks
+            ? $localize`A copy right after it; later weeks move on a week`
+            : $localize`A copy right after it`),
+        disabled: refusal !== null,
+      },
+      {
+        label: $localize`Delete week`,
+        action: 'delete-week',
+        danger: true,
+        hint:
+          weeks <= 1
+            ? $localize`A meal plan keeps at least one day.`
+            : week < weeks
+              ? $localize`Later weeks move up a week`
+              : undefined,
+        disabled: weeks <= 1,
+      },
+    ];
   }
 
   private againstLine(place: TargetStanding, difference: number): string | null {
@@ -1572,6 +1741,7 @@ export class MealPlanBuilder implements HoldsUnsavedWork {
     this.saveError.set(null);
     this.editing.set(null);
     this.picking.set(null);
+    this.copying.set(null);
     this.adding.set(null);
     this.addingStatus.set('');
   }

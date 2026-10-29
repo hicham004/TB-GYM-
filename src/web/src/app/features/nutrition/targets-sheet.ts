@@ -1,3 +1,4 @@
+import { formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -26,6 +27,7 @@ import {
   FAT_PICKS,
   FORMULAS,
   GOAL_PICKS,
+  macroShares,
   mapWorkedOut,
   numberOrNull,
   perKilogram,
@@ -240,69 +242,68 @@ const SEXES: readonly SegmentOption[] = [
           </app-field>
         </fieldset>
 
+        <!-- Two blocks, each its box first and one row of picks under it (critique B5c, T45). -->
         <fieldset class="group">
           <legend i18n>Protein and fat</legend>
-          <div class="chips" role="group" [attr.aria-label]="proteinPicksLabel">
-            @for (perKg of proteinPerKg; track perKg) {
-              <button
-                type="button"
-                class="chip"
-                [class.chosen]="proteinPick() === perKg"
-                [attr.aria-pressed]="proteinPick() === perKg"
-                [disabled]="proteinPicksOff()"
-                (click)="pickProtein(perKg)"
-              >
-                <span i18n>{{ perKg }} g a kilogram</span>
-              </button>
-            }
+          <div class="block" data-block="protein">
+            <app-field
+              [label]="proteinLabel"
+              [help]="proteinHelp()"
+              [errors]="shows('protein', issues().protein) ? issues().protein : null"
+            >
+              <input
+                appControl
+                name="protein"
+                type="number"
+                inputmode="numeric"
+                step="1"
+                min="0"
+                [value]="protein() ?? ''"
+                (input)="protein.set(numberOrNull($any($event.target).valueAsNumber))"
+                (blur)="attempt.touch('protein')"
+              />
+            </app-field>
+            <div class="picks">
+              <app-segmented-control
+                [label]="proteinPicksLabel"
+                [hideLabel]="true"
+                [options]="proteinOptions()"
+                [selected]="proteinPickValue()"
+                (selectedChange)="pickProtein($event)"
+              />
+              <span class="caption" aria-hidden="true" i18n>g per kg</span>
+            </div>
           </div>
-          <app-field
-            [label]="proteinLabel"
-            [help]="proteinHelp()"
-            [errors]="shows('protein', issues().protein) ? issues().protein : null"
-          >
-            <input
-              appControl
-              name="protein"
-              type="number"
-              inputmode="numeric"
-              step="1"
-              min="0"
-              [value]="protein() ?? ''"
-              (input)="protein.set(numberOrNull($any($event.target).valueAsNumber))"
-              (blur)="attempt.touch('protein')"
-            />
-          </app-field>
-          <div class="chips" role="group" [attr.aria-label]="fatPicksLabel">
-            @for (share of fatPicks; track share) {
-              <button
-                type="button"
-                class="chip"
-                [class.chosen]="fat() === share"
-                [attr.aria-pressed]="fat() === share"
-                (click)="fat.set(share)"
-              >
-                <span i18n>{{ share }}% fat</span>
-              </button>
-            }
+          <div class="block" data-block="fat">
+            <app-field
+              [label]="fatLabel"
+              [help]="fatHelp()"
+              [errors]="shows('fat', issues().fat) ? issues().fat : null"
+            >
+              <input
+                appControl
+                name="fat"
+                type="number"
+                inputmode="decimal"
+                step="1"
+                min="0"
+                [value]="fat() ?? ''"
+                (input)="fat.set(numberOrNull($any($event.target).valueAsNumber))"
+                (blur)="attempt.touch('fat')"
+              />
+            </app-field>
+            <div class="picks">
+              <app-segmented-control
+                [label]="fatPicksLabel"
+                [hideLabel]="true"
+                [options]="fatOptions"
+                [selected]="fatPickValue()"
+                (selectedChange)="pickFat($event)"
+              />
+              <span class="caption" aria-hidden="true" i18n>% of calories</span>
+            </div>
           </div>
-          <app-field
-            [label]="fatLabel"
-            [help]="fatHelp"
-            [errors]="shows('fat', issues().fat) ? issues().fat : null"
-          >
-            <input
-              appControl
-              name="fat"
-              type="number"
-              inputmode="decimal"
-              step="1"
-              min="0"
-              [value]="fat() ?? ''"
-              (input)="fat.set(numberOrNull($any($event.target).valueAsNumber))"
-              (blur)="attempt.touch('fat')"
-            />
-          </app-field>
+          <p class="rest" data-carbs>{{ carbsLine() }}</p>
         </fieldset>
 
         <app-disclosure
@@ -500,6 +501,39 @@ const SEXES: readonly SegmentOption[] = [
         cursor: not-allowed;
       }
 
+      .block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      // The caption beside its picks, and under them when large text leaves no room beside.
+      .picks {
+        align-items: center;
+        column-gap: 0.75rem;
+        display: flex;
+        flex-wrap: wrap;
+        row-gap: 0.25rem;
+      }
+
+      .picks app-segmented-control {
+        flex: 1 1 12rem;
+        max-inline-size: 20rem;
+      }
+
+      // The caption stays whole; the row of picks gives way.
+      .caption {
+        color: var(--tb-muted);
+        flex: none;
+        font-size: 0.875rem;
+        white-space: nowrap;
+      }
+
+      .rest {
+        border-block-start: 1px solid var(--tb-line);
+        padding-block-start: 0.75rem;
+      }
+
       .problem {
         color: var(--tb-danger);
         font-size: 0.875rem;
@@ -555,7 +589,6 @@ export class WorkOutTargets extends SheetForm {
   protected readonly proteinLabel = $localize`Protein (grams a day)`;
   protected readonly fatPicksLabel = $localize`Share of calories from fat`;
   protected readonly fatLabel = $localize`Fat (percent of calories)`;
-  protected readonly fatHelp = $localize`Carbohydrate is what is left after protein and fat.`;
   protected readonly formulaLabel = $localize`Formula`;
   protected readonly bodyFatLabel = $localize`Body fat (percent)`;
   protected readonly saveLabel = $localize`Work out targets`;
@@ -563,8 +596,11 @@ export class WorkOutTargets extends SheetForm {
   protected readonly sexes = SEXES;
   protected readonly kinds = WORK_KINDS;
   protected readonly goalPicks = GOAL_PICKS;
-  protected readonly proteinPerKg = PROTEIN_PER_KG;
-  protected readonly fatPicks = FAT_PICKS;
+  /** "20 · 25 · 30 · 35", captioned "% of calories". */
+  protected readonly fatOptions: readonly SegmentOption[] = FAT_PICKS.map((share) => ({
+    value: String(share),
+    label: String(share),
+  }));
   protected readonly formulas = FORMULAS;
   protected readonly numberOrNull = numberOrNull;
   protected readonly signed = signedKcal;
@@ -632,19 +668,75 @@ export class WorkOutTargets extends SheetForm {
   protected readonly proteinPicksOff = computed(
     () => this.weight() === null || this.issues().weight.length > 0,
   );
+  /** "1.6 · 1.8 · 2.0 · 2.2", captioned "g per kg"; they need the weight above. */
+  protected readonly proteinOptions = computed<readonly SegmentOption[]>(() =>
+    PROTEIN_PER_KG.map((perKg) => ({
+      value: String(perKg),
+      label: formatNumber(perKg, this.locale(), '1.1-1'),
+      disabled: this.proteinPicksOff(),
+    })),
+  );
   protected readonly proteinPick = computed(() => {
     const weight = this.weight();
     const grams = this.protein();
     if (weight === null || grams === null || this.proteinPicksOff()) return null;
     return PROTEIN_PER_KG.find((perKg) => proteinFor(weight, perKg) === grams) ?? null;
   });
+  protected readonly proteinPickValue = computed(() => {
+    const pick = this.proteinPick();
+    return pick === null ? '' : String(pick);
+  });
+  protected readonly fatPickValue = computed(() => {
+    const fat = this.fat();
+    return fat !== null && FAT_PICKS.includes(fat) ? String(fat) : '';
+  });
+  /** The box says grams, the help the grams for each kilogram: the figure both ways. */
   protected readonly proteinHelp = computed(() => {
     const weight = this.weight();
     const grams = this.protein();
+    if (this.proteinPicksOff()) {
+      return $localize`Type the grams. With their weight above, you can pick grams for each kilogram.`;
+    }
     const perKg = weight !== null && grams !== null ? perKilogram(grams, weight) : null;
     return perKg === null
-      ? $localize`Choose a quick pick, or type the grams.`
+      ? $localize`Type the grams, or pick grams for each kilogram below.`
       : $localize`That is ${perKg}:perKg: g for each kilogram of their weight.`;
+  });
+  /**
+   * The targets last worked out, while every number here is still one they were worked out from:
+   * their grams are the server's own answer (NUT-008), which the sheet never works out itself.
+   */
+  private readonly answered = computed(() => {
+    const last = this.last();
+    const given = last?.inputs;
+    if (!last || !given || last.adjustment) return null;
+    const now = this.values();
+    const same =
+      now.weight === given.weight &&
+      now.height === given.height &&
+      now.age === given.age &&
+      now.sex === given.sex &&
+      now.work === given.work &&
+      now.steps === given.steps &&
+      now.goal === last.goalAdjustment &&
+      now.protein === last.protein &&
+      now.fat === given.fatPercent &&
+      now.formula === given.formula &&
+      (now.formula !== 'KatchMcArdle' || now.bodyFat === given.bodyFat);
+    return same ? last : null;
+  });
+  protected readonly fatHelp = computed(() => {
+    const answered = this.answered();
+    return answered
+      ? $localize`That is ${formatNumber(answered.fat, this.locale(), '1.0-0')}:grams: g of fat a day.`
+      : $localize`A share of the day’s calories: the grams come with the calories, once worked out.`;
+  });
+  /** "Carbs: the rest": the figures once Work out has answered for these very numbers. */
+  protected readonly carbsLine = computed(() => {
+    const answered = this.answered();
+    if (!answered) return $localize`Carbs: the rest of the calories, after protein and fat.`;
+    const grams = formatNumber(answered.carbohydrate, this.locale(), '1.0-0');
+    return $localize`Carbs: the rest, ${grams}:grams: g (${macroShares(answered).carbohydrate}:share:%).`;
   });
 
   constructor() {
@@ -668,9 +760,16 @@ export class WorkOutTargets extends SheetForm {
     });
   }
 
-  protected pickProtein(perKg: number): void {
+  protected pickProtein(value: string): void {
     const weight = this.weight();
-    if (weight !== null) this.protein.set(proteinFor(weight, perKg));
+    const perKg = Number(value);
+    if (weight !== null && PROTEIN_PER_KG.includes(perKg))
+      this.protein.set(proteinFor(weight, perKg));
+  }
+
+  protected pickFat(value: string): void {
+    const share = Number(value);
+    if (FAT_PICKS.includes(share)) this.fat.set(share);
   }
 
   protected async submit(): Promise<void> {

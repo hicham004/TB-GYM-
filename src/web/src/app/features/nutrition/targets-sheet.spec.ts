@@ -10,6 +10,7 @@ import {
   formSummary,
   leave,
   press,
+  segment,
   settle,
   toggleFold,
 } from '../../../testing/dom';
@@ -73,6 +74,9 @@ const chip = (host: ParentNode, words: string) =>
     (item) => textOf(item) === words,
   ) ?? null;
 
+const PROTEIN = 'Protein for each kilogram of body weight';
+const FAT = 'Share of calories from fat';
+
 /** Everything a coach must choose themselves. */
 async function chooseTheirs(fixture: Parameters<typeof settle>[0], host: HTMLElement) {
   radio(host, 'work', 'Seated').click();
@@ -102,16 +106,21 @@ describe('Work out targets', () => {
   it('leaves sex and the kind of work for the coach to choose, with no default', async () => {
     const { fixture, host } = await render();
 
-    // Sex and work have nothing chosen; the usual formula waits, folded under its name.
-    expect(host.querySelectorAll('input[type="radio"]:checked').length).toBe(0);
+    // Sex and work have nothing chosen; the usual formula waits, folded under its name. The rows of
+    // quick picks under protein and fat are not choices of that kind.
+    const chosen = () =>
+      Array.from(host.querySelectorAll('input[type="radio"]:checked')).filter(
+        (input) => !input.closest('.picks'),
+      ).length;
+    expect(chosen()).toBe(0);
     expect(fold(host, 'Formula: Mifflin-St Jeor').open).toBe(false);
     await toggleFold(fixture, host, 'Formula: Mifflin-St Jeor');
-    expect(host.querySelectorAll('input[type="radio"]:checked').length).toBe(1);
+    expect(chosen()).toBe(1);
     expect(radio(host, 'formula', 'MifflinStJeor').checked).toBe(true);
     expect(radio(host, 'work', 'Seated').checked).toBe(false);
     expect(host.querySelector<HTMLInputElement>('input[value="Female"]')!.checked).toBe(false);
     expect(chip(host, 'Hold weight 0')?.getAttribute('aria-pressed')).toBe('true');
-    expect(chip(host, '25% fat')?.getAttribute('aria-pressed')).toBe('true');
+    expect(segment(host, FAT, '25').checked).toBe(true);
   });
 
   it('says what is missing in words and sends nothing', async () => {
@@ -155,7 +164,7 @@ describe('Work out targets', () => {
 
     await chooseTheirs(fixture, host);
     press(host, 'Lose steadily −300');
-    press(host, '2 g a kilogram');
+    segment(host, PROTEIN, '2.0').click();
     await settle(fixture);
     expect(field<HTMLInputElement>(host, 'Protein (grams a day)').value).toBe('140');
     expect(textOf(host)).toContain('That is 2 g for each kilogram of their weight.');
@@ -194,7 +203,7 @@ describe('Work out targets', () => {
     fixture.componentInstance.closed.subscribe(closed);
 
     await chooseTheirs(fixture, host);
-    press(host, '2 g a kilogram');
+    segment(host, PROTEIN, '2.0').click();
     await settle(fixture);
     press(host, 'Work out targets');
     await settle(fixture);
@@ -207,13 +216,16 @@ describe('Work out targets', () => {
   it('works protein out from the weight, and turns the quick picks off without one', async () => {
     const { fixture, host } = await render({ starting: { ...STARTING, weight: null } });
 
-    expect(chip(host, '1.8 g a kilogram')?.disabled).toBe(true);
+    expect(segment(host, PROTEIN, '1.8').disabled).toBe(true);
+    expect(textOf(host)).toContain(
+      'Type the grams. With their weight above, you can pick grams for each kilogram.',
+    );
     fill(host, 'Weight (kg)', '72.4');
     await settle(fixture);
-    press(host, '1.8 g a kilogram');
+    segment(host, PROTEIN, '1.8').click();
     await settle(fixture);
     expect(field<HTMLInputElement>(host, 'Protein (grams a day)').value).toBe('130');
-    expect(chip(host, '1.8 g a kilogram')?.getAttribute('aria-pressed')).toBe('true');
+    expect(segment(host, PROTEIN, '1.8').checked).toBe(true);
     // Typing the grams moves the line under it.
     fill(host, 'Protein (grams a day)', '145');
     await settle(fixture);
@@ -231,7 +243,7 @@ describe('Work out targets', () => {
     await settle(fixture);
     expect(host.querySelector('input[name="bodyFat"]')).not.toBeNull();
     await chooseTheirs(fixture, host);
-    press(host, '2 g a kilogram');
+    segment(host, PROTEIN, '2.0').click();
     await settle(fixture);
     press(host, 'Work out targets');
     await settle(fixture);
@@ -269,7 +281,7 @@ describe('Work out targets', () => {
     radio(host, 'formula', 'KatchMcArdle').click();
     await settle(fixture);
     await chooseTheirs(fixture, host);
-    press(host, '2 g a kilogram');
+    segment(host, PROTEIN, '2.0').click();
     await settle(fixture);
     await toggleFold(fixture, host, 'Formula: Katch-McArdle', false);
 
@@ -306,6 +318,51 @@ describe('Work out targets', () => {
     expect(closed).not.toHaveBeenCalled();
   });
 
+  it('puts each number in a block of its own: the box, then one row of picks with its caption (critique B5c)', async () => {
+    const { fixture, host } = await render();
+
+    for (const [block, label, caption, picks] of [
+      ['protein', 'Protein (grams a day)', 'g per kg', ['1.6', '1.8', '2.0', '2.2']],
+      ['fat', 'Fat (percent of calories)', '% of calories', ['20', '25', '30', '35']],
+    ] as const) {
+      const box = host.querySelector(`[data-block="${block}"]`)!;
+      const entry = box.querySelector('app-field')!;
+      const row = box.querySelector('.picks')!;
+      // The box comes first, its picks under it.
+      expect(entry.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(textOf(entry)).toContain(label);
+      expect(textOf(row.querySelector('.caption'))).toBe(caption);
+      expect(Array.from(row.querySelectorAll('label')).map(textOf)).toEqual([...picks]);
+    }
+
+    segment(host, FAT, '30').click();
+    await settle(fixture);
+    expect(field<HTMLInputElement>(host, 'Fat (percent of calories)').value).toBe('30');
+    fill(host, 'Fat (percent of calories)', '28');
+    await settle(fixture);
+    expect(['20', '25', '30', '35'].some((share) => segment(host, FAT, share).checked)).toBe(false);
+    expect(textOf(host.querySelector('[data-carbs]'))).toBe(
+      'Carbs: the rest of the calories, after protein and fat.',
+    );
+  });
+
+  it('says the carbs and the fat in grams once Work out has answered for these numbers', async () => {
+    const last = mapWorkedOut(calculationRecord());
+    const { fixture, host } = await render({ last });
+
+    // Opened again on the numbers last worked out: the server's own grams (NUT-008).
+    expect(textOf(host.querySelector('[data-carbs]'))).toBe('Carbs: the rest, 264 g (49%).');
+    expect(textOf(host)).toContain('That is 60 g of fat a day.');
+
+    // Another number, another answer: none is guessed in the browser.
+    fill(host, 'Protein (grams a day)', '150');
+    await settle(fixture);
+    expect(textOf(host.querySelector('[data-carbs]'))).toBe(
+      'Carbs: the rest of the calories, after protein and fat.',
+    );
+    expect(textOf(host)).not.toContain('g of fat a day');
+  });
+
   it('carries the last calculation’s own choices into the next', async () => {
     const last = mapWorkedOut(calculationRecord());
     const { host } = await render({
@@ -328,7 +385,7 @@ describe('Work out targets', () => {
 
     await chooseTheirs(fixture, host);
     expect(dirty).toHaveBeenLastCalledWith(true);
-    press(host, '2 g a kilogram');
+    segment(host, PROTEIN, '2.0').click();
     await settle(fixture);
     press(host, 'Work out targets');
     await settle(fixture);
@@ -343,7 +400,7 @@ describe('Work out targets', () => {
     fixture.componentInstance.recorded.subscribe(recorded);
 
     await chooseTheirs(fixture, host);
-    press(host, '2 g a kilogram');
+    segment(host, PROTEIN, '2.0').click();
     await settle(fixture);
     press(host, 'Work out targets');
     await settle(fixture);

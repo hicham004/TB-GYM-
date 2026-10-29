@@ -240,8 +240,15 @@ test.describe('meal plan assignment live', () => {
         if ((await input.inputValue()) === '') await input.fill(fallback);
       }
       await targets.getByRole('button', { name: /Hold weight/ }).click();
-      await targets.getByRole('button', { name: /^1\.8 g a kilogram/ }).click();
-      await targets.getByRole('button', { name: /^30% fat/ }).click();
+      // The kit's segmented rows lay their radios over the numbers, so the radio is what is pressed.
+      await targets
+        .getByRole('group', { name: 'Protein for each kilogram of body weight' })
+        .getByRole('radio', { name: '1.8' })
+        .check();
+      await targets
+        .getByRole('group', { name: 'Share of calories from fat' })
+        .getByRole('radio', { name: '30' })
+        .check();
       await targets.getByRole('button', { name: 'Work out targets' }).click();
       await expect(targets.locator('[data-result]')).toContainText('calories a day', {
         timeout: 20_000,

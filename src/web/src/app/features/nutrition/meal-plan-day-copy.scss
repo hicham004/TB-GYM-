@@ -1,0 +1,158 @@
+// The meal-plan builder's copy sheets (critique B5c): the plan's days in weeks, one round chip a day,
+// drawn as the phone's day chips are.
+
+:host {
+  display: block;
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.help {
+  color: var(--tb-muted);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.shortcut {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 999px;
+  color: var(--tb-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.875rem;
+  touch-action: manipulation;
+}
+
+.shortcut:hover {
+  border-color: var(--tb-ink);
+}
+
+.shortcut:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.week {
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.week > legend {
+  color: var(--tb-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-block-end: 0.375rem;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+// The builder's own phone chips' size, so a week fits one row on a phone and each weekday keeps its
+// column; a narrower screen or larger text wraps it.
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.chip {
+  align-items: center;
+  background: var(--tb-surface);
+  block-size: 2.5rem;
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: var(--tb-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  inline-size: 2.5rem;
+  justify-content: center;
+  position: relative;
+  touch-action: manipulation;
+}
+
+// The box or radio covers the chip, so the whole chip is what is pressed.
+.chip input {
+  block-size: 100%;
+  cursor: inherit;
+  inline-size: 100%;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+}
+
+// The legacy `label > span` rule in styles.scss would otherwise restyle the number.
+.chip > span {
+  color: inherit;
+  display: inline;
+  font-size: inherit;
+  font-weight: inherit;
+  margin: 0;
+}
+
+.chip:hover:not(:has(input:disabled)) {
+  border-color: var(--tb-ink);
+}
+
+.chip.empty {
+  border-style: dashed;
+}
+
+// A picked day is filled with the accent ink: the brand on light, the bright accent on dark, where
+// the brand's green would barely stand out from the sheet.
+.chip:has(input:checked) {
+  background: var(--tb-accent-ink);
+  border-color: var(--tb-accent-ink);
+  color: var(--tb-on-accent-ink);
+  font-weight: 700;
+}
+
+.chip:has(input:focus-visible) {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.chip:has(input:disabled) {
+  color: var(--tb-muted);
+  cursor: not-allowed;
+}
+
+// The day the sheet is for: ringed, never picked.
+.chip.self {
+  background: var(--tb-surface-2);
+  border: 2px solid var(--tb-accent-ink);
+  color: var(--tb-ink);
+}
+
+.summary {
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  margin: 0;
+  min-block-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+@media (forced-colors: active) {
+  .chip:has(input:checked) {
+    border: 2px solid Highlight;
+  }
+}

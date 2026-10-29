@@ -171,6 +171,17 @@
             <button appButton type="button" variant="outlined" (click)="showProblem()" i18n>
               Open the meal
             </button>
+          } @else if (issue.copyHere && issue.dayKey) {
+            <!-- A published plan has a meal on every day (NUT-013); another day's meals fill this one. -->
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              (click)="openDayCopy({ mode: 'from', dayKey: issue.dayKey })"
+              i18n
+            >
+              Copy a day here
+            </button>
           }
         </div>
       }
@@ -335,7 +346,17 @@
                 [attr.aria-label]="week.title"
               >
                 @if (grid().length > 1) {
-                  <h3 class="week-title">{{ week.title }}</h3>
+                  <!-- Whole weeks only, so every later day keeps its weekday (critique B5c). -->
+                  <header class="week-head">
+                    <h3 class="week-title">{{ week.title }}</h3>
+                    <app-menu
+                      icon="more"
+                      align="start"
+                      [label]="week.menuLabel"
+                      [items]="week.menu"
+                      (chosen)="onWeekAction(week.number, $event)"
+                    />
+                  </header>
                 }
                 <div class="days">
                   @for (cell of week.days; track cell.key) {
@@ -587,6 +608,18 @@
       </button>
     </ng-template>
   </div>
+</ng-template>
+
+<ng-template #copySheet let-sheet>
+  @if (copying(); as target) {
+    <app-meal-plan-day-copy
+      [mode]="target.mode"
+      [dayKey]="target.dayKey"
+      [weeks]="copyWeeks()"
+      (copied)="copyDays($event, sheet)"
+      (cancelled)="sheet.close()"
+    />
+  }
 </ng-template>
 
 <ng-template #historySheet let-sheet>

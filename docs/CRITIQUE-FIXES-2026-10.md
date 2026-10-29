@@ -27,7 +27,8 @@ settle, and an item it left out, wait for the owner in section 3.
 | B4c | The plan's name on Clients | The owner's change to B4a (2026-10-29): the Plan column shows the plan's name. | Done · 2026-10-29 · cc462c0 (built and committed by the plan runner's chat, on the owner's word); the name sits in a `<bdi>`, so a name in another script reads in its own direction while its line keeps the cell's alignment, as the plan's name on Today does. No line added to section 3. Fixed first, in its own commit (d0d138b): the mocked Clients e2e's 200% text check, which B4a's reason links had made ambiguous |
 | B5a | Meal options | Pick one of N, with the average calories and macros (the owner's note). Choose one for the client. The coach's option order kept. Left out: meals of several recipes (later). | Done · 2026-10-29 · 57e1df9 (built and committed by the plan runner's chat, on the owner's word); the options already published keep the order they were read in, their stored order, which had reshuffled 8 of the demo's 14 two-option meals; a recipe dropped under a day says "Added as a new meal, Snack, on day 2." too. Fixed in the row, since its Change servings and a second pick go through it: changing a meal the client had logged answered 409 with EF Core's "severed" message (found in audit A14a). Three lines added to section 3 (another option first, the button on a meal of one recipe, the words the row did not give) |
 | B5b | Adding without dragging | Press +, then Add here, in both builders. | Done · 2026-10-29 · 9e1722f (built and committed by the plan runner's chat, on the owner's word); one Add here ends the choice, a phone or a narrow window chooses in a Recipes or Exercises sheet, a bar at the foot of the grid says what is being added, with Cancel, and saved workouts have the + too. Six lines added to section 3 (what ends a choice, on a phone, the first-use hint, the rows, Edit weeks left out, the words the row did not give) |
-| B5c | Days, targets and the drafts filter | Nothing shifts (2026-10-27): no Delete day in the middle, no Insert or Duplicate day, whole-week tools instead; no empty day in a published plan. Fill in fat and carbs, the targets sheet's two blocks, the Drafts filter. | Open |
+| B5c1 | Days and the targets sheet's blocks | Nothing shifts (2026-10-27): no Delete day in the middle, no Insert or Duplicate day, whole-week tools instead; no empty day in a published plan. The targets sheet's two blocks. The plan runner's chat split B5c on 2026-10-29, as it was too big for one chat: this part is web only. | Open |
+| B5c2 | Fill in fat and carbs and the drafts filter | The rest of B5c (2026-10-27): Fill in fat and carbs through the server's NUT-008 strategy, with its warnings and "Start from a client's targets"; the Drafts filter. | Open |
 | B5d | Recipe working drafts | Unfinished drafts, saved as you type and private until published. | Open |
 | B6 | Progress and profile | The blocked-client sentence. Age. A starting weight of its own: the first start and each comeback, with the change since the first start from weekly averages (2026-10-27). | Open |
 | B7a | Strength · The grid, whose max, refusals | A line per set when sets differ. The training-max sentences. Refusals with a way out, 20-rep sets staying possible. The chart's % on chart sets. A warning only when a % set is impossible by the chart (2026-10-27). | Open |
@@ -287,7 +288,7 @@ done or not verified, the screenshots, and the next row.
   recipe onto a meal, or press + to add it." One first-use hint, closed by the first add and reachable again from
   "How adding works". Nothing loops, and nothing moves under reduced motion.
 
-### B5c · Days, targets and the drafts filter
+### B5c1 · Days and the targets sheet's blocks (web)
 
 - Nothing shifts. The day menu holds Copy this day to… (pick days; their meals are replaced), Replace with a copy
   of… and Clear meals ("Keeps the day, empties it"). Delete day appears only on the plan's last day. Duplicate day
@@ -295,12 +296,17 @@ done or not verified, the screenshots, and the next row.
   later weeks by whole weeks, so weekdays stay in line. Add day and Add week stay at the end. Undo says what changed
   ("Day 33 cleared."). A published plan still needs a meal on every day (NUT-013), and Publish's refusal offers
   "Copy a day here".
+- The targets sheet's two blocks: the box first and the picks under it (protein 1.6 · 1.8 · 2.0 · 2.2 g per kg;
+  fat 20 · 25 · 30 · 35 % of calories), and "Carbs: the rest" once Work out has answered.
+
+### B5c2 · Fill in fat and carbs and the drafts filter
+
 - The Daily target's "Fill in fat and carbs", with 20 / 25 / 30 / 35 % picks, runs through the server's NUT-008
   strategy so the grams keep their provenance. It warns below 20 % fat and under 0.5 g of fat per kg. "Start from a
   client's targets" lists the coach's own clients only.
-- The targets sheet's two blocks: the box first and the picks under it (protein 1.6 · 1.8 · 2.0 · 2.2 g per kg;
-  fat 20 · 25 · 30 · 35 % of calories), and "Carbs: the rest" once Work out has answered.
 - Recipes get an "All · Published · Drafts (n)" filter, applied on the server.
+- Left from B5c1, server words: Publish's refusal of an empty day on the server still says "Add one, or remove the
+  day."; it takes the builder's words ("Add a meal, or copy a day here.").
 
 ### B5d · Recipe working drafts
 
@@ -504,3 +510,29 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   meal" on a meal that offers the recipe; "Add here · Day 2" on a folded week; "Back Squat added to Lower A.",
   "… added: a new workout on week 2, day 3." and "Full body added on week 1, day 1."; the sheets' "Choose a recipe,
   then press Add here where it goes.". Recommendation: keep.
+- B5c1 · Use for every day. Built: gone from the day menu, which holds only the row's items; the "Copy this day
+  to…" sheet starts with Every day and The same day of each week (each Friday, when day 1 is a Monday), then None.
+  Other way: keep "Use for every day" in the menu too. Recommendation: keep as built.
+- B5c1 · The week's menu. Built: beside the week's name, which shows once a plan has two weeks (one week has Add
+  week, the same copy at the end); Duplicate week only on a full week of 7 days ("Only a full week of 7 days can be
+  duplicated."), since a short last week's copy would not make a week of its own; Delete week on any week, a short
+  last one included. Other way: a short last week's days copied to the end. Recommendation: keep.
+- B5c1 · The copy sheets. Built: the plan's days as numbered round chips in their weeks (a dashed chip for a day
+  with no meals, the day itself ringed and never picked), with "Day 12 has meals now; copying replaces them." before
+  the copy; "Replace with a copy of…" cannot pick a day with no meals (Clear meals empties a day) and says the
+  picked day's meals and calories. Other way: a list of days with their meals. Recommendation: keep: a year of days
+  fits a phone.
+- B5c1 · Publish's refusal of an empty day. Built: "Day 5 has no meals yet. Add a meal, or copy a day here." with
+  Copy a day here; on the last day "…, copy a day here, or delete the day."; and with no meal on any day "Add a meal
+  to it." without the button. Recommendation: keep.
+- B5c1 · "Carbs: the rest" in the targets sheet. Built: the line gives the server's grams and share ("Carbs: the
+  rest, 264 g (49%).") and the fat help its grams only while every number in the sheet is one the last targets were
+  worked out from (the sheet opened again); otherwise "Carbs: the rest of the calories, after protein and fat."
+  After Work out the result shows every figure, as before. Other way: a live figure from a preview call as the coach
+  types. Recommendation: keep; no figure is ever worked out in the browser.
+- B5c1 · Words the row did not give. Built: the hints "Pick the days; their meals are replaced", "Another day's
+  meals, in place of these", "A copy right after it; later weeks move on a week" and "Later weeks move up a week";
+  the Undo lines "Day 5's meals copied to days 6, 12 and 19.", "Day 9 now has day 2's meals.", "Week 2 duplicated as
+  week 3. The weeks after it moved on a week." and "Week 2 deleted. The weeks after it moved up a week."; the
+  captions "g per kg" and "% of calories"; the protein help without a weight "Type the grams. With their weight
+  above, you can pick grams for each kilogram." Recommendation: keep.

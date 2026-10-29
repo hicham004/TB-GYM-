@@ -410,22 +410,24 @@ export function addWeek(plan: MealPlanModel): MealPlanModel {
   return { ...plan, days: [...plan.days, ...copies.slice(0, room)] };
 }
 
-/** A copy of the day straight after it; the days after move one along. */
-export function duplicateDay(plan: MealPlanModel, dayKey: string): MealPlanModel {
-  const index = plan.days.findIndex((day) => day.key === dayKey);
-  if (index < 0 || plan.days.length >= MAX_DAYS) return plan;
-  const days = [...plan.days];
-  days.splice(index + 1, 0, copyDay(plan.days[index]!));
-  return { ...plan, days };
-}
-
-/** The day's meals replace every other day's: "Use this day for every day". */
-export function copyDayToAll(plan: MealPlanModel, dayKey: string): MealPlanModel {
-  const source = plan.days.find((day) => day.key === dayKey);
-  if (!source) return plan;
+/**
+ * A day's meals copied onto the days picked, whose own meals they replace (critique B5c: nothing
+ * shifts). Every day keeps its place, so a later day never changes its number; "Replace with a copy
+ * of…" is the same copy onto one day.
+ */
+export function copyDayTo(
+  plan: MealPlanModel,
+  fromKey: string,
+  toKeys: readonly string[],
+): MealPlanModel {
+  const source = plan.days.find((day) => day.key === fromKey);
+  const targets = new Set(toKeys.filter((dayKey) => dayKey !== fromKey));
+  if (!source || !plan.days.some((day) => targets.has(day.key))) return plan;
   return {
     ...plan,
-    days: plan.days.map((day) => (day.key === dayKey ? day : { ...copyDay(source), key: day.key })),
+    days: plan.days.map((day) =>
+      targets.has(day.key) ? { ...copyDay(source), key: day.key } : day,
+    ),
   };
 }
 
@@ -433,10 +435,73 @@ export function clearDay(plan: MealPlanModel, dayKey: string): MealPlanModel {
   return mapDay(plan, dayKey, (day) => ({ ...day, meals: [] }));
 }
 
-/** A plan keeps at least one day. */
+/**
+ * Only the plan's last day can be deleted, so no day after it moves up (critique B5c); a day in the
+ * middle is cleared or given another day's meals instead. A plan keeps at least one day.
+ */
 export function removeDay(plan: MealPlanModel, dayKey: string): MealPlanModel {
-  if (plan.days.length <= 1) return plan;
-  return { ...plan, days: plan.days.filter((day) => day.key !== dayKey) };
+  if (plan.days.length <= 1 || plan.days.at(-1)?.key !== dayKey) return plan;
+  return { ...plan, days: plan.days.slice(0, -1) };
+}
+
+/** The plan's days of a week, counted from 1, as the grid shows them in sevens. */
+function weekRange(plan: MealPlanModel, week: number): { start: number; end: number } | null {
+  const start = (week - 1) * DAYS_PER_WEEK;
+  if (!Number.isInteger(week) || week < 1 || start >= plan.days.length) return null;
+  return { start, end: Math.min(start + DAYS_PER_WEEK, plan.days.length) };
+}
+
+/** Why a week cannot be duplicated: only a whole week of seven days, with room for it. */
+export function duplicateWeekRefusal(plan: MealPlanModel, week: number): string | null {
+  const range = weekRange(plan, week);
+  if (!range) return null;
+  if (range.end - range.start < DAYS_PER_WEEK) {
+    return $localize`Only a full week of 7 days can be duplicated.`;
+  }
+  return plan.days.length + DAYS_PER_WEEK > MAX_DAYS
+    ? $localize`A meal plan holds up to ${MAX_DAYS}:count: days.`
+    : null;
+}
+
+/**
+ * A copy of a full week straight after it. The weeks after it move on by a whole week, so every day
+ * keeps its weekday (critique B5c).
+ */
+export function duplicateWeek(plan: MealPlanModel, week: number): MealPlanModel {
+  const range = weekRange(plan, week);
+  if (!range || duplicateWeekRefusal(plan, week)) return plan;
+  const days = [...plan.days];
+  days.splice(range.end, 0, ...plan.days.slice(range.start, range.end).map(copyDay));
+  return { ...plan, days };
+}
+
+/**
+ * A week's days removed. The weeks after it move up by a whole week, so every day keeps its weekday
+ * (critique B5c). A plan keeps at least one day.
+ */
+export function deleteWeek(plan: MealPlanModel, week: number): MealPlanModel {
+  const range = weekRange(plan, week);
+  if (!range || range.end - range.start >= plan.days.length) return plan;
+  return {
+    ...plan,
+    days: plan.days.filter((_, index) => index < range.start || index >= range.end),
+  };
+}
+
+/** "day 12", "days 6, 12 and 19", "days 1 to 7", "30 days": the days a copy went to, in words. */
+export function dayListWords(numbers: readonly number[]): string {
+  const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+  if (sorted.length === 1) return $localize`day ${sorted[0]}:day:`;
+  const first = sorted[0]!;
+  const last = sorted.at(-1)!;
+  if (last - first === sorted.length - 1 && sorted.length > 2) {
+    return $localize`days ${first}:first: to ${last}:last:`;
+  }
+  if (sorted.length > 6) return $localize`${sorted.length}:count: days`;
+  const list = new Intl.ListFormat('en-GB', { style: 'long', type: 'conjunction' }).format(
+    sorted.map(String),
+  );
+  return $localize`days ${list}:days:`;
 }
 
 /** The usual name for a new meal: the first of breakfast, lunch and dinner the day lacks, then snack. */
@@ -642,6 +707,8 @@ export interface PlanProblem {
   focus: 'name' | 'targets' | 'day' | 'meal';
   dayKey?: string;
   mealKey?: string;
+  /** An empty day another day's meals can fill: the refusal offers "Copy a day here". */
+  copyHere?: boolean;
 }
 
 /**
@@ -665,13 +732,21 @@ export function planProblem(plan: MealPlanModel, book: RecipeBook): PlanProblem 
       focus: 'targets',
     };
   }
+  const filled = plan.days.some((day) => day.meals.length > 0);
   for (const [index, day] of plan.days.entries()) {
     const number = index + 1;
     if (day.meals.length === 0) {
+      // A published plan has a meal on every day (NUT-013); only the last day can be deleted.
+      const last = index > 0 && index === plan.days.length - 1;
       return {
-        message: $localize`Day ${number}:day: has no meals yet. Add one, or delete the day.`,
+        message: !filled
+          ? $localize`Day ${number}:day: has no meals yet. Add a meal to it.`
+          : last
+            ? $localize`Day ${number}:day: has no meals yet. Add a meal, copy a day here, or delete the day.`
+            : $localize`Day ${number}:day: has no meals yet. Add a meal, or copy a day here.`,
         focus: 'day',
         dayKey: day.key,
+        copyHere: filled,
       };
     }
     for (const [position, meal] of day.meals.entries()) {

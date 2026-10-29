@@ -232,7 +232,11 @@ test('works targets out for the coach, from what the record knows, and sends exa
   await axe(page);
 
   await sheet.getByRole('button', { name: 'Lose faster −500' }).click();
-  await sheet.getByRole('button', { name: '2.2 g a kilogram' }).click();
+  // The kit's segmented row lays its radio over the number, so the radio is what is pressed.
+  await sheet
+    .getByRole('group', { name: 'Protein for each kilogram of body weight' })
+    .getByRole('radio', { name: '2.2' })
+    .check();
   await expect(sheet.getByLabel('Protein (grams a day)')).toHaveValue('176');
   await sheet.getByRole('button', { name: 'Work out targets' }).click();
 

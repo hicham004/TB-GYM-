@@ -20,7 +20,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { UiToast } from '../../ui/toast';
-import { field, fill, menuChoices, settle } from '../../../testing/dom';
+import { field, fill, menuChoices, settle, tick } from '../../../testing/dom';
 import {
   CHICKEN,
   draftContent,
@@ -385,7 +385,7 @@ describe('the meal-plan builder', () => {
     await settle(harness.fixture);
     named(host, 'Publish').click();
     await settle(harness.fixture);
-    expect(alerts(host)).toEqual(['Day 1 has no meals yet. Add one, or delete the day.']);
+    expect(alerts(host)).toEqual(['Day 1 has no meals yet. Add a meal to it.']);
     expect(days(host)[0].classList.contains('problem')).toBe(true);
     expect(api.publishDraft).not.toHaveBeenCalled();
   });
@@ -555,24 +555,192 @@ describe('the meal-plan builder', () => {
     ]);
   });
 
-  it('deletes a day from its menu, with Undo', async () => {
+  /** Opens the kit menu whose button is named `name` and gives its choices. */
+  async function openMenu(
+    fixture: Parameters<typeof settle>[0],
+    where: ParentNode,
+    name: string,
+  ): Promise<HTMLButtonElement[]> {
+    const trigger = named(where, name);
+    trigger.click();
+    await settle(fixture);
+    return menuChoices(trigger);
+  }
+
+  const titles = (items: HTMLButtonElement[]) =>
+    items.map((item) => textOf(item.querySelector('.item-title')));
+
+  /** The Undo toast shown last: its words, and its Undo. */
+  function lastUndo(toast: { show: ReturnType<typeof vi.fn> }): [string, () => void] {
+    const [message, settings] = toast.show.mock.calls.at(-1) as unknown as [
+      string,
+      { action: { label: string; run(): void } },
+    ];
+    expect(settings.action.label).toBe('Undo');
+    return [message, () => settings.action.run()];
+  }
+
+  it('keeps every day in its place: copy, replace and clear, and Delete day on the last day only (critique B5c)', async () => {
     const { host, harness, toast } = await render();
 
-    named(days(host)[0], 'More for day 1').click();
-    await settle(harness.fixture);
-    const remove = menuChoices(named(days(host)[0], 'More for day 1')).find((item) =>
-      textOf(item).startsWith('Delete day'),
-    );
-    remove!.click();
-    await settle(harness.fixture);
-
-    expect(days(host)).toHaveLength(1);
-    expect(textOf(host.querySelector('#days-title'))).toBe('1 day · 1 meal');
-    const undo = toast.show.mock.calls.at(-1) as unknown as [string, { action: { run(): void } }];
-    expect(undo[0]).toBe('Day 1 deleted.');
-    undo[1].action.run();
+    const first = await openMenu(harness.fixture, days(host)[0], 'More for day 1');
+    expect(titles(first)).toEqual(['Copy this day to…', 'Replace with a copy of…', 'Clear meals']);
+    expect(textOf(first[2].querySelector('.item-hint'))).toBe('Keeps the day, empties it');
+    first[2].click();
     await settle(harness.fixture);
     expect(days(host)).toHaveLength(2);
+    expect(mealsOf(days(host)[0])).toEqual([]);
+    const [cleared, undoClear] = lastUndo(toast);
+    expect(cleared).toBe('Day 1 cleared.');
+    undoClear();
+    await settle(harness.fixture);
+    expect(mealsOf(days(host)[0])).toEqual(['Breakfast', 'Lunch']);
+
+    const last = await openMenu(harness.fixture, days(host)[1], 'More for day 2');
+    expect(titles(last)).toEqual([
+      'Copy this day to…',
+      'Replace with a copy of…',
+      'Clear meals',
+      'Delete day',
+    ]);
+    last[3].click();
+    await settle(harness.fixture);
+    expect(days(host)).toHaveLength(1);
+    expect(textOf(host.querySelector('#days-title'))).toBe('1 day · 2 meals');
+    const [deleted, undoDelete] = lastUndo(toast);
+    expect(deleted).toBe('Day 2 deleted.');
+    undoDelete();
+    await settle(harness.fixture);
+    expect(days(host)).toHaveLength(2);
+  });
+
+  it('copies a day to the days picked, replacing their meals, with Undo (critique B5c)', async () => {
+    const { host, harness, toast, api } = await render();
+
+    (await openMenu(harness.fixture, days(host)[0], 'More for day 1'))[0].click();
+    const sheet = await dialogNamed(harness.fixture, 'Copy day 1 to…');
+    expect(textOf(sheet.querySelector('.help'))).toBe(
+      'Day 1’s meals go to the days you pick. Their own meals are replaced.',
+    );
+    expect(field<HTMLInputElement>(sheet, 'Day 1, this day').disabled).toBe(true);
+    const submit = sheet.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect([textOf(submit), submit.disabled]).toEqual(['Copy', true]);
+    tick(sheet, 'Day 2, 1 meal');
+    await settle(harness.fixture);
+    expect(textOf(sheet.querySelector('.summary'))).toBe(
+      '1 day picked. Day 2 has meals now; copying replaces them.',
+    );
+    named(sheet, 'Copy to day 2').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+
+    expect(days(host)).toHaveLength(2);
+    expect(mealsOf(days(host)[1])).toEqual(['Breakfast', 'Lunch']);
+    const [message, undo] = lastUndo(toast);
+    expect(message).toBe('Day 1’s meals copied to day 2.');
+    const saved = api.createDraft.mock.calls.at(-1)![0].content.days ?? [];
+    expect(saved.map((day) => (day.meals ?? []).map((meal) => meal.name))).toEqual([
+      ['Breakfast', 'Lunch'],
+      ['Breakfast', 'Lunch'],
+    ]);
+    undo();
+    await settle(harness.fixture);
+    expect(mealsOf(days(host)[1])).toEqual(['Breakfast']);
+  });
+
+  it('replaces a day with a copy of another, which a day with no meals cannot be (critique B5c)', async () => {
+    const { host, harness, toast } = await render();
+    (await openMenu(harness.fixture, days(host)[0], 'More for day 1'))[2].click();
+    await settle(harness.fixture);
+    // With day 1 cleared, day 2 has no other day to take meals from.
+    const alone = await openMenu(harness.fixture, days(host)[1], 'More for day 2');
+    expect(alone[1].getAttribute('aria-disabled')).toBe('true');
+    expect(textOf(alone[1].querySelector('.item-hint'))).toBe('No other day has meals yet');
+    named(days(host)[1], 'More for day 2').click();
+    await settle(harness.fixture);
+
+    // Day 3, a copy of day 2, is a day to copy; the empty day 1 cannot be picked.
+    named(host, 'Add day').click();
+    await settle(harness.fixture);
+    (await openMenu(harness.fixture, days(host)[1], 'More for day 2'))[1].click();
+    const sheet = await dialogNamed(harness.fixture, 'Replace day 2 with a copy of…');
+    expect(field<HTMLInputElement>(sheet, 'Day 1, no meals').disabled).toBe(true);
+    expect(field<HTMLInputElement>(sheet, 'Day 2, this day').disabled).toBe(true);
+    expect(field<HTMLInputElement>(sheet, 'Day 3, 1 meal').disabled).toBe(false);
+    const submit = sheet.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect([textOf(submit), submit.disabled]).toEqual(['Replace day 2', true]);
+    named(sheet, 'Cancel').click();
+    await settle(harness.fixture);
+
+    // The empty day 1 takes a copy of day 3, and keeps its place.
+    (await openMenu(harness.fixture, days(host)[0], 'More for day 1'))[1].click();
+    const again = await dialogNamed(harness.fixture, 'Replace day 1 with a copy of…');
+    field<HTMLInputElement>(again, 'Day 3, 1 meal').click();
+    await settle(harness.fixture);
+    expect(textOf(again.querySelector('.summary'))).toBe('Day 3: Breakfast · 600 kcal');
+    named(again, 'Replace day 1').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(days(host)).toHaveLength(3);
+    expect(mealsOf(days(host)[0])).toEqual(['Breakfast']);
+    expect(lastUndo(toast)[0]).toBe('Day 1 now has day 3’s meals.');
+  });
+
+  it('duplicates and deletes whole weeks from the week’s menu, with Undo (critique B5c)', async () => {
+    const { host, harness, toast } = await render();
+    named(host, 'Add week').click();
+    await settle(harness.fixture);
+    expect(days(host)).toHaveLength(9);
+    expect(all(host, '.week-title').map(textOf)).toEqual(['Week 1', 'Week 2']);
+
+    const week1 = await openMenu(harness.fixture, host, 'More for week 1');
+    expect(titles(week1)).toEqual(['Duplicate week', 'Delete week']);
+    expect(textOf(week1[0].querySelector('.item-hint'))).toBe(
+      'A copy right after it; later weeks move on a week',
+    );
+    week1[0].click();
+    await settle(harness.fixture);
+    expect(days(host)).toHaveLength(16);
+    expect(all(host, '.week-title').map(textOf)).toEqual(['Week 1', 'Week 2', 'Week 3']);
+    const [copied, undoCopy] = lastUndo(toast);
+    expect(copied).toBe('Week 1 duplicated as week 2. The weeks after it moved on a week.');
+    undoCopy();
+    await settle(harness.fixture);
+    expect(days(host)).toHaveLength(9);
+
+    // Week 2 holds two days, so it cannot be duplicated; it can be deleted.
+    const week2 = await openMenu(harness.fixture, host, 'More for week 2');
+    expect(week2[0].getAttribute('aria-disabled')).toBe('true');
+    expect(textOf(week2[0].querySelector('.item-hint'))).toBe(
+      'Only a full week of 7 days can be duplicated.',
+    );
+    week2[1].click();
+    await settle(harness.fixture);
+    expect(days(host)).toHaveLength(7);
+    expect(all(host, '.week-title')).toHaveLength(0);
+    expect(lastUndo(toast)[0]).toBe('Week 2 deleted.');
+  });
+
+  it('offers Copy a day here when Publish finds a day with no meals (critique B5c)', async () => {
+    const { host, harness, api } = await render();
+    (await openMenu(harness.fixture, days(host)[0], 'More for day 1'))[2].click();
+    await settle(harness.fixture);
+
+    named(host, 'Publish').click();
+    await settle(harness.fixture);
+    expect(all(host, '.alert[role="alert"] p').map(textOf)).toEqual([
+      'Day 1 has no meals yet. Add a meal, or copy a day here.',
+    ]);
+    expect(api.publishDraft).not.toHaveBeenCalled();
+    named(host, 'Copy a day here').click();
+    const sheet = await dialogNamed(harness.fixture, 'Replace day 1 with a copy of…');
+    field<HTMLInputElement>(sheet, 'Day 2, 1 meal').click();
+    await settle(harness.fixture);
+    named(sheet, 'Replace day 1').click();
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    expect(mealsOf(days(host)[0])).toEqual(['Breakfast']);
+    expect(alerts(host)).toEqual([]);
   });
 
   it('adds a recipe without dragging: + chooses it, and every place it can go offers Add here (B5b)', async () => {

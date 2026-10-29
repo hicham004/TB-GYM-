@@ -1932,9 +1932,12 @@ limited to the coach's assigned clients.
   under a day a new meal (named after the day's next usual meal); meals move between days by their grip;
   every drag has a button path (the meal sheet, the recipe sheet, each card's menu), and since critique
   B5b a recipe's + chooses it so each meal and each day offers Add here (a phone chooses in the Recipes
-  sheet), with a first-use "How adding works" fold (`tb.adding-tip:meal-plan`). A day's menu
-  duplicates it, uses it for every day, clears it or deletes it, each with Undo. A phone shows one day at
-  a time from a row of day chips. Changes keep themselves as the coach's draft (NUT-013, as the program
+  sheet), with a first-use "How adding works" fold (`tb.adding-tip:meal-plan`). Since critique B5c nothing
+  shifts: a day's menu copies its meals to days picked in a sheet ("Copy this day to…", with Every day and
+  The same day of each week), replaces them with another day's ("Replace with a copy of…") or clears them,
+  and only the last day has Delete day; a week's menu (beside "Week 2") duplicates or deletes the whole
+  week, so later weeks move by seven days. Each says what changed with an Undo, and Publish's refusal of
+  an empty day offers "Copy a day here". A phone shows one day at a time from a row of day chips. Changes keep themselves as the coach's draft (NUT-013, as the program
   builder's do); Publish makes the next version; Versions lists them.
 - Built in R4.4b: **Recipes** (`/nutrition/recipes`) shows the recipes as cards (a row each on a
   phone): the cover photo's thumbnail or the recipe's initials, one serving's calories, a

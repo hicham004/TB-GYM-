@@ -1011,6 +1011,11 @@ published in this workspace, servings above 0), works out each option's macros f
 removes the draft, in one transaction; it asks first when someone published after the draft began. A
 meal's options are equal choices: the builder's day total uses their average, as NUT-005 allows for
 planning, never as what the client ate.
+Nothing shifts (critique B5c, 2026-10-27): a plan's days are numbered from its start, so the builder
+never inserts a day or deletes one in the middle. A day's meals are copied to other days, replaced by a
+copy of another day's, or cleared, each day keeping its number; only the last day is deleted; Duplicate
+week and Delete week move the later weeks by seven days, so every day keeps its weekday. Publish still
+refuses a day with no meals and offers to copy a day there.
 
 ## 7. Bodyweight and progress
 

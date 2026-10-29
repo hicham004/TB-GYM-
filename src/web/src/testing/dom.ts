@@ -186,6 +186,24 @@ export function tick(host: ParentNode, label: string, checked = true): HTMLInput
   return box;
 }
 
+/**
+ * A choice of the kit's segmented control (`app-segmented-control`) whose legend reads `group`, found
+ * by the words it shows; `.click()` it as a person would. The legend counts even when it is visually
+ * hidden, as a screen reader hears it.
+ */
+export function segment(host: ParentNode, group: string, label: string): HTMLInputElement {
+  const wanted = normalize(group);
+  const row = Array.from(host.querySelectorAll('app-segmented-control fieldset')).find(
+    (candidate) => normalize(candidate.querySelector('legend')?.textContent) === wanted,
+  );
+  const option = Array.from(row?.querySelectorAll('label') ?? []).find(
+    (candidate) => normalize(candidate.textContent) === normalize(label),
+  );
+  const input = option?.querySelector<HTMLInputElement>('input[type="radio"]');
+  if (!input) throw new Error(`No choice "${label}" in "${group}".`);
+  return input;
+}
+
 /** Types into a control found by selector, for the ones no label points at. */
 export function type(host: ParentNode, selector: string, value: string): Control {
   return write(query<Control>(host, selector), value);

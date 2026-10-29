@@ -19,10 +19,13 @@ import {
   applyPlanDrop,
   averageLine,
   clearDay,
-  copyDayToAll,
+  copyDayTo,
+  dayListWords,
   dayTotal,
+  deleteWeek,
   draftPlanCard,
-  duplicateDay,
+  duplicateWeek,
+  duplicateWeekRefusal,
   emptyPlan,
   macroSplit,
   MAX_DAYS,
@@ -203,25 +206,81 @@ describe('meal-plan builder models', () => {
       expect(plan.days).toHaveLength(MAX_DAYS);
       expect(addWeek(plan)).toBe(plan);
       expect(addDay(plan)).toBe(plan);
-      expect(duplicateDay(plan, plan.days[0].key)).toBe(plan);
+      expect(duplicateWeek(plan, 1)).toBe(plan);
+      expect(duplicateWeekRefusal(plan, 1)).toBe('A meal plan holds up to 365 days.');
     });
 
-    it('duplicates a day straight after it, uses a day for every day, clears and deletes days', () => {
+    it('copies a day onto the days picked, in place of their meals: no day moves (critique B5c)', () => {
+      const plan = addWeek(opened());
+      const [first, second, third] = plan.days;
+
+      const copied = copyDayTo(plan, first.key, [second.key, third.key, first.key]);
+      expect(copied.days.map((day) => day.key)).toEqual(plan.days.map((day) => day.key));
+      expect(mealNames(copied, 1)).toEqual(['Breakfast', 'Lunch']);
+      expect(mealNames(copied, 2)).toEqual(['Breakfast', 'Lunch']);
+      expect(copied.days[0]).toBe(plan.days[0]);
+      expect(copied.days[3]).toBe(plan.days[3]);
+      // The copies are meals of their own, so editing one never changes the day it came from.
+      expect(copied.days[1].meals[0].key).not.toBe(first.meals[0].key);
+      expect(copied.days[1].meals[0].choices[0].key).not.toBe(first.meals[0].choices[0].key);
+
+      // "Replace with a copy of…" is the same copy onto one day.
+      expect(mealNames(copyDayTo(plan, second.key, [first.key]), 0)).toEqual(['Breakfast']);
+      expect(copyDayTo(plan, first.key, [first.key])).toBe(plan);
+      expect(copyDayTo(plan, 'gone', [second.key])).toBe(plan);
+
+      const cleared = clearDay(plan, first.key);
+      expect(cleared.days[0].meals).toEqual([]);
+      expect(cleared.days[0].key).toBe(first.key);
+    });
+
+    it('deletes only the plan’s last day, so no later day changes its number', () => {
       const plan = opened();
       const [first, second] = plan.days;
 
-      const duplicated = duplicateDay(plan, first.key);
-      expect(duplicated.days.map((day) => day.meals.length)).toEqual([2, 2, 1]);
+      expect(removeDay(plan, first.key)).toBe(plan);
+      const shorter = removeDay(plan, second.key);
+      expect(shorter.days.map((day) => day.key)).toEqual([first.key]);
+      expect(removeDay(shorter, first.key)).toBe(shorter);
+    });
 
-      const everyday = copyDayToAll(plan, first.key);
-      expect(mealNames(everyday, 1)).toEqual(['Breakfast', 'Lunch']);
-      expect(everyday.days[1].key).toBe(second.key);
-      expect(everyday.days[1].meals[0].key).not.toBe(first.meals[0].key);
+    it('duplicates and deletes whole weeks, so every later day keeps its weekday', () => {
+      // Two full weeks and a third of three days: 17 days.
+      let plan = addWeek(addWeek(opened()));
+      plan = { ...plan, days: plan.days.slice(0, 16) };
+      plan = addDay(plan);
+      expect(plan.days).toHaveLength(17);
+      const keys = plan.days.map((day) => day.key);
 
-      expect(clearDay(plan, first.key).days[0].meals).toEqual([]);
-      expect(removeDay(plan, first.key).days.map((day) => day.key)).toEqual([second.key]);
-      const single = removeDay(plan, first.key);
-      expect(removeDay(single, second.key)).toBe(single);
+      const twice = duplicateWeek(plan, 1);
+      expect(twice.days).toHaveLength(24);
+      // Week 1 stays, its copy is week 2, and the old weeks 2 and 3 move on by exactly seven days.
+      expect(twice.days.slice(0, 7).map((day) => day.key)).toEqual(keys.slice(0, 7));
+      expect(twice.days.slice(14).map((day) => day.key)).toEqual(keys.slice(7));
+      expect(twice.days.slice(7, 14).map((day) => day.meals.length)).toEqual(
+        plan.days.slice(0, 7).map((day) => day.meals.length),
+      );
+      expect(twice.days[7].key).not.toBe(keys[0]);
+      // A week of fewer than seven days is never duplicated.
+      expect(duplicateWeekRefusal(plan, 3)).toBe('Only a full week of 7 days can be duplicated.');
+      expect(duplicateWeek(plan, 3)).toBe(plan);
+      expect(duplicateWeek(plan, 4)).toBe(plan);
+
+      const without = deleteWeek(plan, 2);
+      expect(without.days.map((day) => day.key)).toEqual([...keys.slice(0, 7), ...keys.slice(14)]);
+      expect(deleteWeek(plan, 3).days.map((day) => day.key)).toEqual(keys.slice(0, 14));
+      expect(deleteWeek(plan, 0)).toBe(plan);
+      // A plan keeps at least one day.
+      const oneWeek = emptyPlan();
+      expect(deleteWeek(oneWeek, 1)).toBe(oneWeek);
+    });
+
+    it('says the days a copy went to in words', () => {
+      expect(dayListWords([12])).toBe('day 12');
+      expect(dayListWords([7, 6])).toBe('days 6 and 7');
+      expect(dayListWords([19, 6, 12])).toBe('days 6, 12 and 19');
+      expect(dayListWords([2, 3, 4, 5, 6, 7])).toBe('days 2 to 7');
+      expect(dayListWords([3, 10, 17, 24, 31, 38, 45])).toBe('7 days');
     });
 
     it('names a new meal after the first of breakfast, lunch and dinner the day lacks, then snack', () => {
@@ -373,11 +432,23 @@ describe('meal-plan builder models', () => {
 
       const emptyDay = addDay(clearDay(plan, plan.days[1].key));
       expect(planProblem(clearDay(plan, plan.days[1].key), book)).toEqual({
-        message: 'Day 2 has no meals yet. Add one, or delete the day.',
+        message: 'Day 2 has no meals yet. Add a meal, copy a day here, or delete the day.',
         focus: 'day',
         dayKey: plan.days[1].key,
+        copyHere: true,
       });
       expect(emptyDay.days).toHaveLength(3);
+      // A day in the middle cannot be deleted: another day's meals fill it instead (critique B5c).
+      expect(planProblem(emptyDay, book)?.message).toBe(
+        'Day 2 has no meals yet. Add a meal, or copy a day here.',
+      );
+      const nothing = clearDay(clearDay(plan, plan.days[0].key), plan.days[1].key);
+      expect(planProblem(nothing, book)).toEqual(
+        expect.objectContaining({
+          message: 'Day 1 has no meals yet. Add a meal to it.',
+          copyHere: false,
+        }),
+      );
 
       const meal = plan.days[0].meals[1];
       meal.name = '';

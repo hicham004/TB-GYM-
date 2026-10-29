@@ -19,7 +19,7 @@ import {
   workspace,
 } from '../../../testing/client-nutrition-fixtures';
 import { enrollment, plansOverview } from '../../../testing/client-service-fixtures';
-import { fill, fold, press, settle, tick, toggleFold } from '../../../testing/dom';
+import { fill, fold, press, segment, settle, tick, toggleFold } from '../../../testing/dom';
 import { mayaWeighIns, progressView } from '../../../testing/progress-fixtures';
 import type { ClientCommercialOverview, CoachClientDetails } from '../../core/api/api.models';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -390,7 +390,7 @@ describe('A client’s Nutrition tab', () => {
       sheet.querySelector<HTMLInputElement>('input[name="work"][value="Seated"]')!.click();
       sheet.querySelector<HTMLInputElement>('input[type="radio"][value="Female"]')!.click();
       await settle(fixture);
-      press(sheet, '2 g a kilogram');
+      segment(sheet, 'Protein for each kilogram of body weight', '2.0').click();
       await settle(fixture);
       press(sheet, 'Work out targets');
       await settle(fixture);
@@ -456,7 +456,7 @@ describe('A client’s Nutrition tab', () => {
       sheet.querySelector<HTMLInputElement>('input[name="work"][value="Seated"]')!.click();
       sheet.querySelector<HTMLInputElement>('input[type="radio"][value="Female"]')!.click();
       await settle(fixture);
-      press(sheet, '2 g a kilogram');
+      segment(sheet, 'Protein for each kilogram of body weight', '2.0').click();
       await settle(fixture);
       press(sheet, 'Work out targets');
       await settle(fixture);
