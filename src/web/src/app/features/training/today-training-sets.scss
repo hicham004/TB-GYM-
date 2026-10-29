@@ -39,6 +39,14 @@
 .set-card:has(.set-step) :focus-visible {
   outline-color: var(--tb-brand, #153d33);
 }
+// The kit's fold reads the player's dark tokens; on the light card it takes the card's light values.
+// Only the fold: the set's error line stays on the dark danger fill and its dark ink.
+.set-card:has(.set-step) .set-note {
+  --tb-ink: #14291e;
+  --tb-muted: #52645a;
+  --tb-surface-2: #e8eee1;
+  --tb-focus: var(--tb-brand, #153d33);
+}
 .set-number {
   font-weight: 700;
   color: #a5b8aa;

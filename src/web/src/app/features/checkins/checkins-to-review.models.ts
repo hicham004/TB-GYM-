@@ -62,9 +62,18 @@ export function matchesName(row: ToReviewRow, search: string): boolean {
 
 /**
  * "3 check-ins to review", every one waiting, or "1 of 3 check-ins to review" while a search narrows
- * the ones read.
+ * the ones read. When more wait than were read, a search looks through the oldest only and says so:
+ * "0 of the oldest 500 check-ins to review".
  */
-export function reviewCount(shown: number, read: number, total: number): string {
+export function reviewCount(
+  shown: number,
+  read: number,
+  total: number,
+  searching: boolean,
+): string {
+  if (searching && read < total) {
+    return $localize`${shown}:shown: of the oldest ${read}:count: check-ins to review`;
+  }
   if (shown === read) {
     return total === 1
       ? $localize`1 check-in to review`

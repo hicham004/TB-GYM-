@@ -55,9 +55,16 @@ public sealed class ProgramDraftDomainTests
         Assert.IsTrue(ProgramDraftShape.TryCreate(Content("Year", [.. Enumerable.Repeat(Week(), 52)]), out _, out _, out _));
         AssertRefused(Content("Too long", [.. Enumerable.Repeat(Week(), 53)]), "weeks");
         AssertRefused(Content("None") with { Weeks = [] }, "weeks");
-        AssertRefused(Content("Busy", Week([.. Enumerable.Repeat(Session("Day", 0), 15)])), "weeks");
-        AssertRefused(Content("Day 8", Week(Session("Day", 7))), "sessions");
-        AssertRefused(Content("Many", Week(Session("Day", 0, [.. Enumerable.Repeat(Exercise(), 41)]))), "sessions");
+        // A coach reads these word for word, and on coach screens a workout is never a session (critique B1).
+        Assert.AreEqual(
+            "A week holds at most 14 workouts.",
+            AssertRefused(Content("Busy", Week([.. Enumerable.Repeat(Session("Day", 0), 15)])), "weeks"));
+        Assert.AreEqual(
+            "A workout falls on day 1 to 7 of its week.",
+            AssertRefused(Content("Day 8", Week(Session("Day", 7))), "sessions"));
+        Assert.AreEqual(
+            "A workout holds at most 40 exercises.",
+            AssertRefused(Content("Many", Week(Session("Day", 0, [.. Enumerable.Repeat(Exercise(), 41)]))), "sessions"));
         AssertRefused(Content("Sets", Week(Session("Day", 0, Exercise([.. Enumerable.Repeat(Set(5, null), 21)])))), "sets");
         AssertRefused(Content(new string('n', 161), Week()), "name");
         AssertRefused(Content("Tempo", Week(Session("Day", 0, Exercise(Set(5, null) with { Tempo = new string('1', 33) })))), "sets");
@@ -106,11 +113,13 @@ public sealed class ProgramDraftDomainTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ProgramDraft.ForProgram(TenantId, OwnerId, Guid.NewGuid(), Guid.NewGuid(), 0, shape));
     }
 
-    private static void AssertRefused(ProgramDraftContent content, string field)
+    /// <returns>The sentence the refusal gives.</returns>
+    private static string AssertRefused(ProgramDraftContent content, string field)
     {
         Assert.IsFalse(ProgramDraftShape.TryCreate(content, out _, out var refused, out var problem));
         Assert.AreEqual(field, refused);
         Assert.IsFalse(string.IsNullOrWhiteSpace(problem));
+        return problem;
     }
 
     private static ProgramDraftContent Content(string name, params TrainingWeekRequest[] weeks) =>

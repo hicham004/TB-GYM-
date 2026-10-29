@@ -16,6 +16,7 @@ import { ClientAccessStore } from '../../core/access/client-access.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { announced, button, focusedId, press, query, settle, type } from '../../../testing/dom';
+import { provideMediaUploads } from '../../../testing/media-uploads';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
 import type { ProgressPhotos } from '../progress/progress.models';
 import { CheckInFlow } from './checkin-flow';
@@ -162,6 +163,7 @@ function photos(poses: ('Front' | 'Side' | 'Back')[] = []): ProgressPhotos {
 async function render(
   api: Partial<Record<keyof ApiClient, unknown>> = {},
   access = fakeClientAccess(),
+  uploadsOff = false,
 ) {
   let version = 10;
   const selectedTenantId = signal<string | null>('tenant-1');
@@ -208,6 +210,7 @@ async function render(
       },
       { provide: ClientAccessStore, useValue: access },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      provideMediaUploads(uploadsOff),
     ],
   });
   const harness = await RouterTestingHarness.create();
@@ -508,6 +511,22 @@ describe('CheckInFlow', () => {
     press(host, 'Back to review');
     await settle();
     expect(read()).toContain('3 photos added today');
+  });
+
+  it('says uploads aren’t set up, with no photo to choose, on a server with no media storage', async () => {
+    const { host, client, read, settle } = await render(
+      { getOwnCheckInResponse: vi.fn(() => of(detail(ANSWERED))) },
+      fakeClientAccess(),
+      true,
+    );
+
+    press(host, 'Edit: progress photos');
+    await settle();
+
+    expect(query(host, '#step-heading').textContent?.trim()).toBe("Add this week's photos");
+    expect(read()).toContain('Uploads aren’t set up on this server.');
+    expect(host.querySelector('.pose-input')).toBeNull();
+    expect(client.recordMyProgressPhoto).not.toHaveBeenCalled();
   });
 
   it('saves what was typed before leaving, and holds the client when that save fails', async () => {

@@ -137,6 +137,53 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
+    public async Task TeamACoachWhoComesBackJoinedOnTheDayTheyReturned()
+    {
+        // Whole seconds, so an instant reads back from PostgreSQL exactly.
+        var now = RequiredTestClock.UtcNow;
+        RequiredTestClock.Set(now.AddTicks(-(now.Ticks % TimeSpan.TicksPerSecond)));
+        var firstJoin = RequiredTestClock.UtcNow;
+        using var owner = CreateClient();
+        var tenant = await RegisterCoachAsync(owner, "rejoin-owner@example.test", "Olivia Owner", "Rejoin Gym");
+        using var coach = CreateClient();
+        var coachUserId = await JoinAsCoachAsync(owner, coach, "rejoin-coach@example.test", "Cara Coach");
+        var member = (await TeamMembersAsync(owner)).Single(item => item.UserId == coachUserId);
+        Assert.AreEqual(firstJoin, member.JoinedAtUtc);
+
+        // Removed, then invited back a month later: the same membership row becomes active again (CLI-011).
+        await RefreshCsrfAsync(owner);
+        await AssertStatusAsync(
+            await owner.PostAsJsonAsync($"/api/team/members/{coachUserId}/remove", new { version = member.Version }),
+            HttpStatusCode.OK);
+        RequiredTestClock.Advance(TimeSpan.FromDays(30));
+        var returned = RequiredTestClock.UtcNow;
+        await RefreshCsrfAsync(owner);
+        var again = await owner.PostAsJsonAsync(
+            "/api/team/invitations",
+            new { email = "rejoin-coach@example.test", firstName = "Cara", lastName = "Coach" });
+        await AssertStatusAsync(again, HttpStatusCode.Created);
+        var link = (await RequiredJsonAsync<TeamInvitation>(again)).DevelopmentActionUrl!;
+        await RefreshCsrfAsync(coach);
+        await AssertStatusAsync(
+            await coach.PostAsJsonAsync(
+                "/api/invitations/accept",
+                new { token = QueryValue(link, "token"), displayName = (string?)null, password = (string?)null }),
+            HttpStatusCode.OK);
+        SetTenant(coach, tenant);
+
+        // Since when is since their return, on every member's roster and on the owner's list; the owner's
+        // own day does not move.
+        foreach (var caller in new[] { owner, coach })
+        {
+            var roster = await RequiredJsonAsync<TeamRosterMember[]>(await caller.GetAsync("/api/team/roster"));
+            var joined = roster.ToDictionary(item => item.Role, item => item.JoinedAtUtc);
+            Assert.AreEqual((firstJoin, returned), (joined["Owner"], joined["Coach"]));
+        }
+
+        Assert.AreEqual(returned, (await TeamMembersAsync(owner)).Single(item => item.UserId == coachUserId).JoinedAtUtc);
+    }
+
+    [TestMethod]
     public async Task TeamACoachIsRefusedEverywhereOnAnotherCoachsClientUntilReassigned()
     {
         using var owner = CreateClient();
@@ -815,7 +862,14 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     private sealed record TeamWorkspace(Guid TenantId, string Role);
-    private sealed record TeamMember(Guid UserId, string DisplayName, string Email, string Role, int AssignedClientCount, uint Version);
+    private sealed record TeamMember(
+        Guid UserId,
+        string DisplayName,
+        string Email,
+        string Role,
+        int AssignedClientCount,
+        uint Version,
+        DateTimeOffset JoinedAtUtc = default);
     private sealed record TeamRosterMember(string DisplayName, string Role, DateTimeOffset JoinedAtUtc, bool IsYou);
     private sealed record TeamClient(Guid Id, Guid AssignedCoachUserId, string AssignedCoachName);
     private sealed record TeamClientDetails(Guid Id, Guid? UserId, Guid AssignedCoachUserId, string AssignedCoachName, uint Version);

@@ -18,9 +18,9 @@ import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
-import { pastAndComingProgram } from '../../../testing/mesocycle-fixtures';
+import { chartSet, pastAndComingProgram, setView } from '../../../testing/mesocycle-fixtures';
 import { exercise, searchLibrary } from '../../../testing/program-builder-fixtures';
-import { formSummary, press, settle } from '../../../testing/dom';
+import { field, formSummary, press, query, settle } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { ProgramEditPage } from './program-edit';
@@ -326,6 +326,69 @@ describe('editing a client’s weeks', () => {
     );
     // The session that needs it is opened for the coach.
     expect(await dialogNamed(harness.fixture, 'Edit workout')).toBeTruthy();
+  });
+
+  it('opens the refused set and its Rest, tempo & notes for a refused rest, with focus on it (critique B2b)', async () => {
+    const mesocycle = pastAndComingProgram();
+    // Week 3's Monday squat gains a second set resting longer than the hour the server allows.
+    mesocycle.weeks[2].sessions[0].exercises[0].sets.push(chartSet(2, { restSeconds: 4000 }));
+    const { harness, host, programApi } = await render({ mesocycle });
+    renameWeek3(host);
+    await settle(harness.fixture);
+    press(host, 'Review changes');
+    await settle(harness.fixture);
+
+    expect(textOf(host.querySelector('.alert[role="alert"] p'))).toBe(
+      'Week 3, Lower A: rest must be between 0 and 3600 seconds.',
+    );
+    expect(programApi.previewProgramEdit).not.toHaveBeenCalled();
+    press(host, 'Fix the set');
+    await settle(harness.fixture);
+
+    // Set 2 opens, not set 1, and its fold is made, so the refused box is there to focus.
+    const refused = host.querySelectorAll('.inline-sets [data-set-key]')[1];
+    expect(query(refused, '.set-toggle').getAttribute('aria-expanded')).toBe('true');
+    const more = query<HTMLDetailsElement>(refused, '.more details');
+    expect(more.open).toBe(true);
+    expect(document.activeElement).toBe(field(more, 'Rest (seconds)'));
+    expect(document.activeElement?.getAttribute('aria-invalid')).toBe('true');
+    expect(more.textContent).toContain('rest must be between 0 and 3600 seconds.');
+  });
+
+  it('opens Rest, tempo & notes for a fixed load of 0 under a percentage set, with focus on it (critique B2b)', async () => {
+    const mesocycle = pastAndComingProgram();
+    mesocycle.weeks[2].sessions[0].exercises[0].sets.push(
+      setView({
+        position: 2,
+        loadStrategy: 'PercentageWorkingMax',
+        loadUnit: 'Kilogram',
+        percentageWorkingMax: 70,
+        isManualLoadOverride: true,
+        prescribedLoad: 0,
+      }),
+    );
+    const { harness, host, programApi } = await render({ mesocycle });
+    renameWeek3(host);
+    await settle(harness.fixture);
+    press(host, 'Review changes');
+    await settle(harness.fixture);
+
+    expect(textOf(host.querySelector('.alert[role="alert"] p'))).toBe(
+      'Week 3, Lower A: a fixed load must be more than 0 and at most 2000, with a load unit.',
+    );
+    expect(programApi.previewProgramEdit).not.toHaveBeenCalled();
+    press(host, 'Fix the set');
+    await settle(harness.fixture);
+
+    const refused = host.querySelectorAll('.inline-sets [data-set-key]')[1];
+    expect(query(refused, '.set-toggle').getAttribute('aria-expanded')).toBe('true');
+    const more = query<HTMLDetailsElement>(refused, '.more details');
+    expect(more.open).toBe(true);
+    expect(document.activeElement).toBe(field(more, 'Fixed load instead'));
+    expect(document.activeElement?.getAttribute('aria-invalid')).toBe('true');
+    expect(more.textContent).toContain(
+      'a fixed load must be more than 0 and at most 2000, with a load unit.',
+    );
   });
 
   it('asks before leaving with changes not applied, and warns before a reload', async () => {

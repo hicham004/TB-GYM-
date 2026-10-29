@@ -388,7 +388,11 @@ test('a coach at 1440px keeps the inbox beside the thread and sends with Enter',
 }) => {
   const { sent } = await openMessages(page, 'lea', 1440, 900);
   const inbox = page.getByRole('navigation', { name: 'Conversations' });
-  await expect(inbox.getByRole('button')).toHaveCount(5);
+  await expect(inbox.locator('button.conversation')).toHaveCount(5);
+  // Saved replies to manage, and Mark as unread behind each read row's menu (critique B3b): Nour's
+  // row is unread, so it has none.
+  await expect(inbox.getByRole('button', { name: 'Saved replies' })).toBeVisible();
+  await expect(inbox.getByRole('button', { name: /^More for / })).toHaveCount(4);
   await expect(inbox.getByRole('button', { name: 'Nour Hamdan, 1 unread messages' })).toBeVisible();
   await expect(page.getByText('Choose a conversation')).toBeVisible();
   await check(page, 'coach-inbox', 1440);

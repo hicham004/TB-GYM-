@@ -212,7 +212,7 @@ public sealed class ProgramDraftShape
         var sessions = week.Sessions ?? [];
         if (sessions.Count > 14)
         {
-            return (null, new Refusal("weeks", "A week holds at most 14 sessions."));
+            return (null, new Refusal("weeks", "A week holds at most 14 workouts."));
         }
 
         var normalSessions = new List<TrainingSessionRequest>(sessions.Count);
@@ -234,11 +234,11 @@ public sealed class ProgramDraftShape
     {
         if (session is null)
         {
-            return (null, new Refusal("sessions", "A session is missing."));
+            return (null, new Refusal("sessions", "A workout is missing."));
         }
 
         var name = session.Name ?? string.Empty;
-        if ((Text(name, 160, "sessions", "A session name") ?? Text(session.CoachNotes, 4_000, "sessions", "A session note"))
+        if ((Text(name, 160, "sessions", "A workout name") ?? Text(session.CoachNotes, 4_000, "sessions", "A workout note"))
             is { } textRefusal)
         {
             return (null, textRefusal);
@@ -246,13 +246,13 @@ public sealed class ProgramDraftShape
 
         if (session.DayOffset is < 0 or > 6)
         {
-            return (null, new Refusal("sessions", "A session falls on day 1 to 7 of its week."));
+            return (null, new Refusal("sessions", "A workout falls on day 1 to 7 of its week."));
         }
 
         var exercises = session.Exercises ?? [];
         if (exercises.Count > 40)
         {
-            return (null, new Refusal("sessions", "A session holds at most 40 exercises."));
+            return (null, new Refusal("sessions", "A workout holds at most 40 exercises."));
         }
 
         var normalExercises = new List<ExercisePrescriptionRequest>(exercises.Count);

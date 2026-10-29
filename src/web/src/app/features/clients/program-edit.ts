@@ -23,6 +23,7 @@ import {
   TemplateRef,
   untracked,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -249,6 +250,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   /** The review sheet's summary, where a refused apply is said. */
   private readonly applySummary = viewChild(FormSummary);
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
+  private readonly setEditors = viewChildren(ProgramSetsEditor);
   private loadedKey: string | null = null;
   private libraryTenant: string | null = null;
   private pickerRef: Closable | null = null;
@@ -832,13 +834,13 @@ export class ProgramEditPage implements HoldsUnsavedWork {
     if (problem.exerciseKey && problem.setKey) {
       this.inlineEditing.set(problem.exerciseKey);
       this.phoneWeek.set(problem.weekKey);
+      // As the builder does: the set's editor opens the set, and its fold for a refused rest or
+      // fixed load, before focus moves to the refused box.
       afterNextRender(
         () =>
-          this.host.nativeElement
-            .querySelector<HTMLElement>(
-              `#inline-${problem.exerciseKey} input, #inline-${problem.exerciseKey} button`,
-            )
-            ?.focus(),
+          this.setEditors()
+            .find((editor) => editor.exercise().key === problem.exerciseKey)
+            ?.focus(problem.setKey!),
         { injector: this.injector },
       );
       return;

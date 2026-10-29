@@ -11,7 +11,6 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { ApiClient } from '../../core/api/api-client';
 import type { CheckInToReviewList } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
@@ -25,6 +24,7 @@ import { Icon } from '../../ui/icon';
 import { SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { CHECK_IN_SECTIONS } from './checkin-sections';
+import { CheckInsToReviewApi } from './checkins-to-review-api';
 import { limitNote, matchesName, reviewCount, toReviewRow } from './checkins-to-review.models';
 
 /**
@@ -39,7 +39,7 @@ import { limitNote, matchesName, reviewCount, toReviewRow } from './checkins-to-
   styleUrl: './checkins-to-review.scss',
 })
 export class CheckInsToReview {
-  private readonly api = inject(ApiClient);
+  private readonly api = inject(CheckInsToReviewApi);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
   private readonly calendar = inject(WorkspaceCalendar);
@@ -70,8 +70,17 @@ export class CheckInsToReview {
     const search = this.search();
     return this.rows().filter((row) => matchesName(row, search));
   });
+  /** The ones read: every one waiting, or the oldest when more wait than one read brings. */
+  protected readonly read = computed(() => this.rows().length);
+  /** More wait than were read, so a search looks through the oldest only, and says so. */
+  protected readonly capped = computed(() => Number(this.list()?.total ?? 0) > this.read());
   protected readonly count = computed(() =>
-    reviewCount(this.shown().length, this.rows().length, Number(this.list()?.total ?? 0)),
+    reviewCount(
+      this.shown().length,
+      this.read(),
+      Number(this.list()?.total ?? 0),
+      this.search().trim() !== '',
+    ),
   );
   protected readonly note = computed(() => {
     const list = this.list();
@@ -103,10 +112,7 @@ export class CheckInsToReview {
       try {
         // The workspace's day comes with the list, so a sent day of another year says its year.
         const [list] = await owner.wait(
-          Promise.all([
-            firstValueFrom(this.api.listCheckInsToReview()),
-            this.calendar.resolveToday(),
-          ]),
+          Promise.all([firstValueFrom(this.api.list()), this.calendar.resolveToday()]),
         );
         this.list.set(list);
         this.state.set('ready');

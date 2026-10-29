@@ -225,9 +225,14 @@
     <ng-template appTabPane value="photos" [label]="names.photos">
       <div class="pane" data-pane="photos">
         <div class="toolbar">
-          <button appButton type="button" (click)="sheets.addPhotos()" data-add-photos i18n>
-            Add photos
-          </button>
+          <!-- Said before anyone tries, on a server with no media storage (critique T25). -->
+          @if (uploadsOff()) {
+            <p class="uploads-off" i18n>Uploads aren’t set up on this server.</p>
+          } @else {
+            <button appButton type="button" (click)="sheets.addPhotos()" data-add-photos i18n>
+              Add photos
+            </button>
+          }
           @if (canMakeBeforeAfter()) {
             <app-before-after-button />
           }
@@ -250,15 +255,18 @@
                 [heading]="coachMode() ? noPhotosCoach() : noPhotosClient"
                 [description]="coachMode() ? noPhotosCoachHelp : noPhotosClientHelp"
               >
-                <button
-                  appButton
-                  empty-state-action
-                  type="button"
-                  (click)="sheets.addPhotos()"
-                  i18n
-                >
-                  Add photos
-                </button>
+                <!-- With uploads off, the toolbar above says so. -->
+                @if (!uploadsOff()) {
+                  <button
+                    appButton
+                    empty-state-action
+                    type="button"
+                    (click)="sheets.addPhotos()"
+                    i18n
+                  >
+                    Add photos
+                  </button>
+                }
               </app-empty-state>
             } @else if (photoLists().days.length === 0 && photoMore()) {
               <p class="quiet" i18n>No photos in the last year.</p>

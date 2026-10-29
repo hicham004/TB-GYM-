@@ -134,10 +134,15 @@ of the implemented R1.3 screens before production rollout.
 
 *(Sessions add items here instead of building them.)*
 
-- **Sheets whose buttons end their content (from critique B2a).** The share card and before-and-after
-  sheets, saved replies, a food's details and the program's session and maxes panels keep their
-  buttons in the body, where they scroll with it; none covers a line. Each moves to `appModalFooter`
-  when it is next changed.
+- **Sheets whose buttons end their content (from critique B2a).** These keep their buttons in the
+  body, where they scroll with it; none covers a line: the share card and before-and-after sheets,
+  saved replies, a food's details, a workout opened from a client's program (`program-session`),
+  Edit workout in the program builder and in Edit weeks (`program-session-editor`), the builder's
+  Duplicate with progression (`program-week-progression`), the meal plan builder's Edit meal
+  (`meal-plan-meal-editor`), and the Close of a weigh-in's or a measurement's See changes and of an
+  exercise's history (`WeighInChanges`, `MeasurementChanges`, `ExerciseHistory`). Each moves to
+  `appModalFooter` when it is next changed. A program's maxes are a page panel, not a sheet, and
+  their update sheet already has its footer.
 
 - **Demo data gaps (from R0.1).** The demo has no progress photos
   or coach/exercise media (the real M1 uses coach initials until a profile photo source exists; use

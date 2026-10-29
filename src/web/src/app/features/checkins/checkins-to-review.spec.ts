@@ -5,13 +5,13 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, throwError, type Observable } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiClient } from '../../core/api/api-client';
 import type { CheckInToReviewItem, CheckInToReviewList } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { press, settle } from '../../../testing/dom';
 import { CheckInsToReview } from './checkins-to-review';
+import { CheckInsToReviewApi } from './checkins-to-review-api';
 
 @Component({ template: '' })
 class Stub {}
@@ -67,7 +67,7 @@ const list = (items: CheckInToReviewItem[], total = items.length): CheckInToRevi
 });
 
 async function render(read: () => Observable<CheckInToReviewList>, userId = OWNER) {
-  const api = { listCheckInsToReview: vi.fn(read) };
+  const api = { list: vi.fn(read) };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([
@@ -75,7 +75,7 @@ async function render(read: () => Observable<CheckInToReviewList>, userId = OWNE
         { path: 'checkins/forms', component: Stub },
         { path: 'clients/:clientId/checkins/:assignmentId', component: Stub },
       ]),
-      { provide: ApiClient, useValue: api },
+      { provide: CheckInsToReviewApi, useValue: api },
       { provide: AuthStore, useValue: { user: signal({ id: userId }) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
       {
@@ -228,6 +228,21 @@ describe('Check-ins to review (critique B3b)', () => {
     );
   });
 
+  it('searches only the oldest it read, and says so, when more wait than one read brings', async () => {
+    const { harness, host } = await render(() => of(list([item(), RAMI], 612)));
+
+    await search(harness, host, 'Nour');
+    expect(textOf(host.querySelector('.no-match p'))).toBe(
+      'None of the oldest 2 check-ins to review is from “Nour”.',
+    );
+    expect(textOf(host.querySelector('.count'))).toBe('0 of the oldest 2 check-ins to review');
+
+    // A search keeping every row read counts those, not every one waiting.
+    await search(harness, host, 'a');
+    expect(rowParts(host)).toHaveLength(2);
+    expect(textOf(host.querySelector('.count'))).toBe('2 of the oldest 2 check-ins to review');
+  });
+
   it('says so when the list cannot be read, and tries again', async () => {
     let calls = 0;
     const { harness, host, api } = await render(() =>
@@ -240,7 +255,7 @@ describe('Check-ins to review (critique B3b)', () => {
     press(host, 'Try again');
     await settle(harness.fixture);
 
-    expect(api.listCheckInsToReview).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(2);
     expect(rowParts(host).map((row) => row.name)).toEqual(['Maya Rahman']);
   });
 });

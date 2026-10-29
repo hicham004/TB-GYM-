@@ -59,11 +59,17 @@ describe('a check-in to review (critique B3b)', () => {
   });
 
   it('counts the ones waiting, one or many, all or those a search keeps', () => {
-    expect(reviewCount(1, 1, 1)).toBe('1 check-in to review');
-    expect(reviewCount(2, 2, 2)).toBe('2 check-ins to review');
-    expect(reviewCount(500, 500, 612)).toBe('612 check-ins to review');
-    expect(reviewCount(0, 1, 1)).toBe('0 of 1 check-in to review');
-    expect(reviewCount(1, 3, 3)).toBe('1 of 3 check-ins to review');
+    expect(reviewCount(1, 1, 1, false)).toBe('1 check-in to review');
+    expect(reviewCount(2, 2, 2, false)).toBe('2 check-ins to review');
+    expect(reviewCount(500, 500, 612, false)).toBe('612 check-ins to review');
+    expect(reviewCount(3, 3, 3, true)).toBe('3 check-ins to review');
+    expect(reviewCount(0, 1, 1, true)).toBe('0 of 1 check-in to review');
+    expect(reviewCount(1, 3, 3, true)).toBe('1 of 3 check-ins to review');
+  });
+
+  it('says a search looked through the oldest only when more wait than were read', () => {
+    expect(reviewCount(0, 500, 612, true)).toBe('0 of the oldest 500 check-ins to review');
+    expect(reviewCount(500, 500, 612, true)).toBe('500 of the oldest 500 check-ins to review');
   });
 
   it('notes the oldest are shown only when more wait than were read', () => {

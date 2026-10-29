@@ -192,7 +192,7 @@ public static class ProgramEditPlanner
         if (requested.Count < frozen)
         {
             throw new ArgumentException(
-                $"Weeks up to week {frozen} have sessions that started or passed, so they stay in the program.");
+                $"Weeks up to week {frozen} have workouts that started or passed, so they stay in the program.");
         }
 
         var weekById = existing.ToDictionary(item => item.Id);
@@ -219,7 +219,7 @@ public static class ProgramEditPlanner
             if (locked.Length + items.Count > ProgramEditRules.MaximumSessionsPerWeek)
             {
                 throw new ArgumentException(
-                    $"Week {number} holds up to {ProgramEditRules.MaximumSessionsPerWeek} sessions.");
+                    $"Week {number} holds up to {ProgramEditRules.MaximumSessionsPerWeek} workouts.");
             }
 
             // A kept session stays where it is in the week only while the sessions before it, new ones
@@ -229,14 +229,14 @@ public static class ProgramEditPlanner
             var sessions = new List<PlannedSession>(items.Count);
             for (var position = 0; position < items.Count; position++)
             {
-                var item = items[position] ?? throw new ArgumentException($"A session of week {number} is missing.");
-                var request = item.Session ?? throw new ArgumentException($"A session of week {number} is missing.");
+                var item = items[position] ?? throw new ArgumentException($"A workout of week {number} is missing.");
+                var request = item.Session ?? throw new ArgumentException($"A workout of week {number} is missing.");
                 var where = string.IsNullOrWhiteSpace(request.Name)
                     ? $"Week {number}"
                     : $"Week {number}, {request.Name.Trim()}";
                 if (request.DayOffset is < 0 or > 6)
                 {
-                    throw new ArgumentException($"{where}: a session's day runs from Day 1 to Day 7.");
+                    throw new ArgumentException($"{where}: a workout's day runs from Day 1 to Day 7.");
                 }
 
                 TrainingSession? stored = null;
@@ -328,7 +328,7 @@ public static class ProgramEditPlanner
         {
             return number <= frozen
                 ? throw new ArgumentException(
-                    $"A new week can't go before week {frozen + 1}: weeks up to week {frozen} have sessions that started or passed.")
+                    $"A new week can't go before week {frozen + 1}: weeks up to week {frozen} have workouts that started or passed.")
                 : null;
         }
 
@@ -340,7 +340,7 @@ public static class ProgramEditPlanner
         if ((current.WeekNumber <= frozen || number <= frozen) && current.WeekNumber != number)
         {
             throw new ArgumentException(
-                $"Week {current.WeekNumber} stays where it is: weeks up to week {frozen} have sessions that started or passed.");
+                $"Week {current.WeekNumber} stays where it is: weeks up to week {frozen} have workouts that started or passed.");
         }
 
         return current;

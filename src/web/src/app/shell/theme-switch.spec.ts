@@ -5,18 +5,24 @@ import { AuthStore } from '../core/auth/auth.store';
 import { PersonalModeStore, type ThemeMode } from '../core/theme/personal-mode.store';
 import { UiToast } from '../ui/toast';
 import { button, settle } from '../../testing/dom';
+import { ThemeModeSaver } from './theme-mode-saver';
 import { ThemeSwitch, ThemeSwitchArt } from './theme-switch';
 
+/** The switch as the account menu holds it: made again each time the menu opens. */
 @Component({
   imports: [ThemeSwitch, ThemeSwitchArt],
   template: `
-    <button #theme="appThemeSwitch" appThemeSwitch type="button">
-      <span>Dark mode</span>
-      <app-theme-switch-art [night]="theme.dark()" />
-    </button>
+    @if (open()) {
+      <button #theme="appThemeSwitch" appThemeSwitch type="button">
+        <span>Dark mode</span>
+        <app-theme-switch-art [night]="theme.dark()" />
+      </button>
+    }
   `,
 })
-class Host {}
+class Host {
+  readonly open = signal(true);
+}
 
 type Listener = (event: MediaQueryListEvent) => void;
 
@@ -92,6 +98,14 @@ async function render(options: { mode?: ThemeMode; dark?: boolean; reducedMotion
     personalMode,
     toggle: button(host, 'Dark mode'),
     art: host.querySelector('app-theme-switch-art')!,
+    /** Closes the menu and opens it again, as an outside click or a navigation does; the new switch. */
+    async reopen(): Promise<HTMLButtonElement> {
+      fixture.componentInstance.open.set(false);
+      await settle(fixture);
+      fixture.componentInstance.open.set(true);
+      await settle(fixture);
+      return button(host, 'Dark mode');
+    },
   };
 }
 
@@ -182,6 +196,109 @@ describe('ThemeSwitch', () => {
     expect(personalMode.mode()).toBe('light');
     expect(auth.user().preferredThemeMode).toBe('light');
     expect(toast.show).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['saved', true],
+    ['refused', false],
+  ])(
+    'keeps one queue when the menu closes and opens again while a save is on its way (first %s)',
+    async (_, firstSaved) => {
+      const { fixture, toggle, auth, toast, answers, personalMode, reopen } = await render({
+        mode: 'light',
+      });
+
+      toggle.click();
+      await settle(fixture);
+      (await reopen()).click();
+      await settle(fixture);
+
+      // The new menu's switch waits behind the old one's save rather than starting its own.
+      expect(personalMode.mode()).toBe('light');
+      expect(auth.updateThemeMode).toHaveBeenCalledTimes(1);
+
+      answers[0](firstSaved);
+      await settle(fixture);
+
+      expect(personalMode.mode()).toBe('light');
+      expect(auth.updateThemeMode.mock.calls.map(([mode]) => mode)).toEqual(['dark', 'light']);
+
+      answers[1](true);
+      await settle(fixture);
+      // Time for the toast's own file, which a refusal fetches first.
+      await import('../ui/toast');
+      await settle(fixture);
+
+      expect(personalMode.mode()).toBe('light');
+      expect(auth.user().preferredThemeMode).toBe('light');
+      // The refused press was replaced by a newer one, which was saved.
+      expect(toast.show).not.toHaveBeenCalled();
+    },
+  );
+
+  it('saves the newest press last when the menu reopens between presses', async () => {
+    const { fixture, toggle, auth, answers, personalMode, reopen } = await render({
+      mode: 'light',
+    });
+
+    toggle.click();
+    await settle(fixture);
+    toggle.click();
+    await settle(fixture);
+    (await reopen()).click();
+    await settle(fixture);
+    expect(personalMode.mode()).toBe('dark');
+
+    // Each save answered as it comes, the ones a reply sends next included.
+    for (const answer of answers) {
+      answer(true);
+      await settle(fixture);
+    }
+
+    expect(auth.updateThemeMode.mock.calls.at(-1)?.[0]).toBe('dark');
+    expect(personalMode.mode()).toBe('dark');
+    expect(auth.user().preferredThemeMode).toBe('dark');
+  });
+
+  it('lets a choice on Settings › Appearance replace a press still waiting to be saved', async () => {
+    const { fixture, toggle, auth, answers, personalMode } = await render({ mode: 'light' });
+
+    toggle.click();
+    await settle(fixture);
+    toggle.click();
+    await settle(fixture);
+    const chosen = TestBed.inject(ThemeModeSaver).save('system');
+
+    // The first press's reply: the second press is never saved after the page's choice.
+    answers[0](true);
+    await settle(fixture);
+    expect(auth.updateThemeMode.mock.calls.map(([mode]) => mode)).toEqual(['dark', 'system']);
+
+    answers[1](true);
+    await chosen;
+    await settle(fixture);
+
+    expect(personalMode.mode()).toBe('system');
+    expect(auth.user().preferredThemeMode).toBe('system');
+  });
+
+  it('keeps a press made while a Settings › Appearance choice is on its way drawn over its reply', async () => {
+    const { fixture, toggle, auth, answers, personalMode } = await render({ mode: 'light' });
+
+    const chosen = TestBed.inject(ThemeModeSaver).save('system');
+    toggle.click();
+    await settle(fixture);
+    expect(personalMode.mode()).toBe('dark');
+
+    answers[0](true);
+    await chosen;
+    await settle(fixture);
+    expect(personalMode.mode()).toBe('dark');
+
+    answers[1](true);
+    await settle(fixture);
+    expect(auth.updateThemeMode.mock.calls.map(([mode]) => mode)).toEqual(['system', 'dark']);
+    expect(auth.user().preferredThemeMode).toBe('dark');
   });
 
   it('spreads the new mode from the switch in a view transition, then tidies up', async () => {

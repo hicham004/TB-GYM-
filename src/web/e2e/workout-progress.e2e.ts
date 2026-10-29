@@ -375,6 +375,14 @@ test.describe('Workout player', () => {
       await waitForFonts(page);
       await accessible(page);
       await docsPicture(page, `r22-workout-${width}.png`, { fullPage: true });
+      // The set's More options row is the kit's fold: on the light card it reads in the card's ink
+      // and rings in the brand, not in the player's dark tokens.
+      await page.getByRole('button', { name: 'Log set' }).focus();
+      await page.keyboard.press('Tab');
+      const moreOptions = page.locator('.set-note summary');
+      await expect(moreOptions).toBeFocused();
+      await expect(moreOptions).toHaveCSS('color', 'rgb(20, 41, 30)');
+      await expect(moreOptions).toHaveCSS('outline-color', 'rgb(21, 61, 51)');
       await page.getByRole('spinbutton', { name: 'Actual load', exact: true }).fill('105');
       await page.getByRole('button', { name: 'Log set' }).click();
       await expect(page.getByText('PR', { exact: true })).toBeVisible();

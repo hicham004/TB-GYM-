@@ -777,8 +777,10 @@ owns tab interaction, and `@angular/cdk` owns dialog, sheet, toast and (since cr
 overlays. The UI lab exercises the kit in light, dark and RTL before any redesigned screen adopts it.
 Since B2a a sheet's or dialog's actions go in its `appModalFooter`, which the surface draws outside the
 body that scrolls, so no sticky bar or scroll-margin workaround sits inside a modal; a submit button
-there names its form with `form`, since it is outside it. The kit menu's list is a top-layer popover
-anchored on its button, never a box drawn inside the card or row that holds it.
+there names its form with `form`, since it is outside it. The sheets the UI plan's follow-ups list are
+the exception: their buttons still end their content until they are next changed. The kit menu's
+list is a top-layer popover anchored on its button, never a box drawn inside the card or row that
+holds it.
 Since B2b every fold is the kit's `app-disclosure` on a native `<details>`, and its content is made on
 first open: a save that can refuse a field inside a closed fold opens the fold before it moves focus
 (Assign program's Load settings is the pattern), since a field never made cannot take focus.

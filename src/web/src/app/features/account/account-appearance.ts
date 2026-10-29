@@ -1,6 +1,7 @@
 import { Component, computed, ElementRef, inject, signal, viewChildren } from '@angular/core';
 import { AuthStore } from '../../core/auth/auth.store';
 import { type ThemeMode } from '../../core/theme/personal-mode.store';
+import { ThemeModeSaver } from '../../shell/theme-mode-saver';
 import { SettingsFrame } from '../settings/settings-frame';
 
 const modes: readonly { value: ThemeMode; label: string; description: string }[] = [
@@ -21,6 +22,8 @@ const modes: readonly { value: ThemeMode; label: string; description: string }[]
 })
 export class AccountAppearance {
   private readonly auth = inject(AuthStore);
+  // The Dark mode switch's saver, so a press still waiting there is never saved after this choice.
+  private readonly saver = inject(ThemeModeSaver);
   protected readonly modes = modes;
   private readonly modeInputs = viewChildren<ElementRef<HTMLInputElement>>('modeInput');
   protected readonly selected = computed(() => this.auth.user()?.preferredThemeMode ?? 'system');
@@ -32,7 +35,7 @@ export class AccountAppearance {
     this.saving.set(true);
     this.error.set(false);
     try {
-      await this.auth.updateThemeMode(mode);
+      await this.saver.save(mode);
     } catch {
       this.error.set(true);
       for (const input of this.modeInputs()) {

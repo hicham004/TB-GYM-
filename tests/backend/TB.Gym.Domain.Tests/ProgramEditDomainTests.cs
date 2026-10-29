@@ -335,7 +335,7 @@ public sealed class ProgramEditDomainTests
             [.. Enumerable.Range(0, count).Select(_ => new ProgramEditSessionRequest(null, NewSession("Extra", 5)))];
         weeks[0] = original with { Sessions = [.. original.Sessions, .. Extra(12)] };
         var refused = Assert.ThrowsExactly<ArgumentException>(() => ProgramEditPlanner.Plan(block, weeks, today));
-        StringAssert.Contains(refused.Message, "Week 1 holds up to 14 sessions");
+        StringAssert.Contains(refused.Message, "Week 1 holds up to 14 workouts");
 
         weeks[0] = original with { Sessions = [.. original.Sessions, .. Extra(11)] };
         Assert.AreEqual(11, ProgramEditPlanner.Plan(block, weeks, today).SessionsAdded);

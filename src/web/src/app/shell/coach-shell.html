@@ -142,44 +142,48 @@
       >
         <app-avatar [initials]="initials()" presentation="top-bar-user" />
       </button>
-      @if (openMenu() === 'account') {
-        <div id="account-menu" class="menu-panel account-panel">
-          <div class="account-summary">
-            <p class="menu-item-title" dir="auto">{{ displayName() }}</p>
-            <p class="menu-item-meta" dir="auto">{{ auth.user()?.email }}</p>
+      <!-- Deferred, so the Dark mode switch's code and styles stay out of the first download: fetched
+           once the page is idle, or by the first press of the account button. -->
+      @defer (on idle; on interaction(accountButton)) {
+        @if (openMenu() === 'account') {
+          <div id="account-menu" class="menu-panel account-panel">
+            <div class="account-summary">
+              <p class="menu-item-title" dir="auto">{{ displayName() }}</p>
+              <p class="menu-item-meta" dir="auto">{{ auth.user()?.email }}</p>
+            </div>
+            <ul class="menu-list">
+              <li>
+                <a class="menu-item" routerLink="/account/security" i18n>Password and security</a>
+              </li>
+              <li>
+                <!-- Light or dark in place; Settings › Appearance also offers following the device. -->
+                <button
+                  #theme="appThemeSwitch"
+                  appThemeSwitch
+                  type="button"
+                  class="menu-item theme-item"
+                >
+                  <span i18n>Dark mode</span>
+                  <app-theme-switch-art [night]="theme.dark()" />
+                </button>
+              </li>
+              <!-- A global role, not a workspace one (ADR 0028). Presentation only; the API decides. -->
+              @if (auth.user()?.roles?.includes('PlatformAdmin')) {
+                <li>
+                  <a class="menu-item" routerLink="/admin/billing" i18n>Platform billing</a>
+                </li>
+                <li>
+                  <a class="menu-item" routerLink="/admin/legal" i18n>Legal documents</a>
+                </li>
+              }
+              <li>
+                <button type="button" class="menu-item" (click)="requestSignOut()" i18n>
+                  Sign out
+                </button>
+              </li>
+            </ul>
           </div>
-          <ul class="menu-list">
-            <li>
-              <a class="menu-item" routerLink="/account/security" i18n>Password and security</a>
-            </li>
-            <li>
-              <!-- Light or dark in place; Settings › Appearance also offers following the device. -->
-              <button
-                #theme="appThemeSwitch"
-                appThemeSwitch
-                type="button"
-                class="menu-item theme-item"
-              >
-                <span i18n>Dark mode</span>
-                <app-theme-switch-art [night]="theme.dark()" />
-              </button>
-            </li>
-            <!-- A global role, not a workspace one (ADR 0028). Presentation only; the API decides. -->
-            @if (auth.user()?.roles?.includes('PlatformAdmin')) {
-              <li>
-                <a class="menu-item" routerLink="/admin/billing" i18n>Platform billing</a>
-              </li>
-              <li>
-                <a class="menu-item" routerLink="/admin/legal" i18n>Legal documents</a>
-              </li>
-            }
-            <li>
-              <button type="button" class="menu-item" (click)="requestSignOut()" i18n>
-                Sign out
-              </button>
-            </li>
-          </ul>
-        </div>
+        }
       }
     </div>
   </div>

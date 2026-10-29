@@ -11,6 +11,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { fill, fold, menuChoices, press, settle, toggleFold } from '../../../testing/dom';
 import { workspace } from '../../../testing/intake-fixtures';
+import { provideMediaUploads } from '../../../testing/media-uploads';
 import {
   mayaMeasurements,
   mayaPhotos,
@@ -35,6 +36,8 @@ interface Options {
   clientName?: string;
   weightUnit?: 'Kilogram' | 'Pound';
   tenant?: ReturnType<typeof signal<string>>;
+  /** A server with no media storage (critique T25). */
+  uploadsOff?: boolean;
 }
 
 async function render(options: Options = {}) {
@@ -59,6 +62,7 @@ async function render(options: Options = {}) {
       { provide: CsrfService, useValue: csrf },
       { provide: AuthStore, useValue: { weightUnit: signal(options.weightUnit ?? 'Kilogram') } },
       { provide: TenantStore, useValue: { selectedTenantId: tenant } },
+      provideMediaUploads(options.uploadsOff),
     ],
   });
   let fixture;
@@ -481,6 +485,25 @@ describe('Your entries', () => {
       expect(textOf(host.querySelector('[data-pane="photos"] app-empty-state h2'))).toBe(
         'No photos yet',
       );
+      expect(textOf(host.querySelector('[data-pane="photos"] app-empty-state button'))).toBe(
+        'Add photos',
+      );
+      expect(host.querySelector('[data-pane="photos"] [data-add-photos]')).not.toBeNull();
+    });
+
+    it('says uploads aren’t set up, offering no Add photos, on a server with no media storage', async () => {
+      const { host } = await render({
+        url: '/progress?tab=photos',
+        api: { photos: vi.fn(() => of(photosView([]))) },
+        uploadsOff: true,
+      });
+
+      const pane = host.querySelector('[data-pane="photos"]')!;
+      expect(textOf(pane.querySelector('.toolbar'))).toBe('Uploads aren’t set up on this server.');
+      expect(pane.querySelector('[data-add-photos]')).toBeNull();
+      // The empty state still says there are none, with nothing to press.
+      expect(textOf(pane.querySelector('app-empty-state h2'))).toBe('No photos yet');
+      expect(pane.querySelector('app-empty-state button')).toBeNull();
     });
 
     it('offers a before and after beside Add photos once a pose has photos on two days', async () => {

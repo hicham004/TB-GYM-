@@ -169,7 +169,7 @@ export class CheckInForms {
       () => {
         const target = first
           ? this.host.querySelector<HTMLElement>(`a[href="/checkins/forms/${first.id}"]`)
-          : this.host.querySelector<HTMLElement>('details.archived > summary');
+          : this.host.querySelector<HTMLElement>('app-disclosure.archived > details > summary');
         (target ?? this.heading()?.nativeElement)?.focus();
       },
       { injector: this.injector },

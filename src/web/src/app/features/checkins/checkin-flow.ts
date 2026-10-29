@@ -28,6 +28,7 @@ import type {
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { ownCheckInDenialMessage } from '../../core/i18n/display-labels';
 import { CsrfService } from '../../core/security/csrf.service';
+import { MediaUploads } from '../../core/system/media-uploads';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink, IconButton } from '../../ui/button';
@@ -103,6 +104,7 @@ export class CheckInFlow {
   private readonly tenants = inject(TenantStore);
   private readonly access = inject(ClientAccessStore);
   private readonly injector = inject(Injector);
+  protected readonly uploadsOff = inject(MediaUploads).off;
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly assignmentId = toSignal(
     inject(ActivatedRoute).paramMap.pipe(map((params) => params.get('assignmentId'))),

@@ -1231,16 +1231,6 @@ export class ApiClient {
     );
   }
 
-  /** Mark as unread (MSG-022, critique B3b): the caller's own mark, until they next read the chat. */
-  markConversationUnread(
-    conversationId: string,
-  ): Observable<Phase3Contracts.ConversationReadState> {
-    return this.http.post<Phase3Contracts.ConversationReadState>(
-      `/api/messaging/conversations/${conversationId}/unread`,
-      {},
-    );
-  }
-
   getMessagingUnreadCount(): Observable<number> {
     return this.http
       .get<Phase3Contracts.MessagingUnreadCount>('/api/messaging/unread-count')
@@ -1378,11 +1368,6 @@ export class ApiClient {
       `/api/checkins/clients/${clientId}/assignments`,
       { params: { skip, take } },
     );
-  }
-
-  /** Every sent check-in waiting for its review, of the clients the caller coaches (CHK-014). */
-  listCheckInsToReview(): Observable<Phase3Contracts.CheckInToReviewList> {
-    return this.http.get<Phase3Contracts.CheckInToReviewList>('/api/checkins/to-review');
   }
 
   assignCheckIn(

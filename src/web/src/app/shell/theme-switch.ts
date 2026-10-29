@@ -15,11 +15,8 @@ import {
   type Injector,
   type Signal,
 } from '@angular/core';
-import { AuthStore } from '../core/auth/auth.store';
-import { isThemeMode, PersonalModeStore, type ThemeMode } from '../core/theme/personal-mode.store';
-
-/** The kit's toast stays out of the first download, as `NavigationFailure` keeps it (about 90 kB). */
-const loadToast = () => import('../ui/toast').then((module) => module.UiToast);
+import { PersonalModeStore, type ThemeMode } from '../core/theme/personal-mode.store';
+import { ThemeModeSaver } from './theme-mode-saver';
 
 /** The class `styles.scss` reads on <html> while a new mode spreads over the page. */
 const REVEAL_CLASS = 'tb-theme-reveal';
@@ -48,9 +45,8 @@ export class ThemeSwitchArt {
  *
  * It shows the mode the app is drawn in, so someone following a dark device sees it on. A press draws
  * the other mode at once, spreading it over the page from the switch, and saves it on the account as
- * the Appearance page does, so it follows the person to every device. Presses made while a save is on
- * its way are not lost: the newest is saved next, and an earlier reply never draws its older mode. If
- * the newest is refused, the page goes back to the account's mode and a toast says so.
+ * the Appearance page does, so it follows the person to every device. `ThemeModeSaver` keeps the
+ * presses in order, across the menu closing and opening again.
  */
 @Directive({
   selector: 'button[appThemeSwitch]',
@@ -62,16 +58,13 @@ export class ThemeSwitchArt {
   },
 })
 export class ThemeSwitch {
-  private readonly auth = inject(AuthStore);
   private readonly personalMode = inject(PersonalModeStore);
+  private readonly saver = inject(ThemeModeSaver);
   private readonly document = inject(DOCUMENT);
   // The app's injector rather than this button's: a reveal must finish even if the menu closes.
   private readonly injector = inject(EnvironmentInjector);
   private readonly art = contentChild(ThemeSwitchArt, { read: ElementRef });
   private readonly deviceDark = deviceDark(this.document, inject(DestroyRef));
-  /** The mode pressed last and not saved yet; null once the account has it. */
-  private wanted: ThemeMode | null = null;
-  private saving = false;
 
   /** Whether the app is drawn dark: the person's mode, or their device's while they follow it. */
   readonly dark = computed(() => {
@@ -82,49 +75,7 @@ export class ThemeSwitch {
   protected toggle(): void {
     const mode: ThemeMode = this.dark() ? 'light' : 'dark';
     this.reveal(() => this.personalMode.setMode(mode));
-    this.wanted = mode;
-    if (!this.saving) void this.saveWanted();
-  }
-
-  private async saveWanted(): Promise<void> {
-    const account = this.auth.user()?.id;
-    this.saving = true;
-    try {
-      while (this.wanted !== null) {
-        const mode = this.wanted;
-        let refused = false;
-        try {
-          await this.auth.updateThemeMode(mode);
-        } catch {
-          refused = true;
-        }
-        // Signed out, or another account signed in meanwhile: the new session's mode stands.
-        if (account === undefined || this.auth.user()?.id !== account) {
-          this.wanted = null;
-          return;
-        }
-        if (this.wanted !== mode) {
-          // A newer press came while this one was on its way, and its reply drew the older mode.
-          this.personalMode.setMode(this.wanted);
-          continue;
-        }
-        this.wanted = null;
-        if (refused) {
-          this.personalMode.setMode(accountMode(this.auth.user()?.preferredThemeMode));
-          void this.sayRefused();
-        }
-      }
-    } finally {
-      this.saving = false;
-    }
-  }
-
-  private async sayRefused(): Promise<void> {
-    // Null when the toast's own file could not be fetched either: the mode drawn back says it alone.
-    const toasts = await loadToast()
-      .then((type) => this.injector.get(type))
-      .catch(() => null);
-    toasts?.show($localize`Couldn’t save your choice. Try again.`, { tone: 'error' });
+    this.saver.want(mode);
   }
 
   /**
@@ -168,10 +119,6 @@ export class ThemeSwitch {
     transition.ready.catch(() => undefined);
     void transition.finished.then(tidy, tidy);
   }
-}
-
-function accountMode(value: string | undefined): ThemeMode {
-  return isThemeMode(value) ? value : 'system';
 }
 
 /** Whether the device asks for dark, kept current while the switch is on screen. */

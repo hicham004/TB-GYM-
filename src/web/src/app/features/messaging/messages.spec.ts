@@ -19,6 +19,7 @@ import { profileOverview } from '../../../testing/client-profile-fixtures';
 import { MAYA } from '../../../testing/coach-today-fixtures';
 import { button, field, menuChoices, press, query, settle } from '../../../testing/dom';
 import { ConversationLaunch } from './conversation-launch';
+import { MessagesApi } from './messages-api';
 import { SavedRepliesApi } from './saved-replies-api';
 import { messagingRoutes } from './messages.routes';
 import type { ConversationPage as ServerConversationPage } from '../../core/api/generated';
@@ -195,11 +196,12 @@ interface ApiMocks {
   deleteConversationMessage: ReturnType<typeof vi.fn>;
   moderateConversationMessage: ReturnType<typeof vi.fn>;
   advanceConversationReadCursor: ReturnType<typeof vi.fn>;
-  markConversationUnread: ReturnType<typeof vi.fn>;
   getClientOverview: ReturnType<typeof vi.fn>;
 }
 
 interface Harness extends ApiMocks {
+  /** Mark as unread, from Messages' own API service. */
+  markUnread: ReturnType<typeof vi.fn>;
   host: HTMLElement;
   realtime: RealtimeStub;
   fixture: ComponentFixture<unknown>;
@@ -280,7 +282,6 @@ async function render(
     deleteConversationMessage: vi.fn(),
     moderateConversationMessage: vi.fn(),
     advanceConversationReadCursor: vi.fn(() => of(readState())),
-    markConversationUnread: vi.fn(() => of(readState({ isMarkedUnread: true }))),
     getClientOverview: vi.fn(() =>
       of(
         profileOverview({
@@ -290,6 +291,7 @@ async function render(
     ),
   };
   configure?.(api);
+  const markUnread = vi.fn(() => of(readState({ isMarkedUnread: true })));
   const unreadRefresh = vi.fn().mockResolvedValue(undefined);
 
   await TestBed.configureTestingModule({
@@ -297,6 +299,7 @@ async function render(
     providers: [
       provideRouter(url ? [{ path: 'messages', component: Messages }] : []),
       { provide: ApiClient, useValue: api },
+      { provide: MessagesApi, useValue: { markUnread } },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       { provide: AuthStore, useValue: { user, loading: signal(false) } },
       {
@@ -355,6 +358,7 @@ async function render(
   await settle(fixture);
   return {
     ...api,
+    markUnread,
     unreadRefresh,
     realtime,
     fixture,
@@ -2393,14 +2397,15 @@ describe('Messages', () => {
         .click();
       await settle(harness.fixture);
 
-      expect(harness.markConversationUnread).toHaveBeenCalledWith('conversation-1');
+      expect(harness.markUnread).toHaveBeenCalledWith('conversation-1');
       const row = query(harness.host, '.conversation');
       expect(row.querySelector('.count.marked')).not.toBeNull();
       expect(row.getAttribute('aria-label')).toBe('Rania Haddad, marked unread');
       expect(chips(harness.host)).toContain('Unread 1');
       expect(harness.unreadRefresh.mock.calls.length).toBeGreaterThan(unreadUsed);
-      // Already unread, the row offers nothing more.
+      // Already unread, the row offers nothing more, and focus moves from its menu to the row.
       expect(harness.host.querySelector('app-menu.row-menu')).toBeNull();
+      expect(document.activeElement).toBe(row);
     });
 
     it('marks the open chat unread from its menu and closes it, so reading it does not undo that', async () => {
@@ -2421,7 +2426,7 @@ describe('Messages', () => {
         .click();
       await settle(harness.fixture);
 
-      expect(harness.markConversationUnread).toHaveBeenCalledWith('conversation-1');
+      expect(harness.markUnread).toHaveBeenCalledWith('conversation-1');
       expect(harness.host.querySelector('#thread-heading')).toBeNull();
       expect(harness.advanceConversationReadCursor.mock.calls.length).toBe(reads);
       expect(query(harness.host, '.conversation .count.marked')).not.toBeNull();
@@ -2466,6 +2471,44 @@ describe('Messages', () => {
       expect(harness.host.querySelectorAll('.conversation')).toHaveLength(0);
       expect(query(harness.host, '#thread-heading').textContent).toContain('Rania Haddad');
       expect(bodies(harness.host)).toEqual(['Message 1']);
+    });
+
+    it('counts the open chat in Unread when it is marked after leaving the loaded list (critique B3b)', async () => {
+      const harness = await render(({ listConversations, listConversationMessages }) => {
+        listConversations.mockReturnValue(
+          of(conversationPage([conversation({ unreadCount: 1 })], { counts: COUNTS })),
+        );
+        listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+      });
+      await choose(harness, 'Unread');
+      await open(harness);
+      // Read, the chat leaves the Unread list while its thread stays open.
+      harness.listConversations.mockReturnValue(
+        of(conversationPage([], { counts: { ...COUNTS, unread: 0 } })),
+      );
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+      expect(harness.host.querySelectorAll('.conversation')).toHaveLength(0);
+
+      harness.listConversations.mockReturnValue(
+        of(
+          conversationPage([conversation({ isMarkedUnread: true })], {
+            counts: { ...COUNTS, unread: 1 },
+          }),
+        ),
+      );
+      const trigger = query<HTMLButtonElement>(harness.host, 'app-menu.thread-menu button');
+      trigger.click();
+      await settle(harness.fixture);
+      menuChoices(trigger)
+        .find((item) => (item.textContent ?? '').includes('Mark as unread'))!
+        .click();
+      await settle(harness.fixture);
+
+      // The chip and the list say what the badge says: the chat is back, marked.
+      expect(harness.markUnread).toHaveBeenCalledWith('conversation-1');
+      expect(chips(harness.host)).toContain('Unread 1');
+      expect(query(harness.host, '.conversation .count.marked')).not.toBeNull();
     });
 
     it('keeps the open thread’s row read when a live list read the server just before the cursor moved', async () => {

@@ -51,6 +51,7 @@ import { ChatComposer } from './chat-composer';
 import { chatTimeline, firstUnreadSequence } from './chat-timeline';
 import { ConversationList } from './conversation-list';
 import { InboxToolbar } from './inbox-toolbar';
+import { MessagesApi } from './messages-api';
 import { SavedRepliesSheet } from './saved-replies';
 import { insertReply } from './saved-replies.models';
 import {
@@ -138,6 +139,7 @@ const plainQuery: InboxQuery = { filter: 'all', search: '' };
 })
 export class Messages {
   private readonly api = inject(ApiClient);
+  private readonly messagesApi = inject(MessagesApi);
   private readonly csrf = inject(CsrfService);
   private readonly auth = inject(AuthStore);
   private readonly tenants = inject(TenantStore);
@@ -644,20 +646,28 @@ export class Messages {
   protected async markUnread(conversation: Conversation): Promise<void> {
     if (conversation.id === this.selectedId()) this.closeThread();
     return this.scope.run('markUnread', async (owner) => {
+      const generation = this.contextGeneration;
       try {
         await owner.wait(this.csrf.refresh());
         const readState = await owner.wait(
-          firstValueFrom(this.api.markConversationUnread(conversation.id).pipe(map(mapReadState))),
+          firstValueFrom(this.messagesApi.markUnread(conversation.id)),
         );
-        const before = this.conversations().find((item) => item.id === conversation.id);
-        if (before !== undefined && !countsAsUnread(before) && readState.isMarkedUnread) {
+        const loaded = this.conversations().find((item) => item.id === conversation.id);
+        // The open chat can have left the loaded list (a filter or a refresh); the copy it was
+        // chosen from is kept current, so it says whether the chip counts it yet.
+        const before = loaded ?? conversation;
+        if (!countsAsUnread(before) && readState.isMarkedUnread) {
           // Marking is not an event the live channel carries, so the chip is told here.
           this.counts.update((counts) =>
             counts === null ? null : { ...counts, unread: counts.unread + 1 },
           );
         }
-        this.conversations.update((loaded) =>
-          loaded.map((item) =>
+        // The row's menu goes once the row counts as unread: focus still on it moves to the row.
+        const row = `.conversation[data-conversation-id="${conversation.id}"]`;
+        const rowMenu = this.host.querySelector(`${row} ~ app-menu`);
+        const menuHadFocus = rowMenu?.contains(this.document.activeElement) ?? false;
+        this.conversations.update((items) =>
+          items.map((item) =>
             item.id === conversation.id
               ? {
                   ...item,
@@ -667,6 +677,16 @@ export class Messages {
               : item,
           ),
         );
+        if (menuHadFocus) {
+          afterNextRender(() => this.host.querySelector<HTMLElement>(row)?.focus(), {
+            injector: this.injector,
+          });
+        }
+        // A chat not in the list is read again with the first page, so its row and the chip come
+        // from the server, which replaces the count told above.
+        if (loaded === undefined) {
+          await owner.wait(this.loadConversations(generation, true));
+        }
         await owner.wait(this.unreadStore.refresh());
       } catch (error) {
         if (!owner.current) return;

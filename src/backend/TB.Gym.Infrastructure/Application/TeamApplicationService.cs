@@ -28,7 +28,14 @@ internal sealed class TeamApplicationService(
                 user.DisplayName,
                 user.Email,
                 membership.Role,
-                membership.CreatedAtUtc,
+                // When they last became active (the membership's history, ADR 0028): a removed coach invited
+                // back reuses the row, whose creation time is their first stint, not this one.
+                JoinedAtUtc = dbContext.MembershipStatusChanges
+                    .Where(change =>
+                        change.TenantId == membership.TenantId &&
+                        change.MembershipId == membership.Id &&
+                        change.Status == MembershipStatus.Active)
+                    .Max(change => (DateTimeOffset?)change.ChangedAtUtc) ?? membership.CreatedAtUtc,
                 membership.Version,
             })
             .ToListAsync(cancellationToken);
@@ -49,7 +56,7 @@ internal sealed class TeamApplicationService(
                 member.Email ?? string.Empty,
                 member.Role,
                 counts.GetValueOrDefault(member.UserId),
-                member.CreatedAtUtc,
+                member.JoinedAtUtc,
                 member.Version))
             .ToArray();
     }
@@ -60,7 +67,19 @@ internal sealed class TeamApplicationService(
         var members = await (
             from membership in ActiveStaff()
             join user in dbContext.Users.AsNoTracking() on membership.UserId equals user.Id
-            select new { membership.UserId, user.DisplayName, membership.Role, membership.CreatedAtUtc })
+            select new
+            {
+                membership.UserId,
+                user.DisplayName,
+                membership.Role,
+                // The same joining day as the owner's list: the latest return, not the first stint.
+                JoinedAtUtc = dbContext.MembershipStatusChanges
+                    .Where(change =>
+                        change.TenantId == membership.TenantId &&
+                        change.MembershipId == membership.Id &&
+                        change.Status == MembershipStatus.Active)
+                    .Max(change => (DateTimeOffset?)change.ChangedAtUtc) ?? membership.CreatedAtUtc,
+            })
             .ToListAsync(cancellationToken);
 
         return members
@@ -69,7 +88,7 @@ internal sealed class TeamApplicationService(
             .Select(member => new TeamRosterMember(
                 member.DisplayName,
                 member.Role,
-                member.CreatedAtUtc,
+                member.JoinedAtUtc,
                 member.UserId == currentUser.UserId))
             .ToArray();
     }

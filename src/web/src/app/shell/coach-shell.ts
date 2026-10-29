@@ -61,6 +61,7 @@ export const TOPBAR_BLOCK_SIZE = '--tb-topbar-block-size';
     NgTemplateOutlet,
     RouterLink,
     RouterLinkActive,
+    // Only inside the account menu's @defer block, which keeps them out of the first download.
     ThemeSwitch,
     ThemeSwitchArt,
   ],

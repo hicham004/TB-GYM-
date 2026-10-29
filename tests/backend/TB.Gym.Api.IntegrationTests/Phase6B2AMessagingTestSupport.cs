@@ -440,6 +440,9 @@ public sealed partial class Phase6B2AMessagingTests
             $"/api/messaging/conversations/{conversationId}/read",
             new { throughSequence });
 
+    private static Task<HttpResponseMessage> PostMarkUnreadAsync(HttpClient caller, Guid conversationId) =>
+        caller.PostAsync($"/api/messaging/conversations/{conversationId}/unread", null);
+
     private static async Task<ReadStateResponse> AdvanceReadAsync(
         HttpClient caller,
         Guid conversationId,
@@ -785,6 +788,14 @@ public sealed partial class Phase6B2AMessagingTests
         ("conversationId", conversationId),
         ("userId", userId));
 
+    private Task<bool> IsMarkedUnreadAsync(Guid conversationId, Guid userId) => ScalarAsync<bool>(
+        """
+        SELECT "MarkedUnreadAtUtc" IS NOT NULL FROM messaging."ConversationParticipants"
+        WHERE "ConversationId" = @conversationId AND "UserId" = @userId
+        """,
+        ("conversationId", conversationId),
+        ("userId", userId));
+
     private Task<Guid> AnyMessageIdAsync(Guid conversationId) => ScalarAsync<Guid>(
         """SELECT "Id" FROM messaging."Messages" WHERE "ConversationId" = @id ORDER BY "Sequence" LIMIT 1""",
         ("id", conversationId));
@@ -860,7 +871,8 @@ public sealed partial class Phase6B2AMessagingTests
         bool IsAvailable,
         string AccessReason,
         PreviewResponse? LastMessage,
-        PreviewResponse? LatestFromCounterpart = null);
+        PreviewResponse? LatestFromCounterpart = null,
+        bool IsMarkedUnread = false);
 
     private sealed record ConversationPageResponse(
         ConversationSummaryResponse[] Items,

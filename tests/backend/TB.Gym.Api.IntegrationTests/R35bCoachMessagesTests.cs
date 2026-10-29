@@ -177,7 +177,7 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         // Nobody else can: a team coach who is not in the chat, another space's owner, someone signed out.
         using var coach = CreateClient();
-        await JoinAsCoachAsync(owner, coach, "b3b-unread-coach@example.test", "Lina Saad");
+        var linaUserId = await JoinAsCoachAsync(owner, coach, "b3b-unread-coach@example.test", "Lina Saad");
         await RefreshCsrfAsync(coach);
         await AssertStatusAsync(await coach.PostAsync($"{R35bInboxUrl}/{maya.ChatId}/unread", null), HttpStatusCode.NotFound);
         using var stranger = CreateClient();
@@ -189,6 +189,23 @@ public sealed partial class Phase3TrainingWorkflowTests
         SetTenant(anonymous, tenant);
         await AssertStatusAsync(await anonymous.PostAsync($"{R35bInboxUrl}/{maya.ChatId}/unread", null), HttpStatusCode.Unauthorized);
         Assert.AreEqual(0L, await R35bBadgeAsync(owner), "None of the refused marks reached the owner's chat.");
+
+        // A mark on a chat the caller can no longer open counts nothing (MSG-022): once Maya is Lina's
+        // client, the owner's marked chat leaves the badge and the Unread filter, and cannot be marked again.
+        await R35bMarkUnreadAsync(owner, maya.ChatId);
+        Assert.AreEqual(1L, await R35bBadgeAsync(owner));
+        await ReassignAsync(owner, maya.ClientId, linaUserId, null);
+        await RefreshCsrfAsync(owner);
+        await AssertStatusAsync(await owner.PostAsync($"{R35bInboxUrl}/{maya.ChatId}/unread", null), HttpStatusCode.NotFound);
+        Assert.AreEqual(0L, await R35bBadgeAsync(owner));
+        var ownerUnread = await ReadSliceAsync<ConversationPage>(owner, $"{R35bInboxUrl}?filter=Unread");
+        Assert.IsEmpty(ownerUnread.Items);
+        Assert.AreEqual(new ConversationListCounts(0, 0), ownerUnread.Counts);
+
+        // Nor can the owner mark the chat Lina now has with Maya, which is not theirs (ADR 0026).
+        var linaChat = await StartChatAsync(coach, maya.ClientId);
+        await AssertStatusAsync(await owner.PostAsync($"{R35bInboxUrl}/{linaChat}/unread", null), HttpStatusCode.NotFound);
+        Assert.IsTrue((await R35bMarkUnreadAsync(coach, linaChat)).IsMarkedUnread, "Lina marks her own chat.");
     }
 
     [TestMethod]

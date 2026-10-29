@@ -20,6 +20,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type { WorkspaceDetails } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
+import { MediaUploads } from '../../core/system/media-uploads';
 import { TenantAsyncScope, type TenantOperation } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import type { GirthUnit, MassUnit } from '../../core/units/body-units';
@@ -115,6 +116,7 @@ export class ProgressEntries {
   private readonly locale = inject(LOCALE_ID);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  protected readonly uploadsOff = inject(MediaUploads).off;
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private loadedKey: string | null = null;

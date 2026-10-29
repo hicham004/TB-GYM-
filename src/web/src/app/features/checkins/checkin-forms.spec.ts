@@ -218,6 +218,28 @@ describe('Check-in forms (audit A14b)', () => {
     expect(textOf(host.querySelector('.lede'))).toContain('102 forms, 102 ready to assign.');
   });
 
+  it('moves focus to the Archived row when the last page brings only archived forms', async () => {
+    const first = Array.from({ length: 100 }, (_, index) =>
+      form({ id: `form-${index}`, title: `Form ${String(index).padStart(3, '0')}` }),
+    );
+    const { host, harness } = await render((skip) =>
+      skip === 0
+        ? of(page(first, 101))
+        : of(page([form({ id: 'form-old', title: 'Zz old', isArchived: true })], 101)),
+    );
+
+    press(host, 'Show more forms');
+    await settle(harness.fixture);
+
+    expect(
+      Array.from(host.querySelectorAll('button')).some((button) =>
+        /Show more/.test(button.textContent ?? ''),
+      ),
+    ).toBe(false);
+    // No form to open came: focus goes to the fold the new one went into, not the page's top.
+    expect(document.activeElement).toBe(fold(host, 'Archived (1)').querySelector('summary'));
+  });
+
   it('pages by the rows the server sent, so a form renamed between reads never stalls Show more', async () => {
     const first = Array.from({ length: 100 }, (_, index) =>
       form({ id: `form-${index}`, title: `Form ${String(index).padStart(3, '0')}` }),

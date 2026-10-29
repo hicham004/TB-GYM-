@@ -76,7 +76,14 @@
           </ul>
         } @else {
           <div class="panel pad no-match">
-            <p i18n>No client called “{{ search().trim() }}” has a check-in to review.</p>
+            <!-- More wait than were read: the search looked through the oldest only. -->
+            @if (capped()) {
+              <p i18n>
+                None of the oldest {{ read() }} check-ins to review is from “{{ search().trim() }}”.
+              </p>
+            } @else {
+              <p i18n>No client called “{{ search().trim() }}” has a check-in to review.</p>
+            }
             <button appButton type="button" variant="outlined" (click)="clearSearch()" i18n>
               Clear search
             </button>

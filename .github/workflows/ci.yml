@@ -48,7 +48,8 @@ jobs:
         run: |
           integration=true
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            changed="$(git diff --name-only HEAD^1 HEAD)"
+            # --no-renames lists a move's old path too, so moving a file out of the backend counts.
+            changed="$(git diff --name-only --no-renames HEAD^1 HEAD)"
             printf '%s\n' "$changed"
             # A here-string, not a pipe: under pipefail an early-exiting grep could fail the pipe.
             if ! grep -qvE '^(src/web/|docs/)|\.md$' <<< "$changed"; then

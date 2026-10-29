@@ -64,6 +64,7 @@ test('the owner sidebar is the locked navigation, in order', async ({ page }) =>
     /Check-ins/,
     /Messages/,
     /Products/,
+    /Team/,
     /Settings/,
   ]);
   // Uppercase is presentation: the text itself stays sentence case so translations can differ.
@@ -87,6 +88,8 @@ test('a coach gets the same shell, with Settings on their own account pages', as
   await openShell(page, { memberships: [COACH_MEMBERSHIP] });
 
   await expect(page.locator('.sidebar a[href="/workspace"]')).toHaveCount(0);
+  // Team is the owner's row; a coach opens their read-only Team from Settings.
+  await expect(page.locator('.sidebar a[data-destination="team"]')).toHaveCount(0);
   await expect(sidebarLinks(page)).toHaveCount(8);
   await expect(sidebarLinks(page).last()).toHaveAttribute('href', '/notifications/settings');
   await expect(page.locator('.sidebar .identity-role')).toHaveText('Coach');
@@ -149,7 +152,7 @@ for (const dir of ['ltr', 'rtl'] as const) {
 
     const dialog = page.locator('dialog#coach-navigation-dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('a.item')).toHaveCount(8);
+    await expect(dialog.locator('a.item')).toHaveCount(9);
     await expectNoHorizontalOverflow(page);
     await expect(page).toHaveScreenshot(`coach-nav-390-${dir}.png`);
 

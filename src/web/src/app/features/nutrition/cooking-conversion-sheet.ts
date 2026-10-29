@@ -331,10 +331,6 @@ let nextSheet = 0;
         flex-direction: column;
         gap: 0.5rem;
       }
-
-      input {
-        scroll-margin-block-end: 5rem;
-      }
     `,
   ],
 })

@@ -305,48 +305,55 @@
                       >
                     }
                   </p>
-                  <ul class="poses">
-                    @for (pose of poses; track pose) {
-                      @let slot = photos()[pose];
-                      <li>
-                        <label
-                          class="pose"
-                          [class.is-added]="slot.state === 'added'"
-                          [class.is-saving]="slot.state === 'saving'"
-                        >
-                          <input
-                            class="pose-input"
-                            type="file"
-                            accept="image/*"
-                            [disabled]="slot.state === 'saving' || slot.state === 'added'"
-                            (change)="addPhoto(pose, $event)"
-                          />
-                          <span class="pose-art" aria-hidden="true">
-                            <app-icon [name]="slot.state === 'added' ? 'check-circle' : 'camera'" />
-                          </span>
-                          <strong>{{ poseLabel(pose) }}</strong>
-                          <span class="pose-state">
-                            @switch (slot.state) {
-                              @case ('saving') {
-                                <ng-container i18n>Saving…</ng-container>
+                  <!-- Said before the client tries, on a server with no media storage (critique T25). -->
+                  @if (uploadsOff()) {
+                    <p class="step-help" i18n>Uploads aren’t set up on this server.</p>
+                  } @else {
+                    <ul class="poses">
+                      @for (pose of poses; track pose) {
+                        @let slot = photos()[pose];
+                        <li>
+                          <label
+                            class="pose"
+                            [class.is-added]="slot.state === 'added'"
+                            [class.is-saving]="slot.state === 'saving'"
+                          >
+                            <input
+                              class="pose-input"
+                              type="file"
+                              accept="image/*"
+                              [disabled]="slot.state === 'saving' || slot.state === 'added'"
+                              (change)="addPhoto(pose, $event)"
+                            />
+                            <span class="pose-art" aria-hidden="true">
+                              <app-icon
+                                [name]="slot.state === 'added' ? 'check-circle' : 'camera'"
+                              />
+                            </span>
+                            <strong>{{ poseLabel(pose) }}</strong>
+                            <span class="pose-state">
+                              @switch (slot.state) {
+                                @case ('saving') {
+                                  <ng-container i18n>Saving…</ng-container>
+                                }
+                                @case ('added') {
+                                  <ng-container i18n>Added today</ng-container>
+                                }
+                                @default {
+                                  <ng-container i18n>Add a photo</ng-container>
+                                }
                               }
-                              @case ('added') {
-                                <ng-container i18n>Added today</ng-container>
-                              }
-                              @default {
-                                <ng-container i18n>Add a photo</ng-container>
-                              }
-                            }
-                          </span>
-                        </label>
-                        @if (slot.message) {
-                          <p class="pose-message" [class.is-error]="slot.state === 'failed'">
-                            {{ slot.message }}
-                          </p>
-                        }
-                      </li>
-                    }
-                  </ul>
+                            </span>
+                          </label>
+                          @if (slot.message) {
+                            <p class="pose-message" [class.is-error]="slot.state === 'failed'">
+                              {{ slot.message }}
+                            </p>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  }
                   <p class="tb-visually-hidden" role="status">{{ photoNotice() }}</p>
                 }
                 @case ('review') {

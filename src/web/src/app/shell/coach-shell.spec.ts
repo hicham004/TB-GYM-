@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { DeferBlockBehavior, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthStore } from '../core/auth/auth.store';
@@ -56,6 +56,8 @@ async function render(
   const selectedTenantId = signal(memberships[0].tenantId);
   await TestBed.configureTestingModule({
     imports: [CoachShell],
+    // The account menu is a deferred block, played through as a browser plays it.
+    deferBlockBehavior: DeferBlockBehavior.Playthrough,
     providers: [
       provideRouter([
         { path: '', children: [] },
@@ -203,6 +205,30 @@ describe('CoachShell', () => {
     expect(host.querySelector('#account-menu')).toBeNull();
     expect(account.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(account);
+  });
+
+  it('opens a working account menu at the first press, before the page has been idle', async () => {
+    // A page still busy: idle never comes, so the press itself fetches the menu's deferred part.
+    vi.stubGlobal('requestIdleCallback', () => 0);
+    vi.stubGlobal('cancelIdleCallback', () => undefined);
+    try {
+      const { fixture, host } = await render();
+      const account = host.querySelector<HTMLButtonElement>('.account-button')!;
+
+      account.click();
+      await settle(fixture);
+
+      expect(account.getAttribute('aria-expanded')).toBe('true');
+      expect(button(host, 'Dark mode').getAttribute('role')).toBe('switch');
+      expect(host.querySelector('#account-menu a[href="/account/security"]')).not.toBeNull();
+
+      host.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle(fixture);
+      expect(host.querySelector('#account-menu')).toBeNull();
+      expect(document.activeElement).toBe(account);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('closes an open menu when a click lands outside it', async () => {

@@ -319,7 +319,6 @@ import { MealPlanApi } from './meal-plan-api';
         flex-direction: column;
         gap: 0.5rem;
         padding: 0.75rem 0.875rem;
-        scroll-margin-block-end: 5rem;
       }
     `,
   ],

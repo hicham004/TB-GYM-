@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using TB.Gym.Modules.CheckIns;
 
 namespace TB.Gym.Api.IntegrationTests;
@@ -71,6 +72,102 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.IsEmpty((await ReadSliceAsync<CheckInToReviewList>(stranger, B3bToReviewUrl)).Items);
         SetTenant(stranger, tenant);
         await AssertStatusAsync(await stranger.GetAsync(B3bToReviewUrl), HttpStatusCode.Forbidden);
+    }
+
+    [TestMethod]
+    public async Task B3bToReviewLeavesOutABlockedAReleasedAReassignedAndALapsedClient()
+    {
+        using var owner = CreateClient();
+        var tenant = await RegisterCoachAsync(owner, "b3b-out-owner@example.test", "Hicham Haddad", "B3b Left Out");
+        var form = await Phase6CreateFormAsync(owner, "Weekly check-in", Phase6ShortText("How was your week?"));
+        var version = await Phase6PublishAsync(owner, form.Form.Id, form.Versions[0]);
+        using var lina = CreateClient();
+        await JoinAsCoachAsync(owner, lina, "b3b-out-lina@example.test", "Lina Saad");
+        using var karim = CreateClient();
+        var karimUserId = await JoinAsCoachAsync(owner, karim, "b3b-out-karim@example.test", "Karim Nassar");
+
+        // Four of Lina's clients send a check-in each, in this order. Omar's plan covers check-ins for one
+        // week only, beside eight weeks of training; the others' cover check-ins for eight weeks.
+        using var mayaClient = CreateClient();
+        var mayaId = await R31InviteAsync(lina, mayaClient, tenant, "b3b-out-maya@example.test", "Maya", "Rahman");
+        using var ramiClient = CreateClient();
+        var ramiId = await R31InviteAsync(lina, ramiClient, tenant, "b3b-out-rami@example.test", "Rami", "Saliba");
+        using var nourClient = CreateClient();
+        var nourId = await R31InviteAsync(lina, nourClient, tenant, "b3b-out-nour@example.test", "Nour", "Fares");
+        using var omarClient = CreateClient();
+        var omarId = await R31InviteAsync(lina, omarClient, tenant, "b3b-out-omar@example.test", "Omar", "Nasser");
+        foreach (var clientId in new[] { mayaId, ramiId, nourId })
+        {
+            await Phase6EnrollAsync(owner, clientId, "B3b Left Out plan", "CheckIns");
+        }
+
+        await Step3EnrollAsync(owner, omarId, Phase6WorkspaceToday(), 1, "CheckIns");
+        await Step3EnrollAsync(owner, omarId, Phase6WorkspaceToday(), 8, "Training");
+        var maya = await B3bSentAsync(lina, mayaClient, mayaId, version);
+        var rami = await B3bSentAsync(lina, ramiClient, ramiId, version);
+        var nour = await B3bSentAsync(lina, nourClient, nourId, version);
+        var omar = await B3bSentAsync(lina, omarClient, omarId, version);
+        await B3bAssertToReviewAsync(owner, maya, rami, nour, omar);
+        await B3bAssertToReviewAsync(lina, maya, rami, nour, omar);
+
+        // A blocked relationship closes check-ins on both sides (CHK-011): Maya leaves both lists, and her
+        // check-in, never touched, comes back when the block lifts.
+        var mayaProfile = await RequiredJsonAsync<TeamClientDetails>(await owner.GetAsync($"/api/clients/{mayaId}"));
+        await RefreshCsrfAsync(owner);
+        await AssertStatusAsync(await owner.PostAsJsonAsync($"/api/clients/{mayaId}/relationship/block",
+            new { reason = "B3b privacy check", mayaProfile.Version }), HttpStatusCode.OK);
+        await B3bAssertToReviewAsync(owner, rami, nour, omar);
+        await B3bAssertToReviewAsync(lina, rami, nour, omar);
+        mayaProfile = await RequiredJsonAsync<TeamClientDetails>(await owner.GetAsync($"/api/clients/{mayaId}"));
+        await RefreshCsrfAsync(owner);
+        await AssertStatusAsync(await owner.PostAsJsonAsync($"/api/clients/{mayaId}/relationship/unblock",
+            new { reason = "B3b privacy check done", mayaProfile.Version }), HttpStatusCode.OK);
+        await B3bAssertToReviewAsync(lina, maya, rami, nour, omar);
+
+        // A released client is a former client, whose record is read-only: never listed (ADR 0027).
+        await ReleaseAsync(owner, ramiId, "Moved away");
+        await B3bAssertToReviewAsync(owner, maya, nour, omar);
+        await B3bAssertToReviewAsync(lina, maya, nour, omar);
+
+        // A client given to another coach takes their check-in along: Lina no longer sees Nour's, Karim
+        // does, and the owner's row names Karim (ADR 0026).
+        await ReassignAsync(owner, nourId, karimUserId, null);
+        await B3bAssertToReviewAsync(lina, maya, omar);
+        await B3bAssertToReviewAsync(karim, nour);
+        var ownerList = await B3bAssertToReviewAsync(owner, maya, nour, omar);
+        Assert.AreEqual("Karim Nassar", ownerList.Items[1].CoachName);
+
+        // A week on, Omar's plan still runs but no longer includes check-ins (CHK-014): his row leaves while
+        // the others stay.
+        RequiredTestClock.Advance(TimeSpan.FromDays(8));
+        await B3bAssertToReviewAsync(owner, maya, nour);
+        await B3bAssertToReviewAsync(lina, maya);
+
+        // Once every plan has ended, nothing waits for anyone.
+        RequiredTestClock.Advance(TimeSpan.FromDays(52));
+        await B3bAssertToReviewAsync(owner);
+        await B3bAssertToReviewAsync(lina);
+        await B3bAssertToReviewAsync(karim);
+    }
+
+    /// <summary>
+    /// What the caller's To review lists, oldest first, by assignment, and that its total counts exactly those.
+    /// </summary>
+    private static async Task<CheckInToReviewList> B3bAssertToReviewAsync(HttpClient caller, params Guid[] expected)
+    {
+        var list = await ReadSliceAsync<CheckInToReviewList>(caller, B3bToReviewUrl);
+        CollectionAssert.AreEqual(expected, list.Items.Select(item => item.AssignmentId).ToArray());
+        Assert.AreEqual(expected.Length, list.Total);
+        return list;
+    }
+
+    /// <summary>The coach assigns the form due today, and a minute later the client sends it; returns the assignment.</summary>
+    private async Task<Guid> B3bSentAsync(HttpClient coach, HttpClient client, Guid clientId, Phase6Version version)
+    {
+        var assignment = await B3bAssignAsync(coach, clientId, version.Id, Phase6WorkspaceToday());
+        R31Tick();
+        await B3bSendAsync(client, assignment, version);
+        return assignment;
     }
 
     private static async Task<Guid> B3bAssignAsync(HttpClient coach, Guid clientId, Guid versionId, DateOnly dueDate) =>

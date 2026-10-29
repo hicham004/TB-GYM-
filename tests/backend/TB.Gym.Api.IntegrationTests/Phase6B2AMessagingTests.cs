@@ -898,6 +898,44 @@ public sealed partial class Phase6B2AMessagingTests
     }
 
     [TestMethod]
+    public async Task ConcurrentMarkUnreadAndReadSerializeOnTheReadCursor()
+    {
+        var workspace = await CreateWorkspaceAsync("markrace");
+        var conversation = await StartConversationAsync(workspace.Coach, workspace.ClientProfileId);
+        for (var index = 0; index < 3; index++)
+        {
+            await SendMessageAsync(workspace.Coach, conversation.Conversation.Id, $"message {index}");
+        }
+
+        using var secondSession = await SecondSessionAsync(workspace.ClientEmail, workspace.TenantId);
+        await RefreshCsrfAsync(workspace.Client);
+
+        // One tab marks the chat unread while another reads it. Both take the participant's cursor lock, so
+        // they land one after the other (MSG-022): whichever comes last decides, and neither fails.
+        Barrier.Arm(ReadCursorLockFragment, 2);
+        var mark = PostMarkUnreadAsync(workspace.Client, conversation.Conversation.Id);
+        var read = PostReadAsync(secondSession, conversation.Conversation.Id, 3);
+        await Barrier.ArrivedAsync(2).WaitAsync(TimeSpan.FromSeconds(30));
+        Barrier.Disarm();
+        var responses = await Task.WhenAll(mark, read);
+
+        Assert.AreEqual(2, Barrier.Arrived, "The mark and the read must have reached the cursor lock together.");
+        foreach (var response in responses)
+        {
+            await AssertStatusAsync(response, HttpStatusCode.OK);
+        }
+
+        Assert.AreEqual(
+            3L,
+            await ReadCursorAsync(conversation.Conversation.Id, workspace.ClientUserId),
+            "The read's cursor move is never lost to the mark.");
+
+        // Whichever came last, the next read takes any mark away.
+        await AdvanceReadAsync(workspace.Client, conversation.Conversation.Id, 3);
+        Assert.IsFalse(await IsMarkedUnreadAsync(conversation.Conversation.Id, workspace.ClientUserId));
+    }
+
+    [TestMethod]
     public async Task YourOwnMessagesDoNotIncreaseYourOwnUnreadCount()
     {
         var workspace = await CreateWorkspaceAsync("unread");
@@ -1045,6 +1083,9 @@ public sealed partial class Phase6B2AMessagingTests
         await AssertStatusAsync(
             await PostMessageAsync(other.Coach, conversation.Conversation.Id, "intrusion"),
             HttpStatusCode.Forbidden);
+        await AssertStatusAsync(
+            await PostMarkUnreadAsync(other.Coach, conversation.Conversation.Id),
+            HttpStatusCode.Forbidden);
 
         // And inside their own workspace the identifier simply does not exist.
         SetTenant(other.Coach, other.TenantId);
@@ -1067,6 +1108,9 @@ public sealed partial class Phase6B2AMessagingTests
             HttpStatusCode.NotFound);
         await AssertStatusAsync(
             await PostReadAsync(other.Coach, conversation.Conversation.Id, 1),
+            HttpStatusCode.NotFound);
+        await AssertStatusAsync(
+            await PostMarkUnreadAsync(other.Coach, conversation.Conversation.Id),
             HttpStatusCode.NotFound);
         Assert.AreEqual(0L, await UnreadCountAsync(other.Coach));
 
@@ -1096,6 +1140,9 @@ public sealed partial class Phase6B2AMessagingTests
                 HttpStatusCode.NotFound);
             await AssertStatusAsync(
                 await PostReadAsync(outsider, conversation.Conversation.Id, 1),
+                HttpStatusCode.NotFound);
+            await AssertStatusAsync(
+                await PostMarkUnreadAsync(outsider, conversation.Conversation.Id),
                 HttpStatusCode.NotFound);
             await AssertStatusAsync(
                 await PostDeleteAsync(outsider, conversation.Conversation.Id, sent.Id, sent.Version),
@@ -1469,6 +1516,10 @@ public sealed partial class Phase6B2AMessagingTests
             Assert.AreEqual(
                 expectedReason,
                 await AccessReasonAsync(await PostReadAsync(caller, conversationId, 1)));
+            // Only someone who may open the chat may mark it (MSG-022).
+            Assert.AreEqual(
+                expectedReason,
+                await AccessReasonAsync(await PostMarkUnreadAsync(caller, conversationId)));
             Assert.AreEqual(0L, await UnreadCountAsync(caller), "An inaccessible conversation contributes no badge.");
 
             var listed = await ListConversationsAsync(caller);
@@ -1477,6 +1528,7 @@ public sealed partial class Phase6B2AMessagingTests
             Assert.AreEqual(expectedReason, summary.AccessReason);
             Assert.IsNull(summary.LastMessage, "An unavailable conversation returns no preview.");
             Assert.AreEqual(0L, summary.UnreadCount);
+            Assert.IsFalse(summary.IsMarkedUnread, "An unavailable conversation is never marked unread.");
         }
     }
 
@@ -1497,6 +1549,18 @@ public sealed partial class Phase6B2AMessagingTests
         var workspace = await CreateWorkspaceAsync(label);
         var conversation = await StartConversationAsync(workspace.Coach, workspace.ClientProfileId);
         await SendMessageAsync(workspace.Coach, conversation.Conversation.Id, "before the change");
+
+        // Both sides mark the chat unread while they still may. Once it cannot be opened, the marks count
+        // for nothing: no badge, and no mark in the list (MSG-022).
+        foreach (var participant in new[] { workspace.Coach, workspace.Client })
+        {
+            await RefreshCsrfAsync(participant);
+            await AssertStatusAsync(
+                await PostMarkUnreadAsync(participant, conversation.Conversation.Id),
+                HttpStatusCode.OK);
+        }
+
+        Assert.AreEqual(1L, await UnreadCountAsync(workspace.Coach), $"{label}: the coach's mark counts until then.");
 
         await breakAccess(workspace, workspace.Enrollment!.Id);
 
