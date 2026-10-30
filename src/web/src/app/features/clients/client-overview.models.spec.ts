@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ClientEnrollment } from '../../core/api/api.models';
 import type { MesocycleSummary } from '../../core/api/generated';
+import { sessionPack } from '../../../testing/client-service-fixtures';
 import { attentionItem, MAYA } from '../../../testing/coach-today-fixtures';
 import {
   activeBlock,
@@ -102,6 +103,72 @@ describe('the plan the header describes', () => {
     expect(currentEnrollment([ended, next], TODAY)?.id).toBe('next');
     expect(currentEnrollment([ended], TODAY)?.id).toBe('ended');
     expect(currentEnrollment([], TODAY)).toBeNull();
+  });
+});
+
+describe('a pack beside a coaching plan (ADR 0038)', () => {
+  const today = '2026-10-01';
+
+  it('never stands in front of a coaching plan, however it was sold', () => {
+    const plan = enrollment({
+      id: 'plan',
+      startDate: '2026-07-21',
+      endDateExclusive: '2026-10-13',
+    });
+    const pack = sessionPack();
+    expect(currentEnrollment([pack, plan], today)?.id).toBe('plan');
+    expect(currentEnrollment([plan, pack], today)?.id).toBe('plan');
+
+    const next = enrollment({
+      id: 'next',
+      startDate: '2026-11-01',
+      endDateExclusive: '2026-12-01',
+      effectiveStatus: 'Upcoming',
+    });
+    expect(currentEnrollment([pack, next], today)?.id).toBe('next');
+  });
+
+  it('stands for the plan with no coaching plan live, and an ended plan does not outrank it', () => {
+    const pack = sessionPack();
+    expect(currentEnrollment([pack], today)?.id).toBe('e-pack');
+
+    const ended = enrollment({
+      id: 'ended',
+      startDate: '2026-06-01',
+      endDateExclusive: '2026-09-01',
+      storedStatus: 'Expired',
+      effectiveStatus: 'Expired',
+    });
+    expect(currentEnrollment([ended, pack], today)?.id).toBe('e-pack');
+    expect(
+      currentEnrollment(
+        [
+          ended,
+          sessionPack({
+            endDateExclusive: '2026-08-01',
+            startDate: '2026-07-01',
+            storedStatus: 'Expired',
+            effectiveStatus: 'Expired',
+          }),
+        ],
+        today,
+      )?.id,
+    ).toBe('ended');
+  });
+});
+
+describe('the renewal prompt beside a pack (ADR 0038)', () => {
+  it('stays on the plan the server flagged, whichever comes first in the list', () => {
+    const plan = enrollment({
+      id: 'plan',
+      endDateExclusive: '2026-10-13',
+      lastActiveDate: '2026-10-12',
+    });
+    const prompt = renewalPrompt([sessionPack(), plan], '2026-10-01', {
+      lastDay: '2026-10-12',
+      renewId: 'plan',
+    });
+    expect(prompt?.enrollment.id).toBe('plan');
   });
 });
 

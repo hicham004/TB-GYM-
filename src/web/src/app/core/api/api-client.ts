@@ -14,6 +14,7 @@ import type {
   PaymentRecordView as ContractPaymentRecordView,
   ProductCatalog as ContractProductCatalog,
   ProductOfferView as ContractProductOfferView,
+  SessionPackView as ContractSessionPackView,
   UpdateWorkspaceRequest,
   WorkspaceDetails as ContractWorkspaceDetails,
 } from './generated';
@@ -37,7 +38,9 @@ import {
   PublicInvitation,
   RegisterCoachRequest,
   RecordManualPaymentRequest,
+  RecordSessionRequest,
   RegistrationResponse,
+  SessionPack,
   TenantMembership,
   UpdateClientIntakeRequest,
   WorkspaceDetails,
@@ -376,6 +379,27 @@ export class ApiClient {
       .post<ContractClientEnrollmentView>(
         `/api/commercial/enrollments/${enrollmentId}/cancel`,
         request,
+      )
+      .pipe(map(toClientEnrollment));
+  }
+
+  /** A session held or charged on the client's pack ending first (SES-004). */
+  recordSession(clientId: string, request: RecordSessionRequest): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(`/api/commercial/clients/${clientId}/sessions`, request)
+      .pipe(map(toClientEnrollment));
+  }
+
+  /** Undoes a session held or charged; the row it undoes stays on the ledger (SES-003). */
+  voidSession(
+    clientId: string,
+    entryId: string,
+    idempotencyKey: string,
+  ): Observable<ClientEnrollment> {
+    return this.http
+      .post<ContractClientEnrollmentView>(
+        `/api/commercial/clients/${clientId}/sessions/${entryId}/void`,
+        { idempotencyKey },
       )
       .pipe(map(toClientEnrollment));
   }
@@ -1545,6 +1569,7 @@ function toProductOffer(value: ContractProductOfferView) {
     durationCount: toNumber(value.durationCount),
     priceAmount: toNumber(value.priceAmount),
     version: toNumber(value.version),
+    sessionCount: toNullableNumber(value.sessionCount ?? null),
   };
 }
 
@@ -1575,6 +1600,19 @@ function toClientEnrollment(value: ContractClientEnrollmentView): ClientEnrollme
     balanceAmount: toNumber(value.balanceAmount),
     version: toNumber(value.version),
     payments: value.payments.map(toPaymentRecord),
+    sessions: value.sessions ? toSessionPack(value.sessions) : null,
+  };
+}
+
+function toSessionPack(value: ContractSessionPackView): SessionPack {
+  return {
+    ...value,
+    count: toNumber(value.count),
+    left: toNumber(value.left),
+    held: toNumber(value.held),
+    charged: toNumber(value.charged),
+    lapsed: toNumber(value.lapsed),
+    entries: value.entries.map((entry) => ({ ...entry, count: toNumber(entry.count) })),
   };
 }
 

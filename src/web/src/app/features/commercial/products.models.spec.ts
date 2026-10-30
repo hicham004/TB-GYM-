@@ -1,19 +1,29 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { describe, expect, it } from 'vitest';
-import { atlasCatalog, features, offer, product } from '../../../testing/product-fixtures';
+import {
+  atlasCatalog,
+  features,
+  offer,
+  packProduct,
+  product,
+} from '../../../testing/product-fixtures';
 import {
   catalogSummary,
   clientsLine,
   duration,
   emptyOption,
+  emptyPackOption,
+  offerLength,
   optionErrors,
   optionLength,
   optionRequest,
   optionRow,
+  packValidity,
   planCard,
   planCards,
   priceErrors,
   productWriteError,
+  sessionsName,
 } from './products.models';
 
 describe('Plans you sell, in coach words', () => {
@@ -114,6 +124,7 @@ describe('Plans you sell, in coach words', () => {
         price: 0,
         currency: 'lbp',
         features: ['Messaging', 'Training'],
+        sessions: null,
       }),
     ).toEqual({
       label: '6 weeks',
@@ -179,5 +190,78 @@ describe('Plans you sell, in coach words', () => {
     expect(optionRow(offer({ clients: { now: 3, starting: 0 } }), 'en-US').clients).toBe(
       '3 clients',
     );
+  });
+
+  describe('session packs (critique B10b)', () => {
+    const pack = emptyPackOption('USD');
+
+    it('starts a pack at ten sessions over 90 days, a single session over 30, nothing else ticked', () => {
+      expect(pack).toEqual(
+        expect.objectContaining({ sessions: 10, length: 90, unit: 'Day', features: [] }),
+      );
+      expect(packValidity(10)).toBe(90);
+      expect(packValidity(1)).toBe(30);
+      expect(packValidity(null)).toBe(90);
+    });
+
+    it('calls an option by its count until it has a name of its own', () => {
+      expect(sessionsName(1)).toBe('Single session');
+      expect(sessionsName(10)).toBe('10 sessions');
+      expect(optionRequest({ ...pack, price: 300 }, 'SessionPack')).toEqual({
+        label: '10 sessions',
+        durationCount: 90,
+        durationUnit: 'Day',
+        priceAmount: 300,
+        priceCurrency: 'USD',
+        features: [],
+        sessionCount: 10,
+      });
+      expect(
+        optionRequest(
+          { ...pack, price: 35, sessions: 1, length: 30, label: 'Trial' },
+          'SessionPack',
+        ).label,
+      ).toBe('Trial');
+    });
+
+    it('checks the count as the server does, and asks for no ticks', () => {
+      const valid = { ...pack, price: 300 };
+      expect(optionErrors(valid, 'SessionPack')).toEqual({});
+      for (const sessions of [null, 0, 101, 2.5]) {
+        expect(optionErrors({ ...valid, sessions }, 'SessionPack')['sessions']).toEqual([
+          'Enter a whole number of sessions, 1 to 100.',
+        ]);
+      }
+      expect(optionErrors({ ...valid, sessions: 100 }, 'SessionPack')).toEqual({});
+      expect(optionErrors({ ...valid, sessions: 1 }, 'SessionPack')).toEqual({});
+      // A coaching plan neither asks for a count nor goes without a tick.
+      expect(Object.keys(optionErrors(valid))).toEqual(['features']);
+    });
+
+    it('reads an option by its count and how long it runs, with sessions among what it includes', () => {
+      const [ten] = packProduct().offers;
+      const row = optionRow(ten, 'en-US');
+      expect(row.duration).toBe('10 sessions · 90 days');
+      expect(row.name).toBeNull();
+      expect(row.features.map((chip) => chip.label)).toEqual(['1-on-1 sessions']);
+      expect(optionRow({ ...ten, label: 'Student rate' }, 'en-US').name).toBe('Student rate');
+      expect(offerLength(offer())).toBe('12 weeks');
+    });
+
+    it('marks the card of a pack', () => {
+      expect(planCard(packProduct(), 'en-US').isPack).toBe(true);
+      expect(planCard(product(), 'en-US').isPack).toBe(false);
+    });
+
+    it('words a clash in the slot it clashed on', () => {
+      const clash = new HttpErrorResponse({
+        status: 409,
+        error: { code: 'active_offer_slot_conflict' },
+      });
+      expect(productWriteError(clash, 'SessionPack')).toBe(
+        'This pack already sells that many sessions for that length in that currency. Change its price instead, or stop selling it first.',
+      );
+      expect(productWriteError(clash)).toContain('an option of that length');
+    });
   });
 });

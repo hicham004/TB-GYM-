@@ -155,3 +155,26 @@ for (const width of [390, 1440]) {
     await axe(page);
   });
 }
+
+for (const width of [390, 1440]) {
+  test(`a session pack is set up in the new plan sheet at ${width}px and passes axe`, async ({
+    page,
+  }) => {
+    await openPlans(page, width);
+    await page.getByRole('button', { name: 'New plan', exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: 'New plan' });
+    await sheet.getByRole('radio', { name: 'Session pack' }).check({ force: true });
+    await sheet.getByLabel('Price', { exact: true }).fill('300');
+
+    await expect(sheet.getByRole('spinbutton', { name: 'Sessions' })).toHaveValue('10');
+    await expect(sheet.getByLabel('Valid for (days)')).toHaveValue('90');
+    await expect(sheet.getByRole('checkbox', { name: '1-on-1 sessions' })).toBeChecked();
+    await expect(sheet.getByRole('checkbox', { name: '1-on-1 sessions' })).toBeDisabled();
+    await expect(sheet.getByText('Clients pay USD 300 for 10 sessions')).toBeVisible();
+
+    await sheet.getByRole('spinbutton', { name: 'Sessions' }).fill('1');
+    await expect(sheet.getByLabel('Valid for (days)')).toHaveValue('30');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+}

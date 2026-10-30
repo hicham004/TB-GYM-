@@ -7,7 +7,10 @@ import type {
   ManualPaymentMethod,
   PaymentRecord,
   ProductCatalog,
+  SessionEntry,
+  SessionPack,
 } from '../../core/api/api.models';
+import type { UiMenuItem } from '../../ui/menu';
 import type { StatusPillTone } from '../../ui/status-pill';
 import type { ClientAction } from './client-actions';
 import {
@@ -92,6 +95,8 @@ export interface PlanCard {
   readonly over: boolean;
   readonly cancelled: boolean;
   readonly free: boolean;
+  /** A session pack, which runs beside a coaching plan rather than following it (ADR 0038). */
+  readonly isPack: boolean;
 }
 
 const FEATURE_ORDER: readonly CoachingFeature[] = [
@@ -100,6 +105,7 @@ const FEATURE_ORDER: readonly CoachingFeature[] = [
   'CheckIns',
   'Messaging',
   'ResourceLibrary',
+  'Sessions',
 ];
 
 export function featureLabel(feature: CoachingFeature): string {
@@ -114,6 +120,8 @@ export function featureLabel(feature: CoachingFeature): string {
       return $localize`Messaging`;
     case 'ResourceLibrary':
       return $localize`Resources`;
+    case 'Sessions':
+      return $localize`1-on-1 sessions`;
   }
 }
 
@@ -297,6 +305,7 @@ export function planCard(plan: ClientEnrollment, context: ServiceContext): PlanC
     over,
     cancelled: plan.storedStatus === 'Cancelled',
     free,
+    isPack: Boolean(plan.sessions),
   };
 }
 
@@ -332,14 +341,15 @@ function planRow(plan: ClientEnrollment, context: ServiceContext): PlanRow {
 
 /**
  * Every plan but the one in front: those running or still to come, soonest first, then the earlier
- * ones, newest first. Cancelled plans are history however their dates fall.
+ * ones, newest first. Cancelled plans are history however their dates fall. Packs have a section of
+ * their own, so a coach selling singles does not read each of them here too (ADR 0038).
  */
 export function otherPlans(
   plans: readonly ClientEnrollment[],
   focusId: string | null,
   context: ServiceContext,
 ): { coming: PlanRow[]; earlier: PlanRow[] } {
-  const rest = plans.filter((plan) => plan.id !== focusId);
+  const rest = plans.filter((plan) => plan.id !== focusId && !plan.sessions);
   const live = (plan: ClientEnrollment) => !isOver(plan, context.today);
   return {
     coming: rest
@@ -371,6 +381,8 @@ export interface OfferChoice {
   readonly features: readonly CoachingFeature[];
   /** Features this option may cover alongside another plan for the same feature (SUB-004). */
   readonly concurrent: readonly CoachingFeature[];
+  /** The sessions a pack's option sells (SES-001); null on a coaching plan's. */
+  readonly sessions: number | null;
 }
 
 export function offerChoices(
@@ -390,18 +402,29 @@ export function offerChoices(
             offer.priceAmount === 0
               ? $localize`Free`
               : money(offer.priceAmount, offer.priceCurrency, locale);
+          const days =
+            offer.durationUnit === 'Week' ? offer.durationCount * 7 : offer.durationCount;
+          const sessions = offer.sessionCount ?? null;
           return {
             offerId: offer.id,
             productId: product.id,
             label: `${product.name} · ${offer.label}`,
-            detail: [price, featureLabels(features).join(', ')].join(' · '),
-            days: offer.durationUnit === 'Week' ? offer.durationCount * 7 : offer.durationCount,
+            detail:
+              sessions === null
+                ? [price, featureLabels(features).join(', ')].join(' · ')
+                : [
+                    price,
+                    sessionsCount(sessions),
+                    $localize`to use within ${days}:days: days`,
+                  ].join(' · '),
+            days,
             price: offer.priceAmount,
             currency: offer.priceCurrency,
             features,
             concurrent: offer.features
               .filter((item) => item.allowsConcurrentCoverage)
               .map((item) => item.feature),
+            sessions,
           };
         }),
     );
@@ -430,6 +453,209 @@ export function renewalOfferId(
   return null;
 }
 
+// ------------------------------------------------------------------------------------------------
+// 1-on-1 sessions (critique B10b, ADR 0038)
+// ------------------------------------------------------------------------------------------------
+
+/** "1 session", "10 sessions". */
+export function sessionsCount(count: number): string {
+  return count === 1 ? $localize`1 session` : $localize`${count}:count: sessions`;
+}
+
+export interface SessionLine {
+  readonly id: string;
+  /** "Tue 20 Oct" */
+  readonly day: string;
+  /** "Held", "Charged · No-show", "10 sessions added", "Undone" */
+  readonly what: string;
+  /** "Karim Haddad · Legs": who, and the coach's own note. */
+  readonly detail: string | null;
+  /** A row a later one undid: it stays, struck through. */
+  readonly undone: boolean;
+  readonly canUndo: boolean;
+}
+
+export interface SessionPackRow {
+  readonly id: string;
+  /** "Personal training · 10 sessions" */
+  readonly name: string;
+  /** "7 of 10 left · until 9 Jan · last held Tue 20 Oct" */
+  readonly line: string;
+  readonly pill: PlanPill;
+  /** Past its last day, or cancelled. */
+  readonly over: boolean;
+  /** What Manage plan offers for it: its payment, its renewal, its pause, its end. */
+  readonly menu: readonly UiMenuItem[];
+  /** The ledger with what lapsed on top, newest day first. */
+  readonly history: readonly SessionLine[];
+}
+
+function packLine(plan: ClientEnrollment, pack: SessionPack, context: ServiceContext): string {
+  const { locale, today } = context;
+  const until = formatDate(plan.lastActiveDate, 'd MMM', locale);
+  if (isOver(plan, today)) {
+    const parts = [$localize`${pack.held}:held: held`];
+    if (pack.charged > 0) parts.push($localize`${pack.charged}:charged: charged`);
+    if (pack.lapsed > 0) parts.push($localize`${pack.lapsed}:lapsed: lapsed`);
+    return parts.join(' · ');
+  }
+  if (plan.storedStatus === 'PendingPayment') {
+    return $localize`${sessionsCount(pack.count)}:sessions: · until ${until}:date:`;
+  }
+  const parts = [
+    $localize`${pack.left}:left: of ${pack.count}:count: left`,
+    today < plan.startDate
+      ? $localize`from ${formatDate(plan.startDate, 'd MMM', locale)}:start: until ${until}:end:`
+      : $localize`until ${until}:date:`,
+  ];
+  if (pack.lastHeldOn) {
+    parts.push($localize`last held ${shortDate(pack.lastHeldOn, locale)}:date:`);
+  }
+  return parts.join(' · ');
+}
+
+function sessionLine(
+  entry: SessionEntry,
+  pack: SessionPack,
+  locale: string,
+  canChange: boolean,
+): SessionLine {
+  const base = { id: entry.id, day: shortDate(entry.day, locale), undone: entry.isVoided };
+  switch (entry.kind) {
+    case 'Issued':
+      return {
+        ...base,
+        what: $localize`${sessionsCount(entry.count)}:sessions: added`,
+        detail: null,
+        canUndo: false,
+      };
+    case 'Voided': {
+      const undone = pack.entries.find((item) => item.id === entry.voidsEntryId);
+      return {
+        ...base,
+        what: undone
+          ? $localize`Undid the session of ${shortDate(undone.day, locale)}:date:`
+          : $localize`Undid a session`,
+        detail: null,
+        canUndo: false,
+      };
+    }
+    default:
+      return {
+        ...base,
+        what:
+          entry.kind === 'Held' ? $localize`Held` : $localize`Charged · ${entry.reason}:reason:`,
+        detail: [entry.coachName, entry.note].filter(Boolean).join(' · ') || null,
+        canUndo: canChange && !entry.isVoided,
+      };
+  }
+}
+
+/**
+ * The client's packs, those running or still to come first, in the order a session uses them (the one
+ * ending first, SES-004), then the earlier ones, newest first. Nothing can change on a former client's.
+ */
+export function sessionPackRows(
+  plans: readonly ClientEnrollment[],
+  context: ServiceContext,
+  canChange: boolean,
+  renewable: (plan: ClientEnrollment) => boolean = () => true,
+): SessionPackRow[] {
+  const { locale, today } = context;
+  const packs = plans.filter((plan) => plan.sessions);
+  const live = (plan: ClientEnrollment) => !isOver(plan, today);
+  return [
+    ...packs.filter(live).sort((a, b) => a.endDateExclusive.localeCompare(b.endDateExclusive)),
+    ...packs
+      .filter((plan) => !live(plan))
+      .sort((a, b) => b.endDateExclusive.localeCompare(a.endDateExclusive)),
+  ].map((plan) => {
+    const pack = plan.sessions!;
+    const lapsed: SessionLine[] =
+      pack.lapsed > 0 && pack.lapsedOn
+        ? [
+            {
+              id: `${plan.id}-lapsed`,
+              day: shortDate(pack.lapsedOn, locale),
+              what: $localize`${sessionsCount(pack.lapsed)}:sessions: lapsed`,
+              detail: null,
+              undone: false,
+              canUndo: false,
+            },
+          ]
+        : [];
+    return {
+      id: plan.id,
+      name: `${plan.productName} · ${plan.offerLabel}`,
+      line: packLine(plan, pack, context),
+      pill: planCard(plan, context).pill,
+      over: isOver(plan, today),
+      menu: canChange ? packMenu(plan, context, renewable(plan)) : [],
+      history: [
+        ...lapsed,
+        ...pack.entries.map((entry) => sessionLine(entry, pack, locale, canChange)),
+      ],
+    };
+  });
+}
+
+/** Manage plan for one pack, whichever plan is in front; starting another is Sell sessions here. */
+function packMenu(
+  plan: ClientEnrollment,
+  context: ServiceContext,
+  renewable: boolean,
+): UiMenuItem[] {
+  return planMenu(planCard(plan, context), null, renewable)
+    .filter((item) => item.action !== 'start')
+    .map(({ label, hint, action, disabled }) => ({ label, hint, action: action ?? '', disabled }));
+}
+
+/** Where a session on `day` goes, as the sheet says it; the server chooses again when it is saved. */
+export interface SessionTarget {
+  /** "Goes on Personal training: 7 of 10 left, until Fri 9 Jan." */
+  readonly line: string;
+  /** The money that pays the pack waiting for it, taken with the session. */
+  readonly receipt: { readonly amount: number; readonly currency: string } | null;
+}
+
+/**
+ * The pack ending first with a session left on that day (SES-004), else the one waiting for payment.
+ * Null when none covers the day or can take it: the server's refusal then says why in full.
+ */
+export function sessionTarget(
+  plans: readonly ClientEnrollment[],
+  day: string,
+  locale: string,
+): SessionTarget | null {
+  const covering = plans
+    .filter(
+      (plan) =>
+        plan.sessions &&
+        plan.storedStatus !== 'Cancelled' &&
+        plan.startDate <= day &&
+        day < plan.endDateExclusive,
+    )
+    .sort((a, b) => a.endDateExclusive.localeCompare(b.endDateExclusive));
+  const usable = covering.find(
+    (plan) => plan.storedStatus === 'Active' && (plan.sessions?.left ?? 0) > 0,
+  );
+  if (usable?.sessions) {
+    const left = usable.sessions.left;
+    const count = usable.sessions.count;
+    return {
+      line: $localize`Goes on ${usable.productName}:plan:: ${left}:left: of ${count}:count: left, until ${shortDate(usable.lastActiveDate, locale)}:date:.`,
+      receipt: null,
+    };
+  }
+  const waiting = covering.find((plan) => plan.storedStatus === 'PendingPayment');
+  if (!waiting) return null;
+  const amount = waiting.balanceAmount;
+  return {
+    line: $localize`${waiting.productName}:plan: is waiting for ${money(amount, waiting.priceCurrency, locale)}:price:. Saving this records that payment too, received on the day of the session, and the session goes on it.`,
+    receipt: { amount, currency: waiting.priceCurrency },
+  };
+}
+
 export type ServiceActionId = 'start' | 'renew' | 'pay' | 'pause' | 'resume' | 'cancel';
 
 /** The one filled button for the plan in front, or null when nothing needs the coach. */
@@ -453,9 +679,13 @@ export function primaryAction(
   if (card.canPay) return { id: 'pay', label: $localize`Record payment` };
   if (card.canResume) return { id: 'resume', label: $localize`Resume plan` };
   const prompt = renewalPrompt(plans, context.today, context.ending ?? null);
+  // A pack sold today does not follow a coaching plan, nor a coaching plan a pack.
   const nothingAfter = !plans.some(
     (plan) =>
-      plan.id !== card.id && !isOver(plan, context.today) && plan.startDate >= context.today,
+      plan.id !== card.id &&
+      Boolean(plan.sessions) === card.isPack &&
+      !isOver(plan, context.today) &&
+      plan.startDate >= context.today,
   );
   const renew =
     prompt?.enrollment.id === card.id ||
@@ -669,9 +899,13 @@ export function accessSummary(
       rows: [],
     };
   }
+  // Sessions are listed for a client with a pack: the other five are what any plan chooses between.
   const ordered = FEATURE_ORDER.map((feature) =>
     decisions.find((item) => item.feature === feature),
-  ).filter((item): item is FeatureAccessDecision => item !== undefined);
+  ).filter(
+    (item): item is FeatureAccessDecision =>
+      item !== undefined && !(item.feature === 'Sessions' && item.reason === 'NoEntitlement'),
+  );
   const rows = ordered.map((decision) => ({
     feature: decision.feature,
     label: featureLabel(decision.feature),

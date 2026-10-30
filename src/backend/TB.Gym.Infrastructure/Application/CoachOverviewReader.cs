@@ -330,10 +330,15 @@ internal sealed class CoachOverviewReader(
             // waiting for payment neither moves the plan's end nor quiets Ending soon; it is counted instead,
             // for the item to ask for the payment. With nothing paid, the unpaid plan still names the plan.
             var livePlans = plans[client.Id].Where(item => !item.Ended).ToArray();
-            var runningPlan = livePlans.Where(item => item.Paid).MaxBy(item => item.EndDateExclusive)
-                ?? livePlans.MaxBy(item => item.EndDateExclusive);
+
+            // A pack runs beside a plan (ADR 0038): it says when the client's plan ends only with no coaching plan
+            // left, so 90 days of sessions never hide a plan ending soon.
+            var coachingPlans = livePlans.Where(item => !item.IsSessionPack).ToArray();
+            var namingPlans = coachingPlans.Length > 0 ? coachingPlans : livePlans;
+            var runningPlan = namingPlans.Where(item => item.Paid).MaxBy(item => item.EndDateExclusive)
+                ?? namingPlans.MaxBy(item => item.EndDateExclusive);
             var unpaidRenewals = runningPlan is { Paid: true }
-                ? livePlans
+                ? namingPlans
                     .Where(item => !item.Paid && item.EndDateExclusive > runningPlan.EndDateExclusive)
                     .OrderBy(item => item.StartDate)
                     .ToArray()
@@ -823,7 +828,8 @@ internal sealed class CoachOverviewReader(
                     item.ProductNameSnapshot,
                     item.Status != EnrollmentStatus.PendingPayment,
                     item.Status == EnrollmentStatus.Paused ? item.PausedAtUtc : null,
-                    item.EndDateExclusive <= today))
+                    item.EndDateExclusive <= today,
+                    item.SessionCountSnapshot != null))
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.ClientProfileId);
     }
@@ -1518,7 +1524,8 @@ internal sealed class CoachOverviewReader(
         string PlanName,
         bool Paid,
         DateTimeOffset? PausedAtUtc,
-        bool Ended);
+        bool Ended,
+        bool IsSessionPack);
 
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);
 

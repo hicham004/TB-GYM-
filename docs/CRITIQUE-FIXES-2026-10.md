@@ -869,3 +869,56 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   today", "Starts in 5 days" and "Starts tomorrow"; "Waiting for payment" with the notice's "It starts once your coach
   has your payment."; "Paused" with "Your coach has paused this plan. It still ends on Sat 14 Nov."; "Go to Today";
   "No plan yet" with "Your coach will put your plan here."; "Your plan couldn't be loaded." Recommendation: keep.
+- B10b · Where a pack shows. Built: "1-on-1 sessions" under the plan in front, shown once the client has a pack or the
+  coach sells one: running packs first, the one a session goes on at the top, each with its own ⋯ (Record payment,
+  Renew, Pause, Cancel, which bring it to the front with its payments), its History folded, and those over under
+  Earlier packs. Packs left Other plans, so a coach selling singles does not read each one twice. A pack stands in
+  front only with no coaching plan running or to come, or just sold and waiting for its payment. Other way: packs
+  under Other plans as well, as plan rows. Recommendation: keep.
+- B10b · New plan. Built: "What you sell", Coaching plan or Session pack, at the top of New plan; a pack asks for
+  Sessions (10) and "Valid for (days)" (90, or 30 while the count is 1, until the coach changes it), and an option
+  left unnamed is called "10 sessions" or "Single session". The critique's two presets became that one box. Other way:
+  Session pack and Single session as two buttons that fill it. Recommendation: keep.
+- B10b · The other ticks on a pack. Built: 1-on-1 sessions ticked and locked, the rest unticked and free to tick, as
+  the critique said; a tick such as Training then blocks overlap with a plan's Training (SUB-004). Other way: a pack
+  includes its sessions alone. Recommendation: keep until Toufic answers.
+- B10b · Selling. Built: Sell sessions offers packs alone, while Start a plan offers every option, packs included, so
+  a client's first plan can be a pack. A pack's Renew starts today, not after the old pack ends, since packs run side
+  by side and the one ending first is used. Other way: Start a plan without packs, and a renewal after the old pack.
+  Recommendation: keep.
+- B10b · Who held it. Built: whoever records the session, so an owner recording for a coach is the coach of that
+  session. Other way: a "Who held it" choice for the owner, or the client's own coach. Recommendation: the choice,
+  before B10d counts sessions per coach.
+- B10b · The day. Built: today or earlier, inside a pack; a session on a pack's last day can be recorded the next
+  morning, though the pack has closed. A paused pack takes no session until it is resumed, a day before the pause
+  included. Other way: a paused pack takes days before its pause; a pack takes nothing once it has ended.
+  Recommendation: keep.
+- B10b · The receipt in the sheet. Built: when no pack can take the day and one waits for payment, the sheet names the
+  amount and asks only how it was paid, Cash first, for exactly what is left, dated the session's day, with no
+  reference or note, and the button says "Record session and payment". A part payment stays on Record payment, as it
+  opens nothing (SUB-008). Other way: an amount box. Recommendation: keep.
+- B10b · Undo. Built: "Undo" on a session held or charged, in its pack's History, asking once and for no reason; the
+  row stays struck through under "Undid the session of Fri 30 Oct". It works on a pack that is over, and what lapsed
+  moves with it, but not for a former client. Other way: a reason, as Pause and Cancel ask. Recommendation: keep.
+- B10b · Lapsed. Built: read from the date on every read, never stored (ADR 0038): "3 sessions lapsed" on top of the
+  History and "6 held · 1 charged · 3 lapsed" on the pack, a cancelled pack's sessions lapsing the day it was cancelled.
+  Nothing goes back to the client, as no refund or credit exists (SUB-008). Other way: a row a Worker writes; moving
+  what is left to a new pack. Recommendation: keep; moving sessions is a money rule for later, if coaches ask.
+- B10b · A plan that ends beside a pack. Built as the row said, every reader keeping features: a client whose coaching
+  plan ended while a pack runs reads Running on Clients, shows in no Ended, not renewed and cannot Ask to renew (SUB-014
+  says partly running). Other way: Sessions do not count for those three. Recommendation: that, a small change with
+  B10c, if Toufic has such clients.
+- B10b · What the client reads, left out for B10c. My plan names a pack and "1-on-1 sessions" in What's included; "7 of
+  10 left", which B10a's status gave to this row, is in B10c's own word with the dates held, and no client reads a
+  charge's reason until then. Recommendation: build both in B10c.
+- B10b · The demo, left out (outside the row). Atlas has no pack, so the screenshots come from a throwaway copy where
+  one was sold. Recommendation: one pack and one client on it, with B10c.
+- B10b · Words the row did not give. Built: "What you sell", "Coaching plan", "Session pack"; "Sessions" with "1 to
+  100. A pack of 1 is a single session."; "Validity counted in", "Valid for (days)"; "Clients pay USD 300 for 10
+  sessions, to use within 90 days of its first day. You record each payment on their profile."; "No sessions running.
+  Sell Lynn a pack or a single session and it shows here."; "What happened", "Held", "No-show", "Late cancel"; "Day of
+  the session"; "Goes on Personal training: 8 of 10 left, until Wed 27 Jan."; "Personal training is waiting for USD 35.
+  Saving this records that payment too, received on the day of the session, and the session goes on it."; "Lynn reads
+  this. The session comes off their pack."; "10 sessions added", "Charged · No-show"; "The session of Fri 30 Oct goes
+  back on the pack. Both stay in its history."; "Earlier packs"; and the refusals in SES-005. Recommendation: keep, or
+  have Toufic read them with B8c's words.

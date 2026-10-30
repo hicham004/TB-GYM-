@@ -56,11 +56,8 @@ function covers(enrollment: ClientEnrollment, today: string): boolean {
   return enrollment.startDate <= today && today < enrollment.endDateExclusive;
 }
 
-/**
- * The plan the header describes: the one covering today (an active one first), else the next one
- * to start, else the one that ended most recently. Cancelled plans are history, not the plan.
- */
-export function currentEnrollment(
+/** The one covering today (an active one first), else the next one to start. */
+function livePlan(
   enrollments: readonly ClientEnrollment[],
   today: string,
 ): ClientEnrollment | null {
@@ -72,7 +69,28 @@ export function currentEnrollment(
   const upcoming = live
     .filter((item) => item.startDate > today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  if (upcoming.length > 0) return upcoming[0];
+  return upcoming[0] ?? null;
+}
+
+/**
+ * The plan the header describes: the one covering today (an active one first), else the next one
+ * to start, else the one that ended most recently. Cancelled plans are history, not the plan. A pack
+ * runs beside a plan (ADR 0038), so it stands for the plan only with no coaching plan live.
+ */
+export function currentEnrollment(
+  enrollments: readonly ClientEnrollment[],
+  today: string,
+): ClientEnrollment | null {
+  const live =
+    livePlan(
+      enrollments.filter((item) => !item.sessions),
+      today,
+    ) ??
+    livePlan(
+      enrollments.filter((item) => item.sessions),
+      today,
+    );
+  if (live) return live;
   const ended = [...enrollments].sort((a, b) =>
     b.endDateExclusive.localeCompare(a.endDateExclusive),
   );
@@ -114,10 +132,14 @@ export function renewalPrompt(
   today: string,
   ending: PlanEnding | null,
 ): RenewalPrompt | null {
+  // The plan the server flagged, which a pack running beside it is not (ADR 0038).
   const current = enrollments.find(
-    (item) => item.effectiveStatus === 'Active' && covers(item, today),
+    (item) =>
+      item.effectiveStatus === 'Active' &&
+      covers(item, today) &&
+      item.lastActiveDate === ending?.lastDay,
   );
-  if (!current || ending?.lastDay !== current.lastActiveDate) return null;
+  if (!current) return null;
   const daysLeft = daysBetween(today, current.lastActiveDate);
   if (daysLeft < 0) return null;
   const followed = enrollments.some(

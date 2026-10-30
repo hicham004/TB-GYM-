@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { UiConfirm } from '../../ui/confirm';
 import {
   Component,
@@ -26,9 +27,12 @@ import { EmailDelivery } from '../../core/system/email-delivery';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
+import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
+import { UiMenu } from '../../ui/menu';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
+import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ClientActions } from './client-actions';
 import { ClientCoach } from './client-coach';
 import { ClientRelease } from './client-release';
@@ -43,22 +47,25 @@ import {
   primaryAction,
   renewalAskedFor,
   renewalAskedLine,
+  sessionPackRows,
   type PlanCard,
   type RenewalRequest,
   type ServiceActionId,
   type ServiceContext,
+  type SessionLine,
 } from './client-service.models';
 import { planEnding } from './client-overview.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { AccessChange, PlanStatusChange } from './plan-dialogs';
 import { PlanPayment, PlanStart } from './plan-sheets';
+import { SessionSheet } from './session-sheet';
 
 /**
  * A client's Service & access (C3, R3.4b): the plan in front with what it includes and what has been
  * paid, the one thing that needs the coach as the page's only filled button (plan §2 rule 5), every
- * other change behind Manage plan, the client's other plans, and who coaches them and whether they
- * can use anything at all. The server decides every change (SUB-003 to SUB-011, ADR 0026, ADR 0027);
- * a former client's record shows the same history with nothing to change.
+ * other change behind Manage plan, their 1-on-1 sessions (ADR 0038), the client's other plans, and who
+ * coaches them and whether they can use anything at all. The server decides every change (SUB-003 to
+ * SUB-011, ADR 0026, ADR 0027); a former client's record shows the same history with nothing to change.
  */
 @Component({
   selector: 'app-client-service',
@@ -70,11 +77,16 @@ import { PlanPayment, PlanStart } from './plan-sheets';
     ClientCoach,
     ClientRelease,
     EmptyState,
+    NgTemplateOutlet,
     PlanPayment,
     PlanStart,
     PlanStatusChange,
+    SessionSheet,
     Skeleton,
     StatusPill,
+    UiDisclosure,
+    UiDisclosureContent,
+    UiMenu,
   ],
   templateUrl: './client-service.html',
   styleUrl: './client-service.scss',
@@ -110,6 +122,7 @@ export class ClientService extends GuardedSheets {
   }
 
   private loadedKey: string | null = null;
+  private readonly undoIntent = new IntentIdempotencyKey();
 
   protected readonly context = inject(ClientWorkspaceContext);
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
@@ -123,8 +136,11 @@ export class ClientService extends GuardedSheets {
   protected readonly renewSource = signal<ClientEnrollment | null>(null);
   protected readonly statusMode = signal<'pause' | 'cancel'>('pause');
   protected readonly resuming = signal(false);
+  /** Whether the start sheet is selling sessions, so it offers packs alone. */
+  protected readonly sellingSessions = signal(false);
 
   protected readonly startSheet = viewChild.required<TemplateRef<unknown>>('startSheet');
+  protected readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
   protected readonly paymentSheet = viewChild.required<TemplateRef<unknown>>('paymentSheet');
   protected readonly statusDialog = viewChild.required<TemplateRef<unknown>>('statusDialog');
   protected readonly accessDialog = viewChild.required<TemplateRef<unknown>>('accessDialog');
@@ -194,6 +210,25 @@ export class ClientService extends GuardedSheets {
 
   protected readonly menu = computed(() =>
     this.context.isFormer() ? [] : planMenu(this.card(), this.primary(), this.renewable()),
+  );
+
+  /** The client's packs, those running or to come first, and whether one can be sold here. */
+  protected readonly packs = computed(() => {
+    const rows = sessionPackRows(
+      this.plans(),
+      this.serviceContext(),
+      !this.context.isFormer(),
+      (plan) => offerChoices(this.catalog(), this.locale, plan.productId).length > 0,
+    );
+    return { live: rows.filter((row) => !row.over), earlier: rows.filter((row) => row.over) };
+  });
+  protected readonly canSell = computed(() =>
+    offerChoices(this.catalog(), this.locale).some((choice) => choice.sessions !== null),
+  );
+  protected readonly showSessions = computed(
+    () =>
+      this.packs().live.length + this.packs().earlier.length > 0 ||
+      (this.canSell() && !this.context.isFormer()),
   );
 
   protected readonly emptyDescription = computed(
@@ -319,14 +354,77 @@ export class ClientService extends GuardedSheets {
 
   protected openStart(): void {
     this.renewSource.set(null);
+    this.sellingSessions.set(false);
     this.openSheet(this.startSheet(), $localize`Start a plan`, (plan: ClientEnrollment) => {
       this.picked.set(plan.id);
       return $localize`${plan.productName}:plan: is set up for ${this.firstName()}:name:.`;
     });
   }
 
+  protected openSell(): void {
+    this.renewSource.set(null);
+    this.sellingSessions.set(true);
+    this.openSheet(this.startSheet(), $localize`Sell sessions`, (plan: ClientEnrollment) => {
+      // A pack waiting for payment comes to the front, for its Record payment.
+      if (plan.storedStatus === 'PendingPayment') this.picked.set(plan.id);
+      return $localize`${plan.productName}:plan: is set up for ${this.firstName()}:name:.`;
+    });
+  }
+
+  /** A pack's own menu acts on that pack, which comes to the front with its payments. */
+  protected packAction(id: string, action: string): void {
+    this.picked.set(id);
+    this.onAction(action);
+  }
+
+  protected openSession(): void {
+    this.openSheet(this.sessionSheet(), $localize`Record a session`, (pack: ClientEnrollment) => {
+      const sessions = pack.sessions;
+      return sessions
+        ? $localize`The session is recorded. ${sessions.left}:left: of ${sessions.count}:count: left on ${pack.productName}:plan:.`
+        : $localize`The session is recorded.`;
+    });
+  }
+
+  protected undoLabel(line: SessionLine): string {
+    return $localize`Undo the session of ${line.day}:date:`;
+  }
+
+  /** A correction, not a delete: the row stays on the ledger and the session goes back (SES-003). */
+  protected async undoSession(line: SessionLine): Promise<void> {
+    const undo = await this.ask(
+      $localize`The session of ${line.day}:date: goes back on the pack. Both stay in its history.`,
+      $localize`Undo session`,
+      $localize`Keep it`,
+      $localize`Undo this session?`,
+    );
+    if (!undo) return;
+    this.context.clearMessages();
+    try {
+      await this.csrf.refresh();
+      await firstValueFrom(
+        this.api.voidSession(
+          this.context.clientId(),
+          line.id,
+          this.undoIntent.forPayload({ entry: line.id }),
+        ),
+      );
+      this.undoIntent.complete();
+      this.afterChange($localize`The session is back on the pack.`);
+    } catch (error) {
+      this.context.error.set(
+        serviceWriteError(
+          error,
+          $localize`The session could not be undone. Try again.`,
+          this.firstName(),
+        ),
+      );
+    }
+  }
+
   private openRenew(plan: ClientEnrollment): void {
     this.renewSource.set(plan);
+    this.sellingSessions.set(false);
     this.openSheet(this.startSheet(), $localize`Renew plan`, (renewal: ClientEnrollment) => {
       this.picked.set(renewal.id);
       return $localize`${renewal.productName}:plan: is renewed for ${this.firstName()}:name:.`;

@@ -72,7 +72,77 @@
             </ul>
           </div>
         </section>
+      } @else {
+        <section class="panel">
+          <app-empty-state [heading]="emptyHeading" [description]="emptyDescription()">
+            @if (!context.isFormer()) {
+              <button empty-state-action appButton type="button" (click)="openStart()" i18n>
+                Start a plan
+              </button>
+            }
+          </app-empty-state>
+        </section>
+      }
 
+      @if (showSessions()) {
+        <section class="panel" aria-labelledby="sessions-title">
+          <header class="panel-head sessions-head">
+            <h2 id="sessions-title" i18n>1-on-1 sessions</h2>
+            @if (!context.isFormer()) {
+              <div class="sessions-actions">
+                @if (packs().live.length + packs().earlier.length > 0) {
+                  <button
+                    appButton
+                    type="button"
+                    [variant]="primary() ? 'outlined' : 'filled'"
+                    (click)="openSession()"
+                    i18n
+                  >
+                    Record a session
+                  </button>
+                }
+                @if (canSell()) {
+                  <button appButton type="button" variant="outlined" (click)="openSell()" i18n>
+                    Sell sessions
+                  </button>
+                }
+              </div>
+            }
+          </header>
+          <div class="panel-body">
+            @for (pack of packs().live; track pack.id) {
+              <ng-container
+                [ngTemplateOutlet]="packRow"
+                [ngTemplateOutletContext]="{ $implicit: pack }"
+              />
+            } @empty {
+              <p class="quiet" i18n>
+                No sessions running. Sell {{ firstName() }} a pack or a single session and it shows
+                here.
+              </p>
+            }
+            @if (packs().earlier.length > 0) {
+              <app-disclosure
+                class="earlier-packs"
+                label="Earlier packs"
+                i18n-label
+                [count]="packs().earlier.length"
+              >
+                <ng-template appDisclosureContent>
+                  @for (pack of packs().earlier; track pack.id) {
+                    <ng-container
+                      [ngTemplateOutlet]="packRow"
+                      [ngTemplateOutletContext]="{ $implicit: pack }"
+                    />
+                  }
+                </ng-template>
+              </app-disclosure>
+            }
+          </div>
+        </section>
+      }
+
+      @if (card(); as plan) {
         <section class="panel" aria-labelledby="payments-title">
           <header class="panel-head">
             <h2 id="payments-title" i18n>Payments</h2>
@@ -110,16 +180,6 @@
               </ul>
             }
           </div>
-        </section>
-      } @else {
-        <section class="panel">
-          <app-empty-state [heading]="emptyHeading" [description]="emptyDescription()">
-            @if (!context.isFormer()) {
-              <button empty-state-action appButton type="button" (click)="openStart()" i18n>
-                Start a plan
-              </button>
-            }
-          </app-empty-state>
         </section>
       }
 
@@ -221,6 +281,60 @@
   }
 </div>
 
+<ng-template #packRow let-pack>
+  <div class="pack">
+    <div class="pack-main">
+      <div class="pack-copy">
+        <p class="pack-name" dir="auto">{{ pack.name }}</p>
+        <p class="pack-line" dir="auto">{{ pack.line }}</p>
+      </div>
+      <div class="pack-side">
+        <app-status-pill [label]="pack.pill.label" [tone]="pack.pill.tone" />
+        @if (pack.menu.length > 0) {
+          <app-menu
+            icon="more"
+            label="More for {{ pack.name }}"
+            i18n-label
+            [items]="pack.menu"
+            (chosen)="packAction(pack.id, $event)"
+          />
+        }
+      </div>
+    </div>
+    @if (pack.history.length > 0) {
+      <app-disclosure label="History" i18n-label [count]="pack.history.length">
+        <ng-template appDisclosureContent>
+          <ul class="ledger" role="list">
+            @for (line of pack.history; track line.id) {
+              <li class="ledger-row" [class.undone]="line.undone">
+                <span class="ledger-main">
+                  <span class="ledger-day">{{ line.day }}</span>
+                  <span class="ledger-what" dir="auto">{{ line.what }}</span>
+                  @if (line.detail; as detail) {
+                    <span class="ledger-detail" dir="auto">{{ detail }}</span>
+                  }
+                </span>
+                @if (line.canUndo) {
+                  <button
+                    appButton
+                    type="button"
+                    variant="text"
+                    [attr.aria-label]="undoLabel(line)"
+                    (click)="undoSession(line)"
+                    i18n
+                  >
+                    Undo
+                  </button>
+                }
+              </li>
+            }
+          </ul>
+        </ng-template>
+      </app-disclosure>
+    }
+  </div>
+</ng-template>
+
 <!-- What the menu and the main button open. They stay here so they share this page's data. -->
 <ng-template #startSheet let-sheet>
   <app-plan-start
@@ -230,6 +344,18 @@
     [catalog]="catalog()"
     [plans]="plans()"
     [renewFrom]="renewSource()"
+    [sessionsOnly]="sellingSessions()"
+    (dirtyChange)="dirty = $event"
+    (closed)="closePlanSheet($event, sheet)"
+  />
+</ng-template>
+
+<ng-template #sessionSheet let-sheet>
+  <app-session-sheet
+    [clientId]="context.clientId()"
+    [firstName]="firstName()"
+    [today]="today()"
+    [plans]="plans()"
     (dirtyChange)="dirty = $event"
     (closed)="closePlanSheet($event, sheet)"
   />

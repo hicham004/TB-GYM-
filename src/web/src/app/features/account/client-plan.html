@@ -24,11 +24,12 @@
     }
     @default {
       @for (plan of plans(); track plan.id) {
-        <section class="plan" [attr.aria-labelledby]="'plan-' + plan.id">
+        <!-- Named with its dates too: two packs of one plan share a name. -->
+        <section class="plan" [attr.aria-labelledby]="'plan-' + plan.id + ' when-' + plan.id">
           <div class="plan-head">
             <app-status-pill [label]="plan.pill.label" [tone]="plan.pill.tone" />
             <h2 [id]="'plan-' + plan.id" dir="auto">{{ plan.name }}</h2>
-            <p class="plan-when">
+            <p class="plan-when" [id]="'when-' + plan.id">
               <bdi>{{ plan.option }}</bdi> · <span class="plan-dates">{{ plan.dates }}</span>
             </p>
             @if (plan.note; as note) {

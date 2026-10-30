@@ -8,11 +8,17 @@ public sealed class CoachingProduct : TenantEntity
     {
     }
 
-    private CoachingProduct(Guid tenantId, string name, string? description)
+    private CoachingProduct(Guid tenantId, string name, string? description, ProductKind kind)
         : base(tenantId)
     {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
         Name = CommercialText.Required(name, 160, nameof(name));
         Description = CommercialText.Optional(description, 2_000, nameof(description));
+        Kind = kind;
         IsActive = true;
     }
 
@@ -20,10 +26,17 @@ public sealed class CoachingProduct : TenantEntity
 
     public string? Description { get; private set; }
 
+    /// <summary>A coaching plan, or a session pack whose options count sessions (SES-001). It never changes.</summary>
+    public ProductKind Kind { get; private set; }
+
     public bool IsActive { get; private set; }
 
-    public static CoachingProduct Create(Guid tenantId, string name, string? description) =>
-        new(tenantId, name, description);
+    public static CoachingProduct Create(
+        Guid tenantId,
+        string name,
+        string? description,
+        ProductKind kind = ProductKind.CoachingPlan) =>
+        new(tenantId, name, description, kind);
 
     public void Update(string name, string? description, bool isActive)
     {
@@ -82,7 +95,8 @@ public sealed class ProductOffer : TenantEntity
         OfferDurationUnit durationUnit,
         decimal amount,
         string currencyCode,
-        IEnumerable<OfferFeatureDefinition> features)
+        IEnumerable<OfferFeatureDefinition> features,
+        int? sessionCount)
         : base(tenantId)
     {
         if (productId == Guid.Empty)
@@ -111,6 +125,8 @@ public sealed class ProductOffer : TenantEntity
             throw new ArgumentException("At least one valid coaching feature is required.", nameof(features));
         }
 
+        SessionPackRules.EnsureOffer(sessionCount, normalizedFeatures);
+
         ProductId = productId;
         Label = CommercialText.Required(label, 120, nameof(label));
         BillingModel = OfferBillingModel.FixedDuration;
@@ -118,6 +134,7 @@ public sealed class ProductOffer : TenantEntity
         DurationUnit = durationUnit;
         PriceAmount = MoneyRules.NormalizeAmount(amount, allowZero: true);
         PriceCurrency = MoneyRules.NormalizeCurrency(currencyCode);
+        SessionCount = sessionCount;
         IsActive = true;
 
         foreach (var feature in normalizedFeatures)
@@ -144,6 +161,9 @@ public sealed class ProductOffer : TenantEntity
 
     public string PriceCurrency { get; private set; } = string.Empty;
 
+    /// <summary>The sessions a pack's option sells, 1 to 100 (SES-001); null on a coaching plan's option.</summary>
+    public int? SessionCount { get; private set; }
+
     public bool IsActive { get; private set; }
 
     public IReadOnlyCollection<OfferEntitlement> Entitlements => entitlements;
@@ -156,7 +176,8 @@ public sealed class ProductOffer : TenantEntity
         OfferDurationUnit durationUnit,
         decimal amount,
         string currencyCode,
-        IEnumerable<OfferFeatureDefinition> features) =>
+        IEnumerable<OfferFeatureDefinition> features,
+        int? sessionCount = null) =>
         new(
             tenantId,
             productId,
@@ -165,7 +186,8 @@ public sealed class ProductOffer : TenantEntity
             durationUnit,
             amount,
             currencyCode,
-            features);
+            features,
+            sessionCount);
 
     public SubscriptionPeriod GetPeriod(DateOnly startDate)
     {
@@ -185,7 +207,7 @@ public sealed class ProductOffer : TenantEntity
                 offer.Id != Id && offer.IsActive &&
                 offer.TenantId == TenantId && offer.ProductId == ProductId &&
                 offer.DurationCount == DurationCount && offer.DurationUnit == DurationUnit &&
-                offer.PriceCurrency == PriceCurrency))
+                offer.PriceCurrency == PriceCurrency && offer.SessionCount == SessionCount))
         {
             throw new ActiveOfferSlotConflictException();
         }
@@ -216,7 +238,8 @@ public sealed class ProductOffer : TenantEntity
 
         return CreateFixedDuration(
             TenantId, ProductId, Label, DurationCount, DurationUnit, price, PriceCurrency,
-            entitlements.Select(item => new OfferFeatureDefinition(item.Feature, item.AllowsConcurrentCoverage)));
+            entitlements.Select(item => new OfferFeatureDefinition(item.Feature, item.AllowsConcurrentCoverage)),
+            SessionCount);
     }
 }
 
@@ -296,6 +319,7 @@ public sealed class ClientEnrollment : TenantEntity
         OfferLabelSnapshot = offer.Label;
         PriceAmount = offer.PriceAmount;
         PriceCurrency = offer.PriceCurrency;
+        SessionCountSnapshot = offer.SessionCount;
         StartDate = period.Start;
         EndDateExclusive = period.EndExclusive;
         Status = PriceAmount == 0m ? EnrollmentStatus.Active : EnrollmentStatus.PendingPayment;
@@ -329,6 +353,9 @@ public sealed class ClientEnrollment : TenantEntity
 
     public string PriceCurrency { get; private set; } = string.Empty;
 
+    /// <summary>The sessions this pack was sold with (SES-002); null on a coaching plan.</summary>
+    public int? SessionCountSnapshot { get; private set; }
+
     public DateOnly StartDate { get; private set; }
 
     public DateOnly EndDateExclusive { get; private set; }
@@ -352,6 +379,8 @@ public sealed class ClientEnrollment : TenantEntity
     public IReadOnlyCollection<EnrollmentEntitlement> Entitlements => entitlements;
 
     public SubscriptionPeriod Period => new(StartDate, EndDateExclusive);
+
+    public bool IsSessionPack => SessionCountSnapshot is not null;
 
     public static ClientEnrollment Assign(
         Guid tenantId,
@@ -662,6 +691,12 @@ public static class PaymentDay
 public sealed record OfferFeatureDefinition(
     CoachingFeature Feature,
     bool AllowsConcurrentCoverage = false);
+
+public enum ProductKind
+{
+    CoachingPlan = 1,
+    SessionPack = 2,
+}
 
 public enum OfferBillingModel
 {

@@ -88,6 +88,9 @@
   <div class="card-head">
     <div class="card-title">
       <h2 class="card-name" dir="auto">{{ card.name }}</h2>
+      @if (card.isPack) {
+        <p class="kind" i18n>Session pack</p>
+      }
       <p class="clients" [class.has-clients]="card.hasClients">
         <app-icon name="clients" />
         <span>{{ card.clients }}</span>

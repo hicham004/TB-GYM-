@@ -136,6 +136,44 @@ public static class CommercialEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // The route names the client, so the tenant handler checks a coach's client and a released one (ADR 0026, 0027).
+        coachGroup.MapPost("/clients/{clientProfileId:guid}/sessions", async (
+            Guid clientProfileId,
+            RecordSessionRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ICommercialApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.RecordSessionAsync(clientProfileId, request, cancellationToken));
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("RecordClientSession")
+        .Produces<ClientEnrollmentView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
+
+        coachGroup.MapPost("/clients/{clientProfileId:guid}/sessions/{entryId:guid}/void", async (
+            Guid clientProfileId,
+            Guid entryId,
+            VoidSessionRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ICommercialApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.VoidSessionAsync(clientProfileId, entryId, request, cancellationToken));
+        })
+        .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+        .WithName("VoidClientSession")
+        .Produces<ClientEnrollmentView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status404NotFound);
+
         coachGroup.MapPost("/enrollments/{enrollmentId:guid}/payments", async (
             Guid enrollmentId,
             RecordManualPaymentRequest request,

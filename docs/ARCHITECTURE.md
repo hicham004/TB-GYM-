@@ -65,7 +65,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Tenancy          | Coach workspace, membership, tenant role, tenant lifecycle                                                                                                                               |
 | Clients          | Tenant-specific profile, onboarding/intake, relationship block state/history                                                                                                             |
 | Invitations      | Invite lifecycle, prefilled fields, acceptance and account linking                                                                                                                       |
-| Subscriptions    | Products, immutable offers, enrollments, entitlement coverage, payments, renewal                                                                                                         |
+| Subscriptions    | Products, immutable offers, enrollments, entitlement coverage, payments, renewal, session packs and their ledger                                                                         |
 | Training         | Immutable template versions, assigned mesocycle snapshots, prescriptions, executions, actuals                                                                                            |
 | Exercise Library | Tenant exercise metadata, muscles, tags, approved alternatives, media associations                                                                                                       |
 | Nutrition        | Versioned foods/cooking factors, immutable recipes and meal-plan versions, assigned client snapshots, daily actuals, energy/macro calculations, structured allergens, reviewed AI drafts |
@@ -668,6 +668,14 @@ brand and can be changed from the personal Appearance screen.
 Critique B10a adds one client read beside `GET /api/client-access/me`: `GET /api/client-plan/me`, the
 client's own plans through the current profile (SUB-017), for the My plan page. It carries no money. No
 schema, write contract or invariant changed.
+
+Critique B10b adds session packs to the Subscriptions module (ADR 0038): `CoachingFeature.Sessions`, a plan's
+`Kind`, a count on the price option and its enrollment, and the append-only `subscriptions."SessionLedgerEntries"`,
+written by `POST /api/commercial/clients/{clientProfileId}/sessions` and `.../sessions/{entryId}/void` and read as
+`ClientEnrollmentView.Sessions`. Every other reader of a plan keeps reading features. Infrastructure's
+`CommercialApplicationService.Sessions.cs` holds the commands; `SessionPackRules` and `SessionLedger` are pure rules
+in the module (SES-001 to SES-006). The receipt taken with a session goes through the same `ApplyReceiptAsync` as
+Record payment.
 
 R2.5b adds two client reads for the Training tab (`/training/program`), with no schema or write
 change. `GET /api/training/me/program` describes one block: the one covering today, else the next,

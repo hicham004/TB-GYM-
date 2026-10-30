@@ -356,6 +356,48 @@ the plan's description as it stands today, since an enrollment keeps no copy of 
 runs: a plan that is over reads as over. No price, payment or reason the coach typed reaches the client through this
 read, and it decides no access (SUB-009).
 
+### Session packs (1-on-1 sessions, critique B10b, ADR 0038)
+
+**SES-001** A plan is a coaching plan or a session pack, and never changes kind. A pack's price option carries a
+session count, 1 to 100, and its length as the pack's validity: every pack ends. The screens start at 90 days, 30 for a
+single session, and the coach changes it per price; a single session is a pack of 1. Sessions are a sixth coaching
+feature: a pack's options always include it, side by side with any other pack (SUB-004), and a coaching plan's never
+do. Anything else ticked on a pack keeps its own overlap rule. One active option per count, length and currency
+(SUB-002, ADR 0034), and a new price keeps the count.
+
+**SES-002** Selling a pack is an enrollment (SUB-003): dated, waiting for payment until the exact price is received
+(SUB-008), active at once when free, keeping the count it was sold with. A renewal is a new pack with a full count;
+the old one keeps its ledger. A pack-only client is billable as any covered client (PBL-002 as it stands). Beside a
+coaching plan that runs or is to come, a pack never stands for the client's plan: the Clients row, CLI-018's Ending
+soon and the plan in front of Service & access stay the coaching plan's.
+
+**SES-003** Each pack has an append-only ledger: Issued, once, when it becomes active, with the count it was sold
+with; Held (the workspace day, the coach who recorded it, a note only the team reads); Charged (a no-show or late
+cancel, with a reason the client reads); Voided (a correction pointing at the session held or charged it undoes, once
+per row, which stays). Balance = issued − held − charged + voided, so a pack waiting for payment has none. Triggers
+refuse update and delete, and a guard refuses a session past the balance, outside the dates or on an unpaid pack,
+whoever writes.
+
+**SES-004** A session counts when it happens, never at booking: its day is today or earlier in the workspace. It goes
+on the pack ending first among those paid, covering that day and with a session left. A session on a pack's last day
+may be recorded later: the day decides, not the day it was typed. The command locks the client's packs, so a last
+session cannot go twice, and its idempotency key is bound to the outcome, day, note or reason and any receipt
+(SUB-011).
+
+**SES-005** Refusals are in words: a day still to come (`session_in_future`), no pack (`no_session_pack`), a day outside
+every pack (`session_day_outside_pack`), no sessions left (`no_sessions_left`), a pack waiting for payment
+(`session_pack_unpaid`), a paused pack (`session_pack_paused`) and a blocked or departed client, by the shared access
+decision (`client_blocked`, `client_inactive`); a released client answers `client_released` and another coach's client
+404 (ADR 0026, ADR 0027). Paid packs are looked at first, and the refusal names what the coach can act on first. A
+receipt taken with a session pays the pack waiting on that day, ending first, and only for exactly what is left to pay
+(`session_receipt_not_full`), dated the session's day: session and receipt commit together, and a pack already running
+still takes the session if it ends first.
+
+**SES-006** A lapsed pack is never extended; a free one-session pack is the goodwill tool. What is left when a pack ends
+or is cancelled has lapsed, on the calendar's word (SUB-006): it is read from the date, never stored, so an Undo after
+the end lapses with the rest. A pause stops access, not the pack's dates, and a paused pack takes no session until it
+is resumed.
+
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 
 **PBL-001** Each workspace is billed monthly, in USD, for the previous UTC month

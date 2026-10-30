@@ -8,6 +8,7 @@ import {
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import {
+  chargeReason,
   overlappingPlan,
   paymentErrors,
   paymentOutcome,
@@ -16,6 +17,8 @@ import {
   planStartErrors,
   reasonErrors,
   serviceWriteError,
+  sessionErrors,
+  sessionRequest,
 } from './client-service-forms.models';
 import { offerChoices } from './client-service.models';
 
@@ -183,5 +186,78 @@ describe('the server’s refusals, in coach words', () => {
     const message =
       'Maya already has Online Coaching from Tue 21 Jul 2026 to Mon 12 Oct 2026. Start after it ends.';
     expect(say({ code: 'entitlement_overlap', message }, 409)).toBe(message);
+  });
+});
+
+describe('recording a session', () => {
+  const held = { kind: 'Held', day: SERVICE_TODAY, note: '', reason: '' } as const;
+  const noShow = { ...held, kind: 'NoShow', reason: 'No-show' } as const;
+
+  it('asks for a day that has happened', () => {
+    expect(sessionErrors(held, SERVICE_TODAY, 'Maya')).toEqual({});
+    expect(sessionErrors({ ...held, day: '' }, SERVICE_TODAY, 'Maya')['day']).toEqual([
+      'Choose the day of the session.',
+    ]);
+    expect(sessionErrors({ ...held, day: '2026-10-02' }, SERVICE_TODAY, 'Maya')['day']).toEqual([
+      'A session counts once it has happened. Choose today or an earlier day.',
+    ]);
+  });
+
+  it('asks a charge why, in words the client reads, and a note only to keep it short', () => {
+    expect(sessionErrors(noShow, SERVICE_TODAY, 'Maya')).toEqual({});
+    expect(sessionErrors({ ...noShow, reason: '  ' }, SERVICE_TODAY, 'Maya')['reason']).toEqual([
+      'Say why it is charged. Maya reads it.',
+    ]);
+    const long = 'x'.repeat(501);
+    expect(Object.keys(sessionErrors({ ...noShow, reason: long }, SERVICE_TODAY, 'Maya'))).toEqual([
+      'reason',
+    ]);
+    expect(Object.keys(sessionErrors({ ...held, note: long }, SERVICE_TODAY, 'Maya'))).toEqual([
+      'note',
+    ]);
+    // What the other kind would ask for does not count against this one.
+    expect(sessionErrors({ ...held, reason: long }, SERVICE_TODAY, 'Maya')).toEqual({});
+  });
+
+  it('starts a charge from what happened', () => {
+    expect(chargeReason('NoShow')).toBe('No-show');
+    expect(chargeReason('LateCancel')).toBe('Late cancel');
+    expect(chargeReason('Held')).toBe('');
+  });
+
+  it('sends what the kind takes, and the money only when the pack waits for it', () => {
+    expect(sessionRequest({ ...held, note: ' Legs ', reason: 'x' }, null, 'Cash', 'key')).toEqual({
+      outcome: 'Held',
+      day: SERVICE_TODAY,
+      note: 'Legs',
+      reason: null,
+      receipt: null,
+      idempotencyKey: 'key',
+    });
+    expect(sessionRequest({ ...noShow, note: 'x' }, null, 'Cash', 'key')).toEqual(
+      expect.objectContaining({ outcome: 'Charged', note: null, reason: 'No-show' }),
+    );
+    const target = { line: '', receipt: { amount: 35, currency: 'USD' } };
+    expect(sessionRequest(held, target, 'BankTransfer', 'key').receipt).toEqual({
+      amount: 35,
+      currencyCode: 'USD',
+      method: 'BankTransfer',
+    });
+  });
+
+  it('keeps the server’s own words, even when a pack’s name holds a system word', () => {
+    const refused = (code: string, message: string) =>
+      serviceWriteError(
+        new HttpErrorResponse({ status: 409, error: { code, message } }),
+        'Try again.',
+        'Maya',
+      );
+    expect(refused('no_sessions_left', 'Maya has no sessions left on Summer offer.')).toBe(
+      'Maya has no sessions left on Summer offer.',
+    );
+    expect(refused('session_pack_paused', 'Summer offer is paused.')).toBe(
+      'Summer offer is paused.',
+    );
+    expect(refused('session_conflict', 'The enrollment clashed.')).toBe('Try again.');
   });
 });

@@ -8991,6 +8991,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("RenewedFromEnrollmentId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("SessionCountSnapshot")
+                        .HasColumnType("integer");
+
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
 
@@ -9044,6 +9047,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_ClientEnrollments_PriceAmount", "\"PriceAmount\" >= 0");
 
                             t.HasCheckConstraint("CK_ClientEnrollments_PriceCurrency", "\"PriceCurrency\" ~ '^[A-Z]{3}$'");
+
+                            t.HasCheckConstraint("CK_ClientEnrollments_SessionCountSnapshot", "\"SessionCountSnapshot\" IS NULL OR \"SessionCountSnapshot\" BETWEEN 1 AND 100");
                         });
                 });
 
@@ -9067,6 +9072,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("CoachingPlan");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -9442,6 +9454,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("SessionCount")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -9463,10 +9478,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ProductId", "IsActive");
 
-                    b.HasIndex("TenantId", "ProductId", "DurationCount", "DurationUnit", "PriceCurrency")
+                    b.HasIndex("TenantId", "ProductId", "SessionCount", "DurationCount", "DurationUnit", "PriceCurrency")
                         .IsUnique()
                         .HasDatabaseName("IX_ProductOffers_ActiveDurationCurrency")
                         .HasFilter("\"IsActive\"");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("TenantId", "ProductId", "SessionCount", "DurationCount", "DurationUnit", "PriceCurrency"), false);
 
                     b.ToTable("ProductOffers", "subscriptions", t =>
                         {
@@ -9475,6 +9492,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_ProductOffers_PriceAmount", "\"PriceAmount\" >= 0");
 
                             t.HasCheckConstraint("CK_ProductOffers_PriceCurrency", "\"PriceCurrency\" ~ '^[A-Z]{3}$'");
+
+                            t.HasCheckConstraint("CK_ProductOffers_SessionCount", "\"SessionCount\" IS NULL OR \"SessionCount\" BETWEEN 1 AND 100");
                         });
                 });
 
@@ -9538,6 +9557,106 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("RenewalRequests", "subscriptions", t =>
                         {
                             t.HasCheckConstraint("CK_RenewalRequests_Window", "\"AskAgainFrom\" = \"RequestedOn\" + 7");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.SessionLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CoachUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid?>("VoidsEntryId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EnrollmentId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SessionLedgerEntries_OneIssuedPerPack")
+                        .HasFilter("\"Kind\" = 'Issued'");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "VoidsEntryId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SessionLedgerEntries_OneVoidPerEntry")
+                        .HasFilter("\"VoidsEntryId\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "Day");
+
+                    b.HasIndex("TenantId", "CoachUserId", "Day");
+
+                    b.HasIndex("TenantId", "EnrollmentId", "Day");
+
+                    b.ToTable("SessionLedgerEntries", "subscriptions", t =>
+                        {
+                            t.HasCheckConstraint("CK_SessionLedgerEntries_Coach", "(\"Kind\" IN ('Held', 'Charged')) = (\"CoachUserId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SessionLedgerEntries_Count", "(\"Kind\" = 'Issued' AND \"Count\" BETWEEN 1 AND 100) OR (\"Kind\" <> 'Issued' AND \"Count\" = 1)");
+
+                            t.HasCheckConstraint("CK_SessionLedgerEntries_Note", "\"Kind\" = 'Held' OR \"Note\" IS NULL");
+
+                            t.HasCheckConstraint("CK_SessionLedgerEntries_Reason", "(\"Kind\" = 'Charged') = (\"Reason\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SessionLedgerEntries_Voids", "(\"Kind\" = 'Voided') = (\"VoidsEntryId\" IS NOT NULL)");
                         });
                 });
 
@@ -13659,6 +13778,35 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.SessionLedgerEntry", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CoachUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.ClientEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "EnrollmentId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.SessionLedgerEntry", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VoidsEntryId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Tenancy.Tenant", b =>

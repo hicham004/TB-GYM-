@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -16,13 +17,16 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
   cancelledPlan,
   catalog,
+  catalogWithPacks,
   enrollment,
   plansOverview,
   SERVICE_TODAY,
+  sessionPack,
+  unpaidPack,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import { installDialogSupport } from '../../../testing/dialog';
-import { fill, press, settle } from '../../../testing/dom';
+import { fill, menuChoices, press, settle, toggleFold } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { TeamApi } from '../team/team-api';
 import { ClientService } from './client-service';
@@ -52,6 +56,8 @@ const FORMER = {
 
 interface Options {
   plans?: ClientCommercialOverview;
+  /** What the coach sells; the plain catalog when left out. */
+  sells?: ReturnType<typeof catalog>;
   /** Replaces the plans read, to fail it or to answer differently the second time. */
   getPlans?: () => Observable<ClientCommercialOverview>;
   profile?: CoachClientDetails;
@@ -74,7 +80,7 @@ async function render(options: Options = {}) {
     : vi.fn(() => of(options.plans ?? plansOverview([cancelledPlan(), enrollment()])));
   const api = {
     getClientCommercialOverview,
-    getProductCatalog: vi.fn(() => of(catalog())),
+    getProductCatalog: vi.fn(() => of(options.sells ?? catalog())),
     getClientOverview: vi.fn(() =>
       of({
         attention: [
@@ -453,5 +459,245 @@ describe('a client’s Service & access', () => {
     press(host, 'Try again');
     await settle(harness.fixture);
     expect(textOf(host.querySelector('#plan-title'))).toBe('Online Coaching');
+  });
+
+  describe('1-on-1 sessions (critique B10b)', () => {
+    const section = (host: HTMLElement) =>
+      host.querySelector<HTMLElement>('[aria-labelledby="sessions-title"]');
+
+    it('stays away from a coach who sells no sessions', async () => {
+      const { host } = await render();
+      expect(section(host)).toBeNull();
+    });
+
+    it('invites the first sale once the coach sells sessions', async () => {
+      const { host, harness } = await render({ sells: catalogWithPacks() });
+
+      expect(textOf(section(host))).toContain(
+        'No sessions running. Sell Maya a pack or a single session and it shows here.',
+      );
+      expect(all(section(host)!, 'button').map(textOf)).toEqual(['Sell sessions']);
+
+      press(section(host)!, 'Sell sessions');
+      await settle(harness.fixture);
+      expect(textOf(dialog()?.querySelector('h2'))).toBe('Sell sessions');
+      expect(all(dialog()!, '.choice-label').map(textOf)).toEqual([
+        'Personal training · 10 sessions',
+        'Personal training · Single session',
+      ]);
+    });
+
+    it('reads a pack beside the coaching plan, which stays in front', async () => {
+      const { host } = await render({
+        plans: plansOverview([sessionPack(), enrollment()]),
+        sells: catalogWithPacks(),
+      });
+
+      expect(textOf(host.querySelector('#plan-title'))).toBe('Online Coaching');
+      expect(textOf(section(host)?.querySelector('.pack-name'))).toBe(
+        'Personal training · 10 sessions',
+      );
+      expect(textOf(section(host)?.querySelector('.pack-line'))).toBe(
+        '7 of 10 left · until 29 Nov · last held Tue 29 Sep',
+      );
+    });
+
+    it('makes Record a session the page’s one filled button unless the plan needs the coach', async () => {
+      const plain = await render({
+        plans: plansOverview([sessionPack()]),
+        endingSoon: false,
+      });
+      expect(
+        all(section(plain.host)!, 'button').find((item) => textOf(item) === 'Record a session')
+          ?.className,
+      ).toContain('tb-button--filled');
+      TestBed.resetTestingModule();
+
+      const owed = await render({ plans: plansOverview([sessionPack(), unpaidRenewal()]) });
+      expect(textOf(owed.host.querySelector('.hero-actions button'))).toBe('Record payment');
+      expect(
+        all(section(owed.host)!, 'button').find((item) => textOf(item) === 'Record a session')
+          ?.className,
+      ).toContain('tb-button--outlined');
+    });
+
+    it('records a session in its sheet and says what is left', async () => {
+      const after = sessionPack({}, { left: 6, held: 3 });
+      const recordSession = vi.fn(() => of(after));
+      const getPlans = vi
+        .fn()
+        .mockReturnValueOnce(of(plansOverview([sessionPack()])))
+        .mockReturnValue(of(plansOverview([after])));
+      const { host, harness, context } = await render({
+        getPlans,
+        api: { recordSession },
+        endingSoon: false,
+      });
+
+      press(section(host)!, 'Record a session');
+      await settle(harness.fixture);
+      expect(textOf(dialog()?.querySelector('h2'))).toBe('Record a session');
+      fill(dialog()!, 'Note (optional)', 'Legs');
+      press(dialog()!, 'Record session');
+      await settle(harness.fixture);
+
+      expect(recordSession).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({ outcome: 'Held', note: 'Legs' }),
+      );
+      expect(context.notice()).toBe('The session is recorded. 6 of 10 left on Personal training.');
+      expect(textOf(section(host)?.querySelector('.pack-line'))).toContain('6 of 10 left');
+    });
+
+    it('sells a pack and brings it to the front while it waits for its payment', async () => {
+      const sold = unpaidPack();
+      const assignProduct = vi.fn(() => of(sold));
+      const getPlans = vi
+        .fn()
+        .mockReturnValueOnce(of(plansOverview([enrollment()])))
+        .mockReturnValue(of(plansOverview([sold, enrollment()])));
+      const { host, harness } = await render({
+        getPlans,
+        sells: catalogWithPacks(),
+        api: { assignProduct },
+      });
+
+      press(section(host)!, 'Sell sessions');
+      await settle(harness.fixture);
+      all(dialog()!, 'input[type="radio"]')
+        .find((item) => (item as HTMLInputElement).value === 'o-pack-1')!
+        .click();
+      await settle(harness.fixture);
+      press(dialog()!, 'Sell sessions');
+      await settle(harness.fixture);
+
+      expect(assignProduct).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({ offerId: 'o-pack-1' }),
+      );
+      expect(textOf(host.querySelector('#plan-title'))).toBe('Personal training');
+      expect(textOf(host.querySelector('.hero-actions button'))).toBe('Record payment');
+    });
+
+    it('keeps the ledger folded, and undoes a session once the coach says so', async () => {
+      const after = sessionPack({}, { left: 8, held: 1 });
+      const voidSession = vi.fn(() => of(after));
+      const getPlans = vi
+        .fn()
+        .mockReturnValueOnce(of(plansOverview([sessionPack()])))
+        .mockReturnValue(of(plansOverview([after])));
+      const { host, harness, context } = await render({ getPlans, api: { voidSession } });
+
+      expect(all(section(host)!, '.ledger-row')).toEqual([]);
+      await toggleFold(harness.fixture, section(host)!, 'History');
+      const rows = all(section(host)!, '.ledger-row');
+      expect(rows.map((row) => textOf(row.querySelector('.ledger-what')))).toEqual([
+        'Undid the session of Wed 30 Sep',
+        'Held',
+        'Held',
+        'Charged · No-show',
+        'Held',
+        '10 sessions added',
+      ]);
+      expect(rows[1].classList.contains('undone')).toBe(true);
+      expect(rows.filter((row) => row.querySelector('button')).length).toBe(3);
+
+      rows[2].querySelector<HTMLButtonElement>('button')!.click();
+      await settle(harness.fixture);
+      expect(textOf(dialog())).toContain(
+        'The session of Tue 29 Sep goes back on the pack. Both stay in its history.',
+      );
+      press(dialog()!, 'Keep it');
+      await settle(harness.fixture);
+      expect(voidSession).not.toHaveBeenCalled();
+
+      all(section(host)!, '.ledger-row')[2].querySelector<HTMLButtonElement>('button')!.click();
+      await settle(harness.fixture);
+      press(dialog()!, 'Undo session');
+      await settle(harness.fixture);
+
+      expect(voidSession).toHaveBeenCalledWith('client-1', 's-2', expect.any(String));
+      expect(context.notice()).toBe('The session is back on the pack.');
+    });
+
+    it('says an undo refused in the server’s words', async () => {
+      const voidSession = vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: {
+                code: 'session_already_undone',
+                message: 'This session was already undone.',
+              },
+            }),
+        ),
+      );
+      const { host, harness, context } = await render({
+        plans: plansOverview([sessionPack()]),
+        api: { voidSession },
+      });
+
+      await toggleFold(harness.fixture, section(host)!, 'History');
+      all(section(host)!, '.ledger-row button')[0].click();
+      await settle(harness.fixture);
+      press(dialog()!, 'Undo session');
+      await settle(harness.fixture);
+
+      expect(context.error()).toBe('This session was already undone.');
+    });
+
+    it('folds the packs that are over', async () => {
+      const ended = sessionPack(
+        {
+          id: 'ended',
+          startDate: '2026-05-01',
+          endDateExclusive: '2026-07-30',
+          lastActiveDate: '2026-07-29',
+          effectiveStatus: 'Expired',
+        },
+        { left: 2, held: 8, charged: 0, lapsed: 2, lapsedOn: '2026-07-29' },
+      );
+      const { host, harness } = await render({ plans: plansOverview([sessionPack(), ended]) });
+
+      expect(all(section(host)!, '.pack').length).toBe(1);
+      await toggleFold(harness.fixture, section(host)!, 'Earlier packs');
+      expect(all(section(host)!, '.pack-line').map(textOf)).toContain('8 held · 2 lapsed');
+    });
+
+    it('lists a pack in its section alone, with its own menu on that pack', async () => {
+      const { host, harness } = await render({
+        plans: plansOverview([sessionPack(), enrollment()]),
+        sells: catalogWithPacks(),
+      });
+
+      expect(host.querySelector('#others-title')).toBeNull();
+      expect(textOf(host.querySelector('#plan-title'))).toBe('Online Coaching');
+
+      const menu = section(host)!.querySelector<HTMLButtonElement>(
+        'app-menu button[aria-label="More for Personal training · 10 sessions"]',
+      )!;
+      menu.click();
+      await settle(harness.fixture);
+      const pause = menuChoices(menu).find((item) => textOf(item).startsWith('Pause plan'))!;
+      pause.click();
+      await settle(harness.fixture);
+
+      expect(textOf(dialog()?.querySelector('h2'))).toBe('Pause plan');
+      // The plan it acts on comes to the front, with its payments.
+      expect(textOf(host.querySelector('#plan-title'))).toBe('Personal training');
+    });
+
+    it('shows a former client’s ledger with nothing to change', async () => {
+      const { host, harness } = await render({
+        plans: plansOverview([sessionPack()]),
+        profile: FORMER,
+      });
+
+      expect(all(section(host)!, '.sessions-actions button')).toEqual([]);
+      await toggleFold(harness.fixture, section(host)!, 'History');
+      expect(all(section(host)!, '.ledger-row').length).toBe(6);
+      expect(all(section(host)!, '.ledger-row button')).toEqual([]);
+    });
   });
 });

@@ -1,8 +1,12 @@
 import { formatDate } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import type { ClientEnrollment } from '../../core/api/api.models';
+import type {
+  ClientEnrollment,
+  ManualPaymentMethod,
+  RecordSessionRequest,
+} from '../../core/api/api.models';
 import { addDays } from './client-overview.models';
-import { money, type OfferChoice } from './client-service.models';
+import { money, type OfferChoice, type SessionTarget } from './client-service.models';
 
 /**
  * The forms of Service & access: starting or renewing a plan, recording a payment, and the reason a
@@ -141,6 +145,77 @@ export function paymentOutcome(
 }
 
 // ------------------------------------------------------------------------------------------------
+// Recording a session
+// ------------------------------------------------------------------------------------------------
+
+/** What happened: it took place, or the coach charges a no-show or a late cancel (SES-003). */
+export type SessionKind = 'Held' | 'NoShow' | 'LateCancel';
+
+export interface SessionValues {
+  readonly kind: SessionKind;
+  readonly day: string;
+  readonly note: string;
+  readonly reason: string;
+}
+
+/** The reason a charge starts with; the client reads it, and the coach may say more. */
+export function chargeReason(kind: SessionKind): string {
+  switch (kind) {
+    case 'NoShow':
+      return $localize`No-show`;
+    case 'LateCancel':
+      return $localize`Late cancel`;
+    case 'Held':
+      return '';
+  }
+}
+
+export function sessionErrors(
+  values: SessionValues,
+  today: string,
+  firstName: string,
+): FieldMessages {
+  const errors: FieldMessages = {};
+  if (!values.day) {
+    errors['day'] = [$localize`Choose the day of the session.`];
+  } else if (values.day > today) {
+    errors['day'] = [
+      $localize`A session counts once it has happened. Choose today or an earlier day.`,
+    ];
+  }
+  if (values.kind === 'Held') {
+    if (values.note.trim().length > REASON_LIMIT) {
+      errors['note'] = [$localize`Keep it under ${REASON_LIMIT}:limit: characters.`];
+    }
+  } else if (!values.reason.trim()) {
+    errors['reason'] = [$localize`Say why it is charged. ${firstName}:name: reads it.`];
+  } else if (values.reason.trim().length > REASON_LIMIT) {
+    errors['reason'] = [$localize`Keep it under ${REASON_LIMIT}:limit: characters.`];
+  }
+  return errors;
+}
+
+/** The command as the server takes it, with the money when the pack waits for it. */
+export function sessionRequest(
+  values: SessionValues,
+  target: SessionTarget | null,
+  method: ManualPaymentMethod,
+  idempotencyKey: string,
+): RecordSessionRequest {
+  const held = values.kind === 'Held';
+  return {
+    outcome: held ? 'Held' : 'Charged',
+    day: values.day,
+    note: held ? values.note.trim() || null : null,
+    reason: held ? null : values.reason.trim(),
+    receipt: target?.receipt
+      ? { amount: target.receipt.amount, currencyCode: target.receipt.currency, method }
+      : null,
+    idempotencyKey,
+  };
+}
+
+// ------------------------------------------------------------------------------------------------
 // The server's refusals, in coach words
 // ------------------------------------------------------------------------------------------------
 
@@ -176,6 +251,20 @@ export function serviceWriteError(error: unknown, fallback: string, name: string
       return $localize`That clashes with an earlier request. Reload the page to see what was saved.`;
     case 'workspace_read_only':
       return $localize`Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.`;
+    // Written for the coach, and they may name a pack whatever it is called (SES-005).
+    case 'no_session_pack':
+    case 'no_sessions_left':
+    case 'no_pack_waiting_for_payment':
+    case 'session_in_future':
+    case 'session_day_outside_pack':
+    case 'session_pack_unpaid':
+    case 'session_pack_paused':
+    case 'session_receipt_not_full':
+    case 'session_already_undone':
+    case 'session_not_undoable':
+    case 'client_blocked':
+    case 'client_inactive':
+      return text ?? fallback;
   }
   const said = (text ?? '').toLowerCase();
   if (said.includes('cannot exceed the outstanding'))

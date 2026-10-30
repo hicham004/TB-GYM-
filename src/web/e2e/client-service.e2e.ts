@@ -4,8 +4,11 @@ import type { ClientCommercialOverview, ClientEnrollment } from '../src/app/core
 import {
   cancelledPlan,
   catalog,
+  catalogWithPacks,
   enrollment,
   plansOverview,
+  sessionPack,
+  unpaidPack,
   unpaidRenewal,
 } from '../src/testing/client-service-fixtures';
 import { COACH_NOW, LEA_ID, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
@@ -406,3 +409,83 @@ test.describe('plan date conflicts', () => {
     });
   }
 });
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`1-on-1 sessions at ${width}px read a pack, keep its history and pass axe`, async ({
+    page,
+  }) => {
+    await openService(page, width, height, {
+      plans: [plansOverview([sessionPack(), enrollment()])],
+      extra: {
+        'GET /api/commercial/products': (route) => json(route, 200, catalogWithPacks()),
+      },
+    });
+
+    const section = page.locator('[aria-labelledby="sessions-title"]');
+    await expect(page.locator('#plan-title')).toHaveText('Online Coaching');
+    await expect(section.locator('.pack-name')).toHaveText('Personal training · 10 sessions');
+    await expect(section.locator('.pack-line')).toHaveText(
+      '7 of 10 left · until 29 Nov · last held Tue 29 Sep',
+    );
+    await expect(page.locator('.row-name')).toHaveCount(0);
+
+    await section.locator('summary', { hasText: 'History' }).click();
+    await expect(section.locator('.ledger-what')).toHaveText([
+      'Undid the session of Wed 30 Sep',
+      'Held',
+      'Held',
+      'Charged · No-show',
+      'Held',
+      '10 sessions added',
+    ]);
+    await expect(section.getByRole('button', { name: 'Undo the session of' })).toHaveCount(3);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/b10b-sessions-${width}.png`, fullPage: true });
+  });
+
+  test(`Record a session at ${width}px takes the money with it and passes axe`, async ({
+    page,
+  }) => {
+    const requests: NonNullable<OpenOptions['requests']> = [];
+    const settled = sessionPack(
+      { id: 'e-single', offerLabel: 'Single session', priceAmount: 35 },
+      { count: 1, left: 0, held: 1, charged: 0, entries: [] },
+    );
+    await openService(page, width, height, {
+      plans: [plansOverview([unpaidPack(), enrollment()]), plansOverview([settled, enrollment()])],
+      requests,
+      extra: {
+        'GET /api/commercial/products': (route) => json(route, 200, catalogWithPacks()),
+        [`POST /api/commercial/clients/${ID}/sessions`]: (route) => json(route, 200, settled),
+      },
+    });
+
+    await page.getByRole('button', { name: 'Record a session' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Record a session' });
+    await expect(sheet.locator('.target')).toHaveText(
+      'Personal training is waiting for USD 35. Saving this records that payment too, received on the day of the session, and the session goes on it.',
+    );
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+
+    await sheet.getByRole('button', { name: 'Record session and payment' }).click();
+    await expect(sheet).toBeHidden();
+    expect(requests).toEqual([
+      {
+        method: 'POST',
+        path: `/api/commercial/clients/${ID}/sessions`,
+        body: expect.objectContaining({
+          outcome: 'Held',
+          receipt: { amount: 35, currencyCode: 'USD', method: 'Cash' },
+        }),
+      },
+    ]);
+    await expect(page.locator('[aria-labelledby="sessions-title"] .pack-line')).toContainText(
+      '0 of 1 left',
+    );
+  });
+}

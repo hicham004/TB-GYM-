@@ -68,6 +68,19 @@ public interface ICommercialApplicationService
         CancellationToken cancellationToken);
 
     Task<OwnPlansView?> GetOwnPlansAsync(CancellationToken cancellationToken);
+
+    /// <summary>Records a session held or charged on the client's pack ending first (SES-004).</summary>
+    Task<CommercialCommandResult> RecordSessionAsync(
+        Guid clientProfileId,
+        RecordSessionRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Undoes a session held or charged, with a new row pointing at it (SES-003).</summary>
+    Task<CommercialCommandResult> VoidSessionAsync(
+        Guid clientProfileId,
+        Guid entryId,
+        VoidSessionRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ProductCatalog(
@@ -82,13 +95,15 @@ public sealed record CoachingProductView(
     bool IsActive,
     IReadOnlyList<ProductOfferView> Offers,
     uint Version,
-    PlanClientCount Clients);
+    PlanClientCount Clients,
+    ProductKind Kind);
 
 /// <param name="Clients">
 /// Who is on this option (SUB-015). A replacement from Change price also counts the clients of the options it
 /// replaced, who keep their old price (ADR 0034); a retired option counts only its own.
 /// </param>
 /// <param name="ReplacedByOfferId">The option Change price put in this one's place; null when it was not replaced.</param>
+/// <param name="SessionCount">The sessions a pack's option sells (SES-001); null on a coaching plan's.</param>
 public sealed record ProductOfferView(
     Guid Id,
     string Label,
@@ -102,7 +117,8 @@ public sealed record ProductOfferView(
     DateTimeOffset CreatedAtUtc,
     uint Version,
     PlanClientCount Clients,
-    Guid? ReplacedByOfferId);
+    Guid? ReplacedByOfferId,
+    int? SessionCount);
 
 /// <summary>
 /// The caller's clients on a plan (SUB-015, ADR 0026: a Coach counts their own, the Owner every client still
@@ -121,6 +137,7 @@ public sealed record ClientCommercialOverview(
     IReadOnlyList<ClientEnrollmentView> Enrollments);
 
 /// <param name="CancelledOn">The workspace day the plan was cancelled (COACH-20); null unless it was.</param>
+/// <param name="Sessions">A pack's sessions and ledger (SES-003); null on a coaching plan.</param>
 public sealed record ClientEnrollmentView(
     Guid Id,
     Guid ProductId,
@@ -142,7 +159,8 @@ public sealed record ClientEnrollmentView(
     IReadOnlyList<CoachingFeature> Features,
     IReadOnlyList<PaymentRecordView> Payments,
     DateTimeOffset CreatedAtUtc,
-    uint Version);
+    uint Version,
+    SessionPackView? Sessions);
 
 /// <param name="ReceivedOn">The workspace day the money arrived (WEA-6), the same for every reader.</param>
 public sealed record PaymentRecordView(
@@ -162,7 +180,8 @@ public sealed record PaymentRecordView(
 public sealed record CreateCoachingProductRequest(
     string Name,
     string? Description,
-    CreateProductOfferRequest InitialOffer);
+    CreateProductOfferRequest InitialOffer,
+    ProductKind Kind = ProductKind.CoachingPlan);
 
 public sealed record UpdateCoachingProductRequest(
     string Name,
@@ -176,7 +195,8 @@ public sealed record CreateProductOfferRequest(
     OfferDurationUnit DurationUnit,
     decimal PriceAmount,
     string? PriceCurrency,
-    IReadOnlyList<OfferFeatureRequest> Features);
+    IReadOnlyList<OfferFeatureRequest> Features,
+    int? SessionCount = null);
 
 public sealed record OfferFeatureRequest(
     CoachingFeature Feature,

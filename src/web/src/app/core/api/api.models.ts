@@ -23,8 +23,10 @@ import type {
   PublicInvitationDetails,
   RegisterCoachRequest as ContractRegisterCoachRequest,
   RecordManualPaymentRequest as ContractRecordManualPaymentRequest,
+  RecordSessionRequest as ContractRecordSessionRequest,
   RenewEnrollmentRequest as ContractRenewEnrollmentRequest,
   ResumeEnrollmentRequest as ContractResumeEnrollmentRequest,
+  SessionEntryKind as ContractSessionEntryKind,
   SetOfferAvailabilityRequest as ContractSetOfferAvailabilityRequest,
   TenantMembershipSummary,
   TenantRole as ContractTenantRole,
@@ -61,6 +63,8 @@ export type UpdateWorkspaceRequest = ContractUpdateWorkspaceRequest;
 export type CreateCoachingProductRequest = ContractCreateCoachingProductRequest;
 export type CreateProductOfferRequest = ContractCreateProductOfferRequest;
 export type RecordManualPaymentRequest = ContractRecordManualPaymentRequest;
+export type RecordSessionRequest = ContractRecordSessionRequest;
+export type SessionEntryKind = ContractSessionEntryKind;
 export type RenewEnrollmentRequest = ContractRenewEnrollmentRequest;
 export type ChangeEnrollmentStatusRequest = ContractChangeEnrollmentStatusRequest;
 export type ChangeClientRelationshipRequest = ContractChangeClientRelationshipRequest;
@@ -221,6 +225,8 @@ export interface CoachingProduct {
   isActive: boolean;
   offers: ProductOffer[];
   version: number;
+  /** A coaching plan, or a session pack whose options count sessions (ADR 0038). */
+  kind?: 'CoachingPlan' | 'SessionPack';
 }
 
 export interface ProductOffer {
@@ -237,6 +243,8 @@ export interface ProductOffer {
   version: number;
   /** The option Change price put in this one's place (ADR 0034); null when it was not replaced. */
   replacedByOfferId: string | null;
+  /** The sessions a pack's option sells (SES-001); null on a coaching plan's. */
+  sessionCount?: number | null;
 }
 
 export interface OfferFeature {
@@ -300,6 +308,37 @@ export interface ClientEnrollment {
   payments: PaymentRecord[];
   createdAtUtc: string;
   version: number;
+  /** A pack's sessions and ledger (SES-003); null on a coaching plan. */
+  sessions?: SessionPack | null;
+}
+
+export interface SessionPack {
+  /** The sessions it was sold with. */
+  count: number;
+  /** Issued less held less charged plus undone; none until it is paid. */
+  left: number;
+  held: number;
+  charged: number;
+  /** What was left when it ended or was cancelled; none while it runs (SES-006). */
+  lapsed: number;
+  lapsedOn: string | null;
+  lastHeldOn: string | null;
+  /** The ledger, newest day first. */
+  entries: SessionEntry[];
+}
+
+export interface SessionEntry {
+  id: string;
+  kind: SessionEntryKind;
+  count: number;
+  day: string;
+  coachName: string | null;
+  /** The coach's own note, for the team. */
+  note: string | null;
+  /** Why it was charged, which the client reads. */
+  reason: string | null;
+  voidsEntryId: string | null;
+  isVoided: boolean;
 }
 
 export interface PaymentRecord {

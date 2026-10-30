@@ -110,6 +110,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
 
+    public DbSet<SessionLedgerEntry> SessionLedgerEntries => Set<SessionLedgerEntry>();
+
     public DbSet<NotificationOutboxItem> NotificationOutboxItems => Set<NotificationOutboxItem>();
 
     public DbSet<Notification> Notifications => Set<Notification>();

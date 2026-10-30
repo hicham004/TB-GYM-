@@ -8,6 +8,7 @@ import type {
   OfferDurationUnit,
   PlanClientCount,
   ProductCatalog,
+  ProductKind,
   ProductOfferView,
 } from '../../core/api/generated';
 import type { IconName } from '../../ui/icon';
@@ -21,7 +22,10 @@ import type { UiMenuItem } from '../../ui/menu';
 
 const num = (value: number | string): number => Number(value);
 
-/** The order a plan lists what it includes, matching Service & access. */
+/**
+ * What a coach ticks a plan to include, in the order a plan lists them, matching Service & access. Sessions
+ * are not among them: a pack always includes its own, and a coaching plan never does (SES-001).
+ */
 export const FEATURES: readonly CoachingFeature[] = [
   'Training',
   'Nutrition',
@@ -29,6 +33,9 @@ export const FEATURES: readonly CoachingFeature[] = [
   'Messaging',
   'ResourceLibrary',
 ];
+
+/** Every feature a plan can list, in that order. */
+export const LISTED_FEATURES: readonly CoachingFeature[] = [...FEATURES, 'Sessions'];
 
 export interface FeatureChip {
   readonly feature: CoachingFeature;
@@ -48,6 +55,8 @@ export function featureChip(feature: CoachingFeature): FeatureChip {
       return { feature, label: $localize`Messaging`, icon: 'messages' };
     case 'ResourceLibrary':
       return { feature, label: $localize`Resources`, icon: 'resources' };
+    case 'Sessions':
+      return { feature, label: $localize`1-on-1 sessions`, icon: 'clients' };
   }
 }
 
@@ -62,6 +71,27 @@ export function duration(offer: Pick<ProductOfferView, 'durationCount' | 'durati
     return count === 1 ? $localize`1 day` : $localize`${count}:count: days`;
   }
   return count === 1 ? $localize`1 week` : $localize`${count}:count: weeks`;
+}
+
+/** What a pack's option is called until it is given a name of its own. */
+export function sessionsName(count: number): string {
+  return count === 1 ? $localize`Single session` : $localize`${count}:count: sessions`;
+}
+
+/** The length a pack is sold for until the coach changes it: every pack ends (SES-001). */
+export function packValidity(sessions: number | null): number {
+  return sessions === 1 ? 30 : 90;
+}
+
+/** "10 sessions · 90 days", or a coaching option's length. */
+export function offerLength(
+  offer: Pick<ProductOfferView, 'durationCount' | 'durationUnit' | 'sessionCount'>,
+): string {
+  const length = duration(offer);
+  const sessions = offer.sessionCount;
+  return sessions === null || sessions === undefined
+    ? length
+    : `${sessionsName(num(sessions))} · ${length}`;
 }
 
 /**
@@ -88,6 +118,7 @@ export function clientsLine(clients: PlanClientCount, oldPrice = false): string 
 export interface OptionRow {
   readonly id: string;
   readonly price: string;
+  /** "12 weeks", or "10 sessions · 90 days" for a pack. */
   readonly duration: string;
   /** The coach's own name for the option, when it says more than its length ("Summer offer"). */
   readonly name: string | null;
@@ -104,6 +135,8 @@ export interface PlanCard {
   readonly name: string;
   readonly description: string | null;
   readonly isActive: boolean;
+  /** Whether it sells sessions rather than coaching (SES-001). */
+  readonly isPack: boolean;
   readonly clients: string;
   readonly hasClients: boolean;
   /** What every option for sale includes, shown once; null when the options differ. */
@@ -115,15 +148,17 @@ export interface PlanCard {
 }
 
 export function optionRow(offer: ProductOfferView, locale: string): OptionRow {
-  const length = duration(offer);
+  const sessions = offer.sessionCount;
+  const called =
+    sessions === null || sessions === undefined ? duration(offer) : sessionsName(num(sessions));
   const label = offer.label.trim();
   return {
     id: offer.id,
     price: price(offer.priceAmount, offer.priceCurrency, locale),
-    duration: length,
+    duration: offerLength(offer),
     name:
-      label && label.toLocaleLowerCase(locale) !== length.toLocaleLowerCase(locale) ? label : null,
-    features: FEATURES.filter((feature) =>
+      label && label.toLocaleLowerCase(locale) !== called.toLocaleLowerCase(locale) ? label : null,
+    features: LISTED_FEATURES.filter((feature) =>
       offer.features.some((item) => item.feature === feature),
     ).map(featureChip),
     clients: clientsLine(offer.clients, !offer.isActive),
@@ -152,6 +187,7 @@ export function planCard(product: CoachingProductView, locale: string): PlanCard
     name: product.name,
     description: product.description?.trim() || null,
     isActive: product.isActive,
+    isPack: product.kind === 'SessionPack',
     clients: clientsLine(product.clients),
     hasClients: num(product.clients.now) + num(product.clients.starting) > 0,
     includes: sets.size === 1 ? selling[0].features : null,
@@ -213,6 +249,8 @@ export interface OptionValues {
   readonly price: number | null;
   readonly currency: string;
   readonly features: readonly CoachingFeature[];
+  /** The sessions a pack's option sells; null on a coaching plan's. */
+  readonly sessions: number | null;
 }
 
 export type FieldMessages = Record<string, string[]>;
@@ -225,11 +263,38 @@ export function emptyOption(currency: string): OptionValues {
     price: null,
     currency,
     features: ['Training', 'CheckIns', 'Messaging'],
+    sessions: null,
   };
 }
 
-export function optionErrors(values: OptionValues): FieldMessages {
+/** A pack's first option: ten sessions over 90 days, and nothing else ticked (SES-001). */
+export function emptyPackOption(currency: string): OptionValues {
+  return {
+    label: '',
+    length: packValidity(10),
+    unit: 'Day',
+    price: null,
+    currency,
+    features: [],
+    sessions: 10,
+  };
+}
+
+export function optionErrors(
+  values: OptionValues,
+  kind: ProductKind = 'CoachingPlan',
+): FieldMessages {
   const errors: FieldMessages = {};
+  const pack = kind === 'SessionPack';
+  if (
+    pack &&
+    (values.sessions === null ||
+      !Number.isInteger(values.sessions) ||
+      values.sessions < 1 ||
+      values.sessions > 100)
+  ) {
+    errors['sessions'] = [$localize`Enter a whole number of sessions, 1 to 100.`];
+  }
   // The server's own bounds (SUB-002), so the form never refuses what it would accept.
   const days = values.unit === 'Day';
   if (values.length === null || !Number.isInteger(values.length) || values.length < 1) {
@@ -256,7 +321,7 @@ export function optionErrors(values: OptionValues): FieldMessages {
   if (values.label.trim().length > 120) {
     errors['label'] = [$localize`Keep the name to 120 characters.`];
   }
-  if (values.features.length === 0) {
+  if (!pack && values.features.length === 0) {
     errors['features'] = [$localize`Choose at least one thing the plan includes.`];
   }
   return errors;
@@ -280,11 +345,22 @@ export function optionLength(values: Pick<OptionValues, 'length' | 'unit'>): str
     : '';
 }
 
-/** An option without its own name is called by its length, as the server needs a name. */
-export function optionRequest(values: OptionValues): CreateProductOfferRequest {
+/**
+ * An option without its own name is called by its length, or by its count on a pack, as the server needs
+ * a name. The server adds a pack's sessions to what is ticked.
+ */
+export function optionRequest(
+  values: OptionValues,
+  kind: ProductKind = 'CoachingPlan',
+): CreateProductOfferRequest {
   const length = values.length ?? 0;
+  const sessions = kind === 'SessionPack' ? (values.sessions ?? 0) : null;
   return {
-    label: values.label.trim() || duration({ durationCount: length, durationUnit: values.unit }),
+    label:
+      values.label.trim() ||
+      (sessions === null
+        ? duration({ durationCount: length, durationUnit: values.unit })
+        : sessionsName(sessions)),
     durationCount: length,
     durationUnit: values.unit,
     priceAmount: values.price ?? 0,
@@ -293,6 +369,7 @@ export function optionRequest(values: OptionValues): CreateProductOfferRequest {
       feature,
       allowsConcurrentCoverage: false,
     })),
+    ...(sessions === null ? {} : { sessionCount: sessions }),
   };
 }
 
@@ -308,12 +385,14 @@ export function priceErrors(amount: number | null, current: number | string): st
 }
 
 /** A refusal in coach words; anything unexpected falls back to the server's own message. */
-export function productWriteError(error: unknown): string {
+export function productWriteError(error: unknown, kind: ProductKind = 'CoachingPlan'): string {
   if (error instanceof HttpErrorResponse) {
     const code = (error.error as { code?: string } | null)?.code;
     switch (code) {
       case 'active_offer_slot_conflict':
-        return $localize`This plan already sells an option of that length in that currency. Change its price instead, or stop selling it first.`;
+        return kind === 'SessionPack'
+          ? $localize`This pack already sells that many sessions for that length in that currency. Change its price instead, or stop selling it first.`
+          : $localize`This plan already sells an option of that length in that currency. Change its price instead, or stop selling it first.`;
       case 'product_conflict':
         return $localize`You already sell a plan with this name. Choose another name.`;
       // BILL-7: a new, renamed or restored plan cannot take the name of another plan for sale.

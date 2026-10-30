@@ -53,7 +53,9 @@ describe('ClientPlanPage', () => {
     const { host } = await render(() => of(view(plan())));
 
     const card = host.querySelector('section.plan')!;
-    expect(card.getAttribute('aria-labelledby')).toBe(card.querySelector('h2')!.id);
+    expect(card.getAttribute('aria-labelledby')).toBe(
+      `${card.querySelector('h2')!.id} ${card.querySelector('.plan-when')!.id}`,
+    );
     expect(text(card.querySelector('h2')!)).toBe('Online Coaching');
     expect(text(card.querySelector('.plan-when')!)).toBe('12 weeks · Mon 5 Oct – Sun 27 Dec');
     expect(text(card.querySelector('app-status-pill')!)).toBe('Active · 73 days left');

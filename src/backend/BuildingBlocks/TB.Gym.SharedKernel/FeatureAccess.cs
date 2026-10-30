@@ -7,6 +7,7 @@ public enum CoachingFeature
     CheckIns = 3,
     Messaging = 4,
     ResourceLibrary = 5,
+    Sessions = 6,
 }
 
 public enum FeatureAccessReason

@@ -6,8 +6,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoachingProductView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { announced, button, field, fill, press, query, settle, tick } from '../../../testing/dom';
-import { features, offer, product } from '../../../testing/product-fixtures';
+import {
+  announced,
+  button,
+  field,
+  fill,
+  press,
+  query,
+  segment,
+  settle,
+  tick,
+} from '../../../testing/dom';
+import { features, offer, packProduct, product } from '../../../testing/product-fixtures';
 import { ProductSheet, type ProductSheetMode } from './product-sheets';
 import { ProductsApi } from './products-api';
 
@@ -641,5 +651,123 @@ describe('ProductSheet', () => {
     await settle(fixture);
 
     expect(dirty.at(-1)).toBe(true);
+  });
+
+  describe('a session pack (critique B10b)', () => {
+    const asPack = async (fixture: { detectChanges(): void }, host: HTMLElement) => {
+      segment(host, 'What you sell', 'Session pack').click();
+      await settle(fixture as never);
+    };
+
+    it('asks a new plan what it sells, a coaching plan as ever unless the coach says', async () => {
+      const { host } = await render({ kind: 'new' });
+      expect(segment(host, 'What you sell', 'Coaching plan').checked).toBe(true);
+      expect(host.querySelector('[name="sessions"]')).toBeNull();
+    });
+
+    it('creates a pack: ten sessions over 90 days, its sessions always included', async () => {
+      const { fixture, host, api, closed } = await render({ kind: 'new' });
+
+      await asPack(fixture, host);
+      fill(host, 'Plan name', 'Personal training');
+      expect(field<HTMLInputElement>(host, 'Sessions').value).toBe('10');
+      expect(field<HTMLInputElement>(host, 'Valid for (days)').value).toBe('90');
+      expect(included(host)[0]).toEqual(['1-on-1 sessions', true]);
+      expect(query<HTMLInputElement>(host, 'fieldset.features input').disabled).toBe(true);
+      expect(included(host).filter(([, on]) => on).length).toBe(1);
+
+      fill(host, 'Price', '300');
+      await settle(fixture);
+      expect(sellLine(host)).toBe(
+        'Clients pay USD 300 for 10 sessions, to use within 90 days of its first day. You record each payment on their profile.',
+      );
+
+      press(host, 'Create plan');
+      await settle(fixture);
+      expect(api.createProduct).toHaveBeenCalledWith({
+        name: 'Personal training',
+        description: null,
+        kind: 'SessionPack',
+        initialOffer: {
+          label: '10 sessions',
+          durationCount: 90,
+          durationUnit: 'Day',
+          priceAmount: 300,
+          priceCurrency: 'USD',
+          features: [],
+          sessionCount: 10,
+        },
+      });
+      expect(closed).toHaveLength(1);
+    });
+
+    it('gives a single session 30 days until the coach chooses a length', async () => {
+      const { fixture, host } = await render({ kind: 'new' });
+
+      await asPack(fixture, host);
+      fill(host, 'Sessions', '1');
+      await settle(fixture);
+      expect(field<HTMLInputElement>(host, 'Valid for (days)').value).toBe('30');
+      fill(host, 'Sessions', '8');
+      await settle(fixture);
+      expect(field<HTMLInputElement>(host, 'Valid for (days)').value).toBe('90');
+
+      fill(host, 'Valid for (days)', '60');
+      fill(host, 'Sessions', '1');
+      await settle(fixture);
+      expect(field<HTMLInputElement>(host, 'Valid for (days)').value).toBe('60');
+    });
+
+    it('keeps the price typed when the coach changes what they sell', async () => {
+      const { fixture, host } = await render({ kind: 'new' });
+
+      fill(host, 'Price', '120');
+      await settle(fixture);
+      await asPack(fixture, host);
+      expect(field<HTMLInputElement>(host, 'Price').value).toBe('120');
+
+      segment(host, 'What you sell', 'Coaching plan').click();
+      await settle(fixture);
+      expect(field<HTMLInputElement>(host, 'Price').value).toBe('120');
+      expect(field<HTMLInputElement>(host, 'Length in weeks').value).toBe('12');
+    });
+
+    it('refuses a count the server would refuse', async () => {
+      const { fixture, host, api } = await render({ kind: 'new' });
+
+      await asPack(fixture, host);
+      fill(host, 'Plan name', 'Personal training');
+      fill(host, 'Price', '300');
+      fill(host, 'Sessions', '101');
+      press(host, 'Create plan');
+      await settle(fixture);
+
+      expect(api.createProduct).not.toHaveBeenCalled();
+      expect(reasonFor(field(host, 'Sessions'))).toContain(
+        'Enter a whole number of sessions, 1 to 100.',
+      );
+    });
+
+    it('adds a price option to a pack, asking for the count again', async () => {
+      const { fixture, host, api } = await render({ kind: 'option', product: packProduct() });
+
+      fill(host, 'Sessions', '5');
+      fill(host, 'Price', '160');
+      press(host, 'Add price option');
+      await settle(fixture);
+
+      expect(api.addOffer).toHaveBeenCalledWith(
+        'p-pack',
+        expect.objectContaining({ label: '5 sessions', durationCount: 90, sessionCount: 5 }),
+      );
+    });
+
+    it('changes a pack’s price under its count', async () => {
+      const pack = packProduct();
+      const { host } = await render({ kind: 'price', product: pack, offer: pack.offers[0] });
+      expect(textOf(host.querySelector('.plan-line'))).toContain(
+        'Personal training · 10 sessions · 90 days, now USD 300',
+      );
+    });
   });
 });

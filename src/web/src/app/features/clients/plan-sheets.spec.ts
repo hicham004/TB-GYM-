@@ -9,8 +9,10 @@ import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import {
   catalog,
+  catalogWithPacks,
   enrollment,
   SERVICE_TODAY,
+  sessionPack,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import {
@@ -94,6 +96,40 @@ describe('Start a plan', () => {
       idempotencyKey: expect.any(String),
     });
     expect(closed).toHaveBeenCalledWith(expect.objectContaining({ id: 'e-new' }));
+  });
+
+  it('offers packs alone when selling sessions, sold beside a running plan with no warning', async () => {
+    const { fixture, host, api } = await renderStart({
+      catalog: catalogWithPacks(),
+      sessionsOnly: true,
+    });
+
+    expect(Array.from(host.querySelectorAll('.choice-label')).map(textOf)).toEqual([
+      'Personal training · 10 sessions',
+      'Personal training · Single session',
+    ]);
+    pick(host, 'o-pack-1');
+    await settle(fixture);
+    expect(textOf(host.querySelector('.run'))).toBe('Runs Thu 1 Oct – Fri 30 Oct');
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(textOf(host)).toContain('Maya can use it once USD 35 is paid.');
+
+    press(host, 'Sell sessions');
+    await settle(fixture);
+    expect(api.assignProduct).toHaveBeenCalledWith(
+      'client-1',
+      expect.objectContaining({ offerId: 'o-pack-1', startDate: SERVICE_TODAY }),
+    );
+  });
+
+  it('starts a renewed pack today, beside what is left of the old one', async () => {
+    const { host } = await renderStart({
+      catalog: catalogWithPacks(),
+      renewFrom: sessionPack(),
+      plans: [sessionPack()],
+    });
+
+    expect(textOf(host.querySelector('.run'))).toBe('Runs Thu 1 Oct – Tue 29 Dec');
   });
 
   it('warns before the server would refuse a clash with a running plan, and says from when it fits', async () => {

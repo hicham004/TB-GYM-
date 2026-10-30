@@ -741,6 +741,7 @@ export type ClientEnrollmentView = {
   payments: Array<PaymentRecordView>;
   createdAtUtc: string;
   version: number | string;
+  sessions: null | SessionPackView;
 };
 
 export type ClientExerciseView = {
@@ -1251,7 +1252,7 @@ export type CoachClientRef = {
 };
 
 export type CoachingFeature =
-  'Training' | 'Nutrition' | 'CheckIns' | 'Messaging' | 'ResourceLibrary';
+  'Training' | 'Nutrition' | 'CheckIns' | 'Messaging' | 'ResourceLibrary' | 'Sessions';
 
 export type CoachingProductView = {
   id: string;
@@ -1261,6 +1262,7 @@ export type CoachingProductView = {
   offers: Array<ProductOfferView>;
   version: number | string;
   clients: PlanClientCount;
+  kind: ProductKind;
 };
 
 export type CoachMaxSuggestionView = {
@@ -1603,6 +1605,7 @@ export type CreateCoachingProductRequest = {
   name: string;
   description: null | string;
   initialOffer: CreateProductOfferRequest;
+  kind?: ProductKind;
 };
 
 export type CreateCoachInvitationRequest = {
@@ -1667,6 +1670,7 @@ export type CreateProductOfferRequest = {
   priceAmount: number | string;
   priceCurrency: null | string;
   features: Array<OfferFeatureRequest>;
+  sessionCount?: null | number | string;
 };
 
 export type CreateProgramDraftRequest = {
@@ -3023,6 +3027,8 @@ export type ProductCatalog = {
   products: Array<CoachingProductView>;
 };
 
+export type ProductKind = 'CoachingPlan' | 'SessionPack';
+
 export type ProductOfferView = {
   id: string;
   label: string;
@@ -3037,6 +3043,7 @@ export type ProductOfferView = {
   version: number | string;
   clients: PlanClientCount;
   replacedByOfferId: null | string;
+  sessionCount: null | number | string;
 };
 
 export type ProgramDraftContent = {
@@ -3552,6 +3559,15 @@ export type RecordPlatformPaymentRequest = {
   receivedOn: null | string;
 };
 
+export type RecordSessionRequest = {
+  outcome: SessionOutcome;
+  day: string;
+  note: null | string;
+  reason: null | string;
+  receipt: null | SessionReceiptRequest;
+  idempotencyKey: string;
+};
+
 export type RecordSetActualRequest = {
   repetitions: null | number | string;
   load: null | number | string;
@@ -3765,6 +3781,39 @@ export type SessionDayCountView = {
   date: string;
   scheduled: number | string;
   completed: number | string;
+};
+
+export type SessionEntryKind = 'Issued' | 'Held' | 'Charged' | 'Voided';
+
+export type SessionEntryView = {
+  id: string;
+  kind: SessionEntryKind;
+  count: number | string;
+  day: string;
+  coachName: null | string;
+  note: null | string;
+  reason: null | string;
+  voidsEntryId: null | string;
+  isVoided: boolean;
+};
+
+export type SessionOutcome = 'Held' | 'Charged';
+
+export type SessionPackView = {
+  count: number | string;
+  left: number | string;
+  held: number | string;
+  charged: number | string;
+  lapsed: number | string;
+  lapsedOn: null | string;
+  lastHeldOn: null | string;
+  entries: Array<SessionEntryView>;
+};
+
+export type SessionReceiptRequest = {
+  amount: number | string;
+  currencyCode: string;
+  method: ManualPaymentMethod;
 };
 
 export type SetExerciseArchivedRequest = {
@@ -4249,6 +4298,10 @@ export type VoidInvoiceRequest = {
 export type VoidInvoiceResponse = {
   voided: PlatformInvoiceView;
   reissued: null | PlatformInvoiceView;
+};
+
+export type VoidSessionRequest = {
+  idempotencyKey: string;
 };
 
 export type WalkingWords = {
@@ -6393,6 +6446,79 @@ export type AssignProductToClientResponses = {
 
 export type AssignProductToClientResponse =
   AssignProductToClientResponses[keyof AssignProductToClientResponses];
+
+export type RecordClientSessionData = {
+  body: RecordSessionRequest;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/commercial/clients/{clientProfileId}/sessions';
+};
+
+export type RecordClientSessionErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RecordClientSessionError = RecordClientSessionErrors[keyof RecordClientSessionErrors];
+
+export type RecordClientSessionResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type RecordClientSessionResponse =
+  RecordClientSessionResponses[keyof RecordClientSessionResponses];
+
+export type VoidClientSessionData = {
+  body: VoidSessionRequest;
+  path: {
+    clientProfileId: string;
+    entryId: string;
+  };
+  query?: never;
+  url: '/api/commercial/clients/{clientProfileId}/sessions/{entryId}/void';
+};
+
+export type VoidClientSessionErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type VoidClientSessionError = VoidClientSessionErrors[keyof VoidClientSessionErrors];
+
+export type VoidClientSessionResponses = {
+  /**
+   * OK
+   */
+  200: ClientEnrollmentView;
+};
+
+export type VoidClientSessionResponse =
+  VoidClientSessionResponses[keyof VoidClientSessionResponses];
 
 export type RecordManualPaymentData = {
   body: RecordManualPaymentRequest;

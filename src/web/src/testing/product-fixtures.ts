@@ -26,6 +26,7 @@ export function offer(overrides: Partial<ProductOfferView> = {}): ProductOfferVi
     version: 1,
     clients: { now: 0, starting: 0 },
     replacedByOfferId: null,
+    sessionCount: null,
     ...overrides,
   };
 }
@@ -39,8 +40,41 @@ export function product(overrides: Partial<CoachingProductView> = {}): CoachingP
     offers: [offer()],
     version: 1,
     clients: { now: 0, starting: 0 },
+    kind: 'CoachingPlan',
     ...overrides,
   };
+}
+
+/** Personal training: ten sessions over 90 days, and a single one over 30 (critique B10b). */
+export function packProduct(overrides: Partial<CoachingProductView> = {}): CoachingProductView {
+  const sessions = { feature: 'Sessions', allowsConcurrentCoverage: true } as const;
+  return product({
+    id: 'p-pack',
+    name: 'Personal training',
+    description: null,
+    kind: 'SessionPack',
+    offers: [
+      offer({
+        id: 'o-pack-10',
+        label: '10 sessions',
+        durationCount: 90,
+        durationUnit: 'Day',
+        priceAmount: 300,
+        features: [sessions],
+        sessionCount: 10,
+      }),
+      offer({
+        id: 'o-pack-1',
+        label: 'Single session',
+        durationCount: 30,
+        durationUnit: 'Day',
+        priceAmount: 35,
+        features: [sessions],
+        sessionCount: 1,
+      }),
+    ],
+    ...overrides,
+  });
 }
 
 /**

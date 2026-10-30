@@ -378,6 +378,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(1L, await A7ScalarAsync("SELECT count(*) FROM billing.\"PricePlans\" WHERE \"GraceDays\" = 0"));
         Assert.AreEqual(3L, await A7ScalarAsync("SELECT count(*) FROM pg_trigger WHERE tgname IN ('TR_EnrollmentEntitlements_Protect', 'TR_ClientProfileChanges_AppendOnly', 'TR_CoachingProducts_ActiveName')"));
         Assert.AreEqual("55000", (await A7RefusedAsync($"DELETE FROM subscriptions.\"EnrollmentEntitlements\" WHERE \"EnrollmentId\" = '{plan.Id}'")).SqlState);
+
+        // The API reads the newest model, so the migrations after this one go back on before it is asked.
+        await migrator.MigrateAsync();
         await A7ProductAsync(coach, "Second plan", 0m, 4, "Messaging");
         await RefreshCsrfAsync(coach);
         Assert.AreEqual("product_name_taken", (await A7ConflictAsync(

@@ -1752,6 +1752,10 @@ limited to the coach's assigned clients.
     and End coaching (owner). A former client's record shows the same plans and payments with nothing
     to change.
   - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r34b-*.png`.
+- Since critique B10b (ADR 0038), "1-on-1 sessions" sits under the plan in front, for a client with a pack or a
+  coach who sells one: each pack's line, its ⋯ and its folded History, Record a session and Sell sessions. Packs
+  are not listed under Other plans; one stands in front only with no coaching plan running or to come, or while it
+  waits for the payment of a sale just made.
 - Built in R5.3b: **Intake** (`/clients/:clientId/intake`, from the header's Edit or View intake; follows dark
   mode): what a client answered as four cards (About, Goal, Day and food, Health), each with an Edit that opens
   that group in a sheet (the date of birth typed in three boxes, a refusal shown in the server's words, a
@@ -2022,6 +2026,8 @@ limited to the coach's assigned clients.
 - The heading becomes "Plans you sell": cards with price, duration and icons for the included
   features, plus the number of clients on each plan.
 - Removes: "Step 3B live check"-style internal descriptions from the seed.
+- Since critique B10b a new plan is a coaching plan or a session pack ("What you sell"); a pack's price option
+  counts sessions and how long they stay valid, and its card says Session pack.
 - Built in R5.1a: each plan is a card with its clients ("9 clients", "6 clients · 1 starting"), its
   description, what it includes and its price options shortest first, each with its own clients and a
   menu (Change price, Stop selling). New plan opens a sheet with the first price option (an option left

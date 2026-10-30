@@ -10,7 +10,7 @@ using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
-internal sealed class CommercialApplicationService(
+internal sealed partial class CommercialApplicationService(
     GymDbContext dbContext,
     IClock clock,
     ICurrentUser currentUser,
@@ -46,7 +46,7 @@ internal sealed class CommercialApplicationService(
             }
 
             var currency = await ResolveCurrencyAsync(request.InitialOffer.PriceCurrency, cancellationToken);
-            var product = CoachingProduct.Create(tenantContext.TenantId, request.Name, request.Description);
+            var product = CoachingProduct.Create(tenantContext.TenantId, request.Name, request.Description, request.Kind);
             CoachingProduct.EnsureNameFree(product.Id, product.Name, await ActiveProductsAsync(cancellationToken));
             var offer = CreateOffer(product, request.InitialOffer, currency);
             dbContext.CoachingProducts.Add(product);
@@ -438,65 +438,21 @@ internal sealed class CommercialApplicationService(
                     return NotFound();
                 }
 
-                var tenantToday = await GetTenantTodayAsync(cancellationToken);
-                if (tenantToday >= enrollment.EndDateExclusive)
-                {
-                    return Invalid("enrollment", "An expired enrollment cannot receive a payment.");
-                }
-
-                if (enrollment.Status != EnrollmentStatus.PendingPayment)
-                {
-                    return Invalid("enrollment", "Only a pending-payment enrollment can receive a manual payment.");
-                }
-
-                var currency = MoneyRules.NormalizeCurrency(request.CurrencyCode);
-                if (!string.Equals(currency, enrollment.PriceCurrency, StringComparison.Ordinal))
-                {
-                    return Invalid(
-                        "currencyCode",
-                        "Phase 2 payments must use the enrollment price currency; cross-currency settlement requires an explicit FX record.");
-                }
-
-                var amount = MoneyRules.NormalizeAmount(request.Amount, allowZero: false);
-                var paidAmount = await dbContext.PaymentRecords
-                    .Where(item =>
-                        item.EnrollmentId == enrollmentId &&
-                        item.Operation == PaymentOperation.Receipt)
-                    .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-                var balance = enrollment.PriceAmount - paidAmount;
-                if (amount > balance)
-                {
-                    return Invalid("amount", "The payment cannot exceed the outstanding enrollment balance.");
-                }
-
-                var payment = PaymentRecord.RecordManualReceipt(
-                    enrollment.TenantId,
-                    enrollment.Id,
-                    amount,
-                    currency,
-                    receivedAtUtc,
-                    request.Method,
-                    request.Reference,
-                    request.Note,
+                var refusal = await ApplyReceiptAsync(
+                    enrollment,
+                    new ReceiptEntry(
+                        request.Amount,
+                        request.CurrencyCode,
+                        receivedAtUtc,
+                        request.Method,
+                        request.Reference,
+                        request.Note,
+                        request.IdempotencyKey),
                     actorId,
-                    request.IdempotencyKey,
-                    clock.UtcNow);
-                dbContext.PaymentRecords.Add(payment);
-
-                if (paidAmount + amount == enrollment.PriceAmount)
+                    cancellationToken);
+                if (refusal is not null)
                 {
-                    enrollment.Activate(clock.UtcNow);
-                    await CancelScheduledNotificationsAsync(
-                        enrollment.Id,
-                        CommercialNotificationKind.PaymentRequired,
-                        cancellationToken);
-
-                    var context = await GetNotificationContextAsync(enrollment.ClientProfileId, cancellationToken);
-                    ScheduleImmediate(
-                        enrollment,
-                        context,
-                        CommercialNotificationKind.EnrollmentActivated,
-                        "activated");
+                    return refusal;
                 }
 
                 await dbContext.SaveChangesAsync(cancellationToken);
@@ -521,6 +477,84 @@ internal sealed class CommercialApplicationService(
             }
         });
     }
+
+    /// <summary>
+    /// A receipt on a plan already locked by the caller, inside the caller's transaction. The exact price opens the
+    /// plan (SUB-008), and a pack's sessions with it (SES-003). Null when it was taken, else the refusal.
+    /// </summary>
+    private async Task<CommercialCommandResult?> ApplyReceiptAsync(
+        ClientEnrollment enrollment,
+        ReceiptEntry receipt,
+        Guid actorId,
+        CancellationToken cancellationToken)
+    {
+        var tenantToday = await GetTenantTodayAsync(cancellationToken);
+        if (tenantToday >= enrollment.EndDateExclusive)
+        {
+            return Invalid("enrollment", "An expired enrollment cannot receive a payment.");
+        }
+
+        if (enrollment.Status != EnrollmentStatus.PendingPayment)
+        {
+            return Invalid("enrollment", "Only a pending-payment enrollment can receive a manual payment.");
+        }
+
+        var currency = MoneyRules.NormalizeCurrency(receipt.CurrencyCode);
+        if (!string.Equals(currency, enrollment.PriceCurrency, StringComparison.Ordinal))
+        {
+            return Invalid(
+                "currencyCode",
+                "Phase 2 payments must use the enrollment price currency; cross-currency settlement requires an explicit FX record.");
+        }
+
+        var amount = MoneyRules.NormalizeAmount(receipt.Amount, allowZero: false);
+        var paidAmount = await PaidAmountAsync(enrollment.Id, cancellationToken);
+        var balance = enrollment.PriceAmount - paidAmount;
+        if (amount > balance)
+        {
+            return Invalid("amount", "The payment cannot exceed the outstanding enrollment balance.");
+        }
+
+        var payment = PaymentRecord.RecordManualReceipt(
+            enrollment.TenantId,
+            enrollment.Id,
+            amount,
+            currency,
+            receipt.ReceivedAtUtc,
+            receipt.Method,
+            receipt.Reference,
+            receipt.Note,
+            actorId,
+            receipt.IdempotencyKey,
+            clock.UtcNow);
+        dbContext.PaymentRecords.Add(payment);
+
+        if (paidAmount + amount == enrollment.PriceAmount)
+        {
+            enrollment.Activate(clock.UtcNow);
+            IssueSessions(enrollment, tenantToday);
+            await CancelScheduledNotificationsAsync(
+                enrollment.Id,
+                CommercialNotificationKind.PaymentRequired,
+                cancellationToken);
+
+            var context = await GetNotificationContextAsync(enrollment.ClientProfileId, cancellationToken);
+            ScheduleImmediate(
+                enrollment,
+                context,
+                CommercialNotificationKind.EnrollmentActivated,
+                "activated");
+        }
+
+        return null;
+    }
+
+    private async Task<decimal> PaidAmountAsync(Guid enrollmentId, CancellationToken cancellationToken) =>
+        await dbContext.PaymentRecords
+            .Where(item =>
+                item.EnrollmentId == enrollmentId &&
+                item.Operation == PaymentOperation.Receipt)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
 
     public async Task<CommercialCommandResult> RenewAsync(
         Guid enrollmentId,
@@ -746,6 +780,11 @@ internal sealed class CommercialApplicationService(
             }
 
             dbContext.ClientEnrollments.Add(enrollment);
+            if (enrollment.Status == EnrollmentStatus.Active)
+            {
+                IssueSessions(enrollment, tenantToday);
+            }
+
             var notificationContext = await GetNotificationContextAsync(clientProfileId, cancellationToken);
             ScheduleEnrollmentNotifications(enrollment, notificationContext);
             if (renewedFromEnrollmentId is not null)
@@ -893,6 +932,16 @@ internal sealed class CommercialApplicationService(
             throw new ArgumentException("Each coaching feature may appear only once.", nameof(request));
         }
 
+        var isPack = product.Kind == ProductKind.SessionPack;
+        if (isPack != request.SessionCount is not null)
+        {
+            throw new ArgumentException(
+                isPack ? "Say how many sessions this price sells." : "Only a session pack counts sessions.",
+                nameof(request));
+        }
+
+        var features = request.Features.Select(item =>
+            new OfferFeatureDefinition(item.Feature, item.AllowsConcurrentCoverage));
         return ProductOffer.CreateFixedDuration(
             tenantContext.TenantId,
             product.Id,
@@ -901,8 +950,8 @@ internal sealed class CommercialApplicationService(
             request.DurationUnit,
             request.PriceAmount,
             currency,
-            request.Features.Select(item =>
-                new OfferFeatureDefinition(item.Feature, item.AllowsConcurrentCoverage)));
+            isPack ? SessionPackRules.PackFeatures(features) : features,
+            request.SessionCount);
     }
 
     private async Task<string> ResolveCurrencyAsync(
@@ -1092,9 +1141,11 @@ internal sealed class CommercialApplicationService(
                 offer.CreatedAtUtc,
                 offer.Version,
                 CountOfferClients(offer, clients, replacements),
-                replacements.FirstOrDefault(item => item.SourceOfferId == offer.Id)?.ReplacementOfferId)).ToArray(),
+                replacements.FirstOrDefault(item => item.SourceOfferId == offer.Id)?.ReplacementOfferId,
+                offer.SessionCount)).ToArray(),
             product.Version,
-            CountClients(clients.Where(item => item.ProductId == product.Id)));
+            CountClients(clients.Where(item => item.ProductId == product.Id)),
+            product.Kind);
 
     /// <summary>
     /// SUB-015 per option. An option on sale counts the clients of the options it replaced too, who stay on
@@ -1141,6 +1192,7 @@ internal sealed class CommercialApplicationService(
             .OrderByDescending(item => item.ReceivedAtUtc)
             .ToListAsync(cancellationToken);
         var (zone, tenantToday) = await GetWorkspaceDayAsync(cancellationToken);
+        var packs = await LoadSessionPacksAsync(enrollments, tenantToday, zone, cancellationToken);
 
         return new ClientCommercialOverview(
             clientProfileId,
@@ -1152,7 +1204,8 @@ internal sealed class CommercialApplicationService(
                     payments.Where(payment => payment.EnrollmentId == enrollment.Id).ToArray(),
                     tenantToday,
                     zone,
-                    client.IsCoachBlocked))
+                    client.IsCoachBlocked,
+                    packs.GetValueOrDefault(enrollment.Id)))
                 .ToArray());
     }
 
@@ -1174,9 +1227,10 @@ internal sealed class CommercialApplicationService(
             .Select(item => item.IsCoachBlocked)
             .SingleAsync(cancellationToken);
         var (zone, tenantToday) = await GetWorkspaceDayAsync(cancellationToken);
+        var packs = await LoadSessionPacksAsync([enrollment], tenantToday, zone, cancellationToken);
         return new CommercialCommandResult(
             CommercialCommandStatus.Success,
-            Enrollment: ToEnrollmentView(enrollment, payments, tenantToday, zone, blocked));
+            Enrollment: ToEnrollmentView(enrollment, payments, tenantToday, zone, blocked, packs.GetValueOrDefault(enrollment.Id)));
     }
 
     private static ClientEnrollmentView ToEnrollmentView(
@@ -1184,7 +1238,8 @@ internal sealed class CommercialApplicationService(
         IReadOnlyList<PaymentRecord> payments,
         DateOnly tenantToday,
         TimeZoneInfo zone,
-        bool relationshipBlocked)
+        bool relationshipBlocked,
+        SessionPackView? sessions)
     {
         var paidAmount = payments
             .Where(item => item.Operation == PaymentOperation.Receipt)
@@ -1222,7 +1277,8 @@ internal sealed class CommercialApplicationService(
                 item.Source,
                 item.CreatedAtUtc)).ToArray(),
             enrollment.CreatedAtUtc,
-            enrollment.Version);
+            enrollment.Version,
+            sessions);
     }
 
     private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken) =>

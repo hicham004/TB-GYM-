@@ -302,6 +302,8 @@ function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): v
             <ng-container i18n>Saving…</ng-container>
           } @else if (renewFrom()) {
             <ng-container i18n>Renew plan</ng-container>
+          } @else if (sessionsOnly()) {
+            <ng-container i18n>Sell sessions</ng-container>
           } @else {
             <ng-container i18n>Start plan</ng-container>
           }
@@ -334,6 +336,8 @@ export class PlanStart {
   readonly plans = input.required<readonly ClientEnrollment[]>();
   /** The plan being renewed: the new plan uses one of its price options and follows it. */
   readonly renewFrom = input<ClientEnrollment | null>(null);
+  /** Selling sessions: only packs are offered (ADR 0038). */
+  readonly sessionsOnly = input(false);
   /** The plan started, or null when the coach closed the sheet without one. */
   readonly closed = output<ClientEnrollment | null>();
   readonly dirtyChange = output<boolean>();
@@ -345,7 +349,9 @@ export class PlanStart {
   protected readonly error = signal<string | null>(null);
 
   protected readonly choices = computed(() =>
-    offerChoices(this.catalog(), this.locale, this.renewFrom()?.productId ?? null),
+    offerChoices(this.catalog(), this.locale, this.renewFrom()?.productId ?? null).filter(
+      (choice) => !this.sessionsOnly() || choice.sessions !== null,
+    ),
   );
   /**
    * A renewal starts on the plan's own price option while it is offered, or on the option that replaced it
@@ -358,9 +364,11 @@ export class PlanStart {
     const same = choices.find((choice) => choice.offerId === renewal);
     return (same ?? (choices.length === 1 ? choices[0] : undefined))?.offerId ?? '';
   });
-  protected readonly startDate = linkedSignal(() =>
-    defaultPlanStart(this.today(), this.renewFrom()),
-  );
+  /** Packs run side by side (SES-002), so a new one starts today, beside what is left of the old. */
+  protected readonly startDate = linkedSignal(() => {
+    const from = this.renewFrom();
+    return from?.sessions ? this.today() : defaultPlanStart(this.today(), from);
+  });
 
   private readonly choice = computed(() =>
     this.choices().find((item) => item.offerId === this.offerId()),

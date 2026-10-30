@@ -979,7 +979,9 @@ export interface NutritionCover {
 }
 
 /** The plans a meal plan may sit under: those with Nutrition that have not ended or been cancelled. */
-export function nutritionCovers(enrollments: readonly ClientEnrollmentView[]): NutritionCover[] {
+export function nutritionCovers(
+  enrollments: readonly Omit<ClientEnrollmentView, 'sessions'>[],
+): NutritionCover[] {
   return enrollments
     .filter(
       (item) =>

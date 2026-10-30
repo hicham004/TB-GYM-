@@ -32,6 +32,15 @@ describe('ownPlan', () => {
     });
   });
 
+  it('names a pack’s sessions among what’s included, whatever else it holds', () => {
+    expect(read({ features: ['Sessions'] }).includes.map((chip) => chip.label)).toEqual([
+      '1-on-1 sessions',
+    ]);
+    expect(read({ features: ['Sessions', 'Training'] }).includes.map((chip) => chip.label)).toEqual(
+      ['Training', '1-on-1 sessions'],
+    );
+  });
+
   it('says the years when the dates are not all this year’s', () => {
     expect(read({ lastDay: '2027-01-10' }).dates).toBe('5 Oct 2026 – 10 Jan 2027');
   });

@@ -17,7 +17,7 @@ import {
   tick,
   toggleFold,
 } from '../../../testing/dom';
-import { atlasCatalog, offer, product } from '../../../testing/product-fixtures';
+import { atlasCatalog, offer, packProduct, product } from '../../../testing/product-fixtures';
 import { Products } from './products';
 import { ProductsApi } from './products-api';
 
@@ -415,5 +415,18 @@ describe('Plans you sell', () => {
       isActive: true,
       version: 1,
     });
+  });
+
+  it('marks a pack and reads its options by their count', async () => {
+    const { host } = await render(() =>
+      of({ workspaceCurrencyCode: 'USD', products: [packProduct()] }),
+    );
+
+    expect(textOf(host.querySelector('.kind'))).toBe('Session pack');
+    expect(Array.from(host.querySelectorAll('.length')).map(textOf)).toEqual([
+      'Single session · 30 days',
+      '10 sessions · 90 days',
+    ]);
+    expect(textOf(host.querySelector('.includes'))).toBe('1-on-1 sessions');
   });
 });

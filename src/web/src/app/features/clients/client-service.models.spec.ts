@@ -3,9 +3,12 @@ import type { FeatureAccessDecision } from '../../core/api/api.models';
 import {
   cancelledPlan,
   catalog,
+  catalogWithPacks,
   enrollment,
   payment,
   SERVICE_TODAY,
+  sessionPack,
+  unpaidPack,
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import {
@@ -21,6 +24,8 @@ import {
   renewalAskedFor,
   renewalAskedLine,
   renewalOfferId,
+  sessionPackRows,
+  sessionTarget,
   type ServiceContext,
 } from './client-service.models';
 
@@ -413,5 +418,218 @@ describe('what the client can use (BILL-5, LOST-13)', () => {
       'Maya is blocked in your coaching space. They can’t use anything their plans include until you unblock them.',
     );
     expect(summary.rows).toEqual([]);
+  });
+});
+
+describe('1-on-1 sessions (critique B10b)', () => {
+  const rows = (plans = [sessionPack()], canChange = true) =>
+    sessionPackRows(plans, context, canChange);
+
+  it('keeps a pack out of Other plans, whatever it holds: it has a section of its own', () => {
+    const others = otherPlans(
+      [sessionPack(), enrollment(), unpaidPack(), cancelledPlan()],
+      'e-1',
+      context,
+    );
+    expect(others.coming).toEqual([]);
+    expect(others.earlier.map((row) => row.id)).toEqual(['e-0']);
+  });
+
+  it('gives a pack what Manage plan offers, but for starting another', () => {
+    const labels = (plan = sessionPack(), renewable = true) =>
+      sessionPackRows([plan], context, true, () => renewable)[0].menu.map((item) => item.label);
+    expect(labels()).toEqual(['Renew plan', 'Pause plan', 'Cancel plan']);
+    expect(labels(unpaidPack())).toEqual([
+      'Record payment',
+      'Renew plan',
+      'Pause plan',
+      'Cancel plan',
+    ]);
+    expect(sessionPackRows([sessionPack()], context, true, () => false)[0].menu[0]).toEqual(
+      expect.objectContaining({ label: 'Renew plan', disabled: true }),
+    );
+    expect(rows([sessionPack()], false)[0].menu).toEqual([]);
+  });
+
+  it('does not count a pack sold today as the plan that follows an ended one', () => {
+    const ended = enrollment({
+      startDate: '2026-06-01',
+      endDateExclusive: '2026-09-01',
+      lastActiveDate: '2026-08-31',
+      effectiveStatus: 'Expired',
+    });
+    const pack = sessionPack({ startDate: SERVICE_TODAY });
+    const card = planCard(ended, context);
+    expect(primaryAction(card, [ended, pack], context, false)?.id).toBe('renew');
+    expect(planCard(pack, context).isPack).toBe(true);
+    expect(card.isPack).toBe(false);
+  });
+
+  it('reads a running pack as the coach counts it', () => {
+    const [pack] = rows();
+    expect(pack.name).toBe('Personal training · 10 sessions');
+    expect(pack.line).toBe('7 of 10 left · until 29 Nov · last held Tue 29 Sep');
+    expect(pack.pill.label).toBe('Active · 59 days left');
+    expect(pack.over).toBe(false);
+  });
+
+  it('says nothing of a last session before there is one, and the dates of a pack to come', () => {
+    expect(rows([sessionPack({}, { left: 10, held: 0, lastHeldOn: null })])[0].line).toBe(
+      '10 of 10 left · until 29 Nov',
+    );
+    expect(
+      rows([
+        sessionPack(
+          { startDate: '2026-10-05', effectiveStatus: 'Upcoming' },
+          { left: 10, lastHeldOn: null },
+        ),
+      ])[0].line,
+    ).toBe('10 of 10 left · from 5 Oct until 29 Nov');
+    expect(rows([unpaidPack()])[0].line).toBe('1 session · until 30 Oct');
+    expect(rows([unpaidPack()])[0].pill.label).toBe('Waiting for payment');
+  });
+
+  it('keeps the ledger as words, a row undone struck and only what stands undoable', () => {
+    expect(rows()[0].history).toEqual([
+      expect.objectContaining({
+        day: 'Wed 30 Sep',
+        what: 'Undid the session of Wed 30 Sep',
+        detail: null,
+        canUndo: false,
+      }),
+      expect.objectContaining({ what: 'Held', undone: true, canUndo: false }),
+      expect.objectContaining({ what: 'Held', detail: 'Lea Khoury · Legs', canUndo: true }),
+      expect.objectContaining({
+        day: 'Tue 22 Sep',
+        what: 'Charged · No-show',
+        detail: 'Lea Khoury',
+        canUndo: true,
+      }),
+      expect.objectContaining({ what: 'Held', detail: 'Lea Khoury', canUndo: true }),
+      expect.objectContaining({ what: '10 sessions added', detail: null, canUndo: false }),
+    ]);
+  });
+
+  it('changes nothing on a former client’s record', () => {
+    expect(rows([sessionPack()], false)[0].history.some((line) => line.canUndo)).toBe(false);
+  });
+
+  it('says what became of a pack that is over, with what lapsed on top of its ledger', () => {
+    const ended = sessionPack(
+      {
+        startDate: '2026-06-01',
+        endDateExclusive: '2026-08-30',
+        lastActiveDate: '2026-08-29',
+        effectiveStatus: 'Expired',
+      },
+      { left: 3, held: 6, charged: 1, lapsed: 3, lapsedOn: '2026-08-29' },
+    );
+    const [pack] = rows([ended]);
+    expect(pack.over).toBe(true);
+    expect(pack.line).toBe('6 held · 1 charged · 3 lapsed');
+    expect(pack.pill.label).toBe('Ended');
+    expect(pack.history[0]).toEqual(
+      expect.objectContaining({ day: 'Sat 29 Aug', what: '3 sessions lapsed', canUndo: false }),
+    );
+  });
+
+  it('lists what runs first, ending first, then what is over, newest first', () => {
+    const later = sessionPack({ id: 'later', endDateExclusive: '2026-12-30' });
+    const sooner = sessionPack({ id: 'sooner', endDateExclusive: '2026-10-20' });
+    const old = sessionPack({ id: 'old', endDateExclusive: '2026-05-01', startDate: '2026-02-01' });
+    const older = sessionPack({
+      id: 'older',
+      endDateExclusive: '2026-01-01',
+      startDate: '2025-10-01',
+    });
+    const plan = enrollment();
+    expect(rows([older, later, plan, old, sooner]).map((row) => row.id)).toEqual([
+      'sooner',
+      'later',
+      'old',
+      'older',
+    ]);
+  });
+
+  it('tells the sheet the pack ending first with a session left that day', () => {
+    const later = sessionPack({ id: 'later', productName: 'Later pack' });
+    const sooner = sessionPack(
+      {
+        id: 'sooner',
+        productName: 'Sooner pack',
+        endDateExclusive: '2026-10-20',
+        lastActiveDate: '2026-10-19',
+      },
+      { left: 2 },
+    );
+    expect(sessionTarget([later, sooner], SERVICE_TODAY, 'en-US')).toEqual({
+      line: 'Goes on Sooner pack: 2 of 10 left, until Mon 19 Oct.',
+      receipt: null,
+    });
+
+    const empty = sessionPack(
+      { id: 'sooner', productName: 'Sooner pack', endDateExclusive: '2026-10-20' },
+      { left: 0 },
+    );
+    expect(sessionTarget([later, empty], SERVICE_TODAY, 'en-US')?.line).toContain('Later pack');
+  });
+
+  it('offers the money when the only pack that day waits for it, and is silent past every pack', () => {
+    expect(sessionTarget([unpaidPack()], SERVICE_TODAY, 'en-US')).toEqual({
+      line: 'Personal training is waiting for USD 35. Saving this records that payment too, received on the day of the session, and the session goes on it.',
+      receipt: { amount: 35, currency: 'USD' },
+    });
+    expect(sessionTarget([unpaidPack()], '2026-09-30', 'en-US')).toBeNull();
+    expect(sessionTarget([enrollment()], SERVICE_TODAY, 'en-US')).toBeNull();
+
+    // A pack paused, used up or cancelled is the server's to refuse in words.
+    expect(
+      sessionTarget([sessionPack({ storedStatus: 'Paused' })], SERVICE_TODAY, 'en-US'),
+    ).toBeNull();
+    expect(sessionTarget([sessionPack({}, { left: 0 })], SERVICE_TODAY, 'en-US')).toBeNull();
+    expect(
+      sessionTarget([sessionPack({ storedStatus: 'Cancelled' })], SERVICE_TODAY, 'en-US'),
+    ).toBeNull();
+  });
+
+  it('sells a pack by its count and how long it runs, with concurrency the server’s word', () => {
+    const packs = offerChoices(catalogWithPacks(), 'en-US').filter(
+      (item) => item.sessions !== null,
+    );
+    expect(packs.map((item) => [item.label, item.detail, item.days, item.sessions])).toEqual([
+      ['Personal training · 10 sessions', 'USD 300 · 10 sessions · to use within 90 days', 90, 10],
+      ['Personal training · Single session', 'USD 35 · 1 session · to use within 30 days', 30, 1],
+    ]);
+    expect(packs[0].concurrent).toEqual(['Sessions']);
+    expect(offerChoices(catalog(), 'en-US').every((item) => item.sessions === null)).toBe(true);
+  });
+
+  it('lists sessions under Access for a client with a pack, and only then', () => {
+    const granted = {
+      feature: 'Training',
+      isAllowed: true,
+      reason: 'Granted',
+      enrollmentId: 'e-1',
+      accessibleFrom: '2026-07-21',
+      accessibleUntilExclusive: '2026-10-13',
+    } as FeatureAccessDecision;
+    const none = {
+      feature: 'Sessions',
+      isAllowed: false,
+      reason: 'NoEntitlement',
+      enrollmentId: null,
+      accessibleFrom: null,
+      accessibleUntilExclusive: null,
+    } as FeatureAccessDecision;
+    expect(
+      accessSummary([granted, none], 'Maya', false, 'en-US').rows.map((row) => row.label),
+    ).toEqual(['Training']);
+
+    const open = { ...granted, feature: 'Sessions', accessibleUntilExclusive: '2026-11-30' };
+    const summary = accessSummary([open as FeatureAccessDecision], 'Maya', false, 'en-US');
+    expect(summary.rows).toEqual([
+      expect.objectContaining({ label: '1-on-1 sessions', state: 'Open until Sun 29 Nov' }),
+    ]);
+    expect(summary.line).toBe('Maya can use everything their plan includes.');
   });
 });

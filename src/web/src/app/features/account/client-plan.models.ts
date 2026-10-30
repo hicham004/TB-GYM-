@@ -2,7 +2,7 @@ import type { OwnPlansView, OwnPlanView } from '../../core/api/generated';
 import type { StatusPillTone } from '../../ui/status-pill';
 import { daysBetween } from '../clients/client-overview.models';
 import { dateRange, shortDate } from '../clients/client-service.models';
-import { featureChip, FEATURES, type FeatureChip } from '../commercial/products.models';
+import { featureChip, LISTED_FEATURES, type FeatureChip } from '../commercial/products.models';
 
 /**
  * My plan (critique B10a, SUB-017): a client's own plans in their own words. Pure functions of the
@@ -89,7 +89,7 @@ export function ownPlan(plan: OwnPlanView, today: string, locale: string): OwnPl
     dates: dateRange(plan.startDate, plan.lastDay, { today, locale }),
     ...status(plan, today, locale),
     ended: plan.status === 'Expired',
-    includes: FEATURES.filter((feature) => plan.features.includes(feature)).map(featureChip),
+    includes: LISTED_FEATURES.filter((feature) => plan.features.includes(feature)).map(featureChip),
     description: plan.description,
   };
 }

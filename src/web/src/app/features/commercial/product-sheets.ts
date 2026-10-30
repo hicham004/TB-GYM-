@@ -20,6 +20,7 @@ import { firstValueFrom } from 'rxjs';
 import type {
   CoachingFeature,
   CoachingProductView,
+  ProductKind,
   ProductOfferView,
 } from '../../core/api/generated';
 import { FormAttempt } from '../../core/forms/form-attempt';
@@ -34,26 +35,30 @@ import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ProductsApi } from './products-api';
 import {
-  duration,
   emptyOption,
+  emptyPackOption,
   FEATURES,
   featureChip,
   type FieldMessages,
+  offerLength,
   optionErrors,
   optionLength,
   optionRequest,
   type OptionValues,
+  packValidity,
   planErrors,
   price,
   priceErrors,
   productWriteError,
+  sessionsName,
 } from './products.models';
 
 /**
  * The sheets of Plans you sell (C8, R5.1a): a new plan with its first price option, another price
- * option, a new price, and the plan's name and description. Each asks only for what the server needs,
- * says what will happen in a sentence, and keeps a refusal on screen in coach words. A price change
- * retried with the same entry reuses its idempotency key (SUB-011).
+ * option, a new price, and the plan's name and description. A new plan is a coaching plan or a session
+ * pack, whose options count sessions (ADR 0038). Each asks only for what the server needs, says what
+ * will happen in a sentence, and keeps a refusal on screen in coach words. A price change retried with
+ * the same entry reuses its idempotency key (SUB-011).
  */
 export type ProductSheetMode =
   | { readonly kind: 'new' }
@@ -81,6 +86,15 @@ export type ProductSheetMode =
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+      @if (mode().kind === 'new') {
+        <app-segmented-control
+          [label]="planKindLabel"
+          [options]="planKindOptions"
+          [selected]="planKind()"
+          (selectedChange)="setPlanKind($event)"
+        />
+      }
+
       @if (mode().kind === 'new' || mode().kind === 'details') {
         <app-field [label]="nameLabel" [errors]="shows('name') ? errors()['name'] : null">
           <input
@@ -126,9 +140,30 @@ export type ProductSheetMode =
         @if (mode().kind === 'new') {
           <h3 class="group-title" i18n>First price option</h3>
         }
+        @if (isPack()) {
+          <app-field
+            [label]="sessionsLabel"
+            [help]="sessionsHelp"
+            [errors]="shows('sessions') ? errors()['sessions'] : null"
+          >
+            <input
+              appControl
+              name="sessions"
+              autocomplete="off"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="100"
+              step="1"
+              [value]="option().sessions ?? ''"
+              (input)="setSessions(number($any($event.target).valueAsNumber))"
+              (blur)="attempt.touch('sessions')"
+            />
+          </app-field>
+        }
         <!-- Weeks, or days for a plan sold by the day, such as 30 days (INV-7). -->
         <app-segmented-control
-          [label]="unitLabel"
+          [label]="unitLabel()"
           [options]="unitOptions"
           [selected]="option().unit"
           (selectedChange)="setUnit($event)"
@@ -144,7 +179,7 @@ export type ProductSheetMode =
               min="1"
               step="1"
               [value]="option().length ?? ''"
-              (input)="setOption({ length: number($any($event.target).valueAsNumber) })"
+              (input)="setLength(number($any($event.target).valueAsNumber))"
               (blur)="attempt.touch('length')"
             />
           </app-field>
@@ -260,6 +295,11 @@ export type ProductSheetMode =
           [attr.aria-describedby]="shows('features') ? 'plan-features-error' : null"
         >
           <legend i18n>What’s included</legend>
+          @if (isPack()) {
+            <app-checkbox [label]="sessionsChip.label">
+              <input appControl type="checkbox" checked disabled />
+            </app-checkbox>
+          }
           @for (chip of featureChips; track chip.feature) {
             <app-checkbox [label]="chip.label">
               <input
@@ -436,7 +476,15 @@ export class ProductSheet {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly featureChips = FEATURES.map(featureChip);
+  protected readonly sessionsChip = featureChip('Sessions');
 
+  protected readonly planKindLabel = $localize`What you sell`;
+  protected readonly planKindOptions: readonly SegmentOption[] = [
+    { value: 'CoachingPlan', label: $localize`Coaching plan` },
+    { value: 'SessionPack', label: $localize`Session pack` },
+  ];
+  protected readonly sessionsLabel = $localize`Sessions`;
+  protected readonly sessionsHelp = $localize`1 to 100. A pack of 1 is a single session.`;
   protected readonly nameLabel = $localize`Plan name`;
   protected readonly descriptionLabel = $localize`Description (optional)`;
   /** The ticks are named only where they are on the sheet, a new plan's. */
@@ -445,7 +493,9 @@ export class ProductSheet {
       ? $localize`What you’ll do for them and what you expect, as you’d tell a new client. The ticks are what the app opens for them.`
       : $localize`What you’ll do for them and what you expect, as you’d tell a new client.`,
   );
-  protected readonly unitLabel = $localize`Length counted in`;
+  protected readonly unitLabel = computed(() =>
+    this.isPack() ? $localize`Validity counted in` : $localize`Length counted in`,
+  );
   protected readonly unitOptions: readonly SegmentOption[] = [
     { value: 'Week', label: $localize`Weeks` },
     { value: 'Day', label: $localize`Days` },
@@ -460,10 +510,18 @@ export class ProductSheet {
     return mode.kind === 'new' ? null : mode.product;
   });
   protected readonly productName = computed(() => this.product()?.name ?? '');
+  protected readonly planKind = linkedSignal<ProductKind>(
+    () => this.product()?.kind ?? 'CoachingPlan',
+  );
+  protected readonly isPack = computed(() => this.planKind() === 'SessionPack');
+  /** A pack's length follows its count until the coach sets it. */
+  private lengthSet = false;
 
   protected readonly name = linkedSignal(() => this.product()?.name ?? '');
   protected readonly description = linkedSignal(() => this.product()?.description ?? '');
-  protected readonly option = linkedSignal<OptionValues>(() => emptyOption(this.currency()));
+  protected readonly option = linkedSignal<OptionValues>(() =>
+    this.isPack() ? emptyPackOption(this.currency()) : emptyOption(this.currency()),
+  );
   protected readonly newPrice = linkedSignal<number | null>(() => {
     const mode = this.mode();
     return mode.kind === 'price' ? Number(mode.offer.priceAmount) : null;
@@ -476,13 +534,21 @@ export class ProductSheet {
   protected readonly optionLine = computed(() => {
     const mode = this.mode();
     return mode.kind === 'price'
-      ? $localize`${mode.product.name}:plan: · ${duration(mode.offer)}:length:, now ${price(mode.offer.priceAmount, mode.offer.priceCurrency, this.locale)}:price:`
+      ? $localize`${mode.product.name}:plan: · ${offerLength(mode.offer)}:length:, now ${price(mode.offer.priceAmount, mode.offer.priceCurrency, this.locale)}:price:`
       : '';
   });
-  protected readonly lengthLabel = computed(() =>
-    this.option().unit === 'Day' ? $localize`Length in days` : $localize`Length in weeks`,
-  );
+  protected readonly lengthLabel = computed(() => {
+    const days = this.option().unit === 'Day';
+    if (this.isPack()) return days ? $localize`Valid for (days)` : $localize`Valid for (weeks)`;
+    return days ? $localize`Length in days` : $localize`Length in weeks`;
+  });
   protected readonly optionNameHelp = computed(() => {
+    if (this.isPack()) {
+      const sessions = this.option().sessions;
+      return sessions
+        ? $localize`Left empty it’s called “${sessionsName(sessions)}:name:”. Name it when that isn’t the point, like “Student rate”.`
+        : $localize`Left empty it’s called by its number of sessions. Name it when that isn’t the point, like “Student rate”.`;
+    }
     const length = optionLength(this.option());
     return length
       ? $localize`Left empty it’s called by its length, “${length}:length:”. Name it when the length isn’t the point, like “Student rate”.`
@@ -500,7 +566,9 @@ export class ProductSheet {
     if (kind === 'new' || kind === 'details') {
       Object.assign(errors, planErrors(this.name(), this.description()));
     }
-    if (kind === 'new' || kind === 'option') Object.assign(errors, optionErrors(this.option()));
+    if (kind === 'new' || kind === 'option') {
+      Object.assign(errors, optionErrors(this.option(), this.planKind()));
+    }
     if (kind === 'price' && this.priceProblems().length > 0) errors['price'] = this.priceProblems();
     return errors;
   });
@@ -509,9 +577,15 @@ export class ProductSheet {
   /** What a client would be sold, in one line. */
   protected readonly sellLine = computed(() => {
     const values = this.option();
-    if (Object.keys(optionErrors(values)).length > 0) return null;
+    if (Object.keys(optionErrors(values, this.planKind())).length > 0) return null;
     const amount = price(values.price ?? 0, values.currency.trim().toUpperCase(), this.locale);
     const length = optionLength(values);
+    if (this.isPack()) {
+      const sessions = sessionsName(values.sessions ?? 0);
+      return values.price === 0
+        ? $localize`Clients get ${sessions}:sessions: for free, to use within ${length}:length: of its first day.`
+        : $localize`Clients pay ${amount}:price: for ${sessions}:sessions:, to use within ${length}:length: of its first day. You record each payment on their profile.`;
+    }
     return values.price === 0
       ? $localize`Clients get ${length}:length: for free, from the day you start their plan.`
       : $localize`Clients pay ${amount}:price: for ${length}:length:. You record each payment on their profile.`;
@@ -526,6 +600,23 @@ export class ProductSheet {
     this.dirtyChange.emit(true);
   }
 
+  /** What was typed for the price stays; the rest starts as that kind of plan starts. */
+  protected setPlanKind(value: string): void {
+    const { price: typedPrice, currency, label } = this.option();
+    this.planKind.set(value === 'SessionPack' ? 'SessionPack' : 'CoachingPlan');
+    this.lengthSet = false;
+    this.setOption({ price: typedPrice, currency, label });
+  }
+
+  protected setSessions(sessions: number | null): void {
+    this.setOption(this.lengthSet ? { sessions } : { sessions, length: packValidity(sessions) });
+  }
+
+  protected setLength(length: number | null): void {
+    this.lengthSet = true;
+    this.setOption({ length });
+  }
+
   protected showOptionName(): void {
     this.optionNameShown.set(true);
     afterNextRender(
@@ -537,6 +628,7 @@ export class ProductSheet {
 
   /** The number stays as typed: the length line under it says what it now means. */
   protected setUnit(unit: string): void {
+    this.lengthSet = true;
     this.setOption({ unit: unit === 'Day' ? 'Day' : 'Week' });
   }
 
@@ -578,7 +670,7 @@ export class ProductSheet {
         this.closed.emit(saved);
       } catch (error) {
         if (!owner.current) return;
-        this.error.set(productWriteError(error));
+        this.error.set(productWriteError(error, this.planKind()));
         // At the foot of a long sheet the refusal may be scrolled out of view: focus brings it up.
         this.summary().focus();
       } finally {
@@ -596,10 +688,11 @@ export class ProductSheet {
         return this.api.createProduct({
           name: this.name().trim(),
           description: this.description().trim() || null,
-          initialOffer: optionRequest(this.option()),
+          initialOffer: optionRequest(this.option(), this.planKind()),
+          ...(this.isPack() ? { kind: this.planKind() } : {}),
         });
       case 'option':
-        return this.api.addOffer(mode.product.id, optionRequest(this.option()));
+        return this.api.addOffer(mode.product.id, optionRequest(this.option(), this.planKind()));
       case 'details':
         return this.api.updateProduct(mode.product.id, {
           name: this.name().trim(),
