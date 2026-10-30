@@ -1,0 +1,200 @@
+// My plan (critique B10a), in the language of Me: the brand card with its accent glow and dot texture, then
+// what the plan holds. Brand v2 tokens only, so the page follows the person's light or dark mode.
+@use '../../ui/page';
+
+// Centred and narrow on a wide screen, as Me is.
+.page {
+  margin-inline: auto;
+  max-inline-size: 44rem;
+}
+
+// A client's way back to Me, as on My profile.
+.back {
+  align-items: center;
+  color: var(--tb-muted);
+  display: inline-flex;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  gap: 0.25rem;
+  margin-inline-start: -0.375rem;
+  min-block-size: 2.75rem;
+  padding-inline: 0.375rem;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--tb-ink);
+  }
+
+  &:focus-visible {
+    border-radius: var(--tb-radius-control);
+    outline: 3px solid var(--tb-focus);
+  }
+}
+
+.back-icon {
+  transform: scaleX(-1);
+}
+
+:host-context([dir='rtl']) .back-icon {
+  transform: none;
+}
+
+.plan {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 26px;
+  overflow: hidden;
+}
+
+.plan-head {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tb-brand) 86%, #ffffff),
+    var(--tb-brand) 55%,
+    color-mix(in srgb, var(--tb-brand) 80%, #000000)
+  );
+  color: var(--tb-on-brand);
+  display: grid;
+  gap: var(--space-8);
+  isolation: isolate;
+  justify-items: start;
+  overflow: hidden;
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+  position: relative;
+}
+
+// The prototype's glow and dot texture, as on Me: decoration only, under the content.
+.plan-head::before,
+.plan-head::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.plan-head::before {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--tb-accent) 60%, transparent),
+    transparent 66%
+  );
+  block-size: 21rem;
+  border-radius: 50%;
+  inline-size: 21rem;
+  inset-block-start: -10rem;
+  inset-inline-end: -8rem;
+  opacity: 0.55;
+}
+
+.plan-head::after {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--tb-accent) 30%, transparent) 1px,
+    transparent 1.4px
+  );
+  background-size: 14px 14px;
+  inset: 0;
+  mask-image: linear-gradient(205deg, #000000 5%, transparent 55%);
+}
+
+.plan-head h2 {
+  color: inherit;
+  font-size: clamp(1.4rem, 5.5vw, 1.7rem);
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+  margin-block-start: var(--space-4);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.plan-when,
+.plan-note {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-when {
+  color: var(--tb-on-brand-soft);
+  font-size: 0.9375rem;
+}
+
+// A date range wraps as one unit, so the option's name and the dates break where the dot is.
+.plan-dates {
+  display: inline-block;
+}
+
+.plan-note {
+  color: var(--tb-on-brand);
+  font-size: 0.9375rem;
+  max-inline-size: 34rem;
+}
+
+.plan-action {
+  margin-block-start: var(--space-8);
+}
+
+.plan-body {
+  display: grid;
+  gap: var(--space-24);
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+}
+
+.plan-part {
+  display: grid;
+  gap: var(--space-12);
+  min-inline-size: 0;
+}
+
+h3 {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+// One column until two names fit side by side, however large the person's text is.
+.includes {
+  display: grid;
+  gap: var(--space-8) var(--space-16);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.includes li {
+  align-items: center;
+  color: var(--tb-ink);
+  display: flex;
+  font-weight: 600;
+  gap: var(--space-12);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.include-icon {
+  background: var(--tb-surface-2);
+  block-size: 2.25rem;
+  border-radius: 12px;
+  color: var(--tb-accent-ink);
+  display: grid;
+  flex: none;
+  inline-size: 2.25rem;
+  place-items: center;
+}
+
+// The coach's own words, in the lines they wrote them.
+.description {
+  color: var(--tb-ink);
+  margin: 0;
+  max-inline-size: 38rem;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+@media (forced-colors: active) {
+  .plan {
+    border-color: CanvasText;
+  }
+}

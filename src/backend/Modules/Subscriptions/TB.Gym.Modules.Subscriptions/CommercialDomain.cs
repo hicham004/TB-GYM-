@@ -430,6 +430,12 @@ public sealed class ClientEnrollment : TenantEntity
         StatusReason = null;
     }
 
+    /// <summary>The workspace day the plan was cancelled (COACH-20); null unless it was.</summary>
+    public DateOnly? CancelledOn(TimeZoneInfo workspaceZone) =>
+        Status == EnrollmentStatus.Cancelled && CancelledAtUtc is { } cancelledAtUtc
+            ? PaymentDay.Of(cancelledAtUtc, workspaceZone)
+            : null;
+
     public EffectiveEnrollmentStatus GetEffectiveStatus(DateOnly tenantToday, bool relationshipBlocked)
     {
         if (relationshipBlocked)

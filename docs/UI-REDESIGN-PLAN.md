@@ -797,6 +797,8 @@ of the implemented R1.3 screens before production rollout.
   The demo now delivers its notices as it is built and has everyone read them three days before today, so
   only recent ones are new; checked live with the Worker running (a coach's note and a shared week each
   reached the client in seconds and opened the right place).
+  Since critique B10a the client has a plan page, My plan (`/plan`, the first row of Me's Account group);
+  the plan notices still open Today, where Ask to renew lives.
 
 - **Settings, Team, Billing, R5.2a (built 2026-10-09; screenshots `docs/design/r52a-*.png`). Decided by Claude
   for the owner on 2026-10-09**, after looking at Everfit (personal settings, timezone included, for everyone

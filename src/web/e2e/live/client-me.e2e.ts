@@ -22,6 +22,19 @@ test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true
 const CLIENT = ACCOUNTS.hadi;
 const TEMP_PASSWORD = 'LiveCheck-Temp-2026!x';
 
+test('My plan reads the plan the coach sold, from the coach’s own catalog', async ({ page }) => {
+  await signIn(page, CLIENT);
+  await page.goto('/me');
+  await page.getByRole('link', { name: /My plan/ }).click();
+  await expect(page.getByRole('heading', { name: 'My plan', level: 1 })).toBeVisible();
+
+  const plan = page.locator('section.plan').first();
+  await expect(plan.getByRole('heading', { level: 2 })).toHaveText('Online Coaching');
+  await expect(plan.getByRole('heading', { name: 'What’s included' })).toBeVisible();
+  await expect(plan.getByText('Your own program, a weekly check-in')).toBeVisible();
+  await expect(page.locator('main')).not.toContainText(/USD|paid/i);
+});
+
 test('Appearance and Body weight are saved on the account and followed elsewhere', async ({
   page,
   browser,

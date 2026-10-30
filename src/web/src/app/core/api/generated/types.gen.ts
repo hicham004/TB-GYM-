@@ -2837,6 +2837,23 @@ export type OwnCoachView = {
   name: string;
 };
 
+export type OwnPlansView = {
+  today: string;
+  plans: Array<OwnPlanView>;
+};
+
+export type OwnPlanView = {
+  id: string;
+  name: string;
+  optionLabel: string;
+  description: null | string;
+  startDate: string;
+  lastDay: string;
+  cancelledOn: null | string;
+  status: EffectiveEnrollmentStatus;
+  features: Array<CoachingFeature>;
+};
+
 export type PaymentInstructionsView = {
   whishNumber: null | string;
   supportEmail: null | string;
@@ -4694,6 +4711,29 @@ export type GetOwnCoachingFeatureAccessResponses = {
 
 export type GetOwnCoachingFeatureAccessResponse =
   GetOwnCoachingFeatureAccessResponses[keyof GetOwnCoachingFeatureAccessResponses];
+
+export type GetOwnPlansData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/client-plan/me';
+};
+
+export type GetOwnPlansErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetOwnPlansResponses = {
+  /**
+   * OK
+   */
+  200: OwnPlansView;
+};
+
+export type GetOwnPlansResponse = GetOwnPlansResponses[keyof GetOwnPlansResponses];
 
 export type ListCheckInsToReviewData = {
   body?: never;

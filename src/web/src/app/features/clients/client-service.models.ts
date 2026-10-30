@@ -146,7 +146,11 @@ export function shortDate(date: string, locale: string): string {
   return formatDate(date, 'EEE d MMM', locale);
 }
 
-function dateRange(start: string, lastDay: string, context: ServiceContext): string {
+export function dateRange(
+  start: string,
+  lastDay: string,
+  context: Pick<ServiceContext, 'locale' | 'today'>,
+): string {
   const thisYear = context.today.slice(0, 4);
   const sameYear = start.slice(0, 4) === thisYear && lastDay.slice(0, 4) === thisYear;
   const pattern = sameYear ? 'EEE d MMM' : 'd MMM y';

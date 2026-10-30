@@ -1,0 +1,75 @@
+<div class="page">
+  <header class="top">
+    <div class="intro">
+      <a class="back" routerLink="/me">
+        <app-icon name="chevron-right" class="back-icon" />
+        <span i18n>Me</span>
+      </a>
+      <h1 #heading tabindex="-1" i18n>My plan</h1>
+      <p class="lede" i18n>What’s in your plan and the dates it runs.</p>
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="5" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>Your plan couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @for (plan of plans(); track plan.id) {
+        <section class="plan" [attr.aria-labelledby]="'plan-' + plan.id">
+          <div class="plan-head">
+            <app-status-pill [label]="plan.pill.label" [tone]="plan.pill.tone" />
+            <h2 [id]="'plan-' + plan.id" dir="auto">{{ plan.name }}</h2>
+            <p class="plan-when">
+              <bdi>{{ plan.option }}</bdi> · <span class="plan-dates">{{ plan.dates }}</span>
+            </p>
+            @if (plan.note; as note) {
+              <p class="plan-note">{{ note }}</p>
+            }
+            @if (plan.ended) {
+              <a appButton routerLink="/" variant="accent" size="touch" class="plan-action" i18n
+                >Go to Today</a
+              >
+            }
+          </div>
+          <div class="plan-body">
+            <div class="plan-part">
+              <h3 i18n>What’s included</h3>
+              <ul class="includes" role="list">
+                @for (item of plan.includes; track item.feature) {
+                  <li>
+                    <span class="include-icon"><app-icon [name]="item.icon" /></span>
+                    {{ item.label }}
+                  </li>
+                }
+              </ul>
+            </div>
+            @if (plan.description; as description) {
+              <div class="plan-part">
+                <h3 i18n>About this plan</h3>
+                <p class="description" dir="auto">{{ description }}</p>
+              </div>
+            }
+          </div>
+        </section>
+      } @empty {
+        <div class="panel">
+          <app-empty-state
+            heading="No plan yet"
+            i18n-heading
+            description="Your coach will put your plan here."
+            i18n-description
+          />
+        </div>
+      }
+    }
+  }
+</div>

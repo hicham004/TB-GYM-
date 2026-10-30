@@ -291,6 +291,11 @@ export class ApiClient {
       .pipe(map((decisions) => decisions.map(toFeatureAccess)));
   }
 
+  /** The signed-in client's own plans (SUB-017): what runs or is coming, else the one that ended last. */
+  getOwnPlans(): Observable<Phase3Contracts.OwnPlansView> {
+    return this.http.get<Phase3Contracts.OwnPlansView>('/api/client-plan/me');
+  }
+
   /** Whether the signed-in client's whole plan has run out, and when they last asked to renew. */
   getOwnRenewalStatus(): Observable<Phase3Contracts.RenewalStatusView> {
     return this.http.get<Phase3Contracts.RenewalStatusView>('/api/client-renewal/me');

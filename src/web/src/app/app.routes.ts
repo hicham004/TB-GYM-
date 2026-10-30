@@ -139,6 +139,15 @@ export const routes: Routes = [
       import('./features/profile/client-profile').then((module) => module.ClientProfilePage),
   },
   {
+    // The client's own reading of their plan (critique B10a), from Me.
+    path: 'plan',
+    canActivate: [authGuard, clientGuard],
+    data: REDESIGNED,
+    title: $localize`My plan | TB Gym`,
+    loadComponent: () =>
+      import('./features/account/client-plan').then((module) => module.ClientPlanPage),
+  },
+  {
     path: 'me',
     canActivate: [authGuard, clientGuard],
     // Rebuilt on brand v2 in R2.5c, so it follows the person's light or dark choice, which is made here.

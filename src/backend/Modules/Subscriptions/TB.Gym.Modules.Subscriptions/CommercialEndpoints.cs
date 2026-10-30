@@ -234,6 +234,20 @@ public static class CommercialEndpoints
         .Produces<FeatureAccessDecision[]>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // The client's own page on their plan (SUB-017).
+        endpoints.MapGet("/api/client-plan/me", async (
+            ICommercialApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var plans = await service.GetOwnPlansAsync(cancellationToken);
+            return plans is null ? Results.NotFound() : Results.Ok(plans);
+        })
+        .RequireAuthorization(AuthorizationPolicies.TenantClient)
+        .WithName("GetOwnPlans")
+        .WithTags(SubscriptionsModule.Name)
+        .Produces<OwnPlansView>()
+        .Produces(StatusCodes.Status404NotFound);
+
         // A client asks their coach to renew a plan that has run out (ADR 0029).
         var renewal = endpoints
             .MapGroup("/api/client-renewal/me")

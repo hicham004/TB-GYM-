@@ -665,6 +665,10 @@ Both use the current client profile and server-side access rules. The user's lig
 is stored on the Identity account and applied after session load; it is independent of the tenant
 brand and can be changed from the personal Appearance screen.
 
+Critique B10a adds one client read beside `GET /api/client-access/me`: `GET /api/client-plan/me`, the
+client's own plans through the current profile (SUB-017), for the My plan page. It carries no money. No
+schema, write contract or invariant changed.
+
 R2.5b adds two client reads for the Training tab (`/training/program`), with no schema or write
 change. `GET /api/training/me/program` describes one block: the one covering today, else the next,
 else the last finished (at most eight open blocks are read, as for coverage). It sends every week's

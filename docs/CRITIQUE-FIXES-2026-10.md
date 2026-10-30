@@ -840,3 +840,31 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   reader, "Back Squat: How to Barbell Squat …. Watch on YouTube · opens in a new tab"; "Ask for Active,
   Archived or Both." Also: the demo's Push-up is Strength where it was General (a workspace's own General
   exercises become Other). Recommendation: keep.
+- B10a · Where the page lives. Built: `/plan`, "My plan", the first row of Me's Account group; nothing on Today or
+  in the tabs. Other way: a line on Today as well. Recommendation: keep, and let B10c's sessions line link here.
+- B10a · The plan notices, left out (outside the row). They still open Today. Recommendation: a one-line change, so
+  the waiting-for-payment, started, ending-soon and next-plan notices open My plan, and "Your plan has ended" stays
+  on Today, where Ask to renew is.
+- B10a · Which plans show. Built: every plan running or still to come, in the order they start, and once none is
+  left only the one that ended last, a cancelled plan counting from the day it was cancelled. Other way: a fold of
+  earlier plans, as Service & access has. Recommendation: keep until a client asks.
+- B10a · The description. Built: the plan's description as it stands today, while the plan's name, the price's name
+  and what's included stay as sold, since an enrollment keeps no copy of it, so a coach's edit reaches every client
+  on the plan. Other way: a copy on each enrollment at sale, a migration, so a client keeps the words they were sold.
+  Recommendation: keep; a fixed typo should reach them.
+- B10a · The price's name. Built: beside the dates ("12 weeks · Fri 28 Aug – Thu 19 Nov"), T18's reader, so a name
+  like "Student rate" now reaches the client. Other way: the dates alone. Recommendation: keep, and add "Your client
+  sees this name." to the hint under "Name for this price".
+- B10a · The money, left out (the row does not list it). No price or payment shows; "Waiting for payment" gives no
+  amount. Other way: the price and what has been paid. Recommendation: keep it out until a coach or client asks.
+- B10a · An ended plan. Built: "Ended", the notices' sentence "If you'd like to keep going, ask your coach to renew
+  it." and Go to Today, where Ask to renew stays; a cancelled plan says "Cancelled Fri 30 Oct" and no more. Other
+  way: the Ask to renew card on this page too. Recommendation: that card, a small row, if clients look here first.
+- B10a · A blocked client. Built: they still read their plans (SUB-009), a running one saying "Access paused" and
+  "Your coach has paused your access.", Today's words, never "blocked"; a plan that is over reads as over. Other way:
+  the page closed to them. Recommendation: keep.
+- B10a · Words the row did not give. Built: "What's in your plan and the dates it runs."; Me's "What's included and
+  your dates"; "What's included" and "About this plan"; the coach's "Active · 20 days left", "Ends tomorrow", "Ends
+  today", "Starts in 5 days" and "Starts tomorrow"; "Waiting for payment" with the notice's "It starts once your coach
+  has your payment."; "Paused" with "Your coach has paused this plan. It still ends on Sat 14 Nov."; "Go to Today";
+  "No plan yet" with "Your coach will put your plan here."; "Your plan couldn't be loaded." Recommendation: keep.

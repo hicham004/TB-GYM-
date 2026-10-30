@@ -137,6 +137,7 @@ for (const [width, height] of [
       'href',
       '/messages',
     );
+    await expect(page.getByRole('link', { name: /My plan/ })).toHaveAttribute('href', '/plan');
     await expect(page.getByRole('link', { name: /My profile/ })).toHaveAttribute(
       'href',
       '/profile',
@@ -174,6 +175,125 @@ test('Me follows dark mode, because dark mode is chosen here', async ({ page }) 
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
   await page.screenshot({ path: 'test-results/r25c-me-dark-390.png', fullPage: true });
+});
+
+/** A client's own plans (critique B10a), as `GET /api/client-plan/me` answers. */
+const ONLINE_COACHING = {
+  id: '00000000-0000-4000-8000-0000000000c1',
+  name: 'Online Coaching',
+  optionLabel: '12 weeks',
+  description:
+    'Your own program, a weekly check-in and direct chat with your coach.\nAsk me anything.',
+  startDate: '2026-10-05',
+  lastDay: '2026-12-27',
+  cancelledOn: null,
+  status: 'Active',
+  features: ['Training', 'Nutrition', 'CheckIns', 'Messaging'],
+};
+
+async function openPlan(
+  page: Page,
+  plans: object[],
+  options: Parameters<typeof mockClient>[1] & { width?: number; height?: number } = {},
+) {
+  await page.setViewportSize({ width: options.width ?? 390, height: options.height ?? 844 });
+  await mockClient(page, {
+    ...options,
+    extra: {
+      'GET /api/client-plan/me': (route) => json(route, 200, { today: '2026-10-15', plans }),
+    },
+  });
+  await page.goto('/plan');
+  await expect(page.getByRole('heading', { name: 'My plan', level: 1 })).toBeVisible();
+  await waitForFonts(page);
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`My plan at ${width}px reads the plan`, async ({ page }) => {
+    await openPlan(page, [ONLINE_COACHING], { width, height });
+
+    await expect(page).toHaveTitle('My plan | TB Gym');
+    await expect(page.getByRole('heading', { name: 'My plan', level: 1 })).toBeFocused();
+    const plan = page.getByRole('region', { name: 'Online Coaching' });
+    await expect(plan.getByText('Active · 73 days left')).toBeVisible();
+    await expect(plan.getByText('12 weeks · Mon 5 Oct – Sun 27 Dec')).toBeVisible();
+    await expect(plan.getByRole('listitem')).toHaveText([
+      'Training',
+      'Nutrition',
+      'Check-ins',
+      'Messaging',
+    ]);
+    await expect(plan.getByRole('heading', { name: 'About this plan' })).toBeVisible();
+    await expect(plan.getByText('Ask me anything.')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/b10a-plan-${width}.png`, fullPage: true });
+  });
+}
+
+test('My plan follows dark mode and reads every state of a plan', async ({ page }) => {
+  await openPlan(
+    page,
+    [
+      { ...ONLINE_COACHING, status: 'Paused' },
+      {
+        ...ONLINE_COACHING,
+        id: '00000000-0000-4000-8000-0000000000c2',
+        name: 'Next block',
+        startDate: '2026-12-28',
+        lastDay: '2027-02-21',
+        status: 'PendingPayment',
+        description: null,
+      },
+    ],
+    { user: { preferredThemeMode: 'dark' } },
+  );
+
+  await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+  await expect(page.getByText('It still ends on Sun 27 Dec.')).toBeVisible();
+  await expect(page.getByText('Waiting for payment')).toBeVisible();
+  await expect(page.getByText('It starts once your coach has your payment.')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await page.screenshot({ path: 'test-results/b10a-plan-dark-390.png', fullPage: true });
+});
+
+test('My plan keeps a long name and 200% text inside the page', async ({ page }) => {
+  await openPlan(page, [
+    {
+      ...ONLINE_COACHING,
+      name: 'Transformation with a very long name that a coach typed in without a thought',
+      optionLabel: 'Student rate for the whole of the first year',
+      lastDay: '2027-03-01',
+    },
+  ]);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '200%';
+  });
+
+  await expectNoHorizontalOverflow(page);
+  await expect(page.getByText('5 Oct 2026 – 1 Mar 2027')).toBeVisible();
+  await page.screenshot({ path: 'test-results/b10a-plan-200-390.png', fullPage: true });
+});
+
+test('a plan that ran out says what to do next, and Today is one tap away', async ({ page }) => {
+  await openPlan(page, [{ ...ONLINE_COACHING, status: 'Expired', lastDay: '2026-10-10' }]);
+
+  await expect(page.getByText('Ended', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Go to Today' })).toHaveAttribute('href', '/');
+  await expectNoAxeViolations(page);
+  await page.screenshot({ path: 'test-results/b10a-plan-ended-390.png', fullPage: true });
+});
+
+test('a client with no plan yet is told it will appear here', async ({ page }) => {
+  await openPlan(page, []);
+
+  await expect(page.getByRole('heading', { name: 'No plan yet' })).toBeVisible();
+  await expect(page.getByText('Your coach will put your plan here.')).toBeVisible();
+  await expectNoAxeViolations(page);
 });
 
 test('a coach you cannot message is shown, but not as a link', async ({ page }) => {

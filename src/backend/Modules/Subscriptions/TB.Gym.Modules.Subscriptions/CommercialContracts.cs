@@ -66,6 +66,8 @@ public interface ICommercialApplicationService
 
     Task<IReadOnlyList<FeatureAccessDecision>?> GetSelfAccessAsync(
         CancellationToken cancellationToken);
+
+    Task<OwnPlansView?> GetOwnPlansAsync(CancellationToken cancellationToken);
 }
 
 public sealed record ProductCatalog(

@@ -612,6 +612,55 @@ internal sealed class CommercialApplicationService(
                 cancellationToken);
     }
 
+    /// <summary>
+    /// The client's own plans (SUB-017). A returning client reads their new profile's alone: the plans of the
+    /// profile before it stay with it (ADR 0027).
+    /// </summary>
+    public async Task<OwnPlansView?> GetOwnPlansAsync(CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } userId)
+        {
+            return null;
+        }
+
+        var client = await dbContext.ClientProfiles
+            .AsNoTracking()
+            .CurrentFor(userId)
+            .Select(item => new { item.Id, item.IsCoachBlocked })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (client is null)
+        {
+            return null;
+        }
+
+        var enrollments = await dbContext.ClientEnrollments
+            .AsNoTracking()
+            .Include(item => item.Entitlements)
+            .Where(item => item.ClientProfileId == client.Id)
+            .ToListAsync(cancellationToken);
+        var (zone, today) = await GetWorkspaceDayAsync(cancellationToken);
+        var shown = OwnPlans.Shown(enrollments, today, zone);
+        var productIds = shown.Select(item => item.ProductId).ToArray();
+        var descriptions = await dbContext.CoachingProducts
+            .AsNoTracking()
+            .Where(item => productIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id, item => item.Description, cancellationToken);
+        return new OwnPlansView(
+            today,
+            shown
+                .Select(plan => new OwnPlanView(
+                    plan.Id,
+                    plan.ProductNameSnapshot,
+                    plan.OfferLabelSnapshot,
+                    descriptions.GetValueOrDefault(plan.ProductId),
+                    plan.StartDate,
+                    plan.EndDateExclusive.AddDays(-1),
+                    plan.CancelledOn(zone),
+                    OwnPlans.StatusOf(plan, today, client.IsCoachBlocked),
+                    plan.Entitlements.Select(item => item.Feature).Order().ToArray()))
+                .ToArray());
+    }
+
     private async Task<CommercialCommandResult> AssignCoreAsync(
         Guid clientProfileId,
         Guid offerId,
@@ -1157,9 +1206,7 @@ internal sealed class CommercialApplicationService(
             enrollment.Status,
             enrollment.GetEffectiveStatus(tenantToday, relationshipBlocked),
             enrollment.StatusReason,
-            enrollment.Status == EnrollmentStatus.Cancelled && enrollment.CancelledAtUtc is { } cancelledAtUtc
-                ? WorkspaceDay(cancelledAtUtc, zone)
-                : null,
+            enrollment.CancelledOn(zone),
             enrollment.Entitlements.Select(item => item.Feature).Order().ToArray(),
             payments.Select(item => new PaymentRecordView(
                 item.Id,

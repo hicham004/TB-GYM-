@@ -116,7 +116,7 @@ describe('ClientAccount', () => {
     expect(host.textContent).toContain('maya@example.test');
     expect(host.querySelector('app-avatar')?.textContent?.trim()).toBe('MR');
     const links = [...host.querySelectorAll('.rows a')].map((link) => link.getAttribute('href'));
-    expect(links).toEqual(['/profile', '/notifications/settings', '/account/security']);
+    expect(links).toEqual(['/plan', '/profile', '/notifications/settings', '/account/security']);
     // The weight history is reached from Progress, not from here.
     expect(host.querySelector('a[href="/progress"]')).toBeNull();
   });

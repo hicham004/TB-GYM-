@@ -348,6 +348,14 @@ the whole workspace's (a per-coach breakdown is critique B10d); each total is on
 payments made it up, never added, netted or converted across currencies, never called profit or earnings, and no
 client is named beside it.
 
+**SUB-017** A client's own plans (critique B10a, `GET /api/client-plan/me`, read through `CurrentFor`, so a returning
+client reads their new profile's plans alone). Every plan not over shows, in the order they start; once none is left,
+the one that ended last, a cancelled plan counting from the day it was cancelled. Each says its name and its price
+option's name as sold, what's included, its first and last covered days, where it stands on the workspace's today, and
+the plan's description as it stands today, since an enrollment keeps no copy of it. A block speaks only of what still
+runs: a plan that is over reads as over. No price, payment or reason the coach typed reaches the client through this
+read, and it decides no access (SUB-009).
+
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 
 **PBL-001** Each workspace is billed monthly, in USD, for the previous UTC month
