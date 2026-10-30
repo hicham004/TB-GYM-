@@ -68,8 +68,9 @@ left. Locally the plan runner commits on the current branch, as it did for the a
 **The local runner** (the owner, 2026-10-29). `.\scripts\start-plan-runner.ps1 -Plan critique` builds the rest
 of the plan one fresh chat per row, with nobody watching. A chat that changed server code runs the full backend suite
 on the laptop before it commits, and fixes first, in its own commit, a failure an earlier row left. It commits on
-main and never pushes; the runner pushes each row that ends Done, while the repository is private and GitHub has
-nothing main lacks. A choice the row's spec does not settle is made the way closest to the owner's earlier choices,
+main and never pushes; the runner pushes each row that ends Done, while GitHub has nothing main lacks (the repository
+is public, the owner's choice of 2026-10-30).
+A choice the row's spec does not settle is made the way closest to the owner's earlier choices,
 built and listed in section 3; a new money rule, legal wording or work outside the row is left out and listed there
 with a recommendation. No chat stops the run for a decision. A used-up weekly usage limit pauses the runner until it
 resets, and the run carries on.

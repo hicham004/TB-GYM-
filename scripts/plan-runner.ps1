@@ -86,7 +86,7 @@ $model = 'claude-opus-5-5'
 $effort = 'max'
 # Models whose weekly limit is used up, with when to try them again; their rows run on $FallbackModel.
 $script:exhaustedUntil = @{}
-# Set when a push needs the owner (a public repository, or commits on origin that the branch lacks).
+# Set when a push needs the owner (commits on origin that the branch lacks, or an origin not on GitHub).
 $script:pushStop = $false
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $gateSign = [char]::ConvertFromUtf32(0x1F6A6)
@@ -222,7 +222,7 @@ $stepPrompt = ($planPrompts[$Plan] + "`n" + $sharedRules).Replace('<<PUSH>>', $p
 
 $resumePrompt = 'The run stopped ({0}). Carry on with step {1} from where you stopped. The unattended-run rules in the first message still apply.'
 # For -ResumeSession: hours may have passed since the chat stopped, and its runner has exited.
-$stoppedResumePrompt = 'A usage limit stopped this chat and ended that run of the runner. The limit has reset and a new run resumes you now, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
+$stoppedResumePrompt = 'A usage limit or the owner stopped this chat and ended that run of the runner. A new run resumes you now, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, test runs you started have ended, and other commits may have reached main. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
 # After -OnWeeklyLimit wait: the same run waited, possibly for days, while the chat was stopped.
 $weeklyResumePrompt = 'A weekly usage limit stopped this chat, and the runner waited for it to reset, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
 
@@ -599,37 +599,13 @@ function Get-GitHubRepository {
     if ($url -match 'github\.com[:/]+([^/]+/[^/]+?)(?:\.git)?/?$') { return $Matches[1] }
 }
 
-# $true while GitHub hides the repository from the signed-out (404), $false when anyone can read
-# it, $null when GitHub could not be asked.
-function Test-RepositoryPrivate([string]$Repository) {
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri ('https://api.github.com/repos/{0}' -f $Repository) -UseBasicParsing -TimeoutSec 30 `
-            -Headers @{ 'User-Agent' = 'tb-gym-plan-runner' } | Out-Null
-        return $false
-    }
-    catch {
-        $response = $null
-        if ($_.Exception.PSObject.Properties['Response']) { $response = $_.Exception.Response }
-        if ($response -and [int]$response.StatusCode -eq 404) { return $true }
-        return $null
-    }
-}
-
-# Pushes the branch after a step ended Done (the owner, 2026-10-29). A public repository or
-# commits on origin the branch lacks stop the run for the owner; a passing failure (no network)
-# is noted and the next step's push carries this one's commits too.
+# Pushes the branch after a step ended Done (the owner, 2026-10-29). Commits on origin the branch
+# lacks stop the run for the owner; a passing failure (no network) is noted and the next step's
+# push carries this one's commits too.
 function Invoke-Push {
     $branch = @(Invoke-Git rev-parse --abbrev-ref HEAD)[0]
     $repository = Get-GitHubRepository
     if (-not $repository) { return @{ Text = 'not pushed: origin is not on GitHub'; Stop = $true } }
-    $private = Test-RepositoryPrivate $repository
-    if ($private -eq $false) {
-        return @{ Text = ('not pushed: github.com/{0} is public, and the plan and critique stay private' -f $repository); Stop = $true }
-    }
-    if ($null -eq $private) {
-        return @{ Text = ('not pushed: GitHub did not say whether github.com/{0} is private; the next push tries again' -f $repository); Stop = $false }
-    }
     # A credential prompt would hang an unattended run: fail instead.
     $saved = @{ GCM_INTERACTIVE = $env:GCM_INTERACTIVE; GIT_TERMINAL_PROMPT = $env:GIT_TERMINAL_PROMPT }
     $env:GCM_INTERACTIVE = 'never'
@@ -823,15 +799,7 @@ function Show-DryRun {
     Write-Note ('Plan: {0} ({1}){2}.' -f $Plan, $planFiles[$Plan], (Get-CutoffText))
     Write-Note ('Each chat: --effort {0} ({1}), bypassPermissions, git push denied, at most {2} hours.' -f $effort, (Get-RowModelText), $StepHours)
     Write-Note ('Runner: {0}.' -f (Get-RunRulesText))
-    if (-not $NoPush) {
-        $repository = Get-GitHubRepository
-        $private = $null
-        if ($repository) { $private = Test-RepositoryPrivate $repository }
-        $state = 'GitHub did not answer'
-        if ($private -eq $true) { $state = 'private, so pushes go ahead' }
-        elseif ($private -eq $false) { $state = 'PUBLIC, so the runner would refuse to push' }
-        Write-Note ('Push target: github.com/{0}, {1}.' -f $repository, $state)
-    }
+    if (-not $NoPush) { Write-Note ('Push target: github.com/{0}.' -f (Get-GitHubRepository)) }
     foreach ($note in @(Get-EnvironmentNotes)) { Write-Note ('Note: ' + $note) }
     foreach ($chat in @(Get-RecentChats)) {
         Write-Note ('Active in the last {0} min: "{1}" ({2}), {3} min ago' -f $IdleMinutes, $chat.Title, $chat.Id, $chat.Minutes)
