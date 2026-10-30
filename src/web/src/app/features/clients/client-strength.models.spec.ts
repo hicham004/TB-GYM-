@@ -12,37 +12,73 @@ import {
 } from '../../../testing/client-strength-fixtures';
 import {
   changeWords,
+  estimateRequest,
+  fromSetRequest,
   groupLifts,
   liftSummary,
   mapMax,
   mapPerformance,
   maxErrors,
   maxProblems,
+  recordedWords,
   recordRefusal,
   recordRequest,
+  setEstimate,
   summarize,
   valueWords,
   type MaxValues,
 } from './client-strength.models';
 
 const LOCALE = 'en-US';
-const lifts = () => groupLifts(mayaMaxes().map(mapMax));
+const lifts = () => groupLifts(mayaMaxes().map((view) => mapMax(view)));
 
 function values(overrides: Partial<MaxValues> = {}): MaxValues {
   return {
     exerciseId: SQUAT,
     kind: 'CoachWorkingMax',
     value: 100,
+    repetitions: null,
     unit: 'Kilogram',
     date: TODAY,
     note: '',
+    alsoTrainingMax: true,
     ...overrides,
   };
 }
 
+/** A set they did, 100 kg × 5, as the sheet holds it. */
+const aSet = (overrides: Partial<MaxValues> = {}) =>
+  values({ kind: 'FromSet', repetitions: 5, ...overrides });
+
+/** Back Squat 100 kg × 5 on record: its Epley estimate, and the training max at 90% saved with it. */
+const fromSet = () => ({
+  estimate: maxView({
+    id: 'est-1',
+    kind: 'EstimatedOneRepMax',
+    value: 116.667,
+    effectiveDate: '2026-10-09',
+    createdAtUtc: '2026-10-09T08:00:00Z',
+    source: 'Calculation',
+    methodKey: 'Epley',
+    program: null,
+    basis: { load: 100, repetitions: 5 },
+  }),
+  trainingMax: maxView({
+    id: 'tm-1',
+    kind: 'CoachWorkingMax',
+    value: 105,
+    effectiveDate: '2026-10-09',
+    createdAtUtc: '2026-10-09T08:00:00Z',
+    source: 'Calculation',
+    methodKey: 'TrainingMaxShare',
+    program: null,
+    fromEstimate: { estimateId: 'est-1', estimate: 116.667, percent: 90 },
+  }),
+});
+
 describe('the maxes on record', () => {
   it('words each max with its kind and where it came from', () => {
-    const entries = mayaMaxes().map(mapMax);
+    const entries = mayaMaxes().map((view) => mapMax(view));
     const tested = entries.find((item) => item.id === 'max-tested')!;
     const program = entries.find((item) => item.id === 'max-squat-2')!;
 
@@ -56,6 +92,43 @@ describe('the maxes on record', () => {
 
   it('reads a max that arrives as text', () => {
     expect(mapMax(maxView({ value: '62.50' })).value).toBe(62.5);
+  });
+
+  it('words a set’s estimate by its set and the training max by the estimate it was set from', () => {
+    const { estimate, trainingMax } = fromSet();
+
+    expect(mapMax(estimate, LOCALE)).toMatchObject({
+      kindLabel: 'Estimated 1RM',
+      source: 'From 100 kg × 5 (Epley)',
+      derivedFrom: null,
+    });
+    expect(mapMax(trainingMax, LOCALE)).toMatchObject({
+      kindLabel: 'Training max',
+      source: '90% of an estimated 116.67 kg',
+      derivedFrom: 'est-1',
+    });
+    expect(
+      mapMax(
+        maxView({
+          ...trainingMax,
+          unit: 'Pound',
+          fromEstimate: { estimateId: 'e', estimate: '225', percent: '90' },
+        }),
+      ).source,
+    ).toBe('90% of an estimated 225 lb');
+  });
+
+  it('puts a training max right above the estimate it was saved with, whatever order they arrive in', () => {
+    const { estimate, trainingMax } = fromSet();
+    for (const order of [
+      [estimate, trainingMax],
+      [trainingMax, estimate],
+    ]) {
+      const [lift] = groupLifts(order.map((view) => mapMax(view)));
+      expect(lift.entries.map((entry) => entry.id)).toEqual(['tm-1', 'est-1']);
+      expect(lift.latest.id).toBe('tm-1');
+      expect(lift.also.map((entry) => entry.id)).toEqual(['est-1']);
+    }
   });
 
   it('groups the lifts, the one that changed last first', () => {
@@ -192,7 +265,9 @@ describe('recording a max', () => {
   });
 
   it('sends a coach’s entry, leaving its method to the server', () => {
-    expect(recordRequest(values({ kind: 'TestedOneRepMax', note: '  Felt heavy.  ' }))).toEqual({
+    expect(
+      recordRequest({ ...values({ note: '  Felt heavy.  ' }), kind: 'TestedOneRepMax' }),
+    ).toEqual({
       exerciseId: SQUAT,
       kind: 'TestedOneRepMax',
       value: 100,
@@ -204,7 +279,102 @@ describe('recording a max', () => {
       sourceWorkoutExecutionId: null,
       note: 'Felt heavy.',
     });
-    expect(recordRequest(values()).note).toBeNull();
+    expect(recordRequest({ ...values(), kind: 'CoachWorkingMax' }).note).toBeNull();
+  });
+
+  it('asks a set for 1 to 10 whole reps and the day they did it; a typed max never asks for reps', () => {
+    expect(maxProblems(maxErrors(aSet(), TODAY))).toBe(0);
+    expect(maxErrors(values(), TODAY).repetitions).toEqual([]);
+    expect(maxErrors(aSet({ repetitions: null }), TODAY).repetitions).toEqual(['Enter the reps.']);
+    for (const reps of [0, 11, 2.5]) {
+      expect(maxErrors(aSet({ repetitions: reps }), TODAY).repetitions).toEqual([
+        'From 1 to 10 reps: past 10, an estimate from reps is too rough to use.',
+      ]);
+    }
+    expect(maxErrors(aSet({ repetitions: 10 }), TODAY).repetitions).toEqual([]);
+    expect(maxErrors(aSet({ repetitions: 1 }), TODAY).repetitions).toEqual([]);
+    expect(maxErrors(aSet({ value: 0 }), TODAY).value).toEqual([
+      'The weight has to be more than 0 and at most 2,000 kg.',
+    ]);
+    expect(maxErrors(aSet({ date: '' }), TODAY).date).toEqual(['Choose the day they did it.']);
+    expect(maxErrors(aSet({ date: '2026-10-11' }), TODAY).date).toEqual([
+      'A set they did is from today or a day that has passed.',
+    ]);
+    expect(maxProblems(maxErrors(aSet({ repetitions: null, value: null }), TODAY))).toBe(2);
+  });
+
+  it('sends a set for the server to work out, and asks its calculator only about a set it can read', () => {
+    expect(fromSetRequest(aSet({ alsoTrainingMax: false, note: '  Belt.  ' }))).toEqual({
+      exerciseId: SQUAT,
+      load: 100,
+      repetitions: 5,
+      unit: 'Kilogram',
+      effectiveDate: TODAY,
+      alsoSetTrainingMax: false,
+      note: 'Belt.',
+    });
+    expect(fromSetRequest(aSet()).alsoSetTrainingMax).toBe(true);
+    expect(estimateRequest({ value: 100, repetitions: 5, unit: 'Pound' })).toEqual({
+      load: 100,
+      repetitions: 5,
+      unit: 'Pound',
+      methodKey: 'Epley',
+    });
+    for (const [value, repetitions] of [
+      [100, null],
+      [100, 0],
+      [100, 11],
+      [100, 2.5],
+      [null, 5],
+      [0, 5],
+      [2001, 5],
+    ] as const) {
+      expect(estimateRequest({ value, repetitions, unit: 'Kilogram' })).toBeNull();
+    }
+  });
+
+  it('words the server’s estimate and the training max it would set', () => {
+    const view = {
+      estimate: 116.667,
+      unit: 'Kilogram' as const,
+      methodKey: 'Epley',
+      methodVersion: '1.0',
+      qualification: '',
+      explanation: 'Epley v1: 100 kg × (1 + 5 / 30) = 116.667 kg.',
+      trainingMax: {
+        value: '105.000',
+        percent: 90,
+        methodKey: 'TrainingMaxShare',
+        methodVersion: '1.0',
+        explanation: '',
+      },
+    };
+    expect(setEstimate(view, LOCALE)).toEqual({
+      estimate: '116.67 kg',
+      explanation: 'Epley v1: 100 kg × (1 + 5 / 30) = 116.667 kg.',
+      trainingMax: '105 kg',
+      tooHeavy: false,
+    });
+    expect(setEstimate({ ...view, estimate: 2133.333, trainingMax: null }, LOCALE)).toMatchObject({
+      trainingMax: null,
+      tooHeavy: true,
+    });
+  });
+
+  it('says what was recorded: one max, or a set’s estimate and the training max set from it', () => {
+    const { estimate, trainingMax } = fromSet();
+    expect(
+      recordedWords(
+        [mapMax(maxView({ kind: 'TestedOneRepMax', value: 100, program: null }))],
+        LOCALE,
+      ),
+    ).toBe('Back Squat — Tested 1RM 100 kg recorded.');
+    expect(recordedWords([mapMax(estimate), mapMax(trainingMax)], LOCALE)).toBe(
+      'Back Squat — Estimated 1RM 116.67 kg and training max 105 kg recorded.',
+    );
+    expect(recordedWords([mapMax(estimate)], LOCALE)).toBe(
+      'Back Squat — Estimated 1RM 116.67 kg recorded.',
+    );
   });
 
   it('explains a refusal, and falls back when it is not one', () => {

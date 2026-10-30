@@ -6,27 +6,37 @@ import {
   inject,
   input,
   linkedSignal,
+  LOCALE_ID,
   output,
   signal,
+  untracked,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import type { TrainingLoadUnit } from '../../core/api/generated';
+import type { EstimateOneRepMaxRequest, TrainingLoadUnit } from '../../core/api/generated';
 import { SheetForm } from '../../core/forms/sheet-form';
+import { Checkbox } from '../../ui/checkbox';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
 import { EntryActions, SHEET_STYLES } from '../../ui/sheet-parts';
 import { numberOrNull } from '../nutrition/client-nutrition.models';
+import { ClientStrengthApi } from './client-strength-api';
 import {
-  maxErrors,
+  estimateRequest,
+  fromSetRequest,
   mapMax,
+  MAX_CHOICES,
+  maxErrors,
   maxProblems,
-  RECORDABLE_KINDS,
   recordRefusal,
   recordRequest,
+  setEstimate,
+  type MaxChoice,
   type MaxEntry,
+  type MaxValues,
+  type SetEstimate,
 } from './client-strength.models';
 import { ExercisePicker, type ExerciseChoice } from './exercise-picker';
 
@@ -35,14 +45,31 @@ const UNITS: readonly SegmentOption[] = [
   { value: 'Pound' satisfies TrainingLoadUnit, label: 'lb' },
 ];
 
+/** How long typing pauses before the server is asked for a set's estimate. */
+const ESTIMATE_PAUSE_MS = 300;
+
+const requestKey = (request: EstimateOneRepMaxRequest) =>
+  `${request.load}|${request.repetitions}|${request.unit}`;
+
 /**
- * Record a max by hand, in a sheet (R5.3d): which lift, what kind (a training max a program works
- * from, or a tested one-rep max), the weight and the day it was true. A max is only ever added, never
- * changed (STR-001), and an estimate is not a kind a coach types: it comes from a calculation or a set.
+ * Record a max in a sheet (R5.3d; critique B7b): which lift, what kind (a training max a program works from,
+ * a tested one-rep max, or a set they did), the numbers and the day. A max is only ever added, never changed
+ * (STR-001), and an estimate is never typed: from a set's weight × reps the server works it out by Epley v1,
+ * shows it while the coach types, and records it with a training max at 90% of it when the box is ticked
+ * (TrainingMaxShare v1, STR-017).
  */
 @Component({
   selector: 'app-record-max',
-  imports: [Control, DateField, EntryActions, ExercisePicker, Field, FormSummary, SegmentedControl],
+  imports: [
+    Checkbox,
+    Control,
+    DateField,
+    EntryActions,
+    ExercisePicker,
+    Field,
+    FormSummary,
+    SegmentedControl,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
@@ -103,8 +130,75 @@ const UNITS: readonly SegmentOption[] = [
           />
         </div>
       </app-field>
+      @if (fromSet()) {
+        <app-field
+          [label]="repsLabel"
+          [help]="repsHelp"
+          [errors]="shows('repetitions', issues().repetitions) ? issues().repetitions : null"
+        >
+          <input
+            appControl
+            name="repetitions"
+            type="number"
+            inputmode="numeric"
+            step="1"
+            min="1"
+            max="10"
+            class="reps"
+            [value]="repetitions() ?? ''"
+            (input)="repetitions.set(numberOrNull($any($event.target).valueAsNumber))"
+            (blur)="attempt.touch('repetitions')"
+          />
+        </app-field>
+        <div class="estimate" data-estimate>
+          <div class="about" aria-live="polite">
+            @switch (estimateState()) {
+              @case ('ready') {
+                @if (worked(); as result) {
+                  <p>
+                    <span i18n>Estimated 1RM</span>&ngsp;<strong data-estimate-value>{{
+                      result.estimate
+                    }}</strong>
+                  </p>
+                  <p class="muted" data-explanation>{{ result.explanation }}</p>
+                  @if (result.tooHeavy) {
+                    <p class="problem-text" i18n>That set works out to a max of more than 2,000.</p>
+                  }
+                }
+              }
+              @case ('working') {
+                <p class="muted" i18n>Working out their estimated 1RM…</p>
+              }
+              @case ('error') {
+                <p class="muted" data-estimate-error>{{ estimateFailure()?.message }}</p>
+              }
+              @default {
+                <p class="muted" i18n>
+                  Their estimated 1RM shows here once the weight and the reps are in.
+                </p>
+              }
+            }
+          </div>
+          <app-checkbox [label]="alsoLabel">
+            <input
+              appControl
+              type="checkbox"
+              name="also-training-max"
+              [checked]="alsoTrainingMax()"
+              [aria-describedby]="alsoFigure() ? alsoFigureId : null"
+              (change)="alsoTrainingMax.set($any($event.target).checked)"
+            />
+          </app-checkbox>
+          @if (alsoFigure(); as figure) {
+            <p class="also-figure" [id]="alsoFigureId" data-training-max>
+              <span i18n>Training max</span>&ngsp;<strong>{{ figure }}</strong
+              >&ngsp;<span class="muted" i18n>· 90% of the estimate</span>
+            </p>
+          }
+        </div>
+      }
       <app-date-field
-        [label]="dateLabel"
+        [label]="dateLabel()"
         [errors]="shows('date', issues().date) ? issues().date : null"
         [(value)]="date"
         [max]="today()"
@@ -112,7 +206,7 @@ const UNITS: readonly SegmentOption[] = [
         [firstDay]="firstDay()"
         (touched)="attempt.touch('date')"
       />
-      <app-field [label]="noteLabel" [help]="noteHelp">
+      <app-field [label]="noteLabel" [help]="noteHelp()">
         <textarea
           appControl
           name="note"
@@ -213,11 +307,38 @@ const UNITS: readonly SegmentOption[] = [
       .choice-text strong {
         color: var(--tb-ink);
       }
+
+      // Reps are one or two digits: a narrow box, so it reads as a count beside the weight above it.
+      .reps {
+        max-inline-size: 8rem;
+      }
+
+      .estimate {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .estimate .about {
+        gap: 0.25rem;
+      }
+
+      // Under the box's label: the kit's 16px box and its 8px gap.
+      .also-figure {
+        padding-inline-start: 1.5rem;
+      }
+
+      .also-figure strong {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+      }
     `,
   ],
 })
 export class RecordMax extends SheetForm {
   private readonly api = inject(ApiClient);
+  private readonly strengthApi = inject(ClientStrengthApi);
+  private readonly locale = inject(LOCALE_ID);
 
   readonly clientId = input.required<string>();
   readonly firstName = input.required<string>();
@@ -230,59 +351,131 @@ export class RecordMax extends SheetForm {
   readonly start = input<ExerciseChoice | null>(null);
   /** The unit the lift is already kept in, so a second entry matches the first. */
   readonly startUnit = input<TrainingLoadUnit>('Kilogram');
-  /** The max that was recorded, or null when the sheet was closed without one. */
-  readonly closed = output<MaxEntry | null>();
+  /**
+   * What was recorded, or null when the sheet was closed without it: one max, or a set's estimate followed by
+   * the training max set from it.
+   */
+  readonly closed = output<readonly MaxEntry[] | null>();
 
   protected readonly exerciseLabel = $localize`Exercise`;
   protected readonly kindLabel = $localize`What kind of max`;
   protected readonly valueLabel = $localize`Weight`;
   protected readonly unitLabel = $localize`Unit`;
-  protected readonly dateLabel = $localize`Day it was true`;
+  protected readonly repsLabel = $localize`Reps`;
+  protected readonly repsHelp = $localize`From 1 to 10 reps.`;
+  protected readonly alsoLabel = $localize`Also set their training max at 90%`;
   protected readonly noteLabel = $localize`Note (optional)`;
-  protected readonly noteHelp = $localize`How it was tested, or why it is the number.`;
   protected readonly saveLabel = $localize`Record max`;
   protected readonly savingLabel = $localize`Saving…`;
-  protected readonly kinds = RECORDABLE_KINDS;
+  protected readonly alsoFigureId = `${this.formId}-training-max`;
+  protected readonly kinds = MAX_CHOICES;
   protected readonly units = UNITS;
   protected readonly numberOrNull = numberOrNull;
 
   protected readonly exercise = linkedSignal<ExerciseChoice | null>(() => this.start());
-  protected readonly kind = signal<'CoachWorkingMax' | 'TestedOneRepMax'>('CoachWorkingMax');
+  protected readonly kind = signal<MaxChoice>('CoachWorkingMax');
   protected readonly value = signal<number | null>(null);
+  protected readonly repetitions = signal<number | null>(null);
   protected readonly unit = linkedSignal<TrainingLoadUnit>(() => this.startUnit());
   protected readonly date = linkedSignal(() => this.today());
   protected readonly note = signal('');
+  /** Ticked from the start: the training max at 90% by default (the owner's choice for critique B7b). */
+  protected readonly alsoTrainingMax = signal(true);
 
-  protected readonly issues = computed(() =>
-    maxErrors(
-      {
-        exerciseId: this.exercise()?.id ?? null,
-        kind: this.kind(),
-        value: this.value(),
-        unit: this.unit(),
-        date: this.date(),
-        note: this.note(),
-      },
-      this.today(),
-    ),
+  protected readonly fromSet = computed(() => this.kind() === 'FromSet');
+  protected readonly dateLabel = computed(() =>
+    this.fromSet() ? $localize`Day they did it` : $localize`Day it was true`,
   );
+  protected readonly noteHelp = computed(() =>
+    this.fromSet()
+      ? $localize`How the set went, or where it was done.`
+      : $localize`How it was tested, or why it is the number.`,
+  );
+
+  private readonly values = computed<MaxValues>(() => ({
+    exerciseId: this.exercise()?.id ?? null,
+    kind: this.kind(),
+    value: this.value(),
+    repetitions: this.repetitions(),
+    unit: this.unit(),
+    date: this.date(),
+    note: this.note(),
+    alsoTrainingMax: this.alsoTrainingMax(),
+  }));
+  protected readonly issues = computed(() => maxErrors(this.values(), this.today()));
   protected readonly problems = computed(() => maxProblems(this.issues()));
   protected readonly valueHelp = computed(() => {
     const exercise = this.exercise();
-    return exercise
-      ? $localize`For ${exercise.name}:lift:. The unit is never converted: kilograms stay kilograms.`
-      : null;
+    if (!exercise) return null;
+    return this.fromSet()
+      ? $localize`The weight of the set, for ${exercise.name}:lift:. The unit is never converted: kilograms stay kilograms.`
+      : $localize`For ${exercise.name}:lift:. The unit is never converted: kilograms stay kilograms.`;
   });
+
+  /** What the server's calculator is asked now, or null while the set cannot make an estimate yet. */
+  private readonly estimateAsk = computed(() =>
+    this.fromSet() ? estimateRequest(this.values()) : null,
+  );
+  private readonly estimateKey = computed(() => {
+    const ask = this.estimateAsk();
+    return ask ? requestKey(ask) : null;
+  });
+  /** The server's last answer, kept with the set it answered, so a changed set never shows an old number. */
+  private readonly answered = signal<(SetEstimate & { readonly key: string }) | null>(null);
+  protected readonly estimateFailure = signal<{ key: string; message: string } | null>(null);
+  protected readonly worked = computed(() => {
+    const answer = this.answered();
+    return answer && answer.key === this.estimateKey() ? answer : null;
+  });
+  protected readonly estimateState = computed<'waiting' | 'working' | 'ready' | 'error'>(() => {
+    const key = this.estimateKey();
+    if (key === null) return 'waiting';
+    if (this.worked()) return 'ready';
+    return this.estimateFailure()?.key === key ? 'error' : 'working';
+  });
+  /** The training max the box records, as the server worked it out: shown only while ticked. */
+  protected readonly alsoFigure = computed(() =>
+    this.alsoTrainingMax() ? (this.worked()?.trainingMax ?? null) : null,
+  );
 
   constructor() {
     super();
     effect(() =>
       this.dirtyChange.emit(
         this.value() !== null ||
+          this.repetitions() !== null ||
           this.note().trim() !== '' ||
           (this.exercise() !== null && this.exercise()?.id !== this.start()?.id),
       ),
     );
+    // Asks the server once typing pauses; a newer set replaces an answer still on its way (one lane).
+    effect((onCleanup) => {
+      const ask = this.estimateAsk();
+      const key = this.estimateKey();
+      if (ask === null || key === null || untracked(() => this.answered()?.key) === key) return;
+      const timer = setTimeout(() => void this.estimate(ask, key), ESTIMATE_PAUSE_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
+  }
+
+  private estimate(request: EstimateOneRepMaxRequest, key: string): Promise<void> {
+    return this.scope.run('estimate', async (owner) => {
+      try {
+        // The calculator is a POST like every other and checks the token (audit SEC-4).
+        await owner.wait(this.csrf.refresh());
+        const view = await owner.wait(firstValueFrom(this.strengthApi.estimateOneRepMax(request)));
+        this.answered.set({ key, ...setEstimate(view, this.locale) });
+      } catch (error) {
+        if (!owner.current) return;
+        this.estimateFailure.set({
+          key,
+          message: recordRefusal(
+            error,
+            $localize`The estimate could not be worked out. Try again.`,
+          ),
+        });
+      }
+    });
   }
 
   protected async submit(): Promise<void> {
@@ -291,23 +484,33 @@ export class RecordMax extends SheetForm {
       this.refuse();
       return;
     }
-    const request = recordRequest({
-      exerciseId: this.exercise()!.id,
-      kind: this.kind(),
-      value: this.value(),
-      unit: this.unit(),
-      date: this.date(),
-      note: this.note(),
-    });
-    let saved = null as MaxEntry | null;
+    const values = this.values();
+    let saved: readonly MaxEntry[] = [];
     const ok = await this.send(
       async (owner) => {
-        saved = mapMax(
-          await owner.wait(firstValueFrom(this.api.recordStrengthMax(this.clientId(), request))),
-        );
+        if (values.kind === 'FromSet') {
+          // The server works every number out again from the set; nothing shown here is sent.
+          const answer = await owner.wait(
+            firstValueFrom(
+              this.strengthApi.recordMaxFromSet(this.clientId(), fromSetRequest(values)),
+            ),
+          );
+          saved = [
+            mapMax(answer.estimate, this.locale),
+            ...(answer.trainingMax ? [mapMax(answer.trainingMax, this.locale)] : []),
+          ];
+          return;
+        }
+        const request = recordRequest({ ...values, kind: values.kind });
+        saved = [
+          mapMax(
+            await owner.wait(firstValueFrom(this.api.recordStrengthMax(this.clientId(), request))),
+            this.locale,
+          ),
+        ];
       },
       (error) => recordRefusal(error, $localize`The max could not be saved. Try again.`),
     );
-    if (ok && saved) this.closed.emit(saved);
+    if (ok && saved.length > 0) this.closed.emit(saved);
   }
 }

@@ -60,6 +60,30 @@ public static class StrengthEndpoints
         .ProducesValidationProblem()
         .Produces(StatusCodes.Status404NotFound);
 
+        // A max from a set they did (critique B7b, STR-017): the server works the estimate out from the set and,
+        // when asked, the training max at 90 % of it; nothing it records is a number someone typed.
+        group.MapPost("/clients/{clientProfileId:guid}/maxes/from-set", async (
+            Guid clientProfileId,
+            RecordMaxFromSetRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IStrengthApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.RecordFromSetAsync(clientProfileId, request, cancellationToken);
+            return result.Status switch
+            {
+                StrengthCommandStatus.Success => Results.Ok(result.Records),
+                StrengthCommandStatus.NotFound => Results.NotFound(),
+                _ => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
+            };
+        })
+        .WithName("RecordStrengthMaxFromSet")
+        .Produces<MaxFromSetView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status404NotFound);
+
         // The two calculators change nothing, but they are POSTs like every other and check the token too
         // (audit SEC-4), so no state-changing route is ever the one exception a reader has to remember.
         group.MapPost("/estimate-one-rep-max", async (

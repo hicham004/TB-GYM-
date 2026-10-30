@@ -4,6 +4,13 @@ namespace TB.Gym.Modules.Strength;
 
 public sealed class StrengthMaxRecord : TenantEntity
 {
+    /// <summary>
+    /// The most repetitions a max from a set they did takes (critique B7b, STR-017). Epley v1 reads up to 12
+    /// (STR-005), but an estimate from reps loses accuracy past about 10 (Reynolds et al. 2006), so the
+    /// product asks for 10 or fewer.
+    /// </summary>
+    public const int MaximumSetRepetitions = 10;
+
     private StrengthMaxRecord()
     {
     }
@@ -73,6 +80,26 @@ public sealed class StrengthMaxRecord : TenantEntity
 
     public string? Note { get; private set; }
 
+    /// <summary>The weight of the set an estimate was worked out from (STR-017); null for every other max.</summary>
+    public decimal? BasisLoad { get; private set; }
+
+    /// <summary>The repetitions of that set, 1 to <see cref="MaximumSetRepetitions"/>.</summary>
+    public int? BasisRepetitions { get; private set; }
+
+    /// <summary>The estimate a training max was set from (TrainingMaxShare v1); null for every other max.</summary>
+    public Guid? SourceEstimateId { get; private set; }
+
+    /// <summary>That estimate's value as the training max took it, kept beside the link.</summary>
+    public decimal? EstimateValue { get; private set; }
+
+    /// <summary>The share of the estimate the training max is, 90 in TrainingMaxShare v1.</summary>
+    public decimal? SharePercent { get; private set; }
+
+    /// <summary>
+    /// A max as a coach records it by hand: a training max or a tested one. An estimate is never typed
+    /// (STR-001): it is worked out from a set they did, by <see cref="EstimateFromSet"/>, and a calculated
+    /// max always keeps the numbers it was calculated from.
+    /// </summary>
     public static StrengthMaxRecord Create(
         Guid tenantId,
         Guid clientProfileId,
@@ -85,8 +112,23 @@ public sealed class StrengthMaxRecord : TenantEntity
         string methodKey,
         string methodVersion,
         Guid? sourceWorkoutExecutionId,
-        string? note) =>
-        new(
+        string? note)
+    {
+        if (kind == StrengthMaxKind.EstimatedOneRepMax)
+        {
+            throw new ArgumentException(
+                "An estimated max is worked out from a set they did, never typed: record the set's weight and reps.",
+                nameof(kind));
+        }
+
+        if (source == StrengthMaxSource.Calculation)
+        {
+            throw new ArgumentException(
+                "A calculated max is recorded from a set they did, with the numbers it was worked out from.",
+                nameof(source));
+        }
+
+        return new(
             tenantId,
             clientProfileId,
             exerciseId,
@@ -99,6 +141,95 @@ public sealed class StrengthMaxRecord : TenantEntity
             methodVersion,
             sourceWorkoutExecutionId,
             note);
+    }
+
+    /// <summary>
+    /// An Estimated 1RM worked out from a set they did, weight × reps, by Epley v1 (critique B7b, STR-017). The
+    /// number is the calculation's, never typed, and the record keeps the set it came from.
+    /// </summary>
+    public static StrengthMaxRecord EstimateFromSet(
+        Guid tenantId,
+        Guid clientProfileId,
+        Guid exerciseId,
+        decimal load,
+        int repetitions,
+        LoadUnit unit,
+        DateOnly effectiveDate,
+        string? note)
+    {
+        if (repetitions is < 1 or > MaximumSetRepetitions)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(repetitions),
+                "A max from a set takes 1 to 10 reps: past 10, an estimate from reps is too rough to use.");
+        }
+
+        if (load is <= 0m or > 2_000m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(load), "The weight must be more than 0 and at most 2,000.");
+        }
+
+        var estimator = new EpleyOneRepMaxEstimator();
+        var setLoad = decimal.Round(load, 3, MidpointRounding.AwayFromZero);
+        var value = estimator.Estimate(setLoad, repetitions);
+        if (value > 2_000m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(load), "That set works out to a max of more than 2,000.");
+        }
+
+        return new StrengthMaxRecord(
+            tenantId,
+            clientProfileId,
+            exerciseId,
+            StrengthMaxKind.EstimatedOneRepMax,
+            value,
+            unit,
+            effectiveDate,
+            StrengthMaxSource.Calculation,
+            estimator.MethodKey,
+            estimator.Version,
+            null,
+            note)
+        {
+            BasisLoad = setLoad,
+            BasisRepetitions = repetitions,
+        };
+    }
+
+    /// <summary>
+    /// A training max set from an estimate by TrainingMaxShare v1, 90 % of it (critique B7b, STR-017), for the
+    /// same client, lift, unit and day. It names the estimate and keeps its value and the share, so the
+    /// arithmetic can be checked from the record alone.
+    /// </summary>
+    public static StrengthMaxRecord TrainingMaxFromEstimate(StrengthMaxRecord estimate)
+    {
+        ArgumentNullException.ThrowIfNull(estimate);
+        if (estimate.Kind != StrengthMaxKind.EstimatedOneRepMax ||
+            estimate.Source != StrengthMaxSource.Calculation ||
+            estimate.BasisLoad is null)
+        {
+            throw new ArgumentException("A training max is set from an estimate worked out from a set.", nameof(estimate));
+        }
+
+        return new StrengthMaxRecord(
+            estimate.TenantId,
+            estimate.ClientProfileId,
+            estimate.ExerciseId,
+            StrengthMaxKind.CoachWorkingMax,
+            TrainingMaxShare.Apply(estimate.Value),
+            estimate.Unit,
+            estimate.EffectiveDate,
+            StrengthMaxSource.Calculation,
+            TrainingMaxShare.Key,
+            TrainingMaxShare.CurrentVersion,
+            null,
+            null)
+        {
+            SourceEstimateId = estimate.Id,
+            EstimateValue = estimate.Value,
+            SharePercent = TrainingMaxShare.Percent,
+        };
+    }
 }
 
 /// <summary>Where a program's training max came from.</summary>

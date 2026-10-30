@@ -45,9 +45,52 @@ public sealed partial class GymDbContext
                 .HasForeignKey(item => new { item.TenantId, item.SourceWorkoutExecutionId })
                 .HasPrincipalKey(item => new { item.TenantId, item.Id })
                 .OnDelete(DeleteBehavior.Restrict);
-            entity.ToTable(table => table.HasCheckConstraint(
-                "CK_StrengthMaxHistory_Value",
-                "\"Value\" > 0 AND \"Value\" <= 2000"));
+            entity.Property(item => item.BasisLoad).HasPrecision(8, 3);
+            entity.Property(item => item.EstimateValue).HasPrecision(8, 3);
+            entity.Property(item => item.SharePercent).HasPrecision(5, 2);
+
+            // A training max set from an estimate (STR-017) names it through a key holding the client, the lift,
+            // the unit and the estimate's value, so it can only be the same client's estimate of the same lift,
+            // in the same unit, and the value it kept is the estimate's own.
+            entity.HasOne<StrengthMaxRecord>()
+                .WithMany()
+                .HasForeignKey(item => new
+                {
+                    item.TenantId,
+                    item.ClientProfileId,
+                    item.ExerciseId,
+                    item.Unit,
+                    item.EstimateValue,
+                    item.SourceEstimateId,
+                })
+                .HasPrincipalKey(item => new
+                {
+                    item.TenantId,
+                    item.ClientProfileId,
+                    item.ExerciseId,
+                    item.Unit,
+                    item.Value,
+                    item.Id,
+                })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_StrengthMaxHistory_Value",
+                    "\"Value\" > 0 AND \"Value\" <= 2000");
+
+                // An estimate from a set they did keeps the set, 1 to 10 reps, all or nothing; Epley v1 never
+                // gives less than the weight lifted, nor more than 4/3 of it at 10 reps.
+                table.HasCheckConstraint(
+                    "CK_StrengthMaxHistory_SetBasis",
+                    "(\"BasisLoad\" IS NULL AND \"BasisRepetitions\" IS NULL) OR (\"BasisLoad\" > 0 AND \"BasisLoad\" <= 2000 AND \"BasisRepetitions\" >= 1 AND \"BasisRepetitions\" <= 10 AND \"Kind\" = 'EstimatedOneRepMax' AND \"Source\" = 'Calculation' AND \"Value\" >= \"BasisLoad\" AND \"Value\" <= round(\"BasisLoad\" * 40 / 30, 3))");
+
+                // A training max set from an estimate keeps the estimate's value and the share it took, all or
+                // nothing, and is exactly that share of it to three decimals (TrainingMaxShare).
+                table.HasCheckConstraint(
+                    "CK_StrengthMaxHistory_FromEstimate",
+                    "(\"SourceEstimateId\" IS NULL AND \"EstimateValue\" IS NULL AND \"SharePercent\" IS NULL) OR (\"SourceEstimateId\" IS NOT NULL AND \"EstimateValue\" > 0 AND \"EstimateValue\" <= 2000 AND \"SharePercent\" > 0 AND \"SharePercent\" <= 100 AND \"Kind\" = 'CoachWorkingMax' AND \"Source\" = 'Calculation' AND \"BasisLoad\" IS NULL AND \"Value\" = round(\"EstimateValue\" * \"SharePercent\" / 100, 3))");
+            });
             ConfigureTenantEntity(entity);
         });
 

@@ -1,7 +1,10 @@
 import { formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import type {
+  EstimateOneRepMaxRequest,
   ExerciseHistoryItem,
+  OneRepMaxEstimateView,
+  RecordMaxFromSetRequest,
   RecordStrengthMaxRequest,
   StrengthMaxKind,
   StrengthMaxView,
@@ -24,21 +27,37 @@ const toNumber = (value: number | string): number => Number(value);
 /** The server's limit on a recorded max, in either unit (kilograms and pounds are never converted). */
 export const MAX_LOAD = { min: 0, max: 2000 } as const;
 
-/** The kinds a coach may record by hand: an estimate only ever comes from a calculation or a set. */
-export const RECORDABLE_KINDS: readonly {
-  readonly value: Extract<StrengthMaxKind, 'CoachWorkingMax' | 'TestedOneRepMax'>;
+/**
+ * The most reps a max from a set they did takes (critique B7b, STR-017): the server's Epley v1 reads 12, but an
+ * estimate from reps loses accuracy past about 10, so the product asks for 10 or fewer. The server refuses more.
+ */
+export const SET_REPS = { min: 1, max: 10 } as const;
+
+/**
+ * What Record a max offers (critique B7b): a training max or a tested one typed in, or a set they did, whose
+ * estimate the server works out. An estimate is never typed (STR-001), so it is not a kind of its own here.
+ */
+export type MaxChoice = Extract<StrengthMaxKind, 'CoachWorkingMax' | 'TestedOneRepMax'> | 'FromSet';
+
+export const MAX_CHOICES: readonly {
+  readonly value: MaxChoice;
   readonly label: string;
   readonly hint: string;
 }[] = [
   {
     value: 'CoachWorkingMax',
     label: $localize`Training max`,
-    hint: $localize`The number a program works its percentages from.`,
+    hint: $localize`The number a program’s percentages use; 5/3/1-style programs set it at 85 to 90% of the best single, others use the single itself.`,
   },
   {
     value: 'TestedOneRepMax',
     label: $localize`Tested 1RM`,
-    hint: $localize`The heaviest single they lifted when it was tested.`,
+    hint: $localize`The heaviest single they actually lifted, on that day.`,
+  },
+  {
+    value: 'FromSet',
+    label: $localize`From a set they did`,
+    hint: $localize`Its weight × reps, up to 10 reps; their 1RM is worked out from it.`,
   },
 ];
 
@@ -57,12 +76,15 @@ export interface MaxEntry {
   /** The day the max was true, never the day it was typed in. */
   readonly date: string;
   readonly createdAtUtc: string;
-  /** Where it came from, in words: a program and its week, or how a coach recorded it. */
+  /** Where it came from, in words: a program and its week, a set they did, or how a coach recorded it. */
   readonly source: string;
   readonly note: string | null;
+  /** The estimate a training max was set from in the same save (STR-017), so it reads right above it. */
+  readonly derivedFrom: string | null;
 }
 
-export function mapMax(view: StrengthMaxView): MaxEntry {
+/** Maps one row of the history; `locale` words the numbers in where it came from. */
+export function mapMax(view: StrengthMaxView, locale = 'en'): MaxEntry {
   return {
     id: view.id,
     exerciseId: view.exerciseId,
@@ -73,8 +95,9 @@ export function mapMax(view: StrengthMaxView): MaxEntry {
     unit: view.unit,
     date: view.effectiveDate,
     createdAtUtc: view.createdAtUtc,
-    source: historySourceWords(view),
+    source: historySourceWords(view, locale),
     note: view.note,
+    derivedFrom: view.fromEstimate?.estimateId ?? null,
   };
 }
 
@@ -100,7 +123,10 @@ export interface Lift {
 }
 
 const newestFirst = (a: MaxEntry, b: MaxEntry) =>
-  b.date.localeCompare(a.date) || b.createdAtUtc.localeCompare(a.createdAtUtc);
+  b.date.localeCompare(a.date) ||
+  b.createdAtUtc.localeCompare(a.createdAtUtc) ||
+  // Saved together, a training max set from an estimate reads above the estimate it was made from.
+  (a.derivedFrom === b.id ? -1 : b.derivedFrom === a.id ? 1 : 0);
 
 /** Lifts with the most recent change first, so what moved lately is on top. */
 export function groupLifts(entries: readonly MaxEntry[]): Lift[] {
@@ -175,39 +201,69 @@ function sameValue(a: number, b: number): boolean {
 
 export interface MaxValues {
   exerciseId: string | null;
-  kind: Extract<StrengthMaxKind, 'CoachWorkingMax' | 'TestedOneRepMax'>;
+  kind: MaxChoice;
+  /** The max typed, or the weight of the set they did. */
   value: number | null;
+  /** The reps of the set they did; only a set has them. */
+  repetitions: number | null;
   unit: TrainingLoadUnit;
   date: string;
   note: string;
+  /** Whether a set's estimate also sets their training max at 90% of it (TrainingMaxShare v1). */
+  alsoTrainingMax: boolean;
 }
 
-export type MaxField = 'exercise' | 'value' | 'date';
+export type MaxField = 'exercise' | 'value' | 'repetitions' | 'date';
 
 export function maxErrors(values: MaxValues, today: string): Record<MaxField, string[]> {
-  const errors: Record<MaxField, string[]> = { exercise: [], value: [], date: [] };
+  const errors: Record<MaxField, string[]> = { exercise: [], value: [], repetitions: [], date: [] };
+  const fromSet = values.kind === 'FromSet';
   if (values.exerciseId === null) errors.exercise.push($localize`Choose the exercise.`);
   if (values.value === null || !Number.isFinite(values.value)) {
     errors.value.push($localize`Enter the weight.`);
   } else if (values.value <= MAX_LOAD.min || values.value > MAX_LOAD.max) {
     errors.value.push(
-      $localize`A max has to be more than 0 and at most 2,000 ${unitLabel(values.unit)}:unit:.`,
+      fromSet
+        ? $localize`The weight has to be more than 0 and at most 2,000 ${unitLabel(values.unit)}:unit:.`
+        : $localize`A max has to be more than 0 and at most 2,000 ${unitLabel(values.unit)}:unit:.`,
     );
   }
+  if (fromSet) {
+    const reps = values.repetitions;
+    if (reps === null || !Number.isFinite(reps)) {
+      errors.repetitions.push($localize`Enter the reps.`);
+    } else if (!Number.isInteger(reps) || reps < SET_REPS.min || reps > SET_REPS.max) {
+      errors.repetitions.push(
+        $localize`From 1 to 10 reps: past 10, an estimate from reps is too rough to use.`,
+      );
+    }
+  }
   if (!values.date) {
-    errors.date.push($localize`Choose the day it was true.`);
+    errors.date.push(
+      fromSet ? $localize`Choose the day they did it.` : $localize`Choose the day it was true.`,
+    );
   } else if (values.date > today) {
-    errors.date.push($localize`A max can be recorded for today or a day that has passed.`);
+    errors.date.push(
+      fromSet
+        ? $localize`A set they did is from today or a day that has passed.`
+        : $localize`A max can be recorded for today or a day that has passed.`,
+    );
   }
   return errors;
 }
 
 export function maxProblems(errors: Record<MaxField, readonly string[]>): number {
-  return errors.exercise.length + errors.value.length + errors.date.length;
+  return (
+    errors.exercise.length + errors.value.length + errors.repetitions.length + errors.date.length
+  );
 }
 
+const noteOrNull = (note: string): string | null => (note.trim() === '' ? null : note.trim());
+
 /** Recorded by hand, so its source is a coach entry; the server names the method itself. */
-export function recordRequest(values: MaxValues): RecordStrengthMaxRequest {
+export function recordRequest(
+  values: MaxValues & { kind: Exclude<MaxChoice, 'FromSet'> },
+): RecordStrengthMaxRequest {
   return {
     exerciseId: values.exerciseId!,
     kind: values.kind,
@@ -218,8 +274,75 @@ export function recordRequest(values: MaxValues): RecordStrengthMaxRequest {
     methodKey: null,
     methodVersion: null,
     sourceWorkoutExecutionId: null,
-    note: values.note.trim() === '' ? null : values.note.trim(),
+    note: noteOrNull(values.note),
   };
+}
+
+/** A set they did: the server works the estimate out from it, and the training max when asked (STR-017). */
+export function fromSetRequest(values: MaxValues): RecordMaxFromSetRequest {
+  return {
+    exerciseId: values.exerciseId!,
+    load: values.value!,
+    repetitions: values.repetitions!,
+    unit: values.unit,
+    effectiveDate: values.date,
+    alsoSetTrainingMax: values.alsoTrainingMax,
+    note: noteOrNull(values.note),
+  };
+}
+
+/**
+ * What the server's calculator is asked for a set while the coach types (INV-9), or null while the weight or
+ * the reps cannot make an estimate yet. Nothing is worked out in the browser.
+ */
+export function estimateRequest(
+  values: Pick<MaxValues, 'value' | 'repetitions' | 'unit'>,
+): EstimateOneRepMaxRequest | null {
+  const { value, repetitions } = values;
+  if (value === null || !Number.isFinite(value) || value <= MAX_LOAD.min || value > MAX_LOAD.max) {
+    return null;
+  }
+  if (
+    repetitions === null ||
+    !Number.isInteger(repetitions) ||
+    repetitions < SET_REPS.min ||
+    repetitions > SET_REPS.max
+  ) {
+    return null;
+  }
+  return { load: value, repetitions, unit: values.unit, methodKey: 'Epley' };
+}
+
+/** The server's estimate for a set, in the sheet's words. */
+export interface SetEstimate {
+  /** "116.67 kg" */
+  readonly estimate: string;
+  /** The server's own sentence: "Epley v1: 100 kg × (1 + 5 / 30) = 116.667 kg." */
+  readonly explanation: string;
+  /** "105 kg", what "Also set their training max at 90%" records; null past what a max can be. */
+  readonly trainingMax: string | null;
+  /** A max is at most 2,000: past it the save is refused, so the sheet says so first. */
+  readonly tooHeavy: boolean;
+}
+
+export function setEstimate(view: OneRepMaxEstimateView, locale = 'en'): SetEstimate {
+  const estimate = toNumber(view.estimate);
+  const trainingMax = view.trainingMax ? toNumber(view.trainingMax.value) : null;
+  return {
+    estimate: valueWords(estimate, view.unit, locale),
+    explanation: view.explanation,
+    trainingMax: trainingMax === null ? null : valueWords(trainingMax, view.unit, locale),
+    tooHeavy: estimate > MAX_LOAD.max,
+  };
+}
+
+/** The toast once a max is recorded: one entry, or a set's estimate and the training max set from it. */
+export function recordedWords(entries: readonly MaxEntry[], locale = 'en'): string {
+  const [first, second] = entries;
+  if (second) {
+    return $localize`${first.exerciseName}:lift: — Estimated 1RM ${valueWords(first.value, first.unit, locale)}:estimate: and training max ${valueWords(second.value, second.unit, locale)}:trainingMax: recorded.`;
+  }
+  return $localize`${first.exerciseName}:lift: — ${first.kindLabel}:kind: ${valueWords(first.value, first.unit, locale)}:value: recorded.`;
 }
 
 /** What a refused recording means for the coach. */

@@ -978,7 +978,9 @@ of the implemented R1.3 screens before production rollout.
   beside it, and the change since the earlier one of the same kind and unit is said in words, never
   between kilograms and pounds. (2) **A coach records a training max or a tested one only**: the server
   refuses a typed estimate ("An estimated max requires a calculation or a workout source"), and the
-  older form offered it and always failed. (3) **How they have done** lists their sets newest first, the
+  older form offered it and always failed. Since critique B7b (2026-10-30) the sheet also takes a set they
+  did, weight × reps up to 10: the server's estimate shows under Reps as the coach types, and "Also set
+  their training max at 90%", ticked by default, records a training max beside it (STR-017). (3) **How they have done** lists their sets newest first, the
   best estimated max and a chart of the estimates, in pages of 50. (4) **A lift is chosen from the ones
   with a max first, then by searching the library** on the server (two letters, 8 matches), so a large
   library is never loaded whole.

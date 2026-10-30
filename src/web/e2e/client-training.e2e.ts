@@ -2022,8 +2022,9 @@ test('a max recorded from a lift’s row sends a tested max with no estimate, th
   const sheet = page.getByRole('dialog', { name: 'Record a max for Back Squat' });
   await expect(sheet).toBeVisible();
   await page.waitForTimeout(700);
-  // Two kinds, and never an estimate: the server refuses one without a calculation or a workout.
-  await expect(sheet.locator('input[name="kind"]')).toHaveCount(2);
+  // Three kinds, and never a typed estimate: a set they did is worked out by the server (critique B7b).
+  await expect(sheet.locator('input[name="kind"]')).toHaveCount(3);
+  await expect(sheet.locator('input[name="kind"][value="FromSet"]')).toHaveCount(1);
   await expect(sheet).not.toContainText('Estimated');
   await axe(page);
   await docsPicture(page, 'r53d2-record-390.png');

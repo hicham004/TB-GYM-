@@ -21,6 +21,7 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { ClientStrength } from './client-strength';
+import { ClientStrengthApi } from './client-strength-api';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 type Api = Partial<
@@ -29,6 +30,12 @@ type Api = Partial<
     ReturnType<typeof vi.fn>
   >
 >;
+
+/** The Record a max sheet's own calls (critique B7b): the server's estimate, and a set they did saved. */
+const strengthCalls = {
+  estimateOneRepMax: vi.fn(),
+  recordMaxFromSet: vi.fn(),
+};
 
 async function render(
   api: Api = {},
@@ -46,6 +53,7 @@ async function render(
   TestBed.configureTestingModule({
     providers: [
       { provide: ApiClient, useValue: calls },
+      { provide: ClientStrengthApi, useValue: strengthCalls },
       {
         provide: ClientWorkspaceContext,
         useValue: {
@@ -80,6 +88,8 @@ describe('A client’s strength history', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    strengthCalls.estimateOneRepMax.mockReset();
+    strengthCalls.recordMaxFromSet.mockReset();
     document.body
       .querySelectorAll('.cdk-overlay-container')
       .forEach((node) => node.replaceChildren());
@@ -217,6 +227,96 @@ describe('A client’s strength history', () => {
     expect(dialog()).toBeNull();
     expect(host.querySelector('[data-skeleton], app-skeleton')).toBeNull();
     expect(textOf(host.querySelector('[data-lift] .now'))).toBe('100 kg Training max');
+  });
+
+  it('records a set they did, says both maxes it saved, and lists the training max above its estimate', async () => {
+    const estimate = maxView({
+      id: 'est-1',
+      kind: 'EstimatedOneRepMax',
+      value: 116.667,
+      effectiveDate: TODAY,
+      createdAtUtc: '2026-10-10T09:00:00Z',
+      source: 'Calculation',
+      methodKey: 'Epley',
+      program: null,
+      basis: { load: 100, repetitions: 5 },
+    });
+    const trainingMax = maxView({
+      id: 'tm-1',
+      value: 105,
+      effectiveDate: TODAY,
+      createdAtUtc: '2026-10-10T09:00:00Z',
+      source: 'Calculation',
+      methodKey: 'TrainingMaxShare',
+      program: null,
+      fromEstimate: { estimateId: 'est-1', estimate: 116.667, percent: 90 },
+    });
+    strengthCalls.estimateOneRepMax.mockReturnValue(
+      of({
+        estimate: 116.667,
+        unit: 'Kilogram',
+        methodKey: 'Epley',
+        methodVersion: '1.0',
+        qualification: '',
+        explanation: 'Epley v1: 100 kg × (1 + 5 / 30) = 116.667 kg.',
+        trainingMax: {
+          value: 105,
+          percent: 90,
+          methodKey: 'TrainingMaxShare',
+          methodVersion: '1.0',
+          explanation: '',
+        },
+      }),
+    );
+    strengthCalls.recordMaxFromSet.mockReturnValue(of({ estimate, trainingMax }));
+    // The server lists them in either order; the training max reads above the estimate it came from.
+    const listStrengthMaxes = vi
+      .fn()
+      .mockReturnValueOnce(of(maxPage(mayaMaxes())))
+      .mockReturnValue(of(maxPage([estimate, trainingMax, ...mayaMaxes()])));
+    const { fixture, host, calls } = await render({ listStrengthMaxes });
+
+    press(host.querySelector('[data-lift]')!, 'Record a max');
+    await settle(fixture);
+    const sheet = dialog()!;
+    sheet.querySelector<HTMLInputElement>('input[name="kind"][value="FromSet"]')!.click();
+    await settle(fixture);
+    fill(sheet, 'Weight', '100');
+    fill(sheet, 'Reps', '5');
+    await settle(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await settle(fixture);
+    expect(textOf(sheet.querySelector('[data-training-max]'))).toBe(
+      'Training max 105 kg · 90% of the estimate',
+    );
+    press(sheet, 'Record max');
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(strengthCalls.recordMaxFromSet).toHaveBeenCalledWith(
+      'client-1',
+      expect.objectContaining({
+        exerciseId: SQUAT,
+        load: 100,
+        repetitions: 5,
+        alsoSetTrainingMax: true,
+      }),
+    );
+    expect(calls.recordStrengthMax).not.toHaveBeenCalled();
+    expect(toast()).toContain(
+      'Back Squat — Estimated 1RM 116.67 kg and training max 105 kg recorded.',
+    );
+    expect(dialog()).toBeNull();
+    const squat = host.querySelector('[data-lift]')!;
+    expect(textOf(squat.querySelector('.now'))).toBe('105 kg Training max');
+    expect(textOf(squat.querySelector('[data-also]'))).toContain('Estimated 1RM 116.67 kg');
+    const history = squat.querySelector<HTMLElement>('[data-history]')!;
+    await toggleFold(fixture, history, 'All 5 on record');
+    const rows = Array.from(history.querySelectorAll('.entry')).map((row) => textOf(row));
+    expect(rows.slice(0, 2)).toEqual([
+      expect.stringContaining('105 kg Training max 90% of an estimated 116.67 kg'),
+      expect.stringContaining('116.67 kg Estimated 1RM From 100 kg × 5 (Epley)'),
+    ]);
   });
 
   it('reads the list again, quietly, each time the program page changes something (R5.4c)', async () => {

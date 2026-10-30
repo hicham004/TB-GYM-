@@ -45,6 +45,9 @@ public interface IOneRepMaxEstimator
     string Version { get; }
 
     decimal Estimate(decimal load, int repetitions);
+
+    /// <summary>The estimate with its numbers, in the words kept beside every calculation.</summary>
+    string Explain(decimal load, int repetitions, LoadUnit unit);
 }
 
 public sealed class EpleyOneRepMaxEstimator : IOneRepMaxEstimator
@@ -61,6 +64,17 @@ public sealed class EpleyOneRepMaxEstimator : IOneRepMaxEstimator
         ValidateEstimateInput(load, repetitions, 12);
         var estimate = repetitions == 1 ? load : load * (1m + repetitions / 30m);
         return decimal.Round(estimate, 3, MidpointRounding.AwayFromZero);
+    }
+
+    public string Explain(decimal load, int repetitions, LoadUnit unit)
+    {
+        var estimate = Estimate(load, repetitions);
+        var unitName = StrengthUnits.Short(unit);
+        return repetitions == 1
+            ? string.Create(CultureInfo.InvariantCulture,
+                $"Epley v1: a single of {load:0.###} {unitName} is the max itself.")
+            : string.Create(CultureInfo.InvariantCulture,
+                $"Epley v1: {load:0.###} {unitName} × (1 + {repetitions} / 30) = {estimate:0.###} {unitName}.");
     }
 
     internal static void ValidateEstimateInput(decimal load, int repetitions, int maxRepetitions)
@@ -89,6 +103,17 @@ public sealed class BrzyckiOneRepMaxEstimator : IOneRepMaxEstimator
         EpleyOneRepMaxEstimator.ValidateEstimateInput(load, repetitions, 10);
         var estimate = repetitions == 1 ? load : load * 36m / (37m - repetitions);
         return decimal.Round(estimate, 3, MidpointRounding.AwayFromZero);
+    }
+
+    public string Explain(decimal load, int repetitions, LoadUnit unit)
+    {
+        var estimate = Estimate(load, repetitions);
+        var unitName = StrengthUnits.Short(unit);
+        return repetitions == 1
+            ? string.Create(CultureInfo.InvariantCulture,
+                $"Brzycki v1: a single of {load:0.###} {unitName} is the max itself.")
+            : string.Create(CultureInfo.InvariantCulture,
+                $"Brzycki v1: {load:0.###} {unitName} × 36 / (37 − {repetitions}) = {estimate:0.###} {unitName}.");
     }
 }
 

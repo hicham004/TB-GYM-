@@ -104,7 +104,7 @@ export function sourceWords(entry: TrainingMaxEntryView, firstName: string): str
  * Where a row of the client's max history came from (STR-015): a program's training max names its
  * program and the week it applies from, a recorded max how it was recorded.
  */
-export function historySourceWords(record: StrengthMaxView): string {
+export function historySourceWords(record: StrengthMaxView, locale = 'en'): string {
   const program = record.program;
   if (program) {
     const origin = (() => {
@@ -122,6 +122,13 @@ export function historySourceWords(record: StrengthMaxView): string {
       }
     })();
     return $localize`${program.programName}:program:, from week ${program.effectiveFromWeek}:week:, ${origin}:origin:`;
+  }
+  // A max from a set they did (critique B7b, STR-017): the estimate names its set, the training max its estimate.
+  if (record.basis) {
+    return $localize`From ${weight(record.basis.load, record.unit, locale)}:set: × ${num(record.basis.repetitions)}:reps: (${record.methodKey}:method:)`;
+  }
+  if (record.fromEstimate) {
+    return $localize`${formatNumber(num(record.fromEstimate.percent), locale, '1.0-2')}:percent:% of an estimated ${weight(record.fromEstimate.estimate, record.unit, locale)}:estimate:`;
   }
   switch (record.methodKey) {
     case 'CoachSelection':

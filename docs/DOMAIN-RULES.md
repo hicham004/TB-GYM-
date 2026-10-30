@@ -661,7 +661,9 @@ client is refused at the workspace (ADR 0027).
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated
 1RM, or coach working max), value/unit, effective date, source, method/version, optional source
-workout, and note. Recording a new value appends history; update/delete is prohibited.
+workout, and note. Recording a new value appends history; update/delete is prohibited. An estimate is
+never typed: since critique B7b (2026-10-30) the server works it out from a set they did (STR-017),
+and the record route refuses an estimated kind or a calculation source.
 
 **STR-002** Assignment snapshots exactly one working max for every exercise using calculated
 loading. Later global strength records never rewrite prescriptions. Intentional rebasing was
@@ -808,8 +810,8 @@ newest first, each named with its program, the week it applies from and where it
 day the coach set it in that program's time zone. Each fact stays stored once: a program's max is never
 copied into the recorded maxes, and its id is the program max's, which Assign program never sends as a
 saved max, so the plain list (and Assign program) stays the recorded maxes alone. The coach's Strength
-history (R5.3d2) groups that list by lift; a coach records a training max or a tested one, because the
-server refuses a typed estimate (STR-001: an estimate needs a calculation or a workout).
+history (R5.3d2) groups that list by lift; a coach records a training max, a tested one, or a set they
+did whose estimate the server works out (STR-017), and a typed estimate is refused (STR-001).
 
 **STR-016** How they have done (`GET /api/training/clients/{clientProfileId}/exercises/{exerciseId}/history`,
 audit A3, TRAIN-4) estimates each finished set's max by a named formula and says which
@@ -817,6 +819,21 @@ audit A3, TRAIN-4) estimates each finished set's max by a named formula and says
 chart %, to three decimals: the number the Training maxes panel gives the same set (STR-012). Any other
 set of 1 to 12 reps with a weight is read by Epley v1. A set with no weight or more than 12 reps has
 no estimate; nothing is extrapolated. The sheet names the formula on each row.
+
+**STR-017** A max from a set they did (critique B7b, built 2026-10-30; the owner's choice of 2026-10-27,
+ADR 0036). Record a max takes a set's weight × reps, 1 to 10 reps (Epley v1 reads 12, STR-005, but an
+estimate from reps loses accuracy past about 10, Reynolds et al. 2006), the day they did it (today or a
+day gone in the workspace, checked by the server) and a note. The server works the estimate out by Epley
+v1 and records an Estimated 1RM whose source is the calculation (method Epley 1.0) and which keeps the
+set's weight and reps. "Also set their training max at 90%", ticked by default, records in the same save
+a training max by `TrainingMaxShare` v1, 90 % of the estimate to three decimals (Wendler's starting
+point), for the same lift, unit and day, naming the estimate and keeping its value and the share. The
+database checks both: a set of 1 to 10 reps whose estimate lies between the weight and 4/3 of it, a
+training max of exactly its share of the estimate, and a key tying it to the same client's estimate of
+the same lift, unit and value; both are append-only. `POST /api/strength/estimate-one-rep-max` (audit
+INV-9) gives the sheet the estimate, its sentence and the training max at 90 % while the coach types;
+nothing is worked out in the browser. Programs read neither directly: Assign program starts from the
+training max as from any recorded one (STR-014).
 
 ## 6. Nutrition, recipes, and calorie targets
 

@@ -2286,6 +2286,11 @@ export type MacroSplitView = {
 
 export type ManualPaymentMethod = 'Cash' | 'BankTransfer' | 'Card' | 'MobileWallet' | 'Other';
 
+export type MaxFromSetView = {
+  estimate: StrengthMaxView;
+  trainingMax: null | StrengthMaxView;
+};
+
 export type MealPlanChoiceRequest = {
   recipeVersionId: string;
   servings: number | string;
@@ -2741,6 +2746,8 @@ export type OneRepMaxEstimateView = {
   methodKey: string;
   methodVersion: string;
   qualification: string;
+  explanation: string;
+  trainingMax: null | TrainingMaxShareView;
 };
 
 export type OwnCoachView = {
@@ -3406,6 +3413,16 @@ export type RecordManualPaymentRequest = {
   idempotencyKey: string;
 };
 
+export type RecordMaxFromSetRequest = {
+  exerciseId: string;
+  load: number | string;
+  repetitions: number | string;
+  unit: LoadUnit;
+  effectiveDate: string;
+  alsoSetTrainingMax: boolean;
+  note: null | string;
+};
+
 export type RecordNutritionChoiceRequest = {
   planDayId: string;
   planSlotId: string;
@@ -3724,6 +3741,12 @@ export type StartingWeightView = {
   corrections: Array<StartingWeightCorrectionView>;
 };
 
+export type StrengthMaxFromEstimateView = {
+  estimateId: string;
+  estimate: number | string;
+  percent: number | string;
+};
+
 export type StrengthMaxKind = 'TestedOneRepMax' | 'EstimatedOneRepMax' | 'CoachWorkingMax';
 
 export type StrengthMaxPage = {
@@ -3738,6 +3761,11 @@ export type StrengthMaxProgramView = {
   programName: string;
   effectiveFromWeek: number | string;
   origin: WorkingMaxSource;
+};
+
+export type StrengthMaxSetView = {
+  load: number | string;
+  repetitions: number | string;
 };
 
 export type StrengthMaxSource = 'Manual' | 'TestedLift' | 'WorkoutSet' | 'Calculation';
@@ -3758,6 +3786,8 @@ export type StrengthMaxView = {
   note: null | string;
   createdAtUtc: string;
   program?: null | StrengthMaxProgramView;
+  basis?: null | StrengthMaxSetView;
+  fromEstimate?: null | StrengthMaxFromEstimateView;
 };
 
 export type SubstituteExerciseRequest = {
@@ -3905,6 +3935,14 @@ export type TrainingMaxSetChangeView = {
   percentageWorkingMax: null | number | string;
   previousLoad: null | number | string;
   newLoad: number | string;
+  explanation: string;
+};
+
+export type TrainingMaxShareView = {
+  value: number | string;
+  percent: number | string;
+  methodKey: string;
+  methodVersion: string;
   explanation: string;
 };
 
@@ -6641,6 +6679,39 @@ export type RecordStrengthMaxResponses = {
 
 export type RecordStrengthMaxResponse =
   RecordStrengthMaxResponses[keyof RecordStrengthMaxResponses];
+
+export type RecordStrengthMaxFromSetData = {
+  body: RecordMaxFromSetRequest;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/strength/clients/{clientProfileId}/maxes/from-set';
+};
+
+export type RecordStrengthMaxFromSetErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type RecordStrengthMaxFromSetError =
+  RecordStrengthMaxFromSetErrors[keyof RecordStrengthMaxFromSetErrors];
+
+export type RecordStrengthMaxFromSetResponses = {
+  /**
+   * OK
+   */
+  200: MaxFromSetView;
+};
+
+export type RecordStrengthMaxFromSetResponse =
+  RecordStrengthMaxFromSetResponses[keyof RecordStrengthMaxFromSetResponses];
 
 export type EstimateOneRepMaxData = {
   body: EstimateOneRepMaxRequest;

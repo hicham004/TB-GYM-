@@ -682,3 +682,28 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   updated from there." and the Strength history's "Programs don’t read the maxes you record directly: …",
   the critique's sentence; the preview's "Weights are worked out …" only when a lift needs a max.
   Recommendation: keep.
+- B7b · The share. Built: a fixed 90 % (`TrainingMaxShare` v1) behind "Also set their training max at 90%",
+  ticked by default; a coach whose programs use the single itself unticks it, so the estimate alone is
+  recorded, or types a training max. Other way: picks 85 · 90 · 95 · 100 % under the box, 90 first, as the
+  targets sheet's picks. Recommendation: keep until a coach asks; the record already keeps its share, so a
+  pick is a small v2.
+- B7b · An estimate alone at Assign program. Built: unchanged, Assign program starts a lift from the newest
+  training max recorded in its unit and from an estimate only when the lift has no training max (STR-014's
+  rule), so an unticked set leaves an older training max in place. Other way: the newest max of any kind.
+  Recommendation: keep: a program's percentages use a training max, and the box is ticked by default.
+- B7b · The day and the note. Built: "Day they did it", today or a day gone, checked by the server too; the
+  note goes on the estimate ("How the set went, or where it was done.") and the training max carries none,
+  its line saying where it came from. Other way: the note on both. Recommendation: keep.
+- B7b · Where the estimate shows. Built: right under the Reps box, the server's figure and its sentence
+  ("Estimated 1RM 116.67 kg", "Epley v1: 100 kg × (1 + 5 / 30) = 116.667 kg."), asked of the server once
+  typing pauses, then the box and "Training max 105 kg · 90% of the estimate" under it; nothing is asked
+  while the weight or the reps cannot make an estimate. Other way: the figures only once saved.
+  Recommendation: keep: the coach sees the training max before recording it.
+- B7b · Words the row did not give. Built: the kinds' hints in the row's words with "%" as the app writes
+  shares ("85 to 90%"), "Its weight × reps, up to 10 reps; their 1RM is worked out from it.", "Reps", "From 1
+  to 10 reps.", "From 1 to 10 reps: past 10, an estimate from reps is too rough to use.", "Enter the reps.",
+  "Day they did it", "Choose the day they did it.", "A set they did is from today or a day that has
+  passed.", "The weight of the set, for Back Squat. …", "Their estimated 1RM shows here once the weight and
+  the reps are in.", "Working out their estimated 1RM…", "That set works out to a max of more than 2,000.",
+  the toast "Back Squat — Estimated 1RM 116.67 kg and training max 105 kg recorded.", and the history's
+  "From 100 kg × 5 (Epley)" and "90% of an estimated 116.67 kg". Recommendation: keep.

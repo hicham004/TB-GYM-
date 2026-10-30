@@ -8655,6 +8655,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("BasisLoad")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
+                    b.Property<int?>("BasisRepetitions")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ClientProfileId")
                         .HasColumnType("uuid");
 
@@ -8668,6 +8675,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("EffectiveDate")
                         .HasColumnType("date");
+
+                    b.Property<decimal?>("EstimateValue")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
 
                     b.Property<Guid>("ExerciseId")
                         .HasColumnType("uuid");
@@ -8691,10 +8702,17 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<decimal?>("SharePercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)");
+
+                    b.Property<Guid?>("SourceEstimateId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("SourceWorkoutExecutionId")
                         .HasColumnType("uuid");
@@ -8733,8 +8751,14 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ClientProfileId", "ExerciseId", "EffectiveDate", "CreatedAtUtc");
 
+                    b.HasIndex("TenantId", "ClientProfileId", "ExerciseId", "Unit", "EstimateValue", "SourceEstimateId");
+
                     b.ToTable("MaxHistory", "strength", t =>
                         {
+                            t.HasCheckConstraint("CK_StrengthMaxHistory_FromEstimate", "(\"SourceEstimateId\" IS NULL AND \"EstimateValue\" IS NULL AND \"SharePercent\" IS NULL) OR (\"SourceEstimateId\" IS NOT NULL AND \"EstimateValue\" > 0 AND \"EstimateValue\" <= 2000 AND \"SharePercent\" > 0 AND \"SharePercent\" <= 100 AND \"Kind\" = 'CoachWorkingMax' AND \"Source\" = 'Calculation' AND \"BasisLoad\" IS NULL AND \"Value\" = round(\"EstimateValue\" * \"SharePercent\" / 100, 3))");
+
+                            t.HasCheckConstraint("CK_StrengthMaxHistory_SetBasis", "(\"BasisLoad\" IS NULL AND \"BasisRepetitions\" IS NULL) OR (\"BasisLoad\" > 0 AND \"BasisLoad\" <= 2000 AND \"BasisRepetitions\" >= 1 AND \"BasisRepetitions\" <= 10 AND \"Kind\" = 'EstimatedOneRepMax' AND \"Source\" = 'Calculation' AND \"Value\" >= \"BasisLoad\" AND \"Value\" <= round(\"BasisLoad\" * 40 / 30, 3))");
+
                             t.HasCheckConstraint("CK_StrengthMaxHistory_Value", "\"Value\" > 0 AND \"Value\" <= 2000");
                         });
                 });
@@ -13462,6 +13486,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "SourceWorkoutExecutionId")
                         .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Strength.StrengthMaxRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId", "ExerciseId", "Unit", "EstimateValue", "SourceEstimateId")
+                        .HasPrincipalKey("TenantId", "ClientProfileId", "ExerciseId", "Unit", "Value", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

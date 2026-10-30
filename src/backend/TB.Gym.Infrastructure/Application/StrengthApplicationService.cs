@@ -5,7 +5,10 @@ using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
-internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenantContext tenantContext)
+internal sealed class StrengthApplicationService(
+    GymDbContext dbContext,
+    ITenantContext tenantContext,
+    IClock clock)
     : IStrengthApplicationService
 {
     private const string ManualMethodVersion = "1.0";
@@ -121,6 +124,75 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
         }
     }
 
+    public async Task<MaxFromSetCommandResult> RecordFromSetAsync(
+        Guid clientProfileId,
+        RecordMaxFromSetRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await dbContext.ClientProfiles.AsNoTracking()
+                .AnyAsync(item => item.Id == clientProfileId, cancellationToken) ||
+            !await dbContext.Exercises.AsNoTracking()
+                .AnyAsync(item => item.Id == request.ExerciseId && !item.IsArchived, cancellationToken))
+        {
+            return new MaxFromSetCommandResult(StrengthCommandStatus.NotFound);
+        }
+
+        // The day they did the set, in the workspace's calendar (SYS-008): a set not done yet implies nothing.
+        if (request.EffectiveDate > await GetTenantTodayAsync(cancellationToken))
+        {
+            return InvalidFromSet("effectiveDate", "A max from a set is for today or a day that has passed.");
+        }
+
+        if (!Enum.IsDefined(request.Unit))
+        {
+            return InvalidFromSet("unit", "Choose kilograms or pounds.");
+        }
+
+        StrengthMaxRecord estimate;
+        try
+        {
+            estimate = StrengthMaxRecord.EstimateFromSet(
+                tenantContext.TenantId,
+                clientProfileId,
+                request.ExerciseId,
+                request.Load,
+                request.Repetitions,
+                request.Unit,
+                request.EffectiveDate,
+                request.Note);
+        }
+        catch (ArgumentException exception)
+        {
+            return InvalidFromSet(
+                exception.ParamName switch
+                {
+                    "repetitions" or "load" or "note" => exception.ParamName,
+                    _ => "max",
+                },
+                exception.PersonMessage());
+        }
+
+        // Both or neither: one save, so a training max never stands without the estimate it names.
+        var trainingMax = request.AlsoSetTrainingMax ? StrengthMaxRecord.TrainingMaxFromEstimate(estimate) : null;
+        dbContext.StrengthMaxRecords.Add(estimate);
+        if (trainingMax is not null)
+        {
+            dbContext.StrengthMaxRecords.Add(trainingMax);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var exerciseName = await dbContext.Exercises.AsNoTracking()
+            .Where(item => item.Id == request.ExerciseId)
+            .Select(item => item.Name)
+            .SingleAsync(cancellationToken);
+        return new MaxFromSetCommandResult(
+            StrengthCommandStatus.Success,
+            new MaxFromSetView(
+                ToView(estimate, exerciseName),
+                trainingMax is null ? null : ToView(trainingMax, exerciseName)));
+    }
+
     public OneRepMaxEstimateView Estimate(EstimateOneRepMaxRequest request)
     {
         // An empty body leaves the method out; it is refused like an unknown one (audit SEC-4).
@@ -131,12 +203,23 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
             _ => throw new ArgumentException("Supported estimate methods are Epley and Brzycki.", nameof(request)),
         };
 
+        var estimate = estimator.Estimate(request.Load, request.Repetitions);
         return new OneRepMaxEstimateView(
-            estimator.Estimate(request.Load, request.Repetitions),
+            estimate,
             request.Unit,
             estimator.MethodKey,
             estimator.Version,
-            "Population-level estimate only; individual response varies and the value is not physiologically exact.");
+            "Population-level estimate only; individual response varies and the value is not physiologically exact.",
+            estimator.Explain(request.Load, request.Repetitions, request.Unit),
+            // What "Also set their training max at 90 %" would record, so the screen shows the server's number.
+            estimate <= 2_000m
+                ? new TrainingMaxShareView(
+                    TrainingMaxShare.Apply(estimate),
+                    TrainingMaxShare.Percent,
+                    TrainingMaxShare.Key,
+                    TrainingMaxShare.CurrentVersion,
+                    TrainingMaxShare.Explain(estimate, request.Unit))
+                : null);
     }
 
     public RpeChartMaxEstimateView EstimateFromRpeChart(EstimateRpeChartMaxRequest request)
@@ -151,25 +234,14 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
             estimate.Explanation);
     }
 
-    private static (string MethodKey, string Version) ResolveMethod(RecordStrengthMaxRequest request)
-    {
-        if (request.Kind == StrengthMaxKind.EstimatedOneRepMax)
-        {
-            if (string.IsNullOrWhiteSpace(request.MethodKey) || string.IsNullOrWhiteSpace(request.MethodVersion))
-            {
-                throw new ArgumentException("Estimated maxes require the calculation method and version.");
-            }
-
-            return (request.MethodKey.Trim(), request.MethodVersion.Trim());
-        }
-
-        return request.Kind switch
+    private static (string MethodKey, string Version) ResolveMethod(RecordStrengthMaxRequest request) =>
+        request.Kind switch
         {
             StrengthMaxKind.TestedOneRepMax => ("TestedLift", ManualMethodVersion),
             StrengthMaxKind.CoachWorkingMax => ("CoachSelection", ManualMethodVersion),
-            _ => throw new ArgumentOutOfRangeException(nameof(request)),
+            // An estimate is never typed: StrengthMaxRecord.Create refuses it in its own words (STR-001, STR-017).
+            _ => (request.Kind.ToString(), ManualMethodVersion),
         };
-    }
 
     private static StrengthMaxView ToView(StrengthMaxRecord item, string exerciseName) =>
         new(
@@ -186,7 +258,13 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
             item.MethodVersion,
             item.SourceWorkoutExecutionId,
             item.Note,
-            item.CreatedAtUtc);
+            item.CreatedAtUtc,
+            Basis: item is { BasisLoad: { } load, BasisRepetitions: { } repetitions }
+                ? new StrengthMaxSetView(load, repetitions)
+                : null,
+            FromEstimate: item is { SourceEstimateId: { } estimateId, EstimateValue: { } estimate, SharePercent: { } share }
+                ? new StrengthMaxFromEstimateView(estimateId, estimate, share)
+                : null);
 
     /// <summary>
     /// Every training max of the client's programs, each dated the day the coach set it in that program's
@@ -254,4 +332,20 @@ internal sealed class StrengthApplicationService(GymDbContext dbContext, ITenant
         new(
             StrengthCommandStatus.Invalid,
             Errors: new Dictionary<string, string[]> { [field] = [message] });
+
+    private static MaxFromSetCommandResult InvalidFromSet(string field, string message) =>
+        new(
+            StrengthCommandStatus.Invalid,
+            Errors: new Dictionary<string, string[]> { [field] = [message] });
+
+    /// <summary>The workspace's today (SYS-008), never the server's clock.</summary>
+    private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken)
+    {
+        var timeZoneId = await dbContext.Tenants.AsNoTracking()
+            .Where(tenant => tenant.Id == tenantContext.TenantId)
+            .Select(tenant => tenant.TimeZoneId)
+            .SingleAsync(cancellationToken);
+        var localNow = TimeZoneInfo.ConvertTime(clock.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
+        return DateOnly.FromDateTime(localNow.DateTime);
+    }
 }

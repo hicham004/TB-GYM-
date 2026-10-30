@@ -15,6 +15,15 @@ public interface IStrengthApplicationService
         RecordStrengthMaxRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Records the Estimated 1RM a set they did implies (Epley v1) and, when asked, a training max at 90 % of it
+    /// (TrainingMaxShare v1), in one save (critique B7b, STR-017).
+    /// </summary>
+    Task<MaxFromSetCommandResult> RecordFromSetAsync(
+        Guid clientProfileId,
+        RecordMaxFromSetRequest request,
+        CancellationToken cancellationToken);
+
     OneRepMaxEstimateView Estimate(EstimateOneRepMaxRequest request);
 
     RpeChartMaxEstimateView EstimateFromRpeChart(EstimateRpeChartMaxRequest request);
@@ -35,7 +44,15 @@ public sealed record StrengthMaxView(
     Guid? SourceWorkoutExecutionId,
     string? Note,
     DateTimeOffset CreatedAtUtc,
-    StrengthMaxProgramView? Program = null);
+    StrengthMaxProgramView? Program = null,
+    StrengthMaxSetView? Basis = null,
+    StrengthMaxFromEstimateView? FromEstimate = null);
+
+/// <summary>The set an estimate was worked out from, weight × reps (STR-017).</summary>
+public sealed record StrengthMaxSetView(decimal Load, int Repetitions);
+
+/// <summary>The estimate a training max was set from, its value then, and the share it took (STR-017).</summary>
+public sealed record StrengthMaxFromEstimateView(Guid EstimateId, decimal Estimate, decimal Percent);
 
 /// <summary>
 /// The program a row of the client's max history belongs to, when the row is a program's training max rather
@@ -65,6 +82,27 @@ public sealed record RecordStrengthMaxRequest(
     Guid? SourceWorkoutExecutionId,
     string? Note);
 
+/// <summary>
+/// A max from a set they did (critique B7b): its weight and reps (1 to 10), the day they did it, and whether a
+/// training max at 90 % of the estimate is recorded with it. The server works every number out itself.
+/// </summary>
+public sealed record RecordMaxFromSetRequest(
+    Guid ExerciseId,
+    decimal Load,
+    int Repetitions,
+    LoadUnit Unit,
+    DateOnly EffectiveDate,
+    bool AlsoSetTrainingMax,
+    string? Note);
+
+/// <summary>What a max from a set recorded: the estimate, and the training max set from it when asked.</summary>
+public sealed record MaxFromSetView(StrengthMaxView Estimate, StrengthMaxView? TrainingMax);
+
+public sealed record MaxFromSetCommandResult(
+    StrengthCommandStatus Status,
+    MaxFromSetView? Records = null,
+    IReadOnlyDictionary<string, string[]>? Errors = null);
+
 public sealed record EstimateOneRepMaxRequest(decimal Load, int Repetitions, LoadUnit Unit, string MethodKey);
 
 public sealed record OneRepMaxEstimateView(
@@ -72,7 +110,20 @@ public sealed record OneRepMaxEstimateView(
     LoadUnit Unit,
     string MethodKey,
     string MethodVersion,
-    string Qualification);
+    string Qualification,
+    string Explanation,
+    TrainingMaxShareView? TrainingMax);
+
+/// <summary>
+/// The training max TrainingMaxShare v1 sets from an estimate, 90 % of it, so a screen shows the server's number
+/// before anything is recorded; null when the estimate is past what a max can be.
+/// </summary>
+public sealed record TrainingMaxShareView(
+    decimal Value,
+    decimal Percent,
+    string MethodKey,
+    string MethodVersion,
+    string Explanation);
 
 /// <summary>What week 1's weight implies as a training max, read backwards from the RTS chart (STR-011).</summary>
 public sealed record EstimateRpeChartMaxRequest(decimal Load, int Repetitions, decimal Rpe, LoadUnit Unit);

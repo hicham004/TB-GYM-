@@ -30,6 +30,7 @@ import {
   groupLifts,
   liftSummary,
   mapMax,
+  recordedWords,
   valueWords,
   type Lift,
   type MaxEntry,
@@ -180,7 +181,7 @@ export class ClientStrength extends GuardedSheets {
             ),
           );
           total = Number(read.total);
-          all.push(...read.items.map(mapMax));
+          all.push(...read.items.map((item) => mapMax(item, this.locale)));
           if (all.length >= total || read.items.length === 0) break;
         }
         this.truncated.set(all.length < total);
@@ -223,12 +224,10 @@ export class ClientStrength extends GuardedSheets {
     );
   }
 
-  protected recorded(saved: MaxEntry | null, sheet: Closable): void {
-    if (saved === null) return void this.closeAsking(sheet);
-    this.done(
-      sheet,
-      $localize`${saved.exerciseName}:lift: — ${saved.kindLabel}:kind: ${valueWords(saved.value, saved.unit, this.locale)}:value: recorded.`,
-    );
+  /** One max, or a set's estimate and the training max set from it (critique B7b), recorded in one save. */
+  protected recorded(saved: readonly MaxEntry[] | null, sheet: Closable): void {
+    if (saved === null || saved.length === 0) return void this.closeAsking(sheet);
+    this.done(sheet, recordedWords(saved, this.locale));
     void this.load(true);
   }
 

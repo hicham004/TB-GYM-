@@ -129,6 +129,18 @@ The owner asked for it to be planned, then left its three questions to Claude af
   asked for, it lists every program's training maxes beside the recorded ones, named "Phase 2, from week 5,
   from logged sets", while Assign program keeps reading the recorded maxes alone.
 
+## A max from a set they did (critique B7b, decided by the owner 2026-10-27, built 2026-10-30)
+
+Toufic asked to enter a max as a coach has it in mind, a set such as "100 kg × 5" (critique T42). Record a
+max now takes a set's weight × reps, up to 10 reps (Reynolds et al. 2006: linear equations hold to about
+10), and the server works the Estimated 1RM out by Epley v1, the formula STR-005 already names; the
+calculator endpoint the audit found unused (INV-9) shows it while the coach types. "Also set their training
+max at 90%", ticked by default, records a training max beside it by `TrainingMaxShare` v1, 90 % of the
+estimate, Wendler's starting point for 5/3/1 (the owner's choice), so a program does not run off one good
+day. A coach who programs from the single itself unticks it, or types a training max. The share is a named
+version: another share is v2, never an edit. Both records are append-only, and the training max names its
+estimate through a key holding the client, the lift, the unit and the estimate's value (STR-017).
+
 **Telling the client about changes** (the owner's open question from P3a, P3b and P4a, decided by Claude
 on the same day). TB Gym sends no training notices at all today, not even for a new program or a shared
 week, and the coaching apps notify on new workouts and programs rather than on edits (TrueCoach; Trainerize,

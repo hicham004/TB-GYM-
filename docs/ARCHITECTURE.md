@@ -480,8 +480,10 @@ duplicates alone (BILL-7).
 Phase 3 extends database defense in depth to immutable template-version content, append-only
 strength max and working-max history (one first max per lift and one successor per max, plus an
 append-only record of each update; a max estimated from a logged set references that completed set
-and keeps its numbers, STR-012, each keep of a max over a suggestion is append-only too, STR-013, and a
-max carried into a new program names the earlier max through a key that includes the client, STR-014),
+and keeps its numbers, STR-012, each keep of a max over a suggestion is append-only too, STR-013, a
+max carried into a new program names the earlier max through a key that includes the client, STR-014,
+and a recorded estimate from a set they did keeps its set while the training max set from it names it
+through a key holding the client, lift, unit and value, with its share checked, STR-017),
 append-only workout notes/progression applications,
 started/completed prescription snapshots, and completed actual performance. A second GiST
 exclusion constraint rejects overlapping primary mesocycles per tenant/client/date range,
@@ -765,8 +767,9 @@ and the Overview arrive as `?action=assign` and open the same sheet. The read si
 `ClientProgramApi`, not `ApiClient`, so it stays out of the initial bundle. The server's refusals
 (overlap, coverage, a stale version, a started program) are worded for a coach in `programWriteError`,
 and the old stylesheet-and-form screen is gone; training max history and an exercise's history are
-the Strength history card (`ClientStrength`, R5.3d): every max by lift, a Record a max sheet and a
-How they have done sheet.
+the Strength history card (`ClientStrength`, R5.3d): every max by lift, a Record a max sheet (a
+training max, a tested one, or a set they did whose estimate the server works out through the
+feature-local `ClientStrengthApi`, critique B7b) and a How they have done sheet.
 The coach's program, workout and records reads ask `CoachTrainingReadPolicy` (TRN-023, Training
 module) of the same access decision, so they also open before a booked plan begins; the client's own
 reads do not.
