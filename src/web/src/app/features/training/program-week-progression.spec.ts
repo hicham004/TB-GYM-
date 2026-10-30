@@ -165,7 +165,7 @@ describe('Duplicate with progression', () => {
       Array.from(firstWeek?.querySelectorAll('.set') ?? []).map((node) => node.textContent?.trim()),
     ).toEqual([
       '5 · 70% of training max · RPE 6.5',
-      '5 · Load from RTS chart & effort · RPE 7.5',
+      '5 · RPE 7.5 · 80% of training max',
       '5 · 100 kg · RPE 7.5',
     ]);
     // Every line differs from the source week, so every line is marked.

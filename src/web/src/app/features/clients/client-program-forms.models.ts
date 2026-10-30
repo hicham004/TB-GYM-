@@ -15,6 +15,7 @@ import type {
   TrainingMesocycleView,
   TrainingSessionView,
 } from '../../core/api/generated';
+import { liftsNeedingMax, maxReason } from '../training/training-max-needs';
 import { unitLabel } from '../training/training-program.models';
 import { setLines } from './client-program.models';
 import { addDays } from './client-overview.models';
@@ -152,6 +153,8 @@ export interface MaxRow {
   readonly loggedSetId?: string | null;
   /** Where the client's latest program left this lift, in this unit; null when it has none. */
   readonly previous?: PreviousMax | null;
+  /** Why the lift is listed: "3 sets use % of training max in weeks 1 to 4" (critique B7a). */
+  readonly reason?: string;
 }
 
 /** A lift of the client's latest program: the max it uses now and what its logged sets suggest. */
@@ -202,34 +205,21 @@ export interface MaxNeed {
   readonly exerciseId: string;
   readonly name: string;
   readonly anchor?: WeekOneAnchor | null;
+  /** Why the lift is asked for: "3 sets use % of training max in weeks 1 to 4" (critique B7a). */
+  readonly reason?: string;
 }
 
 /**
  * The exercises whose load is worked out from a training max: a share of it, or an effort target.
- * Only these need a number before the program can be assigned.
+ * Only these need a number before the program can be assigned. The rule is the builder's "Needs a
+ * training max for" line too, and the server's.
  */
 export function exercisesNeedingMax(version: ProgramTemplateVersionView): MaxNeed[] {
-  const needed = new Map<string, string>();
-  for (const week of version.weeks) {
-    for (const session of week.sessions) {
-      for (const exercise of session.exercises) {
-        if (
-          exercise.sets.some(
-            (set) =>
-              set.loadStrategy === 'PercentageWorkingMax' ||
-              set.loadStrategy === 'RpeBasedEpley' ||
-              set.loadStrategy === 'RpeChart',
-          )
-        ) {
-          needed.set(exercise.exerciseId, exercise.exerciseName);
-        }
-      }
-    }
-  }
-  return [...needed].map(([exerciseId, name]) => ({
-    exerciseId,
-    name,
-    anchor: weekOneAnchor(version, exerciseId),
+  return liftsNeedingMax(version.weeks).map((lift) => ({
+    exerciseId: lift.exerciseId,
+    name: lift.name,
+    anchor: weekOneAnchor(version, lift.exerciseId),
+    reason: maxReason(lift),
   }));
 }
 
@@ -262,6 +252,7 @@ export function maxRow(
     carriedFromMaxId: carries ? last.maxId : null,
     loggedSetId: null,
     previous: last,
+    reason: need.reason,
   };
 }
 

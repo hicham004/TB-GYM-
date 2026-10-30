@@ -24,6 +24,10 @@
           <app-icon name="close" />
         </button>
       </div>
+      @if (warning(set); as text) {
+        <!-- A flag, never a refusal: the % still sets the weight (critique B7a). -->
+        <p class="set-warning" data-impossible>{{ text }}</p>
+      }
       @if (isOpen(set)) {
         <div class="set-fields" [id]="'set-fields-' + set.key" (focusout)="check(set)">
           <div class="choices">
@@ -34,6 +38,7 @@
               (chosen)="typeChanged(set, $event)"
             />
             <app-menu
+              data-load-menu
               [label]="strategyLabel(set.loadStrategy)"
               [items]="loadItems"
               align="start"
@@ -50,6 +55,7 @@
               density="compact"
               ><input
                 appControl
+                data-field="reps"
                 autocomplete="off"
                 spellcheck="false"
                 maxlength="20"
@@ -73,6 +79,7 @@
                 density="compact"
                 ><input
                   appControl
+                  data-field="load"
                   type="number"
                   min="0"
                   [max]="set.loadStrategy === 'Direct' ? 2000 : 150"
@@ -89,6 +96,7 @@
               density="compact"
               ><input
                 appControl
+                data-field="effort"
                 type="number"
                 step="0.5"
                 inputmode="decimal"
@@ -98,6 +106,23 @@
                 (ngModelChange)="changed()"
             /></app-field>
           </div>
+          @if (wayOuts(set); as ways) {
+            @if (ways.length > 0) {
+              <!-- A formula's limit stays; these keep the set and move where its weight comes from. -->
+              <div class="ways" role="group" [attr.aria-label]="waysLabel" data-ways>
+                @for (way of ways; track way.way) {
+                  <button
+                    appButton
+                    type="button"
+                    variant="outlined"
+                    (click)="takeWay(set, way.way)"
+                  >
+                    {{ way.label }}
+                  </button>
+                }
+              </div>
+            }
+          }
           <div class="choices">
             @if (set.loadStrategy !== 'None') {
               <app-menu

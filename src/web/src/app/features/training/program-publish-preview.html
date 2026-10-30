@@ -3,6 +3,9 @@
     Check the workouts and prescriptions before publishing. Clients already on this program keep
     their own copy.
   </p>
+  @if (needsMax().length > 0) {
+    <app-needs-max-line [lifts]="needsMax()" />
+  }
   <div class="client-view" aria-label="Client preview" i18n-aria-label>
     <div class="hero">
       <p i18n>Your program</p>
@@ -81,8 +84,12 @@
       <p class="empty" i18n>Your coach hasn’t shared this week yet</p>
     }
   </div>
-  <p class="explanation" i18n>
-    Shared weeks open from the program’s start date. Loads based on a training max are calculated
-    for each client when you assign it.
+  <p class="explanation">
+    <span i18n>Shared weeks open from the program’s start date.</span>
+    @if (needsMax().length > 0) {
+      &ngsp;<span data-weights-when i18n
+        >Weights are worked out when you assign the program, from this client’s training max.</span
+      >
+    }
   </p>
 </div>

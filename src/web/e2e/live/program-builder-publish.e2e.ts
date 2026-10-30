@@ -81,11 +81,20 @@ test('a coach drags, prescribes, copies with a progression and publishes', async
   await expect(inline.locator('app-field', { hasText: 'RPE target' })).toContainText(
     'the RTS chart starts at RPE 6.5',
   );
+  // The refusal offers a way out (critique B7a): 5 reps plus 4 in reserve fit the Epley curve.
+  await expect(inline.locator('[data-ways] button')).toHaveText([
+    'Use the Epley curve for this set',
+    'Type a weight',
+  ]);
   await nextSave(page, async () => {
     await rpe.fill('8');
     await rpe.press('Tab');
   });
-  await expect(row.locator('.exercise-line')).toHaveText('1 × 5 · RPE 8');
+  // The chart's share of the training max: 5 reps at RPE 8 is 81.1%.
+  await expect(row.locator('.exercise-line')).toHaveText('1 × 5 · RPE 8 · 81% of training max');
+  await expect(page.locator('[data-needs-max]')).toHaveText(
+    'Needs a training max for: Back Squat · set when you assign the program',
+  );
   await row.getByRole('button', { name: 'Done editing sets' }).click();
 
   // Duplicate with progression: two copies, half an RPE point each, read before they are added.
@@ -98,15 +107,13 @@ test('a coach drags, prescribes, copies with a progression and publishes', async
   await expect(
     dialog.getByRole('heading', { name: '2 new weeks after week 1', level: 3 }),
   ).toBeVisible();
-  await expect(dialog.locator('.result')).toContainText(
-    '5 · Load from RTS chart & effort · RPE 8.5',
-  );
-  await expect(dialog.locator('.result')).toContainText('5 · Load from RTS chart & effort · RPE 9');
+  await expect(dialog.locator('.result')).toContainText('5 · RPE 8.5 · 82% of training max');
+  await expect(dialog.locator('.result')).toContainText('5 · RPE 9 · 84% of training max');
   await expect(page.locator('section.week')).toHaveCount(1);
   await nextSave(page, () => dialog.getByRole('button', { name: 'Add 2 weeks' }).click());
   await expect(page.locator('section.week')).toHaveCount(3);
   await expect(page.locator('section.week').nth(2).locator('.exercise-line')).toHaveText([
-    '1 × 5 · RPE 9',
+    '1 × 5 · RPE 9 · 84% of training max',
   ]);
 
   // Week 3 stays unshared: the preview hides it and shows no calculated kilograms.
@@ -120,7 +127,13 @@ test('a coach drags, prescribes, copies with a progression and publishes', async
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
   const preview = page.getByRole('dialog', { name: 'Preview before publishing' });
   await expect(preview).toBeVisible();
-  await expect(preview).toContainText('Load from RTS chart & effort · RPE 8');
+  await expect(preview).toContainText('5 · RPE 8 · 81% of training max');
+  await expect(preview).toContainText(
+    'Needs a training max for: Back Squat · set when you assign the program',
+  );
+  await expect(preview).toContainText(
+    'Weights are worked out when you assign the program, from this client’s training max.',
+  );
   await expect(preview).not.toContainText(' kg');
   await preview.getByText('Week 3', { exact: true }).click({ force: true });
   await expect(preview).toContainText('Your coach hasn’t shared this week yet');

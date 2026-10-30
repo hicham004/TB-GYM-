@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { WeekProgressionPreviewView } from '../../core/api/generated';
 import {
   copiesThatFit,
+  impossiblePercentage,
   insertProgression,
   isRpeLoaded,
   MAX_COPIES,
@@ -13,6 +14,8 @@ import {
   rpeLoadedSetCount,
   setIssue,
   setSummary,
+  setWayOuts,
+  takeWayOut,
   withProgramFormula,
 } from './program-builder.models';
 import {
@@ -66,8 +69,143 @@ describe('the RTS chart in the builder', () => {
     expect(setIssue({ ...epley, exertionTarget: 5, repetitionsMaximum: 6 })).toBeNull();
   });
 
-  it('summarises a chart set without guessing a weight', () => {
-    expect(setSummary(chartSet())).toBe('5 · Load from RTS chart & effort · RPE 7');
+  it('summarises a chart set with the chart’s share of the training max, never a weight', () => {
+    // 5 reps at RPE 7 is 78.6% on the chart, said in whole percents after the effort it comes from.
+    expect(setSummary(chartSet())).toBe('5 · RPE 7 · 79% of training max');
+    expect(setSummary(chartSet({ exertionTarget: 8 }))).toBe('5 · RPE 8 · 81% of training max');
+    // A range takes its top reps, as the server works the weight out: 10 at RPE 8 is 68%.
+    expect(
+      setSummary(chartSet({ repetitionsMinimum: 8, repetitionsMaximum: 10, exertionTarget: 8 })),
+    ).toBe('8–10 · RPE 8 · 68% of training max');
+    // RIR 2 is RPE 8.
+    expect(setSummary(chartSet({ exertionDisplayPreference: 'Rir', exertionTarget: 2 }))).toBe(
+      '5 · RIR 2 · 81% of training max',
+    );
+    expect(setSummary(chartSet({ exertionTarget: 6 }))).toBe('5 · RPE 6 · outside the RTS chart');
+    expect(setSummary(chartSet({ exertionTarget: null }))).toBe('5 · Load from RTS chart & effort');
+  });
+
+  it('says why a formula refuses a set, and offers ways out that keep its reps', () => {
+    // Too far from failure for the chart: the Epley curve takes it while reps plus RIR fit.
+    expect(setIssue(chartSet({ exertionTarget: 6 }))).toEqual({
+      field: 'exertionTarget',
+      limit: 'chartEffort',
+      message:
+        'the RTS chart starts at RPE 6.5 (RIR 3.5): four or more reps from failure, its percentages no longer hold.',
+    });
+    expect(setWayOuts(chartSet({ exertionTarget: 6 }))).toEqual(['epley', 'direct']);
+    expect(
+      setWayOuts(chartSet({ exertionTarget: 5, repetitionsMinimum: 10, repetitionsMaximum: 10 })),
+    ).toEqual(['direct', 'none']);
+
+    // Past 12 reps the formulas stop; 20-rep sets stay possible by a %, a typed weight or the client.
+    const twenty = chartSet({ repetitionsMinimum: 20, repetitionsMaximum: 20, exertionTarget: 8 });
+    expect(setIssue(twenty)).toEqual({
+      field: 'repetitionsMaximum',
+      limit: 'chartReps',
+      message: 'the formulas stop at 12 reps, so the RTS chart has no weight for 20 reps.',
+    });
+    expect(setWayOuts(twenty)).toEqual(['percentage', 'direct', 'none']);
+
+    // The Epley curve counts the reps in reserve; the chart takes 10 at RPE 6.5 where it cannot.
+    const epley = set({
+      loadStrategy: 'RpeBasedEpley',
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      exertionTarget: 6.5,
+    });
+    expect(setIssue(epley)?.message).toBe(
+      'the formulas stop at 12 reps, and the Epley curve counts the reps left in reserve too: 10 + 3.5 = 13.5.',
+    );
+    expect(setWayOuts(epley)).toEqual(['chart', 'percentage', 'direct', 'none']);
+    expect(setWayOuts({ ...epley, exertionTarget: 6 })).toEqual(['percentage', 'direct', 'none']);
+
+    // Nothing is offered for any other problem, or a set with none.
+    expect(setWayOuts(chartSet({ exertionTarget: null }))).toEqual([]);
+    expect(setWayOuts(chartSet())).toEqual([]);
+  });
+
+  it('takes a way out by moving only where the weight comes from', () => {
+    const twenty = chartSet({ repetitionsMinimum: 20, repetitionsMaximum: 20, exertionTarget: 8 });
+    for (const [way, strategy] of [
+      ['percentage', 'PercentageWorkingMax'],
+      ['direct', 'Direct'],
+      ['none', 'None'],
+    ] as const) {
+      const taken = { ...twenty };
+      takeWayOut(taken, way);
+      expect(taken.loadStrategy).toBe(strategy);
+      expect([taken.repetitionsMinimum, taken.repetitionsMaximum, taken.exertionTarget]).toEqual([
+        20, 20, 8,
+      ]);
+    }
+    const none = { ...twenty };
+    takeWayOut(none, 'none');
+    expect(setIssue(none)).toBeNull();
+    const epley = chartSet({ exertionTarget: 6 });
+    takeWayOut(epley, 'epley');
+    expect(epley.loadStrategy).toBe('RpeBasedEpley');
+    expect(setIssue(epley)).toBeNull();
+  });
+});
+
+describe('a % set the chart says cannot be done', () => {
+  const percent = (overrides: Partial<DraftSet>) =>
+    set({
+      loadStrategy: 'PercentageWorkingMax',
+      loadValue: 85,
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      ...overrides,
+    });
+
+  it('warns past the chart’s RPE 10 cell for its fewest reps, and only then', () => {
+    expect(impossiblePercentage(percent({}))).toBe(
+      '85% × 10 reps is heavier than the chart allows for 10 reps (74%). Most lifters can’t do it.',
+    );
+    // A range is possible when its fewest reps are: 8 at RPE 10 is 78.6%.
+    expect(impossiblePercentage(percent({ repetitionsMinimum: 8, repetitionsMaximum: 12 }))).toBe(
+      '85% × 8–12 reps is heavier than the chart allows for 8 reps (79%). Most lifters can’t do it.',
+    );
+    expect(impossiblePercentage(percent({ loadValue: 70 }))).toBeNull();
+    // 5 at RPE 10 is 86.3%, so 85% × 5–12 can be done at its low end.
+    expect(
+      impossiblePercentage(percent({ repetitionsMinimum: 5, repetitionsMaximum: 12 })),
+    ).toBeNull();
+    // The share is read as the sentence says it: 74% is not past the chart's 73.9%.
+    expect(impossiblePercentage(percent({ loadValue: 74 }))).toBeNull();
+    expect(impossiblePercentage(percent({ loadValue: 74.5 }))).toContain('(74%)');
+  });
+
+  it('bounds sets past 12 reps by the chart’s last column, and a single by 100%', () => {
+    expect(
+      impossiblePercentage(
+        percent({ loadValue: 70, repetitionsMinimum: 15, repetitionsMaximum: 20 }),
+      ),
+    ).toBe(
+      '70% × 15–20 reps is heavier than the chart allows even for 12 reps (68%). Most lifters can’t do it.',
+    );
+    expect(
+      impossiblePercentage(
+        percent({ loadValue: 65, repetitionsMinimum: 20, repetitionsMaximum: 20 }),
+      ),
+    ).toBeNull();
+    expect(impossiblePercentage(percent({ loadValue: 105, repetitionsMinimum: null }))).toBe(
+      '105% × up to 10 reps is heavier than the chart allows for 1 rep (100%). Most lifters can’t do it.',
+    );
+  });
+
+  it('never ties the % to the set’s RPE, and leaves every other set alone', () => {
+    expect(impossiblePercentage(percent({ exertionTarget: 6 }))).toBe(
+      impossiblePercentage(percent({ exertionTarget: 10 })),
+    );
+    expect(impossiblePercentage(percent({ manualLoadOverride: 60 }))).toBeNull();
+    expect(impossiblePercentage(percent({ loadValue: null }))).toBeNull();
+    expect(
+      impossiblePercentage(percent({ repetitionsMinimum: null, repetitionsMaximum: null })),
+    ).toBeNull();
+    expect(impossiblePercentage(chartSet({ exertionTarget: 10 }))).toBeNull();
+    expect(impossiblePercentage(set({ loadStrategy: 'Direct', loadValue: 200 }))).toBeNull();
   });
 });
 

@@ -338,6 +338,16 @@ describe('Assign program', () => {
     expect(api['listStrengthMaxes']).toHaveBeenCalledWith(expect.any(String));
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
     expect(textOf(fieldset.querySelector('legend'))).toBe('Training maxes');
+    expect(textOf(fieldset.querySelector('.muted'))).toBe(
+      'This program works its weights out from these and keeps them as its own; you update them from its Training maxes. Each starts from the max you recorded, when there is one.',
+    );
+    // A filled row folds to the lift and its number, and says why it is listed (critique B7a).
+    const squat = fold(host, 'Back squat · 100 kg');
+    expect(squat.open).toBe(false);
+    expect(textOf(squat.querySelector('summary .hint'))).toBe(
+      '1 set uses % of training max in week 1',
+    );
+    await toggleFold(fixture, host, 'Back squat · 100 kg');
     expect(Array.from(fieldset.querySelectorAll('label')).map(textOf)).toEqual(['Back squat']);
     expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('100');
     expect(textOf(fieldset)).toContain('Your recorded training max');
@@ -365,6 +375,11 @@ describe('Assign program', () => {
 
     expect(programApi['getPreviousMaxes']).toHaveBeenCalledWith('client-1');
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    expect(textOf(fieldset.querySelector('.muted'))).toBe(
+      'This program works its weights out from these and keeps them as its own; you update them from its Training maxes. Each starts where Maya’s last program left the lift, or from a max you recorded since.',
+    );
+    // The row stays open while its last program's logged sets suggest a new max.
+    expect(fold(host, 'Back squat · 105 kg').open).toBe(true);
     expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('105');
     expect(textOf(fieldset)).toContain('Where Phase 1 left it, set Sun 20 Sep');
 
@@ -510,6 +525,7 @@ describe('Assign program', () => {
   it('works a max out from the weight of week 1’s first set, and says how it was worked out (P2)', async () => {
     const { fixture, host, api, programApi } = await render({ version: chartVersion });
     await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
+    await toggleFold(fixture, host, 'Back squat · 100 kg');
 
     // The coach can type a max, or choose to work it out from week 1: it names the set it reads.
     tick(host, 'From week 1’s weight');
@@ -550,8 +566,11 @@ describe('Assign program', () => {
   it('asks for that weight when week 1’s weight is chosen, and forgets what was worked out when it changes', async () => {
     const { fixture, host, api } = await render({ version: chartVersion });
     await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
+    await toggleFold(fixture, host, 'Back squat · 100 kg');
     tick(host, 'From week 1’s weight');
     await settle(fixture);
+    // A row worked out from week 1 reads so on its fold until a weight is typed.
+    expect(fold(host, 'Back squat').open).toBe(true);
 
     press(host, 'Assign program');
     await settle(fixture);
@@ -576,7 +595,9 @@ describe('Assign program', () => {
   it('offers no week 1 choice for a lift whose week 1 has nothing the chart covers (P2)', async () => {
     const { fixture, host } = await render();
     await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
+    await toggleFold(fixture, host, 'Back squat · 100 kg');
 
+    expect(host.querySelector('fieldset.maxes input')).not.toBeNull();
     expect(host.querySelector('fieldset.maxes app-segmented-control')).toBeNull();
   });
 
@@ -653,6 +674,26 @@ describe('Assign program', () => {
     expect(textOf(host)).toContain('Enter the training max for Back squat.');
   });
 
+  it('puts the maxes before Load settings, and opens a folded max that is refused (critique B7a)', async () => {
+    const { fixture, host, api } = await render();
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
+    const rows = () =>
+      Array.from(host.querySelectorAll('app-disclosure > details > summary .label')).map(textOf);
+    expect(rows()).toEqual(['Back squat · 100 kg', 'Load settings']);
+
+    await toggleFold(fixture, host, 'Back squat · 100 kg');
+    fill(host, 'Back squat', '');
+    await settle(fixture);
+    await toggleFold(fixture, host, 'Back squat', false);
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    expect(api['assignClientMesocycle']).not.toHaveBeenCalled();
+    expect(fold(host, 'Back squat').open).toBe(true);
+    expect(textOf(host)).toContain('Enter the training max for Back squat.');
+    expect(document.activeElement).toBe(field(host, 'Back squat'));
+  });
+
   it('assigns with the plan, program, date, settings and maxes, under one key per exact payload', async () => {
     const failure = new HttpErrorResponse({ status: 503 });
     const { fixture, host, api, csrf, closed } = await render({
@@ -711,6 +752,7 @@ describe('Assign program', () => {
     press(host, 'Assign program');
     await settle(fixture);
 
+    await toggleFold(fixture, host, 'Back squat · 100 kg');
     fill(host, 'Back squat', '110');
     await settle(fixture);
     press(host, 'Assign program');

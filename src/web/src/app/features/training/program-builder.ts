@@ -59,6 +59,8 @@ import { StatusPill } from '../../ui/status-pill';
 import { UiToast } from '../../ui/toast';
 import { AddingBar } from './adding-bar';
 import { ExerciseDemo } from './exercise-demo';
+import { NeedsMaxLine } from './needs-max-line';
+import { SetLines } from './set-lines';
 import { DraftAutosave, PROGRAM_AUTOSAVE_TIMING, type SaveOutcome } from './program-autosave';
 import { ProgramBuilderApi } from './program-builder-api';
 import {
@@ -76,9 +78,9 @@ import {
   type DropTarget,
   copiesThatFit,
   duplicateWeekAfter,
-  exerciseSummary,
   findSession,
   gridColumns,
+  gridLines,
   insertProgression,
   insertSavedSession,
   type LibraryExercise,
@@ -112,6 +114,7 @@ import { ProgramSessionEditor } from './program-session-editor';
 import { ProgramSetsEditor } from './program-sets-editor';
 import { ProgramPublishPreview } from './program-publish-preview';
 import { ProgramWeekProgression } from './program-week-progression';
+import { liftsNeedingMax } from './training-max-needs';
 import {
   type DraftSession,
   type DraftExercise,
@@ -152,7 +155,8 @@ interface ExerciseCell {
   draft: DraftExercise;
   editLabel: string;
   name: string;
-  line: string;
+  /** Its working sets, equal neighbours told once (critique B7a). */
+  lines: string[];
   isMainLift: boolean;
   drag: DragItem;
   /** The library's demos of this exercise, for Watch demo (P4). */
@@ -247,12 +251,14 @@ const LEAVE_WAIT_MS = 8000;
     FormsModule,
     Icon,
     ModalFooter,
+    NeedsMaxLine,
     ProgramLibrary,
     ProgramSessionEditor,
     ProgramSetsEditor,
     ProgramPublishPreview,
     ProgramWeekProgression,
     RouterLink,
+    SetLines,
     Skeleton,
     StatusPill,
     UiConfirm,
@@ -265,6 +271,7 @@ const LEAVE_WAIT_MS = 8000;
     './program-week-session.scss',
     './builder-adding.scss',
     './program-adding.scss',
+    './program-set-lines.scss',
   ],
   host: {
     '(window:beforeunload)': 'onBeforeUnload($event)',
@@ -440,6 +447,18 @@ export class ProgramBuilder implements HoldsUnsavedWork {
     const sessionText =
       sessions === 1 ? $localize`1 workout` : $localize`${sessions}:count: workouts`;
     return `${weekText} · ${sessionText}`;
+  });
+
+  /**
+   * The lifts Assign program will ask a training max for, by its own rule (critique B7a), so the coach
+   * knows before publishing which maxes the program works its weights out from.
+   */
+  protected readonly needsMax = computed(() => {
+    this.revision();
+    return liftsNeedingMax(this.draft().weeks).map((lift) => ({
+      exerciseId: lift.exerciseId,
+      name: lift.name || $localize`Exercise`,
+    }));
   });
 
   /** The week whose "Duplicate with progression" sheet is open (TRN-025). */
@@ -1623,7 +1642,7 @@ export class ProgramBuilder implements HoldsUnsavedWork {
         draft: exercise,
         editLabel: $localize`Edit sets for ${exercise.exerciseName || $localize`Exercise`}:exercise:`,
         name: exercise.exerciseName || $localize`Exercise`,
-        line: exerciseSummary(exercise),
+        lines: gridLines(exercise),
         isMainLift: exercise.isMainLift,
         drag: { kind: 'exercise', ref: { ...ref, exerciseKey: exercise.key } },
         media: this.libraryMedia().get(exercise.exerciseId) ?? [],

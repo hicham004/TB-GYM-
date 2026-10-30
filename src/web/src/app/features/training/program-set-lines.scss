@@ -1,0 +1,20 @@
+// The grid row's set lines (critique B7a): equal sets told once, each run of sets that differ on a line
+// of its own. They stack at the end of the row and wrap under a long name (R6.3); in a narrow day a
+// line wraps rather than pushing the column wider. Loaded after program-week-session.scss.
+
+// The name keeps its own width before the lines take theirs: where both do not fit, the lines move
+// under it rather than cutting it short. A name wider than the day still ends in an ellipsis.
+.exercise-heading {
+  flex: 1 0 auto;
+  max-inline-size: 100%;
+}
+
+.prescription-toggle {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  white-space: normal;
+}
+
+.needs-max {
+  flex-basis: 100%;
+}

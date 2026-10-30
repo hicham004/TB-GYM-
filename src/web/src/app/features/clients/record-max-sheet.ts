@@ -48,7 +48,8 @@ const UNITS: readonly SegmentOption[] = [
     <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
       <p class="muted" i18n>
         A max is added to {{ firstName() }}’s history and never changed; to put one right, record
-        the right number for the day.
+        the right number for the day. Programs don’t read it directly: each keeps its own training
+        maxes, set when you assign it and updated from there.
       </p>
       <app-exercise-picker
         [label]="exerciseLabel"

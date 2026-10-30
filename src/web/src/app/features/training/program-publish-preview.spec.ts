@@ -43,6 +43,36 @@ describe('the program’s client preview', () => {
     expect(host.querySelectorAll('.exercise').length).toBe(3);
   });
 
+  it('names the lifts that will need a training max, and when their weights are worked out', async () => {
+    const { host } = await render();
+    const text = (selector: string) =>
+      (host.querySelector(selector)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    expect(text('[data-needs-max]')).toBe(
+      'Needs a training max for: Back squat, Bench press · set when you assign the program',
+    );
+    expect(text('.explanation:last-child')).toBe(
+      'Shared weeks open from the program’s start date. Weights are worked out when you assign the program, from this client’s training max.',
+    );
+  });
+
+  it('says nothing of maxes for a program whose weights are typed', async () => {
+    const program = draftFromVersion(versionView());
+    for (const set of program.weeks
+      .flatMap((week) => week.sessions)
+      .flatMap((session) => session.exercises)
+      .flatMap((exercise) => exercise.sets)) {
+      set.loadStrategy = 'Direct';
+      set.loadValue = 60;
+    }
+    const fixture = TestBed.createComponent(ProgramPublishPreview);
+    fixture.componentRef.setInput('program', program);
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-needs-max]')).toBeNull();
+    expect(host.querySelector('[data-weights-when]')).toBeNull();
+    expect(host.textContent).toContain('Shared weeks open from the program’s start date.');
+  });
+
   it('shows the client’s unshared-week message without rendering its sessions', async () => {
     const { fixture, host } = await render();
     const radio = host.querySelector<HTMLInputElement>('input[value="1"]')!;

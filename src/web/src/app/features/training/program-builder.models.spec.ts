@@ -11,10 +11,10 @@ import {
   daySessions,
   draftProblem,
   duplicateWeekAfter,
-  exerciseSummary,
   setSummary,
   setIssue,
   gridColumns,
+  gridLines,
   groupPatterns,
   libraryChips,
   libraryExercise,
@@ -184,7 +184,7 @@ describe('program builder grid', () => {
     );
   });
 
-  it('sums an exercise up in one line, from its working sets', () => {
+  it('tells an exercise’s working sets once when they are equal, as sets × reps', () => {
     const exercise = emptyExercise('squat');
     const warmUp = { ...emptySet(), setType: 'WarmUp' as const, loadStrategy: 'Direct' as const };
     warmUp.repetitionsMinimum = warmUp.repetitionsMaximum = 3;
@@ -199,10 +199,7 @@ describe('program builder grid', () => {
     };
     // A warm-up is not a working set, whatever its reps (TRAIN-2).
     exercise.sets = [warmUp, working, { ...working }, { ...working }];
-    expect(exerciseSummary(exercise)).toBe('3 × 5 · 75% · RPE 7');
-
-    exercise.sets = [working, { ...working }, { ...working }];
-    expect(exerciseSummary(exercise)).toBe('3 × 5 · 75% · RPE 7');
+    expect(gridLines(exercise)).toEqual(['3 × 5 · 75% of training max · RPE 7']);
 
     const range = { ...emptySet(), repetitionsMinimum: 8, repetitionsMaximum: 10 };
     range.loadStrategy = 'Direct';
@@ -210,21 +207,60 @@ describe('program builder grid', () => {
     range.exertionDisplayPreference = 'Rir';
     range.exertionTarget = 2;
     exercise.sets = [range, { ...range }];
-    expect(exerciseSummary(exercise)).toBe('2 × 8–10 · 60 kg · RIR 2');
+    expect(gridLines(exercise)).toEqual(['2 × 8–10 · 60 kg · RIR 2']);
 
     // The audit's case: a warm-up with the working set's reps once read "2 × 8–10".
     exercise.sets = [{ ...range, setType: 'WarmUp' as const, loadValue: 40 }, range];
-    expect(exerciseSummary(exercise)).toBe('1 × 8–10 · 60 kg · RIR 2');
+    expect(gridLines(exercise)).toEqual(['1 × 8–10 · 60 kg · RIR 2']);
 
-    // Working sets that disagree on reps are counted alone too.
-    exercise.sets = [warmUp, working, { ...working, repetitionsMinimum: 3, repetitionsMaximum: 3 }];
-    expect(exerciseSummary(exercise)).toBe('2 sets · 75% · RPE 7');
+    // A chart set says the chart's share after the effort it comes from (5 at RPE 8 is 81.1%).
+    const chart = {
+      ...working,
+      loadStrategy: 'RpeChart' as const,
+      loadValue: null,
+      exertionTarget: 8,
+    };
+    exercise.sets = [chart, { ...chart }];
+    expect(gridLines(exercise)).toEqual(['2 × 5 · RPE 8 · 81% of training max']);
 
     // Warm-ups alone say what they are.
     exercise.sets = [warmUp, { ...warmUp }];
-    expect(exerciseSummary(exercise)).toBe('2 × 3 warm-up · 40 kg');
-    exercise.sets = [warmUp, { ...warmUp, repetitionsMinimum: 5, repetitionsMaximum: 5 }];
-    expect(exerciseSummary(exercise)).toBe('2 warm-up sets · 40 kg');
+    expect(gridLines(exercise)).toEqual(['2 × 3 warm-up · 40 kg']);
+    expect(gridLines(emptyExercise('squat', false, 'Squat'))).toEqual(['1 × 5']);
+    exercise.sets = [];
+    expect(gridLines(exercise)).toEqual(['No sets yet']);
+  });
+
+  it('gives each run of sets that differ a line of its own, never one set’s effort for all', () => {
+    const exercise = emptyExercise('squat');
+    const set = (reps: number, rpe: number | null) => ({
+      ...emptySet(),
+      repetitionsMinimum: reps,
+      repetitionsMaximum: reps,
+      loadStrategy: 'PercentageWorkingMax' as const,
+      loadValue: 70,
+      exertionTarget: rpe,
+    });
+    // Toufic's case: two sets of ten at RPE 5 and RPE 10 once read "2 sets · RPE 5".
+    exercise.sets = [set(10, 5), set(10, 10)];
+    expect(gridLines(exercise)).toEqual([
+      '1 × 10 · 70% of training max · RPE 5',
+      '1 × 10 · 70% of training max · RPE 10',
+    ]);
+
+    // A top set and its back-offs: equal neighbours stay together, in the coach's order.
+    const top = { ...set(3, 8), loadStrategy: 'RpeChart' as const, loadValue: null };
+    exercise.sets = [top, set(5, null), set(5, null), set(5, null), set(3, 8)];
+    expect(gridLines(exercise)).toEqual([
+      '1 × 3 · RPE 8 · 86% of training max',
+      '3 × 5 · 70% of training max',
+      '1 × 3 · 70% of training max · RPE 8',
+    ]);
+
+    // Sets with no reps are counted as sets.
+    const open = { ...set(5, 7), repetitionsMinimum: null, repetitionsMaximum: null };
+    exercise.sets = [open, { ...open }];
+    expect(gridLines(exercise)).toEqual(['2 sets · 70% of training max · RPE 7']);
   });
 });
 

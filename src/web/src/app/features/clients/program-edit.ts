@@ -68,8 +68,8 @@ import {
   type DraftProblem,
   type DragItem,
   type DropTarget,
-  exerciseSummary,
   findSession,
+  gridLines,
   insertSavedSession,
   type LibraryExercise,
   MAX_WEEKS,
@@ -87,6 +87,7 @@ import { ProgramLibrary } from '../training/program-library';
 import { ProgramLibrarySource } from '../training/program-library-source';
 import { ProgramSessionEditor } from '../training/program-session-editor';
 import { ProgramSetsEditor } from '../training/program-sets-editor';
+import { SetLines } from '../training/set-lines';
 import {
   type DraftExercise,
   type DraftSession,
@@ -127,7 +128,8 @@ interface ExerciseCell {
   draft: DraftExercise;
   editLabel: string;
   name: string;
-  line: string;
+  /** Its working sets, equal neighbours told once (critique B7a). */
+  lines: string[];
   isMainLift: boolean;
   drag: DragItem;
   /** The library's demos of this exercise, for Watch demo (P4). */
@@ -212,6 +214,7 @@ interface EditFailure {
     ProgramSessionEditor,
     ProgramSetsEditor,
     RouterLink,
+    SetLines,
     Skeleton,
     StatusPill,
     UiConfirm,
@@ -223,6 +226,7 @@ interface EditFailure {
     '../training/program-week.scss',
     '../training/program-week-session.scss',
     './program-edit.scss',
+    '../training/program-set-lines.scss',
   ],
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
@@ -971,7 +975,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
         draft: exercise,
         editLabel: $localize`Edit sets for ${exercise.exerciseName || $localize`Exercise`}:exercise:`,
         name: exercise.exerciseName || $localize`Exercise`,
-        line: exerciseSummary(exercise),
+        lines: gridLines(exercise),
         isMainLift: exercise.isMainLift,
         drag: { kind: 'exercise', ref: { ...ref, exerciseKey: exercise.key } },
         media: this.libraryMedia().get(exercise.exerciseId) ?? [],

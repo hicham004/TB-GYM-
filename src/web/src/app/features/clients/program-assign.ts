@@ -191,6 +191,106 @@ import {
               />
             </app-field>
 
+            <!-- The maxes before Load settings (critique B7a): most coaches fill these and never touch the rest. -->
+            @if (maxes().length > 0) {
+              <fieldset class="maxes">
+                <legend i18n>Training maxes</legend>
+                <p class="muted" dir="auto">{{ maxesNote() }}</p>
+                @for (row of maxes(); track row.exerciseId; let index = $index) {
+                  <!-- A filled row folds to its name and number; why it is listed shows either way. -->
+                  <app-disclosure
+                    class="max"
+                    [attr.data-max]="row.exerciseId"
+                    [label]="foldLabel(row)"
+                    [hint]="row.reason ?? null"
+                    [open]="openRows().has(row.exerciseId)"
+                    (openChange)="toggleRow(row.exerciseId, $event)"
+                  >
+                    <ng-template appDisclosureContent>
+                      <div class="max-body">
+                        @if (row.anchor) {
+                          <app-segmented-control
+                            [label]="howLabel(row)"
+                            [options]="howOptions"
+                            [selected]="row.mode"
+                            (selectedChange)="chooseMode(index, $event)"
+                          />
+                        }
+                        @if (row.mode === 'weekOne') {
+                          <app-field
+                            [label]="weekOneLabel(row)"
+                            [help]="weekOneHelp(row)"
+                            [errors]="
+                              shows('max:' + row.exerciseId)
+                                ? errors()['max:' + row.exerciseId]
+                                : null
+                            "
+                          >
+                            <div class="value-unit">
+                              <input
+                                appControl
+                                type="number"
+                                min="0.01"
+                                step="0.25"
+                                [value]="row.weekOneWeight ?? ''"
+                                (input)="setWeekOneWeight(index, $any($event.target).valueAsNumber)"
+                                (change)="estimate(index)"
+                                (blur)="attempt.touch('max:' + row.exerciseId)"
+                              />
+                              <span class="unit">{{ unitName(row.unit) }}</span>
+                            </div>
+                          </app-field>
+                          @if (estimates()[row.exerciseId]; as worked) {
+                            <p class="estimate" dir="auto" aria-live="polite">{{ worked }}</p>
+                          }
+                        } @else {
+                          <!-- The fold's row names the lift; the box keeps the name for a screen reader. -->
+                          <app-field
+                            [label]="row.name"
+                            hideLabel
+                            [help]="maxHelp(row)"
+                            [errors]="
+                              shows('max:' + row.exerciseId)
+                                ? errors()['max:' + row.exerciseId]
+                                : null
+                            "
+                          >
+                            <div class="value-unit">
+                              <input
+                                appControl
+                                type="number"
+                                min="0.01"
+                                step="0.25"
+                                [value]="row.value ?? ''"
+                                (input)="setMax(index, $any($event.target).valueAsNumber)"
+                                (blur)="attempt.touch('max:' + row.exerciseId)"
+                              />
+                              <span class="unit">{{ unitName(row.unit) }}</span>
+                            </div>
+                          </app-field>
+                          @if (suggestionFor(row); as suggested) {
+                            <div class="suggested">
+                              <p dir="auto">{{ suggested.text }}</p>
+                              <button
+                                appButton
+                                type="button"
+                                variant="outlined"
+                                (click)="useSuggestion(index)"
+                              >
+                                {{ suggested.action }}
+                              </button>
+                            </div>
+                          }
+                        }
+                      </div>
+                    </ng-template>
+                  </app-disclosure>
+                }
+              </fieldset>
+            } @else if (versionLoading()) {
+              <app-skeleton [label]="loadingLabel" [lines]="2" />
+            }
+
             <app-disclosure
               class="loads"
               label="Load settings"
@@ -230,90 +330,6 @@ import {
                 </div>
               </ng-template>
             </app-disclosure>
-
-            @if (maxes().length > 0) {
-              <fieldset class="maxes">
-                <legend i18n>Training maxes</legend>
-                <p class="muted" i18n>
-                  This program works its loads out from these. They are kept with the program, and
-                  changing a max later never changes it.
-                </p>
-                @for (row of maxes(); track row.exerciseId; let index = $index) {
-                  <div class="max">
-                    @if (row.anchor) {
-                      <app-segmented-control
-                        [label]="howLabel(row)"
-                        [options]="howOptions"
-                        [selected]="row.mode"
-                        (selectedChange)="chooseMode(index, $event)"
-                      />
-                    }
-                    @if (row.mode === 'weekOne') {
-                      <app-field
-                        [label]="weekOneLabel(row)"
-                        [help]="weekOneHelp(row)"
-                        [errors]="
-                          shows('max:' + row.exerciseId) ? errors()['max:' + row.exerciseId] : null
-                        "
-                      >
-                        <div class="value-unit">
-                          <input
-                            appControl
-                            type="number"
-                            min="0.01"
-                            step="0.25"
-                            [value]="row.weekOneWeight ?? ''"
-                            (input)="setWeekOneWeight(index, $any($event.target).valueAsNumber)"
-                            (change)="estimate(index)"
-                            (blur)="attempt.touch('max:' + row.exerciseId)"
-                          />
-                          <span class="unit">{{ unitName(row.unit) }}</span>
-                        </div>
-                      </app-field>
-                      @if (estimates()[row.exerciseId]; as worked) {
-                        <p class="estimate" dir="auto" aria-live="polite">{{ worked }}</p>
-                      }
-                    } @else {
-                      <app-field
-                        [label]="row.name"
-                        [help]="maxHelp(row)"
-                        [errors]="
-                          shows('max:' + row.exerciseId) ? errors()['max:' + row.exerciseId] : null
-                        "
-                      >
-                        <div class="value-unit">
-                          <input
-                            appControl
-                            type="number"
-                            min="0.01"
-                            step="0.25"
-                            [value]="row.value ?? ''"
-                            (input)="setMax(index, $any($event.target).valueAsNumber)"
-                            (blur)="attempt.touch('max:' + row.exerciseId)"
-                          />
-                          <span class="unit">{{ unitName(row.unit) }}</span>
-                        </div>
-                      </app-field>
-                      @if (suggestionFor(row); as suggested) {
-                        <div class="suggested">
-                          <p dir="auto">{{ suggested.text }}</p>
-                          <button
-                            appButton
-                            type="button"
-                            variant="outlined"
-                            (click)="useSuggestion(index)"
-                          >
-                            {{ suggested.action }}
-                          </button>
-                        </div>
-                      }
-                    }
-                  </div>
-                }
-              </fieldset>
-            } @else if (versionLoading()) {
-              <app-skeleton [label]="loadingLabel" [lines]="2" />
-            }
           }
 
           <app-form-summary>
@@ -440,7 +456,7 @@ import {
       border: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.875rem;
+      gap: 0.25rem;
       margin: 0;
       min-inline-size: 0;
       padding: 0;
@@ -452,10 +468,20 @@ import {
       padding: 0;
     }
 
-    .max {
+    .maxes > .muted {
+      margin-block: 0.25rem 0.5rem;
+    }
+
+    .max + .max {
+      border-block-start: 1px solid var(--tb-line);
+      padding-block-start: 0.25rem;
+    }
+
+    .max-body {
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+      padding-block-end: 0.75rem;
     }
 
     .estimate {
@@ -559,6 +585,11 @@ export class ProgramAssign {
   /** Load settings is folded; a refused rounding opens it, so the reason and the box can be seen. */
   protected readonly loadsOpen = signal(false);
   protected readonly maxes = signal<MaxRow[]>([]);
+  /**
+   * The max rows unfolded, by lift: a row with no number, or one whose last program suggests a new
+   * one, starts open; a filled row folds to its name and number (critique B7a).
+   */
+  protected readonly openRows = signal<ReadonlySet<string>>(new Set());
   /** What the program's own name is replaced by in the client's copy; empty keeps it (TRN-002). */
   protected readonly name = signal('');
   /** The server's words for each lift worked out from week 1's weight, by exercise (STR-011). */
@@ -642,6 +673,47 @@ export class ProgramAssign {
 
   protected shows(field: string): boolean {
     return this.attempt.shows(field, this.errors()[field] ?? []);
+  }
+
+  /**
+   * What the maxes are and where each starts (STR-002, STR-014): the program keeps its own, and each
+   * starts where the client's last program left the lift, or from a max the coach recorded.
+   */
+  protected readonly maxesNote = computed(() =>
+    this.previous()?.programName
+      ? $localize`This program works its weights out from these and keeps them as its own; you update them from its Training maxes. Each starts where ${this.firstName()}:name:’s last program left the lift, or from a max you recorded since.`
+      : $localize`This program works its weights out from these and keeps them as its own; you update them from its Training maxes. Each starts from the max you recorded, when there is one.`,
+  );
+
+  /** A folded row's line: the lift, and the number it starts from once there is one. */
+  protected foldLabel(row: MaxRow): string {
+    if (row.mode === 'weekOne') {
+      return row.weekOneWeight === null
+        ? row.name
+        : $localize`${row.name}:exercise: · ${this.weight(row.weekOneWeight, row.unit)}:weight: in week 1`;
+    }
+    return row.value === null ? row.name : `${row.name} · ${this.weight(row.value, row.unit)}`;
+  }
+
+  protected toggleRow(exerciseId: string, open: boolean): void {
+    this.openRows.update((rows) => {
+      const next = new Set(rows);
+      if (open) next.add(exerciseId);
+      else next.delete(exerciseId);
+      return next;
+    });
+  }
+
+  /** New rows: the ones still to fill, and those with a suggestion to take or leave, start open. */
+  private setRows(rows: MaxRow[]): void {
+    this.maxes.set(rows);
+    this.openRows.set(
+      new Set(
+        rows
+          .filter((row) => row.value === null || this.suggestionFor(row) !== null)
+          .map((row) => row.exerciseId),
+      ),
+    );
   }
 
   /** Where a training max came from: the last program, its logged sets, the one recorded, typed here, or none yet. */
@@ -756,7 +828,7 @@ export class ProgramAssign {
           firstValueFrom(this.api.getProgramTemplateVersion(versionId)),
         );
         this.needs = exercisesNeedingMax(version);
-        this.maxes.set(
+        this.setRows(
           this.needs.map((need) => maxRow(need, this.history(), this.unit(), this.previous())),
         );
       } catch (error) {
@@ -779,7 +851,7 @@ export class ProgramAssign {
   protected chooseUnit(value: string): void {
     const unit: TrainingLoadUnit = value === 'Pound' ? 'Pound' : 'Kilogram';
     this.unit.set(unit);
-    this.maxes.set(this.needs.map((need) => maxRow(need, this.history(), unit, this.previous())));
+    this.setRows(this.needs.map((need) => maxRow(need, this.history(), unit, this.previous())));
     this.estimates.set({});
   }
 
@@ -869,6 +941,12 @@ export class ProgramAssign {
     if (this.problemCount() > 0) {
       this.error.set(null);
       if ((this.errors()['loadIncrement'] ?? []).length > 0) this.loadsOpen.set(true);
+      // A folded max with a problem opens, so its reason and its box can be seen.
+      for (const row of this.maxes()) {
+        if ((this.errors()['max:' + row.exerciseId] ?? []).length > 0) {
+          this.toggleRow(row.exerciseId, true);
+        }
+      }
       afterNextRender(
         () => this.host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
         { injector: this.injector },
@@ -916,6 +994,10 @@ export class ProgramAssign {
               };
         }),
       );
+      // The newer estimate is said in its row, so a folded row with one opens.
+      for (const row of this.maxes()) {
+        if (this.suggestionFor(row)) this.toggleRow(row.exerciseId, true);
+      }
     } catch {
       // The message already says to look again; the sheet keeps what it had.
     }

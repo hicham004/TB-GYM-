@@ -293,7 +293,8 @@
                                   [attr.aria-controls]="'inline-' + exercise.key"
                                   (click)="editSets(exercise.key)"
                                 >
-                                  {{ exercise.line }} <app-icon name="chevron-down" />
+                                  <app-set-lines [lines]="exercise.lines" />
+                                  <app-icon name="chevron-down" />
                                 </button>
                                 @if (inlineEditing() === exercise.key) {
                                   <div class="inline-sets" [id]="'inline-' + exercise.key">

@@ -2,13 +2,19 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 import { trainingSetTypeLabel } from '../../core/i18n/display-labels';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { SegmentedControl } from '../../ui/segmented-control';
+import { NeedsMaxLine } from './needs-max-line';
 import { libraryNames, setSummary, type LibraryExercise } from './program-builder.models';
+import { liftsNeedingMax } from './training-max-needs';
 import type { DraftExercise, ProgramDraft } from './training-builder.models';
 
-/** A read-only look at the client's prescriptions, without inventing dates or calculated loads. */
+/**
+ * A read-only look at the client's prescriptions, without inventing dates or calculated loads. It
+ * repeats the builder's "Needs a training max for" line, since the weights are worked out only when the
+ * program is assigned (critique B7a).
+ */
 @Component({
   selector: 'app-program-publish-preview',
-  imports: [SegmentedControl, UiDisclosure, UiDisclosureContent],
+  imports: [NeedsMaxLine, SegmentedControl, UiDisclosure, UiDisclosureContent],
   templateUrl: './program-publish-preview.html',
   styleUrl: './program-publish-preview.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -28,6 +34,12 @@ export class ProgramPublishPreview {
   );
   protected readonly sessions = computed(() =>
     [...this.week().sessions].sort((a, b) => a.dayOffset - b.dayOffset),
+  );
+  protected readonly needsMax = computed(() =>
+    liftsNeedingMax(this.program().weeks).map((lift) => ({
+      exerciseId: lift.exerciseId,
+      name: lift.name || $localize`Exercise`,
+    })),
   );
   protected readonly summary = setSummary;
   protected readonly typeLabel = trainingSetTypeLabel;

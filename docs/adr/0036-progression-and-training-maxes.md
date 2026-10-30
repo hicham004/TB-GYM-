@@ -187,7 +187,10 @@ history never rewritten.
   It stops with a plain message if a program already has two first maxes for a lift. Rolling it back
   after a lift was updated twice from the same week would break the old index, so that is a forward
   fix too.
-- The chart is versioned; any change to a cell is RpeChart v2, never an edit.
+- The chart is versioned; any change to a cell is RpeChart v2, never an edit. Since critique B7a
+  (2026-10-30) the program builder keeps a pinned copy to show a chart set's share and flag a % set
+  the chart says cannot be done; a domain test compares it with the server's cell by cell, so v2
+  changes both or fails.
 - Sources: [Helms et al. 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4961270/),
   [Halperin et al. 2022, reps-to-failure prediction meta-analysis](https://sportrxiv.org/index.php/server/preprint/view/67),
   [Trainerize client notices](https://ideas.abcfitness.com/forums/167887-coach-trainer-abc-trainerize/suggestions/45879544-notify-client-when-program-phase-or-workout-is-add),

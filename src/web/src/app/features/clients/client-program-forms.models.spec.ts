@@ -212,11 +212,25 @@ describe('training maxes', () => {
     } as StrengthMaxView;
   }
 
-  it('asks only for the exercises whose load is worked out from a max, each once', () => {
+  it('asks only for the exercises whose load is worked out from a max, each once, saying why', () => {
     expect(exercisesNeedingMax(version)).toEqual([
-      { exerciseId: 'squat', name: 'Back squat', anchor: null },
-      { exerciseId: 'bench', name: 'Bench press', anchor: null },
+      {
+        exerciseId: 'squat',
+        name: 'Back squat',
+        anchor: null,
+        reason: '1 set uses % of training max and 1 set uses the Epley curve in week 1',
+      },
+      {
+        exerciseId: 'bench',
+        name: 'Bench press',
+        anchor: null,
+        reason: '1 set uses the Epley curve in week 1',
+      },
     ]);
+    // The reason travels with the row the sheet makes from it.
+    expect(maxRow(exercisesNeedingMax(version)[1], [], 'Kilogram').reason).toBe(
+      '1 set uses the Epley curve in week 1',
+    );
   });
 
   it('tells which set week 1’s weight would be read from, when the chart covers one', () => {

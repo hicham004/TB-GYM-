@@ -223,6 +223,9 @@
               </button>
             </div>
           </div>
+          @if (needsMax().length > 0) {
+            <app-needs-max-line class="needs-max" [lifts]="needsMax()" />
+          }
 
           @if (grid().length > 1) {
             <!-- A phone shows one week at a time; wider, every week is on the page. -->
@@ -414,7 +417,8 @@
                                   [attr.aria-controls]="'inline-' + exercise.key"
                                   (click)="editSets(exercise.key)"
                                 >
-                                  {{ exercise.line }} <app-icon name="chevron-down" />
+                                  <app-set-lines [lines]="exercise.lines" />
+                                  <app-icon name="chevron-down" />
                                 </button>
                                 @if (inlineEditing() === exercise.key) {
                                   <div class="inline-sets" [id]="'inline-' + exercise.key">

@@ -43,7 +43,9 @@
       <header class="exercise-head">
         <div class="exercise-copy">
           <h4 dir="auto">{{ exerciseTitle(exercise, index) }}</h4>
-          <p class="exercise-line">{{ summary(exercise) }}</p>
+          @for (line of lines(exercise); track $index) {
+            <p class="exercise-line">{{ line }}</p>
+          }
         </div>
         <div class="row-tools">
           <button

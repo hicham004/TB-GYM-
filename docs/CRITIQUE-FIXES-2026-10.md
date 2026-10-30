@@ -638,3 +638,47 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   Khoury, Fri 30 Oct 2026", "That is the start already saved. Change the weight or the day, or close
   this.", "The start could not be saved. Try again." and the toast "Starting weight corrected. The earlier
   one stays in its history." Recommendation: keep.
+- B7a · The grid's runs of sets. Built: equal neighbours once ("3 × 5 · 75% of training max"), and a set
+  unlike its neighbours on a line of its own written "1 × 3 · RPE 8 · 86% of training max" (the client's
+  session sheet's rule, with "1 ×" so every line reads sets × reps); warm-ups stay out. In a narrow day the
+  exercise's name keeps its width and the lines wrap under it, breaking only between their parts. Other
+  way: one line per set whenever any differ. Recommendation: keep: a top set and three back-offs read two
+  lines, not four.
+- B7a · Whole percents. Built: the chart's share in whole percents on the grid, the set's line, the
+  publish preview and the week copies ("81%"), as the row writes it; the RPE box's help gives the cell
+  itself ("RTS chart: 5 reps at RPE 8 is 81.1% of the training max."); the % flag compares in whole
+  percents too, so 74% × 10 is not flagged against the chart's 73.9%. Other way: one decimal everywhere,
+  as the server's explanation writes it. Recommendation: keep.
+- B7a · When a % set is flagged. Built: by its fewest reps, so a range that can be done at its low end is
+  not flagged (85% × 5–12); past 12 reps by the chart's 12-rep cell ("70% × 15 reps is heavier than the
+  chart allows even for 12 reps (68%)."); an older "up to 10" set from one rep, so only past 100%. The flag
+  sits under the set's line in the set editor, open or closed, and not on the grid. Other way: the top
+  reps, no flag past 12, or a mark on the grid row too. Recommendation: keep.
+- B7a · Ways out the row did not list. Built: an Epley set past 12 (reps plus RIR) that the RTS chart
+  covers is offered "Use the RTS chart for this set" first; a chart set too far from failure whose reps
+  plus RIR the Epley curve cannot take either gets "Type a weight" and "Let the client pick the weight" in
+  place of the Epley button. A way out keeps the reps and the effort and puts the cursor in the box to
+  fill next. Other way: exactly the row's buttons. Recommendation: keep: no button leads to another
+  refusal.
+- B7a · Assign program's rows. Built: every max row is the kit's fold, its line the lift and the number it
+  starts from ("Back Squat · 100 kg") with the reason under it; a row with no number, or whose last
+  program's logged sets suggest a new max, starts open, and a refused one opens at Assign; the box keeps
+  the lift's name for a screen reader. Other way: plain boxes for the empty rows. Recommendation: keep:
+  one look for every row, and a suggestion is never folded away.
+- B7a · Epley sets, left out (outside the row). An Epley set's line still shows its effort only ("3 × 5 ·
+  RPE 8"), as before, since the row names chart sets, so it can read like a set with no load.
+  Recommendation: a small row showing the Epley curve's share the same way, from a pinned copy of
+  WorkingMaxLoad v2's curve with its test.
+- B7a · Words the row did not give. Built: the refusals "the RTS chart starts at RPE 6.5 (RIR 3.5): four
+  or more reps from failure, its percentages no longer hold.", "the formulas stop at 12 reps, so the RTS
+  chart has no weight for 20 reps." and "the formulas stop at 12 reps, and the Epley curve counts the reps
+  left in reserve too: 10 + 4 = 14."; "outside the RTS chart" on such a set's line; the buttons' group
+  "Ways to keep this set"; the reasons "6 sets use % of training max and 1 set uses the RTS chart in weeks
+  1 and 2", "1 set uses the Epley curve in week 3", "weeks 1 to 4" and "weeks 1, 3 and 5"; Assign
+  program's "This program works its weights out from these and keeps them as its own; you update them
+  from its Training maxes. Each starts where Maya’s last program left the lift, or from a max you recorded
+  since." (with no last program "… Each starts from the max you recorded, when there is one."); Record a
+  max's "Programs don’t read it directly: each keeps its own training maxes, set when you assign it and
+  updated from there." and the Strength history's "Programs don’t read the maxes you record directly: …",
+  the critique's sentence; the preview's "Weights are worked out …" only when a lift needs a max.
+  Recommendation: keep.

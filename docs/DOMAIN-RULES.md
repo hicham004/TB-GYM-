@@ -669,7 +669,11 @@ approved on 2026-10-05 (P2, ADR 0036): a coach may supersede a program's working
 a new snapshot that names the one it supersedes, the week it applies from and a reason, recalculates
 only the sessions not started (TRN-004), and always goes through preview, hash and apply with the
 concurrency token and an idempotency key (STR-009). Earlier snapshots, and started or finished
-sessions with their loads, are never rewritten.
+sessions with their loads, are never rewritten. A lift needs a max when any of its sets works its
+weight out from one (a share, the Epley curve or the chart) without a typed weight; since critique B7a
+(2026-10-30) the builder's head and the publish preview name those lifts by that one rule ("Needs a
+training max for: Back Squat · set when you assign the program"), and each Assign program row says why
+it is there ("3 sets use % of training max in weeks 1 to 4").
 
 **STR-003** RPE and RIR are related but not two independently authoritative fields. In common
 resistance-training usage, RPE 10 roughly means 0 RIR, RPE 9 roughly 1 RIR, and so on, but
@@ -730,7 +734,19 @@ it the coach types a weight or uses another formula. The coach chooses the formu
 the builder (P1; choosing it again at assignment is not built yet), and RpeChart v1 is the default for
 new RPE-loaded sets. Every calculated load keeps an explanation with its numbers and its rounding
 ("RTS RPE chart v1: 5 reps at RPE 7 is 78.6% of 140 kg = 110.04 kg. Rounded to the nearest 2.5 kg:
-110 kg.").
+110 kg."). Since critique B7a (2026-10-30) the builder holds a pinned copy of the chart
+(`rpe-chart.ts`, compared cell by cell with this one by a domain test) for three things only, the
+server still working every weight out: a chart set shows its share of the training max in whole
+percents ("5 · RPE 8 · 81% of training max"; the set editor gives the cell, 81.1%); a % set is flagged,
+never refused, only when the chart says it cannot be done, its share above the chart's RPE 10 cell
+for its fewest reps (the 12-rep cell past 12), compared as the sentence shows it in whole percents
+("85% × 10 reps is heavier than the chart allows for 10 reps (74%). Most lifters can't do it."), and
+nothing else links a % set's share to its RPE, which is only how hard it should feel; and a set at a
+formula's limit is refused with a way out that keeps its reps: past 12 reps (the chart's reps, or the
+Epley curve's reps plus RIR) % of training max, a typed weight or no prescribed load (the client picks
+the weight), all taking 1 to 100 reps, and the chart for an Epley set it covers; below RPE 6.5 on the
+chart the Epley curve while its reps plus RIR fit, else a typed weight or no prescribed load. The caps
+stay.
 
 **STR-011** A program's training maxes (P2, ADR 0036). Each lift that works its weights out from a
 max has one chain of maxes in the program: the one chosen at assignment, then each update superseding

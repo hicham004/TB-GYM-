@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 import type { CoachClientProgramView } from '../src/app/core/api/generated';
 import {
   cancelledBlock,
@@ -509,6 +509,15 @@ async function openTraining(page: Page, width: number, height: number, options: 
   await waitForFonts(page);
 }
 
+/** A filled max row in Assign program folds to its name and number (critique B7a); this opens it. */
+async function openMax(sheet: Locator, lift: string) {
+  const row = sheet.locator('app-disclosure.max', { hasText: lift });
+  const open = await row
+    .locator('details')
+    .evaluate((details) => (details as HTMLDetailsElement).open);
+  if (!open) await row.locator('summary').click();
+}
+
 async function axe(page: Page) {
   const result = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
@@ -705,7 +714,10 @@ test('Assign program opens from the address, asks for a training max, and sends 
   expect(requests).toEqual([]);
 
   await chooseOption(sheet, 'Program', 'Lean & Strong · Phase 3 · 6 weeks');
-  // The back squat is worked out from a training max, which starts from the one recorded.
+  // The back squat is worked out from a training max, which starts from the one recorded; the
+  // filled row folds to its number and says why it is listed.
+  await expect(sheet.locator('app-disclosure.max summary')).toContainText('Back Squat · 70 kg');
+  await openMax(sheet, 'Back Squat');
   await expect(sheet.getByLabel('Back Squat', { exact: true })).toHaveValue('70');
   await expect(sheet.getByText('Your recorded training max')).toBeVisible();
   await chooseDay(sheet, 'Start date', '2026-10-26');
@@ -1416,6 +1428,7 @@ test('Assign program can name the program and work a max out from week 1’s wei
   await sheet.getByLabel('Program name (optional)').fill('Peaking block');
 
   // The squat can be typed, or worked out from the weight of week 1's first set.
+  await openMax(sheet, 'Back Squat');
   await sheet.getByRole('radio', { name: 'From week 1’s weight' }).check();
   await expect(sheet).toContainText(
     'The weight of its first working set: 5 reps at RPE 7. The max is worked out from the RTS chart.',

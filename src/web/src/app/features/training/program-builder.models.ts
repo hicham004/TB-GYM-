@@ -11,6 +11,12 @@ import type {
 } from '../../core/api/generated';
 import { exerciseEquipmentLabel, movementPatternLabel } from '../../core/i18n/display-labels';
 import {
+  chartPercent,
+  RPE_CHART_MAXIMUM_REPS,
+  RPE_CHART_MAXIMUM_RPE,
+  RPE_CHART_MINIMUM_RPE,
+} from './rpe-chart';
+import {
   DraftExercise,
   DraftSession,
   DraftSet,
@@ -89,89 +95,134 @@ export function columnsFor(used: ReadonlySet<number>, editingDay: number | null)
 }
 
 /**
- * One line for an exercise on the grid: "4 × 5 · 75% · RPE 7". The sets and reps are the working
- * sets', as a coach writes them, so a warm-up is never counted as one (TRAIN-2); sets that disagree
- * on reps read "4 sets". The load and effort come from the first working set that has one. An
- * exercise of warm-ups only says so.
+ * The grid's lines for an exercise (critique B7a): its working sets as a coach writes them, equal
+ * neighbours told once as sets × reps ("2 × 10 · 70% of training max · RPE 7" is two sets of ten) and
+ * each run of sets that differ on a line of its own, as the client's session sheet tells them. A
+ * warm-up never counts (TRAIN-2), so an exercise of warm-ups only says so.
  */
-export function exerciseSummary(exercise: DraftExercise): string {
+export function gridLines(exercise: DraftExercise): string[] {
   const sets = exercise.sets;
-  if (sets.length === 0) {
-    return $localize`No sets yet`;
-  }
-
+  if (sets.length === 0) return [$localize`No sets yet`];
   const working = sets.filter((set) => set.setType !== 'WarmUp');
-  const pool = working.length > 0 ? working : sets;
-  const parts: string[] = [];
-  const reps = sharedReps(pool);
-  if (working.length > 0) {
-    parts.push(reps === null ? $localize`${pool.length}:count: sets` : `${pool.length} × ${reps}`);
-  } else {
-    parts.push(
-      reps === null
-        ? $localize`${pool.length}:count: warm-up sets`
-        : $localize`${pool.length}:count: × ${reps}:reps: warm-up`,
-    );
+  const warmUps = working.length === 0;
+  const runs: { reps: string | null; rest: string; count: number }[] = [];
+  for (const set of warmUps ? sets : working) {
+    const reps = repsText(set) || null;
+    const rest = setParts(set, false).join(' · ');
+    const last = runs.at(-1);
+    if (last && last.reps === reps && last.rest === rest) last.count += 1;
+    else runs.push({ reps, rest, count: 1 });
   }
-  const override = pool.find((set) => set.manualLoadOverride !== null);
-  const loaded = pool.find(
-    (set) =>
-      (set.loadStrategy === 'PercentageWorkingMax' || set.loadStrategy === 'Direct') &&
-      set.loadValue !== null,
-  );
-  if (override) {
-    parts.push(`${override.manualLoadOverride} ${override.loadUnit === 'Pound' ? 'lb' : 'kg'}`);
-  } else if (loaded?.loadStrategy === 'PercentageWorkingMax') {
-    parts.push(`${loaded.loadValue}%`);
-  } else if (loaded?.loadStrategy === 'Direct') {
-    parts.push(`${loaded.loadValue} ${loaded.loadUnit === 'Pound' ? 'lb' : 'kg'}`);
-  }
-
-  const effort = pool.find((set) => set.exertionTarget !== null);
-  if (effort) {
-    parts.push(
-      effort.exertionDisplayPreference === 'Rir'
-        ? `RIR ${effort.exertionTarget}`
-        : `RPE ${effort.exertionTarget}`,
-    );
-  }
-  return parts.join(' · ');
+  return runs.map(({ reps, rest, count }) => {
+    const head = warmUps
+      ? reps === null
+        ? count === 1
+          ? $localize`1 warm-up set`
+          : $localize`${count}:count: warm-up sets`
+        : $localize`${count}:count: × ${reps}:reps: warm-up`
+      : reps === null
+        ? count === 1
+          ? $localize`1 set`
+          : $localize`${count}:count: sets`
+        : `${count} × ${reps}`;
+    return rest ? `${head} · ${rest}` : head;
+  });
 }
 
 /** Every set's exact prescription, including a coach's override; a preview never guesses a load. */
 export function setSummary(set: DraftSet): string {
-  const parts = [sharedReps([set]) ?? $localize`Reps not prescribed`];
+  return [repsText(set) || $localize`Reps not prescribed`, ...setParts(set, true)].join(' · ');
+}
+
+/**
+ * What a set asks after its reps: its load, then its effort. A chart set's share follows its effort,
+ * since the chart reads it from the reps and the RPE ("RPE 8 · 81% of training max"). The grid says
+ * nothing for a set with no load; the set's own summary says so.
+ */
+function setParts(set: DraftSet, sayEveryLoad: boolean): string[] {
   const unit = set.loadUnit === 'Pound' ? 'lb' : 'kg';
+  const effort =
+    set.exertionTarget === null
+      ? null
+      : `${set.exertionDisplayPreference === 'Rir' ? 'RIR' : 'RPE'} ${set.exertionTarget}`;
+  const parts: string[] = [];
   if (set.manualLoadOverride !== null) {
-    parts.push($localize`${set.manualLoadOverride}:load: ${unit}:unit: fixed load`);
+    parts.push(
+      sayEveryLoad
+        ? $localize`${set.manualLoadOverride}:load: ${unit}:unit: fixed load`
+        : `${set.manualLoadOverride} ${unit}`,
+    );
   } else if (set.loadStrategy === 'Direct' && set.loadValue !== null) {
     parts.push(`${set.loadValue} ${unit}`);
   } else if (set.loadStrategy === 'PercentageWorkingMax' && set.loadValue !== null) {
     parts.push($localize`${set.loadValue}:percentage:% of training max`);
-  } else if (set.loadStrategy === 'RpeChart') {
-    parts.push($localize`Load from RTS chart & effort`);
-  } else if (set.loadStrategy === 'RpeBasedEpley') {
-    parts.push($localize`Load from training max & effort`);
-  } else {
-    parts.push($localize`No prescribed load`);
+  } else if (
+    set.loadStrategy === 'RpeChart' &&
+    effort !== null &&
+    set.repetitionsMaximum !== null
+  ) {
+    const share = chartShare(set);
+    return [
+      effort,
+      share === null
+        ? $localize`outside the RTS chart`
+        : $localize`${Math.round(share)}:percentage:% of training max`,
+    ];
+  } else if (sayEveryLoad) {
+    parts.push(
+      set.loadStrategy === 'RpeChart'
+        ? $localize`Load from RTS chart & effort`
+        : set.loadStrategy === 'RpeBasedEpley'
+          ? $localize`Load from training max & effort`
+          : $localize`No prescribed load`,
+    );
   }
-  if (set.exertionTarget !== null) {
-    parts.push(`${set.exertionDisplayPreference === 'Rir' ? 'RIR' : 'RPE'} ${set.exertionTarget}`);
-  }
-  return parts.join(' · ');
+  if (effort !== null) parts.push(effort);
+  return parts;
 }
 
-function sharedReps(sets: readonly DraftSet[]): string | null {
-  const first = sets[0];
-  if (first.repetitionsMinimum === null && first.repetitionsMaximum === null) {
+/** A set's RPE, read from RIR when the coach writes it that way (STR-003). */
+function rpeOf(set: DraftSet): number | null {
+  if (set.exertionTarget === null) return null;
+  return set.exertionDisplayPreference === 'Rpe' ? set.exertionTarget : 10 - set.exertionTarget;
+}
+
+/**
+ * The share of the training max a chart set's weight will be (STR-010): the chart's cell for its top
+ * reps at its RPE, as the server works the weight out at assignment. Null when the chart has no cell.
+ */
+export function chartShare(set: DraftSet): number | null {
+  const rpe = rpeOf(set);
+  if (set.loadStrategy !== 'RpeChart' || rpe === null || set.repetitionsMaximum === null) {
     return null;
   }
-  const same = sets.every(
-    (set) =>
-      set.repetitionsMinimum === first.repetitionsMinimum &&
-      set.repetitionsMaximum === first.repetitionsMaximum,
-  );
-  return same ? repsText(first) : null;
+  return chartPercent(set.repetitionsMaximum, rpe);
+}
+
+/**
+ * The warning a % set gets only when the chart says it cannot be done (the owner, 2026-10-27): its
+ * share is heavier than the chart allows at RPE 10 for its fewest reps. Nothing else links a % to an
+ * RPE: the % sets the weight, and an RPE on a % set is only how hard it should feel. Past 12 reps the
+ * chart's last column bounds it, since more reps are never lighter. The share is compared as the
+ * sentence shows it, in whole percents.
+ */
+export function impossiblePercentage(set: DraftSet): string | null {
+  if (set.loadStrategy !== 'PercentageWorkingMax' || set.manualLoadOverride !== null) return null;
+  const share = set.loadValue;
+  if (share === null || !(share > 0)) return null;
+  const fewest = set.repetitionsMinimum ?? (set.repetitionsMaximum !== null ? 1 : null);
+  if (fewest === null || fewest < 1 || !Number.isInteger(fewest)) return null;
+  const reps = Math.min(fewest, RPE_CHART_MAXIMUM_REPS);
+  const most = chartPercent(reps, RPE_CHART_MAXIMUM_RPE)!;
+  const shown = Math.round(most);
+  if (share <= Math.max(most, shown)) return null;
+  const asked = repsText(set);
+  if (fewest > RPE_CHART_MAXIMUM_REPS) {
+    return $localize`${share}:percentage:% × ${asked}:reps: reps is heavier than the chart allows even for ${reps}:chartReps: reps (${shown}:chart:%). Most lifters can’t do it.`;
+  }
+  return reps === 1
+    ? $localize`${share}:percentage:% × ${asked}:reps: reps is heavier than the chart allows for 1 rep (${shown}:chart:%). Most lifters can’t do it.`
+    : $localize`${share}:percentage:% × ${asked}:reps: reps is heavier than the chart allows for ${reps}:chartReps: reps (${shown}:chart:%). Most lifters can’t do it.`;
 }
 
 /** The two numbers a set stores for its reps; null on either end leaves that end open. */
@@ -701,6 +752,8 @@ export interface SetIssue {
     | 'manualLoadOverride'
     | 'loadValue';
   message: string;
+  /** A formula's limit, which the set editor offers a way out of (critique B7a); the caps stay. */
+  limit?: 'chartEffort' | 'chartReps' | 'epleyReps';
 }
 
 /** Identifies the field as well as the rule, so both editors explain and focus the same problem. */
@@ -781,36 +834,80 @@ export function setIssue(set: DraftSet): SetIssue | null {
         field: set.exertionTarget === null ? 'exertionTarget' : 'repetitionsMaximum',
         message: $localize`a load from RPE needs the highest reps and an RPE or RIR target.`,
       };
-    const rpe =
-      set.exertionDisplayPreference === 'Rpe' ? set.exertionTarget : 10 - set.exertionTarget;
+    const rpe = rpeOf(set)!;
     if (set.loadStrategy === 'RpeChart') {
       // The same range as the server's RTS chart (STR-010), shown early; the server decides.
-      if (rpe < RPE_CHART.minimumRpe)
+      if (rpe < RPE_CHART_MINIMUM_RPE)
         return {
           field: 'exertionTarget',
-          message: $localize`the RTS chart starts at RPE 6.5 (RIR 3.5). For this set type a weight or use the Epley curve.`,
+          limit: 'chartEffort',
+          message: $localize`the RTS chart starts at RPE 6.5 (RIR 3.5): four or more reps from failure, its percentages no longer hold.`,
         };
-      if (set.repetitionsMaximum > RPE_CHART.maximumReps)
+      if (set.repetitionsMaximum > RPE_CHART_MAXIMUM_REPS)
         return {
           field: 'repetitionsMaximum',
-          message: $localize`the RTS chart covers up to 12 reps. For this set type a weight or use the Epley curve.`,
+          limit: 'chartReps',
+          message: $localize`the formulas stop at 12 reps, so the RTS chart has no weight for ${set.repetitionsMaximum}:reps: reps.`,
         };
     } else if (set.repetitionsMaximum + (10 - rpe) > 12)
       return {
         field: 'repetitionsMaximum',
-        message: $localize`for a load from RPE, the highest reps plus RIR can’t be more than 12.`,
+        limit: 'epleyReps',
+        message: $localize`the formulas stop at 12 reps, and the Epley curve counts the reps left in reserve too: ${set.repetitionsMaximum}:reps: + ${10 - rpe}:reserve: = ${set.repetitionsMaximum + (10 - rpe)}:total:.`,
       };
   }
   return null;
 }
 
+/** A way out of a formula's limit, which the set editor offers as a button. */
+export type SetWayOut = 'chart' | 'epley' | 'percentage' | 'direct' | 'none';
+
+/**
+ * The ways out of a set's formula limit (critique B7a). Past 12 reps the set keeps its reps (sets of
+ * 20 stay possible): % of training max and a typed weight take 1 to 100, and the client can pick the
+ * weight for an RPE target; an Epley set the RTS chart covers can move to the chart. Too far from
+ * failure for the chart, the Epley curve takes the set when its reps plus RIR fit, else a typed weight
+ * or the client's own pick. Nothing else is offered for any other problem.
+ */
+export function setWayOuts(set: DraftSet): SetWayOut[] {
+  const limit = setIssue(set)?.limit;
+  if (!limit) return [];
+  const rpe = rpeOf(set)!;
+  const reps = set.repetitionsMaximum!;
+  if (limit === 'chartEffort') {
+    return reps + (10 - rpe) <= 12 ? ['epley', 'direct'] : ['direct', 'none'];
+  }
+  const keepReps: SetWayOut[] = ['percentage', 'direct', 'none'];
+  return limit === 'epleyReps' && chartPercent(reps, rpe) !== null
+    ? ['chart', ...keepReps]
+    : keepReps;
+}
+
+const WAY_OUT_STRATEGY: Record<SetWayOut, TrainingLoadStrategy> = {
+  chart: 'RpeChart',
+  epley: 'RpeBasedEpley',
+  percentage: 'PercentageWorkingMax',
+  direct: 'Direct',
+  none: 'None',
+};
+
+/** What each way out does to the set: its reps and effort stay, only where its weight comes from moves. */
+export function takeWayOut(set: DraftSet, way: SetWayOut): void {
+  set.manualLoadOverride = null;
+  set.loadStrategy = WAY_OUT_STRATEGY[way];
+}
+
 // ---------- RPE formulas (STR-010) ----------
 
 /**
- * What the RTS RPE chart covers, copied from the server's `RtsRpeChart` only to warn while the coach
- * types. The server decides when the program is published or assigned.
+ * What the RTS RPE chart covers, from the builder's pinned copy of the server's chart, to warn while
+ * the coach types. The server decides when the program is published or assigned.
  */
-export const RPE_CHART = { minimumRpe: 6.5, maximumRpe: 10, maximumReps: 12 } as const;
+export const RPE_CHART = {
+  minimumRpe: RPE_CHART_MINIMUM_RPE,
+  maximumRpe: RPE_CHART_MAXIMUM_RPE,
+  maximumReps: RPE_CHART_MAXIMUM_REPS,
+} as const;
 
 export type RpeFormula = Extract<TrainingLoadStrategy, 'RpeChart' | 'RpeBasedEpley'>;
 

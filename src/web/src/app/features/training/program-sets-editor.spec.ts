@@ -199,3 +199,97 @@ describe('the shared program set editor', () => {
     expect(more.textContent).toContain('rest must be between 0 and 3600 seconds.');
   });
 });
+
+describe('a formula’s limit in the set editor (critique B7a)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function chartSet(reps: number, rpe: number) {
+    const rendered = await render(1);
+    Object.assign(rendered.exercise.sets[0], {
+      loadStrategy: 'RpeChart',
+      loadValue: null,
+      manualLoadOverride: null,
+      repetitionsMinimum: reps,
+      repetitionsMaximum: reps,
+      exertionTarget: rpe,
+    });
+    rendered.fixture.componentRef.setInput('revision', 1);
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  const refuse = async (host: HTMLElement, fixture: Parameters<typeof settle>[0]) => {
+    host.querySelector('.set-fields')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    await settle(fixture);
+  };
+  const ways = (host: HTMLElement) =>
+    Array.from(host.querySelectorAll('[data-ways] button')).map((node) => node.textContent?.trim());
+
+  it('says the chart’s own cell for the set’s reps and effort', async () => {
+    const { host } = await chartSet(5, 8);
+    expect(host.textContent).toContain('RTS chart: 5 reps at RPE 8 is 81.1% of the training max.');
+    expect(host.querySelector('.set-summary')?.textContent).toContain(
+      '5 · RPE 8 · 81% of training max',
+    );
+  });
+
+  it('offers a way out past 12 reps that keeps a 20-rep set, and puts the cursor where it goes', async () => {
+    const { fixture, host, exercise, edited } = await chartSet(20, 8);
+    expect(ways(host)).toEqual([]);
+    await refuse(host, fixture);
+    expect(host.querySelector('.tb-field__support--error')?.textContent).toContain(
+      'the formulas stop at 12 reps, so the RTS chart has no weight for 20 reps.',
+    );
+    expect(ways(host)).toEqual([
+      'Use % of training max',
+      'Type a weight',
+      'Let the client pick the weight',
+    ]);
+
+    press(host, 'Use % of training max');
+    await settle(fixture);
+    expect(exercise.sets[0]).toMatchObject({
+      loadStrategy: 'PercentageWorkingMax',
+      repetitionsMinimum: 20,
+      repetitionsMaximum: 20,
+      exertionTarget: 8,
+    });
+    expect(edited).toHaveBeenCalled();
+    // The box that appeared has the cursor, and is not called empty before the coach types in it.
+    expect(document.activeElement).toBe(field(host, '% of training max'));
+    expect(host.querySelector('.tb-field__support--error')).toBeNull();
+    expect(ways(host)).toEqual([]);
+  });
+
+  it('offers the Epley curve to a set too far from failure for the chart, while it can take it', async () => {
+    const { fixture, host, exercise } = await chartSet(5, 6);
+    await refuse(host, fixture);
+    expect(host.querySelector('.tb-field__support--error')?.textContent).toContain(
+      'four or more reps from failure, its percentages no longer hold.',
+    );
+    expect(ways(host)).toEqual(['Use the Epley curve for this set', 'Type a weight']);
+    press(host, 'Use the Epley curve for this set');
+    await settle(fixture);
+    expect(exercise.sets[0].loadStrategy).toBe('RpeBasedEpley');
+    expect(document.activeElement).toBe(field(host, 'RPE target'));
+    expect(setIssue(exercise.sets[0])).toBeNull();
+  });
+
+  it('flags a % set the chart says cannot be done, under its line, without refusing it', async () => {
+    const { fixture, host, exercise } = await render(2);
+    Object.assign(exercise.sets[1], {
+      manualLoadOverride: null,
+      loadValue: 85,
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+    });
+    fixture.componentRef.setInput('revision', 1);
+    await settle(fixture);
+    // The second set is closed, and still says so.
+    const flagged = Array.from(host.querySelectorAll('[data-impossible]'));
+    expect(flagged.map((node) => node.textContent?.trim())).toEqual([
+      '85% × 10 reps is heavier than the chart allows for 10 reps (74%). Most lifters can’t do it.',
+    ]);
+    expect(setIssue(exercise.sets[1])).toBeNull();
+  });
+});

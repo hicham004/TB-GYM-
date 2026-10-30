@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using TB.Gym.Modules.Strength;
 
 namespace TB.Gym.Domain.Tests;
@@ -198,5 +200,57 @@ public sealed class RpeChartDomainTests
         Assert.AreEqual(81.081m, rpe.Value);
         StringAssert.StartsWith(rpe.Explanation, "WorkingMaxLoad v2: 100 kg / (1 + (5 reps + 2 in reserve) / 30) = 81.081 kg.");
         StringAssert.Contains(rpe.Explanation, "does not estimate or imply a true 1RM");
+    }
+
+    [TestMethod]
+    public void TheBuildersPinnedCopyHasEveryCellAndLimitOfThisChart()
+    {
+        // The program builder shows a chart set's percentage from its own copy (critique B7a); a cell
+        // that differed would show the coach a number the server never uses.
+        var source = File.ReadAllText(Path.Combine(
+            RepositoryRoot(), "src", "web", "src", "app", "features", "training", "rpe-chart.ts"));
+        var table = Regex.Match(source, @"PERCENTAGES[^=]*=\s*\[(?<rows>.*?)\];", RegexOptions.Singleline);
+        Assert.IsTrue(table.Success, "rpe-chart.ts no longer holds its PERCENTAGES table.");
+        var rows = Regex.Matches(table.Groups["rows"].Value, @"\[(?<cells>[^\[\]]*)\]")
+            .Select(row => row.Groups["cells"].Value
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(cell => decimal.Parse(cell, CultureInfo.InvariantCulture))
+                .ToArray())
+            .ToArray();
+
+        Assert.HasCount(RpeRows.Length, rows);
+        var mismatches = new List<string>();
+        for (var row = 0; row < RpeRows.Length; row++)
+        {
+            Assert.HasCount(RtsRpeChart.MaximumRepetitions, rows[row], $"RPE {RpeRows[row]}");
+            for (var reps = 1; reps <= RtsRpeChart.MaximumRepetitions; reps++)
+            {
+                var server = RtsRpeChart.PercentOfOneRepMax(reps, RpeRows[row]);
+                if (rows[row][reps - 1] != server)
+                {
+                    mismatches.Add($"RPE {RpeRows[row]} x {reps}: web {rows[row][reps - 1]}, server {server}");
+                }
+            }
+        }
+
+        Assert.IsEmpty(mismatches, string.Join("; ", mismatches));
+        string Constant(string name) =>
+            Regex.Match(source, $@"export const {name} = '?(?<value>[^';]+)'?;").Groups["value"].Value;
+        Assert.AreEqual(RtsRpeChart.CurrentVersion, Constant("RPE_CHART_VERSION"));
+        Assert.AreEqual(RtsRpeChart.MinimumRpe, decimal.Parse(Constant("RPE_CHART_MINIMUM_RPE"), CultureInfo.InvariantCulture));
+        Assert.AreEqual(RtsRpeChart.MaximumRpe, decimal.Parse(Constant("RPE_CHART_MAXIMUM_RPE"), CultureInfo.InvariantCulture));
+        Assert.AreEqual(RtsRpeChart.MaximumRepetitions, int.Parse(Constant("RPE_CHART_MAXIMUM_REPS"), CultureInfo.InvariantCulture));
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "TB.Gym.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.IsNotNull(directory, "The repository root could not be located from the test output directory.");
+        return directory.FullName;
     }
 }

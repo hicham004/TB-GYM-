@@ -254,9 +254,13 @@ describe('the program builder', () => {
         textOf(row.querySelector('.exercise-line')),
       ]),
     ).toEqual([
-      ['Back squat Main', '3 × 5 · 75% · RPE 7'],
+      ['Back squat Main', '3 × 5 · 75% of training max · RPE 7'],
       ['Romanian deadlift', '2 × 8–10 · RPE 8'],
     ]);
+    // The lifts Assign program will ask a max for, by its own rule (critique B7a).
+    expect(textOf(host.querySelector('[data-needs-max]'))).toBe(
+      'Needs a training max for: Back squat, Bench press · set when you assign the program',
+    );
     expect(status(host)).toBe('Published: you can assign it');
     expect(textOf(host.querySelector('#weeks-title'))).toBe('2 weeks · 4 workouts');
     // Nothing changed and this version is published: nothing to publish, nothing to discard.
@@ -524,7 +528,9 @@ describe('the program builder', () => {
     expect(api.getProgramTemplateVersion).not.toHaveBeenCalled();
     expect(all(host, 'section.week')).toHaveLength(1);
     expect(sessionsOf(all(host, 'section.week')[0])).toEqual(['Lower A, heavier']);
-    expect(textOf(host.querySelector('.exercise-line'))).toBe('1 × 3 · 80% · RPE 8');
+    expect(textOf(host.querySelector('.exercise-line'))).toBe(
+      '1 × 3 · 80% of training max · RPE 8',
+    );
     expect(status(host)).toBe('Saved on Sun 4 Oct, not published yet');
     expect(textOf(host.querySelector('.older'))).toBe(
       'Version 3 was published after you started these changes. Publishing yours makes it the newest version; version 3 stays in Versions.',

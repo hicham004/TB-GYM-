@@ -126,8 +126,12 @@ test('Karim assigns the program he just published to Lynn, or is refused in word
   await chooseOption(sheet, 'Program', `${name} · 1 week`);
   await chooseDay(sheet, 'Start date', today);
   await expect(sheet.locator('.run')).toContainText(/Runs \w{3} \d/);
+  // Each max says why it is asked for; a row already filled is folded to its number (critique B7a).
   const squat = sheet.locator('.max', { hasText: 'Back Squat' });
   await expect(squat).toBeVisible();
+  await expect(squat.locator('summary')).toContainText('1 set uses the RTS chart in week 1');
+  if (!(await squat.locator('details').evaluate((details) => (details as HTMLDetailsElement).open)))
+    await squat.locator('summary').click();
   await squat.getByRole('spinbutton').first().fill('100');
   await sheet.getByRole('button', { name: 'Assign program' }).click();
 

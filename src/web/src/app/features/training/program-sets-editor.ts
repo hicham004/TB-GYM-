@@ -16,7 +16,18 @@ import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
-import { parseReps, repsText, setIssue, setSummary, type SetIssue } from './program-builder.models';
+import {
+  chartShare,
+  impossiblePercentage,
+  parseReps,
+  repsText,
+  setIssue,
+  setSummary,
+  setWayOuts,
+  takeWayOut,
+  type SetIssue,
+  type SetWayOut,
+} from './program-builder.models';
 import {
   type DraftExercise,
   type DraftSet,
@@ -27,6 +38,24 @@ import {
 /** "Normal" is said "Working": the other kinds but a warm-up are working sets too (B1). */
 const WORKING_HINT = $localize`Top, back-off, drop and failure sets are working sets too; a warm-up never counts in the summary or the records.`;
 const PERCENTAGE_HINT = $localize`Of this client’s training max, set when you assign the program.`;
+
+/** The buttons a formula's limit offers (critique B7a), in the order they are offered. */
+const WAY_OUT_LABELS: Record<SetWayOut, string> = {
+  chart: $localize`Use the RTS chart for this set`,
+  epley: $localize`Use the Epley curve for this set`,
+  percentage: $localize`Use % of training max`,
+  direct: $localize`Type a weight`,
+  none: $localize`Let the client pick the weight`,
+};
+
+/** Where the cursor goes once a way out is taken: the box the coach fills next. */
+const WAY_OUT_FIELD: Record<SetWayOut, string> = {
+  chart: '[data-field="effort"]',
+  epley: '[data-field="effort"]',
+  percentage: '[data-field="load"]',
+  direct: '[data-field="load"]',
+  none: '[data-load-menu] button',
+};
 
 /** Whether a set's problem is a box under Rest, tempo & notes (a direct load says its own above). */
 function refusedUnderMore(set: DraftSet): boolean {
@@ -89,6 +118,7 @@ export class ProgramSetsEditor {
     { action: 'Kilogram', label: 'kg' },
     { action: 'Pound', label: 'lb' },
   ];
+  protected readonly waysLabel = $localize`Ways to keep this set`;
   protected readonly effortItems = [
     { action: 'Rpe', label: 'RPE' },
     { action: 'Rir', label: 'RIR' },
@@ -109,12 +139,52 @@ export class ProgramSetsEditor {
     return set.exertionDisplayPreference === 'Rpe' ? $localize`RPE target` : $localize`RIR target`;
   }
 
-  /** A chart set says what the chart covers, where the coach types the effort it needs. */
+  /**
+   * A chart set says the chart's own cell for its reps and effort, as the server will work the weight
+   * out at assignment; until it has one, what the chart covers.
+   */
   protected effortHelp(set: DraftSet): string | null {
     if (set.loadStrategy !== 'RpeChart') return null;
+    const share = chartShare(set);
+    if (share !== null) {
+      const effort = `${set.exertionDisplayPreference === 'Rir' ? 'RIR' : 'RPE'} ${set.exertionTarget}`;
+      return $localize`RTS chart: ${set.repetitionsMaximum}:reps: reps at ${effort}:effort: is ${share.toFixed(1)}:share:% of the training max.`;
+    }
     return set.exertionDisplayPreference === 'Rpe'
       ? $localize`RTS chart: RPE 6.5 to 10, up to 12 reps`
       : $localize`RTS chart: RIR 0 to 3.5, up to 12 reps`;
+  }
+
+  /** A % set the chart says cannot be done is flagged, never refused (critique B7a). */
+  protected warning(set: DraftSet): string | null {
+    this.revision();
+    return impossiblePercentage(set);
+  }
+
+  /** The ways out of a formula's limit, once its refusal is shown. */
+  protected wayOuts(set: DraftSet): { way: SetWayOut; label: string }[] {
+    this.revision();
+    if (!this.checked().has(set.key)) return [];
+    return setWayOuts(set).map((way) => ({ way, label: WAY_OUT_LABELS[way] }));
+  }
+
+  /**
+   * Takes a way out and puts the cursor in the box the coach fills next. The set is checked again when
+   * the coach leaves it, so a box that just appeared is not called empty before they type in it.
+   */
+  protected takeWay(set: DraftSet, way: SetWayOut): void {
+    takeWayOut(set, way);
+    this.changed();
+    afterNextRender(
+      () => {
+        const row = Array.from(
+          this.host.nativeElement.querySelectorAll<HTMLElement>('[data-set-key]'),
+        ).find((element) => element.dataset['setKey'] === set.key);
+        row?.querySelector<HTMLElement>(WAY_OUT_FIELD[way])?.focus();
+        this.checked.update((keys) => new Set([...keys].filter((key) => key !== set.key)));
+      },
+      { injector: this.injector },
+    );
   }
 
   protected unitLabel(set: DraftSet): string {

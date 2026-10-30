@@ -6,12 +6,7 @@ import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { ProgramSetsEditor } from './program-sets-editor';
-import {
-  DAYS,
-  exerciseSummary,
-  type LibraryExercise,
-  libraryNames,
-} from './program-builder.models';
+import { DAYS, gridLines, type LibraryExercise, libraryNames } from './program-builder.models';
 import {
   type DraftExercise,
   type DraftSession,
@@ -64,7 +59,7 @@ export class ProgramSessionEditor {
     value: String(day),
     label: String(day + 1),
   }));
-  protected readonly summary = exerciseSummary;
+  protected readonly lines = gridLines;
 
   private readonly names = computed(() => libraryNames(this.library()));
 

@@ -2,7 +2,11 @@
   <div class="head">
     <div class="head-text">
       <h2 id="strength-title" i18n>Strength history</h2>
-      <p class="hint" i18n>Every max on record, and how {{ name() }} has done on each lift.</p>
+      <p class="hint" i18n>
+        Every max on record, and how {{ name() }} has done on each lift. Programs don’t read the
+        maxes you record directly: each keeps its own training maxes, set when you assign it and
+        updated from there.
+      </p>
     </div>
     <div class="actions">
       <button
