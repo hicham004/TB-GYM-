@@ -34,6 +34,7 @@ import { StatusPill } from '../../ui/status-pill';
 import { ConversationStarter } from '../messaging/conversation-starter';
 import {
   mapProgressDashboard,
+  startWords,
   type ProgressDashboard,
 } from '../progress/progress-dashboard.models';
 import { addDays, daysBetween, weekContaining } from './client-overview.models';
@@ -96,7 +97,11 @@ const RECORDS_SHOWN = 4;
     StatusPill,
   ],
   templateUrl: './client-overview.html',
-  styleUrls: ['./client-overview.scss', './client-overview-cards.scss'],
+  styleUrls: [
+    './client-overview.scss',
+    './client-overview-cards.scss',
+    '../progress/start-lines.scss',
+  ],
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
 export class ClientOverview {
@@ -215,6 +220,14 @@ export class ClientOverview {
   protected readonly weight = computed(() => {
     const dashboard = this.dashboard().value;
     return dashboard ? weightStory(dashboard, this.locale, WEIGHT_WEEKS) : null;
+  });
+
+  /** Where the client started and the change since, however old (critique B6). */
+  protected readonly start = computed(() => {
+    const dashboard = this.dashboard().value;
+    return dashboard
+      ? startWords(dashboard.bodyweight.start, dashboard.displayUnit, this.locale)
+      : null;
   });
 
   protected readonly recordList = computed(() => {

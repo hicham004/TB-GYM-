@@ -175,6 +175,7 @@ export function progressDashboard(overrides: Partial<ProgressDashboard> = {}): P
       trendEstimate: 71.5,
       trendIsAvailable: true,
       observedDayCount: 40,
+      start: null,
     },
     measurements: [],
     measurementObservedDayCount: 0,

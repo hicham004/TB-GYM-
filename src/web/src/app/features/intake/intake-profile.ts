@@ -66,7 +66,7 @@ export class IntakeProfile extends GuardedSheets {
   protected readonly rows = computed<Record<IntakeGroup, AnswerRow[]>>(() => {
     const profile = this.profile();
     return {
-      about: answerRows(profile, 'about', this.locale),
+      about: answerRows(profile, 'about', this.locale, this.today()),
       goal: answerRows(profile, 'goal', this.locale),
       life: answerRows(profile, 'life', this.locale),
       health: answerRows(profile, 'health', this.locale),

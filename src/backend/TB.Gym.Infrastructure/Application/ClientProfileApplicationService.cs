@@ -727,6 +727,9 @@ internal sealed class ClientProfileApplicationService(
                 request.Intake.ToInput(),
                 tenantToday,
                 clock.UtcNow);
+            var unit = request.InitialBodyweightUnit == BodyweightUnit.Kilogram
+                ? RecordedMassUnit.Kilogram
+                : RecordedMassUnit.Pound;
             if (existingObservation is null)
             {
                 dbContext.BodyweightObservations.Add(BodyweightObservation.CreateInitial(
@@ -734,10 +737,23 @@ internal sealed class ClientProfileApplicationService(
                     profile.Id,
                     request.MeasurementDate,
                     request.InitialBodyweightValue,
-                    request.InitialBodyweightUnit == BodyweightUnit.Kilogram
-                        ? RecordedMassUnit.Kilogram
-                        : RecordedMassUnit.Pound,
+                    unit,
                     bodyweightSource));
+            }
+
+            // The start is a record of its own beside that weigh-in (critique B6, PRG-014), unless the
+            // profile already has one, filled in from a weigh-in logged before setup was finished.
+            if (!await dbContext.StartingWeights.AnyAsync(
+                    item => item.ClientProfileId == profile.Id,
+                    cancellationToken))
+            {
+                dbContext.StartingWeights.Add(StartingWeight.Record(
+                    profile.TenantId,
+                    profile.Id,
+                    request.MeasurementDate,
+                    request.InitialBodyweightValue,
+                    unit,
+                    StartingWeightOrigin.Intake));
             }
             dbContext.ClientProfileChanges.Add(ClientProfileChange.Create(
                 profile.TenantId,

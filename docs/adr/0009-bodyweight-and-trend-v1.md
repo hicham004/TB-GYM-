@@ -71,3 +71,15 @@ Correcting an accidentally mis-dated observation, including voiding/replacing it
 losing audit history, remains a follow-up. Phase 5A correction changes values only. This was
 subsequently delivered as void-and-replace; see
 `docs/adr/0015-bodyweight-date-correction-v1.md`.
+
+## Amendment: the starting weight (critique B6, 2026-10-30)
+
+"No second current-weight fact" still holds: a profile's starting weight is a labelled record of its
+own (`StartingWeight`), not a current weight. The intake writes it beside the first observation;
+profiles from before it were filled in from their first active observation; a returning client's new
+profile gets its own. Only staff correct it, with a reason, under optimistic concurrency, appending the
+prior value to `StartingWeightCorrections` (append-only, and a start is never deleted, both enforced by
+triggers). A coach's dashboard read lists the person's starts across their profiles in this workspace
+and "since start", the versioned `BodyweightSinceStartWeeklyMean` 1.0: the latest weekly mean minus the
+mean of the workspace week holding the first start (PRG-005, approved by the owner on 2026-10-27). The
+client's own read carries none of it. See PRG-014.

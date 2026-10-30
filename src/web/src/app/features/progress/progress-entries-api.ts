@@ -4,6 +4,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type {
   CorrectBodyMeasurementRequest,
   CorrectBodyweightRequest,
+  CorrectStartingWeightRequest,
   MeasurementType,
   MeasurementUnit,
   RecordedMassUnit,
@@ -37,6 +38,7 @@ import {
   mapProgressPhotoImage,
   mapProgressPhotos,
 } from './progress.models';
+import { mapStartingWeight, type StartingWeight } from './progress-dashboard.models';
 
 export type { MeasurementType, MeasurementUnit, RecordedMassUnit };
 
@@ -104,6 +106,14 @@ export class ProgressEntriesApi {
         ? this.api.replaceClientBodyweightDate(clientId, observationId, request)
         : this.api.replaceMyBodyweightDate(observationId, request)
     ).pipe(map(mapDateCorrection));
+  }
+
+  /** A coach corrects a client's starting weight; there is no client route (critique B6). */
+  correctStart(
+    clientId: string,
+    request: CorrectStartingWeightRequest,
+  ): Observable<StartingWeight> {
+    return this.api.correctClientStartingWeight(clientId, request).pipe(map(mapStartingWeight));
   }
 
   weightHistory(clientId: string | null, observationId: string): Observable<BodyweightHistory> {

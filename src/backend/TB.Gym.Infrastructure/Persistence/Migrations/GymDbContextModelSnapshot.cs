@@ -8373,6 +8373,158 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("ProgressPhotoRemovals", "progress");
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Progress.StartingWeight", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EnteredUnit")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("EnteredValue")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
+                    b.Property<DateOnly>("MeasurementDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ValueKilograms")
+                        .HasPrecision(7, 3)
+                        .HasColumnType("numeric(7,3)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ClientProfileId")
+                        .IsUnique();
+
+                    b.ToTable("StartingWeights", "progress", t =>
+                        {
+                            t.HasCheckConstraint("CK_StartingWeights_EnteredUnit", "\"EnteredUnit\" IN ('Kilogram', 'Pound')");
+
+                            t.HasCheckConstraint("CK_StartingWeights_Origin", "\"Origin\" IN ('Intake', 'FirstWeighIn')");
+
+                            t.HasCheckConstraint("CK_StartingWeights_ValueKilograms", "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Progress.StartingWeightCorrection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EnteredUnit")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("EnteredValue")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
+                    b.Property<DateOnly>("MeasurementDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StartingWeightId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("SupersededAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SupersededByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ValueKilograms")
+                        .HasPrecision(7, 3)
+                        .HasColumnType("numeric(7,3)");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "StartingWeightId");
+
+                    b.HasIndex("TenantId", "StartingWeightId", "SupersededAtUtc");
+
+                    b.ToTable("StartingWeightCorrections", "progress", t =>
+                        {
+                            t.HasCheckConstraint("CK_StartingWeightCorrections_ValueKilograms", "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Strength.MesocycleWorkingMaxSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -13211,6 +13363,33 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "ProgressPhotoId")
                         .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Progress.StartingWeight", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Progress.StartingWeightCorrection", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Progress.StartingWeight", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId", "StartingWeightId")
+                        .HasPrincipalKey("TenantId", "ClientProfileId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

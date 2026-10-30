@@ -295,6 +295,19 @@
                       Progress page.
                     </p>
                   }
+                  <!-- Where they started, however long ago (critique B6, PRG-014). -->
+                  @if (start(); as story) {
+                    <div class="start" data-start>
+                      <ul class="start-lines" role="list">
+                        @for (line of story.lines; track line.key) {
+                          <li>{{ line.text }}</li>
+                        }
+                      </ul>
+                      @if (story.sinceStart; as since) {
+                        <p class="since-start">{{ since }}</p>
+                      }
+                    </div>
+                  }
                 }
               }
             </div>

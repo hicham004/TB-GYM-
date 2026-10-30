@@ -79,6 +79,11 @@ public sealed partial class GymDbContext(
 
     public DbSet<BodyweightObservationVoid> BodyweightObservationVoids => Set<BodyweightObservationVoid>();
 
+    /// <summary>One starting weight per client profile, beside the daily weigh-ins (critique B6, PRG-014).</summary>
+    public DbSet<StartingWeight> StartingWeights => Set<StartingWeight>();
+
+    public DbSet<StartingWeightCorrection> StartingWeightCorrections => Set<StartingWeightCorrection>();
+
     public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
 
     public DbSet<BodyMeasurementCorrection> BodyMeasurementCorrections => Set<BodyMeasurementCorrection>();
@@ -783,6 +788,70 @@ public sealed partial class GymDbContext(
             ConfigureAuditable(entity);
         });
 
+        builder.Entity<StartingWeight>(entity =>
+        {
+            entity.ToTable("StartingWeights", "progress");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => new { item.TenantId, item.ClientProfileId, item.Id });
+            entity.Property(item => item.MeasurementDate).HasColumnType("date");
+            entity.Property(item => item.ValueKilograms).HasPrecision(7, 3);
+            entity.Property(item => item.EnteredValue).HasPrecision(8, 3);
+            entity.Property(item => item.EnteredUnit).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Origin).HasConversion<string>().HasMaxLength(16);
+
+            // One start per profile; a returning client's new profile has its own (CLI-016).
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId }).IsUnique();
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_StartingWeights_ValueKilograms",
+                    "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500");
+                table.HasCheckConstraint(
+                    "CK_StartingWeights_EnteredUnit",
+                    "\"EnteredUnit\" IN ('Kilogram', 'Pound')");
+                table.HasCheckConstraint(
+                    "CK_StartingWeights_Origin",
+                    "\"Origin\" IN ('Intake', 'FirstWeighIn')");
+            });
+            ConfigureAuditable(entity);
+        });
+
+        builder.Entity<StartingWeightCorrection>(entity =>
+        {
+            entity.ToTable("StartingWeightCorrections", "progress");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.MeasurementDate).HasColumnType("date");
+            entity.Property(item => item.ValueKilograms).HasPrecision(7, 3);
+            entity.Property(item => item.EnteredValue).HasPrecision(8, 3);
+            entity.Property(item => item.EnteredUnit).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.StartingWeightId, item.SupersededAtUtc });
+            // A correction names its start's own workspace and profile, never another's.
+            entity.HasOne<StartingWeight>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId, item.StartingWeightId })
+                .HasPrincipalKey(item => new { item.TenantId, item.ClientProfileId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(client => new { client.TenantId, client.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasQueryFilter(item =>
+                tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_StartingWeightCorrections_ValueKilograms",
+                "\"ValueKilograms\" >= 20 AND \"ValueKilograms\" <= 500"));
+            ConfigureAuditable(entity);
+        });
+
         builder.Entity<BodyMeasurement>(entity =>
         {
             entity.ToTable("BodyMeasurements", "progress");
@@ -995,6 +1064,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<ClientNutritionPlanRecipeIngredient>("A client's recipe copy never changes (NUT-006).");
         RejectAppendOnlyMutations<BodyweightCorrection>("Bodyweight correction history is append-only.");
         RejectAppendOnlyMutations<BodyweightObservationVoid>("Bodyweight void history is append-only.");
+        RejectAppendOnlyMutations<StartingWeightCorrection>("Starting weight correction history is append-only.");
         RejectAppendOnlyMutations<BodyMeasurementCorrection>("Body measurement correction history is append-only.");
 
         // Platform billing (ADR 0028). A plan version, an issued invoice, a void and a payment are facts
@@ -1036,6 +1106,11 @@ public sealed partial class GymDbContext(
         if (ChangeTracker.Entries<BodyweightObservation>().Any(item => item.State == EntityState.Deleted))
         {
             throw new InvalidOperationException("Bodyweight observations cannot be deleted; corrections preserve history.");
+        }
+
+        if (ChangeTracker.Entries<StartingWeight>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("A starting weight is never deleted; a correction keeps the old value.");
         }
 
         if (ChangeTracker.Entries<BodyMeasurement>().Any(item => item.State == EntityState.Deleted))

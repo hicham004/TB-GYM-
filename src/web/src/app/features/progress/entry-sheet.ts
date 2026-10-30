@@ -23,6 +23,7 @@ import { FormSummary } from '../../ui/form-summary';
 import { modalFormId } from '../../ui/modal-footer';
 import { ProgressEntriesApi } from './progress-entries-api';
 import {
+  blockedProgressSentence,
   entryRefusal,
   isStale,
   REASON_LIMIT,
@@ -94,6 +95,17 @@ export abstract class EntrySheet {
   }
 
   /**
+   * What a refusal is read with: the sheet's own context and, for a coach, why a blocked client's
+   * entries are refused (critique B6), so a 403 says so instead of "Try again".
+   */
+  protected refusalContext(context: RefusalContext = {}): RefusalContext {
+    const audience = this.audience();
+    return audience.coach
+      ? { ...context, blocked: blockedProgressSentence(audience.firstName) }
+      : context;
+  }
+
+  /**
    * Runs one write: a fresh CSRF token first, the answer ignored if the workspace changed, a refusal
    * kept on screen. Answers true when the write was made.
    */
@@ -113,7 +125,7 @@ export abstract class EntrySheet {
           return true;
         } catch (error) {
           if (!owner.current) return false;
-          this.error.set(entryRefusal(error, fallback, context));
+          this.error.set(entryRefusal(error, fallback, this.refusalContext(context)));
           if (isStale(error)) this.stale.emit();
           this.focusSummary();
           return false;

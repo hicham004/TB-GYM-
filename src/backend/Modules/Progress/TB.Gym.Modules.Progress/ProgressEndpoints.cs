@@ -499,8 +499,31 @@ public static class ProgressEndpoints
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status404NotFound);
 
+        // The start is read with the dashboard; only staff correct it (critique B6, PRG-014).
+        coach.MapPut("/start", async (
+            Guid clientProfileId,
+            CorrectStartingWeightRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IProgressApplicationService service,
+            CancellationToken token) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToStartResult(await service.CorrectStartingWeightForClientAsync(clientProfileId, request, token));
+        }).WithName("CorrectClientStartingWeight").Produces<StartingWeightView>().ProducesValidationProblem().Produces(StatusCodes.Status403Forbidden).ProducesProblem(StatusCodes.Status404NotFound).ProducesProblem(StatusCodes.Status409Conflict);
+
         return endpoints;
     }
+
+    private static IResult ToStartResult(StartingWeightCommandResult result) => result.Status switch
+    {
+        ProgressCommandStatus.Success => Results.Ok(result.Start),
+        ProgressCommandStatus.NotFound => Results.NotFound(),
+        ProgressCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
+        ProgressCommandStatus.Conflict => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: result.Message ?? "The starting weight conflicts with current state.", extensions: result.Code is null ? null : new Dictionary<string, object?> { ["code"] = result.Code }),
+        ProgressCommandStatus.Forbidden => Results.Forbid(),
+        _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+    };
 
     /// <summary>
     /// Shares the existing progress range handling so an invalid window is a 400 here exactly as it

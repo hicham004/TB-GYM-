@@ -1,6 +1,8 @@
 import { Component, input, output } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { provideRouter, RouterLink } from '@angular/router';
+import { ButtonLink } from '../../ui/button';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoachClientDetails } from '../../core/api/api.models';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
@@ -16,6 +18,7 @@ import { ClientProgressSection } from './client-workspace-sections';
 class DashboardStub {
   readonly clientId = input<string | null>(null);
   readonly clientName = input<string | null>(null);
+  readonly readOnly = input(false);
   readonly answered = output<void>();
 }
 
@@ -28,14 +31,36 @@ class EntriesStub {
   readonly clientName = input<string | null>(null);
 }
 
-async function render(release: CoachClientDetails['release'] = null) {
-  TestBed.configureTestingModule({ providers: [ClientWorkspaceContext] });
+async function render(
+  release: CoachClientDetails['release'] = null,
+  blocked: { profile?: boolean; plans?: boolean } = {},
+) {
+  TestBed.configureTestingModule({ providers: [ClientWorkspaceContext, provideRouter([])] });
   TestBed.overrideComponent(ClientProgressSection, {
-    set: { imports: [DashboardStub, EntriesStub, UiDisclosure, UiDisclosureContent] },
+    set: {
+      imports: [
+        ButtonLink,
+        DashboardStub,
+        EntriesStub,
+        RouterLink,
+        UiDisclosure,
+        UiDisclosureContent,
+      ],
+    },
   });
   const context = TestBed.inject(ClientWorkspaceContext);
   context.clientId.set('client-1');
-  context.profile.set({ id: 'client-1', firstName: 'Maya', release } as CoachClientDetails);
+  context.profile.set({
+    id: 'client-1',
+    firstName: 'Maya',
+    release,
+    isCoachBlocked: blocked.profile === true,
+  } as CoachClientDetails);
+  if (blocked.plans) {
+    context.plans.set({ isRelationshipBlocked: true } as NonNullable<
+      ReturnType<typeof context.plans>
+    >);
+  }
   const fixture = TestBed.createComponent(ClientProgressSection);
   await settle(fixture);
   return { fixture, host: fixture.nativeElement as HTMLElement };
@@ -83,7 +108,7 @@ describe('ClientProgressSection', () => {
   });
 
   it('offers no entry tools for a former client, whose record is read-only', async () => {
-    const { host } = await render({
+    const { fixture, host } = await render({
       releasedAtUtc: '2026-09-20T10:00:00Z',
       reason: 'Moved',
       releasedByName: 'Olivia Owner',
@@ -92,5 +117,31 @@ describe('ClientProgressSection', () => {
 
     expect(host.querySelector('app-progress-dashboard')).not.toBeNull();
     expect(host.querySelector('details')).toBeNull();
+    // Nor a correction of their start (critique B6).
+    const dashboard = fixture.debugElement.query(By.directive(DashboardStub)).componentInstance;
+    expect((dashboard as DashboardStub).readOnly()).toBe(true);
+  });
+
+  it('says why a blocked client’s progress is not shown, and where to unblock them (critique B6)', async () => {
+    const { host } = await render(null, { profile: true });
+    const panel = host.querySelector('section.blocked');
+
+    expect(panel?.querySelector('h2')?.textContent?.trim()).toBe('Access blocked');
+    expect(panel?.querySelector('p')?.textContent?.trim()).toBe(
+      'Maya’s access is blocked, so their progress isn’t shown. Unblock them on Service & access.',
+    );
+    const link = panel?.querySelector<HTMLAnchorElement>('a');
+    expect(link?.textContent?.trim()).toBe('Open Service & access');
+    expect(link?.getAttribute('href')).toBe('/clients/client-1/service');
+    // Nothing is read for a blocked client, so nothing can fail with "Try again".
+    expect(host.querySelector('app-progress-dashboard')).toBeNull();
+    expect(host.querySelector('details')).toBeNull();
+  });
+
+  it('trusts the plans’ answer too when it is the one that says the client is blocked', async () => {
+    const { host } = await render(null, { plans: true });
+
+    expect(host.querySelector('section.blocked')).not.toBeNull();
+    expect(host.querySelector('app-progress-dashboard')).toBeNull();
   });
 });

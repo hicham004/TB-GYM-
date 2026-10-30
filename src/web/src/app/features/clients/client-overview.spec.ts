@@ -396,6 +396,56 @@ describe('ClientOverview', () => {
     expect(lone.host.querySelector('app-sparkline')).toBeNull();
   });
 
+  it('names where the client started and the change since, even without a recent weigh-in (critique B6)', async () => {
+    const none = progressDashboardView({ weeks: [], latestDate: null });
+    const started = {
+      ...none,
+      bodyweight: {
+        ...none.bodyweight,
+        start: {
+          starts: [
+            {
+              clientProfileId: 'maya',
+              kind: 'Started' as const,
+              measurementDate: '2026-05-04',
+              valueKilograms: 74.2,
+              displayValue: 74.2,
+            },
+          ],
+          sinceStart: {
+            methodKey: 'BodyweightSinceStartWeeklyMean',
+            methodVersion: '1.0',
+            startWeekStart: '2026-05-04',
+            startWeekMeanKilograms: 74.2,
+            startWeekObservedDayCount: 1,
+            latestWeekStart: '2026-07-27',
+            latestWeekMeanKilograms: 71.4,
+            latestWeekObservedDayCount: 2,
+            deltaKilograms: -2.8,
+            displayDelta: -2.8,
+            percent: -3.8,
+          },
+          current: null,
+        },
+      },
+    };
+    const { host } = await render({
+      api: { getClientProgressDashboard: vi.fn(() => of(started)) },
+    });
+
+    expect(said(host)).toContain(
+      'No weigh-ins in the last 8 weeks. Maya logs them from their Progress page.',
+    );
+    expect(
+      Array.from(host.querySelectorAll('[data-start] li')).map((item) => item.textContent?.trim()),
+    ).toEqual(['Started at 74.2 kg · Mon 4 May 2026']);
+    expect(host.querySelector('.since-start')?.textContent?.trim()).toBe(
+      'Since start −2.8 kg (−3.8%)',
+    );
+    // The Overview reads; corrections are made from Progress.
+    expect(said(host)).not.toContain('Correct start');
+  });
+
   it('explains a closed training week from where the plan stands, not “not in the plan”', async () => {
     const { host } = await render({
       api: {

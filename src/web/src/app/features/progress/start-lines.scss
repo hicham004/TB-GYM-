@@ -1,0 +1,32 @@
+// Where a coach's client started (critique B6), under the weight on the Progress hero and the Overview's
+// Weight card. One file for both keeps their stylesheets under the component style budget.
+.start {
+  align-items: flex-start;
+  border-block-start: 1px solid var(--tb-line, #d9dfd1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-block: 0.875rem 0.25rem;
+  padding-block-start: 0.75rem;
+}
+
+.start-lines {
+  color: var(--tb-muted, #4f6057);
+  font-size: 0.875rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.since-start {
+  color: var(--tb-ink, #11201b);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0;
+}
+
+// A text button lines up with the words above it, and keeps its 44 px target.
+.correct-start {
+  margin-inline-start: -0.75rem;
+}

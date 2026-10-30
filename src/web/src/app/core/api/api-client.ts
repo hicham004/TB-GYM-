@@ -866,6 +866,17 @@ export class ApiClient {
     );
   }
 
+  /** Staff correct a client's starting weight, with a reason; the old value stays (critique B6). */
+  correctClientStartingWeight(
+    clientId: string,
+    request: Phase3Contracts.CorrectStartingWeightRequest,
+  ) {
+    return this.http.put<Phase3Contracts.StartingWeightView>(
+      `/api/progress/clients/${clientId}/start`,
+      request,
+    );
+  }
+
   replaceMyBodyweightDate(
     observationId: string,
     request: Phase3Contracts.ReplaceBodyweightDateRequest,

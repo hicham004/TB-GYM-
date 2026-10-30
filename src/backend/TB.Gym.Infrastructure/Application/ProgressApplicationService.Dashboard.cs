@@ -42,6 +42,7 @@ internal sealed partial class ProgressApplicationService
                 endExclusive,
                 displayUnit,
                 measurementDisplayUnit,
+                forCoach: false,
                 cancellationToken);
     }
 
@@ -64,6 +65,7 @@ internal sealed partial class ProgressApplicationService
                 endExclusive,
                 displayUnit,
                 measurementDisplayUnit,
+                forCoach: true,
                 cancellationToken);
     }
 
@@ -73,6 +75,7 @@ internal sealed partial class ProgressApplicationService
         DateOnly? requestedEndExclusive,
         RecordedMassUnit displayUnit,
         MeasurementUnit measurementDisplayUnit,
+        bool forCoach,
         CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(displayUnit))
@@ -113,6 +116,14 @@ internal sealed partial class ProgressApplicationService
             calendar,
             displayUnit,
             cancellationToken);
+        if (forCoach)
+        {
+            // Only the coach's read: a returning client never sees their older profile (CLI-016).
+            bodyweight = bodyweight with
+            {
+                Start = await BuildDashboardStartAsync(clientProfileId, calendar, displayUnit, cancellationToken),
+            };
+        }
         var measurements = await BuildDashboardMeasurementsAsync(
             clientProfileId,
             window,

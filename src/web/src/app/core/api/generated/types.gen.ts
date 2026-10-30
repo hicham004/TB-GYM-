@@ -1544,6 +1544,14 @@ export type CorrectBodyweightRequest = {
   version: number | string;
 };
 
+export type CorrectStartingWeightRequest = {
+  value: number | string;
+  unit: RecordedMassUnit;
+  measurementDate: string;
+  reason: string;
+  version: number | string;
+};
+
 export type CreateCheckInFormRequest = {
   title: string;
   description: null | string;
@@ -1691,6 +1699,7 @@ export type DashboardBodyweightSection = {
   weeks: Array<BodyweightWeekView>;
   trend: BodyweightTrendView;
   observedDayCount: number | string;
+  start?: null | DashboardStart;
 };
 
 export type DashboardChange = {
@@ -1761,6 +1770,36 @@ export type DashboardPhotoView = {
 };
 
 export type DashboardSectionAvailability = 'Available' | 'Unavailable';
+
+export type DashboardSinceStart = {
+  methodKey: string;
+  methodVersion: string;
+  startWeekStart: string;
+  startWeekMeanKilograms: number | string;
+  startWeekObservedDayCount: number | string;
+  latestWeekStart: string;
+  latestWeekMeanKilograms: number | string;
+  latestWeekObservedDayCount: number | string;
+  deltaKilograms: number | string;
+  displayDelta: number | string;
+  percent: number | string;
+};
+
+export type DashboardStart = {
+  starts: Array<DashboardStartLine>;
+  sinceStart: null | DashboardSinceStart;
+  current: null | StartingWeightView;
+};
+
+export type DashboardStartKind = 'Started' | 'CameBack';
+
+export type DashboardStartLine = {
+  clientProfileId: string;
+  kind: DashboardStartKind;
+  measurementDate: string;
+  valueKilograms: number | string;
+  displayValue: number | string;
+};
 
 export type DashboardTrainingContext = {
   recentFrom: string;
@@ -3657,6 +3696,32 @@ export type SetPrescriptionView = {
 export type SetWeekPublishedRequest = {
   isPublished: boolean;
   version: number | string;
+};
+
+export type StartingWeightCorrectionView = {
+  id: string;
+  measurementDate: string;
+  valueKilograms: number | string;
+  enteredValue: number | string;
+  enteredUnit: RecordedMassUnit;
+  reason: string;
+  supersededByUserId: string;
+  supersededByName: string;
+  supersededAtUtc: string;
+};
+
+export type StartingWeightOrigin = 'Intake' | 'FirstWeighIn';
+
+export type StartingWeightView = {
+  id: string;
+  clientProfileId: string;
+  measurementDate: string;
+  valueKilograms: number | string;
+  enteredValue: number | string;
+  enteredUnit: RecordedMassUnit;
+  origin: StartingWeightOrigin;
+  version: number | string;
+  corrections: Array<StartingWeightCorrectionView>;
 };
 
 export type StrengthMaxKind = 'TestedOneRepMax' | 'EstimatedOneRepMax' | 'CoachWorkingMax';
@@ -10416,6 +10481,47 @@ export type GetClientProgressDashboardResponses = {
 
 export type GetClientProgressDashboardResponse =
   GetClientProgressDashboardResponses[keyof GetClientProgressDashboardResponses];
+
+export type CorrectClientStartingWeightData = {
+  body: CorrectStartingWeightRequest;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/progress/clients/{clientProfileId}/start';
+};
+
+export type CorrectClientStartingWeightErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CorrectClientStartingWeightError =
+  CorrectClientStartingWeightErrors[keyof CorrectClientStartingWeightErrors];
+
+export type CorrectClientStartingWeightResponses = {
+  /**
+   * OK
+   */
+  200: StartingWeightView;
+};
+
+export type CorrectClientStartingWeightResponse =
+  CorrectClientStartingWeightResponses[keyof CorrectClientStartingWeightResponses];
 
 export type ListCheckInFormsData = {
   body?: never;

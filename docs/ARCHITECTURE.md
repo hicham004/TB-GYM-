@@ -185,6 +185,12 @@ relationship. Workspace-aligned weekly means and the time-aware `BodyweightTrend
 estimate read Progress data only and do not recalculate or mutate Nutrition. See
 `docs/adr/0009-bodyweight-and-trend-v1.md`.
 
+A profile's starting weight (critique B6) is a Progress record of its own, `StartingWeight`, with
+append-only `StartingWeightCorrections`: the intake writes it beside the first observation, and only
+staff correct it. The coach's dashboard read composes the person's starts across their profiles in the
+workspace (a returning client's older, ended ones included) and the versioned
+`BodyweightSinceStartWeeklyMean` summary; the client's own read carries none of it. See PRG-014.
+
 Progress Phase 5B-1 mirrors that tenant/auth/history boundary for typed body measurements.
 Girths store canonical centimetres, body fat stores canonical percent, and corrections append
 prior values. See ADR 0010.

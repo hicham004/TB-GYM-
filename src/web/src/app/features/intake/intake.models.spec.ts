@@ -401,6 +401,19 @@ describe('the answers as a person reads them', () => {
     expect(answerRows(finishedProfile(), 'about', LOCALE)[0].longText).toBe(false);
   });
 
+  it('says the age beside the date of birth, for the coaching space’s today (critique B6)', () => {
+    const birth = (today: string | null) =>
+      answerRows(finishedProfile({ birthDate: '1983-12-24' }), 'about', LOCALE, today).find(
+        (row) => row.key === 'birthDate',
+      )?.value;
+
+    expect(birth('2026-10-30')).toBe('24 Dec 1983 (42)');
+    expect(birth('2026-12-23')).toBe('24 Dec 1983 (42)');
+    expect(birth('2026-12-24')).toBe('24 Dec 1983 (43)');
+    // Without a day to count to, only the date.
+    expect(birth(null)).toBe('24 Dec 1983');
+  });
+
   it('shows a height in the unit it was typed in, and nothing as nothing', () => {
     const inches = answerRows(
       finishedProfile({ heightEnteredValue: 66.5, heightEnteredUnit: 'Inch' }),

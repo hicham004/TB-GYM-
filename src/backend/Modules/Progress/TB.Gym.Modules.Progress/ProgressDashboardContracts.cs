@@ -69,7 +69,50 @@ public sealed record DashboardBodyweightSection(
     IReadOnlyList<BodyweightWeekView> Weeks,
     BodyweightTrendView Trend,
     // The denominator is stated so "12" is never read as a rate: 12 observed days out of 84.
-    int ObservedDayCount);
+    int ObservedDayCount,
+    // Only a coach's read carries it, whatever the window (critique B6); the client's own is null.
+    DashboardStart? Start = null);
+
+/// <summary>
+/// Where the client started (critique B6, PRG-014), read for their coach. <see cref="Starts"/> lists the
+/// person's starts in this workspace up to the profile read, oldest first: their first profile's as
+/// Started, each later profile's as Came back. <see cref="Current"/> is the profile read's own start, the
+/// one a correction changes, or null while that profile has none.
+/// </summary>
+public sealed record DashboardStart(
+    IReadOnlyList<DashboardStartLine> Starts,
+    DashboardSinceStart? SinceStart,
+    StartingWeightView? Current);
+
+public sealed record DashboardStartLine(
+    Guid ClientProfileId,
+    DashboardStartKind Kind,
+    DateOnly MeasurementDate,
+    decimal ValueKilograms,
+    decimal DisplayValue);
+
+public enum DashboardStartKind
+{
+    Started = 1,
+    CameBack = 2,
+}
+
+/// <summary>
+/// The change since the first start by <see cref="BodyweightSinceStart"/>, with the two weekly means it
+/// compares, so the figure can always be explained. Null while there is nothing to compare.
+/// </summary>
+public sealed record DashboardSinceStart(
+    string MethodKey,
+    string MethodVersion,
+    DateOnly StartWeekStart,
+    decimal StartWeekMeanKilograms,
+    int StartWeekObservedDayCount,
+    DateOnly LatestWeekStart,
+    decimal LatestWeekMeanKilograms,
+    int LatestWeekObservedDayCount,
+    decimal DeltaKilograms,
+    decimal DisplayDelta,
+    decimal Percent);
 
 public sealed record DashboardMeasurementSummary(
     MeasurementType MeasurementType,

@@ -1,5 +1,9 @@
+import { formatDate, formatNumber } from '@angular/common';
 import type {
   DashboardBodyweightSection as ContractBodyweight,
+  DashboardStart as ContractStart,
+  DashboardStartKind,
+  StartingWeightView as ContractStartingWeight,
   DashboardChange as ContractChange,
   DashboardEntitledSectionOfDashboardNutritionContext as ContractNutritionSection,
   DashboardEntitledSectionOfDashboardTrainingContext as ContractTrainingSection,
@@ -33,6 +37,59 @@ export interface DashboardBodyweight {
   trendEstimate: number | null;
   trendIsAvailable: boolean;
   observedDayCount: number;
+  /** Where the client started, on a coach's read only (critique B6); null on the client's own. */
+  start: DashboardStart | null;
+}
+
+/** One of the person's starts in this coaching space: their first, or a comeback (CLI-016). */
+export interface DashboardStartLine {
+  clientProfileId: string;
+  kind: DashboardStartKind;
+  date: string;
+  displayValue: number;
+}
+
+/**
+ * "Since start" as the server worked it out (BodyweightSinceStartWeeklyMean): the latest weekly mean
+ * minus the start week's, with the two weeks it compares so the figure can be explained.
+ */
+export interface DashboardSinceStart {
+  methodKey: string;
+  methodVersion: string;
+  startWeekStart: string;
+  latestWeekStart: string;
+  displayDelta: number;
+  percent: number;
+}
+
+/** What the start read before one correction, why it changed, and who changed it when. */
+export interface StartingWeightCorrection {
+  id: string;
+  date: string;
+  valueKilograms: number;
+  enteredValue: number;
+  enteredUnit: RecordedMassUnit;
+  reason: string;
+  byName: string;
+  atUtc: string;
+}
+
+/** The profile read's own start, the one Correct start changes. */
+export interface StartingWeight {
+  id: string;
+  date: string;
+  valueKilograms: number;
+  enteredValue: number;
+  enteredUnit: RecordedMassUnit;
+  version: number;
+  /** Newest first. */
+  corrections: StartingWeightCorrection[];
+}
+
+export interface DashboardStart {
+  lines: DashboardStartLine[];
+  sinceStart: DashboardSinceStart | null;
+  current: StartingWeight | null;
 }
 
 export interface DashboardMeasurement {
@@ -160,7 +217,101 @@ function mapBodyweight(value: ContractBodyweight): DashboardBodyweight {
     trendEstimate: nullableNumber(value.trend.latestDisplayEstimate),
     trendIsAvailable: value.trend.availability === 'Available',
     observedDayCount: Number(value.observedDayCount),
+    start: value.start ? mapStart(value.start) : null,
   };
+}
+
+function mapStart(value: ContractStart): DashboardStart {
+  const since = value.sinceStart;
+  return {
+    lines: value.starts.map((line) => ({
+      clientProfileId: line.clientProfileId,
+      kind: line.kind,
+      date: line.measurementDate,
+      displayValue: Number(line.displayValue),
+    })),
+    sinceStart: since
+      ? {
+          methodKey: since.methodKey,
+          methodVersion: since.methodVersion,
+          startWeekStart: since.startWeekStart,
+          latestWeekStart: since.latestWeekStart,
+          displayDelta: Number(since.displayDelta),
+          percent: Number(since.percent),
+        }
+      : null,
+    current: value.current ? mapStartingWeight(value.current) : null,
+  };
+}
+
+export function mapStartingWeight(value: ContractStartingWeight): StartingWeight {
+  return {
+    id: value.id,
+    date: value.measurementDate,
+    valueKilograms: Number(value.valueKilograms),
+    enteredValue: Number(value.enteredValue),
+    enteredUnit: value.enteredUnit,
+    version: Number(value.version),
+    corrections: value.corrections.map((item) => ({
+      id: item.id,
+      date: item.measurementDate,
+      valueKilograms: Number(item.valueKilograms),
+      enteredValue: Number(item.enteredValue),
+      enteredUnit: item.enteredUnit,
+      reason: item.reason,
+      byName: item.supersededByName,
+      atUtc: item.supersededAtUtc,
+    })),
+  };
+}
+
+/** The start's lines as the coach reads them, oldest first, and "Since start" when there is one. */
+export interface StartWords {
+  lines: { key: string; text: string }[];
+  sinceStart: string | null;
+}
+
+/**
+ * "Started at 97.4 kg · Wed 15 Oct 2025", "Came back at 99.0 kg · Tue 3 Mar 2026" and "Since start
+ * −5.3 kg (−5.4%)" (critique B6). Weights read to one decimal, days with their year, never worked out
+ * here: the server sends the figures.
+ */
+export function startWords(
+  start: DashboardStart | null,
+  unit: RecordedMassUnit,
+  locale: string,
+): StartWords | null {
+  if (start === null || start.lines.length === 0) return null;
+  const word = unit === 'Pound' ? 'lb' : 'kg';
+  const weight = (value: number) => formatNumber(value, locale, '1.1-1');
+  const lines = start.lines.map((line) => {
+    const day = formatDate(line.date, 'EEE d MMM y', locale);
+    return {
+      key: line.clientProfileId,
+      text:
+        line.kind === 'CameBack'
+          ? $localize`Came back at ${weight(line.displayValue)}:weight: ${word}:unit: · ${day}:day:`
+          : $localize`Started at ${weight(line.displayValue)}:weight: ${word}:unit: · ${day}:day:`,
+    };
+  });
+  return { lines, sinceStart: sinceStartText(start.sinceStart, word, locale) };
+}
+
+function sinceStartText(
+  since: DashboardSinceStart | null,
+  word: string,
+  locale: string,
+): string | null {
+  if (since === null) return null;
+  // Less than 0.05 reads as 0.0. Otherwise formatNumber rounds the size by its decimal digits, half
+  // away from zero as the server does (Math.round would take −3.85 to −3.8).
+  const size = Math.abs(since.displayDelta);
+  if (size < 0.05) return $localize`No change since start`;
+  // A true minus sign, which is read aloud as "minus"; a gain says plus.
+  const sign = since.displayDelta < 0 ? '−' : '+';
+  const amount = formatNumber(size, locale, '1.1-1');
+  const percent = formatNumber(Math.abs(since.percent), locale, '1.1-1');
+  return $localize`Since start ${sign}${amount}:change: ${word}:unit: (${sign}${percent}:percent:%)`;
 }
 
 function mapMeasurements(value: ContractMeasurements): {

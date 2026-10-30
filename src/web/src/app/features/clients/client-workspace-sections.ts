@@ -1,7 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { ClientNutrition } from '../nutrition/client-nutrition';
 import { ProgressDashboardView } from '../progress/progress-dashboard';
 import { ProgressEntries } from '../progress/progress-entries';
+import { blockedProgressSentence } from '../progress/progress-entries.models';
+import { ButtonLink } from '../../ui/button';
 import { ClientProgram } from './client-program';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -56,18 +59,41 @@ export class ClientNutritionSection {
  * A client's Progress (C3): charts and a photo compare first, in coach words. Recording a weigh-in
  * or measurement for the client, correcting one, and adding or removing photos stay behind one
  * collapsed "Entries and corrections", and are only loaded once it is opened (R5.3c: the same weight,
- * measurement and photo tabs and sheets the client uses on their own page).
+ * measurement and photo tabs and sheets the client uses on their own page). A blocked client's
+ * progress is closed to the coach (PRG-008), so the tab says why and where to lift it (critique B6).
  */
 @Component({
   selector: 'app-client-progress-section',
-  imports: [ProgressDashboardView, ProgressEntries, UiDisclosure, UiDisclosureContent],
+  imports: [
+    ButtonLink,
+    ProgressDashboardView,
+    ProgressEntries,
+    RouterLink,
+    UiDisclosure,
+    UiDisclosureContent,
+  ],
   template: `
-    <app-progress-dashboard
-      [clientId]="context.clientId()"
-      [clientName]="context.profile()?.firstName ?? null"
-      (answered)="dashboardAnswered.set(true)"
-    />
-    @if (!context.isFormer()) {
+    @if (blocked()) {
+      <section class="blocked" aria-labelledby="progress-blocked-title">
+        <h2 id="progress-blocked-title" i18n>Access blocked</h2>
+        <p dir="auto">{{ blockedSentence() }}</p>
+        <a
+          appButton
+          variant="outlined"
+          [routerLink]="['/clients', context.clientId(), 'service']"
+          i18n
+          >Open Service &amp; access</a
+        >
+      </section>
+    } @else {
+      <app-progress-dashboard
+        [clientId]="context.clientId()"
+        [clientName]="context.profile()?.firstName ?? null"
+        [readOnly]="context.isFormer()"
+        (answered)="dashboardAnswered.set(true)"
+      />
+    }
+    @if (!context.isFormer() && !blocked()) {
       <app-disclosure
         class="entries"
         [class.entries--waiting]="!entriesDrawn()"
@@ -98,11 +124,45 @@ export class ClientNutritionSection {
     .entries {
       margin-block-start: 1rem;
     }
+
+    .blocked {
+      align-items: flex-start;
+      background: var(--tb-surface);
+      border: 1px solid var(--tb-line);
+      border-radius: var(--tb-radius-card);
+      box-shadow: var(--tb-shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem 1.25rem;
+    }
+
+    .blocked h2 {
+      color: var(--tb-ink);
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .blocked p {
+      color: var(--tb-ink);
+      margin: 0;
+      max-inline-size: 65ch;
+    }
   `,
 })
 export class ClientProgressSection {
   protected readonly context = inject(ClientWorkspaceContext);
   protected readonly dashboardAnswered = signal(false);
+  /** Either answer from the server says the coach blocked this client (ADR 0009). */
+  protected readonly blocked = computed(
+    () =>
+      this.context.profile()?.isCoachBlocked === true ||
+      this.context.plans()?.isRelationshipBlocked === true,
+  );
+  protected readonly blockedSentence = computed(() =>
+    blockedProgressSentence(this.context.profile()?.firstName ?? null),
+  );
   /** The fold waits for the charts above it, which would push it down as they land (audit UIQ-5). */
   protected readonly entriesDrawn = drawnTogether(
     () => true,

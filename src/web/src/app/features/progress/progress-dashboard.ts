@@ -26,6 +26,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
   mapProgressDashboard,
   previewAssetIds,
+  startWords,
   type ProgressDashboard,
 } from './progress-dashboard.models';
 import { mapProgress, type ProgressViewModel } from './progress.models';
@@ -55,12 +56,14 @@ import { weighInRows, type Audience } from './progress-entries.models';
     UiDisclosureContent,
   ],
   templateUrl: './progress-dashboard.html',
-  styleUrl: './progress-dashboard.scss',
+  styleUrls: ['./progress-dashboard.scss', './start-lines.scss'],
 })
 export class ProgressDashboardView {
   readonly clientId = input<string | null>(null);
   /** The client's first name, for the coach's sentences ("Maya has no weigh-ins in this period"). */
   readonly clientName = input<string | null>(null);
+  /** A former client's record (ADR 0027): read, never changed, so the start offers no correction. */
+  readonly readOnly = input(false);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
@@ -96,6 +99,17 @@ export class ProgressDashboardView {
     return view ? addDays(view.toExclusive, -1) : deviceToday();
   });
   protected readonly weights = computed(() => weighInRows(this.progress(), this.audience()));
+  /** Where the client started and the change since, for their coach only (critique B6). */
+  protected readonly start = computed(() => {
+    const view = this.dashboard();
+    return view && this.coachMode()
+      ? startWords(view.bodyweight.start, view.displayUnit, this.locale)
+      : null;
+  });
+  /** The start Correct start changes: the profile read's own, while it can still be changed. */
+  protected readonly correctable = computed(() =>
+    this.readOnly() ? null : (this.dashboard()?.bodyweight.start?.current ?? null),
+  );
   protected readonly who = computed(() => this.clientName() ?? $localize`This client`);
   /** Only exact asset ids returned by the batch are eligible to bind protected image paths. */
   protected readonly grantedPreviewIds = signal<ReadonlySet<string>>(new Set());

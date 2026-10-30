@@ -14,6 +14,7 @@ import type { IsoDate } from '../../ui/calendar';
 import { UiConfirm } from '../../ui/confirm';
 import { CorrectMeasurement, LogMeasurements, MeasurementChanges } from './measurement-sheets';
 import { AddPhotos, PhotoView } from './photo-sheets';
+import type { StartingWeight } from './progress-dashboard.models';
 import {
   dayWords,
   type Audience,
@@ -28,6 +29,7 @@ import type {
   BodyweightObservation,
   ProgressPhoto,
 } from './progress.models';
+import { CorrectStart } from './start-weight-sheet';
 import { CorrectWeight, LogWeight, MoveWeighIn, WeighInChanges } from './weigh-in-sheets';
 
 /** What an entry sheet changed, so the page reads that list again. */
@@ -44,6 +46,7 @@ export type EntryKind = 'weight' | 'measurements' | 'photos';
   imports: [
     AddPhotos,
     CorrectMeasurement,
+    CorrectStart,
     CorrectWeight,
     LogMeasurements,
     LogWeight,
@@ -181,6 +184,21 @@ export type EntryKind = 'weight' | 'measurements' | 'photos';
       }
     </ng-template>
 
+    <ng-template #correctStartSheet let-sheet>
+      @if (start(); as current) {
+        <app-correct-start
+          [clientId]="clientId()"
+          [audience]="audience()"
+          [today]="today()"
+          [firstDay]="firstDay()"
+          [start]="current"
+          (dirtyChange)="dirty = $event"
+          (stale)="changed.emit('weight')"
+          (closed)="startCorrected($event, sheet)"
+        />
+      }
+    </ng-template>
+
     <ng-template #confirmDialog let-dialog>
       @if (asking(); as question) {
         <app-confirm
@@ -222,11 +240,14 @@ export class EntrySheets extends GuardedSheets {
     viewChild.required<TemplateRef<unknown>>('measurementChangesSheet');
   private readonly addPhotosSheet = viewChild.required<TemplateRef<unknown>>('addPhotosSheet');
   private readonly photoSheet = viewChild.required<TemplateRef<unknown>>('photoSheet');
+  private readonly correctStartSheet =
+    viewChild.required<TemplateRef<unknown>>('correctStartSheet');
   private readonly confirmTemplate = viewChild.required<TemplateRef<unknown>>('confirmDialog');
 
   protected readonly weighIn = signal<WeighInRow | null>(null);
   protected readonly measurement = signal<MeasurementRow | null>(null);
   protected readonly photo = signal<PhotoTile | null>(null);
+  protected readonly start = signal<StartingWeight | null>(null);
 
   protected readonly existingWeights = computed<ReadonlyMap<string, BodyweightObservation>>(
     () => new Map(this.weights().map((row) => [row.date, row.observation])),
@@ -301,6 +322,12 @@ export class EntrySheets extends GuardedSheets {
     this.show(this.photoSheet(), $localize`${tile.pose}:pose: photo`);
   }
 
+  /** A coach corrects the client's starting weight (critique B6). */
+  correctStart(start: StartingWeight): void {
+    this.start.set(start);
+    this.show(this.correctStartSheet(), $localize`Correct the starting weight`);
+  }
+
   // ---- what the sheets say back ----
 
   protected weightLogged(saved: BodyweightObservation | null, sheet: Closable): void {
@@ -364,6 +391,15 @@ export class EntrySheets extends GuardedSheets {
       sheet,
       count === 1 ? $localize`Photo saved.` : $localize`${count}:count: photos saved.`,
       'photos',
+    );
+  }
+
+  protected startCorrected(corrected: StartingWeight | null, sheet: Closable): void {
+    if (corrected === null) return void this.closeAsking(sheet);
+    this.saved(
+      sheet,
+      $localize`Starting weight corrected. The earlier one stays in its history.`,
+      'weight',
     );
   }
 

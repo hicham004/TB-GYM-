@@ -110,6 +110,32 @@
       } @else {
         <p class="empty" i18n>Your weight chart will appear after your first entry.</p>
       }
+      <!-- Where the client started, whatever the chart's range: their first start, each comeback, and
+           the change since the first, as the server worked it out (critique B6, PRG-014). -->
+      @if (start(); as story) {
+        <div class="start" data-start>
+          <ul class="start-lines" role="list">
+            @for (line of story.lines; track line.key) {
+              <li>{{ line.text }}</li>
+            }
+          </ul>
+          @if (story.sinceStart; as since) {
+            <p class="since-start">{{ since }}</p>
+          }
+          @if (correctable(); as current) {
+            <button
+              appButton
+              type="button"
+              variant="text"
+              class="correct-start"
+              (click)="sheets.correctStart(current)"
+              i18n
+            >
+              Correct start
+            </button>
+          }
+        </div>
+      }
       @if (progress() && entries().length) {
         <app-trend-chart
           [points]="chartPoints()"
@@ -350,6 +376,7 @@
 
 <app-entry-sheets
   #sheets
+  [clientId]="clientId()"
   [audience]="audience()"
   [today]="today()"
   [weightUnit]="startUnit()"

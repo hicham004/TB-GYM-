@@ -14,7 +14,7 @@ import {
   WEIGHT_KG,
   weightKilograms,
 } from '../../core/units/body-units';
-import { addYears, adultCutoff, isIsoDate, type IsoDate } from '../../ui/calendar';
+import { addYears, adultCutoff, ageOn, isIsoDate, type IsoDate } from '../../ui/calendar';
 import type { DateInputStatus } from '../../ui/date-input';
 
 /**
@@ -548,11 +548,23 @@ function longDate(date: string, locale: string): string {
   return formatDate(date, 'd MMM y', locale);
 }
 
+/**
+ * "24 Dec 1983 (42)": a date of birth with the age it makes on the coaching space's today (critique B6),
+ * worked out for that day and never stored (CLI-005).
+ */
+function birthWords(birthDate: string, today: IsoDate | null, locale: string): string {
+  const age = today === null ? null : ageOn(birthDate, today);
+  return age === null
+    ? longDate(birthDate, locale)
+    : $localize`${longDate(birthDate, locale)}:date: (${age}:age:)`;
+}
+
 /** The answers of one group as the summary lists them: a label and a value, or nothing. */
 export function answerRows(
   profile: ClientIntakeProfile,
   group: IntakeGroup,
   locale: string,
+  today: IsoDate | null = null,
 ): AnswerRow[] {
   const text = (key: string, label: string, value: string | null): AnswerRow => ({
     key,
@@ -574,7 +586,7 @@ export function answerRows(
         short(
           'birthDate',
           $localize`Date of birth`,
-          profile.birthDate ? longDate(profile.birthDate, locale) : null,
+          profile.birthDate ? birthWords(profile.birthDate, today, locale) : null,
         ),
         short(
           'height',

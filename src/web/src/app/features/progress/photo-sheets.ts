@@ -320,10 +320,11 @@ export class AddPhotos extends EntrySheet {
             this.setSlot(pose, {
               file,
               state: 'failed',
-              message: entryRefusal(error, $localize`This photo could not be saved. Try again.`, {
-                day: dayText,
-                what: poseName(pose),
-              }),
+              message: entryRefusal(
+                error,
+                $localize`This photo could not be saved. Try again.`,
+                this.refusalContext({ day: dayText, what: poseName(pose) }),
+              ),
             });
             if (isStale(error)) this.stale.emit();
           }

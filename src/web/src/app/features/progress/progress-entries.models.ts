@@ -461,7 +461,7 @@ export function photoLists(photos: readonly ProgressPhoto[], audience: Audience)
 
 // ---------- the reason the server always asks for ----------
 
-export type ReasonKind = 'weight' | 'date' | 'measurement' | 'photo';
+export type ReasonKind = 'weight' | 'date' | 'measurement' | 'photo' | 'start';
 
 /** One tap names the commonest reason; "Something else" is typed. `text` is what is kept in the history. */
 export interface ReasonPick {
@@ -483,6 +483,12 @@ export function reasonPicks(kind: ReasonKind, audience: Audience): readonly Reas
       ];
     case 'date':
       return [pick('day', $localize`Logged on the wrong day`), other];
+    case 'start':
+      return [
+        pick('typo', $localize`Typed the wrong number`),
+        pick('day', $localize`Weighed on another day`),
+        other,
+      ];
     case 'measurement':
       return [
         pick('typo', $localize`Typed the wrong number`),
@@ -542,6 +548,7 @@ export function refusalOf(error: unknown): Refusal {
 
 const STALE_CODES: readonly string[] = [
   'BodyweightVersionConflict',
+  'StartingWeightVersionConflict',
   'BodyweightObservationVoided',
   'BodyMeasurementVersionConflict',
   'ProgressPhotoVersionConflict',
@@ -559,6 +566,21 @@ export interface RefusalContext {
   readonly day?: string;
   /** What was being added: "Waist", "Front". */
   readonly what?: string;
+  /**
+   * What a coach is told when the server refuses because the client's access is blocked: a 403 with no
+   * code (PRG-008, which answers a block that way on purpose, so it cannot be probed).
+   */
+  readonly blocked?: string;
+}
+
+/**
+ * Why a coach sees nothing of a blocked client's progress, and what to do about it (critique B6): the
+ * Progress tab says it in place of the dashboard, and the entry sheets when a save is refused.
+ */
+export function blockedProgressSentence(firstName: string | null): string {
+  return firstName
+    ? $localize`${firstName}:name:’s access is blocked, so their progress isn’t shown. Unblock them on Service & access.`
+    : $localize`This client’s access is blocked, so their progress isn’t shown. Unblock them on Service & access.`;
 }
 
 /** A refusal in words a person can act on: what exists already, what changed, or the server's own sentence. */
@@ -567,7 +589,8 @@ export function entryRefusal(
   fallback: string,
   context: RefusalContext = {},
 ): string {
-  const { code } = refusalOf(error);
+  const { status, code } = refusalOf(error);
+  if (status === 403 && code === null && context.blocked) return context.blocked;
   const day = context.day ?? $localize`that day`;
   switch (code) {
     case 'BodyweightDateAlreadyExists':

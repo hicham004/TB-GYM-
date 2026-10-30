@@ -600,3 +600,41 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   another device. Reload to continue with the latest changes." with Reload recipe; the cards' "Only you
   see it until you publish it. Changed Thu 29 Oct.", "Untitled recipe", "1 ingredient" and "No
   ingredients yet". Recommendation: keep: they are the meal-plan builder's words wherever it has them.
+- B6 · The client's own Progress. Built: the start lines and "Since start" on coach screens only, as the
+  row says ("The coach sees"); a returning client never sees an older profile (CLI-016). Other way: the
+  client also sees their own current start and the change since it on their Progress. Recommendation:
+  keep for now; showing the client their current profile's start later is one line, if you want it.
+- B6 · A client weighed before setup is finished. Built: no start until "Where you start" writes it (the
+  intake asks for that first weigh-in's day and weight, as before); every profile from before B6 was filled
+  in from its first weigh-in, setup finished or not. Other way: a coach's first weigh-in for a client
+  with no start becomes the start. Recommendation: keep: the start is part of setting up, and the About
+  card already says when setup is not finished.
+- B6 · Where Correct start lives. Built: a text button "Correct start" under the start lines on the
+  Progress hero, for the profile read's own start and never a former client's, opening a sheet with the
+  weight and its unit, the day, "What was wrong?" (Typed the wrong number · Weighed on another day ·
+  Something else) and the earlier starts with who changed them; the Overview's Weight card shows the
+  lines without the button. Other way: the button on the Overview too, or inside "Entries and
+  corrections". Recommendation: keep: corrections live on Progress.
+- B6 · A start week with no weigh-in. Built: no "Since start", the start alone, when the week holding the
+  first start has no current weigh-in (its first weigh-in voided, or the start corrected into an empty
+  week), since PRG-005 compares weekly means, never a single day. Other way: the start's own value as
+  that week's mean. Recommendation: keep.
+- B6 · A returning client's "Since start" on the day they come back. Built: their comeback weigh-in is
+  the latest weekly mean, so from that day the coach reads "Since start +2.5 kg (+3.5%)" against the
+  first start's week (seen live: Hadi, 70.42 kg over 5 days in August, then 72.9 kg). Other way: wait
+  until the new profile has a second week. Recommendation: keep: it is the rule you approved.
+- B6 · The Progress hero's pill, left out (outside the row). The pill beside the weight ("↓ 4 kg since 27
+  Aug") still compares the first and last single days of the chart's range, so beside "Since start −3.9
+  kg (−5.6%)", worked out from weekly means, it can read as a second, different change (seen live on
+  Maya). Recommendation: a small row to give the pill weekly means too, or to drop it while the start
+  shows.
+- B6 · Words the row did not give. Built: "24 Dec 1983 (42)" in the app's day-month-year (audit COACH-6)
+  where the row wrote "Dec 24, 1983 (42)"; "(−5.4%)" without the row's space before %, as the app writes
+  shares; "No change since start"; the blocked tab's heading "Access blocked" and its button "Open Service
+  & access" (the Overview's), and "This client’s access is blocked, …" when no first name is known; the
+  entry sheets' refusal in the tab's sentence, on each measurement or photo refused; "Correct start",
+  "Correct the starting weight", "Starting weight", "Day it was weighed", "Weighed on another day", "The
+  earlier start stays in its history. Weigh-ins are not changed.", "Earlier starts", "Changed by Lea
+  Khoury, Fri 30 Oct 2026", "That is the start already saved. Change the weight or the day, or close
+  this.", "The start could not be saved. Try again." and the toast "Starting weight corrected. The earlier
+  one stays in its history." Recommendation: keep.

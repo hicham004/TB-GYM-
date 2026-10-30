@@ -12,6 +12,7 @@ import {
 } from '../../../testing/progress-fixtures';
 import {
   addedBy,
+  blockedProgressSentence,
   dayErrors,
   dayWords,
   entryRefusal,
@@ -322,6 +323,12 @@ describe('photos', () => {
 });
 
 describe('the reason the server always asks for', () => {
+  it('offers a starting weight’s commonest reasons first', () => {
+    expect(
+      reasonPicks('start', { coach: true, firstName: 'Maya', locale: 'en' }).map((p) => p.label),
+    ).toEqual(['Typed the wrong number', 'Weighed on another day', 'Something else']);
+  });
+
   it('offers the commonest reasons for each kind of change, and "Something else" last', () => {
     expect(reasonPicks('weight', client).map((pick) => pick.label)).toEqual([
       'Typed the wrong number',
@@ -414,6 +421,35 @@ describe('what the server says back', () => {
     expect(entryRefusal(new Error('network'), 'The weight could not be saved.')).toBe(
       'The weight could not be saved.',
     );
+  });
+
+  it('tells a coach a blocked client’s entry is refused, and why (critique B6)', () => {
+    const blocked = blockedProgressSentence('Elie');
+    expect(blocked).toBe(
+      'Elie’s access is blocked, so their progress isn’t shown. Unblock them on Service & access.',
+    );
+    expect(blockedProgressSentence(null)).toBe(
+      'This client’s access is blocked, so their progress isn’t shown. Unblock them on Service & access.',
+    );
+    // The server answers a block with a bare 403, so it cannot be probed (PRG-008).
+    const bare = new HttpErrorResponse({ status: 403 });
+    expect(entryRefusal(bare, 'The weight could not be saved. Try again.', { blocked })).toBe(
+      blocked,
+    );
+    // An unpaid workspace is its own 403, with its own words; without a block to name, the fallback.
+    expect(entryRefusal(refusal(403, 'workspace_read_only'), 'x', { blocked })).toBe(
+      'Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.',
+    );
+    expect(entryRefusal(bare, 'The weight could not be saved. Try again.')).toBe(
+      'The weight could not be saved. Try again.',
+    );
+    expect(entryRefusal(new HttpErrorResponse({ status: 500 }), 'Try again.', { blocked })).toBe(
+      'Try again.',
+    );
+  });
+
+  it('knows a start that changed in another tab', () => {
+    expect(isStale(refusal(409, 'StartingWeightVersionConflict'))).toBe(true);
   });
 });
 

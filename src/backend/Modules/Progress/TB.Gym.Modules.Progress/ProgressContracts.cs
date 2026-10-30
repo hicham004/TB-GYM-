@@ -31,7 +31,50 @@ public interface IProgressApplicationService
     Task<ProgressPhotoExportCommandResult> ExportOwnPhotosAsync(ExportProgressPhotosRequest request, CancellationToken cancellationToken);
     Task<ProgressDashboardView?> GetOwnDashboardAsync(DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
     Task<ProgressDashboardView?> GetClientDashboardAsync(Guid clientProfileId, DateOnly? from, DateOnly? endExclusive, RecordedMassUnit displayUnit, MeasurementUnit measurementDisplayUnit, CancellationToken cancellationToken);
+    Task<StartingWeightCommandResult> CorrectStartingWeightForClientAsync(Guid clientProfileId, CorrectStartingWeightRequest request, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Corrects a client's starting weight (critique B6, PRG-014): the weight as it should read, the day it
+/// was weighed, and what was wrong. The previous value is kept in the start's history.
+/// </summary>
+public sealed record CorrectStartingWeightRequest(
+    decimal Value,
+    RecordedMassUnit Unit,
+    DateOnly MeasurementDate,
+    string Reason,
+    uint Version);
+
+/// <summary>One profile's starting weight as it stands, with each correction made to it, newest first.</summary>
+public sealed record StartingWeightView(
+    Guid Id,
+    Guid ClientProfileId,
+    DateOnly MeasurementDate,
+    decimal ValueKilograms,
+    decimal EnteredValue,
+    RecordedMassUnit EnteredUnit,
+    StartingWeightOrigin Origin,
+    uint Version,
+    IReadOnlyList<StartingWeightCorrectionView> Corrections);
+
+/// <summary>What the start read before one correction, why it changed, and who changed it when.</summary>
+public sealed record StartingWeightCorrectionView(
+    Guid Id,
+    DateOnly MeasurementDate,
+    decimal ValueKilograms,
+    decimal EnteredValue,
+    RecordedMassUnit EnteredUnit,
+    string Reason,
+    Guid SupersededByUserId,
+    string SupersededByName,
+    DateTimeOffset SupersededAtUtc);
+
+public sealed record StartingWeightCommandResult(
+    ProgressCommandStatus Status,
+    StartingWeightView? Start = null,
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    string? Code = null,
+    string? Message = null);
 
 public sealed record BodyweightHistorySpanView(DateOnly? FirstDate, DateOnly? LastDate);
 

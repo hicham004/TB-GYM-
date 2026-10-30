@@ -13,6 +13,8 @@ import { press, query, settle, toggleFold } from '../../../testing/dom';
 import { ProgressDashboardView } from './progress-dashboard';
 import { UiSheet } from '../../ui/sheet';
 import { mapProgressDashboard, previewAssetIds } from './progress-dashboard.models';
+import { By } from '@angular/platform-browser';
+import { EntrySheets } from './entry-sheets';
 
 function contract(overrides: Record<string, unknown> = {}): ProgressDashboardContract {
   return {
@@ -148,7 +150,7 @@ async function render(
 async function renderWith(
   result: Observable<ProgressDashboardContract>,
   api: Partial<ApiClient> = {},
-  options: { providers?: Provider[]; clientId?: string } = {},
+  options: { providers?: Provider[]; clientId?: string; readOnly?: boolean } = {},
 ) {
   const selectedTenantId = signal('tenant-1');
   const createMediaAccessBatch = vi.fn((assetIds: string[]) =>
@@ -205,6 +207,7 @@ async function renderWith(
 
   const fixture = TestBed.createComponent(ProgressDashboardView);
   if (options.clientId) fixture.componentRef.setInput('clientId', options.clientId);
+  if (options.readOnly) fixture.componentRef.setInput('readOnly', true);
   await settle(fixture);
   return {
     fixture,
@@ -842,5 +845,119 @@ describe('ProgressDashboardView logging', () => {
     );
     expect(host.querySelectorAll('.photo-tile')).toHaveLength(2);
     expect(host.querySelector('[data-before-after]')).toBeNull();
+  });
+});
+
+describe('where a coach’s client started (critique B6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const START = {
+    starts: [
+      {
+        clientProfileId: 'client-0',
+        kind: 'Started',
+        measurementDate: '2025-10-15',
+        valueKilograms: '97.4',
+        displayValue: '97.4',
+      },
+      {
+        clientProfileId: 'client-9',
+        kind: 'CameBack',
+        measurementDate: '2026-03-03',
+        valueKilograms: '99',
+        displayValue: '99',
+      },
+    ],
+    sinceStart: {
+      methodKey: 'BodyweightSinceStartWeeklyMean',
+      methodVersion: '1.0',
+      startWeekStart: '2025-10-13',
+      startWeekMeanKilograms: '97.4',
+      startWeekObservedDayCount: '1',
+      latestWeekStart: '2026-08-17',
+      latestWeekMeanKilograms: '92.1',
+      latestWeekObservedDayCount: '2',
+      deltaKilograms: '-5.3',
+      displayDelta: '-5.3',
+      percent: '-5.4',
+    },
+    current: {
+      id: 'start-9',
+      clientProfileId: 'client-9',
+      measurementDate: '2026-03-03',
+      valueKilograms: '99',
+      enteredValue: '99',
+      enteredUnit: 'Kilogram',
+      origin: 'Intake',
+      version: '4',
+      corrections: [],
+    },
+  };
+
+  function coachDashboard() {
+    const base = contract();
+    return {
+      ...base,
+      bodyweight: { ...(base.bodyweight as object), start: START },
+    } as unknown as ProgressDashboardContract;
+  }
+
+  const coachApi = () => ({
+    getClientProgressDashboard: vi.fn(() => of(coachDashboard())) as never,
+    getClientProgress: vi.fn(() =>
+      of({ days: [], weeks: [], trend: TREND, displayUnit: 'Kilogram' } as never),
+    ) as never,
+    getClientTrainingPersonalRecords: vi.fn(() =>
+      of({ isAllowed: false, accessReason: 'Expired', items: [] } as never),
+    ) as never,
+  });
+
+  const lines = (host: HTMLElement) =>
+    Array.from(host.querySelectorAll('[data-start] li')).map((item) =>
+      (item.textContent ?? '').trim(),
+    );
+
+  it('names the first start, each comeback and the change since, and offers to correct the start', async () => {
+    const open = vi.fn(() => ({ close: vi.fn(), closed: new Subject<unknown>() }));
+    const { fixture, host } = await renderWith(of(coachDashboard()), coachApi(), {
+      clientId: 'client-9',
+      providers: [{ provide: UiSheet, useValue: { open } }],
+    });
+
+    expect(lines(host)).toEqual([
+      'Started at 97.4 kg · Wed 15 Oct 2025',
+      'Came back at 99.0 kg · Tue 3 Mar 2026',
+    ]);
+    expect(query(host, '.since-start').textContent?.trim()).toBe('Since start −5.3 kg (−5.4%)');
+
+    // The sheets write for this client: the coach's correction goes to their start.
+    const sheets = fixture.debugElement.query(By.directive(EntrySheets)).componentInstance;
+    expect((sheets as EntrySheets).clientId()).toBe('client-9');
+    press(host, 'Correct start');
+    await settle(fixture);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect((open.mock.calls[0] as unknown as [unknown, { title: string }])[1].title).toBe(
+      'Correct the starting weight',
+    );
+  });
+
+  it('shows a former client’s start but offers no correction (ADR 0027)', async () => {
+    const { host } = await renderWith(of(coachDashboard()), coachApi(), {
+      clientId: 'client-9',
+      readOnly: true,
+    });
+
+    expect(lines(host)).toHaveLength(2);
+    expect(
+      Array.from(host.querySelectorAll('button')).some((item) =>
+        item.textContent?.includes('Correct start'),
+      ),
+    ).toBe(false);
+  });
+
+  it('shows the client nothing of it on their own page', async () => {
+    const host = await render(of(coachDashboard()));
+
+    expect(host.querySelector('[data-start]')).toBeNull();
   });
 });

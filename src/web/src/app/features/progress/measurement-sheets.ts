@@ -225,10 +225,11 @@ export class LogMeasurements extends EntrySheet {
             this.mark(
               type,
               'failed',
-              entryRefusal(error, $localize`This one could not be saved. Try again.`, {
-                day: dayText,
-                what: measurementName(type),
-              }),
+              entryRefusal(
+                error,
+                $localize`This one could not be saved. Try again.`,
+                this.refusalContext({ day: dayText, what: measurementName(type) }),
+              ),
             );
             if (isStale(error)) this.stale.emit();
           }
