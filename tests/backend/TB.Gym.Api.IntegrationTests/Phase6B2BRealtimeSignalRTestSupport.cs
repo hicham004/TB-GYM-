@@ -33,7 +33,6 @@ public sealed partial class Phase6B2BRealtimeSignalRTests : IDisposable
     private const string DisallowedOrigin = "https://evil.example.test";
 
     private static readonly string Password = $"Aa1!{Guid.NewGuid():N}";
-    private static readonly DateTimeOffset StartInstant = new(2026, 9, 4, 6, 0, 0, TimeSpan.Zero);
 
     private string? adminConnection;
     private string? databaseName;
@@ -487,7 +486,9 @@ public sealed partial class Phase6B2BRealtimeSignalRTests : IDisposable
         await AssertStatusAsync(product, HttpStatusCode.OK);
         var offerId = (await RequiredJsonAsync<Product>(product)).Offers[0].Id;
 
-        var localNow = TimeZoneInfo.ConvertTime(StartInstant, TimeZoneInfo.FindSystemTimeZoneById("Asia/Beirut"));
+        // The replicas keep the real clock, so the plan starts on the workspace's today and covers every day
+        // these tests run. A fixed start day (4 Sep 2026) stopped covering today once its eight weeks had passed.
+        var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Beirut"));
         await RefreshCsrfAsync(coach.Client);
         var enrollmentResponse = await coach.Client.PostAsJsonAsync(
             $"/api/commercial/clients/{accepted.ClientProfileId}/enrollments",
