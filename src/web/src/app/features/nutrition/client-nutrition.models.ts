@@ -1,10 +1,12 @@
-import { formatDate } from '@angular/common';
+import { formatDate, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import type {
   AllergenCode,
   CalculateNutritionTargetsRequest,
   ClientEnrollmentView,
   ClientNutritionPlanSummary,
+  CoachClientProgramView,
+  EnergyModelView,
   FeatureAccessReason,
   FormulaSex,
   NutritionCalculationRecord,
@@ -24,6 +26,8 @@ import { ALLERGEN_LABELS } from './nutrition.models';
 export type FormulaKey = 'MifflinStJeor' | 'KatchMcArdle' | 'HarrisBenedictRevised';
 
 const toNumber = (value: number | string): number => Number(value);
+const optionalNumber = (value: number | string | null | undefined): number | null =>
+  value === null || value === undefined ? null : Number(value);
 
 // ------------------------------------------------------------------------------------------------
 // What the coach picks from
@@ -61,21 +65,52 @@ export interface WorkKind {
   readonly value: OccupationActivityType;
   readonly label: string;
   readonly hint: string;
+  /** "seated work", as the line under the result names it. */
+  readonly phrase: string;
 }
 
+/**
+ * Every kind of work either energy model takes. Version 1 takes Seated, Mixed and Physical; version 2
+ * splits Physical in two, since it spanned a waiter and a farm labourer (critique B8a). The server says
+ * which kinds the model in force takes.
+ */
 export const WORK_KINDS: readonly WorkKind[] = [
-  { value: 'Seated', label: $localize`Seated`, hint: $localize`Mostly sitting: a desk, driving.` },
+  {
+    value: 'Seated',
+    label: $localize`Seated`,
+    hint: $localize`Mostly sitting: a desk, driving.`,
+    phrase: $localize`seated work`,
+  },
   {
     value: 'Mixed',
     label: $localize`Mixed`,
     hint: $localize`Up and about for part of the day.`,
+    phrase: $localize`mixed work`,
+  },
+  {
+    value: 'OnTheirFeet',
+    label: $localize`On their feet`,
+    hint: $localize`Teaching, retail, nursing, serving.`,
+    phrase: $localize`work on their feet`,
+  },
+  {
+    value: 'HeavyManual',
+    label: $localize`Heavy manual`,
+    hint: $localize`Building, farm, moving loads.`,
+    phrase: $localize`heavy manual work`,
   },
   {
     value: 'Physical',
     label: $localize`Physical`,
     hint: $localize`On their feet or lifting for most of it.`,
+    phrase: $localize`physical work`,
   },
 ];
+
+/** The kinds of work a model takes, in the order the sheet lists them. */
+export function workKindsFor(values: readonly OccupationActivityType[]): WorkKind[] {
+  return WORK_KINDS.filter((kind) => values.includes(kind.value));
+}
 
 export interface FormulaChoice {
   readonly value: FormulaKey;
@@ -97,7 +132,8 @@ export const FORMULAS: readonly FormulaChoice[] = [
   {
     value: 'HarrisBenedictRevised',
     label: $localize`Harris-Benedict (revised)`,
-    hint: $localize`An older formula some coaches still prefer.`,
+    // What the evidence says (Frankenfield 2005; critique B8b).
+    hint: $localize`Older; less often within 10% of a measured value than Mifflin-St Jeor, and runs higher for heavier clients.`,
   },
 ];
 
@@ -105,13 +141,20 @@ export function formulaName(key: string): string {
   return FORMULAS.find((item) => item.value === key)?.label ?? key;
 }
 
-export function workWords(kind: OccupationActivityType): string {
-  return WORK_KINDS.find((item) => item.value === kind)?.label.toLowerCase() ?? kind;
+/** "seated work", "work on their feet". */
+export function workPhrase(kind: OccupationActivityType): string {
+  return WORK_KINDS.find((item) => item.value === kind)?.phrase ?? kind;
 }
 
 // ------------------------------------------------------------------------------------------------
 // The sheet that works targets out
 // ------------------------------------------------------------------------------------------------
+
+/**
+ * Energy version 2's own multiplier (critique B8b): the table's, one of the coach's picks, or one they
+ * type. The table is the default; a pick or a typed one is recorded as `CoachChosenPal`.
+ */
+export type PalMode = 'table' | 'pick' | 'typed';
 
 /** What the coach types, as the sheet holds it: a missing number is null. */
 export interface TargetsValues {
@@ -121,6 +164,14 @@ export interface TargetsValues {
   sex: FormulaSex | null;
   work: OccupationActivityType | null;
   steps: number | null;
+  /** Energy version 2: workouts a week, 0 to 7, filled in from their program. */
+  workouts: number | null;
+  /** Energy version 2: where the multiplier comes from. */
+  palMode: PalMode;
+  /** The pick's multiplier, or the one typed; unread while the table's is used. */
+  chosenPal: number | null;
+  /** Why the coach chose their own multiplier, if they say. */
+  palReason: string;
   /** Kilocalories a day above (plus) or below (minus) what they burn. */
   goal: number | null;
   protein: number | null;
@@ -130,7 +181,10 @@ export interface TargetsValues {
   bodyFat: number | null;
 }
 
-export type TargetsField = Exclude<keyof TargetsValues, 'formula'>;
+export type TargetsField =
+  | Exclude<keyof TargetsValues, 'formula' | 'palMode' | 'chosenPal' | 'palReason'>
+  | 'pal'
+  | 'palReason';
 
 /** Where a prefilled number came from, so a coach knows what they are checking. */
 export interface Starting {
@@ -138,6 +192,8 @@ export interface Starting {
   readonly height: number | null;
   readonly age: number | null;
   readonly steps: number | null;
+  /** Energy version 2: the workouts of their program's current week, when one is running. */
+  readonly workouts?: number | null;
 }
 
 export function emptyTargets(): TargetsValues {
@@ -148,6 +204,10 @@ export function emptyTargets(): TargetsValues {
     sex: null,
     work: null,
     steps: null,
+    workouts: null,
+    palMode: 'table',
+    chosenPal: null,
+    palReason: '',
     goal: 0,
     protein: null,
     fat: 25,
@@ -157,7 +217,11 @@ export function emptyTargets(): TargetsValues {
 }
 
 /** The values a sheet opens with: what the record already knows, and what the last calculation chose. */
-export function startingTargets(starting: Starting, last: WorkedOut | null): TargetsValues {
+export function startingTargets(
+  starting: Starting,
+  last: WorkedOut | null,
+  model: EnergyModel = ENERGY_VERSION_ONE,
+): TargetsValues {
   const values = emptyTargets();
   // Weight, height, age and steps are today's facts about them: a missing one is left to be typed,
   // never filled from an old calculation.
@@ -165,10 +229,16 @@ export function startingTargets(starting: Starting, last: WorkedOut | null): Tar
   values.height = starting.height;
   values.age = starting.age;
   values.steps = starting.steps;
+  const versionTwo = isVersionTwo(model);
+  // The program's current week says how often they train; without one, what the coach said last time.
+  values.workouts = versionTwo ? (starting.workouts ?? last?.inputs?.workouts ?? null) : null;
   if (last?.inputs) {
-    // The choices that were the coach's own carry over; a new calculation starts from them.
+    // The choices that were the coach's own carry over; a new calculation starts from them. A kind of
+    // work the model in force does not take (version 1's Physical under version 2) is chosen again.
     values.sex = last.inputs.sex;
-    values.work = last.inputs.work;
+    values.work = model.kinds.some((kind) => kind.value === last.inputs?.work)
+      ? last.inputs.work
+      : null;
     values.goal = last.goalAdjustment;
     values.fat = last.inputs.fatPercent;
     values.formula = last.inputs.formula;
@@ -177,8 +247,100 @@ export function startingTargets(starting: Starting, last: WorkedOut | null): Tar
       values.weight !== null && last.inputs.weight > 0
         ? Math.round((last.protein / last.inputs.weight) * values.weight)
         : last.protein;
+    if (versionTwo && last.inputs.chosenPal !== null) {
+      values.palMode = model.chosen?.picks.some((pick) => pick.pal === last.inputs?.chosenPal)
+        ? 'pick'
+        : 'typed';
+      values.chosenPal = last.inputs.chosenPal;
+      values.palReason = last.inputs.chosenReason ?? '';
+    }
   }
   return values;
+}
+
+// ------------------------------------------------------------------------------------------------
+// The energy model in force (critique B8a, B8b; NUT-015)
+// ------------------------------------------------------------------------------------------------
+
+/** One of the coach's own multipliers, with the plain words it is chosen by. */
+export interface PalPick {
+  readonly pal: number;
+  readonly words: string;
+}
+
+/**
+ * What the model new calculations use takes, as the server says (`GET /api/nutrition/energy-model`):
+ * version 1 its three kinds of work, version 2 four, workouts a week and the coach's own multiplier.
+ */
+export interface EnergyModel {
+  readonly version: number;
+  readonly kinds: readonly WorkKind[];
+  /** Version 2's: workouts a week go from 0 to this; null for version 1, which takes none. */
+  readonly maxWorkouts: number | null;
+  /** Version 2's "Or choose the multiplier yourself"; null for version 1. */
+  readonly chosen: {
+    readonly min: number;
+    readonly max: number;
+    readonly picks: readonly PalPick[];
+  } | null;
+}
+
+/** Version 1, as every server is until B8c and as the sheet asks when nothing else is known. */
+export const ENERGY_VERSION_ONE: EnergyModel = {
+  version: 1,
+  kinds: workKindsFor(['Seated', 'Mixed', 'Physical']),
+  maxWorkouts: null,
+  chosen: null,
+};
+
+export function mapEnergyModel(view: EnergyModelView): EnergyModel {
+  const maxWorkouts = view.maximumWorkoutsPerWeek;
+  return {
+    version: toNumber(view.version),
+    kinds: workKindsFor(view.kindsOfWork),
+    maxWorkouts: maxWorkouts === null ? null : toNumber(maxWorkouts),
+    chosen: view.coachChosen
+      ? {
+          min: toNumber(view.coachChosen.minimum),
+          max: toNumber(view.coachChosen.maximum),
+          picks: view.coachChosen.picks.map((pick) => ({
+            pal: toNumber(pick.pal),
+            words: pick.words,
+          })),
+        }
+      : null,
+  };
+}
+
+/** Version 2 asks for workouts a week and offers the coach's own multiplier. */
+export function isVersionTwo(model: EnergyModel): boolean {
+  return model.maxWorkouts !== null;
+}
+
+/** The coach's own multiplier as it would be sent, or null for the table's. */
+export function chosenPalOf(values: TargetsValues): number | null {
+  return values.palMode === 'table' ? null : values.chosenPal;
+}
+
+/**
+ * The workouts of the week a program is in today, as the sheet fills them in (critique B8a): only a
+ * program running today counts, and only up to the 7 the model takes.
+ */
+export function programWorkouts(program: CoachClientProgramView, today: string): number | null {
+  if (!program.isAllowed) return null;
+  const running = program.blocks.find(
+    (block) =>
+      block.status === 'Active' && block.startDate <= today && today < block.endDateExclusive,
+  );
+  const week = running?.currentWeekNumber;
+  if (!running || week === null || week === undefined) return null;
+  const current = running.weeks.find((item) => toNumber(item.weekNumber) === toNumber(week));
+  return current ? Math.min(current.sessions.length, 7) : null;
+}
+
+/** "× 1.725", the multiplier to as many decimals as it has, at least two. */
+export function palWords(pal: number, locale = 'en'): string {
+  return `× ${formatNumber(pal, locale, '1.2-3')}`;
 }
 
 /** Grams of protein for a body weight at a number of grams for each kilogram. */
@@ -197,8 +359,14 @@ function rangeWords(min: number, max: number): string {
   return `${format.format(min)} and ${format.format(max)}`;
 }
 
+/** The server's limit on the reason for a coach's own multiplier (`CoachChosenPal`). */
+export const PAL_REASON_LIMIT = 500;
+
 /** Each box's messages, in words and in the units shown, using the server's own limits. */
-export function targetErrors(values: TargetsValues): Record<TargetsField, string[]> {
+export function targetErrors(
+  values: TargetsValues,
+  model: EnergyModel = ENERGY_VERSION_ONE,
+): Record<TargetsField, string[]> {
   const errors: Record<TargetsField, string[]> = {
     weight: [],
     height: [],
@@ -206,11 +374,50 @@ export function targetErrors(values: TargetsValues): Record<TargetsField, string
     sex: [],
     work: [],
     steps: [],
+    workouts: [],
+    pal: [],
+    palReason: [],
     goal: [],
     protein: [],
     fat: [],
     bodyFat: [],
   };
+  // Version 2's own boxes, in the server's words (critique B8a).
+  if (model.maxWorkouts !== null) {
+    const workouts = values.workouts;
+    if (
+      !isNumber(workouts) ||
+      !Number.isInteger(workouts) ||
+      workouts < 0 ||
+      workouts > model.maxWorkouts
+    ) {
+      errors.workouts.push(
+        $localize`Say how many workouts a week they do, from 0 to ${model.maxWorkouts}:max:.`,
+      );
+    }
+  }
+  if (model.chosen && values.palMode !== 'table') {
+    const pal = values.chosenPal;
+    const { min, max } = model.chosen;
+    const low = formatNumber(min, 'en', '1.2-2');
+    const high = formatNumber(max, 'en', '1.2-2');
+    if (!isNumber(pal)) {
+      errors.pal.push($localize`Type the multiplier, from ${low}:low: to ${high}:high:.`);
+    } else if (pal < min) {
+      errors.pal.push(
+        $localize`A multiplier of ${pal}:pal: is under ${low}:low:, the lowest FAO/WHO/UNU’s scale gives a healthy adult’s whole day. Choose one from ${low}:low: to ${high}:high:.`,
+      );
+    } else if (pal > max) {
+      errors.pal.push(
+        $localize`A multiplier of ${pal}:pal: is over ${high}:high:, the highest FAO/WHO/UNU’s scale gives a whole day that can be kept up. Choose one from ${low}:low: to ${high}:high:.`,
+      );
+    } else if (Math.abs(pal * 1000 - Math.round(pal * 1000)) > 1e-6) {
+      errors.pal.push($localize`Type the multiplier with at most three decimals, like 1.725.`);
+    }
+    if (values.palReason.trim().length > PAL_REASON_LIMIT) {
+      errors.palReason.push($localize`Keep the reason to ${PAL_REASON_LIMIT}:limit: characters.`);
+    }
+  }
   if (!isNumber(values.weight)) {
     errors.weight.push($localize`Enter their weight.`);
   } else if (values.weight < WEIGHT_KG.min || values.weight > WEIGHT_KG.max) {
@@ -284,9 +491,16 @@ export function problemCount(errors: Readonly<Record<string, readonly string[]>>
   return Object.values(errors).reduce((total, messages) => total + messages.length, 0);
 }
 
-/** The request for values that passed `targetErrors`. Eating below what they burn is how it is told apart. */
-export function calculationRequest(values: TargetsValues): CalculateNutritionTargetsRequest {
-  return {
+/**
+ * The request for values that passed `targetErrors`. Eating below what they burn is how it is told apart.
+ * Version 2 also sends the workouts a week, and the coach's own multiplier with their reason when they
+ * chose one; version 1 refuses both, so it is sent neither.
+ */
+export function calculationRequest(
+  values: TargetsValues,
+  model: EnergyModel = ENERGY_VERSION_ONE,
+): CalculateNutritionTargetsRequest {
+  const request: CalculateNutritionTargetsRequest = {
     bmrMethodKey: values.formula,
     weightKilograms: values.weight!,
     heightCentimeters: values.height!,
@@ -301,6 +515,15 @@ export function calculationRequest(values: TargetsValues): CalculateNutritionTar
     fatPercentage: values.fat!,
     // The wider protein review range applies while eating below what they burn (NUT-008).
     isEnergyDeficit: values.goal! < 0,
+  };
+  if (!isVersionTwo(model)) return request;
+  const chosen = model.chosen ? chosenPalOf(values) : null;
+  const reason = values.palReason.trim();
+  return {
+    ...request,
+    workoutsPerWeek: values.workouts!,
+    chosenPal: chosen,
+    chosenPalReason: chosen !== null && reason !== '' ? reason : null,
   };
 }
 
@@ -317,7 +540,27 @@ export interface CalculationInputs {
   readonly bodyFat: number | null;
   readonly work: OccupationActivityType;
   readonly steps: number;
+  /** Energy version 2's; null for version 1, which takes none. */
+  readonly workouts: number | null;
+  /** The coach's own multiplier and why, when they chose one (version 2). */
+  readonly chosenPal: number | null;
+  readonly chosenReason: string | null;
   readonly fatPercent: number;
+}
+
+/**
+ * What the server says beside a calculation's numbers (critique B8a), shown as it wrote them: how the
+ * multiplier came about, what the steps are worth inside it, and the goal's rate and share.
+ */
+export interface EnergyWords {
+  /** "Counts as low active: × 1.68 (…)" or "Chosen by the coach: × 1.55 (…)"; null for version 1. */
+  readonly activity: string | null;
+  /** The coach's reason for their own multiplier, when they gave one. */
+  readonly reason: string | null;
+  /** "Their 5,000 steps are inside that, worth about 180 calories a day at 97 kg." */
+  readonly walking: string | null;
+  /** "−500 a day ≈ 0.5 kg a week, 84% of what they burn". */
+  readonly goal: string | null;
 }
 
 /** The coach's own macros over a calculation (NUT-008, INV-2): why, and the targets they changed. */
@@ -346,6 +589,8 @@ export interface WorkedOut {
   readonly goalAdjustment: number;
   readonly formula: string;
   readonly warnings: readonly string[];
+  /** The server's words beside the numbers; each is null where it says nothing. */
+  readonly words: EnergyWords;
   /** Null when an older record's numbers could not be read back. */
   readonly inputs: CalculationInputs | null;
   /** Set when these are the coach's own macros rather than the formula's. */
@@ -369,6 +614,12 @@ export function mapWorkedOut(record: NutritionCalculationRecord): WorkedOut {
     goalAdjustment: toNumber(result.coachGoalAdjustment),
     formula: result.bmrMethodKey,
     warnings: result.warnings,
+    words: {
+      activity: result.activity?.words ?? null,
+      reason: result.activity?.reason ?? null,
+      walking: result.walking?.words ?? null,
+      goal: result.goal?.words ?? null,
+    },
     inputs: given
       ? {
           formula: given.bmrMethodKey as FormulaKey,
@@ -379,6 +630,9 @@ export function mapWorkedOut(record: NutritionCalculationRecord): WorkedOut {
           bodyFat: given.bodyFatPercentage === null ? null : toNumber(given.bodyFatPercentage),
           work: given.occupationType,
           steps: toNumber(given.averageDailySteps),
+          workouts: optionalNumber(given.workoutsPerWeek),
+          chosenPal: optionalNumber(given.chosenPal),
+          chosenReason: given.chosenPalReason ?? null,
           fatPercent: toNumber(given.fatPercentage),
         }
       : null,
@@ -519,6 +773,25 @@ export function warningWords(warning: string): string {
     const [, actual, floor] = perKg;
     return $localize`Fat works out at ${actual}:actual: g for each kilogram a day, under the usual ${floor}:floor: g. This is a flag for you to look at, not a rule.`;
   }
+  // The energy floors, while energy version 2 is in force (critique B8a).
+  const resting =
+    /^The target, ([\d,.]+) calories a day, is under what their body burns at rest \(([\d,.]+)\)\./.exec(
+      warning,
+    );
+  if (resting) {
+    const [, target, rest] = resting;
+    return $localize`The target, ${target}:target: calories a day, is under what their body burns at rest (${rest}:rest:). This is a flag for you to look at, not a rule.`;
+  }
+  const floor =
+    /^The target, ([\d,.]+) calories a day, is under ([\d,.]+), the floor most calculators keep for (women|men)\./.exec(
+      warning,
+    );
+  if (floor) {
+    const [, target, least, who] = floor;
+    return who === 'men'
+      ? $localize`The target, ${target}:target: calories a day, is under ${least}:floor:, the floor most calculators keep for men. This is a flag for you to look at, not a rule.`
+      : $localize`The target, ${target}:target: calories a day, is under ${least}:floor:, the floor most calculators keep for women. This is a flag for you to look at, not a rule.`;
+  }
   return warning;
 }
 
@@ -540,15 +813,21 @@ export function signedKcal(value: number): string {
   return rounded < 0 ? `−${digits}` : rounded > 0 ? `+${digits}` : '0';
 }
 
-/** "70 kg, 168 cm, 29 years, female, seated work, 8,000 steps a day". */
+/** "70 kg, 168 cm, 29 years, female, seated work, 8,000 steps a day, 4 workouts a week". */
 export function inputsLine(inputs: CalculationInputs): string {
   const steps = new Intl.NumberFormat('en').format(inputs.steps);
   const sex = inputs.sex === 'Female' ? $localize`female` : $localize`male`;
+  const workouts =
+    inputs.workouts === null
+      ? ''
+      : inputs.workouts === 1
+        ? $localize`, 1 workout a week`
+        : $localize`, ${inputs.workouts}:workouts: workouts a week`;
   const fat =
     inputs.formula === 'KatchMcArdle' && inputs.bodyFat !== null
       ? $localize`, ${inputs.bodyFat}:fat: percent body fat`
       : '';
-  return $localize`${inputs.weight}:weight: kg, ${inputs.height}:height: cm, ${inputs.age}:age: years, ${sex}:sex:, ${workWords(inputs.work)}:work: work, ${steps}:steps: steps a day${fat}:fat:`;
+  return $localize`${inputs.weight}:weight: kg, ${inputs.height}:height: cm, ${inputs.age}:age: years, ${sex}:sex:, ${workPhrase(inputs.work)}:work:, ${steps}:steps: steps a day${workouts}:workouts:${fat}:fat:`;
 }
 
 // ------------------------------------------------------------------------------------------------

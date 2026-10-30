@@ -12,10 +12,15 @@ import {
   calculationView,
   clientPlan,
   earlierRecord,
+  energyModelView,
+  previewView,
   profile,
+  programView,
   publishedPlans,
+  RANA_WORDS,
   stoppedPlan,
   TODAY,
+  versionTwoRecord,
   workspace,
 } from '../../../testing/client-nutrition-fixtures';
 import { enrollment, plansOverview } from '../../../testing/client-service-fixtures';
@@ -25,6 +30,7 @@ import type { ClientCommercialOverview, CoachClientDetails } from '../../core/ap
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
+import { ClientProgramApi } from '../clients/client-program-api';
 import { ClientWorkspaceContext } from '../clients/client-workspace.context';
 import { ProgressEntriesApi } from '../progress/progress-entries-api';
 import { ClientNutrition } from './client-nutrition';
@@ -42,6 +48,7 @@ interface Options {
   profile?: CoachClientDetails | null;
   plans?: ClientCommercialOverview | null;
   weighIns?: ReturnType<typeof vi.fn>;
+  program?: ReturnType<typeof vi.fn>;
   tenant?: ReturnType<typeof signal<string>>;
 }
 
@@ -53,8 +60,11 @@ async function render(options: Options = {}) {
     calculate: vi.fn(() => of(calculationView({ id: 'calc-3' }))),
     assign: vi.fn(() => of(clientPlan({ id: 'cplan-2', startDate: TODAY }))),
     replaceAllergens: vi.fn(() => of(undefined)),
+    energyModel: vi.fn(() => of(energyModelView(1))),
+    energyPreview: vi.fn(() => of(previewView())),
     ...options.api,
   };
+  const programs = { getProgram: options.program ?? vi.fn(() => of(programView())) };
   const progress = {
     weighIns: options.weighIns ?? vi.fn(() => of(progressView(mayaWeighIns()))),
   };
@@ -80,6 +90,7 @@ async function render(options: Options = {}) {
       { provide: ClientWorkspaceContext, useValue: context },
       { provide: ClientNutritionApi, useValue: api },
       { provide: ProgressEntriesApi, useValue: progress },
+      { provide: ClientProgramApi, useValue: programs },
       { provide: MealPlanApi, useValue: mealPlans },
       { provide: WorkspaceCalendar, useValue: calendar },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
@@ -93,6 +104,7 @@ async function render(options: Options = {}) {
     host: fixture.nativeElement as HTMLElement,
     api,
     progress,
+    programs,
     context,
     tenant,
     calendar,
@@ -402,6 +414,109 @@ describe('A client’s Nutrition tab', () => {
       expect(textOf(card(host, 'targets').querySelector('[data-earlier-targets] summary'))).toBe(
         'Earlier targets (2)',
       );
+    });
+  });
+
+  describe('working targets out under energy version 2 (critique B8b)', () => {
+    it('asks the model in force, and only then the program for the workouts a week', async () => {
+      const { fixture, host, api, programs } = await render({
+        api: { energyModel: vi.fn(() => of(energyModelView(2))) },
+      });
+
+      press(card(host, 'targets'), 'Work out again');
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(api['energyModel']).toHaveBeenCalledTimes(1);
+      expect(programs.getProgram).toHaveBeenCalledWith('client-1');
+      const sheet = dialog()!;
+      expect(sheet.querySelector<HTMLInputElement>('input[name="workouts"]')!.value).toBe('4');
+      expect(sheet.querySelector('input[name="work"][value="OnTheirFeet"]')).not.toBeNull();
+    });
+
+    it('reads no program under version 1', async () => {
+      const { fixture, host, programs } = await render();
+
+      press(card(host, 'targets'), 'Work out again');
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(programs.getProgram).not.toHaveBeenCalled();
+      expect(dialog()!.querySelector('input[name="workouts"]')).toBeNull();
+    });
+
+    it('reads no program when Training is not in their plan', async () => {
+      const plan = NUTRITION_PLAN();
+      const { fixture, host, programs } = await render({
+        api: { energyModel: vi.fn(() => of(energyModelView(2))) },
+        plans: {
+          ...plan,
+          featureAccess: plan.featureAccess.map((item) =>
+            item.feature === 'Training'
+              ? { ...item, isAllowed: false, reason: 'NoEntitlement' as const }
+              : item,
+          ),
+        },
+      });
+
+      press(card(host, 'targets'), 'Work out again');
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(programs.getProgram).not.toHaveBeenCalled();
+      expect(dialog()!.querySelector<HTMLInputElement>('input[name="workouts"]')!.value).toBe('');
+    });
+
+    it('says the calculator could not be opened when the model cannot be read, and opens nothing', async () => {
+      const { fixture, host } = await render({
+        api: {
+          energyModel: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 503 }))),
+        },
+      });
+
+      press(card(host, 'targets'), 'Work out again');
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(dialog()).toBeNull();
+      expect(textOf(card(host, 'targets').querySelector('[data-prepare-failed]'))).toBe(
+        'The calculator could not be opened. Check your connection and try again.',
+      );
+    });
+
+    it('reads what the sheet starts from when the meal plan sheet leads to it', async () => {
+      const { fixture, host, api, progress } = await render({
+        api: { energyModel: vi.fn(() => of(energyModelView(2))) },
+      });
+
+      press(card(host, 'plan'), 'Assign a meal plan');
+      await settle(fixture);
+      await settle(fixture);
+      press(dialog()!, 'Work out new targets first');
+      await settle(fixture);
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(api['energyModel']).toHaveBeenCalledTimes(1);
+      expect(progress.weighIns).toHaveBeenCalledTimes(1);
+      const sheet = dialog()!;
+      expect(textOf(sheet.querySelector('.tb-modal__title'))).toContain(
+        'Work out targets for Rana',
+      );
+      expect(sheet.querySelector<HTMLInputElement>('input[name="weight"]')!.value).toBe('80.2');
+      expect(sheet.querySelector<HTMLInputElement>('input[name="workouts"]')!.value).toBe('4');
+    });
+
+    it('shows the server’s words beside the latest targets', async () => {
+      const { fixture, host } = await render({
+        api: { calculations: vi.fn(() => of([versionTwoRecord(), calculationRecord()])) },
+      });
+
+      const targets = card(host, 'targets');
+      await toggleFold(fixture, targets, 'How this was worked out');
+      expect(textOf(targets.querySelector('[data-said="activity"]'))).toBe(RANA_WORDS.activity);
+      expect(textOf(targets.querySelector('[data-said="walking"]'))).toBe(RANA_WORDS.walking);
+      expect(textOf(targets.querySelector('[data-said="goal"]'))).toBe(RANA_WORDS.goal);
     });
   });
 

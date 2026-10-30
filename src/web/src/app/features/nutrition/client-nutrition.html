@@ -55,6 +55,11 @@
               </div>
             </div>
             <div class="panel-body">
+              @if (prepareFailed()) {
+                <p class="stale" role="status" data-prepare-failed i18n>
+                  The calculator could not be opened. Check your connection and try again.
+                </p>
+              }
               @if (latest(); as made) {
                 @if (made.adjustment) {
                   <p class="when" data-worked-on i18n>Your macros, set {{ workedOn(made) }}</p>
@@ -268,11 +273,13 @@
     [locale]="locale"
     [timeZone]="timeZone()"
     [starting]="starting()"
+    [energy]="energy()"
     [calculations]="calculations()"
     [plans]="planRows()"
     [covers]="covers()"
     [declared]="declared()"
     [theirWords]="allergiesWords()"
     (changed)="refresh($event)"
+    (workOutAsked)="workOut()"
   />
 }

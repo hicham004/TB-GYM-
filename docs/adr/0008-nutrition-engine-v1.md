@@ -70,7 +70,9 @@ is said and never added. v1 stays for every calculation made with it. v2 is buil
 the default for new calculations until B8c, after a qualified review of the table and its words (Toufic and
 a dietitian, recorded here by name and date), which may lift or lower the whole table by up to 0.05 and
 approves the display language: the band words, the coach's picks, the walking line, the floors and the
-weekly rate (`WeeklyWeightChange 1.0`).
+weekly rate (`WeeklyWeightChange 1.0`). Since B8b (2026-10-30) development runs v2 (`appsettings.Development.json`),
+so the targets sheet's v2 screens and the demo can be shown to the reviewers there; production and the test copy
+stay on v1 until B8c.
 
 NUT-008 macro splitting retains unrounded results and validates residual calories. Display/
 prescription rounding is separate, and a positive result that rounds to zero is rejected.

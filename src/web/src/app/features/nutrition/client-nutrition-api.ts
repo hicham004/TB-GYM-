@@ -9,8 +9,11 @@ import type {
   ClientAllergensView,
   ClientNutritionPlanSummary,
   CreateMacroOverrideRequest,
+  EnergyModelView,
+  EnergyPreviewView,
   NutritionCalculationRecord,
   NutritionCalculationView,
+  PreviewEnergyRequest,
 } from '../../core/api/generated';
 
 /**
@@ -39,6 +42,19 @@ export class ClientNutritionApi {
       `/api/nutrition/clients/${clientId}/calculations`,
       { params: new HttpParams().set('take', take) },
     );
+  }
+
+  /** What new calculations work energy out with, so the sheet asks for what it takes (critique B8a). */
+  energyModel(): Observable<EnergyModelView> {
+    return this.http.get<EnergyModelView>('/api/nutrition/energy-model');
+  }
+
+  /**
+   * The sheet's numbers so far, worked out as Work out would and recorded nowhere: energy version 2's
+   * alone. A POST, so a client's body never sits in an address, and it checks the token like any other.
+   */
+  energyPreview(request: PreviewEnergyRequest): Observable<EnergyPreviewView> {
+    return this.http.post<EnergyPreviewView>('/api/nutrition/energy-preview', request);
   }
 
   /** Each press records a calculation; the server never overwrites an earlier one. */

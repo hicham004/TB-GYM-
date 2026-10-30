@@ -31,6 +31,8 @@ export class TargetsResult {
   protected readonly adjustment = computed(() => signedKcal(this.record().goalAdjustment));
   protected readonly formula = computed(() => formulaName(this.record().formula));
   protected readonly flags = computed(() => this.record().warnings.map(warningWords));
+  /** The server's words beside the multiplier and the goal, under energy version 2 (critique B8b). */
+  protected readonly words = computed(() => this.record().words);
   protected readonly from = computed(() => {
     const inputs = this.record().inputs;
     return inputs ? inputsLine(inputs) : null;

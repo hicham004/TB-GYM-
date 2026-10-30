@@ -21,6 +21,7 @@ import { ageOn } from '../../ui/calendar';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill, type StatusPillTone } from '../../ui/status-pill';
+import { ClientProgramApi } from '../clients/client-program-api';
 import { ClientWorkspaceContext } from '../clients/client-workspace.context';
 import { ProgressEntriesApi } from '../progress/progress-entries-api';
 import { ClientNutritionApi } from './client-nutrition-api';
@@ -31,15 +32,19 @@ import {
   allergenName,
   canStop,
   inListOrder,
+  isVersionTwo,
+  mapEnergyModel,
   mapPlan,
   mapWorkedOut,
   nutritionClosed,
   nutritionCovers,
   planDates,
   planStateWords,
+  programWorkouts,
   splitPlans,
   stoppedWords,
   workedOutOn,
+  type EnergyModel,
   type PlanRow,
   type PlanState,
   type Starting,
@@ -96,6 +101,7 @@ export class ClientNutrition {
   protected readonly context = inject(ClientWorkspaceContext);
   private readonly api = inject(ClientNutritionApi);
   private readonly progress = inject(ProgressEntriesApi);
+  private readonly programs = inject(ClientProgramApi);
   private readonly calendar = inject(WorkspaceCalendar);
   private readonly tenants = inject(TenantStore);
   protected readonly locale = inject(LOCALE_ID);
@@ -114,7 +120,12 @@ export class ClientNutrition {
   protected readonly declared = signal<AllergenCode[]>([]);
   /** The latest weigh-in, read when the calculation sheet is opened. */
   private readonly weight = signal<{ value: number; on: string } | null>(null);
+  /** What the energy model in force takes, read when the calculation sheet is opened (critique B8b). */
+  protected readonly energy = signal<EnergyModel | null>(null);
+  /** Energy version 2: the workouts of their program's current week, when one is running. */
+  private readonly programWeek = signal<number | null>(null);
   protected readonly preparing = signal(false);
+  protected readonly prepareFailed = signal(false);
   protected readonly refreshFailed = signal(false);
 
   protected readonly clientId = computed(() => this.context.clientId());
@@ -173,6 +184,7 @@ export class ClientNutrition {
       height: height === null || height === undefined ? null : Number(height),
       age: ageOn(profile?.birthDate, this.today()),
       steps: steps === null || steps === undefined ? null : Number(steps),
+      workouts: this.programWeek(),
     };
   });
 
@@ -287,30 +299,75 @@ export class ClientNutrition {
     });
   }
 
+  /**
+   * Reads what the sheet starts from, then opens it: the latest weigh-in, what the energy model in force
+   * takes (critique B8b) and, under version 2, the workouts of their program's current week. Only the
+   * model is needed to open it: without it the sheet would ask for the wrong things.
+   */
   protected async workOut(): Promise<void> {
     if (this.preparing()) return;
     this.preparing.set(true);
-    await this.scope.run('prepare', async (owner) => {
-      try {
-        const today = this.today();
-        const from = addDaysIso(today, -83);
-        const read = await owner.wait(
-          firstValueFrom(this.progress.weighIns(this.context.clientId(), 'Kilogram', from, null)),
-        );
-        const latest = [...read.days].reverse().find((day) => day.observation !== null);
-        this.weight.set(
-          latest?.observation
-            ? { value: latest.observation.valueKilograms, on: latest.date }
-            : null,
-        );
-      } catch {
-        // No weigh-in to start from is not a reason to stop: the coach types the weight.
-        if (owner.current) this.weight.set(null);
-      } finally {
-        if (owner.current) this.preparing.set(false);
-      }
-    });
-    if (this.state() === 'ready') this.sheets().workOut();
+    this.prepareFailed.set(false);
+    const ready = await this.scope.run(
+      'prepare',
+      async (owner) => {
+        try {
+          const [weight, model] = await owner.wait(
+            Promise.all([this.readWeight(), this.readEnergy()]),
+          );
+          this.weight.set(weight);
+          if (model === null) {
+            this.prepareFailed.set(true);
+            return false;
+          }
+          this.energy.set(model);
+          this.programWeek.set(isVersionTwo(model) ? await owner.wait(this.readWorkouts()) : null);
+          return owner.current;
+        } finally {
+          if (owner.current) this.preparing.set(false);
+        }
+      },
+      false,
+    );
+    if (ready && this.state() === 'ready') this.sheets().workOut();
+  }
+
+  private async readWeight(): Promise<{ value: number; on: string } | null> {
+    try {
+      const from = addDaysIso(this.today(), -83);
+      const read = await firstValueFrom(
+        this.progress.weighIns(this.context.clientId(), 'Kilogram', from, null),
+      );
+      const latest = [...read.days].reverse().find((day) => day.observation !== null);
+      return latest?.observation
+        ? { value: latest.observation.valueKilograms, on: latest.date }
+        : null;
+    } catch {
+      // No weigh-in to start from is not a reason to stop: the coach types the weight.
+      return null;
+    }
+  }
+
+  private async readEnergy(): Promise<EnergyModel | null> {
+    try {
+      return mapEnergyModel(await firstValueFrom(this.api.energyModel()));
+    } catch {
+      return null;
+    }
+  }
+
+  /** The program's current week, when Training is in their plan; none is no reason to stop. */
+  private async readWorkouts(): Promise<number | null> {
+    const training = this.context
+      .plans()
+      ?.featureAccess.find((item) => item.feature === 'Training');
+    if (training && !training.isAllowed) return null;
+    try {
+      const program = await firstValueFrom(this.programs.getProgram(this.context.clientId()));
+      return programWorkouts(program, this.today());
+    } catch {
+      return null;
+    }
   }
 
   protected assign(): void {
@@ -339,7 +396,10 @@ export class ClientNutrition {
     this.planRows.set([]);
     this.declared.set([]);
     this.weight.set(null);
+    this.energy.set(null);
+    this.programWeek.set(null);
     this.preparing.set(false);
+    this.prepareFailed.set(false);
     this.refreshFailed.set(false);
   }
 }

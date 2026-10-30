@@ -5,8 +5,12 @@ import {
   calculationRecord,
   clientPlan,
   earlierRecord,
+  energyModelView,
+  programView,
+  RANA_WORDS,
   stoppedPlan,
   TODAY,
+  versionTwoRecord,
 } from '../../../testing/client-nutrition-fixtures';
 import { enrollment } from '../../../testing/client-service-fixtures';
 import {
@@ -24,7 +28,13 @@ import {
   calculationRequest,
   dayInZone,
   emptyTargets,
+  ENERGY_VERSION_ONE,
+  FORMULAS,
   inListOrder,
+  isVersionTwo,
+  mapEnergyModel,
+  palWords,
+  programWorkouts,
   inputsLine,
   macroShares,
   mapPlan,
@@ -223,8 +233,13 @@ describe('what was worked out', () => {
       bodyFat: null,
       work: 'Seated',
       steps: 8000,
+      workouts: null,
+      chosenPal: null,
+      chosenReason: null,
       fatPercent: 25,
     });
+    // Version 1's calculations say nothing beside their numbers.
+    expect(record.words).toEqual({ activity: null, reason: null, walking: null, goal: null });
   });
 
   it('lists a result whose numbers could not be read back, without them', () => {
@@ -610,5 +625,189 @@ describe('the coach’s own macros (INV-2)', () => {
       'The macros add up to 0 calories. Give at least one of them some grams.',
     );
     expect(adjustRefusal('Something else.')).toBe('Something else.');
+  });
+});
+
+describe('energy version 2 in the calculation sheet (critique B8b)', () => {
+  const two = mapEnergyModel(energyModelView(2));
+
+  it('asks what the model in force takes, as the server says', () => {
+    const one = mapEnergyModel(energyModelView(1));
+    expect(one.kinds.map((kind) => kind.value)).toEqual(['Seated', 'Mixed', 'Physical']);
+    expect([one.maxWorkouts, one.chosen, isVersionTwo(one)]).toEqual([null, null, false]);
+    expect(ENERGY_VERSION_ONE.kinds.map((kind) => kind.value)).toEqual(
+      one.kinds.map((kind) => kind.value),
+    );
+
+    expect(two.kinds.map((kind) => [kind.label, kind.hint])).toEqual([
+      ['Seated', 'Mostly sitting: a desk, driving.'],
+      ['Mixed', 'Up and about for part of the day.'],
+      ['On their feet', 'Teaching, retail, nursing, serving.'],
+      ['Heavy manual', 'Building, farm, moving loads.'],
+    ]);
+    expect([two.maxWorkouts, isVersionTwo(two)]).toEqual([7, true]);
+    expect(two.chosen).toMatchObject({ min: 1.4, max: 2.4 });
+    expect(two.chosen?.picks[2]).toEqual({ pal: 1.725, words: 'hard exercise 6 to 7 days a week' });
+    expect(palWords(1.4)).toBe('× 1.40');
+    expect(palWords(1.725)).toBe('× 1.725');
+  });
+
+  it('says what the evidence says about Harris-Benedict', () => {
+    expect(FORMULAS.find((item) => item.value === 'HarrisBenedictRevised')?.hint).toBe(
+      'Older; less often within 10% of a measured value than Mifflin-St Jeor, and runs higher for heavier clients.',
+    );
+  });
+
+  it('fills the workouts in from the program, else from last time, and carries the coach’s multiplier', () => {
+    const starting = { weight: { value: 70, on: TODAY }, height: 168, age: 30, steps: 8000 };
+    expect(startingTargets({ ...starting, workouts: 3 }, null, two).workouts).toBe(3);
+    expect(startingTargets(starting, mapWorkedOut(versionTwoRecord()), two).workouts).toBe(4);
+    expect(startingTargets(starting, null, two).workouts).toBeNull();
+    // Version 1 takes no workouts, whatever the program holds.
+    expect(startingTargets({ ...starting, workouts: 3 }, null).workouts).toBeNull();
+
+    // Version 1's Physical is chosen again under version 2; version 2's kinds again under version 1.
+    const physical = calculationRecord({
+      inputs: { ...calculationRecord().inputs!, occupationType: 'Physical' },
+    });
+    expect(startingTargets(starting, mapWorkedOut(physical), two).work).toBeNull();
+    const onFeet = calculationRecord({
+      inputs: { ...calculationRecord().inputs!, occupationType: 'OnTheirFeet', workoutsPerWeek: 2 },
+    });
+    expect(startingTargets(starting, mapWorkedOut(onFeet)).work).toBeNull();
+    expect(startingTargets(starting, mapWorkedOut(onFeet), two).work).toBe('OnTheirFeet');
+
+    // The coach's own multiplier carries over, a pick as a pick and any other as typed, with its reason.
+    const picked = versionTwoRecord({
+      inputs: { ...versionTwoRecord().inputs!, chosenPal: 1.55, chosenPalReason: 'Trains hard' },
+    });
+    expect(startingTargets(starting, mapWorkedOut(picked), two)).toMatchObject({
+      palMode: 'pick',
+      chosenPal: 1.55,
+      palReason: 'Trains hard',
+    });
+    const typed = versionTwoRecord({ inputs: { ...versionTwoRecord().inputs!, chosenPal: 1.62 } });
+    expect(startingTargets(starting, mapWorkedOut(typed), two)).toMatchObject({
+      palMode: 'typed',
+      chosenPal: 1.62,
+      palReason: '',
+    });
+    expect(startingTargets(starting, mapWorkedOut(typed)).palMode).toBe('table');
+  });
+
+  it('checks version 2’s boxes in the server’s words', () => {
+    const v2 = (overrides: Partial<TargetsValues> = {}) => valid({ workouts: 4, ...overrides });
+    expect(problemCount(targetErrors(v2(), two))).toBe(0);
+    const workouts = 'Say how many workouts a week they do, from 0 to 7.';
+    expect(targetErrors(valid(), two).workouts).toEqual([workouts]);
+    expect(targetErrors(v2({ workouts: 8 }), two).workouts).toEqual([workouts]);
+    expect(targetErrors(v2({ workouts: 2.5 }), two).workouts).toEqual([workouts]);
+    expect(targetErrors(v2({ workouts: 0 }), two).workouts).toEqual([]);
+    // Version 1 asks for none of them.
+    expect(targetErrors(valid()).workouts).toEqual([]);
+
+    const own = (pal: number | null, reason = '') =>
+      targetErrors(v2({ palMode: 'typed', chosenPal: pal, palReason: reason }), two);
+    expect(own(null).pal).toEqual(['Type the multiplier, from 1.40 to 2.40.']);
+    expect(own(1.375).pal).toEqual([
+      'A multiplier of 1.375 is under 1.40, the lowest FAO/WHO/UNU’s scale gives a healthy adult’s whole day. Choose one from 1.40 to 2.40.',
+    ]);
+    expect(own(2.5).pal).toEqual([
+      'A multiplier of 2.5 is over 2.40, the highest FAO/WHO/UNU’s scale gives a whole day that can be kept up. Choose one from 1.40 to 2.40.',
+    ]);
+    expect(own(1.7251).pal).toEqual([
+      'Type the multiplier with at most three decimals, like 1.725.',
+    ]);
+    expect(own(1.725).pal).toEqual([]);
+    expect(own(1.4).pal).toEqual([]);
+    expect(own(1.6, 'x'.repeat(501)).palReason).toEqual(['Keep the reason to 500 characters.']);
+    // The table's multiplier needs nothing typed.
+    expect(targetErrors(v2({ palMode: 'table', chosenPal: null }), two).pal).toEqual([]);
+  });
+
+  it('sends version 2 the workouts, and the coach’s multiplier with its reason only when chosen', () => {
+    const v2 = valid({ workouts: 4 });
+    expect(calculationRequest(v2, two)).toEqual({
+      ...calculationRequest(valid()),
+      workoutsPerWeek: 4,
+      chosenPal: null,
+      chosenPalReason: null,
+    });
+    expect(
+      calculationRequest(
+        { ...v2, palMode: 'pick', chosenPal: 1.55, palReason: '  Trains hard ' },
+        two,
+      ),
+    ).toMatchObject({ chosenPal: 1.55, chosenPalReason: 'Trains hard' });
+    expect(
+      calculationRequest({ ...v2, palMode: 'typed', chosenPal: 1.62, palReason: ' ' }, two),
+    ).toMatchObject({ chosenPal: 1.62, chosenPalReason: null });
+    // A reason left from a multiplier no longer chosen is not sent.
+    expect(calculationRequest({ ...v2, palMode: 'table', palReason: 'Old' }, two)).toMatchObject({
+      chosenPal: null,
+      chosenPalReason: null,
+    });
+    // Version 1 is sent exactly what it always was.
+    expect(Object.keys(calculationRequest(valid()))).not.toContain('workoutsPerWeek');
+  });
+
+  it('counts the workouts of the week a running program is in today', () => {
+    expect(programWorkouts(programView(), TODAY)).toBe(4);
+    expect(programWorkouts(programView({ isAllowed: false, blocks: [] }), TODAY)).toBeNull();
+    const block = programView().blocks[0];
+    expect(
+      programWorkouts(programView({ blocks: [{ ...block, status: 'Planned' }] }), TODAY),
+    ).toBeNull();
+    expect(
+      programWorkouts(programView({ blocks: [{ ...block, endDateExclusive: TODAY }] }), TODAY),
+    ).toBeNull();
+    expect(
+      programWorkouts(programView({ blocks: [{ ...block, currentWeekNumber: null }] }), TODAY),
+    ).toBeNull();
+    const twice = block.weeks[1].sessions.flatMap((item) => [item, { ...item }]);
+    const busy = { ...block, weeks: [block.weeks[0], { ...block.weeks[1], sessions: twice }] };
+    expect(programWorkouts(programView({ blocks: [busy] }), TODAY)).toBe(7);
+  });
+
+  it('reads the server’s words beside a version 2 calculation, and what it was sent', () => {
+    const record = mapWorkedOut(versionTwoRecord());
+    expect(record.activity).toBe(1.63);
+    expect(record.words).toEqual({
+      activity: RANA_WORDS.activity,
+      reason: null,
+      walking: RANA_WORDS.walking,
+      goal: RANA_WORDS.goal,
+    });
+    expect(record.inputs).toMatchObject({ workouts: 4, chosenPal: null, chosenReason: null });
+    expect(inputsLine(record.inputs!)).toBe(
+      '70 kg, 168 cm, 30 years, female, seated work, 8,000 steps a day, 4 workouts a week',
+    );
+    expect(inputsLine({ ...record.inputs!, workouts: 1, work: 'OnTheirFeet' })).toBe(
+      '70 kg, 168 cm, 30 years, female, work on their feet, 8,000 steps a day, 1 workout a week',
+    );
+  });
+
+  it('puts the energy floors in the coach’s words, with the server’s own numbers', () => {
+    expect(
+      warningWords(
+        'The target, 961 calories a day, is under what their body burns at rest (1,008). This is a warning, not a clinical determination.',
+      ),
+    ).toBe(
+      'The target, 961 calories a day, is under what their body burns at rest (1,008). This is a flag for you to look at, not a rule.',
+    );
+    expect(
+      warningWords(
+        'The target, 961 calories a day, is under 1,200, the floor most calculators keep for women. This is a warning, not a clinical determination.',
+      ),
+    ).toBe(
+      'The target, 961 calories a day, is under 1,200, the floor most calculators keep for women. This is a flag for you to look at, not a rule.',
+    );
+    expect(
+      warningWords(
+        'The target, 1,420 calories a day, is under 1,500, the floor most calculators keep for men. This is a warning, not a clinical determination.',
+      ),
+    ).toBe(
+      'The target, 1,420 calories a day, is under 1,500, the floor most calculators keep for men. This is a flag for you to look at, not a rule.',
+    );
   });
 });

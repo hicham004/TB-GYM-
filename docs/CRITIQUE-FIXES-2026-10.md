@@ -750,3 +750,49 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   multiplier with at most three decimals, like 1.725.", "A reason goes with a multiplier you choose yourself.",
   "Keep the reason to 500 characters." and, while version 1 is in force, "… part of energy version 2, which this
   server does not use yet.". Recommendation: keep until the review, which approves the display words.
+- B8b · What the sheet asks while version 1 is in force. Built: production and the test copy, on version 1
+  until B8c, keep its inputs (three kinds of work, no workouts, no line under them, no multiplier of the
+  coach's own), with the words true of both versions: the group "How active they are", the steps help and the
+  Harris-Benedict hint. Other way: version 1's sheet left exactly as it was until B8c. Recommendation: keep:
+  the words hold for both, and the reviewers read the same sheet.
+- B8b · Where the workouts a week come from. Built: the program running today, its current week's workouts
+  (up to 7), read when the sheet opens and only when Training is in the plan ("From their program’s current
+  week."); without one, the last targets' ("From their last targets."); otherwise the box is empty and Work
+  out asks for it in the server's words. Other way: the program's average over its weeks, or a question in the
+  intake. Recommendation: keep: the current week is what they do now.
+- B8b · The coach's own multiplier. Built: the fold "Or choose the multiplier yourself" under the line, closed
+  unless the last targets used one: "From their work, steps and workouts" first and chosen, the server's six
+  picks ("× 1.55" over "Moderate exercise 3 to 5 days a week."), then "Another multiplier" with its box; a
+  reason box once one is chosen, carried with the multiplier into the next calculation; a refused one opens
+  the fold. Other way: a select, or a "Use the table" button. Recommendation: keep: it reads as the Formula
+  fold does.
+- B8b · The goal picks' rate and share. Built: each pick says "≈ 0.3 kg a week · 87%" under its amount
+  (read aloud with "of what they burn"), and the goal box's help gives the server's sentence for the goal in
+  it ("−300 a day ≈ 0.3 kg a week, 87% of what they burn."); Hold weight reads "no change · 100%". Other way:
+  the sentence under the box only, the picks as before. Recommendation: keep: the picks compare at a glance,
+  as calculator.net shows its goals.
+- B8b · While the server works the line out. Built: the line keeps the last answer until the next one comes,
+  300 ms after typing pauses, since its words name the work, steps and workouts it came from; a preview that
+  fails says "The multiplier could not be shown just now. Work out targets still works it out."; if the model
+  in force cannot be read the sheet does not open ("The calculator could not be opened. Check your connection
+  and try again."). Other way: an empty line while waiting, or the sheet opened as version 1. Recommendation:
+  keep: no number is worked out in the browser, and a sheet that asks the wrong things is worse than none.
+- B8b · The demo. Built: the demo works its targets out with the model in force, so in development Maya and
+  Sara, both at a desk with four workouts a week, read "Counts as low active: × 1.58 (seated work with 7,000
+  steps a day × 1.50, plus 4 workouts a week + 0.08)" (Sara with 6,500 steps), from Mifflin-St Jeor. Other way:
+  one of them on the coach's own multiplier, to show both. Recommendation: keep: the table's value is what
+  their work and steps say.
+- B8b · The anchor sentence, left out (outside the row). The critique's "They burn about 3,161 a day; 2,661 is
+  the target" above the chain is not in the row; the chain's own lines say both numbers. Recommendation: leave
+  it to the review.
+- B8b · Words the row did not give. Built: the hints "Teaching, retail, nursing, serving." and "Building,
+  farm, moving loads." (the critique's) under "On their feet" and "Heavy manual"; "Workouts a week" with "How
+  many times a week they train, from 0 to 7."; the steps help, when the steps are their profile's, "From their
+  profile. Steps from a phone or watch on a normal day, work included. Walking is counted inside the
+  multiplier, never added on top." (the row's words otherwise); "10%" without the row's space, as the app
+  writes shares; "The multiplier shows here once their work, steps and workouts are in.", "Working out the
+  multiplier…" and "Their multiplier shows here once you choose or type it."; "Worked out above, from the
+  table.", "Type one from 1.40 to 2.40.", "Their multiplier" and "Why this multiplier? (optional)" with Adjust
+  macros' help; the result's "The coach’s reason: …" and "…, 4 workouts a week"; the floors in the app's flag
+  words ("… This is a flag for you to look at, not a rule."), as the protein and fat flags are.
+  Recommendation: keep until the review, which approves the display words.

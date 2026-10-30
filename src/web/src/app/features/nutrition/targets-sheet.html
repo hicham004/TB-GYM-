@@ -1,0 +1,442 @@
+@if (result(); as made) {
+  <div class="body" data-result>
+    <p class="muted" i18n>
+      Saved as the latest targets for {{ firstName() }}. Nothing changes for them until you assign a
+      meal plan with these.
+    </p>
+    <app-targets-result [record]="made" />
+    <div class="result-actions">
+      <button appButton type="button" variant="text" (click)="closed.emit(made)" data-done i18n>
+        Done
+      </button>
+      <button appButton type="button" (click)="assign.emit(made)" data-assign i18n>
+        Assign a meal plan with these
+      </button>
+    </div>
+  </div>
+} @else {
+  <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+    <p class="muted" i18n>
+      Estimates from the formulas, not measurements. You choose the numbers that go to
+      {{ firstName() }}.
+    </p>
+
+    <fieldset class="group">
+      <legend i18n>About {{ firstName() }}</legend>
+      <div class="pair">
+        <app-field
+          [label]="weightLabel"
+          [help]="weightHelp()"
+          [errors]="shows('weight', issues().weight) ? issues().weight : null"
+        >
+          <input
+            appControl
+            name="weight"
+            type="number"
+            inputmode="decimal"
+            step="any"
+            min="0"
+            [value]="weight() ?? ''"
+            (input)="weight.set(numberOrNull($any($event.target).valueAsNumber))"
+            (blur)="attempt.touch('weight')"
+          />
+        </app-field>
+        <app-field
+          [label]="heightLabel"
+          [help]="heightHelp()"
+          [errors]="shows('height', issues().height) ? issues().height : null"
+        >
+          <input
+            appControl
+            name="height"
+            type="number"
+            inputmode="decimal"
+            step="any"
+            min="0"
+            [value]="height() ?? ''"
+            (input)="height.set(numberOrNull($any($event.target).valueAsNumber))"
+            (blur)="attempt.touch('height')"
+          />
+        </app-field>
+      </div>
+      <div class="pair">
+        <app-field
+          [label]="ageLabel"
+          [help]="ageHelp()"
+          [errors]="shows('age', issues().age) ? issues().age : null"
+        >
+          <input
+            appControl
+            name="age"
+            type="number"
+            inputmode="numeric"
+            step="1"
+            min="0"
+            [value]="age() ?? ''"
+            (input)="age.set(numberOrNull($any($event.target).valueAsNumber))"
+            (blur)="attempt.touch('age')"
+          />
+        </app-field>
+        <div class="sex tb-field">
+          <span class="tb-field__label" aria-hidden="true">{{ sexLabel }}</span>
+          <app-segmented-control
+            [label]="sexLabel"
+            [hideLabel]="true"
+            [options]="sexes"
+            [selected]="sex() ?? ''"
+            (selectedChange)="sex.set($any($event))"
+          />
+          @if (shows('sex', issues().sex)) {
+            <p class="problem" id="sex-error" role="status">{{ issues().sex[0] }}</p>
+          }
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- How active they are (critique B8b): the kind of work, steps and, under energy version 2, workouts
+         a week, with the server's words for the multiplier under them as the coach types. -->
+    <fieldset class="group" data-group="activity">
+      <legend i18n>How active they are</legend>
+      <div class="choices" role="radiogroup" [attr.aria-label]="workLabel">
+        @for (kind of kinds(); track kind.value) {
+          <label class="choice" [class.chosen]="work() === kind.value">
+            <input
+              type="radio"
+              name="work"
+              [value]="kind.value"
+              [checked]="work() === kind.value"
+              [attr.aria-invalid]="shows('work', issues().work) ? 'true' : null"
+              [attr.aria-describedby]="shows('work', issues().work) ? 'work-error' : null"
+              (change)="work.set(kind.value)"
+            />
+            <span class="choice-text">
+              <strong>{{ kind.label }}</strong
+              >&ngsp;<span class="muted">{{ kind.hint }}</span>
+            </span>
+          </label>
+        }
+      </div>
+      @if (shows('work', issues().work)) {
+        <p class="problem" id="work-error" role="status">{{ issues().work[0] }}</p>
+      }
+      <app-field
+        [label]="stepsLabel"
+        [help]="stepsHelp()"
+        [errors]="shows('steps', issues().steps) ? issues().steps : null"
+      >
+        <input
+          appControl
+          name="steps"
+          type="number"
+          inputmode="numeric"
+          step="100"
+          min="0"
+          [value]="steps() ?? ''"
+          (input)="steps.set(numberOrNull($any($event.target).valueAsNumber))"
+          (blur)="attempt.touch('steps')"
+        />
+      </app-field>
+      @if (versionTwo()) {
+        <app-field
+          [label]="workoutsLabel"
+          [help]="workoutsHelp()"
+          [errors]="shows('workouts', issues().workouts) ? issues().workouts : null"
+        >
+          <input
+            appControl
+            name="workouts"
+            type="number"
+            inputmode="numeric"
+            step="1"
+            min="0"
+            [attr.max]="model().maxWorkouts"
+            [value]="workouts() ?? ''"
+            (input)="workouts.set(numberOrNull($any($event.target).valueAsNumber))"
+            (blur)="attempt.touch('workouts')"
+          />
+        </app-field>
+        <!-- The last answer stays while a newer one is on its way; its words name what it was worked out from. -->
+        <div class="live" aria-live="polite" data-live>
+          @if (preview()?.activity; as words) {
+            <p class="counts" data-counts>{{ words }}</p>
+            @if (preview()?.walking; as walking) {
+              <p class="walking" data-walking>{{ walking }}</p>
+            }
+          } @else if (previewFailed()) {
+            <p class="waiting" data-preview-failed i18n>
+              The multiplier could not be shown just now. Work out targets still works it out.
+            </p>
+          } @else {
+            <p class="waiting" data-waiting>{{ waitingWords() }}</p>
+          }
+        </div>
+        <app-disclosure
+          class="own-pal"
+          label="Or choose the multiplier yourself"
+          i18n-label
+          [(open)]="palOpen"
+          data-own-pal
+        >
+          <ng-template appDisclosureContent>
+            <div class="choices" role="radiogroup" [attr.aria-label]="palLabel">
+              <label class="choice" [class.chosen]="palMode() === 'table'">
+                <input
+                  type="radio"
+                  name="pal"
+                  value="table"
+                  [checked]="palMode() === 'table'"
+                  (change)="palMode.set('table')"
+                />
+                <span class="choice-text">
+                  <strong i18n>From their work, steps and workouts</strong>&ngsp;<span
+                    class="muted"
+                    i18n
+                    >Worked out above, from the table.</span
+                  >
+                </span>
+              </label>
+              @for (pick of picks(); track pick.pal) {
+                <label
+                  class="choice"
+                  [class.chosen]="palMode() === 'pick' && pickedPal() === pick.pal"
+                >
+                  <input
+                    type="radio"
+                    name="pal"
+                    [value]="pick.pal"
+                    [checked]="palMode() === 'pick' && pickedPal() === pick.pal"
+                    (change)="choosePick(pick.pal)"
+                  />
+                  <span class="choice-text">
+                    <strong>{{ palWords(pick.pal) }}</strong
+                    >&ngsp;<span class="muted">{{ pickSentence(pick.words) }}</span>
+                  </span>
+                </label>
+              }
+              <label class="choice" [class.chosen]="palMode() === 'typed'">
+                <input
+                  type="radio"
+                  name="pal"
+                  value="typed"
+                  [checked]="palMode() === 'typed'"
+                  (change)="palMode.set('typed')"
+                />
+                <span class="choice-text">
+                  <strong i18n>Another multiplier</strong>&ngsp;<span class="muted">{{
+                    typedHint()
+                  }}</span>
+                </span>
+              </label>
+            </div>
+            @if (palMode() === 'typed') {
+              <app-field
+                [label]="typedPalLabel"
+                [errors]="shows('pal', issues().pal) ? issues().pal : null"
+              >
+                <input
+                  appControl
+                  name="typedPal"
+                  type="number"
+                  inputmode="decimal"
+                  step="0.001"
+                  [attr.min]="model().chosen?.min ?? null"
+                  [attr.max]="model().chosen?.max ?? null"
+                  [value]="typedPal() ?? ''"
+                  (input)="typedPal.set(numberOrNull($any($event.target).valueAsNumber))"
+                  (blur)="attempt.touch('pal')"
+                />
+              </app-field>
+            }
+            @if (palMode() !== 'table') {
+              <app-field
+                [label]="palReasonLabel"
+                [help]="palReasonHelp()"
+                [errors]="shows('palReason', issues().palReason) ? issues().palReason : null"
+              >
+                <textarea
+                  appControl
+                  name="palReason"
+                  rows="2"
+                  dir="auto"
+                  [value]="palReason()"
+                  (input)="palReason.set($any($event.target).value)"
+                  (blur)="attempt.touch('palReason')"
+                ></textarea>
+              </app-field>
+            }
+          </ng-template>
+        </app-disclosure>
+      }
+    </fieldset>
+
+    <fieldset class="group">
+      <legend i18n>The goal</legend>
+      <div class="chips" role="group" [attr.aria-label]="goalPicksLabel">
+        @for (pick of goalPicks; track pick.kcal) {
+          <button
+            type="button"
+            class="chip"
+            [class.chosen]="goal() === pick.kcal"
+            [class.with-rate]="versionTwo()"
+            [attr.aria-pressed]="goal() === pick.kcal"
+            (click)="goal.set(pick.kcal)"
+          >
+            <span class="chip-head">
+              <span>{{ pick.label }}</span
+              >&ngsp;<strong>{{ signed(pick.kcal) }}</strong>
+            </span>
+            @if (rateOf(pick.kcal); as rate) {
+              &ngsp;<span class="rate" data-rate
+                >{{ rate.pace }}
+                @if (rate.share !== null) {
+                  · {{ rate.share }}%<span class="tb-visually-hidden"
+                    >&ngsp;<ng-container i18n>of what they burn</ng-container></span
+                  >
+                }
+              </span>
+            }
+          </button>
+        }
+      </div>
+      <app-field
+        [label]="goalLabel"
+        [help]="goalHelp()"
+        [errors]="shows('goal', issues().goal) ? issues().goal : null"
+      >
+        <input
+          appControl
+          name="goal"
+          type="number"
+          step="10"
+          [value]="goal() ?? ''"
+          (input)="goal.set(numberOrNull($any($event.target).valueAsNumber))"
+          (blur)="attempt.touch('goal')"
+        />
+      </app-field>
+    </fieldset>
+
+    <!-- Two blocks, each its box first and one row of picks under it (critique B5c, T45). -->
+    <fieldset class="group">
+      <legend i18n>Protein and fat</legend>
+      <div class="block" data-block="protein">
+        <app-field
+          [label]="proteinLabel"
+          [help]="proteinHelp()"
+          [errors]="shows('protein', issues().protein) ? issues().protein : null"
+        >
+          <input
+            appControl
+            name="protein"
+            type="number"
+            inputmode="numeric"
+            step="1"
+            min="0"
+            [value]="protein() ?? ''"
+            (input)="protein.set(numberOrNull($any($event.target).valueAsNumber))"
+            (blur)="attempt.touch('protein')"
+          />
+        </app-field>
+        <div class="picks">
+          <app-segmented-control
+            [label]="proteinPicksLabel"
+            [hideLabel]="true"
+            [options]="proteinOptions()"
+            [selected]="proteinPickValue()"
+            (selectedChange)="pickProtein($event)"
+          />
+          <span class="caption" aria-hidden="true" i18n>g per kg</span>
+        </div>
+      </div>
+      <div class="block" data-block="fat">
+        <app-field
+          [label]="fatLabel"
+          [help]="fatHelp()"
+          [errors]="shows('fat', issues().fat) ? issues().fat : null"
+        >
+          <input
+            appControl
+            name="fat"
+            type="number"
+            inputmode="decimal"
+            step="1"
+            min="0"
+            [value]="fat() ?? ''"
+            (input)="fat.set(numberOrNull($any($event.target).valueAsNumber))"
+            (blur)="attempt.touch('fat')"
+          />
+        </app-field>
+        <div class="picks">
+          <app-segmented-control
+            [label]="fatPicksLabel"
+            [hideLabel]="true"
+            [options]="fatOptions"
+            [selected]="fatPickValue()"
+            (selectedChange)="pickFat($event)"
+          />
+          <span class="caption" aria-hidden="true" i18n>% of calories</span>
+        </div>
+      </div>
+      <p class="rest" data-carbs>{{ carbsLine() }}</p>
+    </fieldset>
+
+    <app-disclosure
+      class="formula"
+      label="Formula: {{ formulaName() }}"
+      i18n-label
+      [(open)]="formulaOpen"
+    >
+      <ng-template appDisclosureContent>
+        <div class="choices" role="radiogroup" [attr.aria-label]="formulaLabel">
+          @for (option of formulas; track option.value) {
+            <label class="choice" [class.chosen]="formula() === option.value">
+              <input
+                type="radio"
+                name="formula"
+                [value]="option.value"
+                [checked]="formula() === option.value"
+                (change)="formula.set(option.value)"
+              />
+              <span class="choice-text">
+                <strong>{{ option.label }}</strong
+                >&ngsp;<span class="muted">{{ option.hint }}</span>
+              </span>
+            </label>
+          }
+        </div>
+        @if (formula() === 'KatchMcArdle') {
+          <app-field
+            [label]="bodyFatLabel"
+            [errors]="shows('bodyFat', issues().bodyFat) ? issues().bodyFat : null"
+          >
+            <input
+              appControl
+              name="bodyFat"
+              type="number"
+              inputmode="decimal"
+              step="any"
+              min="0"
+              [value]="bodyFat() ?? ''"
+              (input)="bodyFat.set(numberOrNull($any($event.target).valueAsNumber))"
+              (blur)="attempt.touch('bodyFat')"
+            />
+          </app-field>
+        }
+      </ng-template>
+    </app-disclosure>
+
+    <app-form-summary>
+      @if (error(); as message) {
+        {{ message }}
+      } @else if (attempt.wasTried() && problems() > 0) {
+        <ng-container i18n>Check the fields marked above.</ng-container>
+      }
+    </app-form-summary>
+    <app-entry-actions
+      [form]="formId"
+      [saveLabel]="saveLabel"
+      [busyLabel]="workingLabel"
+      [busy]="busy()"
+      (notNow)="closed.emit(null)"
+    />
+  </form>
+}

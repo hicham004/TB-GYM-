@@ -16,7 +16,9 @@ import { AdjustMacros } from './adjust-macros-sheet';
 import { AssignMealPlan } from './assign-plan-sheet';
 import { EditAllergens } from './allergens-sheet';
 import {
+  ENERGY_VERSION_ONE,
   splitPlans,
+  type EnergyModel,
   type NutritionCover,
   type PlanRow,
   type Starting,
@@ -46,6 +48,7 @@ export type NutritionChange = 'targets' | 'plans' | 'allergens';
         [clientId]="clientId()"
         [firstName]="firstName()"
         [starting]="starting()"
+        [model]="energy() ?? versionOne"
         [last]="calculations()[0] ?? null"
         [today]="today()"
         [locale]="locale()"
@@ -138,6 +141,11 @@ export class ClientNutritionSheets extends GuardedSheets {
   readonly timeZone = input<string>('UTC');
   /** What the record already knows, as the calculation starts from it. */
   readonly starting = input.required<Starting>();
+  /** What the energy model in force takes, read before the calculation sheet opens (critique B8b). */
+  readonly energy = input<EnergyModel | null>(null);
+  /** The meal plan sheet led to the calculator: the page reads what it starts from, then opens it. */
+  readonly workOutAsked = output<void>();
+  protected readonly versionOne = ENERGY_VERSION_ONE;
   readonly calculations = input<readonly WorkedOut[]>([]);
   readonly plans = input<readonly PlanRow[]>([]);
   readonly covers = input<readonly NutritionCover[]>([]);
@@ -213,12 +221,15 @@ export class ClientNutritionSheets extends GuardedSheets {
     this.assign();
   }
 
-  /** The meal plan sheet found no targets: close it (asking first) and open the calculator. */
+  /**
+   * The meal plan sheet found no targets: close it (asking first) and have the page open the calculator,
+   * once it has read what the sheet starts from.
+   */
   protected async workOutFirst(sheet: Closable): Promise<void> {
     if (!(await this.canClose())) return;
     this.dirty = false;
     sheet.close(null);
-    this.workOut();
+    this.workOutAsked.emit();
   }
 
   protected assigned(row: PlanRow | null, sheet: Closable): void {

@@ -965,7 +965,11 @@ of the implemented R1.3 screens before production rollout.
   (the latest weigh-in, their height, their age on today's date, their steps), as CoachRx does; **sex and
   work type are never guessed**, because the formulas depend on them and a wrong default is a wrong
   target. The engine is the existing named, versioned strategies (NUT-007 to NUT-009); the page only asks and
-  words them. (2) **The goal is a quick pick** (lose 500 or 300, hold, gain 250 or 400 kcal a day) or a
+  words them. Since critique B8b (2026-10-30) the sheet asks what the energy model in force takes (NUT-015):
+  under version 2, development's until B8c, How active they are holds four kinds of work, steps and workouts
+  a week (from the program's current week), with the server's words for the multiplier and the steps under
+  them as the coach types; each goal pick says its rate and share, and Or choose the multiplier yourself
+  folds the coach's own; How this was worked out says the same words. (2) **The goal is a quick pick** (lose 500 or 300, hold, gain 250 or 400 kcal a day) or a
   typed number, and protein is a pick of 1.6, 1.8, 2.0 or 2.2 g/kg with fat picks beside it, as Trainerize
   and Everfit offer presets with every number editable. (3) **A deficit is derived from the goal being below
   zero**, never a separate tick that can disagree with it. (4) **Every plan carries all macros**, because the

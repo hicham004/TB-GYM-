@@ -1,6 +1,9 @@
 import type {
   ClientAllergensView,
   ClientNutritionPlanSummary,
+  CoachClientProgramView,
+  EnergyModelView,
+  EnergyPreviewView,
   MealPlanTemplateSummary,
   NutritionCalculationRecord,
   NutritionCalculationView,
@@ -196,4 +199,207 @@ export function publishedPlans(): MealPlanTemplateSummary[] {
     }),
     planSummary({ id: 'plan-3', versionId: 'plan-v1', name: 'Draft only', status: 'Draft' }),
   ];
+}
+
+// ------------------------------------------------------------------------------------------------
+// Energy version 2 (critique B8a, B8b)
+// ------------------------------------------------------------------------------------------------
+
+/** What the server says the model in force takes: version 1 everywhere until B8c, version 2 in development. */
+export function energyModelView(version: 1 | 2 = 1): EnergyModelView {
+  return version === 1
+    ? {
+        version: 1,
+        activityModelKey: 'OccupationStepsPal',
+        activityModelVersion: '1.0',
+        kindsOfWork: ['Seated', 'Mixed', 'Physical'],
+        maximumWorkoutsPerWeek: null,
+        coachChosen: null,
+      }
+    : {
+        version: 2,
+        activityModelKey: 'OccupationStepsPal',
+        activityModelVersion: '2.0',
+        kindsOfWork: ['Seated', 'Mixed', 'OnTheirFeet', 'HeavyManual'],
+        maximumWorkoutsPerWeek: 7,
+        coachChosen: {
+          methodKey: 'CoachChosenPal',
+          methodVersion: '1.0',
+          minimum: 1.4,
+          maximum: 2.4,
+          picks: [
+            { pal: 1.4, words: 'little movement, no exercise' },
+            { pal: 1.55, words: 'moderate exercise 3 to 5 days a week' },
+            { pal: 1.725, words: 'hard exercise 6 to 7 days a week' },
+            { pal: 1.9, words: 'very hard training daily or heavy manual work' },
+            { pal: 2.2, words: 'heavy manual work and hard training most days' },
+            { pal: 2.4, words: 'heavy manual work all day and training every day' },
+          ],
+        },
+      };
+}
+
+/** Rana at her desk with 8,000 steps and four workouts a week, under version 2: × 1.63. */
+export const RANA_WORDS = {
+  activity:
+    'Counts as somewhat active: × 1.63 (seated work with 8,000 steps a day × 1.55, plus 4 workouts a week + 0.08)',
+  walking: 'Their 8,000 steps are inside that, worth about 210 calories a day at 70 kg.',
+  goal: '−300 a day ≈ 0.3 kg a week, 87% of what they burn',
+} as const;
+
+/** The same targets worked out by version 2 on Sat 10 Oct: 1,444 × 1.63 = 2,353.72, then 300 below. */
+export function versionTwoRecord(
+  overrides: Partial<NutritionCalculationRecord> = {},
+): NutritionCalculationRecord {
+  return calculationRecord({
+    result: calculationView({
+      id: 'calc-4',
+      activityModelVersion: '2.0',
+      activityModelPal: 1.63,
+      tdeeEstimate: 2353.72,
+      calorieTarget: 2053.72,
+      carbohydrateGrams: 239.257,
+      fatGrams: 57.047778,
+      activity: {
+        methodKey: 'OccupationStepsPal',
+        methodVersion: '2.0',
+        pal: 1.63,
+        words: RANA_WORDS.activity,
+        occupationType: 'Seated',
+        averageDailySteps: 8000,
+        stepsBand: 'SomewhatActive',
+        stepsBandName: 'somewhat active',
+        workoutsPerWeek: 4,
+        tableValue: 1.55,
+        workoutTerm: 0.08,
+        chosenWords: null,
+        reason: null,
+      },
+      walking: {
+        averageDailySteps: 8000,
+        weightKilograms: 70,
+        kilocalories: 210,
+        words: RANA_WORDS.walking,
+        methodKey: 'WalkingCost',
+        methodVersion: '1.0',
+      },
+      goal: {
+        goalAdjustment: -300,
+        kilogramsPerWeek: -0.3,
+        shareOfMaintenance: 87,
+        words: RANA_WORDS.goal,
+        methodKey: 'WeeklyWeightChange',
+        methodVersion: '1.0',
+      },
+    }),
+    inputs: {
+      ...calculationRecord().inputs!,
+      workoutsPerWeek: 4,
+      chosenPal: null,
+      chosenPalReason: null,
+    },
+    calculatedAtUtc: '2026-10-10T06:30:00Z',
+    ...overrides,
+  });
+}
+
+/**
+ * What the preview answers for Rana's sheet under version 2: what she burns, 2,353.72 a day, and each
+ * goal pick's rate and share.
+ */
+export function previewView(overrides: Partial<EnergyPreviewView> = {}): EnergyPreviewView {
+  const goal = (adjustment: number, perWeek: number, share: number, words: string) => ({
+    goalAdjustment: adjustment,
+    kilogramsPerWeek: perWeek,
+    shareOfMaintenance: share,
+    words,
+    methodKey: 'WeeklyWeightChange',
+    methodVersion: '1.0',
+  });
+  return {
+    activity: versionTwoRecord().result.activity ?? null,
+    walking: versionTwoRecord().result.walking ?? null,
+    bmrEstimate: 1444,
+    tdeeEstimate: 2353.72,
+    goals: [
+      goal(-500, -0.5, 79, '−500 a day ≈ 0.5 kg a week, 79% of what they burn'),
+      goal(-300, -0.3, 87, RANA_WORDS.goal),
+      goal(0, 0, 100, '0 a day ≈ no change in weight, 100% of what they burn'),
+      goal(250, 0.2, 111, '+250 a day ≈ 0.2 kg a week, 111% of what they burn'),
+      goal(400, 0.4, 117, '+400 a day ≈ 0.4 kg a week, 117% of what they burn'),
+    ],
+    ...overrides,
+  };
+}
+
+/** Rana's program on Sat 10 Oct: week 2 of a running block, four workouts in it. */
+export function programView(
+  overrides: Partial<CoachClientProgramView> = {},
+): CoachClientProgramView {
+  const session = (id: string, date: string) => ({
+    sessionId: id,
+    name: `Workout ${id}`,
+    scheduledDate: date,
+    state: null,
+    workoutExecutionId: null,
+    exerciseCount: 5,
+    setCount: 15,
+  });
+  return {
+    isAllowed: true,
+    accessReason: 'Allowed',
+    localDate: '2026-10-10',
+    blocks: [
+      {
+        id: 'block-1',
+        enrollmentId: 'e-1',
+        name: 'Lean & Strong',
+        startDate: '2026-10-03',
+        endDateExclusive: '2026-10-31',
+        status: 'Active',
+        revealAllWeeks: false,
+        version: 1,
+        weekCount: 4,
+        currentWeekNumber: 2,
+        sessionCount: 16,
+        completedCount: 4,
+        missedCount: 0,
+        weeks: [
+          {
+            id: 'week-1',
+            weekNumber: 1,
+            label: null,
+            startDate: '2026-10-03',
+            isShared: true,
+            isVisible: true,
+            unlockDate: '2026-10-03',
+            sessions: [
+              session('a', '2026-10-03'),
+              session('b', '2026-10-04'),
+              session('c', '2026-10-06'),
+            ],
+          },
+          {
+            id: 'week-2',
+            weekNumber: 2,
+            label: null,
+            startDate: '2026-10-10',
+            isShared: true,
+            isVisible: true,
+            unlockDate: '2026-10-10',
+            sessions: [
+              session('d', '2026-10-10'),
+              session('e', '2026-10-11'),
+              session('f', '2026-10-13'),
+              session('g', '2026-10-15'),
+            ],
+          },
+        ],
+        lifecycle: [],
+      },
+    ],
+    sessionStateRuleKey: 'ClientSessionState',
+    sessionStateRuleVersion: 1,
+    ...overrides,
+  };
 }

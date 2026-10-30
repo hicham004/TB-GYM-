@@ -105,13 +105,21 @@ public sealed partial class Phase3TrainingWorkflowTests
                 builder.UseSetting("RateLimiting:RoutineWriteWindowSeconds", "3600");
             }
 
-            // Energy version 2 is switched off until B8c, so only its own tests switch it on (critique B8a).
-            if (TestContext.TestName?.StartsWith("B8aV2", StringComparison.Ordinal) == true)
+            // Energy version 2 is switched off until B8c, so only its own tests switch it on (critique B8a). Development
+            // runs it since B8b, so every other test pins version 1, the default everywhere else; a B8bDevelopment test
+            // reads what development's own settings say.
+            var energyModelVersion =
+                TestContext.TestName?.StartsWith("B8aV2", StringComparison.Ordinal) == true ||
+                TestContext.TestName?.StartsWith("B8bV2", StringComparison.Ordinal) == true ? "2"
+                : TestContext.TestName?.StartsWith("B8bDevelopment", StringComparison.Ordinal) == true ? null
+                : "1";
+            if (energyModelVersion is not null)
             {
-                builder.UseSetting("Nutrition:EnergyModel:Version", "2");
+                builder.UseSetting("Nutrition:EnergyModel:Version", energyModelVersion);
             }
 
             builder.ConfigureAppConfiguration((_, configuration) =>
+            {
                 // The provider harness, when one is running, has the last word on the media
                 // settings: it is what selects R2 and clamd instead of the local defaults.
                 configuration.AddInMemoryCollection(Phase6B4BProviderHarness.Merge(
@@ -160,7 +168,16 @@ public sealed partial class Phase3TrainingWorkflowTests
                             TestContext.TestName?.StartsWith("R44cAi", StringComparison.Ordinal) == true ? "2"
                             : TestContext.TestName?.StartsWith("A6AiOff", StringComparison.Ordinal) == true ? "0"
                             : "200",
-                    })));
+                    }));
+                // Last, so the pinned energy model wins over appsettings.Development.json's.
+                if (energyModelVersion is not null)
+                {
+                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Nutrition:EnergyModel:Version"] = energyModelVersion,
+                    });
+                }
+            });
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IClock>();

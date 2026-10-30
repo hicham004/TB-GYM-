@@ -140,9 +140,20 @@
   align-items: baseline;
   border-block-end: 1px solid var(--tb-line);
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
   justify-content: space-between;
   padding-block: 0.5rem;
+}
+
+// The server's words under a step take the step's whole width, in the chain's own muted text.
+.step .said {
+  color: var(--tb-muted);
+  flex-basis: 100%;
+  font-variant-numeric: normal;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .step dt {

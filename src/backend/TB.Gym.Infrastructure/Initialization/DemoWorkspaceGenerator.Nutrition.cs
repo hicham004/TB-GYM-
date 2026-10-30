@@ -107,17 +107,32 @@ internal sealed partial class DemoWorkspaceGenerator
     private async Task AssignMealPlanAsync(DemoClientState state)
     {
         var client = state.Client;
+        // Worked out by the energy model in force (critique B8b, NUT-015): version 2, development's, also takes the
+        // workouts a week their program holds, so no demo calculation reads version 1's 1.80. Both demo clients with
+        // a meal plan sit at a desk or work from home.
+        var model = await As<INutritionApplicationService, EnergyModelView>(CoachOf(state),
+            (service, _) => Task.FromResult(service.GetEnergyModel()));
+        var workouts = model.Version == (int)EnergyModelVersion.Version2 ? WorkoutsPerWeekOn(client, -3) : (int?)null;
         var target = await As<INutritionApplicationService, NutritionCommandResult>(CoachOf(state),
             (service, token) => service.CalculateTargetsAsync(state.ClientProfileId,
                 new CalculateNutritionTargetsRequest(MifflinStJeorBmrStrategy.Key,
                     client.StartWeight, client.HeightCentimeters, client.Age, FormulaSex.Female,
-                    null, OccupationActivityType.Seated, client.Steps, -250m, null, 120m, 25m, true), token));
+                    null, OccupationActivityType.Seated, client.Steps, -250m, null, 120m, 25m, true, workouts), token));
         var calculation = Require(target.Calculation, target.Status == NutritionCommandStatus.Success, $"{client.FirstName}: nutrition target", target);
         var assigned = await As<INutritionApplicationService, NutritionCommandResult>(CoachOf(state),
             (service, token) => service.AssignPlanAsync(state.ClientProfileId,
                 new AssignNutritionPlanRequest(mealPlanVersionId, state.EnrollmentIds[^1], calculation.Id,
                     calendar.Day(-3), false), token));
         Require(assigned.ClientPlan, assigned.Status == NutritionCommandStatus.Success, $"{client.FirstName}: assign meals", assigned);
+    }
+
+    /// <summary>The workouts a week of the program a client is on that day, as the targets sheet fills them in.</summary>
+    internal static int WorkoutsPerWeekOn(DemoClient client, int day)
+    {
+        var block = client.Blocks.Where(item => item.StartDay <= day).MaxBy(item => item.StartDay);
+        return block is null
+            ? 0
+            : Math.Min(DemoWorkspaceCast.Program(block.ProgramKey).Sessions.Count, OccupationStepsActivityModelVersion2.MaximumWorkoutsPerWeek);
     }
 
     private async Task LogMealsAsync(DemoClientState state, int offset, bool complete)

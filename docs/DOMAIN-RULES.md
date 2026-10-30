@@ -1092,8 +1092,9 @@ first, under All and Drafts, counted in Drafts (n). Drafts are staff writes, so 
 them readable but not writable (ADR 0028).
 
 **NUT-015** Energy model version 2 (critique B8a, 2026-10-30, ADR 0008 amended). `Nutrition:EnergyModel:Version`
-says which model new calculations use: 1, the default until B8c, works as before; 2 is set by hand on a
-development or review server. Each version takes only its own inputs and refuses the other's in words.
+says which model new calculations use: 1, the default until B8c, works as before; 2 is set for development
+(`appsettings.Development.json`, since B8b, so the demo's targets are version 2's) and by hand on a review
+server. Each version takes only its own inputs and refuses the other's in words.
 Version 2's `OccupationStepsPal 2.0` takes four kinds of work (Seated, Mixed, On their feet, Heavy manual;
 version 1's Physical is refused), steps a day in Tudor-Locke's five bands (under 5,000; 5,000 to 7,499; 7,500
 to 9,999; 10,000 to 12,499; 12,500 and over) and workouts a week, 0 to 7, as sent (the sheet fills them in
@@ -1112,7 +1113,9 @@ and its share of what they burn ("−500 a day ≈ 0.5 kg a week, 84% of what th
 among the warnings, never refusals: a target under the resting estimate, and under 1,200 kcal a day for women
 or 1,500 for men. `POST /api/nutrition/energy-preview` works the targets sheet's numbers out as the coach
 types, for version 2 only, and records nothing; `GET /api/nutrition/energy-model` says what the model in
-force takes. Version 2 becomes the default only after the review B8c records in ADR 0008.
+force takes, and the targets sheet asks exactly that (B8b): under version 2 it fills the workouts in from the
+program's current week and shows the server's words as they come, never working a number out itself.
+Version 2 becomes the default only after the review B8c records in ADR 0008.
 
 ## 7. Bodyweight and progress
 

@@ -7,8 +7,12 @@ import {
   clientPlan,
   CLIENT_ID,
   earlierRecord,
+  energyModelView,
+  previewView,
   profile,
+  programView,
   publishedPlans,
+  RANA_WORDS,
   workspace,
 } from '../src/testing/client-nutrition-fixtures';
 import { profileOverview } from '../src/testing/client-profile-fixtures';
@@ -47,6 +51,8 @@ interface Options {
   declared?: ReturnType<typeof allergens>;
   featureClosed?: boolean;
   details?: Record<string, unknown>;
+  /** The energy model the server says is in force: 1 everywhere until B8c, 2 in development. */
+  energy?: 1 | 2;
 }
 
 async function openNutrition(page: Page, width: number, height: number, options: Options = {}) {
@@ -87,6 +93,10 @@ async function openNutrition(page: Page, width: number, height: number, options:
       return route.fulfill({ status: 200, body: '' });
     },
     [`GET ${BASE}/calculations`]: (route) => json(route, 200, calculations),
+    'GET /api/nutrition/energy-model': (route) =>
+      json(route, 200, energyModelView(options.energy ?? 1)),
+    'POST /api/nutrition/energy-preview': (route) => json(route, 200, previewView()),
+    [`GET /api/training/clients/${CLIENT_ID}/program`]: (route) => json(route, 200, programView()),
     [`POST ${BASE}/calculations`]: (route) => {
       writes.calculations.push(route.request().postDataJSON());
       const made = calculationView({ id: 'calc-3', calorieTarget: 2154.8 });
@@ -261,6 +271,41 @@ test('works targets out for the coach, from what the record knows, and sends exa
   await page.waitForTimeout(300);
   await docsPicture(page, 'r53d-result-390.png');
   await axe(page);
+});
+
+test('under energy version 2 the sheet says the multiplier, the steps and each goal as the coach types (critique B8b)', async ({
+  page,
+}) => {
+  const writes = await openNutrition(page, 390, 844, { energy: 2 });
+
+  await page.locator('[data-work-out]').click();
+  const sheet = page.getByRole('dialog', { name: 'Work out targets for Rana' });
+  await expect(sheet.getByLabel('Workouts a week')).toHaveValue('4');
+  await expect(sheet.locator('input[name="work"]')).toHaveCount(4);
+  await expect(sheet.locator('[data-counts]')).toHaveText(RANA_WORDS.activity);
+  await expect(sheet.locator('[data-walking]')).toHaveText(RANA_WORDS.walking);
+  await expect(sheet.getByRole('button', { name: /^Lose steadily/ })).toContainText(
+    '≈ 0.3 kg a week · 87%',
+  );
+  await page.waitForTimeout(500);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+
+  await sheet.locator('[data-own-pal] summary').click();
+  await sheet.getByRole('radio', { name: /× 1\.55/ }).check();
+  await sheet.getByLabel('Why this multiplier? (optional)').fill('Trains four days a week');
+  await page.waitForTimeout(400);
+  await axe(page);
+  await sheet.getByRole('button', { name: 'Work out targets' }).click();
+  await expect(sheet.locator('[data-result]')).toBeVisible();
+  expect(writes.calculations).toEqual([
+    expect.objectContaining({
+      occupationType: 'Seated',
+      workoutsPerWeek: 4,
+      chosenPal: 1.55,
+      chosenPalReason: 'Trains four days a week',
+    }),
+  ]);
 });
 
 test('goes from new targets straight to assigning a meal plan with them', async ({ page }) => {

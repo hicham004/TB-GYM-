@@ -114,6 +114,7 @@ public sealed class DemoWorkspaceTests
         Assert.Contains("Atlas Performance is ready.", output.ToString());
         var clock = factory.Services.GetRequiredService<DemoClock>();
         var today = new DemoCalendar(clock.Ceiling, DemoWorkspaceCast.TimeZoneId).Today;
+        Guid mayaProfileId;
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -166,6 +167,16 @@ public sealed class DemoWorkspaceTests
                 .CountAsync(item => item.TenantId == tenant.Id && item.Status == ClientNutritionPlanStatus.Active));
             Assert.AreEqual(2, await db.DailyNutritionLogs.IgnoreQueryFilters()
                 .CountAsync(item => item.TenantId == tenant.Id && item.Date == today));
+
+            // Development works energy out with version 2 (critique B8b): both demo targets come from the new table, at a
+            // desk with four workouts a week, and from Mifflin-St Jeor, so no example shows 1.80 or Harris-Benedict.
+            var targets = await db.NutritionCalculationSnapshots.IgnoreQueryFilters()
+                .Where(item => item.TenantId == tenant.Id).ToListAsync();
+            Assert.HasCount(2, targets);
+            Assert.IsTrue(targets.All(item =>
+                (item.BmrMethodKey, item.ActivityModelKey, item.ActivityModelVersion, item.ActivityModelPal) ==
+                (MifflinStJeorBmrStrategy.Key, OccupationStepsActivityModelVersion2.Key, OccupationStepsActivityModelVersion2.Version, 1.58m)));
+            mayaProfileId = clients.Single(client => client.FirstName == "Maya").Id;
         }
 
         // What people see, through the same services and scoping the API uses.
@@ -196,6 +207,16 @@ public sealed class DemoWorkspaceTests
         Assert.AreEqual(1, mayaMeals.Slots.Count(item => item.SelectedChoiceId is not null));
         Assert.AreEqual("Afternoon coffee", mayaMeals.CustomFoods.Single().Name);
         Assert.IsGreaterThan(0m, mayaMeals.SelectedCalories);
+
+        // The owner reads Maya's targets with the words beside the multiplier and what her steps are worth.
+        var mayaTargets = await requests.AsAsync<INutritionApplicationService, ClientNutritionRead<NutritionCalculationRecord[]>>(
+            new DemoActor(people.OwnerId, people.TenantId),
+            service => service.ListCalculationsAsync(mayaProfileId, 1, CancellationToken.None));
+        var mayaLatest = mayaTargets.Value!.Single().Result;
+        Assert.AreEqual(
+            "Counts as low active: × 1.58 (seated work with 7,000 steps a day × 1.50, plus 4 workouts a week + 0.08)",
+            mayaLatest.Activity?.Words);
+        Assert.AreEqual("Their 7,000 steps are inside that, worth about 180 calories a day at 68 kg.", mayaLatest.Walking?.Words);
 
         // Demo clients hit their numbers (P4c): logged sets suggest only heavier maxes, for clients getting stronger.
         var ownerToday = await requests.AsAsync<ICoachOverviewService, CoachTodayView>(

@@ -17,12 +17,16 @@ import {
 import {
   calculationRecord,
   calculationView,
+  energyModelView,
+  previewView,
+  RANA_WORDS,
   TODAY,
+  versionTwoRecord,
 } from '../../../testing/client-nutrition-fixtures';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ClientNutritionApi } from './client-nutrition-api';
-import { mapWorkedOut, type Starting } from './client-nutrition.models';
+import { mapEnergyModel, mapWorkedOut, type Starting } from './client-nutrition.models';
 import { WorkOutTargets } from './targets-sheet';
 
 const STARTING: Starting = {
@@ -34,6 +38,7 @@ const STARTING: Starting = {
 
 interface Api {
   calculate?: ReturnType<typeof vi.fn>;
+  energyPreview?: ReturnType<typeof vi.fn>;
 }
 
 async function render(inputs: Record<string, unknown> = {}, api: Api = {}, tenant = signal('t-1')) {
@@ -421,5 +426,293 @@ describe('Work out targets', () => {
     press(host, 'Not now');
     await settle(fixture);
     expect(closed).toHaveBeenCalledWith(null);
+  });
+});
+
+/** Lets the sheet's pause before asking the preview pass, then the answer land. */
+async function afterPause(fixture: Parameters<typeof settle>[0]) {
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  await settle(fixture);
+}
+
+/** A goal pick by its name, whatever its rate line says under it. */
+const goalChip = (host: ParentNode, label: string) =>
+  Array.from(host.querySelectorAll<HTMLButtonElement>('button.chip')).find((item) =>
+    textOf(item.querySelector('.chip-head')).startsWith(label),
+  ) ?? null;
+
+const VERSION_TWO = () => mapEnergyModel(energyModelView(2));
+
+describe('Work out targets under energy version 1, as every server is until B8c', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('asks what it always asked, with the words that hold for both versions (critique B8b)', async () => {
+    const energyPreview = vi.fn(() => of(previewView()));
+    const { fixture, host } = await render({}, { energyPreview });
+
+    const legends = Array.from(host.querySelectorAll('legend')).map(textOf);
+    expect(legends).toContain('How active they are');
+    expect(
+      Array.from(host.querySelectorAll('input[name="work"]')).map((input) =>
+        input.getAttribute('value'),
+      ),
+    ).toEqual(['Seated', 'Mixed', 'Physical']);
+    expect(host.querySelector('input[name="workouts"]')).toBeNull();
+    expect(host.querySelector('[data-own-pal]')).toBeNull();
+    expect(host.querySelector('[data-live]')).toBeNull();
+    expect(textOf(host)).toContain(
+      'From their profile. Steps from a phone or watch on a normal day, work included. Walking is counted inside the multiplier, never added on top.',
+    );
+    fill(host, 'Steps a day, on average', '9000');
+    await settle(fixture);
+    expect(textOf(host)).toContain(
+      'From their phone or watch on a normal day, work included. Walking is counted inside the multiplier, never added on top.',
+    );
+
+    await toggleFold(fixture, host, 'Formula: Mifflin-St Jeor');
+    expect(textOf(host)).toContain(
+      'Older; less often within 10% of a measured value than Mifflin-St Jeor, and runs higher for heavier clients.',
+    );
+    await afterPause(fixture);
+    expect(energyPreview).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-rate]')).toBeNull();
+  });
+});
+
+describe('Work out targets under energy version 2 (critique B8b)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const v2Starting: Starting = { ...STARTING, workouts: 4 };
+
+  it('asks four kinds of work and the workouts a week, filled in from their program', async () => {
+    const { fixture, host } = await render(
+      { model: VERSION_TWO(), starting: v2Starting },
+      { energyPreview: vi.fn(() => of(previewView())) },
+    );
+
+    expect(
+      Array.from(host.querySelectorAll('input[name="work"]')).map((input) =>
+        textOf(input.closest('label')?.querySelector('strong')),
+      ),
+    ).toEqual(['Seated', 'Mixed', 'On their feet', 'Heavy manual']);
+    expect(textOf(radio(host, 'work', 'OnTheirFeet').closest('label'))).toContain(
+      'Teaching, retail, nursing, serving.',
+    );
+    expect(field<HTMLInputElement>(host, 'Workouts a week').value).toBe('4');
+    expect(textOf(host)).toContain('From their program’s current week.');
+    fill(host, 'Workouts a week', '3');
+    await settle(fixture);
+    expect(textOf(host)).toContain('How many times a week they train, from 0 to 7.');
+  });
+
+  it('says the server’s words for the multiplier, the steps and each goal as the coach types', async () => {
+    const energyPreview = vi.fn(() => of(previewView()));
+    const { fixture, host } = await render(
+      { model: VERSION_TWO(), starting: v2Starting },
+      { energyPreview },
+    );
+
+    // Before the answer, the line says what it waits for.
+    expect(textOf(host.querySelector('[data-live]'))).toBe(
+      'The multiplier shows here once their work, steps and workouts are in.',
+    );
+    await chooseTheirs(fixture, host);
+    expect(textOf(host.querySelector('[data-live]'))).toBe('Working out the multiplier…');
+    await afterPause(fixture);
+
+    expect(energyPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        occupationType: 'Seated',
+        averageDailySteps: 8000,
+        workoutsPerWeek: 4,
+        weightKilograms: 70,
+        sex: 'Female',
+        chosenPal: null,
+        goalAdjustments: [-500, -300, 0, 250, 400],
+      }),
+    );
+    expect(textOf(host.querySelector('[data-counts]'))).toBe(RANA_WORDS.activity);
+    expect(textOf(host.querySelector('[data-walking]'))).toBe(RANA_WORDS.walking);
+    expect(textOf(goalChip(host, 'Lose steadily'))).toBe(
+      'Lose steadily −300 ≈ 0.3 kg a week · 87% of what they burn',
+    );
+    expect(textOf(goalChip(host, 'Hold weight'))).toBe(
+      'Hold weight 0 no change · 100% of what they burn',
+    );
+    // The goal in the box says its own sentence.
+    expect(textOf(host)).toContain('0 a day ≈ no change in weight, 100% of what they burn.');
+    goalChip(host, 'Lose steadily')!.click();
+    await settle(fixture);
+    expect(textOf(host)).toContain(`${RANA_WORDS.goal}.`);
+
+    // A changed number is asked again once typing pauses; the answer in between stays.
+    const calls = energyPreview.mock.calls.length;
+    fill(host, 'Steps a day, on average', '12000');
+    await settle(fixture);
+    expect(energyPreview).toHaveBeenCalledTimes(calls);
+    expect(textOf(host.querySelector('[data-counts]'))).toBe(RANA_WORDS.activity);
+    await afterPause(fixture);
+    expect(energyPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ averageDailySteps: 12000 }),
+    );
+  });
+
+  it('sends the workouts, and the coach’s own multiplier with their reason', async () => {
+    const calculate = vi.fn(() => of(versionTwoRecord().result));
+    const energyPreview = vi.fn(() => of(previewView()));
+    const { fixture, host } = await render(
+      { model: VERSION_TWO(), starting: v2Starting },
+      { calculate, energyPreview },
+    );
+
+    await chooseTheirs(fixture, host);
+    segment(host, PROTEIN, '2.0').click();
+    expect(fold(host, 'Or choose the multiplier yourself').open).toBe(false);
+    await toggleFold(fixture, host, 'Or choose the multiplier yourself');
+    expect(radio(host, 'pal', 'table').checked).toBe(true);
+    expect(textOf(radio(host, 'pal', '1.55').closest('label'))).toBe(
+      '× 1.55 Moderate exercise 3 to 5 days a week.',
+    );
+    radio(host, 'pal', '1.55').click();
+    await settle(fixture);
+    fill(host, 'Why this multiplier? (optional)', 'Trains hard four days a week');
+    await afterPause(fixture);
+    expect(energyPreview).toHaveBeenLastCalledWith(expect.objectContaining({ chosenPal: 1.55 }));
+
+    press(host, 'Work out targets');
+    await settle(fixture);
+    expect(calculate).toHaveBeenCalledWith(
+      'client-1',
+      expect.objectContaining({
+        occupationType: 'Seated',
+        workoutsPerWeek: 4,
+        chosenPal: 1.55,
+        chosenPalReason: 'Trains hard four days a week',
+      }),
+    );
+  });
+
+  it('refuses a multiplier of their own in the server’s words, opening its fold', async () => {
+    const calculate = vi.fn(() => of(versionTwoRecord().result));
+    const { fixture, host } = await render(
+      { model: VERSION_TWO(), starting: v2Starting },
+      { calculate, energyPreview: vi.fn(() => of(previewView())) },
+    );
+
+    await chooseTheirs(fixture, host);
+    segment(host, PROTEIN, '2.0').click();
+    await toggleFold(fixture, host, 'Or choose the multiplier yourself');
+    radio(host, 'pal', 'typed').click();
+    await settle(fixture);
+    fill(host, 'Their multiplier', '1.3');
+    await settle(fixture);
+    expect(textOf(host.querySelector('[data-live]'))).toBe(
+      'Their multiplier shows here once you choose or type it.',
+    );
+    await toggleFold(fixture, host, 'Or choose the multiplier yourself', false);
+    press(host, 'Work out targets');
+    await settle(fixture);
+
+    expect(calculate).not.toHaveBeenCalled();
+    expect(fold(host, 'Or choose the multiplier yourself').open).toBe(true);
+    expect(textOf(host)).toContain(
+      'A multiplier of 1.3 is under 1.40, the lowest FAO/WHO/UNU’s scale gives a healthy adult’s whole day. Choose one from 1.40 to 2.40.',
+    );
+  });
+
+  it('asks for the workouts when no program gives them', async () => {
+    const calculate = vi.fn(() => of(versionTwoRecord().result));
+    const { fixture, host } = await render(
+      { model: VERSION_TWO() },
+      { calculate, energyPreview: vi.fn(() => of(previewView())) },
+    );
+
+    expect(field<HTMLInputElement>(host, 'Workouts a week').value).toBe('');
+    expect(textOf(host)).toContain('How many times a week they train, from 0 to 7.');
+    await chooseTheirs(fixture, host);
+    segment(host, PROTEIN, '2.0').click();
+    await settle(fixture);
+    press(host, 'Work out targets');
+    await settle(fixture);
+    expect(calculate).not.toHaveBeenCalled();
+    expect(textOf(host)).toContain('Say how many workouts a week they do, from 0 to 7.');
+  });
+
+  it('shows the server’s words in How this was worked out', async () => {
+    const calculate = vi.fn(() => of(versionTwoRecord().result));
+    const { fixture, host } = await render(
+      { model: VERSION_TWO(), starting: v2Starting },
+      { calculate, energyPreview: vi.fn(() => of(previewView())) },
+    );
+
+    await chooseTheirs(fixture, host);
+    segment(host, PROTEIN, '2.0').click();
+    await settle(fixture);
+    press(host, 'Work out targets');
+    await settle(fixture);
+    const result = host.querySelector('[data-result]')!;
+    await toggleFold(fixture, result, 'How this was worked out');
+
+    const said = (name: string) => textOf(result.querySelector(`[data-said="${name}"]`));
+    expect(textOf(result.querySelector('[data-step="activity"] dt'))).toBe(
+      'Times 1.63 for how active they are',
+    );
+    expect(said('activity')).toBe(RANA_WORDS.activity);
+    expect(said('walking')).toBe(RANA_WORDS.walking);
+    expect(said('goal')).toBe(RANA_WORDS.goal);
+    expect(textOf(result)).toContain(
+      'Worked out from 70 kg, 168 cm, 30 years, female, seated work, 8,000 steps a day, 4 workouts a week.',
+    );
+  });
+
+  it('says when the preview could not be shown, and still works the targets out', async () => {
+    const calculate = vi.fn(() => of(versionTwoRecord().result));
+    const energyPreview = vi.fn(() => throwError(() => new HttpErrorResponse({ status: 503 })));
+    const { fixture, host } = await render(
+      { model: VERSION_TWO(), starting: v2Starting },
+      { calculate, energyPreview },
+    );
+
+    await chooseTheirs(fixture, host);
+    segment(host, PROTEIN, '2.0').click();
+    await afterPause(fixture);
+    expect(textOf(host.querySelector('[data-preview-failed]'))).toBe(
+      'The multiplier could not be shown just now. Work out targets still works it out.',
+    );
+    press(host, 'Work out targets');
+    await settle(fixture);
+    expect(calculate).toHaveBeenCalledTimes(1);
+  });
+
+  it('chooses version 1’s Physical again, and carries a multiplier the coach chose last time', async () => {
+    const physical = mapWorkedOut(
+      calculationRecord({ inputs: { ...calculationRecord().inputs!, occupationType: 'Physical' } }),
+    );
+    const first = await render(
+      { model: VERSION_TWO(), starting: v2Starting, last: physical },
+      { energyPreview: vi.fn(() => of(previewView())) },
+    );
+    expect(
+      Array.from(first.host.querySelectorAll<HTMLInputElement>('input[name="work"]')).some(
+        (input) => input.checked,
+      ),
+    ).toBe(false);
+    TestBed.resetTestingModule();
+
+    const chosen = mapWorkedOut(
+      versionTwoRecord({
+        inputs: { ...versionTwoRecord().inputs!, chosenPal: 1.62, chosenPalReason: 'Shift work' },
+      }),
+    );
+    const { host } = await render(
+      { model: VERSION_TWO(), starting: v2Starting, last: chosen },
+      { energyPreview: vi.fn(() => of(previewView())) },
+    );
+    expect(fold(host, 'Or choose the multiplier yourself').open).toBe(true);
+    expect(radio(host, 'pal', 'typed').checked).toBe(true);
+    expect(field<HTMLInputElement>(host, 'Their multiplier').value).toBe('1.62');
+    expect(field<HTMLTextAreaElement>(host, 'Why this multiplier? (optional)').value).toBe(
+      'Shift work',
+    );
   });
 });

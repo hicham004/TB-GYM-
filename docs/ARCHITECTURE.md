@@ -182,7 +182,10 @@ multiplier, and keeps what was sent (the workouts a week and a coach's own multi
 append-only `InputJson`, from which the reads say the words again. `GET /api/nutrition/energy-model` tells the
 targets sheet what to ask for; `POST /api/nutrition/energy-preview` (antiforgery, open while a workspace is
 read-only, as the strength calculators are) works the sheet's numbers out and records nothing, a POST so a
-client's body never sits in an address.
+client's body never sits in an address. Since B8b development sets the version to 2 in
+`appsettings.Development.json`; the integration tests pin 1 except version 2's own. The client's Nutrition tab
+reads the model before it opens the sheet and, under version 2, the Training read of the client's program
+for the workouts of its current week; the sheet asks the preview 300 ms after typing pauses.
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

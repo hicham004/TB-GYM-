@@ -9,10 +9,15 @@ import {
   linkedSignal,
   output,
   signal,
+  untracked,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
-import type { FormulaSex, OccupationActivityType } from '../../core/api/generated';
+import type {
+  FormulaSex,
+  OccupationActivityType,
+  PreviewEnergyRequest,
+} from '../../core/api/generated';
 import { SheetForm } from '../../core/forms/sheet-form';
 import { Button } from '../../ui/button';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
@@ -24,12 +29,16 @@ import { ClientNutritionApi } from './client-nutrition-api';
 import {
   calculationRefusal,
   calculationRequest,
+  chosenPalOf,
+  ENERGY_VERSION_ONE,
   FAT_PICKS,
   FORMULAS,
   GOAL_PICKS,
+  isVersionTwo,
   macroShares,
   mapWorkedOut,
   numberOrNull,
+  palWords,
   perKilogram,
   problemCount,
   PROTEIN_PER_KG,
@@ -37,11 +46,18 @@ import {
   signedKcal,
   startingTargets,
   targetErrors,
-  WORK_KINDS,
+  type EnergyModel,
   type FormulaKey,
+  type PalMode,
   type Starting,
   type WorkedOut,
 } from './client-nutrition.models';
+import {
+  mapPreview,
+  pickSentence,
+  previewRequest,
+  type EnergyPreview,
+} from './energy-preview.models';
 import { dayWords } from '../progress/progress-entries.models';
 import { TargetsResult } from './targets-result';
 
@@ -50,11 +66,19 @@ const SEXES: readonly SegmentOption[] = [
   { value: 'Male' satisfies FormulaSex, label: $localize`Male` },
 ];
 
+/** How long typing pauses before the server is asked for the sheet's numbers so far. */
+const PREVIEW_PAUSE_MS = 300;
+
 /**
  * Work out a client's calories and macros, in a sheet (R5.3d). It starts from what the record already
  * knows (age from the birth date, height and steps from the intake, weight from the latest weigh-in)
  * and says where each came from; sex and the kind of work are chosen, never assumed. Every press records
  * a calculation on the server and shows it in the same sheet, ready to assign a meal plan with.
+ *
+ * It asks what the energy model in force takes (critique B8b): under version 2 four kinds of work and the
+ * workouts a week (filled in from their program), the server's words for the multiplier as the coach
+ * types, each goal pick's rate and share, and the coach's own multiplier; under version 1 what it always
+ * asked. No number is worked out in the browser.
  */
 @Component({
   selector: 'app-work-out-targets',
@@ -70,492 +94,9 @@ const SEXES: readonly SegmentOption[] = [
     UiDisclosureContent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    @if (result(); as made) {
-      <div class="body" data-result>
-        <p class="muted" i18n>
-          Saved as the latest targets for {{ firstName() }}. Nothing changes for them until you
-          assign a meal plan with these.
-        </p>
-        <app-targets-result [record]="made" />
-        <div class="result-actions">
-          <button appButton type="button" variant="text" (click)="closed.emit(made)" data-done i18n>
-            Done
-          </button>
-          <button appButton type="button" (click)="assign.emit(made)" data-assign i18n>
-            Assign a meal plan with these
-          </button>
-        </div>
-      </div>
-    } @else {
-      <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
-        <p class="muted" i18n>
-          Estimates from the formulas, not measurements. You choose the numbers that go to
-          {{ firstName() }}.
-        </p>
-
-        <fieldset class="group">
-          <legend i18n>About {{ firstName() }}</legend>
-          <div class="pair">
-            <app-field
-              [label]="weightLabel"
-              [help]="weightHelp()"
-              [errors]="shows('weight', issues().weight) ? issues().weight : null"
-            >
-              <input
-                appControl
-                name="weight"
-                type="number"
-                inputmode="decimal"
-                step="any"
-                min="0"
-                [value]="weight() ?? ''"
-                (input)="weight.set(numberOrNull($any($event.target).valueAsNumber))"
-                (blur)="attempt.touch('weight')"
-              />
-            </app-field>
-            <app-field
-              [label]="heightLabel"
-              [help]="heightHelp()"
-              [errors]="shows('height', issues().height) ? issues().height : null"
-            >
-              <input
-                appControl
-                name="height"
-                type="number"
-                inputmode="decimal"
-                step="any"
-                min="0"
-                [value]="height() ?? ''"
-                (input)="height.set(numberOrNull($any($event.target).valueAsNumber))"
-                (blur)="attempt.touch('height')"
-              />
-            </app-field>
-          </div>
-          <div class="pair">
-            <app-field
-              [label]="ageLabel"
-              [help]="ageHelp()"
-              [errors]="shows('age', issues().age) ? issues().age : null"
-            >
-              <input
-                appControl
-                name="age"
-                type="number"
-                inputmode="numeric"
-                step="1"
-                min="0"
-                [value]="age() ?? ''"
-                (input)="age.set(numberOrNull($any($event.target).valueAsNumber))"
-                (blur)="attempt.touch('age')"
-              />
-            </app-field>
-            <div class="sex tb-field">
-              <span class="tb-field__label" aria-hidden="true">{{ sexLabel }}</span>
-              <app-segmented-control
-                [label]="sexLabel"
-                [hideLabel]="true"
-                [options]="sexes"
-                [selected]="sex() ?? ''"
-                (selectedChange)="sex.set($any($event))"
-              />
-              @if (shows('sex', issues().sex)) {
-                <p class="problem" id="sex-error" role="status">{{ issues().sex[0] }}</p>
-              }
-            </div>
-          </div>
-        </fieldset>
-
-        <fieldset class="group">
-          <legend i18n>Their day</legend>
-          <div class="choices" role="radiogroup" [attr.aria-label]="workLabel">
-            @for (kind of kinds; track kind.value) {
-              <label class="choice" [class.chosen]="work() === kind.value">
-                <input
-                  type="radio"
-                  name="work"
-                  [value]="kind.value"
-                  [checked]="work() === kind.value"
-                  [attr.aria-invalid]="shows('work', issues().work) ? 'true' : null"
-                  [attr.aria-describedby]="shows('work', issues().work) ? 'work-error' : null"
-                  (change)="work.set(kind.value)"
-                />
-                <span class="choice-text">
-                  <strong>{{ kind.label }}</strong
-                  >&ngsp;<span class="muted">{{ kind.hint }}</span>
-                </span>
-              </label>
-            }
-          </div>
-          @if (shows('work', issues().work)) {
-            <p class="problem" id="work-error" role="status">{{ issues().work[0] }}</p>
-          }
-          <app-field
-            [label]="stepsLabel"
-            [help]="stepsHelp()"
-            [errors]="shows('steps', issues().steps) ? issues().steps : null"
-          >
-            <input
-              appControl
-              name="steps"
-              type="number"
-              inputmode="numeric"
-              step="100"
-              min="0"
-              [value]="steps() ?? ''"
-              (input)="steps.set(numberOrNull($any($event.target).valueAsNumber))"
-              (blur)="attempt.touch('steps')"
-            />
-          </app-field>
-        </fieldset>
-
-        <fieldset class="group">
-          <legend i18n>The goal</legend>
-          <div class="chips" role="group" [attr.aria-label]="goalPicksLabel">
-            @for (pick of goalPicks; track pick.kcal) {
-              <button
-                type="button"
-                class="chip"
-                [class.chosen]="goal() === pick.kcal"
-                [attr.aria-pressed]="goal() === pick.kcal"
-                (click)="goal.set(pick.kcal)"
-              >
-                <span>{{ pick.label }}</span
-                >&ngsp;<strong>{{ signed(pick.kcal) }}</strong>
-              </button>
-            }
-          </div>
-          <app-field
-            [label]="goalLabel"
-            [help]="goalHelp"
-            [errors]="shows('goal', issues().goal) ? issues().goal : null"
-          >
-            <input
-              appControl
-              name="goal"
-              type="number"
-              step="10"
-              [value]="goal() ?? ''"
-              (input)="goal.set(numberOrNull($any($event.target).valueAsNumber))"
-              (blur)="attempt.touch('goal')"
-            />
-          </app-field>
-        </fieldset>
-
-        <!-- Two blocks, each its box first and one row of picks under it (critique B5c, T45). -->
-        <fieldset class="group">
-          <legend i18n>Protein and fat</legend>
-          <div class="block" data-block="protein">
-            <app-field
-              [label]="proteinLabel"
-              [help]="proteinHelp()"
-              [errors]="shows('protein', issues().protein) ? issues().protein : null"
-            >
-              <input
-                appControl
-                name="protein"
-                type="number"
-                inputmode="numeric"
-                step="1"
-                min="0"
-                [value]="protein() ?? ''"
-                (input)="protein.set(numberOrNull($any($event.target).valueAsNumber))"
-                (blur)="attempt.touch('protein')"
-              />
-            </app-field>
-            <div class="picks">
-              <app-segmented-control
-                [label]="proteinPicksLabel"
-                [hideLabel]="true"
-                [options]="proteinOptions()"
-                [selected]="proteinPickValue()"
-                (selectedChange)="pickProtein($event)"
-              />
-              <span class="caption" aria-hidden="true" i18n>g per kg</span>
-            </div>
-          </div>
-          <div class="block" data-block="fat">
-            <app-field
-              [label]="fatLabel"
-              [help]="fatHelp()"
-              [errors]="shows('fat', issues().fat) ? issues().fat : null"
-            >
-              <input
-                appControl
-                name="fat"
-                type="number"
-                inputmode="decimal"
-                step="1"
-                min="0"
-                [value]="fat() ?? ''"
-                (input)="fat.set(numberOrNull($any($event.target).valueAsNumber))"
-                (blur)="attempt.touch('fat')"
-              />
-            </app-field>
-            <div class="picks">
-              <app-segmented-control
-                [label]="fatPicksLabel"
-                [hideLabel]="true"
-                [options]="fatOptions"
-                [selected]="fatPickValue()"
-                (selectedChange)="pickFat($event)"
-              />
-              <span class="caption" aria-hidden="true" i18n>% of calories</span>
-            </div>
-          </div>
-          <p class="rest" data-carbs>{{ carbsLine() }}</p>
-        </fieldset>
-
-        <app-disclosure
-          class="formula"
-          label="Formula: {{ formulaName() }}"
-          i18n-label
-          [(open)]="formulaOpen"
-        >
-          <ng-template appDisclosureContent>
-            <div class="choices" role="radiogroup" [attr.aria-label]="formulaLabel">
-              @for (option of formulas; track option.value) {
-                <label class="choice" [class.chosen]="formula() === option.value">
-                  <input
-                    type="radio"
-                    name="formula"
-                    [value]="option.value"
-                    [checked]="formula() === option.value"
-                    (change)="formula.set(option.value)"
-                  />
-                  <span class="choice-text">
-                    <strong>{{ option.label }}</strong
-                    >&ngsp;<span class="muted">{{ option.hint }}</span>
-                  </span>
-                </label>
-              }
-            </div>
-            @if (formula() === 'KatchMcArdle') {
-              <app-field
-                [label]="bodyFatLabel"
-                [errors]="shows('bodyFat', issues().bodyFat) ? issues().bodyFat : null"
-              >
-                <input
-                  appControl
-                  name="bodyFat"
-                  type="number"
-                  inputmode="decimal"
-                  step="any"
-                  min="0"
-                  [value]="bodyFat() ?? ''"
-                  (input)="bodyFat.set(numberOrNull($any($event.target).valueAsNumber))"
-                  (blur)="attempt.touch('bodyFat')"
-                />
-              </app-field>
-            }
-          </ng-template>
-        </app-disclosure>
-
-        <app-form-summary>
-          @if (error(); as message) {
-            {{ message }}
-          } @else if (attempt.wasTried() && problems() > 0) {
-            <ng-container i18n>Check the fields marked above.</ng-container>
-          }
-        </app-form-summary>
-        <app-entry-actions
-          [form]="formId"
-          [saveLabel]="saveLabel"
-          [busyLabel]="workingLabel"
-          [busy]="busy()"
-          (notNow)="closed.emit(null)"
-        />
-      </form>
-    }
-  `,
-  styles: [
-    SHEET_STYLES,
-    `
-      .group {
-        border: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        margin: 0;
-        min-inline-size: 0;
-        padding: 0;
-      }
-
-      .group > legend {
-        color: var(--tb-ink);
-        font-size: 1rem;
-        font-weight: 600;
-        margin-block-end: 0.5rem;
-        padding: 0;
-      }
-
-      .pair {
-        align-items: start;
-        display: grid;
-        gap: 0.75rem;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      @media (max-width: 26rem) {
-        .pair {
-          grid-template-columns: minmax(0, 1fr);
-        }
-      }
-
-      .choices {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      .choice {
-        align-items: flex-start;
-        background: var(--tb-surface);
-        border: 1px solid var(--tb-line-strong);
-        border-radius: var(--tb-radius-control);
-        color: var(--tb-ink);
-        cursor: pointer;
-        display: flex;
-        gap: 0.625rem;
-        min-block-size: 2.75rem;
-        padding: 0.625rem 0.875rem;
-      }
-
-      .choice:hover {
-        border-color: var(--tb-ink);
-      }
-
-      .choice.chosen {
-        background: var(--tb-accent-soft);
-        border-color: var(--tb-accent-ink);
-      }
-
-      .choice:has(input:focus-visible) {
-        outline: 2px solid var(--tb-focus);
-        outline-offset: 2px;
-      }
-
-      .choice input[type='radio'] {
-        accent-color: var(--tb-accent-ink);
-        block-size: 1.125rem;
-        flex: none;
-        inline-size: 1.125rem;
-        margin: 0.125rem 0 0;
-      }
-
-      // A label's direct span is bold in the legacy global styles; the hint under a name is not.
-      .choice-text {
-        display: flex;
-        flex-direction: column;
-        font-weight: 400;
-        gap: 0.125rem;
-        min-inline-size: 0;
-      }
-
-      // The legacy global styles still colour a bare strong; these cards take the mode's own ink.
-      .choice-text strong {
-        color: var(--tb-ink);
-      }
-
-      .chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-
-      .chip {
-        align-items: baseline;
-        background: var(--tb-surface);
-        border: 1px solid var(--tb-line-strong);
-        border-radius: 999px;
-        color: var(--tb-ink);
-        cursor: pointer;
-        display: inline-flex;
-        font: inherit;
-        gap: 0.375rem;
-        min-block-size: 2.75rem;
-        padding: 0.5rem 0.875rem;
-        touch-action: manipulation;
-      }
-
-      .chip strong {
-        font-variant-numeric: tabular-nums;
-      }
-
-      .chip:hover:not(:disabled) {
-        border-color: var(--tb-ink);
-      }
-
-      .chip.chosen {
-        background: var(--tb-accent-soft);
-        border-color: var(--tb-accent-ink);
-      }
-
-      .chip:focus-visible {
-        outline: 3px solid var(--tb-focus);
-        outline-offset: 2px;
-      }
-
-      .chip:disabled {
-        color: var(--tb-muted);
-        cursor: not-allowed;
-      }
-
-      .block {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      // The caption beside its picks, and under them when large text leaves no room beside.
-      .picks {
-        align-items: center;
-        column-gap: 0.75rem;
-        display: flex;
-        flex-wrap: wrap;
-        row-gap: 0.25rem;
-      }
-
-      .picks app-segmented-control {
-        flex: 1 1 12rem;
-        max-inline-size: 20rem;
-      }
-
-      // The caption stays whole; the row of picks gives way.
-      .caption {
-        color: var(--tb-muted);
-        flex: none;
-        font-size: 0.875rem;
-        white-space: nowrap;
-      }
-
-      .rest {
-        border-block-start: 1px solid var(--tb-line);
-        padding-block-start: 0.75rem;
-      }
-
-      .problem {
-        color: var(--tb-danger);
-        font-size: 0.875rem;
-        margin: 0.25rem 0 0;
-      }
-
-      .sex {
-        min-inline-size: 0;
-      }
-
-      .formula .choices {
-        margin-block-end: 0.75rem;
-      }
-
-      .result-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        justify-content: flex-end;
-      }
-    `,
-  ],
+  templateUrl: './targets-sheet.html',
+  styles: [SHEET_STYLES],
+  styleUrls: ['./targets-sheet.scss', './targets-activity.scss'],
 })
 export class WorkOutTargets extends SheetForm {
   private readonly api = inject(ClientNutritionApi);
@@ -569,6 +110,8 @@ export class WorkOutTargets extends SheetForm {
   /** Today in the coaching space, never the browser's. */
   readonly today = input.required<string>();
   readonly locale = input<string>('en');
+  /** What the energy model new calculations use takes, as the server said. */
+  readonly model = input<EnergyModel>(ENERGY_VERSION_ONE);
   /** The calculation that was recorded, or null when the sheet was closed without one. */
   readonly closed = output<WorkedOut | null>();
   /** The result is on screen and the coach wants to assign a meal plan with it. */
@@ -582,8 +125,11 @@ export class WorkOutTargets extends SheetForm {
   protected readonly sexLabel = $localize`Sex used by the formula`;
   protected readonly workLabel = $localize`Kind of work`;
   protected readonly stepsLabel = $localize`Steps a day, on average`;
+  protected readonly workoutsLabel = $localize`Workouts a week`;
+  protected readonly palLabel = $localize`Multiplier`;
+  protected readonly typedPalLabel = $localize`Their multiplier`;
+  protected readonly palReasonLabel = $localize`Why this multiplier? (optional)`;
   protected readonly goalLabel = $localize`Calories a day, above or below what they burn`;
-  protected readonly goalHelp = $localize`Minus eats less than they burn, plus eats more. 0 holds their weight.`;
   protected readonly goalPicksLabel = $localize`Common goals`;
   protected readonly proteinPicksLabel = $localize`Protein for each kilogram of body weight`;
   protected readonly proteinLabel = $localize`Protein (grams a day)`;
@@ -594,7 +140,6 @@ export class WorkOutTargets extends SheetForm {
   protected readonly saveLabel = $localize`Work out targets`;
   protected readonly workingLabel = $localize`Working it out…`;
   protected readonly sexes = SEXES;
-  protected readonly kinds = WORK_KINDS;
   protected readonly goalPicks = GOAL_PICKS;
   /** "20 · 25 · 30 · 35", captioned "% of calories". */
   protected readonly fatOptions: readonly SegmentOption[] = FAT_PICKS.map((share) => ({
@@ -604,14 +149,31 @@ export class WorkOutTargets extends SheetForm {
   protected readonly formulas = FORMULAS;
   protected readonly numberOrNull = numberOrNull;
   protected readonly signed = signedKcal;
+  protected readonly pickSentence = pickSentence;
 
-  private readonly start = computed(() => startingTargets(this.starting(), this.last()));
+  protected readonly versionTwo = computed(() => isVersionTwo(this.model()));
+  protected readonly kinds = computed(() => this.model().kinds);
+  protected readonly picks = computed(() => this.model().chosen?.picks ?? []);
+
+  private readonly start = computed(() =>
+    startingTargets(this.starting(), this.last(), this.model()),
+  );
   protected readonly weight = linkedSignal<number | null>(() => this.start().weight);
   protected readonly height = linkedSignal<number | null>(() => this.start().height);
   protected readonly age = linkedSignal<number | null>(() => this.start().age);
   protected readonly sex = linkedSignal<FormulaSex | null>(() => this.start().sex);
   protected readonly work = linkedSignal<OccupationActivityType | null>(() => this.start().work);
   protected readonly steps = linkedSignal<number | null>(() => this.start().steps);
+  protected readonly workouts = linkedSignal<number | null>(() => this.start().workouts);
+  protected readonly palMode = linkedSignal<PalMode>(() => this.start().palMode);
+  /** The pick chosen, and the multiplier typed, each kept while the other is tried. */
+  protected readonly pickedPal = linkedSignal<number | null>(() =>
+    this.start().palMode === 'pick' ? this.start().chosenPal : null,
+  );
+  protected readonly typedPal = linkedSignal<number | null>(() =>
+    this.start().palMode === 'typed' ? this.start().chosenPal : null,
+  );
+  protected readonly palReason = linkedSignal<string>(() => this.start().palReason);
   protected readonly goal = linkedSignal<number | null>(() => this.start().goal);
   protected readonly protein = linkedSignal<number | null>(() => this.start().protein);
   protected readonly fat = linkedSignal<number | null>(() => this.start().fat);
@@ -622,23 +184,33 @@ export class WorkOutTargets extends SheetForm {
    * choice made inside never closes it, which would hide the radio a keyboard's arrows are on.
    */
   protected readonly formulaOpen = linkedSignal(() => this.start().formula !== 'MifflinStJeor');
+  /** The coach's own multiplier opens on a multiplier chosen last time, and on a refused one. */
+  protected readonly palOpen = linkedSignal(() => this.start().palMode !== 'table');
 
   protected readonly result = signal<WorkedOut | null>(null);
 
-  protected readonly values = computed(() => ({
-    weight: this.weight(),
-    height: this.height(),
-    age: this.age(),
-    sex: this.sex(),
-    work: this.work(),
-    steps: this.steps(),
-    goal: this.goal(),
-    protein: this.protein(),
-    fat: this.fat(),
-    formula: this.formula(),
-    bodyFat: this.bodyFat(),
-  }));
-  protected readonly issues = computed(() => targetErrors(this.values()));
+  protected readonly values = computed(() => {
+    const palMode = this.palMode();
+    return {
+      weight: this.weight(),
+      height: this.height(),
+      age: this.age(),
+      sex: this.sex(),
+      work: this.work(),
+      steps: this.steps(),
+      workouts: this.workouts(),
+      palMode,
+      chosenPal:
+        palMode === 'pick' ? this.pickedPal() : palMode === 'typed' ? this.typedPal() : null,
+      palReason: this.palReason(),
+      goal: this.goal(),
+      protein: this.protein(),
+      fat: this.fat(),
+      formula: this.formula(),
+      bodyFat: this.bodyFat(),
+    };
+  });
+  protected readonly issues = computed(() => targetErrors(this.values(), this.model()));
   protected readonly problems = computed(() => problemCount(this.issues()));
   protected readonly formulaName = computed(
     () => FORMULAS.find((item) => item.value === this.formula())?.label ?? '',
@@ -660,10 +232,34 @@ export class WorkOutTargets extends SheetForm {
       ? $localize`Counted from their birth date.`
       : null,
   );
+  /** What the number means, and that it is never added on top (critique B8b, T47). */
   protected readonly stepsHelp = computed(() =>
     this.starting().steps !== null && this.steps() === this.starting().steps
-      ? $localize`From their profile. Under 5,000 a day is a little, over 10,000 a lot.`
-      : $localize`A phone’s health app shows it. Under 5,000 a day is a little, over 10,000 a lot.`,
+      ? $localize`From their profile. Steps from a phone or watch on a normal day, work included. Walking is counted inside the multiplier, never added on top.`
+      : $localize`From their phone or watch on a normal day, work included. Walking is counted inside the multiplier, never added on top.`,
+  );
+  protected readonly workoutsHelp = computed(() => {
+    const workouts = this.workouts();
+    const fromProgram = this.starting().workouts ?? null;
+    if (fromProgram !== null && workouts === fromProgram) {
+      return $localize`From their program’s current week.`;
+    }
+    const lastTime = this.last()?.inputs?.workouts ?? null;
+    if (fromProgram === null && lastTime !== null && workouts === lastTime) {
+      return $localize`From their last targets.`;
+    }
+    return $localize`How many times a week they train, from 0 to ${this.model().maxWorkouts ?? 7}:max:.`;
+  });
+  protected readonly typedHint = computed(() => {
+    const chosen = this.model().chosen;
+    if (!chosen) return '';
+    const low = formatNumber(chosen.min, this.locale(), '1.2-2');
+    const high = formatNumber(chosen.max, this.locale(), '1.2-2');
+    return $localize`Type one from ${low}:low: to ${high}:high:.`;
+  });
+  protected readonly palReasonHelp = computed(
+    () =>
+      $localize`Kept with these targets, where you and your team see it. ${this.firstName()}:name: sees only the numbers.`,
   );
   protected readonly proteinPicksOff = computed(
     () => this.weight() === null || this.issues().weight.length > 0,
@@ -718,6 +314,8 @@ export class WorkOutTargets extends SheetForm {
       now.sex === given.sex &&
       now.work === given.work &&
       now.steps === given.steps &&
+      now.workouts === given.workouts &&
+      chosenPalOf(now) === given.chosenPal &&
       now.goal === last.goalAdjustment &&
       now.protein === last.protein &&
       now.fat === given.fatPercent &&
@@ -739,6 +337,37 @@ export class WorkOutTargets extends SheetForm {
     return $localize`Carbs: the rest, ${grams}:grams: g (${macroShares(answered).carbohydrate}:share:%).`;
   });
 
+  /** What the preview is asked now, under energy version 2; nothing is asked under version 1. */
+  private readonly previewAsk = computed<PreviewEnergyRequest | null>(() =>
+    this.versionTwo() ? previewRequest(this.values(), this.issues()) : null,
+  );
+  private readonly previewKey = computed(() => {
+    const ask = this.previewAsk();
+    return ask ? JSON.stringify(ask) : null;
+  });
+  /** The server's last answer, kept until a newer one comes: its words name what it was worked out from. */
+  private readonly answer = signal<(EnergyPreview & { readonly key: string }) | null>(null);
+  protected readonly preview = computed(() => this.answer());
+  protected readonly previewFailed = signal(false);
+  /** What the line under How active they are waits for, or that the server is working it out. */
+  protected readonly waitingWords = computed(() => {
+    if (this.palMode() !== 'table' && this.issues().pal.length > 0) {
+      return $localize`Their multiplier shows here once you choose or type it.`;
+    }
+    const ask = this.previewAsk();
+    return ask?.occupationType && ask.averageDailySteps != null && ask.workoutsPerWeek != null
+      ? $localize`Working out the multiplier…`
+      : $localize`The multiplier shows here once their work, steps and workouts are in.`;
+  });
+  /** The goal's own sentence under the box, once the server has it. */
+  protected readonly goalHelp = computed(() => {
+    const goal = this.goal();
+    const line = goal !== null ? this.preview()?.goals.get(goal) : undefined;
+    return line
+      ? $localize`${line.words}:rate:.`
+      : $localize`Minus eats less than they burn, plus eats more. 0 holds their weight.`;
+  });
+
   constructor() {
     super();
     effect(() => {
@@ -751,6 +380,10 @@ export class WorkOutTargets extends SheetForm {
         now.sex === start.sex &&
         now.work === start.work &&
         now.steps === start.steps &&
+        now.workouts === start.workouts &&
+        now.palMode === start.palMode &&
+        now.chosenPal === start.chosenPal &&
+        now.palReason === start.palReason &&
         now.goal === start.goal &&
         now.protein === start.protein &&
         now.fat === start.fat &&
@@ -758,6 +391,29 @@ export class WorkOutTargets extends SheetForm {
         now.bodyFat === start.bodyFat;
       this.dirtyChange.emit(!same && this.result() === null);
     });
+    // Asks the server once typing pauses; a newer question replaces an answer still on its way (one lane).
+    effect((onCleanup) => {
+      const ask = this.previewAsk();
+      const key = this.previewKey();
+      if (ask === null || key === null || untracked(() => this.answer()?.key) === key) return;
+      const timer = setTimeout(() => void this.askPreview(ask, key), PREVIEW_PAUSE_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
+  }
+
+  /** The words for a pick's multiplier: "× 1.725". */
+  protected palWords(pal: number): string {
+    return palWords(pal, this.locale());
+  }
+
+  /** A goal pick's rate and share, once the server has said them. */
+  protected rateOf(kcal: number) {
+    return this.preview()?.goals.get(kcal) ?? null;
+  }
+
+  protected choosePick(pal: number): void {
+    this.pickedPal.set(pal);
+    this.palMode.set('pick');
   }
 
   protected pickProtein(value: string): void {
@@ -772,14 +428,35 @@ export class WorkOutTargets extends SheetForm {
     if (FAT_PICKS.includes(share)) this.fat.set(share);
   }
 
+  private askPreview(request: PreviewEnergyRequest, key: string): Promise<void> {
+    return this.scope.run('preview', async (owner) => {
+      try {
+        // The preview is a POST like every other and checks the token (audit SEC-4).
+        await owner.wait(this.csrf.refresh());
+        const view = await owner.wait(firstValueFrom(this.api.energyPreview(request)));
+        this.answer.set({ key, ...mapPreview(view, this.locale()) });
+        this.previewFailed.set(false);
+      } catch {
+        if (!owner.current) return;
+        // Nothing is said rather than an old answer; Work out still works the numbers out.
+        this.answer.set(null);
+        this.previewFailed.set(true);
+      }
+    });
+  }
+
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     if (this.problems() > 0) {
       if (this.issues().bodyFat.length > 0) this.formulaOpen.set(true);
+      if (this.issues().pal.length > 0 || this.issues().palReason.length > 0) {
+        this.palOpen.set(true);
+      }
       this.refuse();
       return;
     }
-    const request = calculationRequest(this.values());
+    const model = this.model();
+    const request = calculationRequest(this.values(), model);
     let made = null as WorkedOut | null;
     const ok = await this.send(
       async (owner) => {

@@ -235,8 +235,11 @@ test.describe('meal plan assignment live', () => {
         ['height', '170'],
         ['age', '30'],
         ['steps', '7000'],
+        ['workouts', '3'],
       ] as const) {
         const input = targets.locator(`input[name="${name}"]`);
+        // Workouts a week are energy version 2's, which development runs (critique B8b).
+        if ((await input.count()) === 0) continue;
         if ((await input.inputValue()) === '') await input.fill(fallback);
       }
       await targets.getByRole('button', { name: /Hold weight/ }).click();
