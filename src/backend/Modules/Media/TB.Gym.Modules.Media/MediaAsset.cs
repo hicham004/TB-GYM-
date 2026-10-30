@@ -125,6 +125,13 @@ public sealed class MediaAsset : TenantEntity
 
     public string? ExternalMediaId { get; private set; }
 
+    /// <summary>
+    /// A link's own title, as YouTube or Vimeo gave it when the link was added (critique B9, MED-015); null
+    /// when the provider did not say, as for every link added before B9. <see cref="Title"/> stays the name
+    /// the coach's screen gave it.
+    /// </summary>
+    public string? ExternalTitle { get; private set; }
+
     public string? ScannerKey { get; private set; }
 
     public string? ScannerVersion { get; private set; }
@@ -281,6 +288,26 @@ public sealed class MediaAsset : TenantEntity
         Status = MediaAssetStatus.Ready;
         TombstonedAtUtc = null;
         PurgeAfterUtc = null;
+    }
+
+    /// <summary>
+    /// Keeps the video's own title, as its provider gave it, once (MED-015): a link that has one keeps it, and
+    /// text that is empty once cleaned leaves the link without one. True when the title was taken.
+    /// </summary>
+    public bool TakeExternalTitle(string? providerTitle)
+    {
+        if (Source != MediaSource.ExternalEmbed)
+        {
+            throw new InvalidOperationException("Only a video link has a title from its provider.");
+        }
+
+        if (ExternalTitle is not null || ExternalVideoTitle.Clean(providerTitle) is not { } title)
+        {
+            return false;
+        }
+
+        ExternalTitle = title;
+        return true;
     }
 
     /// <summary>

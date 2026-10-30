@@ -1206,6 +1206,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("TypeName")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -1227,7 +1231,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "IsArchived", "Classification", "Equipment", "MovementPattern");
 
-                    b.ToTable("Exercises", "exercise_library");
+                    b.ToTable("Exercises", "exercise_library", t =>
+                        {
+                            t.HasCheckConstraint("CK_Exercises_Classification", "\"Classification\" IN ('Strength', 'Power', 'Conditioning', 'Mobility', 'Balance', 'WarmUp', 'Other')");
+
+                            t.HasCheckConstraint("CK_Exercises_TypeName", "\"TypeName\" IS NULL OR (\"Classification\" = 'Other' AND \"TypeName\" = btrim(\"TypeName\") AND \"TypeName\" <> '')");
+                        });
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.ExerciseLibrary.ExerciseAlternative", b =>
@@ -2467,6 +2476,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)");
 
+                    b.Property<string>("ExternalTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<bool>("IsCoachProtected")
                         .HasColumnType("boolean");
 
@@ -2623,6 +2636,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Assets", "media", t =>
                         {
+                            t.HasCheckConstraint("CK_MediaAssets_ExternalTitle", "\"ExternalTitle\" IS NULL OR (\"Source\" = 'ExternalEmbed' AND \"ExternalTitle\" <> '')");
+
                             t.HasCheckConstraint("CK_MediaAssets_Hash", "\"Sha256\" IS NULL OR \"Sha256\" ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("CK_MediaAssets_Length", "\"Length\" IS NULL OR (\"Length\" > 0 AND \"Length\" <= 524288000)");

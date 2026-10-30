@@ -20,6 +20,8 @@ import {
   muscleGroupLabel,
 } from '../../core/i18n/display-labels';
 import type { UiMenuItem } from '../../ui/menu';
+import type { SegmentOption } from '../../ui/segmented-control';
+import { externalVideo, watchPage } from './external-video';
 
 /**
  * The exercise library (C10, R5.1b) in coach words. The server holds the rules (a unique name, one
@@ -53,12 +55,20 @@ export const PATTERNS: readonly MovementPattern[] = [
   'Mobility',
   'Other',
 ];
+/** The seven types in the order the select and the filter list them (critique B9). */
 export const TYPES: readonly ExerciseClassification[] = [
   'Strength',
+  'Power',
   'Conditioning',
   'Mobility',
-  'General',
+  'Balance',
+  'WarmUp',
+  'Other',
 ];
+/** Other's own name ("Rehab") is kept up to 40 characters, as the server keeps it (LIB-005). */
+export const OWN_TYPE_NAME_LENGTH = 40;
+/** A tag is kept up to 60 characters. */
+const TAG_LENGTH = 60;
 export const MUSCLES: readonly MuscleGroup[] = [
   'Chest',
   'Back',
@@ -88,29 +98,54 @@ export interface LibraryFilters {
   readonly query: string;
   readonly muscle: MuscleGroup | null;
   readonly pattern: MovementPattern | null;
+  /** A type; Other whenever `typeName` names one of the coach's own. */
   readonly type: ExerciseClassification | null;
+  /** Other's own name ("Rehab"), which the address carries as its type. */
+  readonly typeName: string | null;
   readonly equipment: ExerciseEquipment | null;
+  readonly tag: string | null;
+  /** The Archived view in place of the exercises in use (critique B9); a view, kept by Clear filters. */
   readonly archived: boolean;
   readonly view: LibraryView;
 }
 
-export type FilterKey = 'muscle' | 'pattern' | 'type' | 'equipment';
+export type FilterKey = 'muscle' | 'pattern' | 'type' | 'equipment' | 'tag';
+
+/** What the library page's filters offer, as the server counted it (critique B9). */
+export interface LibraryFacets {
+  readonly active: number;
+  readonly archived: number;
+  readonly tags: readonly { readonly tag: string; readonly count: number }[];
+  readonly typeNames: readonly string[];
+}
+
+export const NO_FACETS: LibraryFacets = { active: 0, archived: 0, tags: [], typeNames: [] };
+
+/** An own type in a menu's actions, apart from the seven types' own values. */
+const OWN = 'own:';
 
 const pick = <T extends string>(
   value: string | null | undefined,
   allowed: readonly T[],
 ): T | null => (value && (allowed as readonly string[]).includes(value) ? (value as T) : null);
 
-/** An unknown value in the address is ignored, never sent: the server would refuse it. */
+/**
+ * An unknown muscle, pattern or equipment in the address is ignored, never sent: the server would refuse
+ * it. A type that is none of the seven is Other's own name, which no type's name can be (LIB-005).
+ */
 export function filtersFrom(
   params: Readonly<Record<string, string | null | undefined>>,
 ): LibraryFilters {
+  const type = pick(params['type'], TYPES);
+  const typeName = type ? '' : (params['type'] ?? '').trim().slice(0, OWN_TYPE_NAME_LENGTH);
   return {
     query: (params['q'] ?? '').slice(0, 200),
     muscle: pick(params['muscle'], MUSCLES),
     pattern: pick(params['pattern'], PATTERNS),
-    type: pick(params['type'], TYPES),
+    type: type ?? (typeName ? 'Other' : null),
+    typeName: typeName || null,
     equipment: pick(params['equipment'], EQUIPMENT),
+    tag: (params['tag'] ?? '').trim().slice(0, TAG_LENGTH) || null,
     archived: params['archived'] === '1',
     view: params['view'] === 'list' ? 'list' : 'grid',
   };
@@ -122,13 +157,15 @@ export function filterParams(filters: LibraryFilters): Params {
     q: filters.query.trim() || null,
     muscle: filters.muscle,
     pattern: filters.pattern,
-    type: filters.type,
+    type: filters.typeName ?? filters.type,
     equipment: filters.equipment,
+    tag: filters.tag,
     archived: filters.archived ? '1' : null,
     view: filters.view === 'list' ? 'list' : null,
   };
 }
 
+/** Whether a search or a filter narrows the view; the view itself (yours or archived) is not a filter. */
 export function isFiltered(filters: LibraryFilters): boolean {
   return (
     filters.query.trim() !== '' ||
@@ -136,8 +173,32 @@ export function isFiltered(filters: LibraryFilters): boolean {
     filters.pattern !== null ||
     filters.type !== null ||
     filters.equipment !== null ||
-    filters.archived
+    filters.tag !== null
   );
+}
+
+/** The filters with nothing narrowing them, in the same view and layout. */
+export function withoutFilters(filters: LibraryFilters): LibraryFilters {
+  return { ...filtersFrom({}), archived: filters.archived, view: filters.view };
+}
+
+/**
+ * "Your exercises · Archived (3)" (critique B9): offered while something is archived, and while the
+ * Archived view is open, so the way back stays.
+ */
+export function statusOptions(
+  facets: LibraryFacets,
+  archived: boolean,
+  locale: string,
+): readonly SegmentOption[] {
+  if (facets.archived === 0 && !archived) return [];
+  return [
+    { value: 'active', label: $localize`Your exercises` },
+    {
+      value: 'archived',
+      label: $localize`Archived (${formatNumber(facets.archived, locale, '1.0-0')}:count:)`,
+    },
+  ];
 }
 
 export interface FilterChip {
@@ -147,6 +208,8 @@ export interface FilterChip {
   /** The accessible name: what the chip filters and by what. */
   readonly name: string;
   readonly active: boolean;
+  /** The action of the choice in effect, marked in the menu. */
+  readonly current: string;
   readonly items: readonly UiMenuItem[];
 }
 
@@ -162,6 +225,7 @@ function chip<T extends string>(
     label: value ? label(value) : title,
     name: value ? $localize`${title}:filter:: ${label(value)}:value:` : title,
     active: value !== null,
+    current: value ?? '',
     items: [
       { label: $localize`Any`, action: '' },
       ...all.map((item) => ({ label: label(item), action: item })),
@@ -169,12 +233,81 @@ function chip<T extends string>(
   };
 }
 
-export function filterChips(filters: LibraryFilters): FilterChip[] {
+/** The same name in another case, as the server lists it, so the menu marks the choice. */
+function listed(names: readonly string[], name: string, locale: string): string {
+  const key = name.toLocaleLowerCase(locale);
+  return names.find((item) => item.toLocaleLowerCase(locale) === key) ?? name;
+}
+
+function byName(a: string, b: string, locale: string): number {
+  return a.localeCompare(b, locale, { sensitivity: 'base' });
+}
+
+/** The seven types, then the coach's own names, each a kind of Other (critique B9). */
+function typeChip(filters: LibraryFilters, own: readonly string[], locale: string): FilterChip {
+  const title = $localize`Type`;
+  const ownName = filters.typeName ? listed(own, filters.typeName, locale) : null;
+  const value = ownName ?? (filters.type ? exerciseClassificationLabel(filters.type) : null);
+  return {
+    key: 'type',
+    label: value ?? title,
+    name: value ? $localize`${title}:filter:: ${value}:value:` : title,
+    active: value !== null,
+    current: ownName ? OWN + ownName : (filters.type ?? ''),
+    items: [
+      { label: $localize`Any`, action: '' },
+      ...TYPES.map((type) => ({ label: exerciseClassificationLabel(type), action: type })),
+      ...[...own]
+        .sort((a, b) => byName(a, b, locale))
+        .map((name) => ({
+          label: name,
+          hint: $localize`Your own type, under Other`,
+          action: OWN + name,
+        })),
+    ],
+  };
+}
+
+/** "knee-friendly (4)": each tag with how many exercises carry it; no chip while nothing is tagged. */
+function tagChip(
+  filters: LibraryFilters,
+  tags: LibraryFacets['tags'],
+  locale: string,
+): FilterChip | null {
+  if (tags.length === 0 && filters.tag === null) return null;
+  const title = $localize`Tag`;
+  const names = tags.map((item) => item.tag);
+  const value = filters.tag ? listed(names, filters.tag, locale) : null;
+  return {
+    key: 'tag',
+    label: value ?? title,
+    name: value ? $localize`${title}:filter:: ${value}:value:` : title,
+    active: value !== null,
+    current: value ?? '',
+    items: [
+      { label: $localize`Any`, action: '' },
+      ...[...tags]
+        .sort((a, b) => byName(a.tag, b.tag, locale))
+        .map((item) => ({
+          label: $localize`${item.tag}:tag: (${formatNumber(item.count, locale, '1.0-0')}:count:)`,
+          action: item.tag,
+        })),
+    ],
+  };
+}
+
+export function filterChips(
+  filters: LibraryFilters,
+  facets: LibraryFacets,
+  locale: string,
+): FilterChip[] {
+  const tag = tagChip(filters, facets.tags, locale);
   return [
     chip('muscle', $localize`Muscle`, filters.muscle, MUSCLES, muscleGroupLabel),
     chip('pattern', $localize`Pattern`, filters.pattern, PATTERNS, movementPatternLabel),
-    chip('type', $localize`Type`, filters.type, TYPES, exerciseClassificationLabel),
+    typeChip(filters, facets.typeNames, locale),
     chip('equipment', $localize`Equipment`, filters.equipment, EQUIPMENT, exerciseEquipmentLabel),
+    ...(tag ? [tag] : []),
   ];
 }
 
@@ -184,14 +317,23 @@ export function withFilter(filters: LibraryFilters, key: FilterKey, value: strin
       return { ...filters, muscle: pick(value, MUSCLES) };
     case 'pattern':
       return { ...filters, pattern: pick(value, PATTERNS) };
-    case 'type':
-      return { ...filters, type: pick(value, TYPES) };
+    case 'type': {
+      const own = value.startsWith(OWN) ? value.slice(OWN.length).trim() : '';
+      return own
+        ? { ...filters, type: 'Other', typeName: own }
+        : { ...filters, type: pick(value, TYPES), typeName: null };
+    }
     case 'equipment':
       return { ...filters, equipment: pick(value, EQUIPMENT) };
+    case 'tag':
+      return { ...filters, tag: value.trim().slice(0, TAG_LENGTH) || null };
   }
 }
 
-/** "42 exercises", "3 match", "48 of 120 shown": the server's count, never the loaded rows alone. */
+/**
+ * "42 exercises", "3 archived exercises", "3 match", "48 of 120 shown": the server's count, never the
+ * loaded rows alone.
+ */
 export function summaryLine(
   total: number,
   shown: number,
@@ -204,6 +346,11 @@ export function summaryLine(
   }
   if (isFiltered(filters)) {
     return total === 1 ? $localize`1 exercise matches` : $localize`${count}:count: exercises match`;
+  }
+  if (filters.archived) {
+    return total === 1
+      ? $localize`1 archived exercise`
+      : $localize`${count}:count: archived exercises`;
   }
   return total === 1 ? $localize`1 exercise` : $localize`${count}:count: exercises`;
 }
@@ -272,7 +419,8 @@ export function exerciseCard(exercise: ExerciseView): ExerciseCard {
     ]
       .filter((part): part is string => part !== null)
       .join(' · '),
-    type: exerciseClassificationLabel(exercise.classification),
+    // Other's own name stands for the type, as the coach named it (critique B9).
+    type: exercise.typeName?.trim() || exerciseClassificationLabel(exercise.classification),
     tags: exercise.tags.join(', '),
     isArchived: exercise.isArchived,
     initials: initialsOf(exercise.name),
@@ -294,18 +442,38 @@ export function exerciseCard(exercise: ExerciseView): ExerciseCard {
   };
 }
 
-/** What a card shows for its first media: a picture, or a play tile naming where the video is. */
+/**
+ * What a card shows for its first media: a picture, a play tile, or a YouTube or Vimeo link that opens
+ * the video on its own page, under the video's own title when its provider gave one (critique B9).
+ */
 export type CardCover =
   | { readonly kind: 'image'; readonly url: string }
-  | { readonly kind: 'video'; readonly label: string };
+  | { readonly kind: 'video'; readonly label: string }
+  | {
+      readonly kind: 'link';
+      readonly provider: 'YouTube' | 'Vimeo';
+      readonly url: string;
+      readonly title: string | null;
+    };
+
+/** A link's tile from the page the server built; a plain tile for an address that is neither page. */
+function linkCover(
+  watchUrl: string | null | undefined,
+  title: string | null | undefined,
+): CardCover {
+  const video = watchPage(watchUrl);
+  return video
+    ? { kind: 'link', provider: video.provider, url: video.url, title: title?.trim() || null }
+    : { kind: 'video', label: $localize`Video link` };
+}
 
 /**
- * What a card can show from the coach's media list alone: a play tile for a video, or null for a
- * picture, which needs a grant first (and for an asset the list did not include).
+ * What a card can show from the coach's media list alone: a link or a play tile for a video, or null
+ * for a picture, which needs a grant first (and for an asset the list did not include).
  */
 export function coverFromAsset(asset: MediaAssetView | undefined): CardCover | null {
   if (!asset || asset.status === 'Purged' || asset.status === 'Rejected') return null;
-  if (asset.source === 'ExternalEmbed') return { kind: 'video', label: $localize`Video link` };
+  if (asset.source === 'ExternalEmbed') return linkCover(asset.watchUrl, asset.externalTitle);
   return asset.kind === 'Video' ? { kind: 'video', label: $localize`Video` } : null;
 }
 
@@ -314,10 +482,29 @@ export function cardCover(access: MediaAccessView): CardCover {
     return { kind: 'image', url: access.thumbnailUrl ?? access.url };
   }
   // External pictures (a YouTube still) are not loaded: the page allows images from TB Gym only.
-  return {
-    kind: 'video',
-    label: access.source === 'ExternalEmbed' ? $localize`Video link` : $localize`Video`,
-  };
+  if (access.source === 'ExternalEmbed') {
+    return linkCover(externalVideo(access)?.url, access.externalTitle);
+  }
+  return { kind: 'video', label: $localize`Video` };
+}
+
+/** "Watch on YouTube · opens in a new tab", under the video's own title on the tile (critique B9). */
+export function watchCaption(provider: 'YouTube' | 'Vimeo'): string {
+  return $localize`Watch on ${provider}:provider: · opens in a new tab`;
+}
+
+/** A card's menu, with "Watch on YouTube" first when its video is a link, as its tile opens it. */
+export function cardMenu(card: ExerciseCard, cover: CardCover | null): readonly UiMenuItem[] {
+  if (cover?.kind !== 'link') return card.menu;
+  return [
+    {
+      label: $localize`Watch on ${cover.provider}:provider:`,
+      hint: $localize`Opens in a new tab`,
+      action: 'watch',
+      href: cover.url,
+    },
+    ...card.menu,
+  ];
 }
 
 // ---------- the exercise sheet ----------
@@ -325,6 +512,8 @@ export function cardCover(access: MediaAccessView): CardCover {
 export interface ExerciseValues {
   readonly name: string;
   readonly classification: ExerciseClassification;
+  /** Other's own name; sent only while the type is Other. */
+  readonly typeName: string;
   readonly equipment: ExerciseEquipment;
   readonly pattern: MovementPattern;
   readonly primaryMuscle: MuscleGroup;
@@ -344,6 +533,7 @@ export function emptyExercise(filters?: LibraryFilters): ExerciseValues {
   return {
     name: '',
     classification: filters?.type ?? 'Strength',
+    typeName: filters?.typeName ?? '',
     equipment: filters?.equipment ?? 'Barbell',
     pattern: filters?.pattern ?? 'Squat',
     primaryMuscle: filters?.muscle ?? 'Quadriceps',
@@ -360,6 +550,7 @@ export function valuesFrom(exercise: ExerciseView): ExerciseValues {
   return {
     name: exercise.name,
     classification: exercise.classification,
+    typeName: exercise.typeName ?? '',
     equipment: exercise.equipment,
     pattern: exercise.movementPattern,
     primaryMuscle: primaryMuscle(exercise) ?? 'FullBody',
@@ -428,6 +619,9 @@ export function exerciseErrors(values: ExerciseValues): FieldMessages {
   if (values.videoLink.trim() && !parseVideoLink(values.videoLink)) {
     errors['videoLink'] = [$localize`Paste a YouTube or Vimeo link, like youtube.com/watch?v=…`];
   }
+  if (values.classification === 'Other' && values.typeName.trim().length > OWN_TYPE_NAME_LENGTH) {
+    errors['typeName'] = [$localize`Keep the type’s name to 40 characters.`];
+  }
   const long = tagsOf(values.tags).find((tag) => tag.length > 60);
   if (long) errors['tags'] = [$localize`Keep each tag to 60 characters.`];
   if (values.instructions.trim().length > 8000) {
@@ -446,6 +640,8 @@ export function exerciseRequest(
     equipment: values.equipment,
     movementPattern: values.pattern,
     classification: values.classification,
+    // Only Other takes a name of the coach's own; another type sends none.
+    typeName: values.classification === 'Other' ? values.typeName.trim() || null : null,
     muscles: [
       { muscle: values.primaryMuscle, role: 'Primary' },
       ...values.secondaryMuscles

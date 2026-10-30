@@ -26,9 +26,13 @@ internal sealed class ExerciseLibraryApplicationService(
     {
         var take = Math.Clamp(request.Take, 1, 100);
         var skip = Math.Max(request.Skip, 0);
-        var library = dbContext.Exercises
-            .AsNoTracking()
-            .Where(item => request.IncludeArchived || !item.IsArchived);
+        IQueryable<Exercise> library = dbContext.Exercises.AsNoTracking();
+        if (request.Status != ExerciseListStatus.Both)
+        {
+            var archived = request.Status == ExerciseListStatus.Archived;
+            library = library.Where(item => item.IsArchived == archived);
+        }
+
         var query = library
             .Include(item => item.Muscles)
             .Include(item => item.Tags)
@@ -63,6 +67,16 @@ internal sealed class ExerciseLibraryApplicationService(
             query = query.Where(item => item.Classification == classification);
         }
 
+        // Other's own name, in any case, as the Type filter lists it (critique B9).
+        if (!string.IsNullOrWhiteSpace(request.TypeName))
+        {
+            var typeName = LikePattern.Escape(request.TypeName.Trim());
+            query = query.Where(item =>
+                item.Classification == ExerciseClassification.Other &&
+                item.TypeName != null &&
+                EF.Functions.ILike(item.TypeName, typeName, LikePattern.EscapeCharacter));
+        }
+
         if (request.Muscle is { } muscle)
         {
             query = query.Where(item => item.Muscles.Any(link => link.Muscle == muscle));
@@ -91,7 +105,48 @@ internal sealed class ExerciseLibraryApplicationService(
         return new ExerciseSearchResult(
             total,
             await ToViewsAsync(items, cancellationToken),
-            [.. patterns.OrderBy(item => item.Pattern)]);
+            [.. patterns.OrderBy(item => item.Pattern)],
+            request.IncludeFacets ? await FacetsAsync(library, cancellationToken) : null);
+    }
+
+    /// <summary>
+    /// The library page's filters (critique B9): how many exercises are in use and archived, and, among those in
+    /// the status asked for, each tag with how many carry it and Other's own names. A tag or a name typed in two
+    /// cases is one choice, spelled as most of its exercises spell it.
+    /// </summary>
+    private async Task<ExerciseLibraryFacets> FacetsAsync(
+        IQueryable<Exercise> library,
+        CancellationToken cancellationToken)
+    {
+        var counts = await dbContext.Exercises.AsNoTracking()
+            .GroupBy(item => item.IsArchived)
+            .Select(group => new { IsArchived = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+        var spellings = await library
+            .SelectMany(item => item.Tags)
+            .GroupBy(tag => new { tag.NormalizedValue, tag.Value })
+            .Select(group => new { group.Key.NormalizedValue, group.Key.Value, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+        var names = await library
+            .Where(item => item.Classification == ExerciseClassification.Other && item.TypeName != null)
+            .GroupBy(item => item.TypeName!)
+            .Select(group => new { Name = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+        return new ExerciseLibraryFacets(
+            counts.Where(item => !item.IsArchived).Sum(item => item.Count),
+            counts.Where(item => item.IsArchived).Sum(item => item.Count),
+            [.. spellings
+                .GroupBy(item => item.NormalizedValue, StringComparer.Ordinal)
+                .Select(group => new ExerciseTagCount(
+                    group.OrderByDescending(item => item.Count).ThenBy(item => item.Value, StringComparer.Ordinal).First().Value,
+                    group.Sum(item => item.Count)))
+                .OrderBy(item => item.Tag, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Tag, StringComparer.Ordinal)],
+            [.. names
+                .GroupBy(item => item.Name.ToUpperInvariant(), StringComparer.Ordinal)
+                .Select(group => group.OrderByDescending(item => item.Count).ThenBy(item => item.Name, StringComparer.Ordinal).First().Name)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(name => name, StringComparer.Ordinal)]);
     }
 
     public async Task<ExerciseView?> GetAsync(Guid exerciseId, CancellationToken cancellationToken)
@@ -265,7 +320,8 @@ internal sealed class ExerciseLibraryApplicationService(
             request.Muscles.Select(item => new ExerciseMuscleDefinition(item.Muscle, item.Role)).ToArray(),
             request.Tags,
             request.Alternatives.Select(item => new ExerciseAlternativeDefinition(item.ExerciseId, item.Note)).ToArray(),
-            request.MediaAssetIds);
+            request.MediaAssetIds,
+            request.TypeName);
 
     private static ExerciseDefinition ToDefinition(UpdateExerciseRequest request) =>
         new(
@@ -277,7 +333,8 @@ internal sealed class ExerciseLibraryApplicationService(
             request.Muscles.Select(item => new ExerciseMuscleDefinition(item.Muscle, item.Role)).ToArray(),
             request.Tags,
             request.Alternatives.Select(item => new ExerciseAlternativeDefinition(item.ExerciseId, item.Note)).ToArray(),
-            request.MediaAssetIds);
+            request.MediaAssetIds,
+            request.TypeName);
 
     private async Task<IReadOnlyList<ExerciseView>> ToViewsAsync(
         IReadOnlyList<Exercise> exercises,
@@ -308,7 +365,8 @@ internal sealed class ExerciseLibraryApplicationService(
                 ? new ExerciseAlternativeView(link.AlternativeExerciseId, alternative.Name, link.Note, alternative.IsArchived)
                 : new ExerciseAlternativeView(link.AlternativeExerciseId, "Unavailable exercise", link.Note, true)).ToArray(),
             item.Media.OrderBy(link => link.DisplayOrder).Select(link => link.MediaAssetId).ToArray(),
-            item.Version)).ToArray();
+            item.Version,
+            item.TypeName)).ToArray();
     }
 
     private async Task<ExerciseView> GetRequiredViewAsync(Guid id, CancellationToken cancellationToken) =>

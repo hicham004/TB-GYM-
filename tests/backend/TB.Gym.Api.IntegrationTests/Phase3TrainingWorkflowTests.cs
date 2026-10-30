@@ -42,6 +42,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     private ScannerSwitch? scannerSwitch;
     private InventoryProbe? inventoryProbe;
     private Phase6B4BProviderHarness? providerHarness;
+    private OEmbedFake? oEmbed;
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -77,6 +78,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         // clock, the storage-call counting, the database — stays as it is.
         var providers = Phase6B4BProviderHarness.StartIfRequestedBy(TestContext.TestName);
         providerHarness = providers;
+        var videoTitles = new OEmbedFake();
+        oEmbed = videoTitles;
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
@@ -204,6 +207,10 @@ public sealed partial class Phase3TrainingWorkflowTests
                     services.RemoveAll<INutritionDataProvider>();
                     services.AddSingleton<INutritionDataProvider, FibreRichTestNutritionDataProvider>();
                 }
+                // A video link's title is asked of YouTube or Vimeo (critique B9): only the socket is replaced, so
+                // no test reaches either, and the composed adapter's addresses and reading are the real ones.
+                services.Configure<HttpClientFactoryOptions>(nameof(IExternalVideoTitles), options =>
+                    options.HttpMessageHandlerBuilderActions.Add(handler => handler.PrimaryHandler = videoTitles));
                 services.AddSingleton<ILoggerProvider>(logCapture);
                 services.AddTransient<IStartupFilter, TestRemoteAddressStartupFilter>();
                 services.AddSingleton<TodayQueryCounter>();

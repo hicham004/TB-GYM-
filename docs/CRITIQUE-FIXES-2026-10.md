@@ -796,3 +796,47 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   macros' help; the result's "The coach’s reason: …" and "…, 4 workouts a week"; the floors in the app's flag
   words ("… This is a flag for you to look at, not a rule."), as the protein and fat flags are.
   Recommendation: keep until the review, which approves the display words.
+- B9 · Where "Your exercises · Archived (n)" sits. Built: the kit's segmented control beside the search, as
+  Recipes' All · Published · Drafts (n), offered while something is archived or the Archived view is open; the
+  search and the filters carry over between the two views, Clear filters keeps the view, and the counts are the
+  library's whatever the filters. Other way: tabs above the toolbar, or Foods' heading with a text button.
+  Recommendation: keep.
+- B9 · "Open one to restore it." Built: the row's sentence, with Restore in an archived card's menu, as before;
+  an archived exercise cannot be edited, so it opens no sheet. Other way: a press on an archived card opens it
+  read-only with Restore, or the sentence says "Restore one from its menu." Recommendation: the second
+  sentence, a one-line change, if the menu should be named.
+- B9 · The meanings the row did not word. Built: Power "Force produced fast: jumps, throws and Olympic
+  lifts."; Conditioning "Work for the heart and lungs: intervals, circuits, rowing, running."; Mobility and
+  flexibility "Range of motion: stretches, joint drills and positions held."; Balance and coordination "Staying
+  steady and moving well: single-leg work, balance and agility drills."; Warm-up and activation "Short drills
+  that get the body ready to train."; Other "Anything else. Give it a name of your own if you like, such as
+  Rehab." The wire keeps Mobility for "Mobility and flexibility" and says Balance and WarmUp for the new two.
+  Recommendation: keep, or have Toufic read them with B8c's words.
+- B9 · Other's own name. Built: refused when it repeats a type ("Strength is one of the types already. Choose
+  it as the type, or give this one another name."), "Other" itself kept as no name; "Rehab" and "rehab" are
+  one choice in the Type filter, under the seven types with "Your own type, under Other", spelled as most of
+  its exercises spell it, each card keeping its own; a plain box, with no suggestions as the coach types, since
+  the UI plan's rule 8 draws no browser list. Other way: the workspace's names as kit chips under the box.
+  Recommendation: keep until a coach mistypes one.
+- B9 · The Tag chip. Built: a fifth chip, shown while something in the view is tagged, each tag written
+  "knee-friendly (2)" as Drafts (n) and Archived (n) are, counted over the view whatever the search and the
+  other filters, so a choice never empties its own menu; two spellings of a tag are one choice. Other way:
+  counts that follow the other filters. Recommendation: keep.
+- B9 · A link added before B9. Built: no title until the same link is added again (pasted into any exercise's
+  Video link), so its tile reads "Watch on YouTube · opens in a new tab" alone and still opens the video;
+  every link added since asks YouTube or Vimeo once, on TB Gym's server, which tells the provider which
+  video was added, never who watches it. Other way: a one-time job asking for every older link's title.
+  Recommendation: the job, a small row, before go-live, if the test copy's links matter.
+- B9 · An uploaded video's tile, left out (outside the row). The row names a link's tile, so an upload's tile
+  still reads "Video" and opens nothing; the builder's Watch demo plays it. Recommendation: a small row
+  opening the same demo sheet from the tile and the card's menu.
+- B9 · Words the row did not give. Built: "A name of your own (optional)" with "Shown as its type and in the
+  Type filter, like Rehab. Up to 40 characters.", "Keep the type’s name to 40 characters." and "Only an
+  exercise of type Other takes a name of your own."; the lede's "1 archived exercise" and "3 archived
+  exercises"; "No exercise is archived" with "An exercise you archive waits here, out of your pickers, until
+  you restore it." and "Back to your exercises"; "No archived exercise matches" with "Show all archived
+  exercises"; "Try another word, or clear the filters." in place of "… Archived exercises show only with
+  Archived too."; the card menu's "Watch on YouTube" with "Opens in a new tab"; the tile's name for a screen
+  reader, "Back Squat: How to Barbell Squat …. Watch on YouTube · opens in a new tab"; "Ask for Active,
+  Archived or Both." Also: the demo's Push-up is Strength where it was General (a workspace's own General
+  exercises become Other). Recommendation: keep.

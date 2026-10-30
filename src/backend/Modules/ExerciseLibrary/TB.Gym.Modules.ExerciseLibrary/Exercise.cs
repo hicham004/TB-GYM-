@@ -31,6 +31,12 @@ public sealed class Exercise : TenantEntity
 
     public ExerciseClassification Classification { get; private set; }
 
+    /// <summary>
+    /// The coach's own name for an exercise of type Other ("Rehab"), shown as its type and offered by the
+    /// library's Type filter (critique B9). It labels only: the exercise is Other in every other way.
+    /// </summary>
+    public string? TypeName { get; private set; }
+
     public bool IsArchived { get; private set; }
 
     public IReadOnlyCollection<ExerciseMuscle> Muscles => muscles;
@@ -70,6 +76,8 @@ public sealed class Exercise : TenantEntity
         {
             throw new ArgumentException("Exercise metadata contains an unsupported value.", nameof(definition));
         }
+
+        var typeName = ExerciseTypes.OwnName(definition.Classification, definition.TypeName);
 
         var requestedMuscles = definition.Muscles
             .DistinctBy(item => new { item.Muscle, item.Role })
@@ -114,6 +122,7 @@ public sealed class Exercise : TenantEntity
         Equipment = definition.Equipment;
         MovementPattern = definition.MovementPattern;
         Classification = definition.Classification;
+        TypeName = typeName;
 
         muscles.RemoveAll(existing => !requestedMuscles.Any(requested =>
             requested.Muscle == existing.Muscle && requested.Role == existing.Role));
@@ -280,18 +289,88 @@ public sealed record ExerciseDefinition(
     IReadOnlyList<ExerciseMuscleDefinition> Muscles,
     IReadOnlyList<string> Tags,
     IReadOnlyList<ExerciseAlternativeDefinition> Alternatives,
-    IReadOnlyList<Guid> MediaAssetIds);
+    IReadOnlyList<Guid> MediaAssetIds,
+    string? TypeName = null);
 
 public sealed record ExerciseMuscleDefinition(MuscleGroup Muscle, MuscleRole Role);
 
 public sealed record ExerciseAlternativeDefinition(Guid ExerciseId, string? Note);
 
+/// <summary>
+/// The kind of exercise (critique B9): seven types, each said in one line under the Type select. A type
+/// labels and filters the library; none changes what a program may prescribe. The column holds the name,
+/// so General became Other by a data migration, with the same number.
+/// </summary>
 public enum ExerciseClassification
 {
     Strength = 1,
-    General = 2,
+    Other = 2,
+    /// <summary>Mobility and flexibility.</summary>
     Mobility = 3,
     Conditioning = 4,
+    Power = 5,
+    /// <summary>Balance and coordination.</summary>
+    Balance = 6,
+    /// <summary>Warm-up and activation.</summary>
+    WarmUp = 7,
+}
+
+/// <summary>Other's own name (critique B9, LIB-005): optional, up to 40 characters, never another type's.</summary>
+public static class ExerciseTypes
+{
+    public const int MaximumOwnNameLength = 40;
+
+    /// <summary>The types' names on screen and on the wire, which an own name may not repeat.</summary>
+    private static readonly HashSet<string> TakenNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Strength",
+        "Power",
+        "Conditioning",
+        "Mobility",
+        "Mobility and flexibility",
+        "Balance",
+        "Balance and coordination",
+        "WarmUp",
+        "Warm-up",
+        "Warm up",
+        "Warm-up and activation",
+    };
+
+    /// <summary>
+    /// The name kept for <paramref name="classification"/>: trimmed, or null when none was given. "Other" itself
+    /// says nothing more, so it is kept as none.
+    /// </summary>
+    public static string? OwnName(ExerciseClassification classification, string? typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            return null;
+        }
+
+        var name = typeName.Trim();
+        if (classification != ExerciseClassification.Other)
+        {
+            throw new ArgumentException("Only an exercise of type Other takes a name of your own.", nameof(typeName));
+        }
+
+        if (name.Length > MaximumOwnNameLength)
+        {
+            throw new ArgumentException(
+                $"Keep the type's name to {MaximumOwnNameLength} characters.",
+                nameof(typeName));
+        }
+
+        if (string.Equals(name, "Other", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return TakenNames.Contains(name)
+            ? throw new ArgumentException(
+                $"{name} is one of the types already. Choose it as the type, or give this one another name.",
+                nameof(typeName))
+            : name;
+    }
 }
 
 public enum ExerciseEquipment

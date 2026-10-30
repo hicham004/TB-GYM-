@@ -60,6 +60,7 @@ public sealed partial class GymDbContext
             entity.Property(item => item.StorageKey).HasMaxLength(StorageObjectLocator.MaximumKeyLength);
             entity.Property(item => item.ExternalProvider).HasConversion<string>().HasMaxLength(24);
             entity.Property(item => item.ExternalMediaId).HasMaxLength(100);
+            entity.Property(item => item.ExternalTitle).HasMaxLength(ExternalVideoTitle.MaximumLength);
             ConfigureScanEvidence(entity);
             entity.Property(item => item.TombstonedAtUtc);
             entity.Property(item => item.PurgeFailureCode).HasMaxLength(100);
@@ -90,6 +91,10 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_MediaAssets_Source",
                     "(\"Source\" = 'Upload' AND \"StorageLocation\" IS NOT NULL AND (\"StorageKey\" IS NOT NULL OR \"Status\" = 'Purged') AND \"ExternalMediaId\" IS NULL) OR (\"Source\" = 'ExternalEmbed' AND \"StorageLocation\" IS NULL AND \"StorageKey\" IS NULL AND \"ExternalMediaId\" IS NOT NULL)");
+                // A provider's own title belongs to a link alone (critique B9, MED-015).
+                table.HasCheckConstraint(
+                    "CK_MediaAssets_ExternalTitle",
+                    "\"ExternalTitle\" IS NULL OR (\"Source\" = 'ExternalEmbed' AND \"ExternalTitle\" <> '')");
                 table.HasCheckConstraint(
                     "CK_MediaAssets_Purged",
                     "(\"Status\" = 'Purged') = (\"PurgedAtUtc\" IS NOT NULL)");

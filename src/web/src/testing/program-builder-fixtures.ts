@@ -269,14 +269,16 @@ export interface LibraryQuery {
   query?: string;
   movementPatterns?: readonly MovementPattern[];
   ids?: readonly string[];
-  includeArchived?: boolean;
+  /** The exercises in use (the default), the archived ones, or both (critique B9). */
+  status?: 'Active' | 'Archived' | 'Both';
   patterns?: boolean;
   skip?: number;
   take?: number;
 }
 
 /**
- * `GET /api/exercises` as the server answers it (WEA-14): archived exercises only when asked for, the ids
+ * `GET /api/exercises` as the server answers it (WEA-14): the exercises in use unless the status asks for the
+ * archived ones or both (critique B9), the ids
  * and patterns asked for, every word in the name or a tag, by name, one page from `skip`, and, when asked
  * for, the library's count under each pattern whatever else was asked.
  */
@@ -284,7 +286,10 @@ export function libraryPage(
   library: readonly ExerciseView[],
   query: LibraryQuery = {},
 ): ExerciseSearchResult {
-  const shown = library.filter((item) => query.includeArchived || !item.isArchived);
+  const status = query.status ?? 'Active';
+  const shown = library.filter(
+    (item) => status === 'Both' || item.isArchived === (status === 'Archived'),
+  );
   const words = (query.query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   const found = shown
     .filter((item) => !query.ids?.length || query.ids.includes(item.id))
@@ -325,7 +330,7 @@ export function libraryQueryOf(address: string): LibraryQuery {
     query: params.get('query') ?? undefined,
     movementPatterns: params.getAll('movementPattern') as MovementPattern[],
     ids: params.getAll('ids'),
-    includeArchived: params.get('includeArchived') === 'true',
+    status: (params.get('status') as LibraryQuery['status'] | null) ?? undefined,
     patterns: params.get('patterns') === 'true',
     skip: Number(params.get('skip') ?? 0),
     take: Number(params.get('take') ?? 50),

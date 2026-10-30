@@ -47,14 +47,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual("Barbell Row | Bench Press", (await A13cSearchAsync(coach, "/api/exercises?query=b%20%20r")).Names);
         Assert.AreEqual("Barbell Row", (await A13cSearchAsync(
             coach, "/api/exercises?query=b%20a%20r%20e%20l%20o%20w%20r%20zzz")).Names, "A ninth word is not read.");
-        var archived = await A13cSearchAsync(coach, "/api/exercises?includeArchived=true&patterns=true");
+        var archived = await A13cSearchAsync(coach, "/api/exercises?status=Both&patterns=true");
         Assert.AreEqual("Squat 2, HorizontalPush 1, VerticalPush 1, HorizontalPull 1", archived.Patterns);
 
         // A program's own lifts by id, archived ones only when asked for.
         var own = await A13cSearchAsync(coach, $"/api/exercises?ids={squat.Id}&ids={row.Id}&ids={lunge.Id}");
         Assert.AreEqual((2, "Back Squat | Barbell Row"), (own.Total, own.Names));
         var ownArchived = await A13cSearchAsync(
-            coach, $"/api/exercises?ids={squat.Id}&ids={lunge.Id}&includeArchived=true");
+            coach, $"/api/exercises?ids={squat.Id}&ids={lunge.Id}&status=Both");
         Assert.AreEqual("Back Squat | Walking Lunge", ownArchived.Names);
         var both = await A13cSearchAsync(coach, $"/api/exercises?ids={bench.Id}&ids={press.Id}&movementPattern=VerticalPush");
         Assert.AreEqual("Overhead Press", both.Names, "Ids and patterns narrow together.");
@@ -64,7 +64,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var otherTenant = await RegisterCoachAsync(other, "a13c-search-other@example.test", "Other", "Coach");
         var theirs = await A13cExerciseAsync(other, "Their Squat", "Squat");
         var asked = await A13cSearchAsync(
-            coach, $"/api/exercises?ids={theirs.Id}&ids={squat.Id}&includeArchived=true&patterns=true");
+            coach, $"/api/exercises?ids={theirs.Id}&ids={squat.Id}&status=Both&patterns=true");
         Assert.AreEqual((1, "Back Squat", archived.Patterns), (asked.Total, asked.Names, asked.Patterns));
 
         // Only the workspace's staff read its library: never a client, a stranger or someone signed out.

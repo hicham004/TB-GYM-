@@ -1634,6 +1634,7 @@ export type CreateExerciseRequest = {
   tags: Array<string>;
   alternatives: Array<ExerciseAlternativeRequest>;
   mediaAssetIds: Array<string>;
+  typeName?: null | string;
 };
 
 export type CreateFoodItemRequest = {
@@ -1956,7 +1957,8 @@ export type ExerciseAlternativeView = {
   isArchived: boolean;
 };
 
-export type ExerciseClassification = 'Strength' | 'General' | 'Mobility' | 'Conditioning';
+export type ExerciseClassification =
+  'Strength' | 'Other' | 'Mobility' | 'Conditioning' | 'Power' | 'Balance' | 'WarmUp';
 
 export type ExerciseEquipment =
   | 'None'
@@ -1993,6 +1995,15 @@ export type ExerciseHistoryPage = {
   take: number | string;
   items: Array<ExerciseHistoryItem>;
 };
+
+export type ExerciseLibraryFacets = {
+  active: number | string;
+  archived: number | string;
+  tags: Array<ExerciseTagCount>;
+  typeNames: Array<string>;
+};
+
+export type ExerciseListStatus = 'Active' | 'Archived' | 'Both';
 
 export type ExerciseMuscleRequest = {
   muscle: MuscleGroup;
@@ -2036,6 +2047,12 @@ export type ExerciseSearchResult = {
   total: number | string;
   items: Array<ExerciseView>;
   patterns: Array<ExercisePatternCount>;
+  facets?: null | ExerciseLibraryFacets;
+};
+
+export type ExerciseTagCount = {
+  tag: string;
+  count: number | string;
 };
 
 export type ExerciseView = {
@@ -2051,6 +2068,7 @@ export type ExerciseView = {
   alternatives: Array<ExerciseAlternativeView>;
   mediaAssetIds: Array<string>;
   version: number | string;
+  typeName?: null | string;
 };
 
 export type ExertionDisplayPreference = 'Rpe' | 'Rir';
@@ -2497,6 +2515,7 @@ export type MediaAccessView = {
   thumbnailUrl?: null | string;
   externalProvider?: null | ExternalMediaProvider;
   watchUrl?: null | string;
+  externalTitle?: null | string;
 };
 
 export type MediaAssetPage = {
@@ -2521,6 +2540,8 @@ export type MediaAssetView = {
   isCoachProtected: boolean;
   createdAtUtc: string;
   version: number | string;
+  externalTitle?: null | string;
+  watchUrl?: null | string;
 };
 
 export type MediaKind = 'Image' | 'Video';
@@ -4161,6 +4182,7 @@ export type UpdateExerciseRequest = {
   alternatives: Array<ExerciseAlternativeRequest>;
   mediaAssetIds: Array<string>;
   version: number | string;
+  typeName?: null | string;
 };
 
 export type UpdateMesocycleVisibilityRequest = {
@@ -6563,10 +6585,12 @@ export type SearchExercisesData = {
     movementPattern?: Array<MovementPattern>;
     muscle?: MuscleGroup;
     classification?: ExerciseClassification;
+    typeName?: string;
     tag?: string;
-    includeArchived?: boolean;
+    status?: ExerciseListStatus;
     ids?: Array<string>;
     patterns?: boolean;
+    facets?: boolean;
     skip?: number | string;
     take?: number | string;
   };

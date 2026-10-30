@@ -16,17 +16,20 @@ public static class ExerciseEndpoints
             .WithTags(ExerciseLibraryModule.Name);
 
         // movementPattern and ids repeat: ?movementPattern=HorizontalPush&movementPattern=VerticalPush;
-        // patterns=true adds the library's count per pattern.
+        // patterns=true adds the library's count per pattern, facets=true the library page's filters, and
+        // status reads the exercises in use (the default), the archived ones or both (critique B9).
         group.MapGet("/", async (
             string? query,
             ExerciseEquipment? equipment,
             MovementPattern[]? movementPattern,
             MuscleGroup? muscle,
             ExerciseClassification? classification,
+            string? typeName,
             string? tag,
-            bool? includeArchived,
+            ExerciseListStatus? status,
             Guid[]? ids,
             bool? patterns,
+            bool? facets,
             int? skip,
             int? take,
             IExerciseLibraryApplicationService service,
@@ -40,6 +43,14 @@ public static class ExerciseEndpoints
                 });
             }
 
+            if (status is { } asked && !Enum.IsDefined(asked))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["status"] = ["Ask for Active, Archived or Both."],
+                });
+            }
+
             return Results.Ok(await service.SearchAsync(
                 new ExerciseSearchRequest(
                     query,
@@ -48,11 +59,13 @@ public static class ExerciseEndpoints
                     muscle,
                     classification,
                     tag,
-                    includeArchived ?? false,
+                    status ?? ExerciseListStatus.Active,
                     skip ?? 0,
                     take is null or 0 ? 50 : take.Value,
                     ids,
-                    patterns ?? false),
+                    patterns ?? false,
+                    typeName,
+                    facets ?? false),
                 cancellationToken));
         })
             .WithName("SearchExercises")

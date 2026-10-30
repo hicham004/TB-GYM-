@@ -90,7 +90,7 @@ internal static class DemoWorkspaceCast
         new("incline-db-press", "Incline Dumbbell Press", ExerciseEquipment.Dumbbell, MovementPattern.HorizontalPush, ExerciseClassification.Strength,
             [(MuscleGroup.Chest, MuscleRole.Primary), (MuscleGroup.Shoulders, MuscleRole.Secondary)],
             ["upper", "push"], "Bench at 30 degrees, elbows at 45, press up over the upper chest.", ["db-bench-press"], 22m, 2m),
-        new("push-up", "Push-up", ExerciseEquipment.Bodyweight, MovementPattern.HorizontalPush, ExerciseClassification.General,
+        new("push-up", "Push-up", ExerciseEquipment.Bodyweight, MovementPattern.HorizontalPush, ExerciseClassification.Strength,
             [(MuscleGroup.Chest, MuscleRole.Primary), (MuscleGroup.Triceps, MuscleRole.Secondary)],
             ["upper", "push", "no equipment"], "Straight line from head to heels, chest to the floor every rep.", [], null, 0m),
         new("lat-pulldown", "Lat Pulldown", ExerciseEquipment.Cable, MovementPattern.VerticalPull, ExerciseClassification.Strength,

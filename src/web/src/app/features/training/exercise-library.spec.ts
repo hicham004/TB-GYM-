@@ -62,6 +62,8 @@ async function render(
             source: 'ExternalEmbed',
             externalProvider: 'YouTube',
             externalMediaId: 'dQw4w9WgXcQ',
+            externalTitle: 'How to Bench Press | Starting Strength',
+            watchUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
           }),
         ],
         total: 2,
@@ -231,9 +233,23 @@ describe('the exercise library', () => {
     expect(squat.querySelector('img')?.getAttribute('src')).toBe(
       '/api/media/m-squat-photo/content',
     );
-    // A video link shows a play tile: pictures from other sites are not loaded.
-    expect(textOf(bench.querySelector('.play'))).toBe('Video link');
+    // A video link is a tile that opens the video on its own page, under its own title (critique B9):
+    // pictures from other sites are not loaded.
+    const watch = bench.querySelector<HTMLAnchorElement>('a.cover[data-watch]')!;
+    expect(textOf(watch.querySelector('.play-title'))).toBe(
+      'How to Bench Press | Starting Strength',
+    );
+    expect(textOf(watch.querySelector('.play-label'))).toBe(
+      'Watch on YouTube · opens in a new tab',
+    );
+    expect(watch.getAttribute('href')).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(watch.getAttribute('target')).toBe('_blank');
+    expect(watch.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(watch.getAttribute('aria-label')).toBe(
+      'Bench Press: How to Bench Press | Starting Strength. Watch on YouTube · opens in a new tab',
+    );
     expect(bench.querySelector('img')).toBeNull();
+    expect(squat.querySelector('a.cover')).toBeNull();
     expect(textOf(pullUp.querySelector('.initials'))).toBe('PU');
     expect(pullUp.querySelector('.cover')?.getAttribute('data-tone')).toBe('pull');
   });
@@ -255,16 +271,134 @@ describe('the exercise library', () => {
         query: 'press',
         muscle: 'Chest',
         movementPattern: null,
-        includeArchived: true,
+        status: 'Archived',
+        facets: true,
         skip: 0,
         take: 48,
       }),
     );
     expect(textOf(host.querySelector('.lede'))).toBe('3 exercises match');
     const chips = Array.from(host.querySelectorAll('.chips app-menu button'));
+    // No Tag chip while nothing is tagged.
     expect(chips.map(textOf)).toEqual(['Muscle: Chest', 'Pattern', 'Type', 'Equipment']);
     expect(chips[0].classList).toContain('selected');
-    expect(button(host, 'Archived too').getAttribute('aria-pressed')).toBe('true');
+    expect(field(host, 'Archived (0)').checked).toBe(true);
+  });
+
+  it('offers Your exercises and Archived (n) once something is archived, and says what archiving does', async () => {
+    const facets = { active: 3, archived: 2, tags: [], typeNames: [] };
+    const { harness, host, api } = await render(undefined, () =>
+      of({ ...results([BACK_SQUAT, BENCH_PRESS, PULL_UP]), facets }),
+    );
+    const views = host.querySelector('app-segmented-control.status')!;
+    expect(textOf(views.querySelector('legend'))).toBe('Exercises to show');
+    expect(Array.from(views.querySelectorAll('label')).map(textOf)).toEqual([
+      'Your exercises',
+      'Archived (2)',
+    ]);
+    expect(field(host, 'Your exercises').checked).toBe(true);
+    expect(host.querySelector('.archived-note')).toBeNull();
+
+    tick(host, 'Archived (2)');
+    await settle(harness.fixture);
+
+    expect(params()).toEqual({ archived: '1' });
+    expect(api.search).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'Archived' }));
+    expect(textOf(host.querySelector('.archived-note'))).toBe(
+      'Archived exercises are left out of your pickers and of programs you build from now on. Programs already built keep them. Open one to restore it.',
+    );
+    expect(textOf(host.querySelector('.lede'))).toBe('3 archived exercises');
+  });
+
+  it('hides the view switch while nothing is archived, and says so when the Archived view is empty', async () => {
+    const plain = await render();
+    expect(plain.host.querySelector('app-segmented-control.status')).toBeNull();
+    TestBed.resetTestingModule();
+
+    const none = await render('/training/exercises?archived=1&view=list', () =>
+      of({ ...results([]), facets: { active: 3, archived: 0, tags: [], typeNames: [] } }),
+    );
+    expect(textOf(none.host.querySelector('app-empty-state h2'))).toBe('No exercise is archived');
+    press(none.host, 'Back to your exercises');
+    await settle(none.harness.fixture);
+    expect(params()).toEqual({ view: 'list' });
+  });
+
+  it('filters by a tag, each with how many carry it, and by a type of the coach’s own', async () => {
+    const facets = {
+      active: 3,
+      archived: 0,
+      tags: [
+        { tag: 'knee-friendly', count: 3 },
+        { tag: 'Home', count: 1 },
+      ],
+      typeNames: ['Rehab'],
+    };
+    const rehab = exercise('Step-down', { classification: 'Other', typeName: 'Rehab' });
+    const { harness, host, api } = await render(undefined, () =>
+      of({ ...results([BACK_SQUAT, rehab]), facets }),
+    );
+    expect(textOf(cards(host)[1].querySelector('.type'))).toBe('Rehab');
+
+    const tag = Array.from(host.querySelectorAll<HTMLButtonElement>('.chips app-menu button')).at(
+      -1,
+    )!;
+    expect(textOf(tag)).toBe('Tag');
+    tag.click();
+    await settle(harness.fixture);
+    expect(menuChoices(tag).map((item) => textOf(item.querySelector('.item-title')))).toEqual([
+      'Any',
+      'Home (1)',
+      'knee-friendly (3)',
+    ]);
+    tag.click();
+    await settle(harness.fixture);
+    await choose(harness, host, 'Tag', 'knee-friendly (3)');
+    expect(params()).toEqual({ tag: 'knee-friendly' });
+    expect(api.search).toHaveBeenLastCalledWith(expect.objectContaining({ tag: 'knee-friendly' }));
+
+    await choose(harness, host, 'Type', 'Rehab');
+    expect(params()).toEqual({ tag: 'knee-friendly', type: 'Rehab' });
+    expect(api.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({ classification: 'Other', typeName: 'Rehab' }),
+    );
+    const type = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('.chips app-menu button'),
+    ).find((candidate) => textOf(candidate) === 'Type: Rehab')!;
+    type.click();
+    await settle(harness.fixture);
+    const choices = menuChoices(type);
+    expect(choices.map((item) => textOf(item.querySelector('.item-title')))).toEqual([
+      'Any',
+      'Strength',
+      'Power',
+      'Conditioning',
+      'Mobility and flexibility',
+      'Balance and coordination',
+      'Warm-up and activation',
+      'Other',
+      'Rehab',
+    ]);
+    expect(textOf(choices.at(-1)!.querySelector('.item-hint'))).toBe('Your own type, under Other');
+    expect(choices.at(-1)!.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('opens a YouTube demo from its card’s menu too, as a link', async () => {
+    const { harness, host } = await render();
+    const more = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="More for Bench Press"]',
+    )!;
+    more.click();
+    await settle(harness.fixture);
+    const [watch, ...rest] = menuChoices(more);
+    expect(textOf(watch.querySelector('.item-title'))).toBe('Watch on YouTube');
+    expect(textOf(watch.querySelector('.item-hint'))).toBe('Opens in a new tab');
+    expect(watch.getAttribute('href')).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(watch.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(rest.map((item) => textOf(item.querySelector('.item-title')))).toEqual([
+      'Edit',
+      'Archive',
+    ]);
   });
 
   it('applies a chip at once and keeps it in the address; Any takes it off', async () => {
@@ -482,9 +616,57 @@ describe('the exercise library', () => {
       tags: ['compound', 'knee-friendly'],
       alternatives: [],
       mediaAssetIds: ['m-squat-video'],
+      typeName: null,
       version: 3,
     });
     expect(toast()).toContain('Back Squat is saved.');
+  });
+
+  it('says what each type means, and lets Other take a name of the coach’s own', async () => {
+    const { harness, host, api } = await render();
+    press(host, 'New exercise');
+    await settle(harness.fixture);
+    const sheet = dialog()!;
+    expect(sheet.textContent).toContain('A lift loaded for reps; feeds maxes and the RPE chart.');
+    expect(sheet.querySelector('input[name="type-name"]')).toBeNull();
+
+    await chooseOption(harness.fixture, sheet, 'Type', 'Other');
+    expect(sheet.textContent).toContain(
+      'Anything else. Give it a name of your own if you like, such as Rehab.',
+    );
+    // A plain box: the page draws no browser-made list (UI plan §2 rule 8).
+    expect(field(sheet, 'A name of your own (optional)').hasAttribute('list')).toBe(false);
+    fill(sheet, 'Exercise name', 'Step-down');
+    fill(sheet, 'A name of your own (optional)', ' Rehab ');
+    await settle(harness.fixture);
+    press(sheet, 'Add exercise');
+    await settle(harness.fixture);
+    expect(api.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ classification: 'Other', typeName: 'Rehab' }),
+    );
+  });
+
+  it('sends no name of the coach’s own once the type is not Other, and refuses a long one', async () => {
+    const { harness, host, api } = await render();
+    press(host, 'New exercise');
+    await settle(harness.fixture);
+    const sheet = dialog()!;
+    fill(sheet, 'Exercise name', 'Box Jump');
+    await chooseOption(harness.fixture, sheet, 'Type', 'Other');
+    fill(sheet, 'A name of your own (optional)', 'r'.repeat(41));
+    await settle(harness.fixture);
+    press(sheet, 'Add exercise');
+    await settle(harness.fixture);
+    expect(api.create).not.toHaveBeenCalled();
+    expect(sheet.textContent).toContain('Keep the type’s name to 40 characters.');
+
+    await chooseOption(harness.fixture, sheet, 'Type', 'Power');
+    expect(sheet.textContent).toContain('Force produced fast: jumps, throws and Olympic lifts.');
+    press(sheet, 'Add exercise');
+    await settle(harness.fixture);
+    expect(api.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ classification: 'Power', typeName: null }),
+    );
   });
 
   it('archives with the version it showed, and Undo restores it', async () => {
@@ -512,5 +694,6 @@ describe('the exercise library', () => {
     expect(menuChoices(more).map((item) => textOf(item.querySelector('.item-title')))).toEqual([
       'Restore',
     ]);
+    expect(textOf(host.querySelector('.archived-note'))).toContain('Open one to restore it.');
   });
 });

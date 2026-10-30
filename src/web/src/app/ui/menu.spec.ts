@@ -245,6 +245,41 @@ describe('UiMenu', () => {
     expect(document.activeElement).toBe(trigger(view.element));
   });
 
+  it('makes an outside page a real link that opens in a new tab, and closes as it is followed', async () => {
+    const view = await render((host) =>
+      host.items.set([
+        {
+          label: 'Watch on YouTube',
+          hint: 'Opens in a new tab',
+          action: 'watch',
+          href: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        },
+        ...WEEK,
+      ]),
+    );
+    await open(view);
+    const watch = item(view.element, 'Watch on YouTube');
+
+    expect(watch.tagName).toBe('A');
+    expect(watch.getAttribute('href')).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(watch.getAttribute('target')).toBe('_blank');
+    expect(watch.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(words(watch.querySelector('.item-title'))).toBe('Watch on YouTube');
+    expect(words(watch.querySelector('.item-hint'))).toBe('Opens in a new tab');
+    expect(document.activeElement).toBe(watch);
+
+    // The arrows go through it like any choice; jsdom follows no link, so the press is the browser's.
+    await key(view, 'ArrowDown');
+    expect(document.activeElement).toBe(item(view.element, 'Rename week'));
+    await key(view, 'ArrowUp');
+    watch.addEventListener('click', (event) => event.preventDefault());
+    watch.click();
+    await settle(view.fixture);
+
+    expect(view.host.heard).toEqual([{ action: 'watch', focus: trigger(view.element) }]);
+    expect(list(view.element)).toBeNull();
+  });
+
   it('says why a choice is not available, and choosing it does nothing', async () => {
     const view = await render();
     await open(view);

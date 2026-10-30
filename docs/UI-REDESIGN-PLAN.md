@@ -1466,6 +1466,8 @@ Tokens are theme-ready from R1, so this costs little later.
     below its other edge, else above, 8 px from the window's edges, pushed inside them only when
     nothing fits; it follows its button when anything scrolls and closes once the button has scrolled
     out of sight. Specs find an open menu's items with `menuChoices` (`src/testing/dom.ts`).
+    Since critique B9 an item with `href` is a real link to an outside page, opened in a new tab with
+    `rel="noopener noreferrer"` (the exercise card's "Watch on YouTube"); the menu closes as it opens.
 - Built in critique B2b: the fold, the sidebar on short windows, and Cards / List.
   - `UiDisclosure` (`ui/disclosure.ts`), the one fold: a native `<details>` whose 44 px row holds the
     label, an optional hint and count, and the kit's chevron at its end, turned over while open (200 ms,

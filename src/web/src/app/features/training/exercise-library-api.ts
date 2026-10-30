@@ -5,6 +5,7 @@ import type {
   CreateExerciseRequest,
   ExerciseClassification,
   ExerciseEquipment,
+  ExerciseListStatus,
   ExerciseSearchResult,
   ExerciseView,
   MediaAccessBatchView,
@@ -21,8 +22,14 @@ export interface ExerciseQuery {
   readonly muscle?: MuscleGroup | null;
   readonly movementPattern?: MovementPattern | null;
   readonly classification?: ExerciseClassification | null;
+  /** Other's own name ("Rehab"), in any case. */
+  readonly typeName?: string | null;
   readonly equipment?: ExerciseEquipment | null;
-  readonly includeArchived?: boolean;
+  readonly tag?: string | null;
+  /** The exercises in use (the server's default), the archived ones, or both (critique B9). */
+  readonly status?: ExerciseListStatus;
+  /** Adds what the library page's filters offer: the counts, the tags and the own type names. */
+  readonly facets?: boolean;
   readonly skip?: number;
   readonly take?: number;
 }
@@ -40,13 +47,16 @@ export class ExerciseLibraryApi {
     let params = new HttpParams()
       .set('skip', query.skip ?? 0)
       .set('take', query.take ?? 48)
-      .set('includeArchived', query.includeArchived ?? false);
+      .set('status', query.status ?? 'Active');
     const text = query.query?.trim();
     if (text) params = params.set('query', text);
     if (query.muscle) params = params.set('muscle', query.muscle);
     if (query.movementPattern) params = params.set('movementPattern', query.movementPattern);
     if (query.classification) params = params.set('classification', query.classification);
+    if (query.typeName?.trim()) params = params.set('typeName', query.typeName.trim());
     if (query.equipment) params = params.set('equipment', query.equipment);
+    if (query.tag?.trim()) params = params.set('tag', query.tag.trim());
+    if (query.facets) params = params.set('facets', true);
     return this.http.get<ExerciseSearchResult>('/api/exercises', { params });
   }
 

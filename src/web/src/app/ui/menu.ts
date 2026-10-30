@@ -29,6 +29,11 @@ export interface UiMenuItem {
   disabled?: boolean;
   /** Removes something: drawn in the danger colour. */
   danger?: boolean;
+  /**
+   * An outside page (a video on YouTube): the item is a real link that opens it in a new tab, with no
+   * opener and no referrer, and the menu closes as it opens. `chosen` still reports the `action`.
+   */
+  href?: string;
 }
 
 let nextId = 0;
@@ -153,22 +158,39 @@ function outOfSight(element: Element): boolean {
       <ul class="panel" [id]="panelId">
         @for (item of items(); track item.action) {
           <li>
-            <button
-              class="item"
-              type="button"
-              [class.danger]="item.danger"
-              [class.current]="current() === item.action"
-              [attr.aria-current]="current() === item.action ? 'true' : null"
-              [attr.aria-disabled]="item.disabled ? 'true' : null"
-              (click)="choose(item)"
-              (keydown)="itemKey($event)"
-              (focusout)="closeOnFocusOut($event)"
-            >
-              <span class="item-title">{{ item.label }}</span>
-              @if (item.hint) {
-                <span class="item-hint">{{ item.hint }}</span>
-              }
-            </button>
+            @if (item.href) {
+              <a
+                class="item"
+                [href]="item.href"
+                target="_blank"
+                rel="noopener noreferrer"
+                (click)="follow(item)"
+                (keydown)="itemKey($event)"
+                (focusout)="closeOnFocusOut($event)"
+              >
+                <span class="item-title">{{ item.label }}</span>
+                @if (item.hint) {
+                  <span class="item-hint">{{ item.hint }}</span>
+                }
+              </a>
+            } @else {
+              <button
+                class="item"
+                type="button"
+                [class.danger]="item.danger"
+                [class.current]="current() === item.action"
+                [attr.aria-current]="current() === item.action ? 'true' : null"
+                [attr.aria-disabled]="item.disabled ? 'true' : null"
+                (click)="choose(item)"
+                (keydown)="itemKey($event)"
+                (focusout)="closeOnFocusOut($event)"
+              >
+                <span class="item-title">{{ item.label }}</span>
+                @if (item.hint) {
+                  <span class="item-hint">{{ item.hint }}</span>
+                }
+              </button>
+            }
           </li>
         }
       </ul>
@@ -270,6 +292,7 @@ function outOfSight(element: Element): boolean {
       justify-content: center;
       padding: 0.5rem 0.75rem;
       text-align: start;
+      text-decoration: none;
     }
 
     .item:hover {
@@ -440,6 +463,12 @@ export class UiMenu {
    */
   protected choose(item: UiMenuItem): void {
     if (item.disabled) return;
+    this.close(true);
+    this.chosen.emit(item.action);
+  }
+
+  /** A link item: the browser opens its page in a new tab; the menu closes behind it. */
+  protected follow(item: UiMenuItem): void {
     this.close(true);
     this.chosen.emit(item.action);
   }

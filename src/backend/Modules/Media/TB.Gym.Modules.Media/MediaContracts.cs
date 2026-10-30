@@ -68,6 +68,11 @@ public sealed record RegisterExternalMediaRequest(
 
 public sealed record DeleteMediaRequest(uint Version);
 
+/// <param name="ExternalTitle">A link's own title, as its provider gave it when it was added; null otherwise (MED-015).</param>
+/// <param name="WatchUrl">
+/// A link's page on YouTube or Vimeo, built from the stored id on the provider's own host like the grant's, so the
+/// library's tile opens it without a grant (critique B9); null for an upload.
+/// </param>
 public sealed record MediaAssetView(
     Guid Id,
     string Title,
@@ -80,7 +85,9 @@ public sealed record MediaAssetView(
     string? ExternalMediaId,
     bool IsCoachProtected,
     DateTimeOffset CreatedAtUtc,
-    uint Version);
+    uint Version,
+    string? ExternalTitle = null,
+    string? WatchUrl = null);
 
 public sealed record MediaAssetPage(
     int Total,
@@ -103,7 +110,9 @@ public sealed record MediaAccessView(
     // A YouTube or Vimeo link only: the provider, and the video's own page, which the screens open
     // in a new tab while no outside player is allowed inside TB Gym (C18). Null for an upload.
     ExternalMediaProvider? ExternalProvider = null,
-    string? WatchUrl = null);
+    string? WatchUrl = null,
+    // A link's own title, when its provider gave one as it was added (critique B9, MED-015).
+    string? ExternalTitle = null);
 
 public sealed record MediaContentResult(
     MediaContentStatus Status,

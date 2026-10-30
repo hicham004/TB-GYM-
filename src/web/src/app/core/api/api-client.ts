@@ -404,7 +404,8 @@ export class ApiClient {
     movementPatterns?: readonly Phase3Contracts.MovementPattern[];
     classification?: Phase3Contracts.ExerciseClassification;
     tag?: string;
-    includeArchived?: boolean;
+    /** The exercises in use, the server's default for every picker, the archived ones, or both. */
+    status?: Phase3Contracts.ExerciseListStatus;
     /** Only these exercises, at most 100: a program's own lifts. */
     ids?: readonly string[];
     /** Adds the library's count per movement pattern, which a builder's chips are drawn from. */

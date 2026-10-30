@@ -40,6 +40,7 @@ import { ExerciseLibraryApi } from './exercise-library-api';
 import {
   type CardCover,
   cardCover,
+  cardMenu,
   coverFromAsset,
   type ExerciseCard,
   exerciseCard,
@@ -49,11 +50,16 @@ import {
   filterParams,
   filtersFrom,
   isFiltered,
+  type LibraryFacets,
   type LibraryFilters,
   type LibraryView,
+  NO_FACETS,
   PAGE_SIZE,
+  statusOptions,
   summaryLine,
+  watchCaption,
   withFilter,
+  withoutFilters,
 } from './exercise-library.models';
 import { ExerciseSheet } from './exercise-sheet';
 
@@ -62,10 +68,12 @@ const GRANT_BATCH = 32;
 
 /**
  * The exercise library (C10, R5.1b): the coach's exercises as cards with their first picture or
- * video, or as a compact list; a search and four filter chips (muscle, pattern, type, equipment) that
- * apply at once and live in the address, so a filtered library can be shared or reopened. New
- * exercise is the one main action; Edit, Archive and Restore sit in each card's menu, and archiving
- * has Undo. Programs already built keep an archived exercise, as they always did.
+ * video, or as a compact list; a search and filter chips (muscle, pattern, type, equipment, and the
+ * tags in use with their counts) that apply at once and live in the address, so a filtered library
+ * can be shared or reopened. "Your exercises" and "Archived (n)" are two views (critique B9): archived
+ * exercises are left out of every picker, and programs already built keep them (LIB-004). New exercise
+ * is the one main action; Edit, Archive and Restore sit in each card's menu, and archiving has Undo. A
+ * YouTube or Vimeo demo's tile, and its menu, open the video on its own page in a new tab.
  */
 @Component({
   selector: 'app-exercise-library',
@@ -124,8 +132,17 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
     { initialValue: {} as Record<string, string | null> },
   );
   protected readonly filters = computed(() => filtersFrom(this.params()));
-  protected readonly chips = computed(() => filterChips(this.filters()));
+  /** The counts, tags and own type names the server gave with the first page (critique B9). */
+  protected readonly facets = signal<LibraryFacets>(NO_FACETS);
+  protected readonly chips = computed(() =>
+    filterChips(this.filters(), this.facets(), this.locale),
+  );
   protected readonly filtered = computed(() => isFiltered(this.filters()));
+  protected readonly statuses = computed(() =>
+    statusOptions(this.facets(), this.filters().archived, this.locale),
+  );
+  protected readonly statusLabel = $localize`Exercises to show`;
+  protected readonly watchCaption = watchCaption;
   /** What the search box shows while typing, ahead of the address it updates. */
   protected readonly searchText = linkedSignal(() => this.filters().query);
 
@@ -144,6 +161,10 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
   );
 
   protected readonly cards = computed(() => this.exercises().map(exerciseCard));
+  /** Each card's menu, with "Watch on YouTube" once its video is known to be a link. */
+  protected readonly menus = computed(
+    () => new Map(this.cards().map((card) => [card.id, cardMenu(card, this.coverOf(card))])),
+  );
   protected readonly summary = computed(() =>
     this.state() === 'ready'
       ? summaryLine(this.total(), this.exercises().length, this.filters(), this.locale)
@@ -164,6 +185,7 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
       this.openSheet?.close();
       this.exercises.set([]);
       this.total.set(0);
+      this.facets.set(NO_FACETS);
       this.covers.set(new Map());
       this.media = null;
       this.state.set('loading');
@@ -192,8 +214,9 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
     this.navigate(withFilter(this.filters(), key, value));
   }
 
-  protected toggleArchived(): void {
-    this.navigate({ ...this.filters(), archived: !this.filters().archived });
+  /** Your exercises or the archived ones; the filters carry over, as the server counts both. */
+  protected setStatus(status: string): void {
+    this.navigate({ ...this.filters(), archived: status === 'archived' });
   }
 
   protected setView(view: LibraryView): void {
@@ -202,7 +225,19 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
 
   protected clearFilters(): void {
     this.searchText.set('');
-    this.navigate({ ...filtersFrom({}), view: this.filters().view });
+    this.navigate(withoutFilters(this.filters()));
+  }
+
+  protected showYours(): void {
+    this.setStatus('active');
+  }
+
+  /** The tile's name: which exercise, the video's own title, and where it opens. */
+  protected watchLabel(card: ExerciseCard, cover: CardCover & { kind: 'link' }): string {
+    const caption = watchCaption(cover.provider);
+    return cover.title
+      ? $localize`${card.name}:exercise:: ${cover.title}:title:. ${caption}:caption:`
+      : $localize`${card.name}:exercise:: ${caption}:caption:`;
   }
 
   private navigate(filters: LibraryFilters): void {
@@ -223,6 +258,14 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
         const page = await owner.wait(firstValueFrom(this.api.search(this.query(filters, 0))));
         this.exercises.set([...page.items]);
         this.total.set(Number(page.total));
+        if (page.facets) {
+          this.facets.set({
+            active: Number(page.facets.active),
+            archived: Number(page.facets.archived),
+            tags: page.facets.tags.map((item) => ({ tag: item.tag, count: Number(item.count) })),
+            typeNames: [...page.facets.typeNames],
+          });
+        }
         this.state.set('ready');
         void this.loadCovers(page.items);
       } catch {
@@ -256,14 +299,18 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
     });
   }
 
+  /** The first page also asks what the filters offer; the counts ignore the filters, so later pages need none. */
   private query(filters: LibraryFilters, skip: number) {
     return {
       query: filters.query,
       muscle: filters.muscle,
       movementPattern: filters.pattern,
       classification: filters.type,
+      typeName: filters.typeName,
       equipment: filters.equipment,
-      includeArchived: filters.archived,
+      tag: filters.tag,
+      status: filters.archived ? ('Archived' as const) : ('Active' as const),
+      facets: skip === 0,
       skip,
       take: PAGE_SIZE,
     };

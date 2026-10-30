@@ -20,6 +20,7 @@ import type { ExerciseView, MediaAssetView, MuscleGroup } from '../../core/api/g
 import { FormAttempt } from '../../core/forms/form-attempt';
 import {
   exerciseClassificationLabel,
+  exerciseClassificationMeaning,
   exerciseEquipmentLabel,
   movementPatternLabel,
   muscleGroupLabel,
@@ -99,12 +100,33 @@ import {
       </app-field>
 
       <div class="grid">
-        <app-select
-          [label]="typeLabel"
-          [options]="typeOptions"
-          [value]="values().classification"
-          (valueChange)="set({ classification: $any($event) })"
-        />
+        <!-- Critique B9: each of the seven types says what it means; Other may take a name of the coach's own. -->
+        <div class="type">
+          <app-select
+            [label]="typeLabel"
+            [options]="typeOptions"
+            [value]="values().classification"
+            [help]="typeMeaning()"
+            (valueChange)="set({ classification: $any($event) })"
+          />
+          @if (values().classification === 'Other') {
+            <app-field
+              [label]="typeNameLabel"
+              [help]="typeNameHelp"
+              [errors]="shows('typeName') ? errors()['typeName'] : null"
+            >
+              <input
+                appControl
+                name="type-name"
+                autocomplete="off"
+                maxlength="40"
+                [value]="values().typeName"
+                (input)="set({ typeName: $any($event.target).value })"
+                (blur)="attempt.touch('typeName')"
+              />
+            </app-field>
+          }
+        </div>
         <app-select
           [label]="muscleLabel"
           [options]="muscleOptions"
@@ -396,6 +418,14 @@ import {
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
     }
 
+    // The type, its meaning and Other's own name take a row of their own, so the meaning has room.
+    .type {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      grid-column: 1 / -1;
+    }
+
     .more {
       align-self: flex-start;
     }
@@ -557,6 +587,8 @@ export class ExerciseSheet implements OnInit {
   protected readonly nameLabel = $localize`Exercise name`;
   protected readonly videoLabel = $localize`Video link (optional)`;
   protected readonly typeLabel = $localize`Type`;
+  protected readonly typeNameLabel = $localize`A name of your own (optional)`;
+  protected readonly typeNameHelp = $localize`Shown as its type and in the Type filter, like Rehab. Up to 40 characters.`;
   protected readonly muscleLabel = $localize`Main muscle`;
   protected readonly patternLabel = $localize`Movement pattern`;
   protected readonly equipmentLabel = $localize`Equipment`;
@@ -599,6 +631,9 @@ export class ExerciseSheet implements OnInit {
   private loaded = false;
 
   protected readonly errors = computed<FieldMessages>(() => exerciseErrors(this.values()));
+  protected readonly typeMeaning = computed(() =>
+    exerciseClassificationMeaning(this.values().classification),
+  );
   protected readonly problemCount = computed(() => Object.keys(this.errors()).length);
   // A link opens on its own site from the workout (C18); only an upload plays inside TB Gym.
   protected readonly videoHelp = computed(() => {

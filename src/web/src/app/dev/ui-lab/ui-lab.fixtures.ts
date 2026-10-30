@@ -18,8 +18,8 @@ export const EQUIPMENT_OPTIONS = [
 export const CLASSIFICATION_OPTIONS = [
   { value: 'Strength', label: 'Strength' },
   { value: 'Conditioning', label: 'Conditioning' },
-  { value: 'Mobility', label: 'Mobility' },
-  { value: 'General', label: 'General' },
+  { value: 'Mobility', label: 'Mobility and flexibility' },
+  { value: 'Other', label: 'Other' },
 ] as const;
 
 export const SET_TYPE_OPTIONS = ['Warm-up', 'Working', 'Back-off'] as const;

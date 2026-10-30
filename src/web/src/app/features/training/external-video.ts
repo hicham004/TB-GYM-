@@ -16,9 +16,11 @@ const WATCH_PAGES = ['https://www.youtube.com/watch?v=', 'https://vimeo.com/'];
  * of the two video pages.
  */
 export function externalVideo(media: MediaAccessView): ExternalVideo | null {
-  const url = media.watchUrl ?? '';
-  if (media.source !== 'ExternalEmbed' || !WATCH_PAGES.some((page) => url.startsWith(page))) {
-    return null;
-  }
+  return media.source === 'ExternalEmbed' ? watchPage(media.watchUrl) : null;
+}
+
+/** The video page the server built for a link (the grant's or the media list's), or null for any other address. */
+export function watchPage(url: string | null | undefined): ExternalVideo | null {
+  if (!url || !WATCH_PAGES.some((page) => url.startsWith(page))) return null;
   return { provider: url.startsWith('https://vimeo.com/') ? 'Vimeo' : 'YouTube', url };
 }

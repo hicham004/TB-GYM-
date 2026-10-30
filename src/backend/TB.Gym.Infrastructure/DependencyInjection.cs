@@ -206,6 +206,14 @@ public static class DependencyInjection
         services.AddOptions<UsdaFoodDataCentralOptions>()
             .Bind(configuration.GetSection("Nutrition:UsdaFoodDataCentral"));
         services.AddScoped<IMediaApplicationService, MediaApplicationService>();
+        // A video link's own title, asked of YouTube or Vimeo once as it is added (critique B9, MED-015). A slow
+        // provider costs the coach's save at most these seconds; the link is then added without a title.
+        services.AddHttpClient<IExternalVideoTitles, OEmbedVideoTitles>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(4);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("TBGym/1.0");
+        });
         services.AddSingleton<MediaUploadConcurrencyGate>();
         services.AddTbGymMediaProviders(configuration, environment);
         services.AddScoped<IMediaPurgeService, MediaPurgeService>();

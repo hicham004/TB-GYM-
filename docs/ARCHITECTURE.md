@@ -447,6 +447,15 @@ same grant; a shorter lifetime interrupts playback without adding protection, si
 content endpoint reauthorizes membership and entitlement on every request and therefore
 revokes access immediately regardless of the remaining lifetime.
 
+A YouTube or Vimeo link holds no bytes and needs no grant to be shown: since critique B9 the coach's media
+list (`GET /api/media`) carries its `watchUrl`, built from the stored id on the provider's own host as the
+grant's is (MED-016), and its `externalTitle`. That title is the one outside call Media makes: Infrastructure's
+`OEmbedVideoTitles`, a typed `HttpClient` behind the module's `IExternalVideoTitles` port, asks the provider's
+public oEmbed endpoint once, on the server, while the link is added (a 4-second timeout, at most 64 KB read,
+only `title` kept and cleaned by `ExternalVideoTitle`), never while a page reads; any failure adds the link
+without one, and adding the same link again fills a missing one (MED-015). Nothing from the provider loads in
+a browser, so the CSP is unchanged.
+
 ## 7. Persistence
 
 PostgreSQL 18 is the target database, accessed through EF Core 10 and Npgsql. Functional
@@ -1037,6 +1046,11 @@ carries `content-visibility: auto`. Names come in ICU root order (`und-x-icu`, `
 since the alpine image's own collation sorts by byte. The builders' old in-browser search also matched
 equipment, pattern and muscle words and ignored accents; the server's finds every word, in any order, in an
 exercise's name or a tag or a recipe's name (LIB-003).
+Critique B9: the exercise search reads `status=Active` (the default every picker keeps), `Archived` or `Both`
+in place of `includeArchived`, and Other's own name (`typeName`, in any case); the Exercises page's first page
+asks `facets=true` for the counts in use and archived ("Archived (n)") and, in the view asked for, the tags with
+how many carry each and the own type names, whatever the other filters, so a choice never empties its menu
+(LIB-004, LIB-005).
 
 Audit A14a (TRAIN-5, VER3B-NEW-1, UIQ-19): no screen draws a browser picker.
 - A list to choose from is the kit's `UiSelect` (`ui/select.ts`): its button names the choice and opens the

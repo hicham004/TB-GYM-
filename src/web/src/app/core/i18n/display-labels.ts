@@ -98,11 +98,28 @@ export function muscleGroupLabel(value: MuscleGroup): string {
 export function exerciseClassificationLabel(value: ExerciseClassification): string {
   const labels: Record<ExerciseClassification, string> = {
     Strength: $localize`Strength`,
-    General: $localize`General`,
-    Mobility: $localize`Mobility`,
+    Power: $localize`Power`,
     Conditioning: $localize`Conditioning`,
+    Mobility: $localize`Mobility and flexibility`,
+    Balance: $localize`Balance and coordination`,
+    WarmUp: $localize`Warm-up and activation`,
+    Other: $localize`Other`,
   };
   return labels[value];
+}
+
+/** What a type means, said under the Type select (critique B9). */
+export function exerciseClassificationMeaning(value: ExerciseClassification): string {
+  const meanings: Record<ExerciseClassification, string> = {
+    Strength: $localize`A lift loaded for reps; feeds maxes and the RPE chart.`,
+    Power: $localize`Force produced fast: jumps, throws and Olympic lifts.`,
+    Conditioning: $localize`Work for the heart and lungs: intervals, circuits, rowing, running.`,
+    Mobility: $localize`Range of motion: stretches, joint drills and positions held.`,
+    Balance: $localize`Staying steady and moving well: single-leg work, balance and agility drills.`,
+    WarmUp: $localize`Short drills that get the body ready to train.`,
+    Other: $localize`Anything else. Give it a name of your own if you like, such as Rehab.`,
+  };
+  return meanings[value];
 }
 
 export function trainingSetTypeLabel(value: TrainingSetType): string {

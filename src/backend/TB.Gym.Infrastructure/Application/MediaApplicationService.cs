@@ -26,7 +26,8 @@ internal sealed class MediaApplicationService(
     ICoachingFeatureAccessService featureAccessService,
     IClock clock,
     ILogger<MediaApplicationService> logger,
-    CoachClientScope coachClientScope)
+    CoachClientScope coachClientScope,
+    IExternalVideoTitles videoTitles)
     : IMediaApplicationService
 {
     /// <summary>
@@ -377,6 +378,12 @@ internal sealed class MediaApplicationService(
                 return await ReuseVideoLinkAsync(existing, cancellationToken);
             }
 
+            // The video's own title, asked of its provider this once (critique B9); a link is added without it
+            // when the provider cannot say.
+            asset.TakeExternalTitle(await videoTitles.FindAsync(
+                request.Provider,
+                asset.ExternalMediaId!,
+                cancellationToken));
             dbContext.MediaAssets.Add(asset);
             try
             {
@@ -408,19 +415,39 @@ internal sealed class MediaApplicationService(
 
     private async Task<MediaCommandResult> ReuseVideoLinkAsync(MediaAsset existing, CancellationToken cancellationToken)
     {
-        if (existing.Status != MediaAssetStatus.Tombstoned)
+        // A link from before B9, or one whose provider did not answer then, takes its own title now.
+        var titled = existing.ExternalTitle is null && existing.TakeExternalTitle(await videoTitles.FindAsync(
+            existing.ExternalProvider!.Value,
+            existing.ExternalMediaId!,
+            cancellationToken));
+        var restored = existing.Status == MediaAssetStatus.Tombstoned;
+        if (restored)
+        {
+            existing.RestoreExternalEmbed();
+        }
+
+        if (!titled && !restored)
         {
             return Success(existing);
         }
 
-        existing.RestoreExternalEmbed();
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            return new MediaCommandResult(MediaCommandStatus.Conflict);
+            if (restored)
+            {
+                return new MediaCommandResult(MediaCommandStatus.Conflict);
+            }
+
+            // Someone changed the link meanwhile: it is answered as they left it, and its title waits for the
+            // next time it is added.
+            dbContext.Entry(existing).State = EntityState.Detached;
+            return await FindVideoLinkAsync(existing, cancellationToken) is { } current
+                ? Success(current)
+                : new MediaCommandResult(MediaCommandStatus.Conflict);
         }
 
         return Success(existing);
@@ -510,7 +537,8 @@ internal sealed class MediaApplicationService(
                 DownloadAllowed: false,
                 thumbnailUrl,
                 isUpload ? null : asset.ExternalProvider,
-                isUpload ? null : BuildExternalWatchUrl(asset)),
+                isUpload ? null : BuildExternalWatchUrl(asset),
+                isUpload ? null : asset.ExternalTitle),
             grant,
             accessLifetime);
     }
@@ -1561,7 +1589,9 @@ internal sealed class MediaApplicationService(
             item.ExternalMediaId,
             item.IsCoachProtected,
             item.CreatedAtUtc,
-            item.Version);
+            item.Version,
+            item.ExternalTitle,
+            item.Source == MediaSource.ExternalEmbed ? BuildExternalWatchUrl(item) : null);
 
     private static MediaCommandResult Success(MediaAsset item) =>
         new(MediaCommandStatus.Success, ToView(item));

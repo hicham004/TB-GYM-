@@ -18,6 +18,17 @@ public sealed partial class GymDbContext
             entity.Property(item => item.Equipment).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.MovementPattern).HasConversion<string>().HasMaxLength(40);
             entity.Property(item => item.Classification).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.TypeName).HasMaxLength(ExerciseTypes.MaximumOwnNameLength);
+            // The seven types (critique B9; General became Other), and Other's own name on Other alone.
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_Exercises_Classification",
+                    "\"Classification\" IN ('Strength', 'Power', 'Conditioning', 'Mobility', 'Balance', 'WarmUp', 'Other')");
+                table.HasCheckConstraint(
+                    "CK_Exercises_TypeName",
+                    "\"TypeName\" IS NULL OR (\"Classification\" = 'Other' AND \"TypeName\" = btrim(\"TypeName\") AND \"TypeName\" <> '')");
+            });
             entity.HasIndex(item => new { item.TenantId, item.NormalizedName }).IsUnique();
             entity.HasIndex(item => new
             {

@@ -21,17 +21,30 @@
 
   <div class="toolbar">
     <div class="find" role="search" aria-label="Find exercises" i18n-aria-label>
-      <app-field class="search" [label]="searchLabel" hideLabel>
-        <input
-          appControl
-          type="search"
-          name="exercise-search"
-          autocomplete="off"
-          [placeholder]="searchPlaceholder"
-          [value]="searchText()"
-          (input)="typed($any($event.target).value)"
-        />
-      </app-field>
+      <div class="find-row">
+        <app-field class="search" [label]="searchLabel" hideLabel>
+          <input
+            appControl
+            type="search"
+            name="exercise-search"
+            autocomplete="off"
+            [placeholder]="searchPlaceholder"
+            [value]="searchText()"
+            (input)="typed($any($event.target).value)"
+          />
+        </app-field>
+        <!-- Critique B9: the archived exercises are a view of their own, offered while there are any. -->
+        @if (statuses().length > 0) {
+          <app-segmented-control
+            class="status"
+            [label]="statusLabel"
+            hideLabel
+            [options]="statuses()"
+            [selected]="filters().archived ? 'archived' : 'active'"
+            (selectedChange)="setStatus($event)"
+          />
+        }
+      </div>
       <div class="chips" role="group" aria-label="Filters" i18n-aria-label>
         @for (chip of chips(); track chip.key) {
           <app-menu
@@ -39,20 +52,11 @@
             align="start"
             [label]="chip.name"
             [selected]="chip.active"
-            [current]="chip.active ? (filters()[chip.key] ?? '') : ''"
+            [current]="chip.current"
             [items]="chip.items"
             (chosen)="setFilter(chip.key, $event)"
           />
         }
-        <button
-          type="button"
-          class="toggle-chip"
-          [attr.aria-pressed]="filters().archived"
-          (click)="toggleArchived()"
-          i18n
-        >
-          Archived too
-        </button>
         @if (filtered()) {
           <button appButton type="button" variant="text" (click)="clearFilters()" i18n>
             Clear filters
@@ -71,6 +75,13 @@
     />
   </div>
 
+  @if (filters().archived) {
+    <p class="archived-note" i18n>
+      Archived exercises are left out of your pickers and of programs you build from now on.
+      Programs already built keep them. Open one to restore it.
+    </p>
+  }
+
   @switch (state()) {
     @case ('loading') {
       <div class="panel pad" aria-busy="true">
@@ -85,16 +96,40 @@
     }
     @default {
       @if (cards().length === 0) {
-        @if (filtered()) {
+        @if (filtered() && filters().archived) {
+          <app-empty-state
+            class="panel"
+            heading="No archived exercise matches"
+            description="Try another word, or clear the filters."
+            i18n-heading
+            i18n-description
+          >
+            <button appButton empty-state-action type="button" (click)="clearFilters()" i18n>
+              Show all archived exercises
+            </button>
+          </app-empty-state>
+        } @else if (filtered()) {
           <app-empty-state
             class="panel"
             heading="No exercise matches"
-            description="Try another word, or clear the filters. Archived exercises show only with Archived too."
+            description="Try another word, or clear the filters."
             i18n-heading
             i18n-description
           >
             <button appButton empty-state-action type="button" (click)="clearFilters()" i18n>
               Show all exercises
+            </button>
+          </app-empty-state>
+        } @else if (filters().archived) {
+          <app-empty-state
+            class="panel"
+            heading="No exercise is archived"
+            description="An exercise you archive waits here, out of your pickers, until you restore it."
+            i18n-heading
+            i18n-description
+          >
+            <button appButton empty-state-action type="button" (click)="showYours()" i18n>
+              Back to your exercises
             </button>
           </app-empty-state>
         } @else {
@@ -114,27 +149,48 @@
         <ul class="exercises" role="list" [class.as-list]="filters().view === 'list'">
           @for (card of cards(); track card.id) {
             <li class="exercise" [class.archived]="card.isArchived" [attr.data-exercise]="card.id">
-              <div class="cover" [attr.data-tone]="card.tone" aria-hidden="true">
-                @if (coverOf(card); as cover) {
-                  @if (cover.kind === 'image') {
-                    <img
-                      [src]="cover.url"
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      width="320"
-                      height="180"
-                    />
+              @let cover = coverOf(card);
+              @if (cover && cover.kind === 'link') {
+                <!-- Critique B9: a YouTube or Vimeo demo opens on its own page; nothing from it loads here (C18). -->
+                <a
+                  class="cover watch"
+                  [href]="cover.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  [attr.aria-label]="watchLabel(card, cover)"
+                  data-watch
+                >
+                  <span class="play">
+                    <app-icon name="play" />
+                    @if (cover.title) {
+                      <span class="play-title" dir="auto">{{ cover.title }}</span>
+                    }
+                    <span class="play-label">{{ watchCaption(cover.provider) }}</span>
+                  </span>
+                </a>
+              } @else {
+                <div class="cover" [attr.data-tone]="card.tone" aria-hidden="true">
+                  @if (cover) {
+                    @if (cover.kind === 'image') {
+                      <img
+                        [src]="cover.url"
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        width="320"
+                        height="180"
+                      />
+                    } @else {
+                      <span class="play">
+                        <app-icon name="play" />
+                        <span class="play-label">{{ cover.label }}</span>
+                      </span>
+                    }
                   } @else {
-                    <span class="play">
-                      <app-icon name="play" />
-                      <span class="play-label">{{ cover.label }}</span>
-                    </span>
+                    <span class="initials">{{ card.initials }}</span>
                   }
-                } @else {
-                  <span class="initials">{{ card.initials }}</span>
-                }
-              </div>
+                </div>
+              }
               <div class="body">
                 <h2 class="name" dir="auto">{{ card.name }}</h2>
                 <p class="detail">{{ card.detail }}</p>
@@ -163,7 +219,7 @@
                 icon="more"
                 label="More for {{ card.name }}"
                 i18n-label
-                [items]="card.menu"
+                [items]="menus().get(card.id) ?? card.menu"
                 (chosen)="cardChosen(card, $event)"
               />
             </li>

@@ -1825,7 +1825,8 @@ size, uses generated object keys, and includes malware/content scanning before p
 **MED-002** Exercise media is associated with a versioned exercise and can be assigned into a
 program snapshot. Default clients see only assigned/permitted media. A coach may grant a
 client explicit full-library access per tenant. Since P4 the coach's read of an assigned program
-names each exercise's snapshot media, so the coach watches the demo the client was given.
+names each exercise's snapshot media, so the coach watches the demo the client was given. Any such
+library grant, once built, leaves archived exercises out (LIB-004); today no client reads the library.
 
 **MED-003** Coaches may receive download controls while clients receive short-lived streaming
 URLs, but a web application cannot guarantee that viewable media is impossible to copy.
@@ -2125,7 +2126,13 @@ coaches adding it at the same moment end with the one that committed first (the 
 `IX_Assets_TenantId_ExternalProvider_ExternalMediaId` settles the race). So several exercises can share
 one demo. It used to answer 500. Another workspace keeps its own asset for the same video. The exercise
 library shows a link as a play tile and never loads the provider's picture: the app's pages allow images
-from TB Gym only.
+from TB Gym only. Amended by critique B9: a link also keeps the video's own title as its provider gives it
+(`ExternalTitle`, apart from the first title, which stays the name the coach's screen gave), asked of the
+provider's public oEmbed page once on TB Gym's server when the link is added, cut to 200 characters, one
+line, with no control or direction-override marks; it is optional, so a provider that does not answer adds
+the link without one, and adding the same link again fills in a missing one, never replacing one it has.
+The library's tile, and its card's menu, read "Watch on YouTube · opens in a new tab" under that title and
+open the watch page MED-016 builds (`rel="noopener noreferrer"`); the coach's media list carries that page.
 
 **MED-016** A YouTube or Vimeo link opens on the provider's own video page, in a new tab, from the
 client's workout player and the coach's demo sheet (C18, decided 2026-10-19, audit A1). Its grant names
@@ -2146,6 +2153,20 @@ save answer `concurrency_conflict`, because the database was asked to update row
 the first eight words: an exercise by its name or a tag, a recipe by its name (audit A13c). Accents count and
 equipment, pattern and muscle words are not searched. The Exercises page, the strength picker and the builders
 all ask the server, a page at a time in natural order of name; the builders' chips ask for a movement group.
+
+**LIB-004** An archived exercise (critique B9) is offered by no picker, builder panel, swap list, max
+recording or client view; programs, their snapshots, records and history keep it; it is restored at any time
+and edited only after it is restored. The Exercises page shows "Your exercises" and, while any is archived,
+"Archived (n)", a view of its own that says so; the search reads exercises in use unless asked for the
+archived ones or both.
+
+**LIB-005** An exercise has one of seven types, each said in a line under the Type select: Strength (a lift
+loaded for reps; feeds maxes and the RPE chart), Power, Conditioning, Mobility and flexibility, Balance and
+coordination, Warm-up and activation, and Other (General before critique B9, renamed by a data migration).
+Other may carry a name of the coach's own, up to 40 characters, which no other type takes and which may not
+be another type's name; it is shown as the exercise's type and listed in the Type filter, and the exercise is
+Other in every other way. A type labels and filters the library; none changes what a program may prescribe.
+The tags in use are a filter of their own, each with how many exercises carry it.
 
 ## 9. Theme and gamification
 
