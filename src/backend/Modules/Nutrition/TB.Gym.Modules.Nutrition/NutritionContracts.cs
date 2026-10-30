@@ -90,6 +90,16 @@ public interface INutritionApplicationService
     Task<NutritionCommandResult> PublishMealPlanDraftAsync(Guid draftId, PublishMealPlanDraftRequest request, CancellationToken cancellationToken);
     Task<NutritionCommandResult> CalculateTargetsAsync(Guid clientProfileId, CalculateNutritionTargetsRequest request, CancellationToken cancellationToken);
 
+    /// <summary>What new calculations work energy out with (critique B8a), so the targets sheet asks for what it takes.</summary>
+    EnergyModelView GetEnergyModel();
+
+    /// <summary>
+    /// The targets sheet's numbers so far, worked out as Work out would and recorded nowhere: the multiplier and the
+    /// words beside it, what their steps are worth, and each goal's rate and share (critique B8a). Energy version 2's
+    /// alone: while version 1 is in force it is refused.
+    /// </summary>
+    NutritionCommandResult PreviewEnergy(PreviewEnergyRequest request);
+
     /// <summary>
     /// The macro split (NUT-008) for a meal plan's daily target, worked out and recorded nowhere: what
     /// "Fill in fat and carbs" writes into the builder's boxes (critique B5c2).
@@ -549,6 +559,12 @@ public sealed record MealPlanDraftView(
 /// <summary>What a draft save answers: small, since the builder already holds the content.</summary>
 public sealed record MealPlanDraftSaveView(Guid Id, DateTimeOffset UpdatedAtUtc, uint Version);
 
+/// <param name="OccupationType">The kinds of work the energy model in force takes (<see cref="EnergyModelView.KindsOfWork"/>).</param>
+/// <param name="WorkoutsPerWeek">Energy version 2 only, and required there: 0 to 7, as the sheet sent it (critique B8a).</param>
+/// <param name="ChosenPal">
+/// Energy version 2 only: the coach's own multiplier in place of the table's (<see cref="CoachChosenPal"/>), 1.40 to 2.40.
+/// </param>
+/// <param name="ChosenPalReason">Why the coach chose it, at most 500 characters; only with <paramref name="ChosenPal"/>.</param>
 public sealed record CalculateNutritionTargetsRequest(
     string BmrMethodKey,
     decimal WeightKilograms,
@@ -562,8 +578,17 @@ public sealed record CalculateNutritionTargetsRequest(
     decimal? CalorieTarget,
     decimal ProteinGrams,
     decimal FatPercentage,
-    bool IsEnergyDeficit);
+    bool IsEnergyDeficit,
+    int? WorkoutsPerWeek = null,
+    decimal? ChosenPal = null,
+    string? ChosenPalReason = null);
 
+/// <param name="Activity">
+/// The words beside the multiplier and their parts, for a multiplier energy version 2 made (its table, or the coach's
+/// own); null for version 1's.
+/// </param>
+/// <param name="Walking">What their steps are worth, inside the multiplier (<see cref="WalkingCost"/>), while energy version 2 is in force.</param>
+/// <param name="Goal">The goal's rate and share (<see cref="WeeklyWeightChange"/>), while energy version 2 is in force.</param>
 public sealed record NutritionCalculationView(
     Guid Id,
     string BmrMethodKey,
@@ -582,7 +607,58 @@ public sealed record NutritionCalculationView(
     decimal FatGrams,
     string EnergyPolicyKey,
     string EnergyPolicyVersion,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    ActivityWords? Activity = null,
+    WalkingWords? Walking = null,
+    GoalRate? Goal = null);
+
+/// <summary>
+/// What new calculations work energy out with (critique B8a, NUT-015), so the targets sheet asks for what that model
+/// takes: version 1 until B8c switches version 2 on.
+/// </summary>
+/// <param name="MaximumWorkoutsPerWeek">Version 2's: workouts a week go from 0 to this; null for version 1, which takes none.</param>
+/// <param name="CoachChosen">Version 2's "Or choose the multiplier yourself"; null for version 1.</param>
+public sealed record EnergyModelView(
+    int Version,
+    string ActivityModelKey,
+    string ActivityModelVersion,
+    IReadOnlyList<OccupationActivityType> KindsOfWork,
+    int? MaximumWorkoutsPerWeek,
+    CoachChosenPalView? CoachChosen);
+
+/// <summary>The coach's own multiplier (<see cref="CoachChosenPal"/>): the picks in plain words, and the range a typed one keeps to.</summary>
+public sealed record CoachChosenPalView(string MethodKey, string MethodVersion, decimal Minimum, decimal Maximum, IReadOnlyList<CoachPalPick> Picks);
+
+/// <summary>
+/// What the targets sheet has so far (critique B8a): every number optional, since the coach is still typing. The
+/// preview works out what it can from what is there, as Work out would, and records nothing.
+/// </summary>
+/// <param name="GoalAdjustments">The goals to give a rate and share for, the sheet's picks and the one typed: at most 10.</param>
+public sealed record PreviewEnergyRequest(
+    string? BmrMethodKey = null,
+    decimal? WeightKilograms = null,
+    decimal? HeightCentimeters = null,
+    int? AgeYears = null,
+    FormulaSex? Sex = null,
+    decimal? BodyFatPercentage = null,
+    OccupationActivityType? OccupationType = null,
+    int? AverageDailySteps = null,
+    int? WorkoutsPerWeek = null,
+    decimal? ChosenPal = null,
+    IReadOnlyList<decimal>? GoalAdjustments = null);
+
+/// <summary>What the targets sheet's numbers come to so far, worked out and recorded nowhere (critique B8a).</summary>
+/// <param name="Activity">The multiplier and the words beside it, once the kind of work, the steps and the workouts are in.</param>
+/// <param name="Walking">What their steps are worth, once the steps and the weight are in.</param>
+/// <param name="BmrEstimate">What their body burns at rest, once the formula has what it needs.</param>
+/// <param name="TdeeEstimate">What they burn, the resting estimate times the multiplier, once both are known.</param>
+/// <param name="Goals">Each goal asked about with its rate, and its share once what they burn is known.</param>
+public sealed record EnergyPreviewView(
+    ActivityWords? Activity,
+    WalkingWords? Walking,
+    decimal? BmrEstimate,
+    decimal? TdeeEstimate,
+    IReadOnlyList<GoalRate> Goals);
 
 /// <summary>
 /// The coach's own grams a day for a client, and why (NUT-008, INV-2). The calorie target is what the
@@ -786,7 +862,8 @@ public sealed record NutritionCommandResult(
     string? Code = null,
     string? Message = null,
     MacroSplitView? MacroSplit = null,
-    RecipeDraftSaveView? RecipeDraft = null);
+    RecipeDraftSaveView? RecipeDraft = null,
+    EnergyPreviewView? EnergyPreview = null);
 
 public enum NutritionCommandStatus
 {

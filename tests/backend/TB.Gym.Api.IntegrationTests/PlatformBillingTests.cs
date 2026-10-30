@@ -506,6 +506,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         "MarkAllOwnNotificationsRead",
         "MarkOwnConversationUnread",
         "MarkOwnNotificationRead",
+        "PreviewNutritionEnergy",
         "PreviewProgramEdit",
         "PreviewTrainingMaxes",
         "PreviewTrainingProgression",

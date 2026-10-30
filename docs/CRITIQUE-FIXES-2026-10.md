@@ -707,3 +707,46 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   the reps are in.", "Working out their estimated 1RM…", "That set works out to a max of more than 2,000.",
   the toast "Back Squat — Estimated 1RM 116.67 kg and training max 105 kg recorded.", and the history's
   "From 100 kg × 5 (Epley)" and "90% of an estimated 116.67 kg". Recommendation: keep.
+- B8a · Where version 2 is switched on. Built: `Nutrition:EnergyModel:Version` is 1 everywhere by default, the
+  owner's development server and the test copy included, since the targets sheet sends version 1's inputs until
+  B8b and the integration suite runs in Development; a server set to 2 (`Nutrition__EnergyModel__Version=2`) uses
+  version 2, and while 1 is in force version 2's inputs are refused in words and the preview answers that it is
+  version 2's. Other way: 2 in appsettings.Development.json now. Recommendation: keep; B8b sets it for
+  development with the screens, and B8c makes 2 the default.
+- B8a · What shows only once version 2 is in force. Built: the words beside a multiplier belong to the
+  calculation version 2 made, so they always show with it; the walking line, the goal's rate and share, and the
+  two energy floors are said only while version 2 is in force, and then on every calculation, version 1's
+  included, as the protein and fat warnings are worked out again on every read. Other way: those three on
+  version 2's calculations only, or the floors for everyone now. Recommendation: keep: they are among the words
+  the review approves (ADR 0008).
+- B8a · "Counts as …" names the steps band. Built: as the row's example has it ("Counts as low active" for
+  5,000 steps), the label is Tudor-Locke's band for the steps, so a nurse on their feet all day with 3,000 steps
+  reads "Counts as sedentary: × 1.65 (work on their feet with 3,000 steps a day, no workouts a week)". Other way:
+  a label for the whole multiplier, FAO's or the IOM's level ("Counts as active: × 1.65"). Recommendation: put
+  it to the reviewers at B8c; keep the row's words until then.
+- B8a · The coach's own picks. Built: six picks, the familiar ladder from FAO/WHO/UNU's lowest whole day up:
+  1.40 "little movement, no exercise", 1.55 "moderate exercise 3 to 5 days a week", 1.725 "hard exercise 6 to 7
+  days a week", 1.90 "very hard training daily or heavy manual work", 2.20 "heavy manual work and hard training
+  most days" and 2.40 "heavy manual work all day and training every day"; any other value from 1.40 to 2.40 can
+  be typed, with at most three decimals so the ladder's 1.725 is one; the kind of work, the steps and the
+  workouts are still sent and kept beside it, and the table's own figure is not said beside a chosen one.
+  Other way: tenths from 1.4 to 2.4, each with words. Recommendation: keep for the review: Toufic's generation
+  knows 1.55, 1.725 and 1.9.
+- B8a · The goal's rate. Built: `WeeklyWeightChange` 1.0 at 7,700 kcal a kilogram (3,500 a pound), to 0.1 kg
+  and said as "≈"; "0 a day ≈ no change in weight", "under 0.1 kg a week" below that, and "−4,000 a day is
+  more than they burn" when a goal would leave nothing; the share in whole percents ("84% of what they burn").
+  Other way: a model that slows as the body adapts (Hall 2011). Recommendation: keep: it is an "about" for the
+  first weeks, and the weight-trend check (later) is the real answer.
+- B8a · Words the row did not give. Built: the line's "no workouts a week", "plus 1 workout a week + 0.02",
+  "work on their feet" and "heavy manual work"; "Chosen by the coach: × 1.55 (moderate exercise 3 to 5 days a
+  week)", by the coach since the owner reads a team coach's too; the walking line's weight in whole kilograms
+  ("at 63 kg" for 62.5) and no line under 5 calories; the floors "The target, 961 calories a day, is under what
+  their body burns at rest (1,008)." and "… is under 1,200, the floor most calculators keep for women.", each
+  ending "This is a warning, not a clinical determination." as the protein and fat warnings do; the refusals
+  "Physical work is split in two now: choose on their feet (teaching, retail, nursing, serving) or heavy manual
+  work (building, farm, moving loads).", "Say how many workouts a week they do, from 0 to 7.", "A multiplier of
+  1.375 is under 1.40, the lowest FAO/WHO/UNU's scale gives a healthy adult's whole day. Choose one from 1.40 to
+  2.40.", "… is over 2.40, the highest FAO/WHO/UNU's scale gives a whole day that can be kept up. …", "Type the
+  multiplier with at most three decimals, like 1.725.", "A reason goes with a multiplier you choose yourself.",
+  "Keep the reason to 500 characters." and, while version 1 is in force, "… part of energy version 2, which this
+  server does not use yet.". Recommendation: keep until the review, which approves the display words.

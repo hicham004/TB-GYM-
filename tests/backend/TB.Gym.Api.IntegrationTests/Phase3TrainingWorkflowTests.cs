@@ -105,6 +105,12 @@ public sealed partial class Phase3TrainingWorkflowTests
                 builder.UseSetting("RateLimiting:RoutineWriteWindowSeconds", "3600");
             }
 
+            // Energy version 2 is switched off until B8c, so only its own tests switch it on (critique B8a).
+            if (TestContext.TestName?.StartsWith("B8aV2", StringComparison.Ordinal) == true)
+            {
+                builder.UseSetting("Nutrition:EnergyModel:Version", "2");
+            }
+
             builder.ConfigureAppConfiguration((_, configuration) =>
                 // The provider harness, when one is running, has the last word on the media
                 // settings: it is what selects R2 and clamd instead of the local defaults.

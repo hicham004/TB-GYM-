@@ -196,6 +196,18 @@ public static class NutritionEndpoints
             Results.Ok(await service.ListClientTargetsAsync(token)))
             .WithName("ListClientTargets").Produces<ClientTargetsList>();
 
+        // Energy version 2 (critique B8a, NUT-015): what new calculations take, and the targets sheet's numbers worked
+        // out as the coach types, recorded nowhere. The preview is a POST, so a client's body stays out of addresses,
+        // and checks the token like every other (audit SEC-4).
+        coach.MapGet("/energy-model", (INutritionApplicationService service) => Results.Ok(service.GetEnergyModel()))
+            .WithName("GetNutritionEnergyModel").Produces<EnergyModelView>();
+        coach.MapPost("/energy-preview", async (PreviewEnergyRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(service.PreviewEnergy(request));
+        }).WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+            .WithName("PreviewNutritionEnergy").Produces<EnergyPreviewView>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status409Conflict);
+
         // A client that is not in the workspace is 404 on every route that names one (SEC-8), as in the
         // other modules; a client whose Nutrition is closed is 403.
         coach.MapPost("/clients/{clientProfileId:guid}/calculations", async (Guid clientProfileId, CalculateNutritionTargetsRequest request, HttpContext context, IAntiforgery antiforgery, INutritionApplicationService service, CancellationToken token) =>
@@ -288,7 +300,7 @@ public static class NutritionEndpoints
 
     private static IResult ToResult(NutritionCommandResult result) => result.Status switch
     {
-        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingConversion ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? (object?)result.MealPlanDraft ?? (object?)result.MacroSplit ?? result.RecipeDraft),
+        NutritionCommandStatus.Success => Results.Ok((object?)result.Settings ?? result.Food ?? (object?)result.Recipe ?? result.MealPlan ?? (object?)result.Calculation ?? result.CookingConversion ?? (object?)result.CalculationRecord ?? result.ClientPlan ?? (object?)result.Day ?? (object?)result.AiDraft ?? (object?)result.MealPlanDraft ?? (object?)result.MacroSplit ?? result.RecipeDraft ?? (object?)result.EnergyPreview),
         NutritionCommandStatus.NotFound => Results.NotFound(),
         NutritionCommandStatus.Forbidden => Results.Forbid(),
         NutritionCommandStatus.Invalid => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),

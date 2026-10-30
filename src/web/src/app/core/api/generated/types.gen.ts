@@ -28,6 +28,22 @@ export type ActiveTrainingBlockView = {
   isCurrentWeekPublished: boolean;
 };
 
+export type ActivityWords = {
+  methodKey: string;
+  methodVersion: string;
+  pal: number | string;
+  words: string;
+  occupationType: OccupationActivityType;
+  averageDailySteps: number | string;
+  stepsBand: StepsBand;
+  stepsBandName: string;
+  workoutsPerWeek: number | string;
+  tableValue: null | number | string;
+  workoutTerm: null | number | string;
+  chosenWords: null | string;
+  reason: null | string;
+};
+
 export type AddFoodVersionRequest = {
   basisQuantity: number | string;
   basisUnit: FoodQuantityUnit;
@@ -392,6 +408,9 @@ export type CalculateNutritionTargetsRequest = {
   proteinGrams: number | string;
   fatPercentage: number | string;
   isEnergyDeficit: boolean;
+  workoutsPerWeek?: null | number | string;
+  chosenPal?: null | number | string;
+  chosenPalReason?: null | string;
 };
 
 export type CancelMesocycleRequest = {
@@ -1168,6 +1187,14 @@ export type CoachAttentionKind =
   | 'NoPlan'
   | 'CheckInOverdue';
 
+export type CoachChosenPalView = {
+  methodKey: string;
+  methodVersion: string;
+  minimum: number | string;
+  maximum: number | string;
+  picks: Array<CoachPalPick>;
+};
+
 export type CoachClientCountView = {
   coachUserId: string;
   name: string;
@@ -1259,6 +1286,11 @@ export type CoachMonthView = {
   coaches: null | Array<CoachClientCountView>;
   moneyRuleKey: string;
   moneyRuleVersion: number | string;
+};
+
+export type CoachPalPick = {
+  pal: number | string;
+  words: string;
 };
 
 export type CoachPlanEndedView = {
@@ -1874,6 +1906,23 @@ export type EmailActionResponse = {
   emailAvailable: boolean;
 };
 
+export type EnergyModelView = {
+  version: number | string;
+  activityModelKey: string;
+  activityModelVersion: string;
+  kindsOfWork: Array<OccupationActivityType>;
+  maximumWorkoutsPerWeek: null | number | string;
+  coachChosen: null | CoachChosenPalView;
+};
+
+export type EnergyPreviewView = {
+  activity: null | ActivityWords;
+  walking: null | WalkingWords;
+  bmrEstimate: null | number | string;
+  tdeeEstimate: null | number | string;
+  goals: Array<GoalRate>;
+};
+
 export type EnrollmentStatus = 'PendingPayment' | 'Active' | 'Paused' | 'Cancelled' | 'Expired';
 
 export type EstimateOneRepMaxRequest = {
@@ -2114,6 +2163,15 @@ export type GenerateAiMealDraftRequest = {
   prompt: string;
   promptVersion: string;
   culture: string;
+};
+
+export type GoalRate = {
+  goalAdjustment: number | string;
+  kilogramsPerWeek: number | string;
+  shareOfMaintenance: null | number | string;
+  words: string;
+  methodKey: string;
+  methodVersion: string;
 };
 
 export type GrantDiscountRequest = {
@@ -2677,6 +2735,9 @@ export type NutritionCalculationView = {
   energyPolicyKey: string;
   energyPolicyVersion: string;
   warnings: Array<string>;
+  activity?: null | ActivityWords;
+  walking?: null | WalkingWords;
+  goal?: null | GoalRate;
 };
 
 export type NutritionChoiceView = {
@@ -2724,7 +2785,8 @@ export type NutritionWorkspaceSettingsView = {
   aiMaximumMonthlyCost: number | string;
 };
 
-export type OccupationActivityType = 'Seated' | 'Mixed' | 'Physical';
+export type OccupationActivityType =
+  'Seated' | 'Mixed' | 'Physical' | 'OnTheirFeet' | 'HeavyManual';
 
 export type OfferBillingModel = 'FixedDuration' | 'Recurring';
 
@@ -2826,6 +2888,20 @@ export type PlatformPaymentView = {
 export type PreparationBasis = 'Raw' | 'Cooked' | 'AsSold' | 'Prepared';
 
 export type PrescriptionModificationPolicy = 'Locked' | 'CoachApprovedSwap';
+
+export type PreviewEnergyRequest = {
+  bmrMethodKey?: null | string;
+  weightKilograms?: null | number | string;
+  heightCentimeters?: null | number | string;
+  ageYears?: null | number | string;
+  sex?: null | FormulaSex;
+  bodyFatPercentage?: null | number | string;
+  occupationType?: null | OccupationActivityType;
+  averageDailySteps?: null | number | string;
+  workoutsPerWeek?: null | number | string;
+  chosenPal?: null | number | string;
+  goalAdjustments?: null | Array<number | string>;
+};
 
 export type PreviewProgramEditRequest = {
   mesocycleVersion: number | string;
@@ -3741,6 +3817,8 @@ export type StartingWeightView = {
   corrections: Array<StartingWeightCorrectionView>;
 };
 
+export type StepsBand = 'Sedentary' | 'LowActive' | 'SomewhatActive' | 'Active' | 'HighlyActive';
+
 export type StrengthMaxFromEstimateView = {
   estimateId: string;
   estimate: number | string;
@@ -4132,6 +4210,15 @@ export type VoidInvoiceRequest = {
 export type VoidInvoiceResponse = {
   voided: PlatformInvoiceView;
   reissued: null | PlatformInvoiceView;
+};
+
+export type WalkingWords = {
+  averageDailySteps: number | string;
+  weightKilograms: number | string;
+  kilocalories: number | string;
+  words: string;
+  methodKey: string;
+  methodVersion: string;
 };
 
 export type WebsiteAnalyticsView = {
@@ -8985,6 +9072,54 @@ export type ListClientTargetsResponses = {
 
 export type ListClientTargetsResponse =
   ListClientTargetsResponses[keyof ListClientTargetsResponses];
+
+export type GetNutritionEnergyModelData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/energy-model';
+};
+
+export type GetNutritionEnergyModelResponses = {
+  /**
+   * OK
+   */
+  200: EnergyModelView;
+};
+
+export type GetNutritionEnergyModelResponse =
+  GetNutritionEnergyModelResponses[keyof GetNutritionEnergyModelResponses];
+
+export type PreviewNutritionEnergyData = {
+  body: PreviewEnergyRequest;
+  path?: never;
+  query?: never;
+  url: '/api/nutrition/energy-preview';
+};
+
+export type PreviewNutritionEnergyErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PreviewNutritionEnergyError =
+  PreviewNutritionEnergyErrors[keyof PreviewNutritionEnergyErrors];
+
+export type PreviewNutritionEnergyResponses = {
+  /**
+   * OK
+   */
+  200: EnergyPreviewView;
+};
+
+export type PreviewNutritionEnergyResponse =
+  PreviewNutritionEnergyResponses[keyof PreviewNutritionEnergyResponses];
 
 export type ListClientNutritionCalculationsData = {
   body?: never;

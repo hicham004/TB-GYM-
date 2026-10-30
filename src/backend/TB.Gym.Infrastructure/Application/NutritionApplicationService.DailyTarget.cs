@@ -104,6 +104,7 @@ internal sealed partial class NutritionApplicationService
                 snapshot.CarbohydrateGrams,
                 snapshot.FatGrams,
                 snapshot.TdeeEstimate,
+                snapshot.BmrEstimate,
                 snapshot.MacroOverrideAuditId,
                 snapshot.InputJson,
             })
@@ -147,7 +148,7 @@ internal sealed partial class NutritionApplicationService
                     isCoachMacros ? null : inputs?.FatPercentage,
                     inputs?.WeightKilograms,
                     inputs is not null && (isCoachMacros ? row.CalorieTarget < row.TdeeEstimate : inputs.IsEnergyDeficit),
-                    CalculationWarnings(row.CalorieTarget, row.ProteinGrams, row.TdeeEstimate, isCoachMacros, inputs));
+                    CalculationWarnings(row.CalorieTarget, row.ProteinGrams, row.TdeeEstimate, row.BmrEstimate, isCoachMacros, inputs));
             })],
             open.Count,
             MaximumClientTargets);

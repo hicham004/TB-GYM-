@@ -52,8 +52,25 @@ key, version, inputs, units, bounds, and result and rejects out-of-range input.
 
 `OccupationStepsPal v1` combines occupation type with average daily steps, maps the result to
 the FAO/WHO/UNU sedentary, moderate, or vigorous range, and never uses training intensity alone.
-`TdeeMultiplication v1` multiplies BMR by PAL. `BmrEstimate`, `ActivityModel`, `TdeeEstimate`,
-`CoachGoalAdjustment`, and `CalorieTarget` remain distinct snapshot fields.
+`BmrTimesPal 1.0` (named `TdeeMultiplication v1` here until critique B8a aligned it with the code) multiplies
+BMR by PAL. `BmrEstimate`, `ActivityModel`, `TdeeEstimate`, `CoachGoalAdjustment`, and `CalorieTarget`
+remain distinct snapshot fields.
+
+Amended 2026-10-30 (critique B8a, the owner's decision of 2026-10-27; NUT-015): v1's bands were 5,000 steps
+wide and its Physical spanned a waiter and a farm labourer, so every mixed-work client from 5,000 to 9,999
+steps read 1.80, FAO's active band, whose own worked day is a standing job plus an hour of exercise.
+`OccupationStepsPal 2.0` keeps v1's shape (work × steps → FAO band) with four kinds of work, Tudor-Locke's five
+step bands and 0.02 a weekly workout (0.14 at most), training still a small term beside work and steps, never
+alone. Its cells are anchored on FAO/WHO/UNU 2004's worked days (an office clerk with an hour of walking 1.53,
+a standing job with walking 1.64, farm labour 2.25), the IOM's categories and about 0.015 to 0.02 per 1,000
+steps; 0.02 a workout is the conservative end of 0.02 to 0.03. A coach may choose the multiplier instead,
+`CoachChosenPal 1.0`, inside the same 1.40 to 2.40 guard, which keeps the familiar ladder as an explicit
+override and never the default. Walking is inside every multiplier, so what steps are worth (`WalkingCost 1.0`)
+is said and never added. v1 stays for every calculation made with it. v2 is built switched off: v1 remains
+the default for new calculations until B8c, after a qualified review of the table and its words (Toufic and
+a dietitian, recorded here by name and date), which may lift or lower the whole table by up to 0.05 and
+approves the display language: the band words, the coach's picks, the walking line, the floors and the
+weekly rate (`WeeklyWeightChange 1.0`).
 
 NUT-008 macro splitting retains unrounded results and validates residual calories. Display/
 prescription rounding is separate, and a positive result that rounds to zero is rejected.

@@ -1016,8 +1016,10 @@ require legal and domain review before release.
 **Phase 4 decision (2026-08-22).** `MifflinStJeor v1` is the default BMR estimate;
 `KatchMcArdle v1` (body-fat required) and `HarrisBenedictRevised v1` are explicit
 alternatives. `OccupationStepsPal v1` combines occupation and average daily steps and feeds
-`TdeeMultiplication v1`. Inputs outside each strategy's declared range are rejected. These
-policies require qualified clinical review before production launch.
+`BmrTimesPal 1.0`, the BMR times the PAL (this line called it `TdeeMultiplication v1` until critique B8a
+aligned it with the code). Inputs outside each strategy's declared range are rejected. These
+policies require qualified clinical review before production launch. Version 2 of the activity model
+waits for that review (NUT-015).
 
 **Phase 4 energy decision (2026-08-22).** Workspaces choose `Atwater v1` (default) or
 `Eu1169 v1`. Since C7 (2026-10-15) Atwater is `v2`: 4/4/9 on total carbohydrate plus alcohol at
@@ -1088,6 +1090,29 @@ draft began. Discard removes the draft and leaves the recipe as last saved. The 
 recipe its coach is changing "In progress" beside its own status, and lists their new recipes in progress
 first, under All and Drafts, counted in Drafts (n). Drafts are staff writes, so an unpaid workspace keeps
 them readable but not writable (ADR 0028).
+
+**NUT-015** Energy model version 2 (critique B8a, 2026-10-30, ADR 0008 amended). `Nutrition:EnergyModel:Version`
+says which model new calculations use: 1, the default until B8c, works as before; 2 is set by hand on a
+development or review server. Each version takes only its own inputs and refuses the other's in words.
+Version 2's `OccupationStepsPal 2.0` takes four kinds of work (Seated, Mixed, On their feet, Heavy manual;
+version 1's Physical is refused), steps a day in Tudor-Locke's five bands (under 5,000; 5,000 to 7,499; 7,500
+to 9,999; 10,000 to 12,499; 12,500 and over) and workouts a week, 0 to 7, as sent (the sheet fills them in
+from the program). The table runs Seated 1.45 to 1.65, Mixed 1.55 to 1.75, On their feet 1.65 to 1.85 and Heavy
+manual 1.90 to 2.10, 0.05 a band, plus 0.02 a workout a week (0.14 at most), inside the 1.40 to 2.40 guard
+(2.24 at most). In its place a coach may choose the multiplier, `CoachChosenPal 1.0`: a pick in plain words or
+a typed value from 1.40 to 2.40 with at most three decimals (the old ladder's 1.2 and 1.375 are refused as
+below FAO/WHO/UNU's lowest whole day), with an optional reason of up to 500 characters, kept in the
+calculation's append-only inputs. A calculation either model made says beside its multiplier how it came
+about ("Counts as low active: × 1.68 (mixed work with 5,000 steps a day × 1.60, plus 4 workouts a week +
+0.08)", or "Chosen by the coach: × 1.55 (…)"); version 1's has no such words. While version 2 is in force,
+every calculation also says what the steps are worth, `WalkingCost 1.0`, shown and never stored or added
+(0.5 kcal × kg × km at 0.75 m a step, rounded to ten: "Their 5,000 steps are inside that, worth about 180
+calories a day at 97 kg."); the goal's rate, `WeeklyWeightChange 1.0` (7,700 kcal a kilogram, said to 0.1 kg),
+and its share of what they burn ("−500 a day ≈ 0.5 kg a week, 84% of what they burn"); and two energy floors
+among the warnings, never refusals: a target under the resting estimate, and under 1,200 kcal a day for women
+or 1,500 for men. `POST /api/nutrition/energy-preview` works the targets sheet's numbers out as the coach
+types, for version 2 only, and records nothing; `GET /api/nutrition/energy-model` says what the model in
+force takes. Version 2 becomes the default only after the review B8c records in ADR 0008.
 
 ## 7. Bodyweight and progress
 

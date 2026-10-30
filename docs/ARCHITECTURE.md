@@ -175,6 +175,14 @@ newest calculation snapshot. A `MealPlanTemplateVersion` filled in names its fat
 `MealPlanTargetSplit`, all three or none by a check); the draft content carries the share and Publish
 works the split out again. `GET /api/nutrition/recipes` takes `status` (All, Published, Drafts) beside
 the builder's `published=true` and answers with the search's counts of each.
+Critique B8a (2026-10-30, NUT-015): the energy models live in the Nutrition module (`EnergyModels`, beside
+the v1 strategies), and `Nutrition:EnergyModel:Version` (1 by default, validated on start) picks the one new
+calculations use. No schema change: a calculation snapshot already names its activity model, version and
+multiplier, and keeps what was sent (the workouts a week and a coach's own multiplier with its reason) in its
+append-only `InputJson`, from which the reads say the words again. `GET /api/nutrition/energy-model` tells the
+targets sheet what to ask for; `POST /api/nutrition/energy-preview` (antiforgery, open while a workspace is
+read-only, as the strength calculators are) works the sheet's numbers out and records nothing, a POST so a
+client's body never sits in an address.
 
 Progress Phase 5A extends the Phase 1 `BodyweightObservation` rather than introducing another
 profile weight. It stores canonical kilograms plus the entered value/unit, keeps one current

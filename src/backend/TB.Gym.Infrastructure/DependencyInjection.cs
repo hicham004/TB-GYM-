@@ -198,6 +198,11 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(20);
         });
         services.AddTbGymAnthropicMealDrafts(configuration);
+        // Which energy model new calculations use (critique B8a): version 1 until B8c switches version 2 on.
+        services.AddOptions<NutritionEnergyModelOptions>()
+            .Bind(configuration.GetSection(NutritionEnergyModelOptions.SectionName))
+            .Validate(options => options.Version is 1 or 2, "Nutrition:EnergyModel:Version must be 1 or 2.")
+            .ValidateOnStart();
         services.AddOptions<UsdaFoodDataCentralOptions>()
             .Bind(configuration.GetSection("Nutrition:UsdaFoodDataCentral"));
         services.AddScoped<IMediaApplicationService, MediaApplicationService>();

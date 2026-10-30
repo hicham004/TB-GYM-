@@ -21,7 +21,8 @@ internal sealed partial class NutritionApplicationService(
     INutritionDataProvider nutritionDataProvider,
     IAiMealDraftProvider aiMealDraftProvider,
     IOptions<NutritionAiAllowanceOptions> aiAllowance,
-    CoachClientScope coachClientScope) : INutritionApplicationService
+    CoachClientScope coachClientScope,
+    IOptions<NutritionEnergyModelOptions> energyModelOptions) : INutritionApplicationService
 {
     private const string AiSchemaVersion = "meal-draft-v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -713,15 +714,9 @@ internal sealed partial class NutritionApplicationService(
 
         try
         {
-            IBmrStrategy bmrStrategy = request.BmrMethodKey switch
-            {
-                MifflinStJeorBmrStrategy.Key => new MifflinStJeorBmrStrategy(),
-                KatchMcArdleBmrStrategy.Key => new KatchMcArdleBmrStrategy(),
-                HarrisBenedictRevisedBmrStrategy.Key => new HarrisBenedictRevisedBmrStrategy(),
-                _ => throw new ArgumentException("A supported BMR strategy is required."),
-            };
-            var bmr = bmrStrategy.Estimate(new BmrInput(request.WeightKilograms, request.HeightCentimeters, request.AgeYears, request.Sex, request.BodyFatPercentage));
-            var activity = OccupationStepsActivityModel.Calculate(new ActivityModelInput(request.OccupationType, request.AverageDailySteps));
+            var bmr = BmrStrategies.For(request.BmrMethodKey).Estimate(new BmrInput(request.WeightKilograms, request.HeightCentimeters, request.AgeYears, request.Sex, request.BodyFatPercentage));
+            // The energy model in force takes its own inputs and refuses the other version's (critique B8a).
+            var activity = EnergyModels.Activity(EnergyModel, ActivityRequestOf(request));
             var tdee = TdeeEstimator.Estimate(bmr, activity);
             var calculatedTarget = tdee.KilocaloriesPerDay + request.CoachGoalAdjustment;
             var calorieTarget = request.CalorieTarget ?? calculatedTarget;
@@ -732,6 +727,8 @@ internal sealed partial class NutritionApplicationService(
 
             var macro = MacroTargetCalculator.Calculate(new MacroTargetInput(calorieTarget, request.ProteinGrams, request.FatPercentage, request.WeightKilograms, request.IsEnergyDeficit));
             var settings = await GetOrCreateSettingsEntityAsync(cancellationToken);
+            // What was sent is kept as the calculation's inputs, append-only, the coach's reason as it is kept.
+            var sent = request with { ChosenPalReason = CoachChosenPal.Reason(request.ChosenPalReason) };
             var snapshot = NutritionCalculationSnapshot.Create(
                 tenantContext.TenantId,
                 clientProfileId,
@@ -742,10 +739,15 @@ internal sealed partial class NutritionApplicationService(
                 macro,
                 settings.EnergyPolicyKey,
                 settings.EnergyPolicyVersion,
-                JsonSerializer.Serialize(request, JsonOptions));
+                JsonSerializer.Serialize(sent, JsonOptions));
             dbContext.NutritionCalculationSnapshots.Add(snapshot);
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new NutritionCommandResult(NutritionCommandStatus.Success, Calculation: ToCalculationView(snapshot, macro.Warnings));
+            IReadOnlyList<string> warnings = [.. macro.Warnings, .. EnergyWarnings(calorieTarget, bmr.KilocaloriesPerDay, request.Sex)];
+            return new NutritionCommandResult(NutritionCommandStatus.Success, Calculation: CalculationView(snapshot, sent, warnings));
+        }
+        catch (EnergyModelInputException exception)
+        {
+            return Invalid(exception.ParamName ?? "calculation", exception.PersonMessage());
         }
         catch (ArgumentException exception)
         {
@@ -1808,14 +1810,11 @@ internal sealed partial class NutritionApplicationService(
             version.PublishedAtUtc ?? version.CreatedAtUtc,
             draft);
 
-    private static NutritionCalculationView ToCalculationView(NutritionCalculationSnapshot item, IReadOnlyList<string> warnings) =>
-        new(item.Id, item.BmrMethodKey, item.BmrMethodVersion, item.BmrEstimate, item.ActivityModelKey, item.ActivityModelVersion, item.ActivityModelPal, item.TdeeMethodKey, item.TdeeMethodVersion, item.TdeeEstimate, item.CoachGoalAdjustment, item.CalorieTarget, item.ProteinGrams, item.CarbohydrateGrams, item.FatGrams, item.EnergyPolicyKey, item.EnergyPolicyVersion, warnings);
-
-    private static NutritionCalculationRecord ToCalculationRecord(NutritionCalculationSnapshot item, MacroAdjustmentView? adjustment)
+    private NutritionCalculationRecord ToCalculationRecord(NutritionCalculationSnapshot item, MacroAdjustmentView? adjustment)
     {
         var inputs = ReadCalculationInputs(item.InputJson);
-        var warnings = CalculationWarnings(item.CalorieTarget, item.ProteinGrams, item.TdeeEstimate, item.MacroOverrideAuditId is not null, inputs);
-        return new NutritionCalculationRecord(ToCalculationView(item, warnings), inputs, item.CreatedAtUtc, adjustment);
+        var warnings = CalculationWarnings(item.CalorieTarget, item.ProteinGrams, item.TdeeEstimate, item.BmrEstimate, item.MacroOverrideAuditId is not null, inputs);
+        return new NutritionCalculationRecord(CalculationView(item, inputs, warnings), inputs, item.CreatedAtUtc, adjustment);
     }
 
     /// <summary>What a calculation was worked out from; null for an older row whose numbers cannot be read back.</summary>
@@ -1835,12 +1834,14 @@ internal sealed partial class NutritionApplicationService(
     /// <summary>
     /// The warning depends only on numbers that were stored, so it is worked out again, never kept. A
     /// coach's own macros are flagged on the same protein range, eating below what they burn when the
-    /// target is under the TDEE estimate.
+    /// target is under the TDEE estimate. While energy version 2 is in force the energy floors follow
+    /// (critique B8a), for a coach's own macros too.
     /// </summary>
-    private static IReadOnlyList<string> CalculationWarnings(
+    private IReadOnlyList<string> CalculationWarnings(
         decimal calorieTarget,
         decimal proteinGrams,
         decimal tdeeEstimate,
+        decimal bmrEstimate,
         bool isCoachMacros,
         CalculateNutritionTargetsRequest? inputs)
     {
@@ -1851,9 +1852,10 @@ internal sealed partial class NutritionApplicationService(
 
         try
         {
-            return isCoachMacros
+            var macros = isCoachMacros
                 ? MacroTargetCalculator.ProteinWarnings(proteinGrams, inputs.WeightKilograms, calorieTarget < tdeeEstimate)
                 : MacroTargetCalculator.Calculate(new MacroTargetInput(calorieTarget, proteinGrams, inputs.FatPercentage, inputs.WeightKilograms, inputs.IsEnergyDeficit)).Warnings;
+            return [.. macros, .. EnergyWarnings(calorieTarget, bmrEstimate, inputs.Sex)];
         }
         catch (ArgumentException)
         {

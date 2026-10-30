@@ -123,11 +123,18 @@ public sealed class HarrisBenedictRevisedBmrStrategy : BmrStrategyBase
             : 447.593m + 9.247m * input.WeightKilograms + 3.098m * input.HeightCentimeters - 4.330m * input.AgeYears;
 }
 
+/// <summary>
+/// The kind of work a client does. Version 1 of the activity model takes Seated, Mixed and Physical; version 2
+/// (<see cref="OccupationStepsActivityModelVersion2"/>) splits Physical into OnTheirFeet and HeavyManual, since
+/// one kind spanned a waiter and a farm labourer.
+/// </summary>
 public enum OccupationActivityType
 {
     Seated = 1,
     Mixed = 2,
     Physical = 3,
+    OnTheirFeet = 4,
+    HeavyManual = 5,
 }
 
 public enum PalBand
@@ -137,7 +144,8 @@ public enum PalBand
     Vigorous = 3,
 }
 
-public sealed record ActivityModelInput(OccupationActivityType OccupationType, int AverageDailySteps);
+/// <param name="WorkoutsPerWeek">Version 2's training term; version 1 never reads it.</param>
+public sealed record ActivityModelInput(OccupationActivityType OccupationType, int AverageDailySteps, int? WorkoutsPerWeek = null);
 
 public sealed record ActivityModelResult(
     decimal Pal,
@@ -146,6 +154,21 @@ public sealed record ActivityModelResult(
     string MethodVersion,
     ActivityModelInput Input);
 
+/// <summary>FAO/WHO/UNU 2004's range for a healthy adult's whole day, which every activity model stays inside.</summary>
+public static class PalGuard
+{
+    public const decimal Minimum = 1.40m;
+    public const decimal Maximum = 2.40m;
+
+    /// <summary>FAO/WHO/UNU's lifestyle band: sedentary or light to 1.69, active to 1.99, vigorous above.</summary>
+    public static PalBand BandFor(decimal pal) => pal switch
+    {
+        <= 1.69m => PalBand.Sedentary,
+        <= 1.99m => PalBand.Moderate,
+        _ => PalBand.Vigorous,
+    };
+}
+
 public sealed class OccupationStepsActivityModel
 {
     public const string Key = "OccupationStepsPal";
@@ -153,7 +176,8 @@ public sealed class OccupationStepsActivityModel
 
     public static ActivityModelResult Calculate(ActivityModelInput input)
     {
-        if (!Enum.IsDefined(input.OccupationType))
+        // Version 1's three kinds only: its default arm below would give a kind it never knew 2.20.
+        if (input.OccupationType is not (OccupationActivityType.Seated or OccupationActivityType.Mixed or OccupationActivityType.Physical))
         {
             throw new ArgumentOutOfRangeException(nameof(input), "A supported occupation type is required.");
         }
@@ -181,14 +205,9 @@ public sealed class OccupationStepsActivityModel
             (OccupationActivityType.Physical, 1) => 2.00m,
             _ => 2.20m,
         };
-        var band = pal switch
-        {
-            <= 1.69m => PalBand.Sedentary,
-            <= 1.99m => PalBand.Moderate,
-            _ => PalBand.Vigorous,
-        };
+        var band = PalGuard.BandFor(pal);
 
-        if (pal is < 1.40m or > 2.40m)
+        if (pal is < PalGuard.Minimum or > PalGuard.Maximum)
         {
             throw new InvalidOperationException("Calculated PAL is outside the supported FAO/WHO/UNU range.");
         }
@@ -213,7 +232,7 @@ public static class TdeeEstimator
     {
         ArgumentNullException.ThrowIfNull(bmrEstimate);
         ArgumentNullException.ThrowIfNull(activityModel);
-        if (bmrEstimate.KilocaloriesPerDay <= 0m || activityModel.Pal is < 1.40m or > 2.40m)
+        if (bmrEstimate.KilocaloriesPerDay <= 0m || activityModel.Pal is < PalGuard.Minimum or > PalGuard.Maximum)
         {
             throw new ArgumentOutOfRangeException(nameof(activityModel), "BMR and PAL must be inside their supported ranges.");
         }
