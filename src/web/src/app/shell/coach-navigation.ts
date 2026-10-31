@@ -47,7 +47,14 @@ export const COACH_NAVIGATION: readonly CoachNavigationGroup[] = [
   {
     label: $localize`Coaching`,
     destinations: [
-      { key: 'overview', label: $localize`Today`, icon: 'overview', link: '/', section: [] },
+      // This month is opened from Today, so it stands in Today's section (critique B10d).
+      {
+        key: 'overview',
+        label: $localize`Today`,
+        icon: 'overview',
+        link: '/',
+        section: ['/month'],
+      },
       {
         key: 'clients',
         label: $localize`Clients`,

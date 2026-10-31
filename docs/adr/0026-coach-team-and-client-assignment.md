@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-09-23; amended 2026-09-24 (a coach can resign, and their clients are told);
 amended 2026-10-20 (the owner's old thread closes too, audit COACH-13); amended 2026-10-29 (money received on
-Today, critique B4b, for the owner to confirm)
+Today, critique B4b, for the owner to confirm); amended 2026-10-31 (the This month page, critique B10d, for the
+owner to confirm)
 
 ## Context
 
@@ -54,6 +55,10 @@ Business rules, decided by the product owner on 2026-09-23:
   month's money received that counts for them by each client's coach history (SUB-016), as totals per
   currency with no client named; the owner sees the workspace's totals and every member of staff's
   client counts, which no coach receives (CLI-020).
+- **The This month page** (critique B10d, 2026-10-31, for the owner to confirm): a coach sees their own money
+  received, sessions held, plans and packs sold, and clients started and ended, this month and last. The owner
+  sees the workspace's and each coach's, anyone who left the team with a number included, so the rows add up to
+  the totals; no coach receives another's, and no client is named (SUB-018).
 
 Mechanism:
 

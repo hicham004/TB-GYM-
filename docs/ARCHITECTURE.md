@@ -788,6 +788,15 @@ renewal requests' read, which runs only while some client's whole plan has run o
 B10c added the sessions held). The
 client list and a client's page read nothing new.
 
+Critique B10d adds the This month page's one read, `GET /api/coach-month` (`ICoachMonthService` in Clients,
+`CoachMonthReader` in Infrastructure), again with no schema change. Month numbers v1 (`MonthNumbersPolicy` in
+Subscriptions, beside money received, SUB-018) is a pure rule: the reader gathers two months of facts in three reads,
+and the rule decides what counts, in which month and for whom. The receipts and the sessions held come through
+`MonthReads`, which Today's This month calls too, so a number never differs between them; the plans booked or
+covering days come each with its client's coach history. The owner's rows are two reads more, the team and the
+names, a former coach's included. The page costs 11 commands whatever the client count, pinned exactly
+(`B10dMonthQueryPin`). On the web the read stays out of `ApiClient` (`MonthApi`), so it loads with its lazy page.
+
 On the web (B4a) every screen shows the server's ending-soon flag and counts no days of its own: the list
 reads `planStatus`, the chat panel and the client's record the `PlanEndingSoon` item. The record's header
 therefore reads the client's overview too, once per page through `ClientWorkspaceContext.overviewForPage`,

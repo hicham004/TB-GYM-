@@ -211,6 +211,17 @@ public static class ClientEndpoints
         .WithName("GetCoachToday")
         .Produces<CoachTodayView>();
 
+        // This month (critique B10d, SUB-018): the month's numbers beside last month's, the caller's own, or for the
+        // owner the workspace's with each coach's. It decides nothing and writes nothing.
+        endpoints.MapGet("/api/coach-month", async (
+            ICoachMonthService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetAsync(cancellationToken)))
+        .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+        .WithTags(ClientsModule.Name)
+        .WithName("GetCoachMonth")
+        .Produces<CoachMonthReportView>();
+
         var selfGroup = endpoints
             .MapGroup("/api/client-profile")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)

@@ -1610,6 +1610,14 @@ limited to the coach's assigned clients.
   message) beside Ended, not renewed (Renew or Record payment, "Asked to renew on …", and the owner's End coaching
   through the release dialog), then "What your clients did · Last 7 days", five rows then Show all. Below 48rem of
   window the feed sits under Needs you in the kit's fold with its count, drawn once.
+- Critique B10d (SUB-018, for the owner to confirm): **This month** at `/month` (`features/month`), opened by "See
+  this month and last" at the foot of Today's This month, with Today lit in the sidebar, whose rows stay as they
+  are. "Your coaching space" for the owner, "Your numbers" for a coach, "October so far": money received, one line
+  per currency with its payments and last month's, then 1-on-1 sessions held, plans sold, session packs sold,
+  clients started and clients ended, each with last month's beside it and no percent. With someone to tell apart
+  the owner has By coach: a table with a Total, one month at a time by the switch above it, each coach a small card
+  under 54rem of its own width, and anyone who left the team marked, their numbers kept. "How these are counted"
+  folds what each number means, and nothing is called profit.
 
 **C2. Clients**
 - Job: "How is everyone doing, and who is slipping?"

@@ -594,13 +594,21 @@ internal sealed class CoachOverviewReader(
         var (from, toExclusive) = MoneyReceivedPolicy.MonthOf(scope.Calendar.Today);
         Guid? countsFor = scope.IsOwner ? null : scope.CallerUserId;
         var (readFromUtc, readToUtc) = MoneyReceivedPolicy.ReadWindowUtc(from, toExclusive, scope.TimeZone);
-        var payments = await ReadPaymentsAsync(countsFor, readFromUtc, readToUtc, cancellationToken);
+        var payments = await MonthReads.ReceiptsAsync(
+            dbContext,
+            countsFor,
+            readFromUtc,
+            readToUtc,
+            MoneyReceivedTag,
+            cancellationToken);
         var received = MoneyReceivedPolicy.Totals(payments, from, toExclusive, scope.TimeZone, countsFor);
         var active = states
             .Where(state => state.PlanState == ClientPlanState.Running)
             .Select(state => state.Client.Id)
             .ToHashSet();
-        var held = await CountSessionsHeldAsync(countsFor, from, toExclusive, cancellationToken);
+        var held = await MonthReads.SessionsHeld(dbContext, countsFor, from, toExclusive)
+            .TagWith(SessionsHeldTag)
+            .CountAsync(cancellationToken);
         return new CoachMonthView(
             from,
             toExclusive,
@@ -610,74 +618,6 @@ internal sealed class CoachOverviewReader(
             MoneyReceivedPolicy.Key,
             MoneyReceivedPolicy.Version,
             held > 0 || scope.Allowed(CoachingFeature.Sessions).Length > 0 ? held : null);
-    }
-
-    /// <summary>
-    /// The sessions held in the month that still stand: a session counts on its own workspace day, a former client's
-    /// too, for the coach who recorded it (SES-003), and an undone one counts for nobody. A charge is no session held.
-    /// </summary>
-    private Task<int> CountSessionsHeldAsync(
-        Guid? coachUserId,
-        DateOnly from,
-        DateOnly toExclusive,
-        CancellationToken cancellationToken) =>
-        dbContext.SessionLedgerEntries.AsNoTracking()
-            .Where(entry => entry.Kind == SessionEntryKind.Held &&
-                            entry.Day >= from &&
-                            entry.Day < toExclusive &&
-                            (coachUserId == null || entry.CoachUserId == coachUserId) &&
-                            !dbContext.SessionLedgerEntries.Any(undo =>
-                                undo.TenantId == entry.TenantId && undo.VoidsEntryId == entry.Id))
-            .TagWith(SessionsHeldTag)
-            .CountAsync(cancellationToken);
-
-    /// <summary>
-    /// In one read, the receipts whose instant falls in <c>[fromUtc, toUtc)</c>, the month and a day either side
-    /// (<see cref="MoneyReceivedPolicy.ReadWindowUtc"/>), each with the coach history of the client it was for
-    /// (ADR 0026). <see cref="MoneyReceivedPolicy"/> then decides each receipt's month, by its workspace day, and its
-    /// coach. A coach's read is narrowed to clients they ever coached; the rule decides which receipts are theirs.
-    /// Every client counts, a former one or one coached by someone else since included: the money arrived (ADR 0027
-    /// keeps payments).
-    /// </summary>
-    private async Task<IReadOnlyList<ReceivedPayment>> ReadPaymentsAsync(
-        Guid? coachUserId,
-        DateTimeOffset fromUtc,
-        DateTimeOffset toUtc,
-        CancellationToken cancellationToken)
-    {
-        var rows = await (
-            from payment in dbContext.PaymentRecords.AsNoTracking()
-            join enrollment in dbContext.ClientEnrollments.AsNoTracking()
-                on new { payment.TenantId, Id = payment.EnrollmentId }
-                equals new { enrollment.TenantId, enrollment.Id }
-            where payment.Operation == PaymentOperation.Receipt &&
-                  payment.ReceivedAtUtc >= fromUtc &&
-                  payment.ReceivedAtUtc < toUtc &&
-                  (coachUserId == null || dbContext.ClientCoachAssignments.Any(entry =>
-                      entry.TenantId == enrollment.TenantId &&
-                      entry.ClientProfileId == enrollment.ClientProfileId &&
-                      entry.CoachUserId == coachUserId))
-            select new
-            {
-                payment.Amount,
-                payment.CurrencyCode,
-                payment.ReceivedAtUtc,
-                payment.Operation,
-                History = dbContext.ClientCoachAssignments
-                    .Where(entry =>
-                        entry.TenantId == enrollment.TenantId &&
-                        entry.ClientProfileId == enrollment.ClientProfileId)
-                    .Select(entry => new CoachHistoryEntry(entry.Sequence, entry.CoachUserId, entry.AssignedAtUtc))
-                    .ToList(),
-            })
-            .TagWith(MoneyReceivedTag)
-            .ToListAsync(cancellationToken);
-        return [.. rows.Select(row => new ReceivedPayment(
-            row.Amount,
-            row.CurrencyCode,
-            row.ReceivedAtUtc,
-            row.Operation,
-            row.History))];
     }
 
     /// <summary>

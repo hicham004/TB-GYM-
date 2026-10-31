@@ -225,6 +225,14 @@ describe('CoachToday', () => {
     expect(parts[2].querySelector('.month-note')?.textContent).toBe('Held by your coaching space');
   });
 
+  it('opens the page of the month from This month (critique B10d)', async () => {
+    const { host } = await render();
+    const link = host.querySelector<HTMLAnchorElement>('section.month .month-foot a');
+
+    expect(squash(link?.textContent)).toBe('See this month and last');
+    expect(link?.getAttribute('href')).toBe('/month');
+  });
+
   it('says plainly when nothing has been received this month, in no currency', async () => {
     const view = coachTodayView({ month: coachMonth({ moneyReceived: [] }) });
     const { host } = await render(() => of(view));

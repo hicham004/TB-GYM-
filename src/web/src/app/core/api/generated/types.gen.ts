@@ -1283,6 +1283,37 @@ export type CoachMoneyReceivedView = {
   paymentCount: number | string;
 };
 
+export type CoachMonthNumbersView = {
+  moneyReceived: Array<CoachMoneyReceivedView>;
+  sessionsHeld: number | string;
+  plansSold: number | string;
+  packsSold: number | string;
+  clientsStarted: number | string;
+  clientsEnded: number | string;
+};
+
+export type CoachMonthReportView = {
+  today: string;
+  thisMonthFrom: string;
+  lastMonthFrom: string;
+  thisMonth: CoachMonthNumbersView;
+  lastMonth: CoachMonthNumbersView;
+  coaches: null | Array<CoachMonthRowView>;
+  monthRuleKey: string;
+  monthRuleVersion: number | string;
+  moneyRuleKey: string;
+  moneyRuleVersion: number | string;
+};
+
+export type CoachMonthRowView = {
+  coachUserId: string;
+  name: string;
+  isYou: boolean;
+  hasLeftTheTeam: boolean;
+  thisMonth: CoachMonthNumbersView;
+  lastMonth: CoachMonthNumbersView;
+};
+
 export type CoachMonthView = {
   from: string;
   toExclusive: string;
@@ -4761,6 +4792,22 @@ export type GetCoachTodayResponses = {
 };
 
 export type GetCoachTodayResponse = GetCoachTodayResponses[keyof GetCoachTodayResponses];
+
+export type GetCoachMonthData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/coach-month';
+};
+
+export type GetCoachMonthResponses = {
+  /**
+   * OK
+   */
+  200: CoachMonthReportView;
+};
+
+export type GetCoachMonthResponse = GetCoachMonthResponses[keyof GetCoachMonthResponses];
 
 export type GetOwnCoachingFeatureAccessData = {
   body?: never;

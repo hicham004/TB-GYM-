@@ -1,0 +1,166 @@
+// This month (critique B10d): the numbers in Today's This month's look, each with last month's beside
+// it, then the owner's rows and how it all is counted. Brand v2 tokens only.
+@use '../../ui/page';
+
+.back {
+  align-items: center;
+  align-self: flex-start;
+  color: var(--tb-muted);
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.25rem;
+  margin-block-end: 0.25rem;
+  min-block-size: 2rem;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--tb-ink);
+  }
+
+  &:focus-visible {
+    border-radius: 6px;
+    outline: 2px solid var(--tb-focus);
+    outline-offset: 2px;
+  }
+}
+
+.back-icon:dir(ltr) {
+  transform: scaleX(-1);
+}
+
+// The kit's fold draws its own card, and its host's `panel` class must not draw a second round it.
+app-disclosure.panel {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  display: block;
+  padding: 0;
+}
+
+// ---------- the numbers ----------
+
+.numbers {
+  gap: 0;
+  padding: 0;
+}
+
+.numbers-head {
+  padding: 1.25rem 1.25rem 0.875rem;
+}
+
+.numbers-span {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+}
+
+.part {
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  padding: 0.875rem 1.25rem 1rem;
+}
+
+.counts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+// Two across, the fifth taking a row of its own, so no line stops halfway.
+@container (max-width: 44rem) {
+  .counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .counts .part:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+// A label that wraps keeps its row's numbers level.
+.part-label {
+  color: var(--tb-muted);
+  flex: 1 0 auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.part-label:lang(ar) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.money-lines {
+  display: grid;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.money-line {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.625rem;
+}
+
+.part-value {
+  color: var(--tb-ink);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0.5rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.money-line .part-value {
+  margin: 0;
+}
+
+.part-note {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  margin: 0.25rem 0 0;
+}
+
+.money-line .part-note {
+  margin: 0;
+}
+
+// A currency with no payment this month has none to count.
+.money-line .part-note:empty {
+  display: none;
+}
+
+.part-empty {
+  color: var(--tb-ink);
+  font-weight: 600;
+  margin: 0.5rem 0 0;
+}
+
+// ---------- how it's counted ----------
+
+.how {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  max-inline-size: 44rem;
+
+  dt {
+    color: var(--tb-ink);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  dd {
+    color: var(--tb-muted);
+    font-size: 0.875rem;
+    margin: 0.125rem 0 0;
+  }
+}

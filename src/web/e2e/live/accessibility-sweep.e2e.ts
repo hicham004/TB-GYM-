@@ -21,6 +21,7 @@ const VIEWPORTS = [
 
 const COACH_ROUTES = [
   '/',
+  '/month',
   '/clients',
   '/invitations',
   '/training/programs',

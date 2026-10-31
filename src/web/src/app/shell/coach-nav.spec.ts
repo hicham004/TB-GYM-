@@ -262,6 +262,7 @@ describe('destination state', () => {
   it('never lets the root page stand for everything below it', () => {
     expect(destinationState(overview, '/')).toBe('page');
     expect(destinationState(overview, '/clients')).toBeNull();
+    expect(destinationState(overview, '/month')).toBe('section');
   });
 });
 

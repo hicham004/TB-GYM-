@@ -62,6 +62,14 @@ export const routes: Routes = [
       import('./features/dashboard/dashboard').then((module) => module.Dashboard),
   },
   {
+    // What the month brought in, beside the last (critique B10d), opened from Today's This month.
+    path: 'month',
+    canActivate: [authGuard, coachGuard],
+    data: REDESIGNED,
+    title: $localize`This month | TB Gym`,
+    loadComponent: () => import('./features/month/month').then((module) => module.ThisMonth),
+  },
+  {
     path: 'clients',
     canActivate: [authGuard, coachGuard],
     loadChildren: () =>

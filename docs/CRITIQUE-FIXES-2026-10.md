@@ -969,3 +969,39 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   "Open Today to see how many you have.", "Your 1-on-1 sessions end soon", "If you'd like to keep going, ask your coach
   to renew them.", "Your 1-on-1 sessions have ended", "Your coach set up more 1-on-1 sessions", "Open Today to see where
   your sessions stand." Recommendation: keep, or have Toufic read them with B8c's words.
+- B10d · Where the page lives. Built: `/month`, opened by "See this month and last" at the foot of Today's This month,
+  with Today lit in the sidebar, which keeps the rows the owner settled. Other way: a This month row under Business,
+  which also means measuring the short-window spacing again. Recommendation: keep until a coach goes looking for it.
+- B10d · What sold means. Built: a plan or pack booked on that workspace day, a renewal too, paid yet or not, as selling
+  is the enrollment (SES-002); a free one, a goodwill pack among them, is not sold, and one cancelled with no money
+  received never was. Other way: counted the day it is paid in full; free ones counted. Recommendation: keep.
+- B10d · Whose a sale is. Built: the coach the client had when it was booked, as money counts (SUB-016), whoever
+  pressed the button. Other way: whoever booked it. Recommendation: keep, so a coach's sales and money agree.
+- B10d · What started and ended mean. Built: days in a row on plans paid in full or free, a pack included, so a free
+  pack after a paid plan keeps a client on, though it is not sold. A client starts on the first day and ends on the
+  last, or the day the plan was cancelled, for the coach they had as that day began. A
+  renewal that follows on, paid late or not, is no end, so last month can change when it is paid; a gap of any length
+  ends one stint and starts another, a weekend between two plans included. Other way: only a first plan ever and
+  coaching ended; or a few days' gap ignored. Recommendation: keep until Toufic says how his renewals start, then a
+  grace of up to 7 days if his clients often restart on a Monday.
+- B10d · Whose sessions. Built: whoever recorded it (SES-008), so a session the owner records for Lea's client counts
+  for the owner, on a row Lea's sits beside. It follows B10b's "Who held it" and B10c's "Whose sessions held", both
+  still open. Other way: a "Who held it" choice for the owner, which B10b's line recommends, left out as outside the
+  row. Recommendation: that choice, now the page shows sessions coach by coach.
+- B10d · Someone who left the team. Built: a row marked "Left the team", last, only with a number in either month, so
+  the rows add up to the total. Other way: their numbers under the owner. Recommendation: keep.
+- B10d · This month beside the last. Built: "October so far" beside the whole of September, each number with last
+  month's in words and no percent, and By coach one month at a time by a switch, since a row can't hold both. Other
+  way: the same day last month, which needs its own definition. Recommendation: keep.
+- B10d · Every number, always. Built: all six on the page, 0 included, for a coach who sells no sessions too, though
+  Today shows sessions only once used (B10c). Other way: sessions and packs hidden until used. Recommendation: keep:
+  a report reads the same every month. An owner alone has no By coach, and nothing in either month invites instead.
+- B10d · Earlier months, left out (the row names this month and last). Recommendation: a month picker once a coach
+  asks.
+- B10d · Words the row did not give. Built: "See this month and last"; "What came in and what changed, beside last
+  month, on your coaching space’s calendar."; "Your coaching space", "Your numbers"; "October so far", "September:
+  9", "Nothing in September", "Nothing received yet", "Nothing in September either"; "Plans sold", "Session packs
+  sold", "Clients started", "Clients ended"; "By coach", "Month shown", "Coach", "Sessions held", "Packs sold",
+  "Started", "Ended", "Total", "None", "Left the team"; "How these are counted" with its seven entries; "Nothing
+  to count yet", "Payments, 1-on-1 sessions, plans you sell and clients starting show up here as they happen.", "Open
+  Clients"; "This month couldn’t be loaded." Recommendation: keep, or have Toufic read them with B8c's words.

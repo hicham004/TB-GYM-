@@ -213,7 +213,8 @@ former client. **This month**: the money received by SUB-016; the active clients
 today (any feature granted), out of all their current clients; the 1-on-1 sessions held (SES-008); and for the owner
 alone every active member of staff,
 the owner first as You, then by name, each with their current clients and how many are active. A coach's Today
-carries no other coach's name, money or count. **Plans ending soon**: each client whose running plan raises CLI-018's
+carries no other coach's name, money or count. This month opens the page of its numbers, beside last month's
+(SUB-018). **Plans ending soon**: each client whose running plan raises CLI-018's
 ending-soon flag, with the plan's name and last paid day, the soonest first; a renewal booked after it and not paid
 yet is named, so its payment is recorded rather than a second renewal (BEB-7), and Message is offered only when the
 caller may message the client (CLI-013). **Ended, not renewed**: each client whose whole plan has lapsed (every
@@ -346,7 +347,7 @@ history (ADR 0026) assigned at or before the receipt's instant (the moment it wa
 the workspace's midday for an earlier day); a receipt dated before the client's first entry counts for that entry's
 coach. A released client's receipts still count, for the coach they had then, and a client moved to another coach
 leaves their earlier receipts with the earlier coach. A coach reads only the totals that count for them, the owner
-the whole workspace's (a per-coach breakdown is critique B10d); each total is one currency's, exact, with how many
+the whole workspace's, and each coach's on the This month page (SUB-018); each total is one currency's, exact, with how many
 payments made it up, never added, netted or converted across currencies, never called profit or earnings, and no
 client is named beside it.
 
@@ -358,6 +359,25 @@ the plan's description as it stands today, since an enrollment keeps no copy of 
 runs: a plan that is over reads as over. No price, payment or reason the coach typed reaches the client through this
 read, the one exception being the reason a session was charged, which is written for them (SES-007), and it decides
 no access (SUB-009).
+
+**SUB-018** Month numbers v1 (`MonthNumbers`, critique B10d; decided by the plan's chat on 2026-10-31, for the owner
+to confirm) is what the This month page counts (`GET /api/coach-month`): this month so far beside the whole of last
+month, each `[first day, first day of next month)` of the workspace's calendar, with no percentage and no client
+named. **Money received** is SUB-016's and **1-on-1 sessions held** SES-008's, each session for whoever recorded it.
+**Plans sold** and **session packs sold** count what was booked on a workspace day of the month, a renewal too, paid
+yet or not, since selling is the enrollment (SES-002), each for the coach the client had when it was booked. A free
+one is not sold, and one cancelled with no money received never was; money kept on a cancelled plan keeps its sale.
+**Clients started** and **clients ended** count stints: days in a row on plans that opened, paid in full or free, a
+pack included. Nothing else covers days (SUB-008); a plan covers from its first day however late it was paid, and a
+cancelled one up to, not including, the day it was cancelled. A renewal that follows on continues the stint, plans side by side make one, and a gap of any length ends
+it and starts another. A client starts on a stint's first day, once it has come, and ends on its last day, once
+that has passed, or the day the plan was cancelled, ending coaching included (CLI-015); a returning client's new
+profile starts again (CLI-016). Each counts for the coach the client had as that day began, so ending a client's
+coaching, which moves them to the owner first, counts for the coach who had them. A former client's numbers stay.
+A coach reads what counts for them. The owner reads the workspace's and each coach's: every active member of staff,
+the owner first as You, then by name, then anyone who left the team with a number in either month, so the rows add
+up to the totals. Last month can still move, as money and sessions recorded late count on their own day. It decides
+no access.
 
 ### Session packs (1-on-1 sessions, critique B10b, ADR 0038)
 
@@ -421,7 +441,8 @@ the sessions left. **Sessions held**, on This month: sessions held that still st
 workspace's calendar month: the owner reads every one of the workspace, a coach those they recorded (SES-003), a
 former client's too. A charge is no session held, and an undone one counts for nobody. It shows only while there is
 something to count: one held this month, or a client the caller coaches with sessions in today's plan. Nobody's money
-or name goes with it.
+or name goes with it. The This month page counts them the same way, this month and last, with each coach's on the
+owner's rows (SUB-018).
 
 **SES-009** A pack hears the plan notices in its own words (critique B10c), since it runs beside a coaching plan and
 "your plan has ended" could name the wrong thing: waiting for payment, set up, ending soon, ended and renewed, as
