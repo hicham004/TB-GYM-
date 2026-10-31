@@ -74,7 +74,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             (nourItem.Count, nourItem.Date, nourItem.SubjectId, nourItem.CanMessage));
         var nourPage = await ReadSliceAsync<ClientProfileOverviewView>(owner, R33bOverviewUrl(nourId));
         CollectionAssert.AreEqual(nourRow.Attention.ToArray(), nourPage.Attention.Select(item => item.Kind).ToArray());
-        Assert.AreEqual((CoachAttentionPolicy.Key, 5), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
+        Assert.AreEqual((CoachAttentionPolicy.Key, 6), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
 
         // Once the owner and Maya have a chat, Remind opens it. A draft is not sent; sending takes the item away
         // and puts the check-in to review in its place.

@@ -472,6 +472,38 @@ for (const [width, height] of [
     await page.screenshot({ path: `test-results/b10b-sessions-${width}.png`, fullPage: true });
   });
 
+  test(`a plan that ran out beside a running pack is the plan in front at ${width}px (SES-010)`, async ({
+    page,
+  }) => {
+    const ended = enrollment({
+      startDate: '2026-07-01',
+      endDateExclusive: '2026-09-30',
+      lastActiveDate: '2026-09-29',
+      effectiveStatus: 'Expired',
+    });
+    await openService(page, width, height, {
+      plans: [plansOverview([sessionPack(), ended])],
+      asked: true,
+      extra: {
+        'GET /api/commercial/products': (route) => json(route, 200, catalogWithPacks()),
+      },
+    });
+
+    await expect(page.locator('#plan-title')).toHaveText('Online Coaching');
+    await expect(page.locator('.eyebrow')).toHaveText('Ended Tue 29 Sep');
+    await expect(page.locator('.facts li.warm')).toHaveText('Maya asked to renew on Mon 28 Sep');
+    await expect(page.locator('.hero-actions > button')).toHaveText('Renew plan');
+
+    // The pack reads as it always did, under its own heading.
+    const section = page.locator('[aria-labelledby="sessions-title"]');
+    await expect(section.locator('.pack-line')).toHaveText(
+      '7 of 10 left · until 29 Nov · last held Tue 29 Sep',
+    );
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/b13-service-${width}.png`, fullPage: true });
+  });
+
   test(`Record a session at ${width}px takes the money with it and passes axe`, async ({
     page,
   }) => {

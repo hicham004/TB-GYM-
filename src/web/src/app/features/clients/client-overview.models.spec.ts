@@ -128,10 +128,20 @@ describe('a pack beside a coaching plan (ADR 0038)', () => {
     expect(currentEnrollment([pack, next], today)?.id).toBe('next');
   });
 
-  it('stands for the plan with no coaching plan live, and an ended plan does not outrank it', () => {
-    const pack = sessionPack();
-    expect(currentEnrollment([pack], today)?.id).toBe('e-pack');
+  it('stands for the plan with no coaching plan ever', () => {
+    const over = sessionPack({
+      id: 'over',
+      startDate: '2026-07-01',
+      endDateExclusive: '2026-08-01',
+      storedStatus: 'Expired',
+      effectiveStatus: 'Expired',
+    });
+    expect(currentEnrollment([sessionPack()], today)?.id).toBe('e-pack');
+    expect(currentEnrollment([over, sessionPack()], today)?.id).toBe('e-pack');
+    expect(currentEnrollment([over], today)?.id).toBe('over');
+  });
 
+  describe('once a coaching plan has run out (SES-010)', () => {
     const ended = enrollment({
       id: 'ended',
       startDate: '2026-06-01',
@@ -139,21 +149,53 @@ describe('a pack beside a coaching plan (ADR 0038)', () => {
       storedStatus: 'Expired',
       effectiveStatus: 'Expired',
     });
-    expect(currentEnrollment([ended, pack], today)?.id).toBe('e-pack');
-    expect(
-      currentEnrollment(
-        [
-          ended,
-          sessionPack({
-            endDateExclusive: '2026-08-01',
-            startDate: '2026-07-01',
-            storedStatus: 'Expired',
-            effectiveStatus: 'Expired',
-          }),
-        ],
-        today,
-      )?.id,
-    ).toBe('ended');
+
+    it('leaves that plan in front while the pack runs, to be renewed', () => {
+      expect(currentEnrollment([sessionPack(), ended], today)?.id).toBe('ended');
+    });
+
+    it('reads a plan past its last day as ended before the Worker has marked it', () => {
+      const unmarked = { ...ended, id: 'unmarked', storedStatus: 'Active' } as ClientEnrollment;
+      expect(currentEnrollment([sessionPack(), unmarked], today)?.id).toBe('unmarked');
+    });
+
+    it('stays on the coaching plan whichever of the two ended last', () => {
+      const pack = sessionPack({
+        startDate: '2026-08-01',
+        endDateExclusive: '2026-09-20',
+        storedStatus: 'Expired',
+        effectiveStatus: 'Expired',
+      });
+      expect(currentEnrollment([ended, pack], today)?.id).toBe('ended');
+      expect(currentEnrollment([pack, ended], today)?.id).toBe('ended');
+    });
+
+    it('takes the later of two that ran out', () => {
+      const later = { ...ended, id: 'later', endDateExclusive: '2026-09-15' };
+      expect(currentEnrollment([sessionPack(), ended, later], today)?.id).toBe('later');
+    });
+
+    it('gives way to the next coaching plan booked after it', () => {
+      const next = enrollment({
+        id: 'next',
+        startDate: '2026-10-05',
+        endDateExclusive: '2026-12-01',
+        effectiveStatus: 'Upcoming',
+      });
+      expect(currentEnrollment([sessionPack(), ended, next], today)?.id).toBe('next');
+    });
+  });
+
+  it('stands for the plan beside one the coach cancelled, which never ran out', () => {
+    const cancelled = enrollment({
+      id: 'cancelled',
+      startDate: '2026-06-01',
+      endDateExclusive: '2026-09-01',
+      storedStatus: 'Cancelled',
+      effectiveStatus: 'Cancelled',
+    });
+    expect(currentEnrollment([cancelled, sessionPack()], today)?.id).toBe('e-pack');
+    expect(currentEnrollment([cancelled], today)?.id).toBe('cancelled');
   });
 });
 

@@ -72,7 +72,8 @@ public sealed record EndedPlan(Guid EnrollmentId, DateOnly LastDay);
 /// Whether a client's whole plan has run out, read from their access decisions (ADR 0029). Only then
 /// may they ask to renew: every feature they had has passed its end date and nothing else is waiting.
 /// A plan the coach cancelled or paused, one feature still running, a renewal awaiting payment or a
-/// plan starting later all keep the button away, as does any block on the relationship.
+/// plan starting later all keep the button away, as does any block on the relationship. A pack beside
+/// a coaching plan that ran out keeps nothing away: callers pass <see cref="CoachingPlanRunOut.PlanDecisions"/>.
 /// </summary>
 public static class RenewalEligibility
 {

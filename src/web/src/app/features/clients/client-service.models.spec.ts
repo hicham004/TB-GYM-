@@ -466,6 +466,30 @@ describe('1-on-1 sessions (critique B10b)', () => {
     expect(card.isPack).toBe(false);
   });
 
+  it('opens on the coaching plan that ran out, with Renew plan, while a pack runs (SES-010)', () => {
+    const ended = enrollment({
+      id: 'ended',
+      startDate: '2026-06-01',
+      endDateExclusive: '2026-09-01',
+      lastActiveDate: '2026-08-31',
+      effectiveStatus: 'Expired',
+    });
+    const plans = [sessionPack(), ended];
+    expect(focusPlanId(plans, SERVICE_TODAY)).toBe('ended');
+
+    const card = planCard(ended, context);
+    expect(card.pill.label).toBe('Ended');
+    expect(primaryAction(card, plans, context, false)).toEqual({
+      id: 'renew',
+      label: 'Renew plan',
+    });
+
+    // The request is about that plan, so the page says so, and the pack's own row keeps its menu.
+    const request = { since: '2026-09-28T08:00:00Z', subjectId: 'ended' };
+    expect(renewalAskedFor(request, card)).toBe(true);
+    expect(rows(plans).map((row) => row.name)).toEqual(['Personal training · 10 sessions']);
+  });
+
   it('reads a running pack as the coach counts it', () => {
     const [pack] = rows();
     expect(pack.name).toBe('Personal training · 10 sessions');

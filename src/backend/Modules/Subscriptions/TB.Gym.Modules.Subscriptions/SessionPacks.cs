@@ -239,6 +239,35 @@ public sealed record SessionPackStanding(ClientEnrollment Pack, int Left);
 /// <summary>The pack a session goes on, or why none can take it, with the pack the refusal is about.</summary>
 public sealed record SessionChoice(ClientEnrollment? Pack, SessionRefusal? Refusal);
 
+/// <summary>
+/// A plan that ends beside a pack (critique B13, SES-010). Once a coaching plan has run out, Sessions stop counting in
+/// what a client's plan reads as: the status, Ended, not renewed and Ask to renew all read the client as they would
+/// with no pack, whatever their packs are doing. A client who never had a coaching plan to run out keeps their pack as
+/// the plan (ADR 0038). This decides no access: the pack keeps running and every feature still asks the shared service.
+/// </summary>
+public static class CoachingPlanRunOut
+{
+    /// <summary>
+    /// The coaching plans that ran out by <paramref name="today"/>, as the access decision reads Expired. A cancelled
+    /// plan was ended by the coach rather than by its dates, and a pack is no coaching plan.
+    /// </summary>
+    public static IQueryable<ClientEnrollment> Among(IQueryable<ClientEnrollment> plans, DateOnly today) =>
+        plans.Where(item =>
+            item.SessionCountSnapshot == null &&
+            item.Status != EnrollmentStatus.Cancelled &&
+            (item.Status == EnrollmentStatus.Expired || item.EndDateExclusive <= today));
+
+    /// <summary>A pack stands behind the Sessions decision, running or not: for anyone else this rule changes nothing.</summary>
+    public static bool HasPack(IEnumerable<FeatureAccessDecision> decisions) =>
+        decisions.Any(item => item is { Feature: CoachingFeature.Sessions, EnrollmentId: not null });
+
+    /// <summary>The decisions a client's plan is read from, the Sessions one left out once a coaching plan ran out.</summary>
+    public static IReadOnlyList<FeatureAccessDecision> PlanDecisions(
+        IReadOnlyList<FeatureAccessDecision> decisions,
+        bool coachingPlanRanOut) =>
+        coachingPlanRanOut ? [.. decisions.Where(item => item.Feature != CoachingFeature.Sessions)] : decisions;
+}
+
 public static class SessionPackRules
 {
     public const int MinimumSessions = 1;

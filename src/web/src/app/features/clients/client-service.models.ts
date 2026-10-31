@@ -815,8 +815,8 @@ export function planMenu(
 // ------------------------------------------------------------------------------------------------
 
 /**
- * The client asks to renew only once their whole plan has run out (SUB-014), so a request is about
- * the plan that ended (`subjectId`) and stands until a plan follows it.
+ * The client asks to renew only once their whole plan has run out (SUB-014), a pack beside it aside
+ * (SES-010), so a request is about the plan that ended (`subjectId`) and stands until a plan follows it.
  */
 export interface RenewalRequest {
   readonly since: string;

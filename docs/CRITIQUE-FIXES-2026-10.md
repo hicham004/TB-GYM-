@@ -597,6 +597,24 @@ Choices the rows from B12 on made, kept as built until the owner answers:
   else held."; "That person is not on your team, so the session can’t be recorded for them. Choose someone on your
   team."; "Coaching plans and session packs sold" for the fold's heading; "Sessions held, on their own day, for whoever
   held them." Recommendation: as built.
+- B13 · A pack that ends after the coaching plan. Built: the coaching plan stays the plan that ended, so the date the
+  client reads, Renew and an ask already made do not jump to the pack. The other way: whichever ended last, as before.
+  Recommendation: as built.
+- B13 · A client who left coaching for packs alone. The row sets no limit, so however long ago the coaching plan ended
+  they read No active plan with their sessions beside it, and Today's Ask to renew stays. Built: that, and when their
+  last pack ends with the coaching plan too old for Ended, not renewed, the pack is listed there so the coach still
+  hears of it. The other way: forget a coaching plan after some months, or when the pack was sold after it ended.
+  Recommendation: as built until a coach has such clients, then the months.
+- B13 · A coaching plan cancelled, paused, unpaid or still to come beside a running pack, none having run out. Built:
+  unchanged, the row speaking only of a plan that ended: the client reads On track, and beside a cancelled plan the pack
+  is the plan. The other way: only a client with no coaching plan at all has their pack as the plan, in the status
+  alone. Recommendation: that way, a small change; On track says here what the partner disliked.
+- B13 · A pack with more than sessions ticked. Built: only Sessions stops counting, as the row says, so Training or
+  Messaging ticked on a pack still runs and the client reads Running beside the coaching plan that ended. The other way:
+  nothing on a pack counts. Recommendation: as built, with B10b's line on what a pack can include.
+- B13 · My plan while a pack runs. Built: unchanged (SUB-017): only plans not over show, so the ended coaching plan is
+  not there while Today says it ended. The other way: list it, with its Go to Today. Recommendation: that way, with B14,
+  whose card would otherwise never show for these clients.
 
 Waits for Toufic's answers (section 1), kept as built until then:
 

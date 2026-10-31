@@ -48,6 +48,9 @@ internal sealed class CoachOverviewReader(
     /// <summary>Names the read of This month's 1-on-1 sessions (critique B10c), for logs and for the test that counts it.</summary>
     internal const string SessionsHeldTag = "Coach overview: 1-on-1 sessions held this month";
 
+    /// <summary>Names the read of which clients with a pack had a coaching plan run out (critique B13).</summary>
+    internal const string CoachingPlansRunOutTag = "Coach overview: coaching plans that ran out, for clients with a pack";
+
     public async Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken)
     {
         var scope = await LoadScopeAsync(null, cancellationToken);
@@ -269,8 +272,14 @@ internal sealed class CoachOverviewReader(
         var checkIns = scope.Allowed(CoachingFeature.CheckIns);
         var messaging = scope.Allowed(CoachingFeature.Messaging);
         var sessionsOpen = scope.Allowed(CoachingFeature.Sessions).ToHashSet();
+
+        // What the plan reads as (SES-010): beside a coaching plan that ran out, as it would with no pack.
+        var coachingPlanRanOut = await ReadCoachingPlansRunOutAsync(scope, today, cancellationToken);
+        var planDecisions = scope.Clients.ToDictionary(
+            client => client.Id,
+            client => CoachingPlanRunOut.PlanDecisions(scope.Access[client.Id], coachingPlanRanOut.Contains(client.Id)));
         var endedPlans = scope.Clients
-            .Select(client => (client.Id, Plan: RenewalEligibility.EndedPlan(scope.Access[client.Id])))
+            .Select(client => (client.Id, Plan: RenewalEligibility.EndedPlan(planDecisions[client.Id])))
             .Where(item => item.Plan is not null)
             .ToDictionary(item => item.Id, item => item.Plan!);
 
@@ -285,7 +294,7 @@ internal sealed class CoachOverviewReader(
 
         return scope.Clients.Select(client =>
         {
-            var decisions = scope.Access[client.Id];
+            var decisions = planDecisions[client.Id];
             var planState = CoachAttentionPolicy.PlanState(decisions);
             var trainingIncluded = training.Contains(client.Id);
             var clientSessions = sessions[client.Id].ToArray();
@@ -337,9 +346,9 @@ internal sealed class CoachOverviewReader(
             var livePlans = plans[client.Id].Where(item => !item.Ended).ToArray();
 
             // A pack runs beside a plan (ADR 0038): it says when the client's plan ends only with no coaching plan
-            // left, so 90 days of sessions never hide a plan ending soon.
+            // left, so 90 days of sessions never hide a plan ending soon, and never once one ran out (SES-010).
             var coachingPlans = livePlans.Where(item => !item.IsSessionPack).ToArray();
-            var namingPlans = coachingPlans.Length > 0 ? coachingPlans : livePlans;
+            var namingPlans = coachingPlans.Length > 0 || planState == ClientPlanState.Ended ? coachingPlans : livePlans;
             var runningPlan = namingPlans.Where(item => item.Paid).MaxBy(item => item.EndDateExclusive)
                 ?? namingPlans.MaxBy(item => item.EndDateExclusive);
             var unpaidRenewals = runningPlan is { Paid: true }
@@ -383,20 +392,29 @@ internal sealed class CoachOverviewReader(
             // Ended, not renewed (critique B4b, CLI-020): the whole plan has lapsed and its plan that ran out last did
             // so lately; SUB-014's ended plan when there is one, as the client's Ask to renew and Needs you name it.
             // A plan booked after it and waiting for payment is named to record its payment instead of renewing.
+            // Beside a coaching plan that ran out a pack names neither (SES-010), unless the coaching plan is too old
+            // to list and no pack is left: a client between packs still shows for the one that just ended.
             EndedNotRenewed? notRenewed = null;
             if (endedFrom is not null && CoachAttentionPolicy.IsLapsed(decisions))
             {
+                var beside = coachingPlanRanOut.Contains(client.Id);
                 var ranOut = plans[client.Id].Where(item => item.Ended).ToArray();
+                var counted = beside ? ranOut.Where(item => !item.IsSessionPack).ToArray() : ranOut;
                 var lapsed = endedPlan is { } ended
-                    ? ranOut.FirstOrDefault(item => item.EnrollmentId == ended.EnrollmentId)
-                    : ranOut.MaxBy(item => (item.EndDateExclusive, item.EnrollmentId));
+                    ? counted.FirstOrDefault(item => item.EnrollmentId == ended.EnrollmentId)
+                    : counted.MaxBy(item => (item.EndDateExclusive, item.EnrollmentId));
+                if (lapsed is null && beside && !livePlans.Any(item => item.IsSessionPack))
+                {
+                    lapsed = ranOut.MaxBy(item => (item.EndDateExclusive, item.EnrollmentId));
+                }
+
                 if (lapsed is not null && CoachAttentionPolicy.EndedLately(lapsed.EndDateExclusive.AddDays(-1), today))
                 {
                     notRenewed = new EndedNotRenewed(
                         lapsed.EnrollmentId,
                         lapsed.PlanName,
                         lapsed.EndDateExclusive.AddDays(-1),
-                        livePlans
+                        (beside ? coachingPlans : livePlans)
                             .Where(item => !item.Paid)
                             .OrderBy(item => item.StartDate)
                             .ThenBy(item => item.EnrollmentId)
@@ -602,8 +620,10 @@ internal sealed class CoachOverviewReader(
             MoneyReceivedTag,
             cancellationToken);
         var received = MoneyReceivedPolicy.Totals(payments, from, toExclusive, scope.TimeZone, countsFor);
+
+        // Any feature granted, a pack's included: SES-010 changes what a plan reads as, not who is being coached today.
         var active = states
-            .Where(state => state.PlanState == ClientPlanState.Running)
+            .Where(state => scope.FeaturesToday(state.Client.Id).Length > 0)
             .Select(state => state.Client.Id)
             .ToHashSet();
         var held = await MonthReads.SessionsHeld(dbContext, countsFor, from, toExclusive)
@@ -653,6 +673,26 @@ internal sealed class CoachOverviewReader(
     }
 
     // ---------- signal reads: one query each, over every client in scope ----------
+
+    /// <summary>
+    /// Which clients with a pack, running or over, had a coaching plan run out (SES-010). Only they can read otherwise,
+    /// so a workspace selling no packs pays nothing for it. An access decision cannot say: a renewal booked after the
+    /// plan hides its Expired behind PaymentRequired or NotStarted.
+    /// </summary>
+    private async Task<HashSet<Guid>> ReadCoachingPlansRunOutAsync(
+        Scope scope,
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        Guid[] withPacks = [.. scope.Clients.Where(client => CoachingPlanRunOut.HasPack(scope.Access[client.Id])).Select(client => client.Id)];
+        return withPacks.Length == 0
+            ? []
+            : await CoachingPlanRunOut.Among(dbContext.ClientEnrollments.AsNoTracking(), today)
+                .Where(item => withPacks.Contains(item.ClientProfileId))
+                .Select(item => item.ClientProfileId)
+                .TagWith(CoachingPlansRunOutTag)
+                .ToHashSetAsync(cancellationToken);
+    }
 
     /// <summary>
     /// In one read, the check-ins the attention rule weighs: every sent one waiting for its review, as the

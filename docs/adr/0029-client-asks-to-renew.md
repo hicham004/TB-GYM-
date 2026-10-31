@@ -1,6 +1,7 @@
 # ADR 0029: A client asks their coach to renew
 
-Status: accepted, 2026-09-25 (Step 3B2)
+Status: accepted, 2026-09-25 (Step 3B2). Amended 2026-10-31: a pack beside a coaching plan that ran out no longer keeps
+the button away (critique B13, ADR 0038, SES-010).
 
 ## Context
 
@@ -18,7 +19,9 @@ Business rules, decided by the product owner on 2026-09-25:
 - **Only when the whole plan has run out**: every feature the client had has passed its end date, and
   nothing else is waiting. No button when the coach cancelled or paused the plan, when one feature
   still runs, when a renewal awaits payment or starts later, or when the relationship is blocked.
-  The rule is `RenewalEligibility`, read from the same access decisions every feature uses.
+  The rule is `RenewalEligibility`, read from the same access decisions every feature uses. Sessions
+  count as no feature here once a coaching plan has run out, whatever a pack beside it is doing, so
+  the client asks about the coaching plan (`CoachingPlanRunOut`, critique B13).
 - **The coach is told in-app, naming the client** ("Maya Rahman asked to renew"), with a link to the
   client's page. This is the one notification whose title names someone: a coach with many clients
   could not act on "a client asked". The name is read when the inbox row is written, never stored in

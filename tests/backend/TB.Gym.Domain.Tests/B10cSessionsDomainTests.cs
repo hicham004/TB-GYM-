@@ -139,10 +139,6 @@ public sealed class B10cSessionsDomainTests
     }
 
     [TestMethod]
-    public void TheAttentionRuleMovedToItsFifthVersion() =>
-        Assert.AreEqual(("CoachAttention", 5), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
-
-    [TestMethod]
     public void APackHearsThePlanNoticesInItsOwnWordsAndAPlanInItsOwn()
     {
         foreach (var kind in PlanNotices)

@@ -679,4 +679,19 @@ describe('what is left on a client’s packs (critique B10c, SES-008)', () => {
     expect(flagged.filters.has('ending')).toBe(false);
     expect(flagged.filters.has('attention')).toBe(false);
   });
+
+  it('reads a coaching plan that ran out as ended, the pack staying a balance beside it (SES-010)', () => {
+    const ended = row({
+      status: 'NoActivePlan',
+      planState: 'Ended',
+      planEndsOn: '2026-09-20',
+      otherPlanCount: 1,
+      sessionsLeft: 9,
+    });
+
+    expect(ended.planPill).toEqual({ label: 'No active plan', tone: 'neutral' });
+    expect(ended.plan.end).toBe('Ended Sun 20 Sep');
+    expect(ended.plan.more).toBe('+1 more plan');
+    expect(ended.sessions).toEqual({ label: '9 sessions left', tone: 'neutral' });
+  });
 });

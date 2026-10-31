@@ -789,10 +789,11 @@ history as a collection (a coach's read narrowed to clients they ever coached), 
 receipt's day and coach and totals per currency. The owner's team is one more query, the owner's alone
 (`CoachClientScope.IsOwnerAsync` answers from the role it already reads). The lapsed plans' names ride on the
 plan-ends read, widened for Today alone to plans that ran out in the last 30 days, and the client's version on
-the clients read. Today's busiest case costs 29 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 25, the
-renewal requests' read, which runs only while some client's whole plan has run out, and This month's three (critique
-B10c added the sessions held). The
-client list and a client's page read nothing new.
+the clients read. Today's busiest case costs 30 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 25, the
+renewal requests' read, which runs only while some client's whole plan has run out, This month's three (critique
+B10c added the sessions held), and critique B13's read of which clients with a pack had a coaching plan run out
+(`CoachingPlanRunOut` in Subscriptions, SES-010), which runs only while a client in scope has a pack. The
+client list and a client's page read nothing else new, and `ClientRenewalService` asks the same rule for the one client.
 
 Critique B10d adds the This month page's one read, `GET /api/coach-month` (`ICoachMonthService` in Clients,
 `CoachMonthReader` in Infrastructure), again with no schema change. Month numbers v2 (`MonthNumbersPolicy` in

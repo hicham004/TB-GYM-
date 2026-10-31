@@ -523,6 +523,25 @@ describe('ClientToday', () => {
       expect(host.querySelector('a[href="/messages"]')).toBeNull();
     });
 
+    it('offers it beside a pack that runs on, and Messaging stays closed (SES-010)', async () => {
+      const { host } = await render({
+        day: expired(),
+        access: fakeClientAccess({
+          Training: 'Expired',
+          Nutrition: 'Expired',
+          CheckIns: 'Expired',
+          Messaging: 'Expired',
+          Sessions: 'Granted',
+        }),
+        api: { getOwnRenewalStatus: vi.fn(() => of(ended)) },
+      });
+
+      expect(host.querySelector('app-today-renewal button')?.textContent?.trim()).toBe(
+        'Ask to renew',
+      );
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+    });
+
     it('asks once and then says when it was sent and when the client can ask again', async () => {
       const { fixture, host, api, read } = await render({
         day: expired(),

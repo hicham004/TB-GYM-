@@ -154,7 +154,7 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v5 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c) is what Coach Today asks a
+**CLI-018** Coach attention v6 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13) is what Coach Today asks a
 coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
 their own, the Owner all) and never a former client. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
@@ -179,7 +179,7 @@ program and what its logged sets suggest for the next one (STR-014); and, last, 
 coming block whose logged sets suggest a new max (STR-012, after any keep, STR-013), named with the max
 in use and the suggestion. The status is Needs attention for any of those but the plan's end, sessions running out
 and maxes to review (a client getting stronger is good news), else the plan's own status: Paused, Ending soon, On track for
-a running plan, or No active plan. That plan status is also shown on its own beside the reasons, whatever they are
+a running plan, or No active plan; a pack beside a coaching plan that ran out is no running plan (SES-010). That plan status is also shown on its own beside the reasons, whatever they are
 (critique B4a: a plan's end keeps its own status, outside Needs attention); there a blocked client reads Access
 blocked (critique B11), since a block changes no plan (SUB-010) and the row still sums theirs up. A client is new for
 14 days after joining. The list also says which clients have not
@@ -211,7 +211,7 @@ brings them back to the page and the workspace they were in.
 **CLI-020** Coach Today (critique B4b; decided overnight on 2026-10-29, for the owner to confirm) shows, beside Needs
 you (CLI-018, unchanged) and the feed, three parts, all over the clients the caller coaches (CLI-013) and never a
 former client. **This month**: the money received by SUB-016; the active clients, current clients whose plan runs
-today (any feature granted), out of all their current clients; the 1-on-1 sessions held (SES-008); and for the owner
+today (any feature granted, a pack's too, SES-010 changing no one's count), out of all their current clients; the 1-on-1 sessions held (SES-008); and for the owner
 alone every active member of staff,
 the owner first as You, then by name, each with their current clients and how many are active. A coach's Today
 carries no other coach's name, money or count. This month opens the page of its numbers, beside last month's
@@ -223,7 +223,9 @@ feature's decision Expired, NoEntitlement or PaymentRequired: nothing runs, is p
 was cancelled or is blocked) and whose plan that ran out, SUB-014's ended plan or else the one ending last, had its
 last day within the last 30 days, today counted (a last day 29 days ago is listed, one 30 days ago is not), the
 latest end first. A plan booked after it and waiting for payment is named, to record its payment instead of Renew,
-and a renewal request from the last 30 days is shown. A cancelled plan is never listed. Ending a client's coaching
+and a renewal request from the last 30 days is shown. A cancelled plan is never listed. Beside a coaching plan that
+ran out a pack is neither the plan listed nor the plan to pay (SES-010), except a pack that just ended with none left
+to run, once that coaching plan is too old to list. Ending a client's coaching
 (CLI-015) stays the owner's, so only the owner's rows carry the client's version it asks for. The workspace week's
 sessions left Today; a client's page keeps its week.
 
@@ -322,7 +324,9 @@ provider webhook behavior require a later approved design.
 
 **SUB-014** A client may ask to renew only when their whole plan has run out: every feature
 decision is `Expired` or `NoEntitlement`, with at least one `Expired` (ADR 0029). Cancelled, paused,
-partly running, awaiting payment, starting later or blocked plans cannot ask. Requests are
+partly running, awaiting payment, starting later or blocked plans cannot ask. A pack beside a coaching plan that ran
+out does not count as partly running: Sessions are left out of that reading (SES-010), so the client asks about the
+coaching plan, whatever the pack is doing. Requests are
 append-only and at most one per client in any 7 workspace calendar days, enforced by the
 `EX_RenewalRequests_OnePerWindow` exclusion constraint; a repeated or concurrent request answers
 with the stored one. The request and the coach's in-app notice commit together.
@@ -395,7 +399,7 @@ do. Anything else ticked on a pack keeps its own overlap rule. One active option
 (SUB-008), active at once when free, keeping the count it was sold with. A renewal is a new pack with a full count;
 the old one keeps its ledger. A pack-only client is billable as any covered client (PBL-002 as it stands). Beside a
 coaching plan that runs or is to come, a pack never stands for the client's plan: the Clients row, CLI-018's Ending
-soon and the plan in front of Service & access stay the coaching plan's.
+soon and the plan in front of Service & access stay the coaching plan's. Nor does it after one has run out (SES-010).
 
 **SES-003** Each pack has an append-only ledger: Issued, once, when it becomes active, with the count it was sold
 with; Held (the workspace day, who held it and who recorded it, a note only the team reads); Charged (a no-show or
@@ -458,6 +462,19 @@ Khoury · recorded by Karim Haddad" when the two differ.
 generic as every notice, with no count and no date. The ending-soon notice works as a plan's does: three days before
 the end, at 09:00 on the workspace's clock, never before the first day (SUB-002), and it is suppressed when delivered
 if no session is left, as there is nothing to end. Clients get no notice for a low balance (not in v1, ADR 0038).
+
+**SES-010** A plan that ends beside a pack (critique B13, the partner's answer of 2026-10-31). Once a coaching plan has
+run out (its last day has passed and it was not cancelled), three readers leave Sessions out and read the client as
+they would with no pack, whatever the pack is doing: the status on Clients and the client's page (CLI-018), Ended, not
+renewed on Today (CLI-020) and Ask to renew (SUB-014). The coaching plan is the one they name and the one Renew offers,
+and it stays so when the pack ends too, even if later, so its date and a request already made never move to the pack; the
+one exception is CLI-020's, for a coach's list. A plan booked after it reads as it would with no pack: waiting for
+payment or still to come. The pack changes in nothing: it runs, takes sessions and says what is left (SES-008), the
+client stays active on This month (CLI-020) and billable (PBL-002), and Messaging stays closed unless the pack itself
+includes it. Which plan runs is the access decision's alone (SUB-009): this rule only says what the plan reads as. A
+client with no coaching plan run out keeps their pack as the plan, including beside a plan the coach cancelled or
+paused. What is left when a pack ends has lapsed (SES-006), as ever. What is paid back or made up stays between coach
+and client: TB Gym records, nothing more, and no credit, refund or compensation rule exists (SUB-008).
 
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 

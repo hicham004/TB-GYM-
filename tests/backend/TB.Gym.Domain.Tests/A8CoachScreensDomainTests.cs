@@ -89,11 +89,11 @@ public sealed class A8CoachScreensDomainTests
     }
 
     [TestMethod]
-    public void TheAttentionRuleIsVersionFive()
+    public void TheAttentionRuleIsVersionSix()
     {
-        // Version 3 came with audit A8's new client with no plan, version 4 with critique B4a's overdue check-in, and
-        // version 5 with critique B10c's sessions running out.
-        Assert.AreEqual(("CoachAttention", 5), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
+        // Version 3 came with audit A8's new client with no plan, version 4 with critique B4a's overdue check-in,
+        // version 5 with critique B10c's sessions running out, and version 6 with critique B13's plan beside a pack.
+        Assert.AreEqual(("CoachAttention", 6), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
     }
 
     private static ClientAttentionSignals Quiet() => new(0, 0, null, null, false, 0, false);

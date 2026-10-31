@@ -1,7 +1,8 @@
 # ADR 0038: Session packs
 
 Status: accepted by the owner in the critique's row B10b (2026-10-27 and 2026-10-29). Built 2026-10-30. Amended
-2026-10-31: who held a session (critique B12, the partner's answer, the owner's word).
+2026-10-31: who held a session (critique B12) and a plan that ends beside a pack (critique B13), both the partner's
+answers, the owner's word.
 
 ## Context
 
@@ -48,8 +49,15 @@ client, so the tenant handler answers another coach's client with 404 and a rele
 
 **A pack never stands for the client's plan beside a coaching plan.** Sessions run alongside, often ending later, so
 the Clients row, Ending soon and the plan in front of Service & access read the coaching plan while one runs or is to
-come. With none, the pack is the plan, as any plan is. Readers that key on features are otherwise unchanged, so a pack
-running keeps a client Running and keeps Ask to renew away (SUB-014: partly running).
+come. With none, the pack is the plan, as any plan is. Readers that key on features are otherwise unchanged.
+
+**A plan that ends beside a pack reads as ended (critique B13, SES-010).** B10b let a running pack keep a client
+Running, off Ended, not renewed and away from Ask to renew. The partner's answer: treat the coaching plan as ended. Once
+a coaching plan has run out, those three readers leave Sessions out, and the client reads as with no pack. The reader
+asks the plans whether one ran out, because a decision cannot say: a renewal booked after it hides the Expired behind
+PaymentRequired or NotStarted, and an Expired on a feature a pack also ticked is no coaching plan's. Only Sessions leaves
+the reading: a coaching feature a pack also includes still runs, and reads as running. The access decisions themselves do
+not change, so the pack runs on, Messaging stays closed, and a client with a pack stays active and billable.
 
 **Who held it (critique B12).** A gym owner often records what a coach held, so a Held row keeps two people:
 `CoachUserId`, who held it and who it counts for, and `RecordedByUserId`, who recorded it. The owner names who held it,

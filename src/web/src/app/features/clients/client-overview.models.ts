@@ -72,29 +72,36 @@ function livePlan(
   return upcoming[0] ?? null;
 }
 
+function latestToEnd(enrollments: readonly ClientEnrollment[]): ClientEnrollment | null {
+  return (
+    [...enrollments].sort((a, b) => b.endDateExclusive.localeCompare(a.endDateExclusive))[0] ?? null
+  );
+}
+
 /**
  * The plan the header describes: the one covering today (an active one first), else the next one
  * to start, else the one that ended most recently. Cancelled plans are history, not the plan. A pack
- * runs beside a plan (ADR 0038), so it stands for the plan only with no coaching plan live.
+ * runs beside a plan (ADR 0038), so it stands for the plan only with no coaching plan live and none
+ * that ran out: that one reads as ended and is the plan to renew, whatever its packs do (SES-010).
  */
 export function currentEnrollment(
   enrollments: readonly ClientEnrollment[],
   today: string,
 ): ClientEnrollment | null {
-  const live =
-    livePlan(
-      enrollments.filter((item) => !item.sessions),
-      today,
+  const coaching = enrollments.filter((item) => !item.sessions);
+  return (
+    livePlan(coaching, today) ??
+    latestToEnd(
+      coaching.filter(
+        (item) => item.effectiveStatus !== 'Cancelled' && today >= item.endDateExclusive,
+      ),
     ) ??
     livePlan(
       enrollments.filter((item) => item.sessions),
       today,
-    );
-  if (live) return live;
-  const ended = [...enrollments].sort((a, b) =>
-    b.endDateExclusive.localeCompare(a.endDateExclusive),
+    ) ??
+    latestToEnd(enrollments)
   );
-  return ended[0] ?? null;
 }
 
 /**

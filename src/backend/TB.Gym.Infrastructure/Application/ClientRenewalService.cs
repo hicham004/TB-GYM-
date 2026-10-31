@@ -40,16 +40,15 @@ internal sealed class ClientRenewalService(
             return new RenewalRequestResult(RenewalRequestStatus.NotFound);
         }
 
-        var ended = RenewalEligibility.EndedPlan(
-            await featureAccessService.EvaluateAllAsync(tenantContext.TenantId, client.Id, cancellationToken));
+        var tenantId = tenantContext.TenantId;
+        var timeZoneId = await TimeZoneAsync(cancellationToken);
+        var today = TodayIn(timeZoneId);
+        var ended = await EndedPlanAsync(client.Id, today, cancellationToken);
         if (ended is null)
         {
             return new RenewalRequestResult(RenewalRequestStatus.PlanNotEnded);
         }
 
-        var tenantId = tenantContext.TenantId;
-        var timeZoneId = await TimeZoneAsync(cancellationToken);
-        var today = TodayIn(timeZoneId);
         if (await OpenRequestAsync(client.Id, today, cancellationToken) is not null)
         {
             return new RenewalRequestResult(
@@ -90,8 +89,7 @@ internal sealed class ClientRenewalService(
         DateOnly today,
         CancellationToken cancellationToken)
     {
-        var ended = RenewalEligibility.EndedPlan(
-            await featureAccessService.EvaluateAllAsync(tenantContext.TenantId, client.Id, cancellationToken));
+        var ended = await EndedPlanAsync(client.Id, today, cancellationToken);
         var last = await dbContext.RenewalRequests.AsNoTracking()
             .Where(item => item.ClientProfileId == client.Id)
             .OrderByDescending(item => item.RequestedOn)
@@ -109,6 +107,16 @@ internal sealed class ClientRenewalService(
             coachName,
             last,
             ended is not null && (last is null || today >= last.AskAgainFrom));
+    }
+
+    /// <summary>The plan that ran out, as Today and Clients read it: a pack beside it asks for nothing (SES-010).</summary>
+    private async Task<EndedPlan?> EndedPlanAsync(Guid clientProfileId, DateOnly today, CancellationToken cancellationToken)
+    {
+        var decisions = await featureAccessService.EvaluateAllAsync(tenantContext.TenantId, clientProfileId, cancellationToken);
+        var coachingPlanRanOut = CoachingPlanRunOut.HasPack(decisions) && await CoachingPlanRunOut
+            .Among(dbContext.ClientEnrollments.AsNoTracking(), today)
+            .AnyAsync(item => item.ClientProfileId == clientProfileId, cancellationToken);
+        return RenewalEligibility.EndedPlan(CoachingPlanRunOut.PlanDecisions(decisions, coachingPlanRanOut));
     }
 
     private Task<RenewalRequest?> OpenRequestAsync(Guid clientProfileId, DateOnly today, CancellationToken cancellationToken) =>
