@@ -32,10 +32,10 @@ public sealed class B10cSessionsDomainTests
     public void AClientReadsTheSessionsThatStandAndAChargesReasonButNeverACoachsNoteOrWhoRecordedIt()
     {
         var pack = Pack(10);
-        var older = SessionLedgerEntry.Hold(pack, Today.AddDays(-7), CoachId, "Knee felt better", Guid.NewGuid());
+        var older = SessionLedgerEntry.Hold(pack, Today.AddDays(-7), CoachId, CoachId, "Knee felt better", Guid.NewGuid());
         var charged = SessionLedgerEntry.Charge(pack, Today.AddDays(-3), CoachId, "No-show: you didn't come", Guid.NewGuid());
-        var undone = SessionLedgerEntry.Hold(pack, Today.AddDays(-1), CoachId, "Wrong day", Guid.NewGuid());
-        var newest = SessionLedgerEntry.Hold(pack, Today, CoachId, null, Guid.NewGuid());
+        var undone = SessionLedgerEntry.Hold(pack, Today.AddDays(-1), CoachId, CoachId, "Wrong day", Guid.NewGuid());
+        var newest = SessionLedgerEntry.Hold(pack, Today, CoachId, CoachId, null, Guid.NewGuid());
         SessionLedgerEntry[] entries =
         [
             SessionLedgerEntry.Issue(pack, Today.AddDays(-10)),
@@ -68,7 +68,7 @@ public sealed class B10cSessionsDomainTests
         SessionLedgerEntry[] entries =
         [
             SessionLedgerEntry.Issue(pack, Today.AddDays(-20)),
-            SessionLedgerEntry.Hold(pack, Today.AddDays(-15), CoachId, null, Guid.NewGuid()),
+            SessionLedgerEntry.Hold(pack, Today.AddDays(-15), CoachId, CoachId, null, Guid.NewGuid()),
             SessionLedgerEntry.Charge(pack, Today.AddDays(-14), CoachId, "Late cancel", Guid.NewGuid()),
         ];
 
@@ -81,7 +81,7 @@ public sealed class B10cSessionsDomainTests
     public void TheDatabasesSumOfALedgerIsTheBalance()
     {
         var pack = Pack(3);
-        var held = SessionLedgerEntry.Hold(pack, Today, CoachId, null, Guid.NewGuid());
+        var held = SessionLedgerEntry.Hold(pack, Today, CoachId, CoachId, null, Guid.NewGuid());
         var charged = SessionLedgerEntry.Charge(pack, Today, CoachId, "No-show", Guid.NewGuid());
         SessionLedgerEntry[] entries =
         [

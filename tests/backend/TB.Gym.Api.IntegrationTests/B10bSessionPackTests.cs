@@ -512,9 +512,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         string Row(Guid enrollmentId, string kind, int count, DateOnly day, Guid? coachUser, string? reason = null, Guid? voids = null, Guid? client = null) =>
             $"""
             INSERT INTO subscriptions."SessionLedgerEntries"
-                ("Id", "TenantId", "EnrollmentId", "ClientProfileId", "Kind", "Count", "Day", "CoachUserId", "Reason", "VoidsEntryId", "IdempotencyKey")
+                ("Id", "TenantId", "EnrollmentId", "ClientProfileId", "Kind", "Count", "Day", "CoachUserId", "RecordedByUserId", "Reason", "VoidsEntryId", "IdempotencyKey")
             SELECT '{Guid.NewGuid()}', "TenantId", '{enrollmentId}', '{client ?? mayaId}', '{kind}', {count}, '{B10bDay(day)}',
-                {(coachUser is { } id ? $"'{id}'" : "NULL")}, {(reason is null ? "NULL" : $"'{reason}'")}, {(voids is { } target ? $"'{target}'" : "NULL")}, '{Guid.NewGuid()}'
+                {(coachUser is { } id ? $"'{id}'" : "NULL")}, {(coachUser is { } recorder ? $"'{recorder}'" : "NULL")}, {(reason is null ? "NULL" : $"'{reason}'")}, {(voids is { } target ? $"'{target}'" : "NULL")}, '{Guid.NewGuid()}'
             FROM subscriptions."ClientEnrollments" WHERE "Id" = '{pack.Id}'
             """;
 
@@ -556,8 +556,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         var ramiId = await InviteAndAcceptAsync(coach, rami, "b10b-sql-rami@example.test", true);
         Assert.AreEqual("23514", (await A7RefusedAsync(Row(pack.Id, "Held", 1, today, coachId, client: ramiId))).SqlState);
 
-        // A coach's user id that is not a member of this workspace cannot sit on its ledger.
-        Assert.AreEqual("23503", (await A7RefusedAsync(Row(pack.Id, "Held", 1, today, Guid.NewGuid()))).SqlState);
+        // A coach's user id that is not a member of this workspace cannot sit on its ledger: critique B12's guard says so.
+        Assert.AreEqual("23514", (await A7RefusedAsync(Row(pack.Id, "Held", 1, today, Guid.NewGuid()))).SqlState);
     }
 
     [TestMethod]
@@ -704,7 +704,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         string? note = null,
         string? reason = null,
         object? receipt = null,
-        Guid? key = null) =>
+        Guid? key = null,
+        Guid? heldBy = null) =>
         coach.PostAsJsonAsync($"/api/commercial/clients/{clientId}/sessions", new
         {
             outcome,
@@ -713,6 +714,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             reason,
             receipt,
             idempotencyKey = key ?? Guid.NewGuid(),
+            heldByUserId = heldBy,
         });
 
     private static async Task<HttpResponseMessage> B10bPostSessionAsync(
@@ -723,10 +725,11 @@ public sealed partial class Phase3TrainingWorkflowTests
         string? note = null,
         string? reason = null,
         object? receipt = null,
-        Guid? key = null)
+        Guid? key = null,
+        Guid? heldBy = null)
     {
         await RefreshCsrfAsync(coach);
-        return await B10bSendSessionAsync(coach, clientId, day, outcome, note, reason, receipt, key);
+        return await B10bSendSessionAsync(coach, clientId, day, outcome, note, reason, receipt, key, heldBy);
     }
 
     private static async Task<ClientEnrollmentView> B10bRecordAsync(
@@ -737,9 +740,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         string? note = null,
         string? reason = null,
         object? receipt = null,
-        Guid? key = null)
+        Guid? key = null,
+        Guid? heldBy = null)
     {
-        var response = await B10bPostSessionAsync(coach, clientId, day, outcome, note, reason, receipt, key);
+        var response = await B10bPostSessionAsync(coach, clientId, day, outcome, note, reason, receipt, key, heldBy);
         await AssertStatusAsync(response, HttpStatusCode.OK);
         return await ReadSlicePayloadAsync<ClientEnrollmentView>(response);
     }

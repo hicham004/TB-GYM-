@@ -1,6 +1,7 @@
 # ADR 0038: Session packs
 
-Status: accepted by the owner in the critique's row B10b (2026-10-27 and 2026-10-29). Built 2026-10-30.
+Status: accepted by the owner in the critique's row B10b (2026-10-27 and 2026-10-29). Built 2026-10-30. Amended
+2026-10-31: who held a session (critique B12, the partner's answer, the owner's word).
 
 ## Context
 
@@ -50,6 +51,15 @@ the Clients row, Ending soon and the plan in front of Service & access read the 
 come. With none, the pack is the plan, as any plan is. Readers that key on features are otherwise unchanged, so a pack
 running keeps a client Running and keeps Ask to renew away (SUB-014: partly running).
 
+**Who held it (critique B12).** A gym owner often records what a coach held, so a Held row keeps two people:
+`CoachUserId`, who held it and who it counts for, and `RecordedByUserId`, who recorded it. The owner names who held it,
+active staff of the workspace; a coach logs only their own, and the server refuses another name. A charge is no session
+held, so it keeps who recorded it in both. A row from before B12 names only who recorded it, in `CoachUserId`, and
+counts as held by them: the ledger is append-only, so nothing is backfilled, and every reader of a session's person
+stays as it was. The guard refuses a new session that does not keep who recorded it or names anyone but active staff,
+and the command takes that membership's lock as an assignment does (ADR 0026), so a coach removed in that moment either
+has the session or is refused. A client reads neither person (SES-007).
+
 ## Consequences
 
 - A receipt can be taken in the same command as a session, when a pack waits for payment on that day. It must pay the
@@ -65,3 +75,6 @@ running keeps a client Running and keeps Ask to renew away (SUB-014: partly runn
 `SessionPacks` adds the columns, the ledger and its triggers, and rebuilds the slot index; every existing plan becomes a
 coaching plan and every existing option has no count. Rolling back drops the ledger, so after real sessions are
 recorded prefer a forward fix: the ledger is a money-adjacent history that must not be lost.
+
+`SessionHeldAndRecordedBy` (critique B12) adds the nullable column, its foreign key and check, and the guard's two
+refusals. Rolling it back drops who recorded each session; prefer a forward fix here too.

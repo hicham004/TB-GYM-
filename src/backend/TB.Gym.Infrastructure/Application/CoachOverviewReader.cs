@@ -584,7 +584,7 @@ internal sealed class CoachOverviewReader(
     /// This month: money received by money received v1 (SUB-016) in the workspace's calendar month, the clients
     /// whose plan runs today, the 1-on-1 sessions held (SES-008), and for the owner alone the team with each member's
     /// clients. The owner reads every receipt and session of the workspace; anyone else only the receipts that count
-    /// for them and the sessions they recorded, and no team.
+    /// for them and the sessions they held, and no team.
     /// </summary>
     private async Task<CoachMonthView> LoadMonthAsync(
         Scope scope,

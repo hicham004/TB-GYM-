@@ -154,6 +154,8 @@ export type SessionKind = 'Held' | 'NoShow' | 'LateCancel';
 export interface SessionValues {
   readonly kind: SessionKind;
   readonly day: string;
+  /** Who held it, the owner's to say (critique B12); null is whoever records it. */
+  readonly heldBy: string | null;
   readonly note: string;
   readonly reason: string;
 }
@@ -212,6 +214,7 @@ export function sessionRequest(
       ? { amount: target.receipt.amount, currencyCode: target.receipt.currency, method }
       : null,
     idempotencyKey,
+    heldByUserId: held ? values.heldBy : null,
   };
 }
 

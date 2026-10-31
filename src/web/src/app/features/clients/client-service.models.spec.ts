@@ -24,6 +24,7 @@ import {
   renewalAskedFor,
   renewalAskedLine,
   renewalOfferId,
+  sessionHolders,
   sessionPackRows,
   sessionTarget,
   type ServiceContext,
@@ -510,6 +511,20 @@ describe('1-on-1 sessions (critique B10b)', () => {
     ]);
   });
 
+  it('says who held a session and who recorded it, only when they differ', () => {
+    const entry = sessionPack().sessions!.entries.find((item) => item.id === 's-2')!;
+    const history = (recordedByName: string | null, note: string | null) =>
+      rows([sessionPack({}, { entries: [{ ...entry, recordedByName, note }] })])[0].history[0]
+        .detail;
+
+    expect(history('Karim Haddad', null)).toBe('Held by Lea Khoury · recorded by Karim Haddad');
+    expect(history('Karim Haddad', 'Legs')).toBe(
+      'Held by Lea Khoury · recorded by Karim Haddad · Legs',
+    );
+    expect(history(null, 'Legs')).toBe('Lea Khoury · Legs');
+    expect(history(null, null)).toBe('Lea Khoury');
+  });
+
   it('changes nothing on a former client’s record', () => {
     expect(rows([sessionPack()], false)[0].history.some((line) => line.canUndo)).toBe(false);
   });
@@ -631,5 +646,30 @@ describe('1-on-1 sessions (critique B10b)', () => {
       expect.objectContaining({ label: '1-on-1 sessions', state: 'Open until Sun 29 Nov' }),
     ]);
     expect(summary.line).toBe('Maya can use everything their plan includes.');
+  });
+});
+
+describe('who the owner can say held a session', () => {
+  const lea = { userId: 'lea', displayName: 'Lea Khoury' };
+  const owner = { userId: 'owner', displayName: 'Karim Haddad' };
+  const omar = { userId: 'omar', displayName: 'Omar Saleh' };
+
+  it('puts the client’s coach first, then the rest of the team, each once, and you as You', () => {
+    expect(sessionHolders(lea, [owner, lea, omar], 'owner')).toEqual([
+      { value: 'lea', label: 'Lea Khoury' },
+      { value: 'owner', label: 'You' },
+      { value: 'omar', label: 'Omar Saleh' },
+    ]);
+  });
+
+  it('leaves out a choice with nobody else to name', () => {
+    expect(sessionHolders(owner, [owner], 'owner')).toEqual([]);
+  });
+
+  it('still tells the client’s coach and the owner apart without the rest of the team', () => {
+    expect(sessionHolders(lea, [owner], 'owner')).toEqual([
+      { value: 'lea', label: 'Lea Khoury' },
+      { value: 'owner', label: 'You' },
+    ]);
   });
 });

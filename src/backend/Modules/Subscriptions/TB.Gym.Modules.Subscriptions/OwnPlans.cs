@@ -28,7 +28,7 @@ public sealed record OwnPlanView(
     IReadOnlyList<CoachingFeature> Features,
     OwnSessionsView? Sessions = null);
 
-/// <summary>A pack as its client reads it (SES-007): never who recorded a session, a coach's note or a row undone.</summary>
+/// <summary>A pack as its client reads it (SES-007): never who held or recorded a session, a coach's note or a row undone.</summary>
 /// <param name="Count">The sessions the pack was sold with.</param>
 /// <param name="Left">Issued − held − charged + voided; none until the pack is active.</param>
 /// <param name="Used">The sessions held or charged that still stand.</param>
@@ -73,7 +73,7 @@ public static class OwnPlans
 
     /// <summary>
     /// What a client reads of a pack (SES-007): the coach's ledger less all that is the team's own, so a charge's reason
-    /// reaches them and a coach's note, who recorded a session and anything undone do not.
+    /// reaches them and a coach's note, who held or recorded a session and anything undone do not.
     /// </summary>
     public static OwnSessionsView SessionsOf(SessionPackView pack) =>
         new(

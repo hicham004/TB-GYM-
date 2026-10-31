@@ -685,6 +685,12 @@ ledger's coach-and-day index. A pack's notices keep the plan's kinds: the dispat
 it already re-reads, through `NotificationTemplateCatalog.TryResolveForEnrollment` (SES-009), so nothing already
 scheduled needs rewriting.
 
+Critique B12 adds who recorded a session beside who held it: a nullable `RecordedByUserId` on the ledger, with its
+tenant-composite foreign key to the membership and a check, while `CoachUserId` stays the person a session counts for,
+so every reader and the coach-and-day index stand as they were and a row from before B12 needs no backfill. The route
+takes an optional `HeldByUserId`, the owner's alone, and `guard_session_entry` refuses a new session that does not keep
+who recorded it or names anyone but active staff (ADR 0038). `MonthNumbersPolicy` moves to v2 for what it now says.
+
 R2.5b adds two client reads for the Training tab (`/training/program`), with no schema or write
 change. `GET /api/training/me/program` describes one block: the one covering today, else the next,
 else the last finished (at most eight open blocks are read, as for coverage). It sends every week's
@@ -789,7 +795,7 @@ B10c added the sessions held). The
 client list and a client's page read nothing new.
 
 Critique B10d adds the This month page's one read, `GET /api/coach-month` (`ICoachMonthService` in Clients,
-`CoachMonthReader` in Infrastructure), again with no schema change. Month numbers v1 (`MonthNumbersPolicy` in
+`CoachMonthReader` in Infrastructure), again with no schema change. Month numbers v2 (`MonthNumbersPolicy` in
 Subscriptions, beside money received, SUB-018) is a pure rule: the reader gathers two months of facts in three reads,
 and the rule decides what counts, in which month and for whom. The receipts and the sessions held come through
 `MonthReads`, which Today's This month calls too, so a number never differs between them; the plans booked or

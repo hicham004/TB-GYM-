@@ -273,6 +273,11 @@ public sealed partial class GymDbContext
                 .HasForeignKey(item => new { item.TenantId, item.CoachUserId })
                 .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TenantMembership>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.RecordedByUserId })
+                .HasPrincipalKey(membership => new { membership.TenantId, membership.UserId })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<SessionLedgerEntry>()
                 .WithMany()
                 .HasForeignKey(item => new { item.TenantId, item.VoidsEntryId })
@@ -288,6 +293,10 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_SessionLedgerEntries_Coach",
                     "(\"Kind\" IN ('Held', 'Charged')) = (\"CoachUserId\" IS NOT NULL)");
+                // Null on a row from before critique B12; a charge is no session held, so its coach recorded it.
+                table.HasCheckConstraint(
+                    "CK_SessionLedgerEntries_RecordedBy",
+                    "\"RecordedByUserId\" IS NULL OR \"Kind\" = 'Held' OR (\"Kind\" = 'Charged' AND \"RecordedByUserId\" = \"CoachUserId\")");
                 table.HasCheckConstraint(
                     "CK_SessionLedgerEntries_Reason",
                     "(\"Kind\" = 'Charged') = (\"Reason\" IS NOT NULL)");

@@ -38,7 +38,7 @@ describe('monthPage', () => {
   it('says every count with last month’s beside it, with no change worked out', () => {
     expect(page().counts).toEqual([
       { key: 'sessions', label: '1-on-1 sessions held', value: '12', last: 'September: 9' },
-      { key: 'plans', label: 'Plans sold', value: '3', last: 'September: 2' },
+      { key: 'plans', label: 'Coaching plans sold', value: '3', last: 'September: 2' },
       { key: 'packs', label: 'Session packs sold', value: '2', last: 'September: 1' },
       { key: 'started', label: 'Clients started', value: '2', last: 'September: 1' },
       { key: 'ended', label: 'Clients ended', value: '1', last: 'September: 0' },

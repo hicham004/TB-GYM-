@@ -1613,7 +1613,7 @@ limited to the coach's assigned clients.
 - Critique B10d (SUB-018, for the owner to confirm): **This month** at `/month` (`features/month`), opened by "See
   this month and last" at the foot of Today's This month, with Today lit in the sidebar, whose rows stay as they
   are. "Your coaching space" for the owner, "Your numbers" for a coach, "October so far": money received, one line
-  per currency with its payments and last month's, then 1-on-1 sessions held, plans sold, session packs sold,
+  per currency with its payments and last month's, then 1-on-1 sessions held, coaching plans sold, session packs sold,
   clients started and clients ended, each with last month's beside it and no percent. With someone to tell apart
   the owner has By coach: a table with a Total, one month at a time by the switch above it, each coach a small card
   under 54rem of its own width, and anyone who left the team marked, their numbers kept. "How these are counted"
@@ -1771,7 +1771,10 @@ limited to the coach's assigned clients.
   are not listed under Other plans; one stands in front only with no coaching plan running or to come, or while it
   waits for the payment of a sale just made. Since critique B10c the Clients row carries a "2 sessions left" pill
   beside the plan's while sessions are in today's plan, warm once they run out; Today's and the client page's
-  Needs you say so with Renew pack or Record payment, and This month counts the 1-on-1 sessions held.
+  Needs you say so with Renew pack or Record payment, and This month counts the 1-on-1 sessions held. Since critique
+  B12 the owner's Record a session asks Who held it, under the day, for Held only, the client's coach first, with
+  nobody else to name no box; a coach has none, and a pack's History says "Held by Lea Khoury · recorded by Karim
+  Haddad" when the two differ.
 - Built in R5.3b: **Intake** (`/clients/:clientId/intake`, from the header's Edit or View intake; follows dark
   mode): what a client answered as four cards (About, Goal, Day and food, Health), each with an Edit that opens
   that group in a sheet (the date of birth typed in three boxes, a refusal shown in the server's words, a

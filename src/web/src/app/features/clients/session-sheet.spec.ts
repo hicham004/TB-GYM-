@@ -76,6 +76,7 @@ describe('Record a session', () => {
       reason: null,
       receipt: null,
       idempotencyKey: expect.any(String),
+      heldByUserId: null,
     });
     expect(closed).toHaveBeenCalledWith(expect.objectContaining({ id: 'e-pack' }));
   });
@@ -169,6 +170,119 @@ describe('Record a session', () => {
     const { host } = await render();
     expect(textOf(host)).not.toContain('How it was paid');
     expect(textOf(host.querySelector('.target'))).not.toContain('USD');
+  });
+
+  describe('who held it', () => {
+    const holders = [
+      { value: 'lea', label: 'Lea Khoury' },
+      { value: 'owner', label: 'You' },
+      { value: 'omar', label: 'Omar Saleh' },
+    ];
+
+    it('starts the owner on the client’s coach, under the day, and sends who they choose', async () => {
+      const { fixture, host, api } = await render({ holders });
+
+      const labels = [...host.querySelectorAll('label')].map((label) => textOf(label));
+      expect(labels.indexOf('Who held it')).toBe(labels.indexOf('Day of the session') + 1);
+      expect(textOf(field(host, 'Who held it'))).toBe('Lea Khoury');
+
+      await chooseOption(fixture, host, 'Who held it', 'Omar Saleh');
+      press(host, 'Record session');
+      await settle(fixture);
+
+      expect(api.recordSession).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({ outcome: 'Held', heldByUserId: 'omar' }),
+      );
+    });
+
+    it('sends the client’s coach when the owner changes nothing', async () => {
+      const { fixture, host, api } = await render({ holders });
+
+      press(host, 'Record session');
+      await settle(fixture);
+
+      expect(api.recordSession).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({ heldByUserId: 'lea' }),
+      );
+    });
+
+    it('asks only about a session held: a no-show or late cancel names nobody', async () => {
+      const { fixture, host, api } = await render({ holders });
+
+      await chooseOption(fixture, host, 'Who held it', 'Omar Saleh');
+      choose(host, 'No-show');
+      await settle(fixture);
+      expect(textOf(host)).not.toContain('Who held it');
+
+      press(host, 'Record session');
+      await settle(fixture);
+      expect(api.recordSession).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({ outcome: 'Charged', heldByUserId: null }),
+      );
+    });
+
+    it('keeps the choice through a change of mind about what happened', async () => {
+      const { fixture, host } = await render({ holders });
+
+      await chooseOption(fixture, host, 'Who held it', 'Omar Saleh');
+      choose(host, 'Late cancel');
+      await settle(fixture);
+      choose(host, 'Held');
+      await settle(fixture);
+
+      expect(textOf(field(host, 'Who held it'))).toBe('Omar Saleh');
+    });
+
+    it('asks a coach nothing: a session they record is theirs', async () => {
+      const { fixture, host, api } = await render();
+
+      expect(textOf(host)).not.toContain('Who held it');
+      press(host, 'Record session');
+      await settle(fixture);
+      expect(api.recordSession).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({ heldByUserId: null }),
+      );
+    });
+
+    it('binds the retry’s key to who held it, so another name is a new session', async () => {
+      const refusal = new HttpErrorResponse({
+        status: 409,
+        error: {
+          code: 'session_holder_not_staff',
+          message: 'That person is not on your team, so the session can’t be recorded for them.',
+        },
+      });
+      const recordSession = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => refusal))
+        .mockReturnValue(of(sessionPack()));
+      const { fixture, host } = await render({ holders }, { recordSession });
+
+      await chooseOption(fixture, host, 'Who held it', 'Omar Saleh');
+      press(host, 'Record session');
+      await settle(fixture);
+      expect(textOf(formSummary(host))).toContain('is not on your team');
+
+      await chooseOption(fixture, host, 'Who held it', 'You');
+      press(host, 'Record session');
+      await settle(fixture);
+
+      const [first, second] = recordSession.mock.calls;
+      expect(second[1].heldByUserId).toBe('owner');
+      expect(second[1].idempotencyKey).not.toBe(first[1].idempotencyKey);
+    });
+
+    it('tells the page once the owner changes it', async () => {
+      const { fixture, host, dirty } = await render({ holders });
+
+      expect(dirty).not.toHaveBeenCalled();
+      await chooseOption(fixture, host, 'Who held it', 'You');
+      expect(dirty).toHaveBeenCalledWith(true);
+    });
   });
 
   it('keeps a refusal on screen in the server’s words, and retries with the same key', async () => {

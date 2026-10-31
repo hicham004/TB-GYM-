@@ -332,7 +332,10 @@ export interface SessionEntry {
   kind: SessionEntryKind;
   count: number;
   day: string;
+  /** Who held it, or who charged it. */
   coachName: string | null;
+  /** Who recorded it, only when that was someone else (critique B12). */
+  recordedByName: string | null;
   /** The coach's own note, for the team. */
   note: string | null;
   /** Why it was charged, which the client reads. */

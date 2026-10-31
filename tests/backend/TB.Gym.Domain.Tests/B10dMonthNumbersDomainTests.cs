@@ -3,7 +3,7 @@ using TB.Gym.Modules.Subscriptions;
 namespace TB.Gym.Domain.Tests;
 
 /// <summary>
-/// Critique B10d, the This month page: month numbers v1 (SUB-018). Plans and packs sold, clients started and ended, and
+/// Critique B10d, the This month page: month numbers (SUB-018). Plans and packs sold, clients started and ended, and
 /// who each counts for, in a workspace that keeps Beirut's time (three hours ahead of UTC until 25 Oct 2026, two after).
 /// </summary>
 [TestClass]
@@ -22,7 +22,7 @@ public sealed class B10dMonthNumbersDomainTests
 
     [TestMethod]
     public void TheRuleIsNamedAndVersioned() =>
-        Assert.AreEqual(("MonthNumbers", 1), (MonthNumbersPolicy.Key, MonthNumbersPolicy.Version));
+        Assert.AreEqual(("MonthNumbers", 2), (MonthNumbersPolicy.Key, MonthNumbersPolicy.Version));
 
     // ---------- sold ----------
 

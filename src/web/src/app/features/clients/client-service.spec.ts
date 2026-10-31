@@ -10,8 +10,10 @@ import { ApiClient } from '../../core/api/api-client';
 import type {
   ClientCommercialOverview,
   CoachClientDetails,
+  TeamMember,
   WorkspaceDetails,
 } from '../../core/api/api.models';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
@@ -26,7 +28,7 @@ import {
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import { installDialogSupport } from '../../../testing/dialog';
-import { fill, menuChoices, press, settle, toggleFold } from '../../../testing/dom';
+import { field, fill, menuChoices, press, settle, toggleFold } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { TeamApi } from '../team/team-api';
 import { ClientService } from './client-service';
@@ -72,6 +74,10 @@ interface Options {
   /** This server sends no email (audit LOST-1). */
   emailOff?: boolean;
   releaseClient?: ReturnType<typeof vi.fn>;
+  /** The team's read; nobody by default. */
+  getTeamMembers?: () => Observable<TeamMember[]>;
+  /** Who is signed in; nobody by default. */
+  user?: { id: string; displayName: string };
 }
 
 async function render(options: Options = {}) {
@@ -112,7 +118,11 @@ async function render(options: Options = {}) {
       ClientWorkspaceContext,
       { provide: ApiClient, useValue: api },
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
-      { provide: TeamApi, useValue: { getTeamMembers: vi.fn(() => of([])) } },
+      {
+        provide: TeamApi,
+        useValue: { getTeamMembers: vi.fn(options.getTeamMembers ?? (() => of([]))) },
+      },
+      ...(options.user ? [{ provide: AuthStore, useValue: { user: signal(options.user) } }] : []),
       { provide: FormerClientsApi, useValue: { releaseClient: options.releaseClient ?? vi.fn() } },
       provideEmailDelivery(options.emailOff),
       {
@@ -547,6 +557,70 @@ describe('a client’s Service & access', () => {
       );
       expect(context.notice()).toBe('The session is recorded. 6 of 10 left on Personal training.');
       expect(textOf(section(host)?.querySelector('.pack-line'))).toContain('6 of 10 left');
+    });
+
+    describe('who held it', () => {
+      const team = [
+        { userId: 'owner-1', displayName: 'Karim Haddad' },
+        { userId: 'coach-1', displayName: 'Lea Khoury' },
+        { userId: 'coach-2', displayName: 'Omar Saleh' },
+      ] as TeamMember[];
+      const signedIn = { id: 'owner-1', displayName: 'Karim Haddad' };
+
+      async function openSheet(options: Options) {
+        const rendered = await render({ plans: plansOverview([sessionPack()]), ...options });
+        press(section(rendered.host)!, 'Record a session');
+        await settle(rendered.harness.fixture);
+        return rendered;
+      }
+
+      const choices = async (harness: { fixture: Parameters<typeof settle>[0] }) => {
+        field(dialog()!, 'Who held it').click();
+        await settle(harness.fixture);
+        return all(dialog()!, '[role="option"]').map(textOf);
+      };
+
+      it('offers the owner the team, the client’s coach first and themselves as You', async () => {
+        const { harness } = await openSheet({ getTeamMembers: () => of(team), user: signedIn });
+
+        expect(textOf(dialog())).toContain('Who held it');
+        expect(await choices(harness)).toEqual(['Lea Khoury', 'You', 'Omar Saleh']);
+      });
+
+      it('asks a coach nothing, and reads no team for them', async () => {
+        const getTeamMembers = vi.fn(() => of(team));
+        await openSheet({
+          isOwner: false,
+          getTeamMembers,
+          user: { id: 'coach-1', displayName: 'Lea Khoury' },
+        });
+
+        expect(textOf(dialog())).not.toContain('Who held it');
+        expect(getTeamMembers).not.toHaveBeenCalled();
+      });
+
+      it('asks an owner on their own nothing', async () => {
+        await openSheet({
+          getTeamMembers: () => of([team[0]]),
+          user: signedIn,
+          profile: {
+            ...PROFILE,
+            assignedCoachUserId: 'owner-1',
+            assignedCoachName: 'Karim Haddad',
+          },
+        });
+
+        expect(textOf(dialog())).not.toContain('Who held it');
+      });
+
+      it('still offers the client’s coach and the owner when the team can’t be read', async () => {
+        const { harness } = await openSheet({
+          getTeamMembers: () => throwError(() => new Error('down')),
+          user: signedIn,
+        });
+
+        expect(await choices(harness)).toEqual(['Lea Khoury', 'You']);
+      });
     });
 
     it('sells a pack and brings it to the front while it waits for its payment', async () => {

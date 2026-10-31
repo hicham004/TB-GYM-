@@ -92,7 +92,7 @@ export function monthPage(view: CoachMonthReportView, locale: string): MonthPage
     money: moneyLines(now.moneyReceived, before.moneyReceived, lastMonth, locale),
     counts: [
       count('sessions', $localize`1-on-1 sessions held`, (month) => month.sessionsHeld),
-      count('plans', $localize`Plans sold`, (month) => month.plansSold),
+      count('plans', $localize`Coaching plans sold`, (month) => month.plansSold),
       count('packs', $localize`Session packs sold`, (month) => month.packsSold),
       count('started', $localize`Clients started`, (month) => month.clientsStarted),
       count('ended', $localize`Clients ended`, (month) => month.clientsEnded),

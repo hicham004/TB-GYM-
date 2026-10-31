@@ -3620,6 +3620,7 @@ export type RecordSessionRequest = {
   reason: null | string;
   receipt: null | SessionReceiptRequest;
   idempotencyKey: string;
+  heldByUserId?: null | string;
 };
 
 export type RecordSetActualRequest = {
@@ -3845,6 +3846,7 @@ export type SessionEntryView = {
   count: number | string;
   day: string;
   coachName: null | string;
+  recordedByName: null | string;
   note: null | string;
   reason: null | string;
   voidsEntryId: null | string;

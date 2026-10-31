@@ -136,6 +136,13 @@
     text-align: start;
   }
 
+  // A label on two lines leaves its number level with the rest of the row.
+  .coach-table td {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
   .coach-table .who {
     grid-column: 1 / -1;
   }

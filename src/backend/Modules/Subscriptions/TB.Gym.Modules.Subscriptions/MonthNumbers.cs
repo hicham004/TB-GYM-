@@ -1,19 +1,19 @@
 namespace TB.Gym.Modules.Subscriptions;
 
 /// <summary>
-/// Month numbers v1 (SUB-018, critique B10d): what the This month page counts in one workspace calendar month, beside
-/// money received v1 (SUB-016) and the sessions held (SES-008). Plans and packs sold count on the day they were booked,
-/// at a price, unless cancelled with no money received. Clients started and ended count a stint: days in a row on
-/// plans that opened, paid in full or free, a pack included, from its first day to its last or the day it was
+/// Month numbers v2 (SUB-018, critique B10d, B12): what the This month page counts in one workspace calendar month,
+/// beside money received v1 (SUB-016) and the sessions held (SES-008). Plans and packs sold count on the day they were
+/// booked, at a price, unless cancelled with no money received. Clients started and ended count a stint: days in a row
+/// on plans that opened, paid in full or free, a pack included, from its first day to its last or the day it was
 /// cancelled, which is not covered. Nothing else covers days (SUB-008), and a gap, however short, ends one stint and
 /// starts another. Each counts for the coach the client had that day (ADR 0026), read as money received reads it; a
-/// session counts for whoever recorded it (SES-003). Past months move with what is recorded late, as money and
-/// sessions do: the day decides, not the day it was typed.
+/// session counts for who held it, where v1 said who recorded it (SES-003). Past months move with what is recorded
+/// late, as money and sessions do: the day decides, not the day it was typed.
 /// </summary>
 public static class MonthNumbersPolicy
 {
     public const string Key = "MonthNumbers";
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>
     /// The numbers of <c>[from, toExclusive)</c>: the whole workspace's (<paramref name="coachUserId"/> null), or only
@@ -129,7 +129,7 @@ public sealed record MonthFacts(
     IReadOnlyList<HeldSession> Sessions,
     IReadOnlyList<MonthPlan> Plans);
 
-/// <summary>A session held that still stands (SES-008): its own workspace day, and who recorded it (SES-003).</summary>
+/// <summary>A session held that still stands (SES-008): its own workspace day, and who held it (SES-003).</summary>
 public sealed record HeldSession(DateOnly Day, Guid CoachUserId);
 
 /// <summary>

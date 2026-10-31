@@ -63,7 +63,7 @@ export class ThisMonth {
     coach: $localize`Coach`,
     money: $localize`Money received`,
     sessions: $localize`Sessions held`,
-    plans: $localize`Plans sold`,
+    plans: $localize`Coaching plans sold`,
     packs: $localize`Packs sold`,
     started: $localize`Started`,
     ended: $localize`Ended`,

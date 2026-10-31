@@ -63,8 +63,8 @@ internal static class MonthReads
 
     /// <summary>
     /// The sessions held in <c>[from, toExclusive)</c> that still stand: a session counts on its own workspace day, a
-    /// former client's too, for the coach who recorded it (SES-003), or every one with <paramref name="coachUserId"/>
-    /// null, and an undone one counts for nobody. A charge is no session held.
+    /// former client's too, for who held it (SES-003), or every one with <paramref name="coachUserId"/> null, and an
+    /// undone one counts for nobody. A charge is no session held.
     /// </summary>
     public static IQueryable<SessionLedgerEntry> SessionsHeld(
         GymDbContext dbContext,

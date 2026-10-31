@@ -48,6 +48,7 @@ public sealed class SessionLedgerEntry : TenantEntity
         int count,
         DateOnly day,
         Guid? coachUserId,
+        Guid? recordedByUserId,
         string? note,
         string? reason,
         Guid? voidsEntryId,
@@ -70,6 +71,7 @@ public sealed class SessionLedgerEntry : TenantEntity
         Count = count;
         Day = day;
         CoachUserId = coachUserId;
+        RecordedByUserId = recordedByUserId;
         Note = note;
         Reason = reason;
         VoidsEntryId = voidsEntryId;
@@ -87,8 +89,14 @@ public sealed class SessionLedgerEntry : TenantEntity
     /// <summary>The workspace day it happened: the session's own day, or the day a pack opened or a row was undone.</summary>
     public DateOnly Day { get; private set; }
 
-    /// <summary>The coach who held or charged the session; null on the other kinds.</summary>
+    /// <summary>
+    /// Who held the session, or who charged it; null on the other kinds. It is who a session counts for. A row from before
+    /// critique B12 names who recorded it, who counts as having held it (SES-003).
+    /// </summary>
     public Guid? CoachUserId { get; private set; }
+
+    /// <summary>Who recorded a session held or charged; null on the other kinds and on a row from before critique B12.</summary>
+    public Guid? RecordedByUserId { get; private set; }
 
     /// <summary>The coach's own note on a session held. Only the team reads it.</summary>
     public string? Note { get; private set; }
@@ -111,12 +119,15 @@ public sealed class SessionLedgerEntry : TenantEntity
             null,
             null,
             null,
+            null,
             pack.AssignmentCommandId);
 
+    /// <summary>A session that took place. The gym owner may record one somebody else held (critique B12).</summary>
     public static SessionLedgerEntry Hold(
         ClientEnrollment pack,
         DateOnly day,
-        Guid coachUserId,
+        Guid heldByUserId,
+        Guid recordedByUserId,
         string? note,
         Guid idempotencyKey) =>
         new(
@@ -124,16 +135,18 @@ public sealed class SessionLedgerEntry : TenantEntity
             SessionEntryKind.Held,
             1,
             day,
-            coachUserId,
+            heldByUserId,
+            recordedByUserId,
             CommercialText.Optional(note, TextLimit, nameof(note)),
             null,
             null,
             idempotencyKey);
 
+    /// <summary>A no-show or late cancel. It keeps who recorded it, as a charge is no session held (critique B12).</summary>
     public static SessionLedgerEntry Charge(
         ClientEnrollment pack,
         DateOnly day,
-        Guid coachUserId,
+        Guid recordedByUserId,
         string reason,
         Guid idempotencyKey) =>
         new(
@@ -141,7 +154,8 @@ public sealed class SessionLedgerEntry : TenantEntity
             SessionEntryKind.Charged,
             1,
             day,
-            coachUserId,
+            recordedByUserId,
+            recordedByUserId,
             null,
             CommercialText.Required(reason, TextLimit, nameof(reason)),
             null,
@@ -159,7 +173,7 @@ public sealed class SessionLedgerEntry : TenantEntity
             throw new InvalidOperationException("Only a session held or charged on this pack can be undone.");
         }
 
-        return new(pack, SessionEntryKind.Voided, 1, day, null, null, null, entry.Id, idempotencyKey);
+        return new(pack, SessionEntryKind.Voided, 1, day, null, null, null, null, entry.Id, idempotencyKey);
     }
 }
 
@@ -208,6 +222,9 @@ public static class SessionLedger
                     entry.Count,
                     entry.Day,
                     entry.CoachUserId is { } coach ? coachNames.GetValueOrDefault(coach) : null,
+                    entry.RecordedByUserId is { } recorder && recorder != entry.CoachUserId
+                        ? coachNames.GetValueOrDefault(recorder)
+                        : null,
                     entry.Note,
                     entry.Reason,
                     entry.VoidsEntryId,
@@ -346,7 +363,8 @@ public sealed record SessionPackView(
     DateOnly? LastHeldOn,
     IReadOnlyList<SessionEntryView> Entries);
 
-/// <param name="CoachName">Who held or charged it.</param>
+/// <param name="CoachName">Who held it, or who charged it.</param>
+/// <param name="RecordedByName">Who recorded it, only when that was someone else (critique B12).</param>
 /// <param name="Note">The coach's own note, for the team.</param>
 /// <param name="Reason">Why it was charged, which the client reads.</param>
 /// <param name="VoidsEntryId">The row a Voided entry undoes.</param>
@@ -357,6 +375,7 @@ public sealed record SessionEntryView(
     int Count,
     DateOnly Day,
     string? CoachName,
+    string? RecordedByName,
     string? Note,
     string? Reason,
     Guid? VoidsEntryId,
@@ -366,13 +385,18 @@ public sealed record SessionEntryView(
 /// <param name="Note">Kept on a session held; only the team reads it.</param>
 /// <param name="Reason">Required when charged; the client reads it.</param>
 /// <param name="Receipt">The money taken that day for a pack waiting for payment, which pays it in full (SES-005).</param>
+/// <param name="HeldByUserId">
+/// Who held a session held, active staff of the workspace, which only the owner can make someone else; null is whoever
+/// records it (SES-003). A charge is no session held, so it names nobody.
+/// </param>
 public sealed record RecordSessionRequest(
     SessionOutcome Outcome,
     DateOnly Day,
     string? Note,
     string? Reason,
     SessionReceiptRequest? Receipt,
-    Guid IdempotencyKey);
+    Guid IdempotencyKey,
+    Guid? HeldByUserId = null);
 
 /// <summary>A receipt recorded with a session, dated that session's day.</summary>
 public sealed record SessionReceiptRequest(decimal Amount, string CurrencyCode, ManualPaymentMethod Method);

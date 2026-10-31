@@ -27,7 +27,7 @@ import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { type SegmentOption, SegmentedControl } from '../../ui/segmented-control';
-import { selectOptions, UiSelect } from '../../ui/select';
+import { selectOptions, type SelectOption, UiSelect } from '../../ui/select';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import {
   chargeReason,
@@ -50,8 +50,10 @@ const METHODS: readonly ManualPaymentMethod[] = [
 /**
  * Record a session (critique B10b): what happened, the day and a note or the reason a charge carries,
  * with the money in the same sheet when the pack still waits for it. It says which pack the session
- * goes on; the server chooses again and refuses in words (SES-004, SES-005). A retry of the same entry
- * reuses its idempotency key, so a double tap records one session (SUB-011).
+ * goes on; the server chooses again and refuses in words (SES-004, SES-005). The gym owner also says
+ * who held a session (critique B12); a coach's are their own, so they have no box, and a charge is no
+ * session held. A retry of the same entry reuses its idempotency key, so a double tap records one
+ * session (SUB-011).
  */
 @Component({
   selector: 'app-session-sheet',
@@ -85,6 +87,15 @@ const METHODS: readonly ManualPaymentMethod[] = [
         (valueChange)="day.set($event); dirtyChange.emit(true)"
         (touched)="attempt.touch('day')"
       />
+
+      @if (kind() === 'Held' && holders().length > 0) {
+        <app-select
+          [label]="holderLabel"
+          [options]="holders()"
+          [value]="holder()"
+          (valueChange)="holder.set($any($event)); dirtyChange.emit(true)"
+        />
+      }
 
       <!-- In the page from the start, so a change of day is announced, its going too. -->
       <p class="target" dir="auto" aria-live="polite">{{ target()?.line }}</p>
@@ -210,6 +221,8 @@ export class SessionSheet {
   readonly firstName = input.required<string>();
   readonly today = input.required<string>();
   readonly plans = input.required<readonly ClientEnrollment[]>();
+  /** Who the owner can say held it, the client's coach first; none for a coach, or anyone alone. */
+  readonly holders = input<readonly SelectOption[]>([]);
   /** The pack the session went on, or null when the coach closed the sheet without one. */
   readonly closed = output<ClientEnrollment | null>();
   readonly dirtyChange = output<boolean>();
@@ -223,6 +236,7 @@ export class SessionSheet {
     { value: 'LateCancel', label: $localize`Late cancel` },
   ];
   protected readonly dayLabel = $localize`Day of the session`;
+  protected readonly holderLabel = $localize`Who held it`;
   protected readonly methodLabel = $localize`How it was paid`;
   protected readonly methods = selectOptions(METHODS, paymentMethodLabel);
   protected readonly noteLabel = $localize`Note (optional)`;
@@ -234,6 +248,7 @@ export class SessionSheet {
 
   protected readonly kind = signal<SessionKind>('Held');
   protected readonly day = linkedSignal(() => this.today());
+  protected readonly holder = linkedSignal(() => this.holders()[0]?.value ?? '');
   protected readonly note = signal('');
   protected readonly reason = signal('');
   protected readonly method = signal<ManualPaymentMethod>('Cash');
@@ -246,6 +261,7 @@ export class SessionSheet {
   private readonly values = computed(() => ({
     kind: this.kind(),
     day: this.day(),
+    heldBy: this.holder() || null,
     note: this.note(),
     reason: this.reason(),
   }));

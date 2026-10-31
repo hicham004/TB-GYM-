@@ -90,7 +90,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(
             (new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 1), new DateOnly(2026, 9, 1)),
             (leas.Today, leas.ThisMonthFrom, leas.LastMonthFrom));
-        Assert.AreEqual(("MonthNumbers", 1, "MoneyReceived", 1), (leas.MonthRuleKey, leas.MonthRuleVersion, leas.MoneyRuleKey, leas.MoneyRuleVersion));
+        Assert.AreEqual(("MonthNumbers", 2, "MoneyReceived", 1), (leas.MonthRuleKey, leas.MonthRuleVersion, leas.MoneyRuleKey, leas.MoneyRuleVersion));
         Assert.AreEqual("USD 400.00 3 | held 2 | plans 1 | packs 1 | started 1 | ended 0", B10dSay(leas.ThisMonth));
         Assert.AreEqual("USD 100.00 1 | held 0 | plans 1 | packs 0 | started 1 | ended 0", B10dSay(leas.LastMonth));
         Assert.IsNull(leas.Coaches);

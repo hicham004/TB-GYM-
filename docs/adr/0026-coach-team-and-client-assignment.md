@@ -58,7 +58,8 @@ Business rules, decided by the product owner on 2026-09-23:
 - **The This month page** (critique B10d, 2026-10-31, for the owner to confirm): a coach sees their own money
   received, sessions held, plans and packs sold, and clients started and ended, this month and last. The owner
   sees the workspace's and each coach's, anyone who left the team with a number included, so the rows add up to
-  the totals; no coach receives another's, and no client is named (SUB-018).
+  the totals; no coach receives another's, and no client is named (SUB-018). A session counts for who held it, which
+  only the owner can make someone else (critique B12, SES-003).
 
 Mechanism:
 

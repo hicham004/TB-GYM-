@@ -266,7 +266,7 @@ public sealed record CoachTodayView(
 /// </param>
 /// <param name="SessionsHeld">
 /// The 1-on-1 sessions held this month that still stand, on the workspace day they happened (SES-008): the Owner's
-/// every one of the workspace, a Coach's those they recorded. Null while there is nothing to count from: none held this
+/// every one of the workspace, a Coach's those they held. Null while there is nothing to count from: none held this
 /// month and no client the caller coaches with sessions in today's plan.
 /// </param>
 public sealed record CoachMonthView(

@@ -12,7 +12,7 @@ import {
   unpaidRenewal,
 } from '../src/testing/client-service-fixtures';
 import { COACH_NOW, LEA_ID, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
-import { chooseDay, chooseOption, kitDateField } from './kit-controls';
+import { chooseDay, chooseOption, kitDateField, kitSelect } from './kit-controls';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -494,8 +494,13 @@ for (const [width, height] of [
     await expect(sheet.locator('.target')).toHaveText(
       'Personal training is waiting for USD 35. Saving this records that payment too, received on the day of the session, and the session goes on it.',
     );
+    await expect(kitSelect(sheet, 'Who held it').locator('button.trigger')).toContainText(
+      'Lea Khoury',
+    );
+    await chooseOption(sheet, 'Who held it', 'You');
     await expectNoHorizontalOverflow(page);
     await axe(page);
+    await page.screenshot({ path: `test-results/b12-who-held-it-${width}.png`, fullPage: true });
 
     await sheet.getByRole('button', { name: 'Record session and payment' }).click();
     await expect(sheet).toBeHidden();
@@ -506,6 +511,7 @@ for (const [width, height] of [
         body: expect.objectContaining({
           outcome: 'Held',
           receipt: { amount: 35, currencyCode: 'USD', method: 'Cash' },
+          heldByUserId: OWNER_ID,
         }),
       },
     ]);

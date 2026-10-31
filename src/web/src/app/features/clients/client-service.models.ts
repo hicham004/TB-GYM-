@@ -11,6 +11,7 @@ import type {
   SessionPack,
 } from '../../core/api/api.models';
 import type { UiMenuItem } from '../../ui/menu';
+import type { SelectOption } from '../../ui/select';
 import type { StatusPillTone } from '../../ui/status-pill';
 import type { ClientAction } from './client-actions';
 import {
@@ -474,7 +475,7 @@ export interface SessionLine {
   readonly day: string;
   /** "Held", "Charged · No-show", "10 sessions added", "Undone" */
   readonly what: string;
-  /** "Karim Haddad · Legs": who, and the coach's own note. */
+  /** "Karim Haddad · Legs", or "Held by Lea Khoury · recorded by Karim Haddad": who, and the note. */
   readonly detail: string | null;
   /** A row a later one undid: it stays, struck through. */
   readonly undone: boolean;
@@ -546,14 +547,18 @@ function sessionLine(
         canUndo: false,
       };
     }
-    default:
+    default: {
+      const who = entry.recordedByName
+        ? $localize`Held by ${entry.coachName}:coach: · recorded by ${entry.recordedByName}:recorder:`
+        : entry.coachName;
       return {
         ...base,
         what:
           entry.kind === 'Held' ? $localize`Held` : $localize`Charged · ${entry.reason}:reason:`,
-        detail: [entry.coachName, entry.note].filter(Boolean).join(' · ') || null,
+        detail: [who, entry.note].filter(Boolean).join(' · ') || null,
         canUndo: canChange && !entry.isVoided,
       };
+    }
   }
 }
 
@@ -614,6 +619,29 @@ function packMenu(
   return planMenu(planCard(plan, context), null, renewable)
     .filter((item) => item.action !== 'start')
     .map(({ label, hint, action, disabled }) => ({ label, hint, action: action ?? '', disabled }));
+}
+
+/** Someone who can hold a session. */
+export interface SessionStaff {
+  readonly userId: string;
+  readonly displayName: string;
+}
+
+/**
+ * Who the owner can say held a session (critique B12): the client's coach first, then the rest of the
+ * team, each once, the signed-in person as You. With nobody else to name there is no choice to offer.
+ */
+export function sessionHolders(
+  coach: SessionStaff,
+  team: readonly SessionStaff[],
+  me: string,
+): SelectOption[] {
+  const people = [coach, ...team.filter((member) => member.userId !== coach.userId)];
+  if (people.length < 2) return [];
+  return people.map((person) => ({
+    value: person.userId,
+    label: person.userId === me ? $localize`You` : person.displayName,
+  }));
 }
 
 /** Where a session on `day` goes, as the sheet says it; the server chooses again when it is saved. */

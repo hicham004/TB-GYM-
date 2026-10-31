@@ -41,6 +41,7 @@ internal sealed partial class CommercialApplicationService
 
         var note = request.Outcome == SessionOutcome.Held ? NormalizeOptional(request.Note) : null;
         var reason = request.Outcome == SessionOutcome.Charged ? NormalizeOptional(request.Reason) : null;
+        var heldBy = request.Outcome == SessionOutcome.Held ? request.HeldByUserId ?? actorId : actorId;
         if (request.Outcome == SessionOutcome.Charged && reason is null)
         {
             return Invalid("reason", "Say why the session is charged. Your client reads it.");
@@ -76,6 +77,14 @@ internal sealed partial class CommercialApplicationService
             return NotFound();
         }
 
+        // A coach logs only their own (critique B12), checked past the 404 so another coach's client stays unseen.
+        if (heldBy != actorId && !await coachClientScope.IsOwnerAsync(cancellationToken))
+        {
+            return Conflict(
+                "session_held_by_someone_else",
+                "A coach records their own sessions. The owner records one that someone else held.");
+        }
+
         await coachClientScope.EnsureNotReleasedAsync(clientProfileId, cancellationToken);
         var strategy = dbContext.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -88,9 +97,18 @@ internal sealed partial class CommercialApplicationService
                     $"SELECT 1 FROM subscriptions.\"ClientEnrollments\" WHERE \"TenantId\" = {tenantContext.TenantId} AND \"ClientProfileId\" = {clientProfileId} AND \"SessionCountSnapshot\" IS NOT NULL ORDER BY \"Id\" FOR UPDATE",
                     cancellationToken);
                 var (zone, today) = await GetWorkspaceDayAsync(cancellationToken);
-                if (await SessionReplayAsync(clientProfileId, request, note, reason, zone, cancellationToken) is { } replay)
+                if (await SessionReplayAsync(clientProfileId, request, heldBy, note, reason, zone, cancellationToken) is { } replay)
                 {
                     return replay;
+                }
+
+                // Locked as an assignment locks a coach (ADR 0026): a removal waits for this session, or it finds them gone.
+                if (heldBy != actorId &&
+                    !await CoachTeam.LockActiveStaffAsync(dbContext, tenantContext.TenantId, heldBy, cancellationToken))
+                {
+                    return Conflict(
+                        "session_holder_not_staff",
+                        "That person is not on your team, so the session can’t be recorded for them. Choose someone on your team.");
                 }
 
                 var access = await featureAccessService.EvaluateAsync(
@@ -128,7 +146,7 @@ internal sealed partial class CommercialApplicationService
                 }
 
                 dbContext.SessionLedgerEntries.Add(request.Outcome == SessionOutcome.Held
-                    ? SessionLedgerEntry.Hold(pack, request.Day, actorId, note, request.IdempotencyKey)
+                    ? SessionLedgerEntry.Hold(pack, request.Day, heldBy, actorId, note, request.IdempotencyKey)
                     : SessionLedgerEntry.Charge(pack, request.Day, actorId, reason!, request.IdempotencyKey));
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -238,7 +256,11 @@ internal sealed partial class CommercialApplicationService
             .AsNoTracking()
             .Where(item => packIds.Contains(item.EnrollmentId))
             .ToListAsync(cancellationToken);
-        var coachIds = entries.Select(item => item.CoachUserId).OfType<Guid>().Distinct().ToArray();
+        var coachIds = entries
+            .SelectMany(item => new[] { item.CoachUserId, item.RecordedByUserId })
+            .OfType<Guid>()
+            .Distinct()
+            .ToArray();
         var coachNames = coachIds.Length == 0
             ? new Dictionary<Guid, string>()
             : await dbContext.Users
@@ -327,12 +349,13 @@ internal sealed partial class CommercialApplicationService
 
     /// <summary>
     /// A retry of a command already done answers with what it did (SUB-011), the session and any receipt alike. The
-    /// key is bound to the session as entered: a changed day, outcome, note, reason or receipt conflicts. Null when the
-    /// key is new.
+    /// key is bound to the session as entered: a changed day, outcome, holder, note, reason or receipt conflicts. Null
+    /// when the key is new.
     /// </summary>
     private async Task<CommercialCommandResult?> SessionReplayAsync(
         Guid clientProfileId,
         RecordSessionRequest request,
+        Guid heldBy,
         string? note,
         string? reason,
         TimeZoneInfo zone,
@@ -354,6 +377,7 @@ internal sealed partial class CommercialApplicationService
                entry.ClientProfileId == clientProfileId &&
                entry.Kind == kind &&
                entry.Day == request.Day &&
+               entry.CoachUserId == heldBy &&
                entry.Note == note &&
                entry.Reason == reason &&
                ReceiptMatches(payment, request, zone)

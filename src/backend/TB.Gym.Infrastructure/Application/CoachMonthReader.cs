@@ -77,7 +77,7 @@ internal sealed class CoachMonthReader(
             .Select(entry => new { entry.Day, entry.CoachUserId })
             .TagWith(SessionsHeldTag)
             .ToListAsync(cancellationToken);
-        // CK_SessionLedgerEntries_Coach: a session held always names its coach.
+        // CK_SessionLedgerEntries_Coach: a session held always names who held it.
         return [.. rows.Select(row => new HeldSession(row.Day, row.CoachUserId!.Value))];
     }
 

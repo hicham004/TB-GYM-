@@ -9605,6 +9605,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<Guid?>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -9635,6 +9638,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "IdempotencyKey")
                         .IsUnique();
 
+                    b.HasIndex("TenantId", "RecordedByUserId");
+
                     b.HasIndex("TenantId", "VoidsEntryId")
                         .IsUnique()
                         .HasDatabaseName("UX_SessionLedgerEntries_OneVoidPerEntry")
@@ -9655,6 +9660,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_SessionLedgerEntries_Note", "\"Kind\" = 'Held' OR \"Note\" IS NULL");
 
                             t.HasCheckConstraint("CK_SessionLedgerEntries_Reason", "(\"Kind\" = 'Charged') = (\"Reason\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SessionLedgerEntries_RecordedBy", "\"RecordedByUserId\" IS NULL OR \"Kind\" = 'Held' OR (\"Kind\" = 'Charged' AND \"RecordedByUserId\" = \"CoachUserId\")");
 
                             t.HasCheckConstraint("CK_SessionLedgerEntries_Voids", "(\"Kind\" = 'Voided') = (\"VoidsEntryId\" IS NOT NULL)");
                         });
@@ -13801,6 +13808,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "RecordedByUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TB.Gym.Modules.Subscriptions.SessionLedgerEntry", null)
                         .WithMany()

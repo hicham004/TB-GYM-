@@ -50,7 +50,7 @@ describe('ThisMonth', () => {
     ]);
     expect(lines(host, '.counts .part')).toEqual([
       '1-on-1 sessions held12September: 9',
-      'Plans sold3September: 2',
+      'Coaching plans sold3September: 2',
       'Session packs sold2September: 1',
       'Clients started2September: 1',
       'Clients ended1September: 0',
@@ -100,12 +100,19 @@ describe('ThisMonth', () => {
       [...host.querySelectorAll('tbody tr:first-child td')].map((cell) =>
         cell.getAttribute('data-label'),
       ),
-    ).toEqual(['Money received', 'Sessions held', 'Plans sold', 'Packs sold', 'Started', 'Ended']);
+    ).toEqual([
+      'Money received',
+      'Sessions held',
+      'Coaching plans sold',
+      'Packs sold',
+      'Started',
+      'Ended',
+    ]);
     expect(lines(host, 'thead th')).toEqual([
       'Coach',
       'Money received',
       'Sessions held',
-      'Plans sold',
+      'Coaching plans sold',
       'Packs sold',
       'Started',
       'Ended',
@@ -136,13 +143,17 @@ describe('ThisMonth', () => {
     expect(lines(host, '.how dt')).toEqual([
       'Money received',
       '1-on-1 sessions held',
-      'Plans and session packs sold',
+      'Coaching plans and session packs sold',
       'Clients started',
       'Clients ended',
       'Whose numbers',
       'Last month',
     ]);
     expect(squash(host.textContent)).not.toMatch(/profit|earned|earning/i);
+    expect(squash(host.textContent)).toContain('for whoever held them');
+    expect(squash(host.textContent)).toContain(
+      'A coaching plan is the coaching a client pays for over dates; a session pack is a set of 1-on-1 sessions.',
+    );
   });
 
   it('goes back to Today', async () => {

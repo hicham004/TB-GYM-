@@ -190,7 +190,7 @@ describe('the server’s refusals, in coach words', () => {
 });
 
 describe('recording a session', () => {
-  const held = { kind: 'Held', day: SERVICE_TODAY, note: '', reason: '' } as const;
+  const held = { kind: 'Held', day: SERVICE_TODAY, heldBy: null, note: '', reason: '' } as const;
   const noShow = { ...held, kind: 'NoShow', reason: 'No-show' } as const;
 
   it('asks for a day that has happened', () => {
@@ -233,6 +233,7 @@ describe('recording a session', () => {
       reason: null,
       receipt: null,
       idempotencyKey: 'key',
+      heldByUserId: null,
     });
     expect(sessionRequest({ ...noShow, note: 'x' }, null, 'Cash', 'key')).toEqual(
       expect.objectContaining({ outcome: 'Charged', note: null, reason: 'No-show' }),
@@ -243,6 +244,15 @@ describe('recording a session', () => {
       currencyCode: 'USD',
       method: 'BankTransfer',
     });
+  });
+
+  it('names who held a session held, and nobody on a charge', () => {
+    expect(sessionRequest({ ...held, heldBy: 'lea' }, null, 'Cash', 'key').heldByUserId).toBe(
+      'lea',
+    );
+    expect(sessionRequest({ ...noShow, heldBy: 'lea' }, null, 'Cash', 'key').heldByUserId).toBe(
+      null,
+    );
   });
 
   it('keeps the server’s own words, even when a pack’s name holds a system word', () => {

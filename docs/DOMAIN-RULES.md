@@ -361,12 +361,14 @@ runs: a plan that is over reads as over. No price, payment or reason the coach t
 read, the one exception being the reason a session was charged, which is written for them (SES-007), and it decides
 no access (SUB-009).
 
-**SUB-018** Month numbers v1 (`MonthNumbers`, critique B10d; decided by the plan's chat on 2026-10-31, for the owner
-to confirm) is what the This month page counts (`GET /api/coach-month`): this month so far beside the whole of last
+**SUB-018** Month numbers v2 (`MonthNumbers`, critique B10d; decided by the plan's chat on 2026-10-31, for the owner
+to confirm; v2, critique B12, counts a session for who held it where v1 said who recorded it, the same on any session
+from before) is what the This month page counts (`GET /api/coach-month`): this month so far beside the whole of last
 month, each `[first day, first day of next month)` of the workspace's calendar, with no percentage and no client
-named. **Money received** is SUB-016's and **1-on-1 sessions held** SES-008's, each session for whoever recorded it.
-**Plans sold** and **session packs sold** count what was booked on a workspace day of the month, a renewal too, paid
-yet or not, since selling is the enrollment (SES-002), each for the coach the client had when it was booked. A free
+named. **Money received** is SUB-016's and **1-on-1 sessions held** SES-008's, each session for who held it.
+**Coaching plans sold** and **session packs sold** count what was booked on a workspace day of the month, a renewal
+too, paid yet or not, since selling is the enrollment (SES-002), each for the coach the client had when it was booked.
+A coaching plan is the coaching a client pays for over dates, a session pack a set of 1-on-1 sessions (SES-001). A free
 one is not sold, and one cancelled with no money received never was; money kept on a cancelled plan keeps its sale.
 **Clients started** and **clients ended** count stints: days in a row on plans that opened, paid in full or free, a
 pack included. Nothing else covers days (SUB-008); a plan covers from its first day however late it was paid, and a
@@ -396,23 +398,28 @@ coaching plan that runs or is to come, a pack never stands for the client's plan
 soon and the plan in front of Service & access stay the coaching plan's.
 
 **SES-003** Each pack has an append-only ledger: Issued, once, when it becomes active, with the count it was sold
-with; Held (the workspace day, the coach who recorded it, a note only the team reads); Charged (a no-show or late
-cancel, with a reason the client reads); Voided (a correction pointing at the session held or charged it undoes, once
-per row, which stays). Balance = issued − held − charged + voided, so a pack waiting for payment has none. Triggers
-refuse update and delete, and a guard refuses a session past the balance, outside the dates or on an unpaid pack,
-whoever writes.
+with; Held (the workspace day, who held it and who recorded it, a note only the team reads); Charged (a no-show or
+late cancel, with a reason the client reads, keeping who recorded it, as a charge is no session held); Voided (a
+correction pointing at the session held or charged it undoes, once per row, which stays). Balance = issued − held −
+charged + voided, so a pack waiting for payment has none. The gym owner says who held a session, among the active
+staff of the workspace, the owner included (critique B12); a coach logs only their own, and a session recorded with no
+name is whoever recorded it. A session from before B12 knows only who recorded it, who counts as having held it.
+Triggers refuse update and delete, and a guard refuses a session past the balance, outside the dates or on an unpaid
+pack, and one that does not keep who recorded it or names anyone but active staff, whoever writes.
 
 **SES-004** A session counts when it happens, never at booking: its day is today or earlier in the workspace. It goes
 on the pack ending first among those paid, covering that day and with a session left. A session on a pack's last day
 may be recorded later: the day decides, not the day it was typed. The command locks the client's packs, so a last
-session cannot go twice, and its idempotency key is bound to the outcome, day, note or reason and any receipt
-(SUB-011).
+session cannot go twice, and its idempotency key is bound to the outcome, day, who held it, note or reason and any
+receipt (SUB-011).
 
 **SES-005** Refusals are in words: a day still to come (`session_in_future`), no pack (`no_session_pack`), a day outside
 every pack (`session_day_outside_pack`), no sessions left (`no_sessions_left`), a pack waiting for payment
-(`session_pack_unpaid`), a paused pack (`session_pack_paused`) and a blocked or departed client, by the shared access
-decision (`client_blocked`, `client_inactive`); a released client answers `client_released` and another coach's client
-404 (ADR 0026, ADR 0027). Paid packs are looked at first, and the refusal names what the coach can act on first. A
+(`session_pack_unpaid`), a paused pack (`session_pack_paused`), another name from a coach
+(`session_held_by_someone_else`), a name that is not active staff of the workspace (`session_holder_not_staff`) and a
+blocked or departed client, by the shared access decision (`client_blocked`, `client_inactive`); a released client
+answers `client_released` and another coach's client 404 (ADR 0026, ADR 0027). Paid packs are looked at first, and the
+refusal names what the coach can act on first. A
 receipt taken with a session pays the pack waiting on that day, ending first, and only for exactly what is left to pay
 (`session_receipt_not_full`), dated the session's day: session and receipt commit together, and a pack already running
 still takes the session if it ends first.
@@ -424,8 +431,8 @@ is resumed.
 
 **SES-007** What a client reads of a pack (critique B10c, through SUB-017's read): how many it was sold with, how many
 are left, how many were used and how many lapsed and on which day, their coach's name as it stands today, and each
-session held or charged that still stands, newest day first, with a charge's reason. Never a coach's note, who recorded
-a session, or a session undone and the row that undid it. A blocked client still reads it (SUB-009), as they read their
+session held or charged that still stands, newest day first, with a charge's reason. Never a coach's note, who held or
+recorded a session, or a session undone and the row that undid it. A blocked client still reads it (SUB-009), as they read their
 plan. My plan says it in a sentence ("7 of 10 sessions with Karim left, until 9 January") and lists the days; Today
 says the sentence for the pack a session goes on next, while a pack runs, is to come, is paused or waits for payment,
 and nothing once every pack is over.
@@ -439,11 +446,12 @@ counts a plan's end. A pack already paid for and still to come quiets it; one wa
 then records its payment instead of renewing (BEB-7). It ranks right after a plan ending, and like one it never makes a
 client Needs attention. A pack standing as the client's plan (SES-002) says its end once, on the plan's own item, with
 the sessions left. **Sessions held**, on This month: sessions held that still stand, on their own workspace day in the
-workspace's calendar month: the owner reads every one of the workspace, a coach those they recorded (SES-003), a
-former client's too. A charge is no session held, and an undone one counts for nobody. It shows only while there is
-something to count: one held this month, or a client the caller coaches with sessions in today's plan. Nobody's money
-or name goes with it. The This month page counts them the same way, this month and last, with each coach's on the
-owner's rows (SUB-018).
+workspace's calendar month: the owner reads every one of the workspace, a coach those they held (SES-003), a former
+client's and a client of another coach's too. A charge is no session held, and an undone one counts for nobody. It
+shows only while there is something to count: one held this month, or a client the caller coaches with sessions in
+today's plan. Nobody's money or name goes with it. The This month page counts them the same way, this month and last,
+with each coach's on the owner's rows (SUB-018). **A pack's History** says who held each session, and "Held by Lea
+Khoury · recorded by Karim Haddad" when the two differ.
 
 **SES-009** A pack hears the plan notices in its own words (critique B10c), since it runs beside a coaching plan and
 "your plan has ended" could name the wrong thing: waiting for payment, set up, ending soon, ended and renewed, as

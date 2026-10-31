@@ -311,7 +311,7 @@ public sealed class B10bSessionPackDomainTests
     }
 
     private static SessionLedgerEntry Hold(ClientEnrollment pack, DateOnly day) =>
-        SessionLedgerEntry.Hold(pack, day, CoachId, null, Guid.NewGuid());
+        SessionLedgerEntry.Hold(pack, day, CoachId, CoachId, null, Guid.NewGuid());
 
     private static SessionPackStanding Standing(ClientEnrollment pack, int left) => new(pack, left);
 }

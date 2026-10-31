@@ -19,8 +19,10 @@ import type {
   ClientEnrollment,
   CoachClientDetails,
   ProductCatalog,
+  TeamMember,
 } from '../../core/api/api.models';
 import type { ClientProfileOverviewView } from '../../core/api/generated';
+import { AuthStore } from '../../core/auth/auth.store';
 import { GuardedSheets, type Closable, type LeaveQuestion } from '../../core/forms/guarded-sheets';
 import { CsrfService } from '../../core/security/csrf.service';
 import { EmailDelivery } from '../../core/system/email-delivery';
@@ -32,6 +34,7 @@ import { EmptyState } from '../../ui/empty-state';
 import { UiMenu } from '../../ui/menu';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
+import { TeamApi } from '../team/team-api';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { ClientActions } from './client-actions';
 import { ClientCoach } from './client-coach';
@@ -47,6 +50,7 @@ import {
   primaryAction,
   renewalAskedFor,
   renewalAskedLine,
+  sessionHolders,
   sessionPackRows,
   type PlanCard,
   type RenewalRequest,
@@ -93,6 +97,8 @@ import { SessionSheet } from './session-sheet';
 })
 export class ClientService extends GuardedSheets {
   private readonly api = inject(ApiClient);
+  private readonly team = inject(TeamApi);
+  private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly emailDelivery = inject(EmailDelivery);
   private readonly tenants = inject(TenantStore);
@@ -129,6 +135,8 @@ export class ClientService extends GuardedSheets {
   protected readonly catalog = signal<ProductCatalog | null>(null);
   /** The client's request to renew (ADR 0029), from the attention read the Overview uses. */
   private readonly renewalRequest = signal<RenewalRequest | null>(null);
+  /** The team, read for the owner alone; null until then, or if the read failed. */
+  private readonly members = signal<readonly TeamMember[] | null>(null);
   /** The plan the coach picked from the list; otherwise the one the page opens on. */
   private readonly picked = signal<string | null>(null);
   /** The plan a sheet or dialog is about; the renewal source for Renew plan. */
@@ -231,6 +239,21 @@ export class ClientService extends GuardedSheets {
       (this.canSell() && !this.context.isFormer()),
   );
 
+  /**
+   * Who the owner can say held a session (critique B12). The API refuses another name from a coach, and
+   * a failed read still leaves the client's coach and the owner to choose from.
+   */
+  protected readonly holders = computed(() => {
+    const client = this.context.profile();
+    const me = this.auth.user();
+    if (!client || !me || !this.context.isOwner()) return [];
+    return sessionHolders(
+      { userId: client.assignedCoachUserId, displayName: client.assignedCoachName },
+      this.members() ?? [{ userId: me.id, displayName: me.displayName }],
+      me.id,
+    );
+  });
+
   protected readonly emptyDescription = computed(
     () =>
       $localize`Start a plan and ${this.firstName()}:name: can use what it includes once it is paid.`,
@@ -302,18 +325,22 @@ export class ClientService extends GuardedSheets {
       try {
         // The plans and the overview the record read for this page when it opened here, or fresh reads
         // (audit UIQ-8); the overview carries the client's request to renew and whether the plan ends soon.
-        const [plans, catalog, overview] = await owner.wait(
+        const [plans, catalog, overview, members] = await owner.wait(
           Promise.all([
             this.context.plansForPage(),
             former
               ? Promise.resolve(null)
               : firstValueFrom(this.api.getProductCatalog()).catch(() => null),
             former ? Promise.resolve(null) : this.context.overviewForPage().catch(() => null),
+            former || !this.context.isOwner()
+              ? Promise.resolve(null)
+              : firstValueFrom(this.team.getTeamMembers()).catch(() => null),
           ]),
         );
         this.context.setPlans(plans);
         this.catalog.set(catalog);
         this.renewalRequest.set(renewalRequestOf(overview));
+        this.members.set(members);
         this.state.set('ready');
       } catch {
         if (!owner.current) return;
@@ -557,6 +584,7 @@ export class ClientService extends GuardedSheets {
     this.state.set('loading');
     this.catalog.set(null);
     this.renewalRequest.set(null);
+    this.members.set(null);
     this.picked.set(null);
     this.subject.set(null);
     this.renewSource.set(null);
