@@ -363,9 +363,13 @@ test('granting a discount of a chosen length, then revoking one after asking', a
   await expect(sheet.getByText(/That overlaps the 30% discount/)).toBeVisible();
   expect(writes.discount).toEqual([]);
 
+  // Focus reaches a day after a redraw, so a key pressed before it lands is lost.
   await sheet.getByRole('button', { name: /First day/ }).click();
+  await expect(sheet.locator('button.day[data-date="2026-10-09"]')).toBeFocused();
   await page.keyboard.press('PageDown');
+  await expect(sheet.locator('button.day[data-date="2026-11-09"]')).toBeFocused();
   await page.keyboard.press('PageDown');
+  await expect(sheet.locator('button.day[data-date="2026-12-09"]')).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(sheet.getByRole('button', { name: /First day/ })).toContainText('Dec 9, 2026');
   await sheet.getByRole('button', { name: '6 months' }).click();
