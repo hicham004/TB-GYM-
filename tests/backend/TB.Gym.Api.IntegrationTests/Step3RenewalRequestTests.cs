@@ -119,7 +119,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             try
             {
                 asks = await Task.WhenAll(racer.PostAsync(RenewalRequestsUrl, null), racer.PostAsync(RenewalRequestsUrl, null));
-                Assert.AreEqual(2, RequiredInsertBarrier.Arrived, "The two requests never raced.");
+                // Two at once can deadlock on the one-per-window constraint; the loser's retry reaches the insert a third time.
+                Assert.IsGreaterThanOrEqualTo(2, RequiredInsertBarrier.Arrived, "The two requests never raced.");
             }
             finally
             {
