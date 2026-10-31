@@ -42,10 +42,20 @@ settle, and an item it left out, wait for the owner in section 3.
 | B10c | Sessions · For clients and on Today | The client's balance and notices; Today's sessions number; the client-row chip. | Done · 2026-10-31 · aadb99a (built and committed by the plan runner's chat, on the owner's word); My plan says what is left on a pack ("7 of 10 sessions with Karim left, until 9 January", the client's coach by their first name) and lists Sessions so far, each session held or charged, newest first, a charge with the reason the coach wrote, the newest five and the rest on request, never a coach's note, who recorded it or a session undone; once a pack is over it says what was used and what lapsed; Today's Also today gains "1-on-1 sessions", the same sentence for the pack a session goes on next, opening My plan, and a client on sessions alone is no longer told nothing is assigned; a pack hears the plan's five notices in its own words, as generic as every notice, ending soon three days before its end and not at all with no session left (SES-007, SES-009); the Clients row has a "2 sessions left" pill while sessions are in today's plan, warm once they run out at 2 or fewer or within 14 days of the last pack's last day, a pack paid and to come counting; Needs you on Today and the client's page says so with Renew pack or Record payment (`SessionsRunningOut`, CoachAttention v5), never making a client Needs attention, a pack standing as the plan saying its end once, on the plan's own item; This month counts the 1-on-1 sessions held, a coach those they recorded, the owner the workspace's, shown once there is something to count (SES-008). No table, route or migration. Fixed first, in its own commit (7bbfee3): the live sell-and-pay spec, stale since B10b's sixth feature. Fifteen lines added to section 3 (when the chip shows, what running out means, whose balance, a pack that is the client's plan, the action, whose sessions held, when This month shows it, where the client reads it on Today, the coach's name, what a client reads of a session, a pack that is over, a blocked client, the notices, a low balance left out, the words the row did not give), and B10b's line on what the client reads is built, so it left |
 | B10d | Sessions · This month | A coach sees their own; the owner sees each coach and the total; per currency. | Done · 2026-10-31 · d28aa2a (built and committed by the plan runner's chat, on the owner's word); a page at `/month`, opened by "See this month and last" at the foot of Today's This month, with Today lit in the sidebar: money received per currency with its payments, 1-on-1 sessions held, plans sold, session packs sold, clients started and clients ended, "October so far" with September's beside each, in the workspace's calendar, with no percent, no client named and nothing called profit; a coach reads their own ("Your numbers"), the owner "Your coaching space" and By coach, a table with a Total, one month at a time by a switch, each coach a small card on a phone, every active member of staff and anyone who left the team with a number in either month, so the rows add up to the totals; one read, `GET /api/coach-month`, 11 commands pinned, no schema change; Month numbers v1 (SUB-018, ADR 0026 amended): sold is booked at a price, a renewal too, paid yet or not, unless cancelled with no money received; started and ended count days in a row on plans paid in full or free, a pack included, each for the coach the client had as that day began; money and sessions come through the reads Today uses, so a number never differs. Ten lines added to section 3 (where the page lives, what sold means, whose a sale is, what started and ended mean, whose sessions, someone who left the team, this month beside the last, every number always, earlier months left out, the words the row did not give). The mocked coach-shell spec fails on a load race the last commit shows too, left for B11 |
 | B11 | Leftovers | Added on the owner's word (2026-10-29): the mocked Playwright suite run once and fixed, its stale screenshots included; "14 sessions a week" in DOMAIN-RULES; a blocked client's row on Clients; the check-in card and the overdue tag agreeing on when a check-in is late. | Done · 2026-10-31 · f14eb0e (built and committed by the plan runner's chat, on the owner's word); the mocked suite, run once in Chromium, failed 95 of 542 and now fails only e2e/private's five, which stay: 70 failed on the client page's overview read no spec answered since B4a (client-training, checkin-review, intake), 8 in client-service on a mock without the server's `PlanEndingSoon`, 4 in coach-shell on the load race, which passes 70 of 70 repeated now that the shell waits for the homepage to leave, and the UI lab's eight pictures were recorded again after looking at each: only the kit's reason tags, Show as and folds are new; no docs/design picture changed; "14 workouts a week" in DOMAIN-RULES; a blocked client's row says "Access blocked" in the client page's red, a fifth `ClientPlanStatus`, beside the plan and its last day, since a block changes no plan (SUB-010), and the column says "Access blocked" with no plan to show; the client's check-in list carries the server's own answer (`IsOverdue`, CHK-015), so the Check-in card, the Check-ins tab and an unsent check-in's page say late from the second day after its due day through day 13, the days the tag does, and the card names the one the tag counts, "Due Fri 30 Oct, not sent yet" in plain ink the day after. Six lines added to section 3 (where overdue is decided, the day after the due day, two open at once, from the 14th day, the blocked row's Plan column, the words the row did not give) |
+| B12 | Sessions · Who held it | The partner's answers of 2026-10-31 (the owner's word), section 2: the gym owner picks who held a session; a coach logs only their own, with no box. "Plans sold" becomes "Coaching plans sold", since the partner asked how it differs from packs. | Open |
+| B13 | Sessions · A plan that ends beside a pack | The coaching plan reads as ended while a pack runs (2026-10-31). What is paid back or made up stays between coach and client: TB Gym records, nothing more. | Open |
+| B14 | My plan · Ask to renew, notifications, the price's name | The Ask to renew card on My plan too, and open from three days before the end; plan notifications open My plan, "Your plan has started" staying on Today; "Your client sees this name." (2026-10-31; the owner chose asking early and the notifications after the research, overriding the rule of 2026-09-25 that a client asks only once the plan has run out). | Open |
+| B15 | Strength · The weight to lift | A client's program shows the weight to lift, not the share. A template has no client, so it shows the share, the Epley curve's too (2026-10-31). | Open |
+| B16 | Small fixes | The Progress label in weekly averages; + and Add here in Edit weeks; an uploaded video's tile opens its demo; "Restore one from its menu." (2026-10-31). | Open |
+| B17 | Older video titles and a pack in the demo | One fetch of the older links' titles before go-live; one pack and one client on it in the demo (2026-10-31). | Open |
+| B18 | Renewal · The next program early | The partner's note of 2026-10-31: a coach can show the next program as soon as it is paid, or keep it for its first day; the owner said yes the same day. | Open |
+| B19 | Renewal · Hiding finished programs | The partner's note of 2026-10-31: a coach decides whether a client keeps seeing programs that finished; the owner said yes the same day. | Open |
 
 Later, not rows: a one-tap "Nice work" from Today's feed (the roadmap, later); saved replies shared by the team
 (deferred); meals of several recipes eaten together (later); the weight-trend check (a roadmap row after go-live);
-the Clients filter chips (later, the owner's note).
+the Clients filter chips (later, the owner's note); a guard so a coach cannot take a client's money and withhold
+access (the partner's note of 2026-10-31, later); and, only if a coach asks: moving a meal option first, 85 to 100% picks on
+Record a max, earlier months on This month, a low-sessions notice, the money and earlier plans on My plan.
 
 ## 1. How a row is built
 
@@ -468,6 +478,100 @@ done or not verified, the screenshots, and the next row.
 - The client page's Check-in card and the overdue tag agree on when an unsent check-in is late: from the second day
   after its due day (CHK-015).
 
+### B12 · Who held it
+
+The partner's answer: "Who held it", and a coach account logs only its own sessions.
+
+- In Record a session the gym owner gets **Who held it**, under the day, for Held only: the client's coach first, then
+  every active member of staff, the owner included. A coach has no box: a session they record is theirs. The server
+  refuses another name from a coach, and from anyone a name that is not active staff of the workspace.
+- The ledger row keeps both people, append-only: who held it and who recorded it. A No-show or Late cancel keeps who
+  recorded it, as a charge is no session held. Rows from before B12 count who recorded them as who held them.
+- Today's and This month's Sessions held, By coach and the pack's History read who held it; the History says "Held by
+  Lea Khoury · recorded by Karim Haddad" when the two differ. A client never reads either (B10c's choice stands).
+  SES-008 and ADR 0038 amended.
+- "Plans sold" becomes "Coaching plans sold" wherever This month shows it, and How these are counted says the
+  difference in a line: a coaching plan is the coaching a client pays for over dates, a session pack is a set of 1-on-1
+  sessions. The By coach table keeps a shorter heading only if the full one does not fit at 1440 and 390.
+
+### B13 · A plan that ends beside a pack
+
+The partner's answer: treat the coaching plan as ended.
+
+- While a pack runs after a coaching plan has ended, three readers stop counting Sessions: the status on Clients (no
+  longer On track), Ended, not renewed on Today, and Ask to renew (SUB-014 no longer calls this "partly running"). Renew
+  offers the coaching plan that ended. The pack changes in nothing: it keeps running and takes sessions, and Messaging
+  stays closed, as a plan's end closes it.
+- A client whose pack is their only plan keeps B10c's rule: the pack stands as the plan.
+- When the plan and the pack have both ended, everything reads ended and renewing works as usual. Unused sessions stay
+  "lapsed": the partner calls them missed, but "No-show" already means that (the lead's call).
+- What is paid back or made up is agreed between coach and client outside the app, the partner's words: TB Gym records,
+  nothing more. No credit, refund or compensation rule (SUB-008 stands).
+
+### B14 · My plan: Ask to renew, notifications, the price's name
+
+- **Ask to renew on My plan.** The Today card's button on My plan too, the same request and the same answer ("Renewal
+  request sent on …"), in place of Go to Today wherever the card shows.
+- **Asking before the end.** Ask to renew opens from three days before the plan's last day, the day the ending-soon
+  notice goes out (SUB-012), on Today and My plan, saying "Your coaching plan with Karim ends on Sat 31 Oct."; the coach
+  gets the same notice and the seven-day window stands. A plan already renewed, waiting for payment, paused, cancelled
+  or blocked still cannot ask. SUB-014 and ADR 0029 amended. A coach could always renew early: the next plan follows on
+  from the last, which covers the partner's "next plan on 1/11".
+- **Notifications.** Waiting for payment, ending soon, ended and next plan open My plan; "Your plan has started" stays on
+  Today, where the first workout is and as its words say. "Open Today to see where your plan stands." and its session
+  pack twin name My plan instead, as a new template version (NOT-006). Session pack notices share these kinds.
+- **The price's name.** "Your client sees this name." under Name for this price, for plans and packs alike.
+
+### B15 · The weight to lift
+
+The partner's note: "show the weight that should be lifted", 81 kg on a 100 kg max and 162 kg on a 200 kg max.
+
+- On a client's program every set worked out from a max shows the weight: "3 × 5 · 81 kg · RPE 8", as the client's
+  Training tab and the client's own screens already do. Edit weeks, which shows the share today, reads the set's saved
+  load; a set changed in this edit keeps its share until the changes are saved, since only the server works out a load.
+  The set editor keeps the share.
+- A template has no client, so no weight: the line keeps the share, and an Epley set gains its own ("3 × 5 · RPE 8 · 81%
+  of training max"), from a pinned copy of WorkingMaxLoad v2's curve with a test against the server's numbers, as B7a
+  pinned the chart.
+- The weight is the program's rounded load from its own training max: 81% of 200 kg reads 162.5 kg with a 2.5 kg step.
+  A coach who enters a 1RM as the training max gets the partner's numbers; one on a 90% training max gets 81% of that.
+
+### B16 · Small fixes
+
+- **The Progress label.** The label beside the weight compares weekly averages, as "Since start" does, so the two agree
+  when the chart begins at the start ("↓ 3.9 kg since 27 Aug"). Named, versioned and worked out on the server.
+- **Edit weeks.** The same + and Add here as the builders, in the same panel and grid, with the tip's words to match.
+- **An uploaded video.** Its tile, and an item in the card's menu, open the same demo as the builder's Watch demo.
+- **Archived exercises.** "Open one to restore it." becomes "Restore one from its menu." Foods has the same sentence:
+  check whether it is true there and correct it if not.
+
+### B17 · Older video titles and a pack in the demo
+
+- **Older titles.** A one-time job asks YouTube or Vimeo once for every link with no title, as adding a link does. A
+  video that is gone keeps its tile as it is, and running the job twice changes nothing. Run it on the test copy and
+  add it to the go-live steps (MED-015).
+- **The demo.** One 10-session pack sold to one client and paid, with a few sessions held, in both casts (Atlas and the
+  sample), so the sessions screens and This month have something to show. `DemoWorkspaceTests` pinned.
+
+### B18 · The next program early
+
+A client reads a program from its first day, even when it is assigned and paid (TRN-023).
+Everfit, Trainerize and TrueCoach each let a coach choose how far ahead a client sees.
+
+- Assign program, and a program's menu, gain "The client sees it": From its first day, the default, or Now.
+- Now opens only while a paid plan covers the program's dates: a plan waiting for payment shows nothing (partial
+  receipts grant no access). The client reads the shared weeks and cannot start a workout before its day
+  (`session_not_due`, TRN-020).
+
+### B19 · Hiding finished programs
+
+Everfit caps how far back a client can look; here a coach protects their written programs.
+
+- A choice on the client's Training tab, "Can see finished programs", on by default. Off hides finished and cancelled
+  programs from the client's Training page only, the server filtering them.
+- It never hides a running or next program, nor the client's own logged workouts, records and progress. Coach screens
+  do not change.
+
 ## 3. Waiting for the owner
 
 A chat that meets an item adds one line here: the row, the question, what it built (or that it left the item out),
@@ -476,552 +580,20 @@ line is removed, and a changed answer becomes a new row.
 
 On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the plan's name, which B4c adds.
 
-- B5a · How a coach makes another option first. Built: options keep the order they were added in (a drop or "Add
-  another option" adds the last), so another option becomes option 1 only by removing and adding again. Other way:
-  "Make it option 1" or Move up in the meal sheet. Recommendation: wait until a coach asks; the order only decides
-  which option the client sees first and chosen.
-- B5a · The button on a meal of one recipe. Built: "Ate as planned", as before, since there is nothing to pick;
-  "I ate this" under a meal's options; "Change servings" on both. Other way: "I ate this" everywhere.
-  Recommendation: keep as built.
-- B5a · Words the row did not give. Built: the meal sheet labels its cards "Option 1", "Option 2" and says "The
-  client picks one of them, and sees option 1 first. With more than one, the day counts their average."; a recipe
-  dropped on a meal whose options were all removed says "Added to Breakfast."; each of the client's option rows has
-  a "Recipe" button. Other way: the sheet's "or" between options, as before. Recommendation: keep, so the card and
-  the sheet number options alike.
-- B5b · What ends a choice. Built: one Add here adds the row once and ends the choice, as a drop does; Escape, a
-  second press of + or the bar's Cancel end it without adding. Other way: the choice stays for more places (the same
-  recipe on several days) until Escape or Cancel. Recommendation: keep; a day's meals are copied from its menu.
-- B5b · On a phone. Built: where the library has no room beside the grid (a phone, a narrow window), a "Recipes" or
-  "Exercises" button opens it in a sheet; the row chosen there closes it and the grid offers Add here. A bar at the
-  foot of the grid, at every width, says "Adding Oat bowl: press Add here where it goes." with Cancel (a phone has no
-  Escape). Other way: the library above the grid on a phone. Recommendation: keep.
-- B5b · The first-use hint. Built: the kit's fold "How adding works" above the first row, open on a coach's first
-  visit to each builder (kept in the browser), folded by Got it, by its own row or by the first add, and opened
-  again from that row. Other way: a callout floating by the first row, as the critique sketched it.
-  Recommendation: keep: it covers no row and folds into the same row it is opened from.
-- B5b · The rows. Built: the + on saved workouts too, which land on any day as a copy (they are rows of the same
-  panel), and the grip moved to the row's start, as the grid's cards have it, so the + ends the row. Other way:
-  exercises only, the grip beside the +. Recommendation: keep.
-- B5b · Edit weeks, left out: the row names the two builders, so a client's program in Edit weeks keeps dragging
-  and its add sheets, with the same panel and no +. Recommendation: give it the same + and Add here in a small row,
-  since its panel and grid are the builder's.
-- B5b · Words the row did not give. Built: "Drag an exercise into a workout, or press + to add it." and "Drag a
-  saved workout onto a day, or press + to add it."; the tips ("Drop a recipe on a meal for another option, or under
-  a day for a new meal. Without dragging, press + on a recipe, then Add here." and the program's); "Already in this
-  meal" on a meal that offers the recipe; "Add here · Day 2" on a folded week; "Back Squat added to Lower A.",
-  "… added: a new workout on week 2, day 3." and "Full body added on week 1, day 1."; the sheets' "Choose a recipe,
-  then press Add here where it goes.". Recommendation: keep.
-- B5c1 · Use for every day. Built: gone from the day menu, which holds only the row's items; the "Copy this day
-  to…" sheet starts with Every day and The same day of each week (each Friday, when day 1 is a Monday), then None.
-  Other way: keep "Use for every day" in the menu too. Recommendation: keep as built.
-- B5c1 · The week's menu. Built: beside the week's name, which shows once a plan has two weeks (one week has Add
-  week, the same copy at the end); Duplicate week only on a full week of 7 days ("Only a full week of 7 days can be
-  duplicated."), since a short last week's copy would not make a week of its own; Delete week on any week, a short
-  last one included. Other way: a short last week's days copied to the end. Recommendation: keep.
-- B5c1 · The copy sheets. Built: the plan's days as numbered round chips in their weeks (a dashed chip for a day
-  with no meals, the day itself ringed and never picked), with "Day 12 has meals now; copying replaces them." before
-  the copy; "Replace with a copy of…" cannot pick a day with no meals (Clear meals empties a day) and says the
-  picked day's meals and calories. Other way: a list of days with their meals. Recommendation: keep: a year of days
-  fits a phone.
-- B5c1 · Publish's refusal of an empty day. Built: "Day 5 has no meals yet. Add a meal, or copy a day here." with
-  Copy a day here; on the last day "…, copy a day here, or delete the day."; and with no meal on any day "Add a meal
-  to it." without the button. Recommendation: keep.
-- B5c1 · "Carbs: the rest" in the targets sheet. Built: the line gives the server's grams and share ("Carbs: the
-  rest, 264 g (49%).") and the fat help its grams only while every number in the sheet is one the last targets were
-  worked out from (the sheet opened again); otherwise "Carbs: the rest of the calories, after protein and fat."
-  After Work out the result shows every figure, as before. Other way: a live figure from a preview call as the coach
-  types. Recommendation: keep; no figure is ever worked out in the browser.
-- B5c1 · Words the row did not give. Built: the hints "Pick the days; their meals are replaced", "Another day's
-  meals, in place of these", "A copy right after it; later weeks move on a week" and "Later weeks move up a week";
-  the Undo lines "Day 5's meals copied to days 6, 12 and 19.", "Day 9 now has day 2's meals.", "Week 2 duplicated as
-  week 3. The weeks after it moved on a week." and "Week 2 deleted. The weeks after it moved up a week."; the
-  captions "g per kg" and "% of calories"; the protein help without a weight "Type the grams. With their weight
-  above, you can pick grams for each kilogram." Recommendation: keep.
-- B5c2 · Where Fill in fat and carbs lives. Built: a button under the Daily target's boxes, beside "Start from a
-  client's targets", opening a sheet with the calories, the protein and the fat box with the 20 · 25 · 30 · 35
-  picks under it (the targets sheet's block); the card then says the arithmetic in one sentence, with the
-  warnings and an Undo. Other way: the picks in the card itself, each filling at once. Recommendation: keep: the
-  card stays four boxes on a phone, and a share under 20 % can be typed.
-- B5c2 · The fat warnings elsewhere. Built: they are NUT-008's own (beside the protein range), so a client's
-  targets (Work out, and their Nutrition tab's latest) warn the same way under 20 % fat or 0.5 g a kilogram.
-  Other way: the builder's fill only. Recommendation: keep: one rule, one set of warnings.
-- B5c2 · Whose clients the owner starts from. Built: every current client with Nutrition and targets, as ADR 0026
-  gives the owner every client and as To review lists them (B3b), a team coach's marked "Coached by …"; a coach
-  sees their own only. Other way: the clients assigned to the owner only. Recommendation: keep.
-- B5c2 · What a client's targets fill. Built: all four targets, with the share when the split made them; the
-  client's weight stays on the page, never in the plan (which every coach of the workspace reads), for the
-  fill's per-kilogram warning. Other way: their calories and protein only. Recommendation: keep.
-- B5c2 · Typing after a fill. Built: the boxes show the server's numbers whole, and the first typed target keeps
-  all four as shown and drops the share and its sentence; Undo brings back what the fill replaced. Other way:
-  keep the share and work fat and carbs out again whenever calories or protein change. Recommendation: keep: a
-  fill is an action, not a binding.
-- B5c2 · Drafts and "Changes not published". Built: Drafts are the recipes never published (the "Draft" pill
-  and the lede's "still drafts"); a published recipe with changes waiting stays under Published, which meal
-  plans may use, with its "Changes not published" pill. Other way: list it under Drafts too. Recommendation:
-  keep until B5d's "In progress".
-- B5c2 · Words the row did not give. Built: "Fat takes the share of the calories you pick, and carbs what protein
-  and fat leave."; "Fat is 25% of the calories, 56 g, and carbs are the rest, 225 g."; "From Maya Fakhoury's
-  targets, worked out Mon 26 Oct." (": your macros, set …" for a coach's own); "The warnings use Maya Fakhoury's
-  weight, 62 kg."; the toasts "Fat and carbs filled in, fat at 25% of the calories." and "Maya Fakhoury's
-  targets are the daily target now."; "Fat is 15% of the calories, under the usual 20%. This is a flag for you to
-  look at, not a rule." and its per-kilogram twin; "None of your clients with Nutrition in their plan has
-  targets yet. Work them out on a client's Nutrition tab."; "No drafts: every recipe is published.", "No
-  published recipes yet. Publish one to use it in your meal plans." and "No drafts match “oat”.".
-  Recommendation: keep.
-- B5d · Where "In progress" shows on Recipes. Built: a coach's new recipes in progress lead the list
-  under All and Drafts and count in Drafts (n), and the lede adds ", 1 in progress"; a saved recipe they
-  are changing keeps its card, with "In progress" beside its own status, under its own filter; nobody
-  else sees either, the owner included. Other way: a fourth chip, "In progress (n)", or a strip of work
-  in progress above the cards. Recommendation: keep: the owner chose three chips (B5c2), and a recipe
-  never published is a draft to its coach either way.
-- B5d · Save as draft. Built: "Save as draft", hinted "Your team sees it; meal plans don’t" (B1's
-  "(complete, not published)" was until B5d), making the next version from the coach's draft, checked
-  like Publish, and saying "Saved as a draft. Your team sees it; meal plans don’t until you publish
-  it."; with nothing changed it says "No changes to save." as before. Other way: keep B1's words, or
-  "Share with my team". Recommendation: keep.
-- B5d · A draft's photo. Built: the unused-photo sweep counts a working draft's photo as named (MED-014
-  amended), so a photo added to a recipe in progress stays as long as the draft does. Other way: the 48
-  hours apply to it too, and the coach adds the photo again. Recommendation: keep: a draft kept for a
-  week would otherwise lose its photo without a word.
-- B5d · An AI suggestion in a draft. Built: a new recipe's draft carries the suggestion it began from
-  and its first version approves it; one turned down since (Remove the suggestions left) leaves the
-  recipe the coach's own lines; Discard leaves a carried suggestion awaiting review, as leaving the
-  editor did before. Other way: Discard turns it down too. Recommendation: keep: the suggestion was
-  paid for when it was made, and its review only says whether a recipe came of it.
-- B5d · Words the row did not give. Built: the "In progress" pill in the kit's blue (info), beside
-  Published, Draft or Changes not published; "Only you see it until you publish it." and "Only you see
-  these changes. Meal plans use the published version until you publish them." (or "… Not in meal
-  plans until you publish it."); before the first pause "New recipe" and "Your changes save as you type.
-  Publish it to use it in meal plans."; the builders' save line ("Saved at 19:49, not published yet",
-  "Saving…", "Not saved yet. Trying again…", "Not saved") and Discard changes ("Discard your changes?",
-  "Discard this recipe?", "Changes discarded.", "Recipe discarded."); "Version 2 of this recipe was saved
-  after you started these changes. Publishing yours makes it the newest version." and at Publish "… Make
-  yours the newest version? Version 2 stays in the recipe’s history." with "Publish mine as the newest"
-  (or "Save mine as the newest") and "Discard mine"; "This recipe was changed in another tab or on
-  another device. Reload to continue with the latest changes." with Reload recipe; the cards' "Only you
-  see it until you publish it. Changed Thu 29 Oct.", "Untitled recipe", "1 ingredient" and "No
-  ingredients yet". Recommendation: keep: they are the meal-plan builder's words wherever it has them.
-- B6 · The client's own Progress. Built: the start lines and "Since start" on coach screens only, as the
-  row says ("The coach sees"); a returning client never sees an older profile (CLI-016). Other way: the
-  client also sees their own current start and the change since it on their Progress. Recommendation:
-  keep for now; showing the client their current profile's start later is one line, if you want it.
-- B6 · A client weighed before setup is finished. Built: no start until "Where you start" writes it (the
-  intake asks for that first weigh-in's day and weight, as before); every profile from before B6 was filled
-  in from its first weigh-in, setup finished or not. Other way: a coach's first weigh-in for a client
-  with no start becomes the start. Recommendation: keep: the start is part of setting up, and the About
-  card already says when setup is not finished.
-- B6 · Where Correct start lives. Built: a text button "Correct start" under the start lines on the
-  Progress hero, for the profile read's own start and never a former client's, opening a sheet with the
-  weight and its unit, the day, "What was wrong?" (Typed the wrong number · Weighed on another day ·
-  Something else) and the earlier starts with who changed them; the Overview's Weight card shows the
-  lines without the button. Other way: the button on the Overview too, or inside "Entries and
-  corrections". Recommendation: keep: corrections live on Progress.
-- B6 · A start week with no weigh-in. Built: no "Since start", the start alone, when the week holding the
-  first start has no current weigh-in (its first weigh-in voided, or the start corrected into an empty
-  week), since PRG-005 compares weekly means, never a single day. Other way: the start's own value as
-  that week's mean. Recommendation: keep.
-- B6 · A returning client's "Since start" on the day they come back. Built: their comeback weigh-in is
-  the latest weekly mean, so from that day the coach reads "Since start +2.5 kg (+3.5%)" against the
-  first start's week (seen live: Hadi, 70.42 kg over 5 days in August, then 72.9 kg). Other way: wait
-  until the new profile has a second week. Recommendation: keep: it is the rule you approved.
-- B6 · The Progress hero's pill, left out (outside the row). The pill beside the weight ("↓ 4 kg since 27
-  Aug") still compares the first and last single days of the chart's range, so beside "Since start −3.9
-  kg (−5.6%)", worked out from weekly means, it can read as a second, different change (seen live on
-  Maya). Recommendation: a small row to give the pill weekly means too, or to drop it while the start
-  shows.
-- B6 · Words the row did not give. Built: "24 Dec 1983 (42)" in the app's day-month-year (audit COACH-6)
-  where the row wrote "Dec 24, 1983 (42)"; "(−5.4%)" without the row's space before %, as the app writes
-  shares; "No change since start"; the blocked tab's heading "Access blocked" and its button "Open Service
-  & access" (the Overview's), and "This client’s access is blocked, …" when no first name is known; the
-  entry sheets' refusal in the tab's sentence, on each measurement or photo refused; "Correct start",
-  "Correct the starting weight", "Starting weight", "Day it was weighed", "Weighed on another day", "The
-  earlier start stays in its history. Weigh-ins are not changed.", "Earlier starts", "Changed by Lea
-  Khoury, Fri 30 Oct 2026", "That is the start already saved. Change the weight or the day, or close
-  this.", "The start could not be saved. Try again." and the toast "Starting weight corrected. The earlier
-  one stays in its history." Recommendation: keep.
-- B7a · The grid's runs of sets. Built: equal neighbours once ("3 × 5 · 75% of training max"), and a set
-  unlike its neighbours on a line of its own written "1 × 3 · RPE 8 · 86% of training max" (the client's
-  session sheet's rule, with "1 ×" so every line reads sets × reps); warm-ups stay out. In a narrow day the
-  exercise's name keeps its width and the lines wrap under it, breaking only between their parts. Other
-  way: one line per set whenever any differ. Recommendation: keep: a top set and three back-offs read two
-  lines, not four.
-- B7a · Whole percents. Built: the chart's share in whole percents on the grid, the set's line, the
-  publish preview and the week copies ("81%"), as the row writes it; the RPE box's help gives the cell
-  itself ("RTS chart: 5 reps at RPE 8 is 81.1% of the training max."); the % flag compares in whole
-  percents too, so 74% × 10 is not flagged against the chart's 73.9%. Other way: one decimal everywhere,
-  as the server's explanation writes it. Recommendation: keep.
-- B7a · When a % set is flagged. Built: by its fewest reps, so a range that can be done at its low end is
-  not flagged (85% × 5–12); past 12 reps by the chart's 12-rep cell ("70% × 15 reps is heavier than the
-  chart allows even for 12 reps (68%)."); an older "up to 10" set from one rep, so only past 100%. The flag
-  sits under the set's line in the set editor, open or closed, and not on the grid. Other way: the top
-  reps, no flag past 12, or a mark on the grid row too. Recommendation: keep.
-- B7a · Ways out the row did not list. Built: an Epley set past 12 (reps plus RIR) that the RTS chart
-  covers is offered "Use the RTS chart for this set" first; a chart set too far from failure whose reps
-  plus RIR the Epley curve cannot take either gets "Type a weight" and "Let the client pick the weight" in
-  place of the Epley button. A way out keeps the reps and the effort and puts the cursor in the box to
-  fill next. Other way: exactly the row's buttons. Recommendation: keep: no button leads to another
-  refusal.
-- B7a · Assign program's rows. Built: every max row is the kit's fold, its line the lift and the number it
-  starts from ("Back Squat · 100 kg") with the reason under it; a row with no number, or whose last
-  program's logged sets suggest a new max, starts open, and a refused one opens at Assign; the box keeps
-  the lift's name for a screen reader. Other way: plain boxes for the empty rows. Recommendation: keep:
-  one look for every row, and a suggestion is never folded away.
-- B7a · Epley sets, left out (outside the row). An Epley set's line still shows its effort only ("3 × 5 ·
-  RPE 8"), as before, since the row names chart sets, so it can read like a set with no load.
-  Recommendation: a small row showing the Epley curve's share the same way, from a pinned copy of
-  WorkingMaxLoad v2's curve with its test.
-- B7a · Words the row did not give. Built: the refusals "the RTS chart starts at RPE 6.5 (RIR 3.5): four
-  or more reps from failure, its percentages no longer hold.", "the formulas stop at 12 reps, so the RTS
-  chart has no weight for 20 reps." and "the formulas stop at 12 reps, and the Epley curve counts the reps
-  left in reserve too: 10 + 4 = 14."; "outside the RTS chart" on such a set's line; the buttons' group
-  "Ways to keep this set"; the reasons "6 sets use % of training max and 1 set uses the RTS chart in weeks
-  1 and 2", "1 set uses the Epley curve in week 3", "weeks 1 to 4" and "weeks 1, 3 and 5"; Assign
-  program's "This program works its weights out from these and keeps them as its own; you update them
-  from its Training maxes. Each starts where Maya’s last program left the lift, or from a max you recorded
-  since." (with no last program "… Each starts from the max you recorded, when there is one."); Record a
-  max's "Programs don’t read it directly: each keeps its own training maxes, set when you assign it and
-  updated from there." and the Strength history's "Programs don’t read the maxes you record directly: …",
-  the critique's sentence; the preview's "Weights are worked out …" only when a lift needs a max.
-  Recommendation: keep.
-- B7b · The share. Built: a fixed 90 % (`TrainingMaxShare` v1) behind "Also set their training max at 90%",
-  ticked by default; a coach whose programs use the single itself unticks it, so the estimate alone is
-  recorded, or types a training max. Other way: picks 85 · 90 · 95 · 100 % under the box, 90 first, as the
-  targets sheet's picks. Recommendation: keep until a coach asks; the record already keeps its share, so a
-  pick is a small v2.
-- B7b · An estimate alone at Assign program. Built: unchanged, Assign program starts a lift from the newest
-  training max recorded in its unit and from an estimate only when the lift has no training max (STR-014's
-  rule), so an unticked set leaves an older training max in place. Other way: the newest max of any kind.
-  Recommendation: keep: a program's percentages use a training max, and the box is ticked by default.
-- B7b · The day and the note. Built: "Day they did it", today or a day gone, checked by the server too; the
-  note goes on the estimate ("How the set went, or where it was done.") and the training max carries none,
-  its line saying where it came from. Other way: the note on both. Recommendation: keep.
-- B7b · Where the estimate shows. Built: right under the Reps box, the server's figure and its sentence
-  ("Estimated 1RM 116.67 kg", "Epley v1: 100 kg × (1 + 5 / 30) = 116.667 kg."), asked of the server once
-  typing pauses, then the box and "Training max 105 kg · 90% of the estimate" under it; nothing is asked
-  while the weight or the reps cannot make an estimate. Other way: the figures only once saved.
-  Recommendation: keep: the coach sees the training max before recording it.
-- B7b · Words the row did not give. Built: the kinds' hints in the row's words with "%" as the app writes
-  shares ("85 to 90%"), "Its weight × reps, up to 10 reps; their 1RM is worked out from it.", "Reps", "From 1
-  to 10 reps.", "From 1 to 10 reps: past 10, an estimate from reps is too rough to use.", "Enter the reps.",
-  "Day they did it", "Choose the day they did it.", "A set they did is from today or a day that has
-  passed.", "The weight of the set, for Back Squat. …", "Their estimated 1RM shows here once the weight and
-  the reps are in.", "Working out their estimated 1RM…", "That set works out to a max of more than 2,000.",
-  the toast "Back Squat — Estimated 1RM 116.67 kg and training max 105 kg recorded.", and the history's
-  "From 100 kg × 5 (Epley)" and "90% of an estimated 116.67 kg". Recommendation: keep.
-- B8a · Where version 2 is switched on. Built: `Nutrition:EnergyModel:Version` is 1 everywhere by default, the
-  owner's development server and the test copy included, since the targets sheet sends version 1's inputs until
-  B8b and the integration suite runs in Development; a server set to 2 (`Nutrition__EnergyModel__Version=2`) uses
-  version 2, and while 1 is in force version 2's inputs are refused in words and the preview answers that it is
-  version 2's. Other way: 2 in appsettings.Development.json now. Recommendation: keep; B8b sets it for
-  development with the screens, and B8c makes 2 the default.
-- B8a · What shows only once version 2 is in force. Built: the words beside a multiplier belong to the
-  calculation version 2 made, so they always show with it; the walking line, the goal's rate and share, and the
-  two energy floors are said only while version 2 is in force, and then on every calculation, version 1's
-  included, as the protein and fat warnings are worked out again on every read. Other way: those three on
-  version 2's calculations only, or the floors for everyone now. Recommendation: keep: they are among the words
-  the review approves (ADR 0008).
-- B8a · "Counts as …" names the steps band. Built: as the row's example has it ("Counts as low active" for
-  5,000 steps), the label is Tudor-Locke's band for the steps, so a nurse on their feet all day with 3,000 steps
-  reads "Counts as sedentary: × 1.65 (work on their feet with 3,000 steps a day, no workouts a week)". Other way:
-  a label for the whole multiplier, FAO's or the IOM's level ("Counts as active: × 1.65"). Recommendation: put
-  it to the reviewers at B8c; keep the row's words until then.
-- B8a · The coach's own picks. Built: six picks, the familiar ladder from FAO/WHO/UNU's lowest whole day up:
-  1.40 "little movement, no exercise", 1.55 "moderate exercise 3 to 5 days a week", 1.725 "hard exercise 6 to 7
-  days a week", 1.90 "very hard training daily or heavy manual work", 2.20 "heavy manual work and hard training
-  most days" and 2.40 "heavy manual work all day and training every day"; any other value from 1.40 to 2.40 can
-  be typed, with at most three decimals so the ladder's 1.725 is one; the kind of work, the steps and the
-  workouts are still sent and kept beside it, and the table's own figure is not said beside a chosen one.
-  Other way: tenths from 1.4 to 2.4, each with words. Recommendation: keep for the review: Toufic's generation
-  knows 1.55, 1.725 and 1.9.
-- B8a · The goal's rate. Built: `WeeklyWeightChange` 1.0 at 7,700 kcal a kilogram (3,500 a pound), to 0.1 kg
-  and said as "≈"; "0 a day ≈ no change in weight", "under 0.1 kg a week" below that, and "−4,000 a day is
-  more than they burn" when a goal would leave nothing; the share in whole percents ("84% of what they burn").
-  Other way: a model that slows as the body adapts (Hall 2011). Recommendation: keep: it is an "about" for the
-  first weeks, and the weight-trend check (later) is the real answer.
-- B8a · Words the row did not give. Built: the line's "no workouts a week", "plus 1 workout a week + 0.02",
-  "work on their feet" and "heavy manual work"; "Chosen by the coach: × 1.55 (moderate exercise 3 to 5 days a
-  week)", by the coach since the owner reads a team coach's too; the walking line's weight in whole kilograms
-  ("at 63 kg" for 62.5) and no line under 5 calories; the floors "The target, 961 calories a day, is under what
-  their body burns at rest (1,008)." and "… is under 1,200, the floor most calculators keep for women.", each
-  ending "This is a warning, not a clinical determination." as the protein and fat warnings do; the refusals
-  "Physical work is split in two now: choose on their feet (teaching, retail, nursing, serving) or heavy manual
-  work (building, farm, moving loads).", "Say how many workouts a week they do, from 0 to 7.", "A multiplier of
-  1.375 is under 1.40, the lowest FAO/WHO/UNU's scale gives a healthy adult's whole day. Choose one from 1.40 to
-  2.40.", "… is over 2.40, the highest FAO/WHO/UNU's scale gives a whole day that can be kept up. …", "Type the
-  multiplier with at most three decimals, like 1.725.", "A reason goes with a multiplier you choose yourself.",
-  "Keep the reason to 500 characters." and, while version 1 is in force, "… part of energy version 2, which this
-  server does not use yet.". Recommendation: keep until the review, which approves the display words.
-- B8b · What the sheet asks while version 1 is in force. Built: production and the test copy, on version 1
-  until B8c, keep its inputs (three kinds of work, no workouts, no line under them, no multiplier of the
-  coach's own), with the words true of both versions: the group "How active they are", the steps help and the
-  Harris-Benedict hint. Other way: version 1's sheet left exactly as it was until B8c. Recommendation: keep:
-  the words hold for both, and the reviewers read the same sheet.
-- B8b · Where the workouts a week come from. Built: the program running today, its current week's workouts
-  (up to 7), read when the sheet opens and only when Training is in the plan ("From their program’s current
-  week."); without one, the last targets' ("From their last targets."); otherwise the box is empty and Work
-  out asks for it in the server's words. Other way: the program's average over its weeks, or a question in the
-  intake. Recommendation: keep: the current week is what they do now.
-- B8b · The coach's own multiplier. Built: the fold "Or choose the multiplier yourself" under the line, closed
-  unless the last targets used one: "From their work, steps and workouts" first and chosen, the server's six
-  picks ("× 1.55" over "Moderate exercise 3 to 5 days a week."), then "Another multiplier" with its box; a
-  reason box once one is chosen, carried with the multiplier into the next calculation; a refused one opens
-  the fold. Other way: a select, or a "Use the table" button. Recommendation: keep: it reads as the Formula
-  fold does.
-- B8b · The goal picks' rate and share. Built: each pick says "≈ 0.3 kg a week · 87%" under its amount
-  (read aloud with "of what they burn"), and the goal box's help gives the server's sentence for the goal in
-  it ("−300 a day ≈ 0.3 kg a week, 87% of what they burn."); Hold weight reads "no change · 100%". Other way:
-  the sentence under the box only, the picks as before. Recommendation: keep: the picks compare at a glance,
-  as calculator.net shows its goals.
-- B8b · While the server works the line out. Built: the line keeps the last answer until the next one comes,
-  300 ms after typing pauses, since its words name the work, steps and workouts it came from; a preview that
-  fails says "The multiplier could not be shown just now. Work out targets still works it out."; if the model
-  in force cannot be read the sheet does not open ("The calculator could not be opened. Check your connection
-  and try again."). Other way: an empty line while waiting, or the sheet opened as version 1. Recommendation:
-  keep: no number is worked out in the browser, and a sheet that asks the wrong things is worse than none.
-- B8b · The demo. Built: the demo works its targets out with the model in force, so in development Maya and
-  Sara, both at a desk with four workouts a week, read "Counts as low active: × 1.58 (seated work with 7,000
-  steps a day × 1.50, plus 4 workouts a week + 0.08)" (Sara with 6,500 steps), from Mifflin-St Jeor. Other way:
-  one of them on the coach's own multiplier, to show both. Recommendation: keep: the table's value is what
-  their work and steps say.
-- B8b · The anchor sentence, left out (outside the row). The critique's "They burn about 3,161 a day; 2,661 is
-  the target" above the chain is not in the row; the chain's own lines say both numbers. Recommendation: leave
-  it to the review.
-- B8b · Words the row did not give. Built: the hints "Teaching, retail, nursing, serving." and "Building,
-  farm, moving loads." (the critique's) under "On their feet" and "Heavy manual"; "Workouts a week" with "How
-  many times a week they train, from 0 to 7."; the steps help, when the steps are their profile's, "From their
-  profile. Steps from a phone or watch on a normal day, work included. Walking is counted inside the
-  multiplier, never added on top." (the row's words otherwise); "10%" without the row's space, as the app
-  writes shares; "The multiplier shows here once their work, steps and workouts are in.", "Working out the
-  multiplier…" and "Their multiplier shows here once you choose or type it."; "Worked out above, from the
-  table.", "Type one from 1.40 to 2.40.", "Their multiplier" and "Why this multiplier? (optional)" with Adjust
-  macros' help; the result's "The coach’s reason: …" and "…, 4 workouts a week"; the floors in the app's flag
-  words ("… This is a flag for you to look at, not a rule."), as the protein and fat flags are.
-  Recommendation: keep until the review, which approves the display words.
-- B9 · Where "Your exercises · Archived (n)" sits. Built: the kit's segmented control beside the search, as
-  Recipes' All · Published · Drafts (n), offered while something is archived or the Archived view is open; the
-  search and the filters carry over between the two views, Clear filters keeps the view, and the counts are the
-  library's whatever the filters. Other way: tabs above the toolbar, or Foods' heading with a text button.
-  Recommendation: keep.
-- B9 · "Open one to restore it." Built: the row's sentence, with Restore in an archived card's menu, as before;
-  an archived exercise cannot be edited, so it opens no sheet. Other way: a press on an archived card opens it
-  read-only with Restore, or the sentence says "Restore one from its menu." Recommendation: the second
-  sentence, a one-line change, if the menu should be named.
-- B9 · The meanings the row did not word. Built: Power "Force produced fast: jumps, throws and Olympic
-  lifts."; Conditioning "Work for the heart and lungs: intervals, circuits, rowing, running."; Mobility and
-  flexibility "Range of motion: stretches, joint drills and positions held."; Balance and coordination "Staying
-  steady and moving well: single-leg work, balance and agility drills."; Warm-up and activation "Short drills
-  that get the body ready to train."; Other "Anything else. Give it a name of your own if you like, such as
-  Rehab." The wire keeps Mobility for "Mobility and flexibility" and says Balance and WarmUp for the new two.
-  Recommendation: keep, or have Toufic read them with B8c's words.
-- B9 · Other's own name. Built: refused when it repeats a type ("Strength is one of the types already. Choose
-  it as the type, or give this one another name."), "Other" itself kept as no name; "Rehab" and "rehab" are
-  one choice in the Type filter, under the seven types with "Your own type, under Other", spelled as most of
-  its exercises spell it, each card keeping its own; a plain box, with no suggestions as the coach types, since
-  the UI plan's rule 8 draws no browser list. Other way: the workspace's names as kit chips under the box.
-  Recommendation: keep until a coach mistypes one.
-- B9 · The Tag chip. Built: a fifth chip, shown while something in the view is tagged, each tag written
-  "knee-friendly (2)" as Drafts (n) and Archived (n) are, counted over the view whatever the search and the
-  other filters, so a choice never empties its own menu; two spellings of a tag are one choice. Other way:
-  counts that follow the other filters. Recommendation: keep.
-- B9 · A link added before B9. Built: no title until the same link is added again (pasted into any exercise's
-  Video link), so its tile reads "Watch on YouTube · opens in a new tab" alone and still opens the video;
-  every link added since asks YouTube or Vimeo once, on TB Gym's server, which tells the provider which
-  video was added, never who watches it. Other way: a one-time job asking for every older link's title.
-  Recommendation: the job, a small row, before go-live, if the test copy's links matter.
-- B9 · An uploaded video's tile, left out (outside the row). The row names a link's tile, so an upload's tile
-  still reads "Video" and opens nothing; the builder's Watch demo plays it. Recommendation: a small row
-  opening the same demo sheet from the tile and the card's menu.
-- B9 · Words the row did not give. Built: "A name of your own (optional)" with "Shown as its type and in the
-  Type filter, like Rehab. Up to 40 characters.", "Keep the type’s name to 40 characters." and "Only an
-  exercise of type Other takes a name of your own."; the lede's "1 archived exercise" and "3 archived
-  exercises"; "No exercise is archived" with "An exercise you archive waits here, out of your pickers, until
-  you restore it." and "Back to your exercises"; "No archived exercise matches" with "Show all archived
-  exercises"; "Try another word, or clear the filters." in place of "… Archived exercises show only with
-  Archived too."; the card menu's "Watch on YouTube" with "Opens in a new tab"; the tile's name for a screen
-  reader, "Back Squat: How to Barbell Squat …. Watch on YouTube · opens in a new tab"; "Ask for Active,
-  Archived or Both." Also: the demo's Push-up is Strength where it was General (a workspace's own General
-  exercises become Other). Recommendation: keep.
-- B10a · Where the page lives. Built: `/plan`, "My plan", the first row of Me's Account group; nothing on Today or
-  in the tabs. Other way: a line on Today as well. Recommendation: keep, and let B10c's sessions line link here.
-- B10a · The plan notices, left out (outside the row). They still open Today. Recommendation: a one-line change, so
-  the waiting-for-payment, started, ending-soon and next-plan notices open My plan, and "Your plan has ended" stays
-  on Today, where Ask to renew is.
-- B10a · Which plans show. Built: every plan running or still to come, in the order they start, and once none is
-  left only the one that ended last, a cancelled plan counting from the day it was cancelled. Other way: a fold of
-  earlier plans, as Service & access has. Recommendation: keep until a client asks.
-- B10a · The description. Built: the plan's description as it stands today, while the plan's name, the price's name
-  and what's included stay as sold, since an enrollment keeps no copy of it, so a coach's edit reaches every client
-  on the plan. Other way: a copy on each enrollment at sale, a migration, so a client keeps the words they were sold.
-  Recommendation: keep; a fixed typo should reach them.
-- B10a · The price's name. Built: beside the dates ("12 weeks · Fri 28 Aug – Thu 19 Nov"), T18's reader, so a name
-  like "Student rate" now reaches the client. Other way: the dates alone. Recommendation: keep, and add "Your client
-  sees this name." to the hint under "Name for this price".
-- B10a · The money, left out (the row does not list it). No price or payment shows; "Waiting for payment" gives no
-  amount. Other way: the price and what has been paid. Recommendation: keep it out until a coach or client asks.
-- B10a · An ended plan. Built: "Ended", the notices' sentence "If you'd like to keep going, ask your coach to renew
-  it." and Go to Today, where Ask to renew stays; a cancelled plan says "Cancelled Fri 30 Oct" and no more. Other
-  way: the Ask to renew card on this page too. Recommendation: that card, a small row, if clients look here first.
-- B10a · A blocked client. Built: they still read their plans (SUB-009), a running one saying "Access paused" and
-  "Your coach has paused your access.", Today's words, never "blocked"; a plan that is over reads as over. Other way:
-  the page closed to them. Recommendation: keep.
-- B10a · Words the row did not give. Built: "What's in your plan and the dates it runs."; Me's "What's included and
-  your dates"; "What's included" and "About this plan"; the coach's "Active · 20 days left", "Ends tomorrow", "Ends
-  today", "Starts in 5 days" and "Starts tomorrow"; "Waiting for payment" with the notice's "It starts once your coach
-  has your payment."; "Paused" with "Your coach has paused this plan. It still ends on Sat 14 Nov."; "Go to Today";
-  "No plan yet" with "Your coach will put your plan here."; "Your plan couldn't be loaded." Recommendation: keep.
-- B10b · Where a pack shows. Built: "1-on-1 sessions" under the plan in front, shown once the client has a pack or the
-  coach sells one: running packs first, the one a session goes on at the top, each with its own ⋯ (Record payment,
-  Renew, Pause, Cancel, which bring it to the front with its payments), its History folded, and those over under
-  Earlier packs. Packs left Other plans, so a coach selling singles does not read each one twice. A pack stands in
-  front only with no coaching plan running or to come, or just sold and waiting for its payment. Other way: packs
-  under Other plans as well, as plan rows. Recommendation: keep.
-- B10b · New plan. Built: "What you sell", Coaching plan or Session pack, at the top of New plan; a pack asks for
-  Sessions (10) and "Valid for (days)" (90, or 30 while the count is 1, until the coach changes it), and an option
-  left unnamed is called "10 sessions" or "Single session". The critique's two presets became that one box. Other way:
-  Session pack and Single session as two buttons that fill it. Recommendation: keep.
-- B10b · The other ticks on a pack. Built: 1-on-1 sessions ticked and locked, the rest unticked and free to tick, as
-  the critique said; a tick such as Training then blocks overlap with a plan's Training (SUB-004). Other way: a pack
-  includes its sessions alone. Recommendation: keep until Toufic answers.
-- B10b · Selling. Built: Sell sessions offers packs alone, while Start a plan offers every option, packs included, so
-  a client's first plan can be a pack. A pack's Renew starts today, not after the old pack ends, since packs run side
-  by side and the one ending first is used. Other way: Start a plan without packs, and a renewal after the old pack.
-  Recommendation: keep.
-- B10b · Who held it. Built: whoever records the session, so an owner recording for a coach is the coach of that
-  session. Other way: a "Who held it" choice for the owner, or the client's own coach. Recommendation: the choice,
-  before B10d counts sessions per coach.
-- B10b · The day. Built: today or earlier, inside a pack; a session on a pack's last day can be recorded the next
-  morning, though the pack has closed. A paused pack takes no session until it is resumed, a day before the pause
-  included. Other way: a paused pack takes days before its pause; a pack takes nothing once it has ended.
-  Recommendation: keep.
-- B10b · The receipt in the sheet. Built: when no pack can take the day and one waits for payment, the sheet names the
-  amount and asks only how it was paid, Cash first, for exactly what is left, dated the session's day, with no
-  reference or note, and the button says "Record session and payment". A part payment stays on Record payment, as it
-  opens nothing (SUB-008). Other way: an amount box. Recommendation: keep.
-- B10b · Undo. Built: "Undo" on a session held or charged, in its pack's History, asking once and for no reason; the
-  row stays struck through under "Undid the session of Fri 30 Oct". It works on a pack that is over, and what lapsed
-  moves with it, but not for a former client. Other way: a reason, as Pause and Cancel ask. Recommendation: keep.
-- B10b · Lapsed. Built: read from the date on every read, never stored (ADR 0038): "3 sessions lapsed" on top of the
-  History and "6 held · 1 charged · 3 lapsed" on the pack, a cancelled pack's sessions lapsing the day it was cancelled.
-  Nothing goes back to the client, as no refund or credit exists (SUB-008). Other way: a row a Worker writes; moving
-  what is left to a new pack. Recommendation: keep; moving sessions is a money rule for later, if coaches ask.
-- B10b · A plan that ends beside a pack. Built as the row said, every reader keeping features: a client whose coaching
-  plan ended while a pack runs reads Running on Clients, shows in no Ended, not renewed and cannot Ask to renew (SUB-014
-  says partly running). Other way: Sessions do not count for those three. Recommendation: that, a small change with
-  B10c, if Toufic has such clients.
-- B10b · The demo, left out (outside the row). Atlas has no pack, so the screenshots come from a throwaway copy where
-  one was sold. Recommendation: one pack and one client on it, with B10c.
-- B10b · Words the row did not give. Built: "What you sell", "Coaching plan", "Session pack"; "Sessions" with "1 to
-  100. A pack of 1 is a single session."; "Validity counted in", "Valid for (days)"; "Clients pay USD 300 for 10
-  sessions, to use within 90 days of its first day. You record each payment on their profile."; "No sessions running.
-  Sell Lynn a pack or a single session and it shows here."; "What happened", "Held", "No-show", "Late cancel"; "Day of
-  the session"; "Goes on Personal training: 8 of 10 left, until Wed 27 Jan."; "Personal training is waiting for USD 35.
-  Saving this records that payment too, received on the day of the session, and the session goes on it."; "Lynn reads
-  this. The session comes off their pack."; "10 sessions added", "Charged · No-show"; "The session of Fri 30 Oct goes
-  back on the pack. Both stay in its history."; "Earlier packs"; and the refusals in SES-005. Recommendation: keep, or
-  have Toufic read them with B8c's words.
-- B10c · When the chip shows. Built: on every client with sessions in today's plan, "7 sessions left" in grey beside
-  the plan's pill, warm once they run out, with no link of its own (the row opens the client). Other way: only when
-  running out. Recommendation: keep, since a gym coach reads balances at a glance.
-- B10c · What running out means. Built: 2 sessions left or fewer, or the last pack's last day within 14 days, today
-  counted, as a plan ending soon. A pack used up early therefore stays in Needs you until it ends, is cancelled or is
-  renewed, since no item can be dismissed. Other way: another number, or the count alone, or an item that goes quiet
-  after a while. Recommendation: keep until Toufic says when he sells the next pack.
-- B10c · Whose balance. Built: one number added across the packs paid and not over, a pack still to come included, so
-  it quiets the item; a paused pack is out of it, and one waiting for payment keeps the item, which then offers Record
-  payment. Other way: a number per pack. Recommendation: keep; Service & access has each pack's own.
-- B10c · A pack that is the client's plan. Built: its end shows once, on the plan's item ("Lynn's plan ends Sat 14 Nov",
-  "2 sessions left · Last day Sat 14 Nov", Renew plan), and the sessions item shows for its count alone. A pack beside a
-  coaching plan has the sessions item and, as B10b settled, no row under Plans ending soon. Other way: two items, or
-  the sessions words on the plan's item too. Recommendation: keep.
-- B10c · The action. Built: Renew pack, the renew sheet for the paid pack ending last, or Record payment for a pack
-  already booked. Other way: Sell sessions, which lists every pack. Recommendation: keep.
-- B10c · Whose sessions held. Built: a coach counts those they recorded, the owner every one of the workspace, each on
-  its own day, a former client's too; a charge is no session held. It follows B10b's "Who held it" line. Other way: the
-  client's coach on that day, as money counts (SUB-016). Recommendation: decide with that line, before B10d.
-- B10c · When This month shows it. Built: once one was held this month or a client of the caller has sessions in today's
-  plan, as Maxes to review shows only when used. Other way: always, reading 0. Recommendation: keep.
-- B10c · Where the client reads it on Today. Built: a row in Also today, "1-on-1 sessions", opening My plan: the pack a
-  session goes on next, "+1 more pack", "Waiting for payment", "Paused · …", nothing once every pack is over. Today's
-  training card says nothing to a client on sessions alone. Other way: a card of its own. Recommendation: keep.
-- B10c · The coach's name. Built: the first word of the client's coach as they stand today, "with Karim", whoever held
-  the sessions. Other way: the full name, as the renewal card says it. Recommendation: keep, and revisit if a coach
-  signs as "Dr. Karim".
-- B10c · What a client reads of a session. Built: the day, Held or Charged, a charge's reason, the newest five and Show
-  all; never who held it, and a session undone is gone. Other way: who held it, in a team. Recommendation: keep.
-- B10c · A pack that is over. Built: "7 of 10 sessions with Karim used, and 3 lapsed on 30 October" with its sessions,
-  while My plan shows it (the plan that ended last, SUB-017); beside a running plan it leaves My plan and Today. Other
-  way: a fold of earlier packs. Recommendation: keep until a client asks.
-- B10c · A blocked client. Built: My plan still says what is left (SUB-009, B10a's choice), and Today's row says "Your
-  coach has paused your access". Other way: the sentence hidden too. Recommendation: keep.
-- B10c · The notices. Built: the plan's five notices in a pack's own words, since "Your plan has ended" could name the
-  wrong thing beside a coaching plan; as generic as every notice, opening Today as they do; and no ending-soon notice
-  for a pack with no session left. Other way: the plan's words for a pack too. Recommendation: keep, and answer B10a's
-  line on where notices open.
-- B10c · A low balance, left out (the row names the ending-soon notice alone, and ADR 0038 leaves reminders out of v1).
-  Clients hear nothing when two sessions are left. Recommendation: keep until a coach asks.
-- B10c · Words the row did not give. Built: "Sessions so far", "Held", "Charged", "Show all 7"; "All 10 sessions with
-  Karim used", "Your session with Karim is used", "1 session with Karim left, until 9 January", "7 of 10 sessions with
-  Karim used, and 3 lapsed on 30 October", "All 10 sessions with Karim lapsed on 30 October", "Your session with Karim
-  lapsed on 30 October"; "+1 more pack", "Couldn't load your sessions"; "Lynn has 2 sessions left", "Lynn has no
-  sessions left", the tag "Sessions", "Last day Sat 14 Nov", "The next pack isn't paid yet", "Renew pack"; "1-on-1
-  sessions held", "Held by you", "Held by your coaching space"; the sheet's "2 sessions left" entry; "Your new 1-on-1
-  sessions are waiting for payment", "They start once your coach has your payment.", "Your 1-on-1 sessions are ready",
-  "Open Today to see how many you have.", "Your 1-on-1 sessions end soon", "If you'd like to keep going, ask your coach
-  to renew them.", "Your 1-on-1 sessions have ended", "Your coach set up more 1-on-1 sessions", "Open Today to see where
-  your sessions stand." Recommendation: keep, or have Toufic read them with B8c's words.
-- B10d · Where the page lives. Built: `/month`, opened by "See this month and last" at the foot of Today's This month,
-  with Today lit in the sidebar, which keeps the rows the owner settled. Other way: a This month row under Business,
-  which also means measuring the short-window spacing again. Recommendation: keep until a coach goes looking for it.
-- B10d · What sold means. Built: a plan or pack booked on that workspace day, a renewal too, paid yet or not, as selling
-  is the enrollment (SES-002); a free one, a goodwill pack among them, is not sold, and one cancelled with no money
-  received never was. Other way: counted the day it is paid in full; free ones counted. Recommendation: keep.
-- B10d · Whose a sale is. Built: the coach the client had when it was booked, as money counts (SUB-016), whoever
-  pressed the button. Other way: whoever booked it. Recommendation: keep, so a coach's sales and money agree.
-- B10d · What started and ended mean. Built: days in a row on plans paid in full or free, a pack included, so a free
-  pack after a paid plan keeps a client on, though it is not sold. A client starts on the first day and ends on the
-  last, or the day the plan was cancelled, for the coach they had as that day began. A
-  renewal that follows on, paid late or not, is no end, so last month can change when it is paid; a gap of any length
-  ends one stint and starts another, a weekend between two plans included. Other way: only a first plan ever and
-  coaching ended; or a few days' gap ignored. Recommendation: keep until Toufic says how his renewals start, then a
-  grace of up to 7 days if his clients often restart on a Monday.
-- B10d · Whose sessions. Built: whoever recorded it (SES-008), so a session the owner records for Lea's client counts
-  for the owner, on a row Lea's sits beside. It follows B10b's "Who held it" and B10c's "Whose sessions held", both
-  still open. Other way: a "Who held it" choice for the owner, which B10b's line recommends, left out as outside the
-  row. Recommendation: that choice, now the page shows sessions coach by coach.
-- B10d · Someone who left the team. Built: a row marked "Left the team", last, only with a number in either month, so
-  the rows add up to the total. Other way: their numbers under the owner. Recommendation: keep.
-- B10d · This month beside the last. Built: "October so far" beside the whole of September, each number with last
-  month's in words and no percent, and By coach one month at a time by a switch, since a row can't hold both. Other
-  way: the same day last month, which needs its own definition. Recommendation: keep.
-- B10d · Every number, always. Built: all six on the page, 0 included, for a coach who sells no sessions too, though
-  Today shows sessions only once used (B10c). Other way: sessions and packs hidden until used. Recommendation: keep:
-  a report reads the same every month. An owner alone has no By coach, and nothing in either month invites instead.
-- B10d · Earlier months, left out (the row names this month and last). Recommendation: a month picker once a coach
-  asks.
-- B10d · Words the row did not give. Built: "See this month and last"; "What came in and what changed, beside last
-  month, on your coaching space’s calendar."; "Your coaching space", "Your numbers"; "October so far", "September:
-  9", "Nothing in September", "Nothing received yet", "Nothing in September either"; "Plans sold", "Session packs
-  sold", "Clients started", "Clients ended"; "By coach", "Month shown", "Coach", "Sessions held", "Packs sold",
-  "Started", "Ended", "Total", "None", "Left the team"; "How these are counted" with its seven entries; "Nothing
-  to count yet", "Payments, 1-on-1 sessions, plans you sell and clients starting show up here as they happen.", "Open
-  Clients"; "This month couldn’t be loaded." Recommendation: keep, or have Toufic read them with B8c's words.
-- B11 · Where overdue is decided. Built: the server says it on each check-in in the client's list (CHK-015), so the
-  Check-in card, the Check-ins tab and an unsent check-in's page all read the rule behind the tag on Clients; the row
-  named only the card, but the other two said "Overdue" from the first day and would have disagreed with it. Other
-  way: the card alone. Recommendation: keep.
-- B11 · The day after the due day. Built: the card says "Due Fri 30 Oct, not sent yet" in plain ink, before the next
-  one due, and the tab says "Due Fri 30 Oct" with no pill; warm and "Overdue" start the next day. Other way: "Next one
-  due …" until it turns late, which says nothing about the one just missed. Recommendation: keep.
-- B11 · Two open at once. Built: the card names the most recent one the server calls overdue, even when a newer one
-  was due yesterday, since that is the one the tag counts. Other way: always the newest, in plain ink. Recommendation:
-  keep.
-- B11 · From the 14th day. Built: when the tag stops asking, the card and the tab stop saying late too: "Due Sat 17 Oct,
-  not sent yet", plain, the check-in still listed under Not sent yet. Other way: "Overdue" stays on the client's page
-  for good. Recommendation: keep, so overdue means one thing everywhere.
-- B11 · The blocked row's Plan column. Built: the pill says "Access blocked" in the client page's red, and the column
-  keeps the plan's name, what it includes, its price and its last day ("Ends Sun 20 Dec"), since a block changes no
-  plan (SUB-010) and the pill already says it; with no plan to show, the column says "Access blocked". Other way: the
-  column empty of the plan, or "Access blocked" in it as well. Recommendation: keep.
-- B11 · Words the row did not give. Built: "Due Fri 30 Oct, not sent yet"; in How these statuses work, Access blocked:
-  "Their training, progress and check-ins stay closed to you and to them until they are unblocked on Service & access.
-  Their plan and its dates don’t change.", and No active plan no longer lists a blocked plan. Recommendation: keep.
+On 2026-10-31 the owner's partner answered the 120 lines that stood here, on a decision page, and the owner passed the
+answers on: 88 smaller choices and the wording stay as built, and what changes is rows B12 to B19. The removed lines are
+in this file's git history.
+
+Waits for Toufic's answers (section 1), kept as built until then:
+
+- B10b · What else a pack can include. Built: 1-on-1 sessions ticked and locked, the rest free to tick.
+- B10c · What running out means. Built: 2 sessions left or fewer, or the last pack's last day within 14 days.
+- B10d · What started and ended mean. Built: any gap ends a stint. A grace of up to 7 days, if clients often restart on
+  a Monday.
+
+For B8c's review, with the energy table's words:
+
+- B8a · "Counts as …" names the steps band. The other way: a label for the whole multiplier ("Counts as active: × 1.65").
+- B8a · The coach's six picks (1.40, 1.55, 1.725, 1.90, 2.20, 2.40). The other way: tenths from 1.4 to 2.4.
+- B8a · The goal's rate at 7,700 kcal a kilogram. The other way: a model that slows as the body adapts (Hall 2011).
+- B8b · The anchor sentence "They burn about 3,161 a day; 2,661 is the target", left out above the chain.
