@@ -116,7 +116,8 @@ test('a plan is sold, part paid, fully paid and protected against double taps an
   const reasons = async () => [
     ...new Set(
       (await access())
-        .filter((item) => item.feature !== 'ResourceLibrary')
+        // Neither is in this plan, whatever its state: 1-on-1 sessions are sold as a pack (ADR 0038).
+        .filter((item) => item.feature !== 'ResourceLibrary' && item.feature !== 'Sessions')
         .map((item) => (item.isAllowed ? 'ok' : item.reason)),
     ),
   ];
