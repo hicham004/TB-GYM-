@@ -679,10 +679,10 @@ describe('the check-in card (workflow facts only, CHK-012)', () => {
   });
 
   it('tells a missed check-in from the next one due, and an unsent one from none assigned', () => {
-    // The most recent past-due one is the one named, not the oldest.
+    // The most recent overdue one is the one named, not the oldest.
     const late = card([
-      checkInItem('a', '2026-09-17', null),
-      checkInItem('b', '2026-09-24', 'Draft'),
+      { ...checkInItem('a', '2026-09-17', null), isOverdue: true },
+      { ...checkInItem('b', '2026-09-24', 'Draft'), isOverdue: true },
       checkInItem('c', '2026-10-08', null),
       checkInItem('done', '2026-09-10', 'Reviewed', '2026-09-10T07:00:00Z', '2026-09-11T07:00:00Z'),
     ]);
@@ -701,6 +701,33 @@ describe('the check-in card (workflow facts only, CHK-012)', () => {
       detail: 'Once one is assigned, Maya reports in here.',
       next: null,
       action: { label: 'Open check-ins', link: `${page}/checkins` },
+    });
+  });
+
+  it('says late on the days the server says overdue, never by a count of its own (critique B11)', () => {
+    // The day after its due day it is unsent, not late, and comes before the next one due.
+    expect(
+      card([checkInItem('y', '2026-09-30', null), checkInItem('c', '2026-10-08', null)]).next,
+    ).toEqual({ text: 'Due Wed 30 Sep, not sent yet', late: false });
+
+    // The server's word decides the day, CHK-015's second day after it.
+    expect(card([{ ...checkInItem('y', '2026-09-29', null), isOverdue: true }]).next).toEqual({
+      text: 'Was due Tue 29 Sep, not sent',
+      late: true,
+    });
+
+    // Beside one only just due, the overdue one is named: it is the one the tag counts.
+    expect(
+      card([
+        { ...checkInItem('old', '2026-09-24', null), isOverdue: true },
+        checkInItem('y', '2026-09-30', null),
+      ]).next,
+    ).toEqual({ text: 'Was due Thu 24 Sep, not sent', late: true });
+
+    // Once the server has stopped asking, on the 14th day, it is still not sent and no longer late.
+    expect(card([checkInItem('x', '2026-09-10', 'Draft')]).next).toEqual({
+      text: 'Due Thu 10 Sep, not sent yet',
+      late: false,
     });
   });
 

@@ -89,6 +89,31 @@ const team = [
 const ENDING = plansOverview([cancelledPlan(), enrollment()]);
 const WITH_RENEWAL = plansOverview([cancelledPlan(), enrollment(), unpaidRenewal()]);
 
+/**
+ * The server's flag (CLI-018), which Service & access reads and counts no days of its own: a running plan
+ * within 14 days of its last day, with the renewals waiting for payment behind it and the first one named.
+ */
+function endingSoon(view: ClientCommercialOverview) {
+  const plan = view.enrollments.find(
+    (item) => item.effectiveStatus === 'Active' && item.lastActiveDate === '2026-10-12',
+  );
+  if (!plan) return [];
+  const unpaid = view.enrollments.filter(
+    (item) => item.storedStatus === 'PendingPayment' && item.startDate > plan.lastActiveDate,
+  );
+  return [
+    {
+      kind: 'PlanEndingSoon',
+      client: MAYA,
+      since: null,
+      date: plan.lastActiveDate,
+      count: unpaid.length > 0 ? unpaid.length : null,
+      weekNumber: null,
+      subjectId: unpaid[0]?.id ?? plan.id,
+    },
+  ];
+}
+
 type Handlers = Record<string, (route: Route) => unknown>;
 
 interface OpenOptions {
@@ -127,7 +152,7 @@ async function openService(page: Page, width: number, height: number, options: O
                   subjectId: 'e-1',
                 },
               ]
-            : [],
+            : endingSoon(plans[0]),
       }),
     ...options.extra,
   };

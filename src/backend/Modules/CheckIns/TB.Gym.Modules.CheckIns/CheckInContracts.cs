@@ -222,11 +222,14 @@ public sealed record CheckInAssignmentResponseSummary(
 /// <remarks>
 /// The status travels with the list so a caller does not have to fetch every response in full just
 /// to render a badge. A null <see cref="Response"/> means the client has not started; there is no
-/// empty draft row waiting for them.
+/// empty draft row waiting for them. <see cref="IsOverdue"/> is <see cref="CheckInAttentionPolicy"/>'s
+/// answer (CHK-015), so a screen says "overdue" on the days the coach is asked, never by a count of
+/// its own (critique B11).
 /// </remarks>
 public sealed record CheckInAssignmentListItem(
     CheckInAssignmentView Assignment,
-    CheckInAssignmentResponseSummary? Response);
+    CheckInAssignmentResponseSummary? Response,
+    bool IsOverdue);
 
 /// <summary>
 /// A bounded page of one client's assignments. <see cref="Total"/> is the whole count so a caller

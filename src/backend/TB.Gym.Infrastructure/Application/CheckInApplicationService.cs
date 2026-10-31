@@ -680,6 +680,11 @@ internal sealed class CheckInApplicationService(
                         response.ReviewedAtUtc))
                     .FirstOrDefault()))
             .ToArrayAsync(cancellationToken);
+        var calendar = await WorkspaceCalendarReader.ReadAsync(
+            dbContext,
+            clock,
+            tenantContext.TenantId,
+            cancellationToken);
 
         return new CheckInAssignmentListView(
             clientProfileId,
@@ -697,7 +702,13 @@ internal sealed class CheckInApplicationService(
                         // Lateness is derived from the stored workspace-local submission date
                         // against the due date, never persisted, exactly as the detail view does.
                         row.Response.SubmittedDate is { } submitted &&
-                        submitted > row.Assignment.DueDate)))]);
+                        submitted > row.Assignment.DueDate),
+                // Both callers reach this list only while check-ins are in the plan (CHK-011).
+                CheckInAttentionPolicy.IsOverdue(
+                    row.Assignment.DueDate,
+                    row.Response?.Status,
+                    checkInsInPlan: true,
+                    calendar.Today)))]);
     }
 
     /// <summary>

@@ -134,6 +134,7 @@ export function checkInItem(
             reviewedAtUtc,
             isLate,
           },
+    isOverdue: false,
   };
 }
 

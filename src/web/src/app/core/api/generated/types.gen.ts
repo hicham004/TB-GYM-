@@ -476,6 +476,7 @@ export type CheckInAssignmentDetail = {
 export type CheckInAssignmentListItem = {
   assignment: CheckInAssignmentView;
   response: null | CheckInAssignmentResponseSummary;
+  isOverdue: boolean;
 };
 
 export type CheckInAssignmentListView = {
@@ -881,7 +882,8 @@ export type ClientPlanRecipeView = {
 export type ClientPlanState =
   'Running' | 'Paused' | 'PaymentDue' | 'NotStarted' | 'Ended' | 'None' | 'Blocked';
 
-export type ClientPlanStatus = 'OnTrack' | 'Paused' | 'EndingSoon' | 'NoActivePlan';
+export type ClientPlanStatus =
+  'OnTrack' | 'Paused' | 'EndingSoon' | 'NoActivePlan' | 'AccessBlocked';
 
 export type ClientPlanSummary = {
   enrollmentId: string;

@@ -386,17 +386,31 @@ describe('a check-in under review', () => {
     });
 
     it('shows no answers before it is sent (CHK-013), and offers nothing to do', async () => {
-      const { host, api } = await render({ detail: reviewDetail({ status: 'Draft' }) });
+      const detail = reviewDetail({ status: 'Draft' });
+      const { host, api } = await render({
+        detail,
+        api: { listClientCheckInAssignments: vi.fn(() => of(reviewList(detail, true))) },
+      });
 
       expect(textOf(host.querySelector('#unsent-heading'))).toBe('Not sent yet');
       expect(textOf(host.querySelector('.prose p'))).toBe(
         'Was due Wed 30 Sep. Maya has started it. You’ll see the answers once it is sent.',
       );
+      expect(textOf(host.querySelector('app-status-pill'))).toBe('Overdue');
       expect(host.querySelector('.row')).toBeNull();
       expect(host.querySelector('textarea')).toBeNull();
       expect(host.querySelector('button.primary')).toBeNull();
       expect(api.compareCheckInResponses).not.toHaveBeenCalled();
       expect(api.getClientProgressDashboard).not.toHaveBeenCalled();
+    });
+
+    it('says overdue on the list’s word, not by the days it counts itself (critique B11)', async () => {
+      const { host } = await render({ detail: reviewDetail({ status: 'Draft' }) });
+
+      expect(textOf(host.querySelector('.prose p'))).toBe(
+        'Due Wed 30 Sep. Maya has started it. You’ll see the answers once it is sent.',
+      );
+      expect(textOf(host.querySelector('app-status-pill'))).toBe('Started');
     });
   });
 

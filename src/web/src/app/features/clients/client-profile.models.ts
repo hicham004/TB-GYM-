@@ -563,7 +563,7 @@ export interface CheckInCard {
   heading: string;
   detail: string;
   pill: { label: string; tone: StatusPillTone } | null;
-  /** The next one still owed: when it is due, or that it is overdue. Null when none is open. */
+  /** The next one still owed: when it is due, or that it is overdue, in warm words. Null when none is open. */
   next: { text: string; late: boolean } | null;
   /**
    * The one thing to do about it, or null when there is nothing to do. It is shown quietly: Needs
@@ -575,7 +575,8 @@ export interface CheckInCard {
 /**
  * The newest check-in the client sent, and the next one owed: workflow facts only. It never reads,
  * rates or compares an answer (CHK-012); comparing answers belongs to the review screen. Lateness is
- * a recorded fact, so it may be said.
+ * a recorded fact, so it may be said, and overdue is the server's word on each one (CHK-015), so this
+ * card and the tag on Clients say it on the same days (critique B11).
  */
 export function checkInCard(
   items: readonly CheckInAssignmentListItem[],
@@ -595,16 +596,19 @@ export function checkInCard(
     .filter((item) => item.response === null || item.response.status === 'Draft')
     .sort((a, b) => a.assignment.dueDate.localeCompare(b.assignment.dueDate));
   // A client who missed several is told about the most recent one; the next one due comes after.
-  const overdue = open.filter((item) => item.assignment.dueDate < today).at(-1);
+  const overdue = open.filter((item) => item.isOverdue).at(-1);
+  const unsent = open.filter((item) => item.assignment.dueDate < today).at(-1);
   const upcoming = open.find((item) => item.assignment.dueDate >= today);
   const next = overdue
     ? {
         text: $localize`Was due ${date(overdue.assignment.dueDate)}:date:, not sent`,
         late: true,
       }
-    : upcoming
-      ? { text: $localize`Next one due ${date(upcoming.assignment.dueDate)}:date:`, late: false }
-      : null;
+    : unsent
+      ? { text: $localize`Due ${date(unsent.assignment.dueDate)}:date:, not sent yet`, late: false }
+      : upcoming
+        ? { text: $localize`Next one due ${date(upcoming.assignment.dueDate)}:date:`, late: false }
+        : null;
 
   if (!latest) {
     return items.length === 0

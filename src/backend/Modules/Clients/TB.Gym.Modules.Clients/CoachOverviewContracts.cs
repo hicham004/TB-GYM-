@@ -85,6 +85,7 @@ public enum ClientPlanStatus
     Paused = 2,
     EndingSoon = 3,
     NoActivePlan = 4,
+    AccessBlocked = 5,
 }
 
 /// <summary>Where the client's plan stands today, read from their feature access decisions.</summary>

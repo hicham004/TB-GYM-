@@ -246,7 +246,8 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     private sealed record Phase6AssignmentListItem(
         Phase6Assignment Assignment,
-        Phase6AssignmentResponseSummary? Response);
+        Phase6AssignmentResponseSummary? Response,
+        bool IsOverdue);
 
     private sealed record Phase6AssignmentList(
         Guid ClientProfileId,

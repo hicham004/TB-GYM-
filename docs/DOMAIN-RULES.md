@@ -180,8 +180,9 @@ coming block whose logged sets suggest a new max (STR-012, after any keep, STR-0
 in use and the suggestion. The status is Needs attention for any of those but the plan's end, sessions running out
 and maxes to review (a client getting stronger is good news), else the plan's own status: Paused, Ending soon, On track for
 a running plan, or No active plan. That plan status is also shown on its own beside the reasons, whatever they are
-(critique B4a: a plan's end keeps its own status, outside Needs attention). A client is new for 14 days after
-joining. The list also says which clients have not
+(critique B4a: a plan's end keeps its own status, outside Needs attention); there a blocked client reads Access
+blocked (critique B11), since a block changes no plan (SUB-010) and the row still sums theirs up. A client is new for
+14 days after joining. The list also says which clients have not
 finished setting up their profile ("Not set up yet", audit LOST-12); that is shown beside the status and is not
 an attention reason. Each row also carries (critique B4a) the current profile's date of birth, the age worked out on
 screen for the workspace's today (CLI-005; a returning client's new profile never takes the old one's, CLI-016); the
@@ -669,7 +670,7 @@ builder keeps a coach's changes on the server as they work, as a `ProgramDraft`:
 program, plus at most 20 programs not published yet per person, each belonging to an Owner's or
 Coach's membership in that workspace. Nobody else reads or changes it, the workspace owner included,
 and it never reaches a client. Its content is a save's shape with values unchecked (an unnamed
-session, reps of 0), bounded only by a version's limits: 1 to 52 weeks, 14 sessions a week on days 1
+session, reps of 0), bounded only by a version's limits: 1 to 52 weeks, 14 workouts a week on days 1
 to 7, 40 exercises a session, 20 sets an exercise, the same text lengths, no NUL character, and
 2,000,000 characters in all. Every save carries the version it read, so a second tab or device is told
 to reload instead of overwriting; a second draft of the same program is refused. Only Publish makes a
@@ -2555,7 +2556,9 @@ not sent it (no response, or only their draft, CHK-005) and its due day was 2 to
 calendar; on the 14th day it stops asking, and sending it, however late, ends it. It is read only while the client's
 plan includes check-ins today, judged by today's plan as every CLI-018 signal is. An absence is not an answer: it is
 worked out from the missing submission alone, never stored, and never from an answer or what a draft holds
-(CHK-012, CHK-013). Coach attention (CLI-018) ranks it after missed sessions.
+(CHK-012, CHK-013). Coach attention (CLI-018) ranks it after missed sessions. The list of a client's check-ins carries
+this answer for each one (critique B11), so the client's page says overdue on the days the coach is asked and counts no
+days of its own.
 
 ## 14. The public website
 

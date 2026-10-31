@@ -277,8 +277,11 @@ export function comparisonOf(
   };
 }
 
-/** A list row for a check-in, from the read that lists them. */
-export function listItemOf(detail: CheckInResponseDetail): CheckInAssignmentListItem {
+/** A list row for a check-in, from the read that lists them, with the server's word on it (CHK-015). */
+export function listItemOf(
+  detail: CheckInResponseDetail,
+  isOverdue = false,
+): CheckInAssignmentListItem {
   const response = detail.response;
   return {
     assignment: detail.assignment,
@@ -292,14 +295,15 @@ export function listItemOf(detail: CheckInResponseDetail): CheckInAssignmentList
           isLate: response.isLate,
         }
       : null,
+    isOverdue,
   };
 }
 
 /** The list on Maya's record: next week's due, this one waiting, two reviewed before it. */
-export function reviewList(current: CheckInResponseDetail = reviewDetail()) {
+export function reviewList(current: CheckInResponseDetail = reviewDetail(), isOverdue = false) {
   const items = [
     listItemOf(reviewDetail({ id: 'assignment-7-oct', status: null, dueDate: '2026-10-07' })),
-    listItemOf(current),
+    listItemOf(current, isOverdue),
     listItemOf(earlierDetail()),
     listItemOf(
       earlierDetail({

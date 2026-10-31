@@ -195,7 +195,11 @@ export class ClientCheckInReview implements HoldsUnsavedWork {
   protected readonly facts = computed(() => {
     const detail = this.detail();
     const context = this.checkInContext();
-    return detail && context ? checkInFacts(detail, context, this.firstName()) : null;
+    if (!detail || !context) return null;
+    const overdue = this.items().some(
+      (item) => item.assignment.id === detail.assignment.id && item.isOverdue,
+    );
+    return checkInFacts(detail, context, this.firstName(), overdue);
   });
 
   protected readonly earlier = computed(() => {

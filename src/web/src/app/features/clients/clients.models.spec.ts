@@ -145,6 +145,31 @@ describe('client list (C2, critique B4a)', () => {
     expect(Maya.planPill.label).toBe('On track');
   });
 
+  it('says a blocked client’s access is blocked, beside the plan that still stands (critique B11)', () => {
+    const blocked = clientRow(
+      overviewRow(coachClient('c-b', 'Ali', 'Fares'), {
+        planState: 'Blocked',
+        planEndsOn: '2026-12-20',
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(blocked.planPill).toEqual({ label: 'Access blocked', tone: 'danger' });
+    expect(blocked.plan.end).toBe('Ends Sun 20 Dec');
+
+    // With no plan to sum up, the cell says why there is nothing in it.
+    const noPlan = clientRow(
+      overviewRow(coachClient('c-n', 'Nour', 'Fares'), {
+        planState: 'Blocked',
+        planEndsOn: null,
+        plan: null,
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(noPlan.plan).toMatchObject({ name: null, end: 'Access blocked' });
+  });
+
   it('turns each reason into a tag with its count and a link to where it is handled', () => {
     const { Elie, Jad, Lynn, Maya, Nour, Sara, Rita, Rami } = rows();
     const read = (row: ClientRow) => row.tags.map((tag) => [tag.label, tag.link, tag.queryParams]);
@@ -294,7 +319,7 @@ describe('client list (C2, critique B4a)', () => {
       planCell(overviewRow(coachClient('c-p', 'Ali', 'Fares'), fields), COACH_TODAY, 'en-US');
 
     expect(end({ planState: 'NotStarted' }).end).toBe('Not started yet');
-    expect(end({ planState: 'Blocked' }).end).toBe('Access blocked');
+    expect(end({ planState: 'Blocked', plan: null, planEndsOn: null }).end).toBe('Access blocked');
     expect(end({ planState: 'Running', planEndsOn: COACH_TODAY }).end).toBe('Ends today');
     expect(end({ planState: 'None', plan: null, planEndsOn: null })).toEqual({
       name: null,

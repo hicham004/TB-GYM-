@@ -429,6 +429,8 @@ export function planPill(status: ClientPlanStatus): { label: string; tone: Statu
       return { label: $localize`Plan ends soon`, tone: 'warm' };
     case 'NoActivePlan':
       return { label: $localize`No active plan`, tone: 'neutral' };
+    case 'AccessBlocked':
+      return { label: $localize`Access blocked`, tone: 'danger' };
   }
 }
 
@@ -632,14 +634,15 @@ function planEnd(
   date: (value: string) => string,
 ): string {
   const ends = row.planEndsOn;
+  const lastDay = (value: string) => {
+    const left = daysBetween(today, value);
+    if (left <= 0) return $localize`Ends today`;
+    if (left === 1) return $localize`Ends tomorrow`;
+    return $localize`Ends ${date(value)}:date:`;
+  };
   switch (row.planState) {
-    case 'Running': {
-      if (!ends) return $localize`Running`;
-      const left = daysBetween(today, ends);
-      if (left <= 0) return $localize`Ends today`;
-      if (left === 1) return $localize`Ends tomorrow`;
-      return $localize`Ends ${date(ends)}:date:`;
-    }
+    case 'Running':
+      return ends ? lastDay(ends) : $localize`Running`;
     case 'Paused': {
       const since = row.planPausedSince;
       if (since && ends)
@@ -654,7 +657,8 @@ function planEnd(
     case 'Ended':
       return ends ? $localize`Ended ${date(ends)}:date:` : $localize`Ended`;
     case 'Blocked':
-      return $localize`Access blocked`;
+      // The pill says it (critique B11), and a block changes no plan (SUB-010): its last day stands.
+      return ends ? lastDay(ends) : $localize`Access blocked`;
     case 'None':
       return $localize`No plan yet`;
   }

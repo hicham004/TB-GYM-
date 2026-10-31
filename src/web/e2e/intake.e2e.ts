@@ -427,6 +427,8 @@ async function openClientIntake(
     user: OWNER,
     extra: {
       [`GET /api/clients/${CLIENT_ID}`]: (route) => json(route, 200, details),
+      // The client's header reads what waits for the coach; nothing does here.
+      [`GET /api/clients/${CLIENT_ID}/overview`]: (route) => json(route, 200, { attention: [] }),
       [`GET /api/commercial/clients/${CLIENT_ID}`]: (route) =>
         json(route, 200, {
           clientProfileId: CLIENT_ID,

@@ -453,6 +453,8 @@ async function openTraining(page: Page, width: number, height: number, options: 
   let reads = 0;
   const handlers: Handlers = {
     [`GET /api/clients/${ID}`]: (route) => json(route, 200, clientDetails),
+    // The client's header reads what waits for the coach; nothing does here.
+    [`GET /api/clients/${ID}/overview`]: (route) => json(route, 200, { attention: [] }),
     [`GET /api/commercial/clients/${ID}`]: (route) =>
       json(route, 200, commercial(options.enrollment)),
     'GET /api/workspace': (route) => json(route, 200, workspace),

@@ -47,6 +47,9 @@ async function openShell(
   });
   await page.goto('/');
   await expect(page.locator('app-coach-shell')).toBeVisible();
+  // The shell shows over the homepage ng serve renders first. Until that leaves, its own Menu button stands
+  // beside the shell's, and the navigation still to end would close a menu opened now.
+  await expect(page.locator('app-home-header')).toHaveCount(0);
   if (options.rtl) await useRtl(page);
   await waitForFonts(page);
 }

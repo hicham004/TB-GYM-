@@ -167,12 +167,12 @@ function listRow(item: CheckInAssignmentListItem, context: CheckInContext): Chec
     };
   }
 
-  const overdue = assignment.dueDate < context.today;
+  // The server's word (CHK-015), so this says Overdue on the days the tag on Clients does (critique B11).
   const started = response?.status === 'Draft';
   return {
     ...base,
-    line: overdue ? $localize`Was due ${due}:date:` : $localize`Due ${due}:date:`,
-    pill: overdue
+    line: item.isOverdue ? $localize`Was due ${due}:date:` : $localize`Due ${due}:date:`,
+    pill: item.isOverdue
       ? { label: $localize`Overdue`, tone: 'warm' }
       : started
         ? { label: $localize`Started`, tone: 'info' }
@@ -212,10 +212,12 @@ export interface CheckInFacts {
   pill: { label: string; tone: StatusPillTone };
 }
 
+/** `overdue` is the list's word on this check-in (CHK-015): the server's, as on the list and on Clients. */
 export function checkInFacts(
   detail: CheckInResponseDetail,
   context: CheckInContext,
   name: string,
+  overdue: boolean,
 ): CheckInFacts {
   const { assignment, response } = detail;
   const due = dayLabel(assignment.dueDate, context);
@@ -239,7 +241,6 @@ export function checkInFacts(
     };
   }
 
-  const overdue = assignment.dueDate < context.today;
   const when = overdue ? $localize`Was due ${due}:date:.` : $localize`Due ${due}:date:.`;
   return {
     headline: $localize`Not sent yet`,

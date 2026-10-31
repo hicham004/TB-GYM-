@@ -75,7 +75,9 @@ export function overviewRow(
         ? 'EndingSoon'
         : planState === 'Running'
           ? 'OnTrack'
-          : 'NoActivePlan';
+          : planState === 'Blocked'
+            ? 'AccessBlocked'
+            : 'NoActivePlan';
   return {
     client,
     goals: null,

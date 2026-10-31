@@ -98,13 +98,19 @@ public sealed class B4aClientsTableDomainTests
         foreach (var state in new[]
         {
             ClientPlanState.PaymentDue, ClientPlanState.NotStarted, ClientPlanState.Ended,
-            ClientPlanState.None, ClientPlanState.Blocked,
+            ClientPlanState.None,
         })
         {
             Assert.AreEqual(ClientPlanStatus.NoActivePlan,
                 CoachAttentionPolicy.PlanStatus([CoachAttentionKind.NoPlan, CoachAttentionKind.RenewalRequested], state),
                 state.ToString());
         }
+
+        // A block changes no plan (SUB-010), so the row says it is blocked, never that there is no plan (critique
+        // B11). The one status the chat's panel reads keeps to the plan.
+        Assert.AreEqual(ClientPlanStatus.AccessBlocked,
+            CoachAttentionPolicy.PlanStatus([CoachAttentionKind.RenewalRequested], ClientPlanState.Blocked));
+        Assert.AreEqual(ClientOverviewStatus.NoActivePlan, CoachAttentionPolicy.Status([], ClientPlanState.Blocked));
 
         // With nothing else waiting, the status is the plan's.
         Assert.AreEqual(ClientOverviewStatus.EndingSoon,

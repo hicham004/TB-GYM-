@@ -1652,7 +1652,8 @@ limited to the coach's assigned clients.
   - Critique B4a (`docs/CRITIQUE-FIXES-2026-10.md`): the table. Client (name, "Age 34" for the workspace's
     today, goal); Status · last 7 days (the reasons as warning tags with their counts, each a link to where it
     is handled, an overdue check-in to the client's check-ins; the plan's own pill, On track, Plan paused, Plan
-    ends soon or No active plan; the strip as ✓ done, × missed, – still due, with its legend under the head or,
+    ends soon, No active plan or, since critique B11, Access blocked beside the plan that still stands; the strip
+    as ✓ done, × missed, – still due, with its legend under the head or,
     on a phone, above the list); Plan (its name as it was booked, in its own writing direction, first since
     critique B4c; what it includes, its length and exact price, its end or "Paused since … · ends …", "+1 more
     plan"); Last check-in ("Sent 2 days ago", "None sent yet", "Not in plan"); Last

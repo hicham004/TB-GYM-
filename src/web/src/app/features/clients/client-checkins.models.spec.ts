@@ -63,8 +63,11 @@ describe('the check-in list on a client’s record', () => {
     expect(groups.open[0]).toMatchObject({ line: 'Due Wed 7 Oct', pill: null, canOpen: false });
   });
 
-  it('marks one past its due date as overdue and a started one as started, neither openable', () => {
-    const overdue = listItemOf(reviewDetail({ id: 'late', status: null, dueDate: '2026-09-28' }));
+  it('marks one the server calls overdue and a started one as started, neither openable', () => {
+    const overdue = listItemOf(
+      reviewDetail({ id: 'late', status: null, dueDate: '2026-09-28' }),
+      true,
+    );
     const started = listItemOf(
       reviewDetail({ id: 'draft', status: 'Draft', dueDate: '2026-10-07' }),
     );
@@ -78,6 +81,15 @@ describe('the check-in list on a client’s record', () => {
     expect(open[1]).toMatchObject({ pill: { label: 'Started' }, canOpen: false });
   });
 
+  it('counts no days of its own: past its due day is not overdue until the server says so (critique B11)', () => {
+    const justDue = listItemOf(reviewDetail({ id: 'y', status: null, dueDate: '2026-09-30' }));
+    const started = listItemOf(reviewDetail({ id: 'z', status: 'Draft', dueDate: '2026-09-30' }));
+    const { open } = checkInListGroups([justDue, started], CONTEXT);
+
+    expect(open[0]).toMatchObject({ line: 'Due Wed 30 Sep', pill: null });
+    expect(open[1]).toMatchObject({ line: 'Due Wed 30 Sep', pill: { label: 'Started' } });
+  });
+
   it('says why check-ins are closed in coach words, never as an empty list', () => {
     expect(checkInsClosed('NoEntitlement', 'Karl')).toBe('Check-ins aren’t part of Karl’s plan.');
     expect(checkInsClosed('Expired', 'Elie')).toBe(
@@ -89,7 +101,7 @@ describe('the check-in list on a client’s record', () => {
 
 describe('the facts at the top of a review', () => {
   it('gives the day it was sent, its due day and the days it was late', () => {
-    expect(checkInFacts(reviewDetail(), CONTEXT, 'Maya')).toEqual({
+    expect(checkInFacts(reviewDetail(), CONTEXT, 'Maya', false)).toEqual({
       headline: 'Sent Thu 1 Oct',
       detail: 'Due Wed 30 Sep',
       late: '1 day late',
@@ -99,8 +111,13 @@ describe('the facts at the top of a review', () => {
   });
 
   it('says who reviewed it, and "by you" only for the signed-in coach', () => {
-    const mine = checkInFacts(earlierDetail(), CONTEXT, 'Maya');
-    const theirs = checkInFacts(earlierDetail(), { ...CONTEXT, userId: 'someone-else' }, 'Maya');
+    const mine = checkInFacts(earlierDetail(), CONTEXT, 'Maya', false);
+    const theirs = checkInFacts(
+      earlierDetail(),
+      { ...CONTEXT, userId: 'someone-else' },
+      'Maya',
+      false,
+    );
 
     expect(mine.reviewed).toBe('Reviewed Thu 24 Sep by you');
     expect(mine.late).toBeNull();
@@ -109,11 +126,12 @@ describe('the facts at the top of a review', () => {
   });
 
   it('keeps an unsent check-in’s answers out of it and says so (CHK-013)', () => {
-    const draft = checkInFacts(reviewDetail({ status: 'Draft' }), CONTEXT, 'Maya');
+    const draft = checkInFacts(reviewDetail({ status: 'Draft' }), CONTEXT, 'Maya', true);
     const none = checkInFacts(
       reviewDetail({ status: null, dueDate: '2026-10-07' }),
       CONTEXT,
       'Maya',
+      false,
     );
 
     expect(draft.headline).toBe('Not sent yet');
@@ -123,6 +141,13 @@ describe('the facts at the top of a review', () => {
     expect(draft.pill.label).toBe('Overdue');
     expect(none.detail).toBe('Due Wed 7 Oct. You’ll see the answers once Maya sends it.');
     expect(none.pill.label).toBe('Not sent yet');
+
+    // Past its due day, it is overdue only on the server's word (CHK-015).
+    const started = checkInFacts(reviewDetail({ status: 'Draft' }), CONTEXT, 'Maya', false);
+    expect(started.detail).toBe(
+      'Due Wed 30 Sep. Maya has started it. You’ll see the answers once it is sent.',
+    );
+    expect(started.pill.label).toBe('Started');
   });
 
   it('reads an instant on the workspace’s own calendar', () => {

@@ -163,8 +163,9 @@ public static class CoachAttentionPolicy
 
     /// <summary>
     /// The plan's own status, whatever else waits for the coach (critique B4a: a plan's end keeps its own status,
-    /// outside Needs attention): a paused plan Paused, a plan ending soon Ending soon, a running plan On track, and
-    /// anything else (ended, unpaid, not started, none, blocked) No active plan.
+    /// outside Needs attention): a paused plan Paused, a plan ending soon Ending soon, a running plan On track, a
+    /// blocked client Access blocked (critique B11: a block changes no plan, SUB-010, so their plan is still shown
+    /// and "no active plan" would contradict it), and anything else (ended, unpaid, not started, none) No active plan.
     /// </summary>
     public static ClientPlanStatus PlanStatus(
         IReadOnlyCollection<CoachAttentionKind> flags,
@@ -172,6 +173,7 @@ public static class CoachAttentionPolicy
         planState == ClientPlanState.Paused ? ClientPlanStatus.Paused
         : flags.Contains(CoachAttentionKind.PlanEndingSoon) ? ClientPlanStatus.EndingSoon
         : planState == ClientPlanState.Running ? ClientPlanStatus.OnTrack
+        : planState == ClientPlanState.Blocked ? ClientPlanStatus.AccessBlocked
         : ClientPlanStatus.NoActivePlan;
 
     /// <summary>
