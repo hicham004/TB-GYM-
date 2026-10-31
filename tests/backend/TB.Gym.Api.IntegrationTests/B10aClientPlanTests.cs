@@ -54,7 +54,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var body = await maya.GetStringAsync(OwnPlansUrl);
         using (var document = JsonDocument.Parse(body))
         {
-            Assert.AreEqual("coachName,plans,today", B10aFieldNames(document.RootElement));
+            Assert.AreEqual("coachName,plans,renewal,today", B10aFieldNames(document.RootElement));
             Assert.AreEqual(
                 "cancelledOn,description,features,id,lastDay,name,optionLabel,sessions,startDate,status",
                 B10aFieldNames(document.RootElement.GetProperty("plans")[0]));

@@ -18,7 +18,7 @@ function longDate(date: string, today: string, locale: string): string {
 }
 
 /** A person calls their coach by their first name; the server sends the name in full. */
-function firstName(name: string | null | undefined): string | null {
+export function firstName(name: string | null | undefined): string | null {
   return name?.trim().split(/\s+/)[0] || null;
 }
 

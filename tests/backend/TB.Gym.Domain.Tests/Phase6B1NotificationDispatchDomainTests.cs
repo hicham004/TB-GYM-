@@ -552,7 +552,7 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             Assert.IsTrue(
                 NotificationTemplateCatalog.TryResolve(kind, "en", out var template),
                 $"{kind} has no published English template.");
-            Assert.IsTrue(template.Version is 1 or 2, $"{kind} is at version {template.Version}.");
+            Assert.IsTrue(template.Version is >= 1 and <= 3, $"{kind} is at version {template.Version}.");
             Assert.AreEqual("en", template.Culture);
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Title));
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Body));

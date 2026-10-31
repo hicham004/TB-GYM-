@@ -8,8 +8,8 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Infrastructure.Application;
 
 /// <summary>
-/// A client asks their coach to renew a plan that has run out (ADR 0029). The request and the coach's
-/// in-app notice commit together; PostgreSQL keeps requests at least 7 days apart per client, so a
+/// A client asks their coach to renew a plan that has run out, or from the day it is ending soon (ADR 0029, critique
+/// B14). The request and the coach's in-app notice commit together; PostgreSQL keeps requests at least 7 days apart per client, so a
 /// double tap or two requests at once store one request and one notice, and both callers get it back.
 /// </summary>
 internal sealed class ClientRenewalService(
@@ -43,8 +43,8 @@ internal sealed class ClientRenewalService(
         var tenantId = tenantContext.TenantId;
         var timeZoneId = await TimeZoneAsync(cancellationToken);
         var today = TodayIn(timeZoneId);
-        var ended = await EndedPlanAsync(client.Id, today, cancellationToken);
-        if (ended is null)
+        var plan = await PlanToRenewAsync(client.Id, today, cancellationToken);
+        if (plan is null)
         {
             return new RenewalRequestResult(RenewalRequestStatus.PlanNotEnded);
         }
@@ -57,7 +57,7 @@ internal sealed class ClientRenewalService(
         }
 
         var now = clock.UtcNow;
-        var request = RenewalRequest.Create(tenantId, client.Id, ended.EnrollmentId, client.AssignedCoachUserId, today, now);
+        var request = RenewalRequest.Create(tenantId, client.Id, plan.EnrollmentId, client.AssignedCoachUserId, today, now);
         dbContext.RenewalRequests.Add(request);
         WorkspaceRelationshipNotices.RenewalRequested(
             dbContext, tenantId, timeZoneId, client.AssignedCoachUserId, client.Id, request.Id, now);
@@ -89,34 +89,53 @@ internal sealed class ClientRenewalService(
         DateOnly today,
         CancellationToken cancellationToken)
     {
-        var ended = await EndedPlanAsync(client.Id, today, cancellationToken);
+        var plan = await PlanToRenewAsync(client.Id, today, cancellationToken);
         var last = await dbContext.RenewalRequests.AsNoTracking()
             .Where(item => item.ClientProfileId == client.Id)
             .OrderByDescending(item => item.RequestedOn)
             .Select(item => new RenewalRequestView(item.Id, item.RequestedOn, item.AskAgainFrom))
             .FirstOrDefaultAsync(cancellationToken);
-        var coachName = ended is null
+        var coachName = plan is null
             ? null
             : await dbContext.Users.AsNoTracking()
                 .Where(user => user.Id == client.AssignedCoachUserId)
                 .Select(user => user.DisplayName)
                 .SingleOrDefaultAsync(cancellationToken);
         return new RenewalStatusView(
-            ended is not null,
-            ended?.LastDay,
+            plan is { Ended: true },
+            plan is { Ended: true } ? plan.LastDay : null,
             coachName,
             last,
-            ended is not null && (last is null || today >= last.AskAgainFrom));
+            plan is not null && (last is null || today >= last.AskAgainFrom),
+            plan is { Ended: false } ? plan.LastDay : null,
+            plan?.EnrollmentId);
     }
 
-    /// <summary>The plan that ran out, as Today and Clients read it: a pack beside it asks for nothing (SES-010).</summary>
-    private async Task<EndedPlan?> EndedPlanAsync(Guid clientProfileId, DateOnly today, CancellationToken cancellationToken)
+    /// <summary>
+    /// The plan the client may ask about: the one that ran out, as Today and Clients read it, a pack beside it asking for
+    /// nothing (SES-010), else one in its last days (critique B14).
+    /// </summary>
+    private async Task<PlanToRenew?> PlanToRenewAsync(Guid clientProfileId, DateOnly today, CancellationToken cancellationToken)
     {
         var decisions = await featureAccessService.EvaluateAllAsync(tenantContext.TenantId, clientProfileId, cancellationToken);
         var coachingPlanRanOut = CoachingPlanRunOut.HasPack(decisions) && await CoachingPlanRunOut
             .Among(dbContext.ClientEnrollments.AsNoTracking(), today)
             .AnyAsync(item => item.ClientProfileId == clientProfileId, cancellationToken);
-        return RenewalEligibility.EndedPlan(CoachingPlanRunOut.PlanDecisions(decisions, coachingPlanRanOut));
+        if (RenewalEligibility.EndedPlan(CoachingPlanRunOut.PlanDecisions(decisions, coachingPlanRanOut)) is { } ended)
+        {
+            return new PlanToRenew(ended.EnrollmentId, ended.LastDay, Ended: true);
+        }
+
+        var plans = await dbContext.ClientEnrollments.AsNoTracking()
+            .Where(item => item.ClientProfileId == clientProfileId &&
+                item.Status != EnrollmentStatus.Cancelled &&
+                item.Status != EnrollmentStatus.Expired &&
+                item.EndDateExclusive > today)
+            .Select(item => new PlanNotOver(item.Id, item.SessionCountSnapshot != null, item.StartDate, item.EndDateExclusive))
+            .ToListAsync(cancellationToken);
+        return RenewalEligibility.EndingPlan(decisions, plans, today) is { } ending
+            ? new PlanToRenew(ending.EnrollmentId, ending.LastDay, Ended: false)
+            : null;
     }
 
     private Task<RenewalRequest?> OpenRequestAsync(Guid clientProfileId, DateOnly today, CancellationToken cancellationToken) =>
@@ -138,4 +157,6 @@ internal sealed class ClientRenewalService(
     /// <summary>The workspace's calendar date: the window is counted in its days, not UTC's.</summary>
     private DateOnly TodayIn(string timeZoneId) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)).DateTime);
+
+    private sealed record PlanToRenew(Guid EnrollmentId, DateOnly LastDay, bool Ended);
 }

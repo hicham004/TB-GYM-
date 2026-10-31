@@ -54,13 +54,14 @@ export function noticeTarget(item: NotificationItem, isOwner: boolean): NoticeTa
         commands: ['/training/program'],
         ...(item.workoutExecutionId ? { queryParams: { workout: item.workoutExecutionId } } : {}),
       };
-    // The client's plan, and their coach leaving: their Today, which says where the plan stands and
-    // offers Ask to renew once it has ended.
+    // The client's plan: My plan, which says where it stands and offers Ask to renew (critique B14).
     case 'PaymentRequired':
-    case 'EnrollmentActivated':
     case 'EnrollmentEndingSoon':
     case 'EnrollmentExpired':
     case 'EnrollmentRenewed':
+      return { commands: ['/plan'] };
+    // A plan that has started, as its words say, and their coach leaving: their Today.
+    case 'EnrollmentActivated':
     case 'CoachDeparted':
       return { commands: ['/'] };
     case 'CoachResigned':

@@ -9,7 +9,12 @@ namespace TB.Gym.Modules.Subscriptions;
 /// </summary>
 /// <param name="Today">The workspace's today (SYS-008), the day each plan's status was read on.</param>
 /// <param name="CoachName">The client's coach today, whom a pack's sentence names; null when they have no name.</param>
-public sealed record OwnPlansView(DateOnly Today, IReadOnlyList<OwnPlanView> Plans, string? CoachName = null);
+/// <param name="Renewal">Their renewal state, as Today reads it, for the Ask to renew on the plan it is about (critique B14).</param>
+public sealed record OwnPlansView(
+    DateOnly Today,
+    IReadOnlyList<OwnPlanView> Plans,
+    string? CoachName = null,
+    RenewalStatusView? Renewal = null);
 
 /// <param name="OptionLabel">The price option's name, as sold.</param>
 /// <param name="Description">The plan's description as it stands today: an enrollment keeps no copy of it.</param>
@@ -50,25 +55,30 @@ public static class OwnPlans
 {
     /// <summary>
     /// Every plan not over, in the order they start; once none is left, the one that ended last, a cancelled plan
-    /// counting from the day it was cancelled rather than a last day that may never have come.
+    /// counting from the day it was cancelled rather than a last day that may never have come. The plan a client may
+    /// ask to renew always shows, first when it is over: beside a pack that runs on, nothing else would list it, and its
+    /// notice opens this page (critique B14).
     /// </summary>
     public static IReadOnlyList<ClientEnrollment> Shown(
         IReadOnlyCollection<ClientEnrollment> plans,
         DateOnly today,
-        TimeZoneInfo workspaceZone)
+        TimeZoneInfo workspaceZone,
+        Guid? planToRenew = null)
     {
         var running = plans
             .Where(plan => !IsOver(plan, today))
             .OrderBy(plan => plan.StartDate)
             .ThenBy(plan => plan.CreatedAtUtc)
             .ToArray();
-        return running.Length > 0
+        var shown = running.Length > 0
             ? running
             : plans
                 .OrderByDescending(plan => plan.CancelledOn(workspaceZone) ?? plan.EndDateExclusive.AddDays(-1))
                 .ThenByDescending(plan => plan.CreatedAtUtc)
                 .Take(1)
                 .ToArray();
+        var toRenew = plans.FirstOrDefault(plan => plan.Id == planToRenew);
+        return toRenew is null || shown.Contains(toRenew) ? shown : [toRenew, .. shown];
     }
 
     /// <summary>

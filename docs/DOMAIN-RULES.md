@@ -316,20 +316,28 @@ strategy. Notification jobs have a unique tenant/deduplication key.
 expiration, and renewal notifications in the tenant's time zone. Phase 2 persists these
 outbox jobs; it does not claim email delivery. A dispatcher must re-check state before a
 delayed send. Full payment cancels any still-pending payment-required job, and terminal
-outbox items cannot be dispatched again.
+outbox items cannot be dispatched again. A plan's ending-soon day is three days before its
+exclusive end, one rule for that notice and for asking to renew (SUB-014), so the notice's
+"ask your coach" always finds the button.
 
 **SUB-013** One-time fixed-duration offers are implemented. The recurring billing-model name
 is reserved, but invoice schedules, automatic charging, retries, dunning, grace periods, and
 provider webhook behavior require a later approved design.
 
-**SUB-014** A client may ask to renew only when their whole plan has run out: every feature
-decision is `Expired` or `NoEntitlement`, with at least one `Expired` (ADR 0029). Cancelled, paused,
-partly running, awaiting payment, starting later or blocked plans cannot ask. A pack beside a coaching plan that ran
-out does not count as partly running: Sessions are left out of that reading (SES-010), so the client asks about the
-coaching plan, whatever the pack is doing. Requests are
-append-only and at most one per client in any 7 workspace calendar days, enforced by the
-`EX_RenewalRequests_OnePerWindow` exclusion constraint; a repeated or concurrent request answers
-with the stored one. The request and the coach's in-app notice commit together.
+**SUB-014** A client may ask to renew once their whole plan has run out: every feature
+decision is `Expired` or `NoEntitlement`, with at least one `Expired` (ADR 0029). They may also ask before
+it ends, from its ending-soon day (SUB-012; critique B14, the owner's choice of 2026-10-31 over the rule of
+2026-09-25): every feature decision is `Granted`, `Expired` or `NoEntitlement`, with at least one `Granted`,
+whatever is granted ends within those days, and no plan is booked after it. Today and My plan say both,
+with the same request and the same answer. Cancelled, paused, partly running, awaiting payment, starting
+later, already renewed or blocked plans cannot ask. A pack beside a coaching plan that ran out or is ending
+does not count as partly running: Sessions are left out of that reading (SES-010, SES-002), so the client asks
+about the coaching plan, whatever the pack is doing. With no coaching plan left a pack stands as the plan, and
+a pack booked after it is its renewal. Requests are append-only and at most one per client in any 7 workspace
+calendar days, enforced by the `EX_RenewalRequests_OnePerWindow` exclusion constraint; a repeated or concurrent
+request answers with the stored one. The request and the coach's in-app notice commit together. A request made
+before the end stands once the plan has ended: it counts for a plan from that plan's ending-soon day, so the
+coach's screens read it from the day the plan ends, and until then the plan reads as ending soon (CLI-018).
 
 **SUB-015** Clients on a plan (R5.1a, decided 2026-10-08). The product catalog counts, for each
 product and each price option, the caller's clients (ADR 0026: a Coach their own, the Owner every client
@@ -358,7 +366,9 @@ client is named beside it.
 
 **SUB-017** A client's own plans (critique B10a, `GET /api/client-plan/me`, read through `CurrentFor`, so a returning
 client reads their new profile's plans alone). Every plan not over shows, in the order they start; once none is left,
-the one that ended last, a cancelled plan counting from the day it was cancelled. Each says its name and its price
+the one that ended last, a cancelled plan counting from the day it was cancelled. The plan the client may ask to renew
+always shows, first when it is over (critique B14): beside a pack that runs on nothing else would list it, and the plan
+notices open this page. The read carries their renewal state (SUB-014). Each says its name and its price
 option's name as sold, what's included, its first and last covered days, where it stands on the workspace's today, and
 the plan's description as it stands today, since an enrollment keeps no copy of it. A block speaks only of what still
 runs: a plan that is over reads as over. No price, payment or reason the coach typed reaches the client through this
@@ -399,7 +409,8 @@ do. Anything else ticked on a pack keeps its own overlap rule. One active option
 (SUB-008), active at once when free, keeping the count it was sold with. A renewal is a new pack with a full count;
 the old one keeps its ledger. A pack-only client is billable as any covered client (PBL-002 as it stands). Beside a
 coaching plan that runs or is to come, a pack never stands for the client's plan: the Clients row, CLI-018's Ending
-soon and the plan in front of Service & access stay the coaching plan's. Nor does it after one has run out (SES-010).
+soon, the plan in front of Service & access and what the client asks to renew (SUB-014) stay the coaching plan's. Nor
+does it after one has run out (SES-010).
 
 **SES-003** Each pack has an append-only ledger: Issued, once, when it becomes active, with the count it was sold
 with; Held (the workspace day, who held it and who recorded it, a note only the team reads); Charged (a no-show or
@@ -1607,8 +1618,11 @@ named when it started, read when the row is written and cut to 60 characters, ne
 (audit UIQ-21). A name is filled in as plain text in one pass, so no name reaches another's token.
 Each template carries its own version: the glossary pass of audit COACH-12 (2026-10-21) published
 version 2 of the plan, team and note notices in the screens' words, and every notice leads somewhere
-(a client's plan or coach leaving to their Today, a client leaving to Former clients for the owner and
-Clients for a coach, a coach leaving to Clients).
+(a client's plan to My plan, critique B14, and "Your plan has started" and their coach leaving to their
+Today, where the first workout is, a client leaving to Former clients for the owner and Clients for a coach,
+a coach leaving to Clients). Critique B14 published version 3 of the next-plan notice and version 2 of its
+session pack twin, which name My plan, and version 2 of the renewal request, which no longer says the plan
+has ended, as a client may ask before it does. A pack's notices share these kinds and open the same pages.
 
 **NOT-007** A notification belongs to one recipient in one workspace. Only that recipient may list
 or mark it, and workspace membership alone — including the owner's — grants no access to another

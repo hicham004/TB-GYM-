@@ -22,6 +22,8 @@ import { ClientToday } from './client-today';
 const running: RenewalStatus = {
   planEnded: false,
   endedOn: null,
+  endsOn: null,
+  planId: null,
   coachName: null,
   lastRequest: null,
   canAsk: false,
@@ -29,6 +31,8 @@ const running: RenewalStatus = {
 const ended: RenewalStatus = {
   planEnded: true,
   endedOn: '2026-10-04',
+  endsOn: null,
+  planId: 'plan-1',
   coachName: 'Hicham Haddad',
   lastRequest: null,
   canAsk: true,
@@ -495,6 +499,91 @@ describe('ClientToday', () => {
       expect(host.querySelector('.today-waiting')).toBeNull();
       expect(host.querySelector('section.today-week')).not.toBeNull();
       expect(host.querySelector('.today-card .today-skeleton')).not.toBeNull();
+    });
+  });
+
+  describe('in a plan’s last days (critique B14)', () => {
+    const endsSoon: RenewalStatus = {
+      ...running,
+      endsOn: '2026-09-24',
+      planId: 'plan-1',
+      coachName: 'Hicham Haddad',
+      canAsk: true,
+    };
+
+    it('keeps the workout and offers to ask under it', async () => {
+      const { host, read } = await render({
+        api: { getOwnRenewalStatus: vi.fn(() => of(endsSoon)) },
+      });
+
+      expect(
+        host.querySelector('#today-renewal-heading')?.textContent?.replace(/\s+/g, ' ').trim(),
+      ).toBe('Your coaching plan with Hicham ends on Thu 24 Sep.');
+      const hero = host.querySelector('.today-card--hero');
+      expect(hero).not.toBeNull();
+      const card = host.querySelector('app-today-renewal');
+      expect(hero!.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(read()).toContain('Ask to renew');
+    });
+
+    it('leaves the coach out when they have no name', async () => {
+      const { host } = await render({
+        api: { getOwnRenewalStatus: vi.fn(() => of({ ...endsSoon, coachName: null })) },
+      });
+
+      expect(
+        host.querySelector('#today-renewal-heading')?.textContent?.replace(/\s+/g, ' ').trim(),
+      ).toBe('Your coaching plan ends on Thu 24 Sep.');
+    });
+
+    it('asks once, says so, and the workout stays', async () => {
+      const sent: RenewalStatus = {
+        ...endsSoon,
+        canAsk: false,
+        lastRequest: asked.lastRequest,
+      };
+      const { fixture, host, api } = await render({
+        api: {
+          getOwnRenewalStatus: vi.fn(() => of(endsSoon)),
+          requestRenewal: vi.fn(() => of(sent)),
+        },
+      });
+
+      host.querySelector<HTMLButtonElement>('app-today-renewal button')!.click();
+      await settle(fixture);
+
+      expect(api.requestRenewal).toHaveBeenCalledTimes(1);
+      expect(
+        host
+          .querySelector('app-today-renewal [role="status"]')
+          ?.textContent?.replace(/\s+/g, ' ')
+          .trim(),
+      ).toBe('Renewal request sent on Mon 5 Oct. You can ask again from Mon 12 Oct.');
+      expect(host.querySelector('app-today-renewal button')).toBeNull();
+      expect(host.querySelector('.today-card--hero')).not.toBeNull();
+    });
+
+    it('holds what sits under the workout until the answer is in', async () => {
+      const pending = new Subject<RenewalStatus>();
+      const { fixture, host } = await render({
+        api: { getOwnRenewalStatus: vi.fn(() => pending) },
+      });
+
+      expect(host.querySelector('.today-below')?.classList).toContain('today-below--waiting');
+      expect(host.querySelector('.today-card--hero')).not.toBeNull();
+
+      pending.next(endsSoon);
+      pending.complete();
+      await settle(fixture);
+
+      expect(host.querySelector('.today-below')?.classList).not.toContain('today-below--waiting');
+      expect(host.querySelector('app-today-renewal')).not.toBeNull();
+    });
+
+    it('shows no card for a plan that is not ending', async () => {
+      const { host } = await render();
+
+      expect(host.querySelector('app-today-renewal')).toBeNull();
     });
   });
 

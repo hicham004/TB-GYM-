@@ -30,7 +30,9 @@ async function stillTooSmall(page: Page, nodes: readonly AxeNode[]): Promise<Axe
   const kept: AxeNode[] = [];
   for (const node of nodes) {
     const selector = node.target.join(' ');
-    const neighbours = [...node.any, ...node.all, ...node.none]
+    // What covers it is the size check's to say; the offset check names whatever sits nearest, a next row too.
+    const neighbours = node.any
+      .filter((check) => check.id === 'target-size')
       .flatMap((check) => check.relatedNodes ?? [])
       .map((related) => related.target.join(' '));
     const onlyTheTabBar =

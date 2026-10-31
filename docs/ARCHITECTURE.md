@@ -685,6 +685,12 @@ ledger's coach-and-day index. A pack's notices keep the plan's kinds: the dispat
 it already re-reads, through `NotificationTemplateCatalog.TryResolveForEnrollment` (SES-009), so nothing already
 scheduled needs rewriting.
 
+Critique B14 adds no table, route or migration. `RenewalEligibility` gains the plan a client may ask about before
+its end, and `EndingSoonDay`, the one rule for that day and the ending-soon notice's. `GET /api/client-renewal/me`
+names that plan and its last day, and `GET /api/client-plan/me` carries the same answer, read by
+`IClientRenewalService`, so My plan puts Ask to renew on the plan it is about and lists one that is over (SUB-017). The
+web's `RenewalAsk` is the one button and answer on Today and My plan. The plan notices open `/plan`, by kind, on the web.
+
 Critique B12 adds who recorded a session beside who held it: a nullable `RecordedByUserId` on the ledger, with its
 tenant-composite foreign key to the membership and a check, while `CoachUserId` stays the person a session counts for,
 so every reader and the coach-and-day index stand as they were and a row from before B12 needs no backfill. The route

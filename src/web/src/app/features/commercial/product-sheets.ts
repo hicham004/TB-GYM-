@@ -546,13 +546,13 @@ export class ProductSheet {
     if (this.isPack()) {
       const sessions = this.option().sessions;
       return sessions
-        ? $localize`Left empty it’s called “${sessionsName(sessions)}:name:”. Name it when that isn’t the point, like “Student rate”.`
-        : $localize`Left empty it’s called by its number of sessions. Name it when that isn’t the point, like “Student rate”.`;
+        ? $localize`Your client sees this name. Left empty it’s called “${sessionsName(sessions)}:name:”. Name it when that isn’t the point, like “Student rate”.`
+        : $localize`Your client sees this name. Left empty it’s called by its number of sessions. Name it when that isn’t the point, like “Student rate”.`;
     }
     const length = optionLength(this.option());
     return length
-      ? $localize`Left empty it’s called by its length, “${length}:length:”. Name it when the length isn’t the point, like “Student rate”.`
-      : $localize`Left empty it’s called by its length. Name it when the length isn’t the point, like “Student rate”.`;
+      ? $localize`Your client sees this name. Left empty it’s called by its length, “${length}:length:”. Name it when the length isn’t the point, like “Student rate”.`
+      : $localize`Your client sees this name. Left empty it’s called by its length. Name it when the length isn’t the point, like “Student rate”.`;
   });
   protected readonly optionNameShown = linkedSignal(() => this.mode().kind !== 'new');
 

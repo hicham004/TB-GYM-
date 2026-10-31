@@ -87,7 +87,7 @@ function coachInbox(): Notice[] {
       'c2',
       'RenewalRequested',
       'Karl Nassar asked to renew',
-      "This client's coaching plan has ended. Open the client's page to set up a renewal.",
+      "Open the client's page to set up a renewal.",
       at(0, 8, 5),
       false,
       { clientProfileId: 'karl' },
@@ -300,11 +300,11 @@ for (const width of [390, 1440]) {
       await expect(
         page.getByRole('link', { name: /Your coach left a note on Lower A/ }),
       ).toHaveAttribute('href', '/training/program?workout=workout-3');
-      // A plan notice opens the client's Today, once its folded day is opened (audit COACH-12, UIQ-21).
+      // A plan notice opens My plan (critique B14), once its folded day is opened (audit UIQ-21).
       const ended = page.getByRole('link', { name: /Your plan ends soon/ });
       await expect(ended).toBeHidden();
       await page.locator('.day-toggle').last().click();
-      await expect(ended).toHaveAttribute('href', '/');
+      await expect(ended).toHaveAttribute('href', '/plan');
       await expectNoHorizontalOverflow(page);
       await axe(page);
       await page.screenshot({

@@ -133,15 +133,19 @@ describe('noticeTarget', () => {
     });
   });
 
-  it('opens every plan notice, and a coach leaving, on the client’s Today (audit COACH-12)', () => {
+  it('opens the plan notices on My plan (critique B14)', () => {
     for (const kind of [
       'PaymentRequired',
-      'EnrollmentActivated',
       'EnrollmentEndingSoon',
       'EnrollmentExpired',
       'EnrollmentRenewed',
-      'CoachDeparted',
     ] as const) {
+      expect(noticeTarget(notice(kind, at, { kind }), false)).toEqual({ commands: ['/plan'] });
+    }
+  });
+
+  it('opens “Your plan has started” and a coach leaving on the client’s Today', () => {
+    for (const kind of ['EnrollmentActivated', 'CoachDeparted'] as const) {
       expect(noticeTarget(notice(kind, at, { kind }), false)).toEqual({ commands: ['/'] });
     }
   });

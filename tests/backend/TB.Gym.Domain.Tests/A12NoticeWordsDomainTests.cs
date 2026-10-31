@@ -34,8 +34,14 @@ public sealed class A12NoticeWordsDomainTests
         {
             Assert.IsTrue(NotificationTemplateCatalog.TryResolve(kind, "en", out var template), kind.ToString());
             // A template changed only by this pass moves to version 2; the others keep the wording, and
-            // the version, they were delivered with.
-            Assert.AreEqual(Reworded.Contains(kind) ? 2 : 1, template.Version, kind.ToString());
+            // the version, they were delivered with. Critique B14 moved two of them on.
+            var expected = kind switch
+            {
+                CommercialNotificationKind.EnrollmentRenewed => 3,
+                CommercialNotificationKind.RenewalRequested => 2,
+                _ => Reworded.Contains(kind) ? 2 : 1,
+            };
+            Assert.AreEqual(expected, template.Version, kind.ToString());
             if (!Reworded.Contains(kind))
             {
                 continue;

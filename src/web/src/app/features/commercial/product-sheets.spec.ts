@@ -128,7 +128,7 @@ describe('ProductSheet', () => {
       const name = field(host, 'Name for this price (optional)');
       expect(document.activeElement).toBe(name);
       expect(describedText(name)).toBe(
-        'Left empty it’s called by its length, “12 weeks”. Name it when the length isn’t the point, like “Student rate”.',
+        'Your client sees this name. Left empty it’s called by its length, “12 weeks”. Name it when the length isn’t the point, like “Student rate”.',
       );
       expect(() => button(host, 'Name this price option')).toThrow();
       fill(host, 'Name for this price (optional)', 'Student rate');
@@ -235,7 +235,7 @@ describe('ProductSheet', () => {
       press(host, 'Name this price option');
       await settle(fixture);
       expect(describedText(field(host, 'Name for this price (optional)'))).toBe(
-        'Left empty it’s called by its length, “30 days”. Name it when the length isn’t the point, like “Student rate”.',
+        'Your client sees this name. Left empty it’s called by its length, “30 days”. Name it when the length isn’t the point, like “Student rate”.',
       );
 
       // A length the server would refuse is refused here, in days.
@@ -275,7 +275,7 @@ describe('ProductSheet', () => {
       const { fixture, host, api } = await render({ kind: 'option', product: ONLINE });
       const name = field(host, 'Name for this price (optional)');
       const unnamed = (length: string) =>
-        `Left empty it’s called by its length${length}. Name it when the length isn’t the point, like “Student rate”.`;
+        `Your client sees this name. Left empty it’s called by its length${length}. Name it when the length isn’t the point, like “Student rate”.`;
       expect(describedText(name)).toBe(unnamed(', “12 weeks”'));
 
       fill(host, 'Length in weeks', '4');
@@ -663,6 +663,18 @@ describe('ProductSheet', () => {
       const { host } = await render({ kind: 'new' });
       expect(segment(host, 'What you sell', 'Coaching plan').checked).toBe(true);
       expect(host.querySelector('[name="sessions"]')).toBeNull();
+    });
+
+    it('tells the coach their client sees a pack’s price name too (critique B14)', async () => {
+      const { fixture, host } = await render({ kind: 'new' });
+
+      await asPack(fixture, host);
+      press(host, 'Name this price option');
+      await settle(fixture);
+
+      expect(describedText(field(host, 'Name for this price (optional)'))).toBe(
+        'Your client sees this name. Left empty it’s called “10 sessions”. Name it when that isn’t the point, like “Student rate”.',
+      );
     });
 
     it('creates a pack: ten sessions over 90 days, its sessions always included', async () => {

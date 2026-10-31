@@ -51,6 +51,26 @@ public sealed class B10aOwnPlansDomainTests
     }
 
     [TestMethod]
+    public void ThePlanAClientMayAskToRenewAlwaysShowsFirstWhenItIsOver()
+    {
+        var ended = Plan("Ended", Today.AddDays(-28), weeks: 2, free: true);
+        var pack = Plan("Pack", Today.AddDays(-20), weeks: 8, free: true);
+
+        Assert.AreEqual("Pack", OwnPlans.Shown([ended, pack], Today, Beirut).Single().ProductNameSnapshot);
+        Assert.AreEqual(
+            "Ended | Pack",
+            string.Join(" | ", OwnPlans.Shown([ended, pack], Today, Beirut, ended.Id).Select(plan => plan.ProductNameSnapshot)));
+        Assert.AreEqual(
+            "Pack",
+            OwnPlans.Shown([ended, pack], Today, Beirut, pack.Id).Single().ProductNameSnapshot,
+            "A plan already listed is not listed twice.");
+        Assert.AreEqual(
+            "Pack",
+            OwnPlans.Shown([pack], Today, Beirut, ended.Id).Single().ProductNameSnapshot,
+            "A plan that is not theirs is never listed.");
+    }
+
+    [TestMethod]
     public void AClientWithNoPlanIsShownNone() =>
         Assert.IsEmpty(OwnPlans.Shown([], Today, Beirut));
 

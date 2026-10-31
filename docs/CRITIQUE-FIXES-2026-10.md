@@ -612,9 +612,40 @@ Choices the rows from B12 on made, kept as built until the owner answers:
 - B13 · A pack with more than sessions ticked. Built: only Sessions stops counting, as the row says, so Training or
   Messaging ticked on a pack still runs and the client reads Running beside the coaching plan that ended. The other way:
   nothing on a pack counts. Recommendation: as built, with B10b's line on what a pack can include.
-- B13 · My plan while a pack runs. Built: unchanged (SUB-017): only plans not over show, so the ended coaching plan is
-  not there while Today says it ended. The other way: list it, with its Go to Today. Recommendation: that way, with B14,
-  whose card would otherwise never show for these clients.
+- B14 · My plan while a pack runs (B13's line, taken up here). Its recommended way is built, since the plan notices now
+  open My plan and "Your plan has ended" would otherwise lead to a page with nothing to ask: the plan a client may ask to
+  renew always shows, first when it is over, with Ask to renew, above the pack (SUB-017). With the plan and the pack both
+  over both show, and only the plan the ask is about has the button. The other way: unchanged, the ask on Today alone.
+  Recommendation: as built.
+- B14 · Which day it opens. The row says both "three days before the plan's last day" and "the day the ending-soon notice
+  goes out", which are a day apart: the notice goes three days before the plan's end, so two before its last day. Built:
+  the notice's day, by one rule for both, so a last day of Sat 31 Oct opens on Thu 29 Oct and the notice's "ask your
+  coach" always finds the button. The other way: a day earlier, before the notice. Recommendation: as built.
+- B14 · Where the card sits on Today while the plan runs. Built: under the day's workout and above Also today, as the
+  workout stays the day's one main action; it is drawn with Also today, so nothing moves when it arrives. The other way:
+  above the workout. Recommendation: as built.
+- B14 · Where the button sits on My plan. Built: on the plan's own coloured head, where Go to Today was, under the plan's
+  line; once asked, the answer replaces "If you'd like to keep going…". Go to Today stays only on an ended plan with
+  nothing to ask, such as one beside a cancelled plan. The other way: Today's whole card above the plans. Recommendation:
+  as built.
+- B14 · A coach's screens before the end. The row asks for the same notice, so that is all that changed: until the plan
+  ends it stays under Ending soon, Service & access offers Renew plan without saying they asked, and Asked to renew shows
+  from the day it ends, the early request counting. The other way: "Asked to renew on …" on the Ending soon row and on
+  Service & access from the day they ask. Recommendation: that way, a small row, since a coach who opens the notice reads
+  nothing there about the request.
+- B14 · A pack that stands as the plan. Built: on My plan the pack keeps its own line ("7 of 10 sessions with Karim left,
+  until 31 October") and gains the button, while Today's card says "Your coaching plan with Karim ends on …", as it has
+  said ended since B10c. The other way: "Your 1-on-1 sessions with Karim end on …" on Today, ended and ending. It needs one
+  field on the read. Recommendation: that way, as SES-009 gave a pack its own words.
+- B14 · Asking goes by the calendar alone. Built: a plan of one or two days hears no ending-soon notice (it would come
+  before its first day) but may ask from its first day, and a pack with no session left may ask though its notice is
+  suppressed. The other way: open only once a notice was sent. Recommendation: as built.
+- B14 · The words the row did not give. Built: the new sentence takes the coach's first name, as the row writes it and
+  as a pack's line does, while "… ended on …" keeps the full name it has always had (the other way: the first name there
+  too; recommended); "Your coaching plan ends on Sat 31 Oct." for a coach with no name; the coach's notice now reads only "Open the client's page to set up a renewal.", as "This client's coaching plan has ended."
+  would be untrue before the end; a refused request says "A renewal can be asked for only from three days before the
+  whole plan ends."; "Your client sees this name." leads the price's help, before "Left empty it's called …".
+  Recommendation: as built.
 
 Waits for Toufic's answers (section 1), kept as built until then:
 

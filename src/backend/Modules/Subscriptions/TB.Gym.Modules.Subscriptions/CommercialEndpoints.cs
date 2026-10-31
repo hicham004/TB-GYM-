@@ -318,7 +318,7 @@ public static class CommercialEndpoints
                 RenewalRequestStatus.PlanNotEnded => Results.Conflict(new
                 {
                     code = "plan_not_ended",
-                    message = "A renewal can be asked for only once the whole plan has run out.",
+                    message = "A renewal can be asked for only from three days before the whole plan ends.",
                 }),
                 _ => Results.NotFound(),
             };

@@ -215,17 +215,43 @@ const PERSONAL_TRAINING = {
   },
 };
 
+/** The client's renewal state (critique B14), as `GET /api/client-plan/me` carries it. */
+const ASK = {
+  planEnded: false,
+  endedOn: null,
+  endsOn: '2026-10-17',
+  planId: ONLINE_COACHING.id,
+  coachName: 'Hicham Haddad',
+  lastRequest: null,
+  canAsk: true,
+};
+
 async function openPlan(
   page: Page,
   plans: object[],
-  options: Parameters<typeof mockClient>[1] & { width?: number; height?: number } = {},
+  options: Parameters<typeof mockClient>[1] & {
+    width?: number;
+    height?: number;
+    renewal?: object;
+  } = {},
 ) {
   await page.setViewportSize({ width: options.width ?? 390, height: options.height ?? 844 });
   await mockClient(page, {
     ...options,
     extra: {
       'GET /api/client-plan/me': (route) =>
-        json(route, 200, { today: '2026-10-15', plans, coachName: 'Hicham Haddad' }),
+        json(route, 200, {
+          today: '2026-10-15',
+          plans,
+          coachName: 'Hicham Haddad',
+          renewal: options.renewal ?? null,
+        }),
+      'POST /api/client-renewal/me/requests': (route) =>
+        json(route, 201, {
+          ...options.renewal,
+          canAsk: false,
+          lastRequest: { id: 'request', requestedOn: '2026-10-15', askAgainFrom: '2026-10-22' },
+        }),
     },
   });
   await page.goto('/plan');
@@ -375,6 +401,104 @@ test('My plan keeps a long name and 200% text inside the page', async ({ page })
   await expectNoHorizontalOverflow(page);
   await expect(page.getByText('5 Oct 2026 – 1 Mar 2027')).toBeVisible();
   await page.screenshot({ path: 'test-results/b10a-plan-200-390.png', fullPage: true });
+});
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`My plan at ${width}px offers Ask to renew in a plan's last days`, async ({ page }) => {
+    await openPlan(page, [{ ...ONLINE_COACHING, lastDay: '2026-10-17' }], {
+      width,
+      height,
+      renewal: ASK,
+    });
+
+    const plan = page.getByRole('region', { name: 'Online Coaching' });
+    await expect(
+      plan.getByText('Your coaching plan with Hicham ends on Sat 17 Oct.'),
+    ).toBeVisible();
+    await expect(plan.getByRole('link', { name: 'Go to Today' })).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/b14-plan-ending-${width}.png`, fullPage: true });
+
+    await plan.getByRole('button', { name: 'Ask to renew' }).click();
+    const sent = plan.getByRole('status');
+    await expect(sent).toHaveText(
+      'Renewal request sent on Thu 15 Oct. You can ask again from Thu 22 Oct.',
+    );
+    await expect(sent).toBeFocused();
+    await expect(plan.getByRole('button', { name: 'Ask to renew' })).toHaveCount(0);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/b14-plan-asked-${width}.png`, fullPage: true });
+  });
+
+  test(`My plan at ${width}px asks about a plan that ran out, in place of Go to Today`, async ({
+    page,
+  }) => {
+    await openPlan(page, [{ ...ONLINE_COACHING, status: 'Expired', lastDay: '2026-10-10' }], {
+      width,
+      height,
+      renewal: { ...ASK, planEnded: true, endedOn: '2026-10-10', endsOn: null },
+    });
+
+    await expect(page.getByText('Ended', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ask to renew' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Go to Today' })).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/b14-plan-ended-${width}.png`, fullPage: true });
+  });
+}
+
+test('Ask to renew reads in dark mode, and 200% text stays inside the page', async ({ page }) => {
+  await openPlan(page, [{ ...ONLINE_COACHING, lastDay: '2026-10-17' }], {
+    renewal: ASK,
+    user: { preferredThemeMode: 'dark' },
+  });
+
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await page.screenshot({ path: 'test-results/b14-plan-ending-dark-390.png', fullPage: true });
+
+  await page.getByRole('button', { name: 'Ask to renew' }).click();
+  await expect(page.getByRole('status')).toContainText('Renewal request sent');
+  await expectNoAxeViolations(page);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '200%';
+  });
+  await expectNoHorizontalOverflow(page);
+});
+
+test('the coaching plan that ended leads, with the ask, beside a pack that runs on', async ({
+  page,
+}) => {
+  await openPlan(
+    page,
+    [{ ...ONLINE_COACHING, status: 'Expired', lastDay: '2026-10-10' }, PERSONAL_TRAINING],
+    { renewal: { ...ASK, planEnded: true, endedOn: '2026-10-10', endsOn: null } },
+  );
+
+  const plans = page.locator('section.plan');
+  await expect(plans.first().getByRole('button', { name: 'Ask to renew' })).toBeVisible();
+  await expect(plans.nth(1).getByRole('button', { name: 'Ask to renew' })).toHaveCount(0);
+  await expect(plans.nth(1).getByText('7 of 10 sessions with Hicham left')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await page.screenshot({ path: 'test-results/b14-plan-beside-pack-390.png', fullPage: true });
+});
+
+test('a pack that stands as the plan keeps its own line and gains the button', async ({ page }) => {
+  await openPlan(page, [{ ...PERSONAL_TRAINING, lastDay: '2026-10-17' }], {
+    renewal: { ...ASK, planId: PERSONAL_TRAINING.id },
+  });
+
+  const pack = page.getByRole('region', { name: 'Personal training' });
+  await expect(pack.getByText('7 of 10 sessions with Hicham left, until 17 October')).toBeVisible();
+  await expect(pack.getByText('Your coaching plan')).toHaveCount(0);
+  await expect(pack.getByRole('button', { name: 'Ask to renew' })).toBeVisible();
+  await expectNoAxeViolations(page);
 });
 
 test('a plan that ran out says what to do next, and Today is one tap away', async ({ page }) => {

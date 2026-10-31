@@ -2882,6 +2882,7 @@ export type OwnPlansView = {
   today: string;
   plans: Array<OwnPlanView>;
   coachName?: null | string;
+  renewal?: null | RenewalStatusView;
 };
 
 export type OwnPlanView = {
@@ -3702,6 +3703,8 @@ export type RenewalStatusView = {
   coachName: null | string;
   lastRequest: null | RenewalRequestView;
   canAsk: boolean;
+  endsOn?: null | string;
+  planId?: null | string;
 };
 
 export type RenewEnrollmentRequest = {

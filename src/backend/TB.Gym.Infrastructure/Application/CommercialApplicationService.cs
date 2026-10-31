@@ -17,7 +17,8 @@ internal sealed partial class CommercialApplicationService(
     ITenantContext tenantContext,
     ICoachingFeatureAccessService featureAccessService,
     IOptions<NotificationEmailOptions> notificationEmailOptions,
-    CoachClientScope coachClientScope)
+    CoachClientScope coachClientScope,
+    IClientRenewalService clientRenewal)
     : ICommercialApplicationService
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
@@ -673,7 +674,8 @@ internal sealed partial class CommercialApplicationService(
             .Where(item => item.ClientProfileId == client.Id)
             .ToListAsync(cancellationToken);
         var (zone, today) = await GetWorkspaceDayAsync(cancellationToken);
-        var shown = OwnPlans.Shown(enrollments, today, zone);
+        var renewal = await clientRenewal.GetOwnStatusAsync(cancellationToken);
+        var shown = OwnPlans.Shown(enrollments, today, zone, renewal?.PlanId);
         var packs = await LoadSessionPacksAsync(shown, today, zone, cancellationToken);
         var coachName = packs.Count == 0
             ? null
@@ -702,7 +704,8 @@ internal sealed partial class CommercialApplicationService(
                     plan.Entitlements.Select(item => item.Feature).Order().ToArray(),
                     packs.TryGetValue(plan.Id, out var pack) ? OwnPlans.SessionsOf(pack) : null))
                 .ToArray(),
-            string.IsNullOrWhiteSpace(coachName) ? null : coachName);
+            string.IsNullOrWhiteSpace(coachName) ? null : coachName,
+            renewal);
     }
 
     private async Task<CommercialCommandResult> AssignCoreAsync(
@@ -1363,7 +1366,7 @@ internal sealed partial class CommercialApplicationService(
 
         // Three days before the end, and never before the plan's first day: a plan of one or two days,
         // which the sheets sell since audit A16b, is not told it ends soon before it begins.
-        var endingDay = enrollment.EndDateExclusive.AddDays(-3);
+        var endingDay = RenewalEligibility.EndingSoonDay(enrollment.EndDateExclusive);
         var endingAtUtc = ToUtc(endingDay, new TimeOnly(9, 0), context.TimeZoneId);
         if (endingDay >= enrollment.StartDate && endingAtUtc > clock.UtcNow)
         {

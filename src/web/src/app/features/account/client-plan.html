@@ -24,6 +24,7 @@
     }
     @default {
       @for (plan of plans(); track plan.id) {
+        @let renewalHere = renewalOf(plan.id);
         <!-- Named with its dates too: two packs of one plan share a name. -->
         <section class="plan" [attr.aria-labelledby]="'plan-' + plan.id + ' when-' + plan.id">
           <div class="plan-head">
@@ -35,10 +36,34 @@
             @if (plan.sessions?.line; as line) {
               <p class="plan-sessions">{{ line }}</p>
             }
-            @if (plan.note; as note) {
-              <p class="plan-note">{{ note }}</p>
+            <!-- Asked, the answer below replaces the invitation. -->
+            @if (plan.note && (renewalHere?.canAsk ?? true)) {
+              <p class="plan-note">{{ plan.note }}</p>
             }
-            @if (plan.ended) {
+            @if (renewalHere; as status) {
+              <!-- A pack's own line already says when it ends and with whom. -->
+              @if (status.endsOn && !plan.sessions) {
+                <p class="plan-note">
+                  @if (firstName(status.coachName); as coach) {
+                    <ng-container i18n
+                      >Your coaching plan with <bdi dir="auto">{{ coach }}</bdi> ends on
+                      <span class="plan-dates">{{ status.endsOn | date: 'EEE d MMM' }}.</span>
+                    </ng-container>
+                  } @else {
+                    <ng-container i18n
+                      >Your coaching plan ends on
+                      <span class="plan-dates">{{ status.endsOn | date: 'EEE d MMM' }}.</span>
+                    </ng-container>
+                  }
+                </p>
+              }
+              <app-renewal-ask
+                class="plan-action"
+                surface="brand"
+                [status]="status"
+                (statusChange)="renewal.set($event)"
+              />
+            } @else if (plan.ended && !renewal()?.planId) {
               <a appButton routerLink="/" variant="accent" size="touch" class="plan-action" i18n
                 >Go to Today</a
               >

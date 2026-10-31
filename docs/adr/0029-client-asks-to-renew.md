@@ -1,7 +1,8 @@
 # ADR 0029: A client asks their coach to renew
 
 Status: accepted, 2026-09-25 (Step 3B2). Amended 2026-10-31: a pack beside a coaching plan that ran out no longer keeps
-the button away (critique B13, ADR 0038, SES-010).
+the button away (critique B13, ADR 0038, SES-010), and a client may ask from the day their plan's ending-soon notice
+goes out, on My plan as on Today (critique B14, the owner's choice, overriding "only when the whole plan has run out").
 
 ## Context
 
@@ -15,13 +16,19 @@ keeps counting that client (ADR 0028).
 Business rules, decided by the product owner on 2026-09-25:
 
 - **Today says "Your coaching plan with {coach} ended on {date}."** with an **Ask to renew** button.
-  The date is the plan's last covered day. The wording uses no pronouns.
-- **Only when the whole plan has run out**: every feature the client had has passed its end date, and
+  The date is the plan's last covered day. The wording uses no pronouns. My plan has the same button on
+  the plan, the same request and the same answer (critique B14).
+- **Once the whole plan has run out**: every feature the client had has passed its end date, and
   nothing else is waiting. No button when the coach cancelled or paused the plan, when one feature
   still runs, when a renewal awaits payment or starts later, or when the relationship is blocked.
   The rule is `RenewalEligibility`, read from the same access decisions every feature uses. Sessions
   count as no feature here once a coaching plan has run out, whatever a pack beside it is doing, so
   the client asks about the coaching plan (`CoachingPlanRunOut`, critique B13).
+- **Or from the plan's ending-soon day** (critique B14): the day its ending-soon notice goes out, three
+  days before its end, saying "Your coaching plan with {coach} ends on {date}.", so the notice's "ask your
+  coach" finds the button. One rule sets the day for both (`RenewalEligibility.EndingSoonDay`). The same
+  plans stay closed, and so does one already renewed, which a decision cannot show: the rule also reads the
+  plans not over. Beside a coaching plan a pack is left out, as it never stands for the client's plan.
 - **The coach is told in-app, naming the client** ("Maya Rahman asked to renew"), with a link to the
   client's page. This is the one notification whose title names someone: a coach with many clients
   could not act on "a client asked". The name is read when the inbox row is written, never stored in
@@ -33,8 +40,9 @@ Business rules, decided by the product owner on 2026-09-25:
 
 ## Implementation
 
-- `subscriptions."RenewalRequests"` is append-only (trigger) and holds the client, the ended
-  enrollment, the coach told, and `[RequestedOn, AskAgainFrom)`. A PostgreSQL GiST exclusion
+- `subscriptions."RenewalRequests"` is append-only (trigger) and holds the client, the enrollment asked
+  about (`EndedEnrollmentId`, named before a client could ask early), the coach told, and
+  `[RequestedOn, AskAgainFrom)`. A PostgreSQL GiST exclusion
   constraint (`EX_RenewalRequests_OnePerWindow`) keeps two windows of one client from overlapping, so
   a double tap or two concurrent requests store one request; the loser answers with the winner.
 - The request and its notice commit together: the notice is an in-app-only outbox intent
@@ -48,7 +56,9 @@ Business rules, decided by the product owner on 2026-09-25:
 
 ## Consequences
 
-- A coach sees who wants to continue without the client needing an open channel.
+- A coach sees who wants to continue without the client needing an open channel. A request made before
+  the end reaches them as a notice; their screens read it from the day the plan ends, and until then the plan
+  reads as ending soon.
 - A client whose plan the coach cancelled cannot ask; a later cancelled-then-expired history is read
   the same way the access rules read it.
 - Not built: showing open renewal requests on the coach's client page or client list, and any

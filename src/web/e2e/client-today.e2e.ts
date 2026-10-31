@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
+import { personFacing } from './axe-target-size';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -171,6 +172,13 @@ const planEnded = {
   coachName: 'Hicham Haddad',
   canAsk: true,
 };
+const planEnding = {
+  ...planRunning,
+  endsOn: '2026-09-23',
+  planId: 'plan',
+  coachName: 'Hicham Haddad',
+  canAsk: true,
+};
 const renewalAsked = {
   ...planEnded,
   lastRequest: { id: 'request', requestedOn: '2026-10-05', askAgainFrom: '2026-10-12' },
@@ -277,6 +285,8 @@ async function openToday(
     path?: string;
     /** The whole plan has run out (ADR 0029): Today shows the renewal card instead of training. */
     ended?: boolean;
+    /** In the plan's last days (critique B14): the card sits under the day's workout. */
+    ending?: boolean;
     /** What `GET /api/client-plan/me` answers, for a client with sessions in their plan. */
     plans?: object[];
   } = {},
@@ -305,8 +315,15 @@ async function openToday(
       'GET /api/checkins/me/assignments': (route: Route) => json(route, 200, checkIns),
       'GET /api/messaging/conversations': (route: Route) => json(route, 200, conversations),
       'GET /api/client-renewal/me': (route: Route) =>
-        json(route, 200, options.ended ? planEnded : planRunning),
-      'POST /api/client-renewal/me/requests': (route: Route) => json(route, 201, renewalAsked),
+        json(route, 200, options.ended ? planEnded : options.ending ? planEnding : planRunning),
+      'POST /api/client-renewal/me/requests': (route: Route) =>
+        json(
+          route,
+          201,
+          options.ending
+            ? { ...planEnding, canAsk: false, lastRequest: renewalAsked.lastRequest }
+            : renewalAsked,
+        ),
       'GET /api/client-plan/me': (route: Route) =>
         json(route, 200, {
           today: '2026-09-20',
@@ -333,7 +350,7 @@ async function expectNoAxeViolations(page: Page) {
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
     .analyze();
   expect(
-    result.violations.map(
+    (await personFacing(page, result.violations)).map(
       (violation) =>
         `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
     ),
@@ -413,6 +430,34 @@ test('an ended plan names the coach, asks once for a renewal and says so', async
   await expectNoAxeViolations(page);
   await expect(card).toHaveScreenshot('client-today-card-plan-ended-asked.png');
 });
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a plan's last days keep the workout and offer Ask to renew`, async ({
+    page,
+  }) => {
+    await openToday(page, { ending: true, width, height });
+
+    await expect(page.locator('#today-renewal-heading')).toHaveText(
+      'Your coaching plan with Hicham ends on Wed 23 Sep.',
+    );
+    await expect(page.locator('.today-card a.today-action')).toHaveCount(1);
+    const workout = await page.locator('.today-card--hero').boundingBox();
+    const card = await page.locator('app-today-renewal .today-card').boundingBox();
+    expect(card!.y).toBeGreaterThan(workout!.y + workout!.height - 1);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/b14-today-ending-${width}.png`, fullPage: true });
+
+    await page.getByRole('button', { name: 'Ask to renew' }).click();
+    await expect(page.locator('app-today-renewal [role="status"]')).toHaveText(
+      'Renewal request sent on Mon 5 Oct. You can ask again from Mon 12 Oct.',
+    );
+    await expect(page.locator('.today-card a.today-action')).toHaveCount(1);
+  });
+}
 
 test('keyboard order runs from the skip link through Today to the tabs', async ({ page }) => {
   await openToday(page);

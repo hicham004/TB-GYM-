@@ -44,7 +44,8 @@ public sealed record NotificationTemplate(string Key, int Version, string Cultur
 /// Arabic is answered in English until they are (audit INV-8). Each template carries its
 /// own version: a wording change publishes the next version of that template alone and leaves every
 /// already-delivered snapshot exactly as it was read. Version 2 is the glossary pass of audit COACH-12
-/// (the plan and team notices in the screens' words, and the note notices naming the workout).
+/// (the plan and team notices in the screens' words, and the note notices naming the workout). Critique B14's are
+/// <see cref="MyPlanVersion"/>, <see cref="PackMyPlanVersion"/> and <see cref="AskBeforeTheEndVersion"/>.
 /// </para>
 /// <para>
 /// A session pack hears the plan notices in its own words (critique B10c, SES-009): it runs beside a coaching plan, so
@@ -83,9 +84,19 @@ public static class NotificationTemplateCatalog
     /// <summary>The glossary pass of audit COACH-12 and UIQ-21 (2026-10-21).</summary>
     private const int GlossaryVersion = 2;
 
+    /// <summary>A plan's renewal notice names My plan, the page it opens (critique B14, 2026-10-31).</summary>
+    private const int MyPlanVersion = 3;
+
+    /// <summary>A pack's renewal notice names My plan too.</summary>
+    private const int PackMyPlanVersion = 2;
+
+    /// <summary>A client may ask before the end, so the coach's notice no longer says the plan has ended (critique B14).</summary>
+    private const int AskBeforeTheEndVersion = 2;
+
     private static readonly Dictionary<CommercialNotificationKind, NotificationTemplate> English = new()
     {
-        // The plan notices go to the client and open their Today, which says where the plan stands.
+        // The plan notices go to the client and open My plan, which says where the plan stands and offers Ask to renew;
+        // "Your plan has started" opens Today, where the first workout is (critique B14).
         [CommercialNotificationKind.PaymentRequired] = new NotificationTemplate(
             "commercial.payment-required",
             GlossaryVersion,
@@ -114,10 +125,10 @@ public static class NotificationTemplateCatalog
         // or active access already exists. It says only that the next plan was set up.
         [CommercialNotificationKind.EnrollmentRenewed] = new NotificationTemplate(
             "commercial.enrollment-renewed",
-            GlossaryVersion,
+            MyPlanVersion,
             DefaultCulture,
             "Your coach set up your next plan",
-            "It follows on from this one. Open Today to see where your plan stands."),
+            "It follows on from this one. Open My plan to see where your plan stands."),
         // To the client, naming nobody (CLI-014): the owner has them until they are reassigned.
         [CommercialNotificationKind.CoachDeparted] = new NotificationTemplate(
             "workspace.coach-departed",
@@ -143,10 +154,10 @@ public static class NotificationTemplateCatalog
         // To the client's coach, naming the client (ADR 0029); the inbox links to the client's page.
         [CommercialNotificationKind.RenewalRequested] = new NotificationTemplate(
             "workspace.renewal-requested",
-            FirstVersion,
+            AskBeforeTheEndVersion,
             DefaultCulture,
             $"{ClientNameToken} asked to renew",
-            "This client's coaching plan has ended. Open the client's page to set up a renewal."),
+            "Open the client's page to set up a renewal."),
         // The training notices (ADR 0036, R5.1c). Each opens the program or the workout it is about.
         [CommercialNotificationKind.ProgramAssigned] = new NotificationTemplate(
             "training.program-assigned",
@@ -211,10 +222,10 @@ public static class NotificationTemplateCatalog
         // Careful wording, as for a plan's renewal: it may still be waiting for payment.
         [CommercialNotificationKind.EnrollmentRenewed] = new NotificationTemplate(
             "commercial.pack-renewed",
-            FirstVersion,
+            PackMyPlanVersion,
             DefaultCulture,
             "Your coach set up more 1-on-1 sessions",
-            "Open Today to see where your sessions stand."),
+            "Open My plan to see where your sessions stand."),
     };
 
     /// <summary>The wordings by language; only English is written so far (audit INV-8).</summary>

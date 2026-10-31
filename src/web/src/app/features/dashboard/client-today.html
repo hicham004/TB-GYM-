@@ -366,6 +366,9 @@
 
   <!-- Drawn once they and everything above have answered, so nothing above pushes them down. -->
   <div class="today-below" [class.today-below--waiting]="!belowDrawn()">
+    @if (planEnding()) {
+      <app-today-renewal [status]="renewal()!" (statusChange)="renewal.set($event)" />
+    }
     <app-today-also [today]="localDate()" />
     <app-today-coach-message [today]="localDate()" [timeZone]="timeZone()" />
   </div>

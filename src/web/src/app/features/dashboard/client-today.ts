@@ -92,10 +92,12 @@ export class ClientToday {
   protected readonly upcoming = signal<UpcomingTraining | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal(false);
-  /** Whether the whole plan has run out (ADR 0029); null until read, or if it could not be. */
+  /** Whether the whole plan has run out or is about to (ADR 0029); null until read, or if it could not be. */
   protected readonly renewal = signal<RenewalStatus | null>(null);
   private readonly renewalLoading = signal(true);
   protected readonly planEnded = computed(() => this.renewal()?.planEnded === true);
+  /** The plan runs on, so training stays and the card sits under it (critique B14). */
+  protected readonly planEnding = computed(() => this.renewal()?.endsOn != null);
   /** The workspace's date from `GET /api/workspace`, read only when the training read fails. */
   private readonly workspaceDate = signal<string | null>(null);
   private readonly workspaceZone = signal<string | null>(null);
@@ -153,6 +155,7 @@ export class ClientToday {
     () => this.coreDrawn(),
     () =>
       this.coreDrawn() &&
+      !this.renewalLoading() &&
       (this.also()?.settled() ?? false) &&
       (this.coachMessage()?.settled() ?? false),
   );

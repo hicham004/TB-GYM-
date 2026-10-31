@@ -39,7 +39,7 @@ export interface OwnPlan {
   readonly pill: { readonly label: string; readonly tone: StatusPillTone };
   /** What the status means for them, where the pill alone leaves a question. */
   readonly note: string | null;
-  /** The plan has ended, so Today is where it goes on from (ADR 0029). */
+  /** The plan has ended, so Ask to renew, or else Today, is where it goes on from (ADR 0029). */
   readonly ended: boolean;
   /** What's included, in one fixed order. */
   readonly includes: readonly FeatureChip[];

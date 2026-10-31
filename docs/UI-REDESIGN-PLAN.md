@@ -798,7 +798,8 @@ of the implemented R1.3 screens before production rollout.
   only recent ones are new; checked live with the Worker running (a coach's note and a shared week each
   reached the client in seconds and opened the right place).
   Since critique B10a the client has a plan page, My plan (`/plan`, the first row of Me's Account group);
-  the plan notices still open Today, where Ask to renew lives.
+  since critique B14 the plan notices open it, Ask to renew lives there as on Today, and "Your plan has
+  started" stays on Today.
   Since critique B10c a pack's card on My plan says what is left ("7 of 10 sessions with Karim left, until 9
   January") and Sessions so far lists each session held or charged, a charge with the coach's reason, the newest
   five and the rest on request. Today's Also today gains "1-on-1 sessions", the same sentence for the pack a session

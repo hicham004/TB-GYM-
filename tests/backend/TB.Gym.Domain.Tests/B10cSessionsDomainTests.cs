@@ -150,9 +150,14 @@ public sealed class B10cSessionsDomainTests
             Assert.AreEqual(asEver, plan, "A plan's notice is as it was.");
             Assert.AreNotEqual(plan.Key, pack.Key);
             Assert.AreEqual("en", pack.Culture);
-            Assert.AreEqual(1, pack.Version);
+            Assert.AreEqual(kind == CommercialNotificationKind.EnrollmentRenewed ? 2 : 1, pack.Version, "Critique B14 moved its renewal on.");
             Assert.Contains("1-on-1 sessions", pack.Title, "It never says \"your plan\", which may be another one.");
-            Assert.DoesNotContain("plan", pack.Title + " " + pack.Body, StringComparison.OrdinalIgnoreCase);
+
+            // My plan is the page it opens (critique B14), and the only plan it speaks of.
+            Assert.DoesNotContain(
+                "plan",
+                (pack.Title + " " + pack.Body).Replace("My plan", string.Empty, StringComparison.Ordinal),
+                StringComparison.OrdinalIgnoreCase);
 
             // As generic as every notice: no count, no date, no name and nothing to fill in.
             Assert.DoesNotContain("{", pack.Title + pack.Body);

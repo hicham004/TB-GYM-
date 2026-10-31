@@ -432,9 +432,10 @@ describe('Notifications', () => {
     );
     expect(href('Your coach set up a new program')).toBe('/training/program');
     // Every plan and team notice leads somewhere (audit COACH-12): a coach's own clients when a client
-    // left, the client's Today for their plan or their coach, Clients when a coach left the team.
+    // left, My plan for their plan (critique B14), their Today for their coach, Clients when a coach
+    // left the team.
     expect(href('Maya Rahman left your coaching space')).toBe('/clients');
-    expect(href('Your plan has ended')).toBe('/');
+    expect(href('Your plan has ended')).toBe('/plan');
     expect(href('Your coach has changed')).toBe('/');
     expect(href('A coach left your team')).toBe('/clients');
     expect(row(host, 'Notification n1').querySelector('button.row')?.textContent).toContain(

@@ -4,7 +4,14 @@ import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
-import type { OwnPlansView, OwnPlanView, OwnSessionsView } from '../../core/api/generated';
+import { HttpErrorResponse } from '@angular/common/http';
+import type {
+  OwnPlansView,
+  OwnPlanView,
+  OwnSessionsView,
+  RenewalStatusView,
+} from '../../core/api/generated';
+import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { click, settle } from '../../../testing/dom';
 import { ClientPlanPage } from './client-plan';
@@ -57,14 +64,43 @@ const pack = (fields: Partial<OwnPlanView> = {}) =>
     ...fields,
   });
 
-async function render(answer: () => ReturnType<ApiClient['getOwnPlans']>) {
-  const api = { getOwnPlans: vi.fn(answer) };
+const renewal = (fields: Partial<RenewalStatusView> = {}): RenewalStatusView => ({
+  planEnded: true,
+  endedOn: '2026-10-14',
+  endsOn: null,
+  planId: 'plan-1',
+  coachName: 'Karim Haddad',
+  lastRequest: null,
+  canAsk: true,
+  ...fields,
+});
+
+const ending = (fields: Partial<RenewalStatusView> = {}) =>
+  renewal({ planEnded: false, endedOn: null, endsOn: '2026-10-17', ...fields });
+
+const sentRequest = {
+  id: 'request-1',
+  requestedOn: '2026-10-15',
+  askAgainFrom: '2026-10-22',
+};
+
+async function render(
+  answer: () => ReturnType<ApiClient['getOwnPlans']>,
+  more: Partial<Record<'requestRenewal' | 'getOwnRenewalStatus', ReturnType<typeof vi.fn>>> = {},
+) {
+  const api = {
+    getOwnPlans: vi.fn(answer),
+    requestRenewal: vi.fn(() => of(renewal({ canAsk: false, lastRequest: sentRequest }))),
+    getOwnRenewalStatus: vi.fn(() => of(renewal())),
+    ...more,
+  };
   const selectedTenantId = signal<string | null>('tenant-atlas');
   await TestBed.configureTestingModule({
     imports: [ClientPlanPage],
     providers: [
       provideRouter([]),
       { provide: ApiClient, useValue: api },
+      { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       { provide: TenantStore, useValue: { selectedTenantId } },
     ],
   }).compileComponents();
@@ -135,7 +171,148 @@ describe('ClientPlanPage', () => {
     );
   });
 
-  it('sends a plan that ran out on to Today, and no other', async () => {
+  describe('Ask to renew (critique B14)', () => {
+    const over = () => plan({ status: 'Expired', lastDay: '2026-10-14' });
+    const withRenewal = (status: RenewalStatusView, ...plans: OwnPlanView[]) => ({
+      ...view(...plans),
+      renewal: status,
+    });
+    const ask = (host: Element) =>
+      [...host.querySelectorAll<HTMLButtonElement>('app-renewal-ask button')].filter((button) =>
+        button.textContent?.includes('Ask to renew'),
+      );
+
+    it('stands in for Go to Today on a plan that ran out, the same request as Today’s', async () => {
+      const { fixture, host, api } = await render(() => of(withRenewal(renewal(), over())));
+
+      expect(host.querySelector('a.plan-action')).toBeNull();
+      expect(text(host.querySelector('.plan-note')!)).toBe(
+        'If you’d like to keep going, ask your coach to renew it.',
+      );
+      expect(ask(host)).toHaveLength(1);
+      expect(ask(host)[0].classList).toContain('tb-button--accent');
+
+      ask(host)[0].click();
+      await settle(fixture);
+
+      expect(api.requestRenewal).toHaveBeenCalledTimes(1);
+      expect(text(host.querySelector('app-renewal-ask [role="status"]')!)).toBe(
+        'Renewal request sent on Thu 15 Oct. You can ask again from Thu 22 Oct.',
+      );
+      expect(ask(host)).toHaveLength(0);
+      // The answer replaces the invitation, and Today is not offered in its place.
+      expect(host.querySelector('.plan-note')).toBeNull();
+      expect(host.querySelector('a.plan-action')).toBeNull();
+    });
+
+    it('says when the plan ends and with whom, in its last days', async () => {
+      const { host } = await render(() =>
+        of(withRenewal(ending(), plan({ lastDay: '2026-10-17' }))),
+      );
+
+      expect(text(host.querySelector('.plan-note')!)).toBe(
+        'Your coaching plan with Karim ends on Sat 17 Oct.',
+      );
+      expect(host.querySelector('.plan-note bdi')?.getAttribute('dir')).toBe('auto');
+      expect(ask(host)).toHaveLength(1);
+    });
+
+    it('leaves the coach out when they have no name', async () => {
+      const { host } = await render(() =>
+        of(withRenewal(ending({ coachName: null }), plan({ lastDay: '2026-10-17' }))),
+      );
+
+      expect(text(host.querySelector('.plan-note')!)).toBe(
+        'Your coaching plan ends on Sat 17 Oct.',
+      );
+    });
+
+    it('asks nothing more of a pack, whose own line says when it ends', async () => {
+      const { host } = await render(() =>
+        of(withRenewal(ending({ planId: 'pack-1' }), pack({ lastDay: '2026-10-17' }))),
+      );
+
+      expect(text(host.querySelector('.plan-sessions')!)).toBe(
+        '8 of 10 sessions with Karim left, until 17 October',
+      );
+      expect(host.querySelector('.plan-note')).toBeNull();
+      expect(ask(host)).toHaveLength(1);
+    });
+
+    it('sits on the plan it is about, and no other', async () => {
+      const { host } = await render(() =>
+        of(withRenewal(renewal(), over(), pack({ status: 'Active' }))),
+      );
+
+      const [first, second] = [...host.querySelectorAll('section.plan')];
+      expect(first.querySelector('app-renewal-ask')).not.toBeNull();
+      expect(second.querySelector('app-renewal-ask')).toBeNull();
+    });
+
+    it('sends nobody to Today from another ended plan while the ask is on the page', async () => {
+      const { host } = await render(() =>
+        of(withRenewal(renewal(), over(), pack({ status: 'Expired' }))),
+      );
+
+      expect(host.querySelector('a.plan-action')).toBeNull();
+      expect(ask(host)).toHaveLength(1);
+    });
+
+    it('shows the answer in place of the button while a request stands', async () => {
+      const { host } = await render(() =>
+        of(withRenewal(renewal({ canAsk: false, lastRequest: sentRequest }), over())),
+      );
+
+      expect(ask(host)).toHaveLength(0);
+      expect(text(host.querySelector('app-renewal-ask [role="status"]')!)).toContain(
+        'You can ask again from Thu 22 Oct.',
+      );
+    });
+
+    it('shows the plan as it is when the server refuses the ask', async () => {
+      const { fixture, host, api } = await render(
+        () => of(withRenewal(ending(), plan({ lastDay: '2026-10-17' }))),
+        {
+          requestRenewal: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 409 }))),
+          getOwnRenewalStatus: vi.fn(() =>
+            of(renewal({ planEnded: false, endedOn: null, planId: null, canAsk: false })),
+          ),
+        },
+      );
+
+      ask(host)[0].click();
+      await settle(fixture);
+
+      expect(api.getOwnRenewalStatus).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('app-renewal-ask')).toBeNull();
+      expect(host.querySelector('.plan-note')).toBeNull();
+    });
+
+    it('says the request failed, in words that read on the brand colour', async () => {
+      const { fixture, host } = await render(() => of(withRenewal(renewal(), over())), {
+        requestRenewal: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
+      });
+
+      ask(host)[0].click();
+      await settle(fixture);
+
+      expect(text(host.querySelector('app-renewal-ask [role="alert"]')!)).toBe(
+        'Couldn’t send your request. Try again.',
+      );
+      expect(host.querySelector('app-renewal-ask')?.classList).toContain('on-brand');
+      expect(ask(host)).toHaveLength(1);
+    });
+
+    it('offers nothing on a plan the server says cannot ask', async () => {
+      const { host } = await render(() =>
+        of({ ...view(plan()), renewal: renewal({ planId: null, canAsk: false }) }),
+      );
+
+      expect(host.querySelector('app-renewal-ask')).toBeNull();
+    });
+  });
+
+  it('sends a plan that ran out on to Today where it cannot be asked about here', async () => {
     const { host } = await render(() => of(view(plan({ status: 'Expired' }))));
 
     expect(text(host.querySelector('.plan-note')!)).toBe(

@@ -338,7 +338,7 @@ internal sealed class CoachOverviewReader(
             var renewal = endedPlan is null
                 ? null
                 : renewals[client.Id]
-                    .Where(item => item.RequestedOn > endedPlan.LastDay)
+                    .Where(item => item.RequestedOn >= endedPlan.AskOpenedOn)
                     .MaxBy(item => item.RequestedAtUtc);
             // BEB-7 (the owner's decision of 2026-10-19): only a paid plan covers days, so a renewal still
             // waiting for payment neither moves the plan's end nor quiets Ending soon; it is counted instead,
