@@ -55,6 +55,19 @@ describe('ExerciseDemo', () => {
     TestBed.resetTestingModule();
   });
 
+  it('is a whole tile when asked, what the page drew in it named by the exercise', async () => {
+    const { fixture, host, grant } = await render(['media-1']);
+    fixture.componentRef.setInput('tile', true);
+    await settle(fixture);
+    const button = host.querySelector<HTMLButtonElement>('.demo.tile')!;
+    expect(button.getAttribute('aria-label')).toBe('Watch demo: Back squat');
+
+    await fixture.componentInstance.open();
+    await settle(fixture);
+    expect(grant).toHaveBeenCalledExactlyOnceWith('media-1');
+    expect(sheet().querySelector('video')).not.toBeNull();
+  });
+
   it('shows nothing for an exercise without a demo', async () => {
     const { host } = await render([]);
     expect(host.querySelector('button')).toBeNull();

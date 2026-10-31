@@ -1297,7 +1297,12 @@ complete/available weekly mean versus last complete/available weekly mean), not 
 single days. The exact comparison rule needs coach approval and is stored with the summary
 version. The owner approved one for "since start" (2026-10-27, critique B6): the latest weekly
 mean minus the mean of the week holding the first start, `BodyweightSinceStartWeeklyMean` 1.0
-(PRG-014).
+(PRG-014). The change beside the weight on Progress follows it (critique B16),
+`BodyweightChangeWeeklyMean` 1.0: within the range a chart shows, the latest weekly mean minus the
+mean of the week holding the range's first weigh-in, each workspace week taken whole over the
+profile's active weigh-ins, sent with both weeks and their day counts for coach and client alike and
+naming that first weigh-in's day. It is the same figure as "since start" when the chart begins at the
+start, and absent while the range's weigh-ins sit in one week, when the chart says where it begins.
 
 **PRG-006** Training, diet, subscription, and progress views synchronize through shared
 identifiers and authoritative periods, not copied date fields. A period change triggers a
@@ -2291,6 +2296,8 @@ line, with no control or direction-override marks; it is optional, so a provider
 the link without one, and adding the same link again fills in a missing one, never replacing one it has.
 The library's tile, and its card's menu, read "Watch on YouTube · opens in a new tab" under that title and
 open the watch page MED-016 builds (`rel="noopener noreferrer"`); the coach's media list carries that page.
+An uploaded video's tile, and its card's menu, read "Watch demo" and open the demo the builder's Watch demo
+opens, on a grant of its own (critique B16).
 
 **MED-016** A YouTube or Vimeo link opens on the provider's own video page, in a new tab, from the
 client's workout player and the coach's demo sheet (C18, decided 2026-10-19, audit A1). Its grant names

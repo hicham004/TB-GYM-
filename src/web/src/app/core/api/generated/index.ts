@@ -476,6 +476,7 @@ export type {
   DashboardStartKind,
   DashboardStartLine,
   DashboardTrainingContext,
+  DashboardWeeklyChange,
   DatedWorkoutView,
   DayOfWeek,
   DeleteMediaAssetData,

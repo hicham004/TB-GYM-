@@ -78,7 +78,7 @@
   @if (filters().archived) {
     <p class="archived-note" i18n>
       Archived exercises are left out of your pickers and of programs you build from now on.
-      Programs already built keep them. Open one to restore it.
+      Programs already built keep them. Restore one from its menu.
     </p>
   }
 
@@ -168,6 +168,19 @@
                     <span class="play-label">{{ watchCaption(cover.provider) }}</span>
                   </span>
                 </a>
+              } @else if (cover && cover.kind === 'upload') {
+                <!-- Critique B16: an uploaded video's tile opens the same demo as the builder's Watch demo. -->
+                <app-exercise-demo
+                  class="cover watch"
+                  tile
+                  [assetIds]="card.exercise.mediaAssetIds"
+                  [exerciseName]="card.name"
+                >
+                  <span class="play">
+                    <app-icon name="play" />
+                    <span class="play-label" i18n>Watch demo</span>
+                  </span>
+                </app-exercise-demo>
               } @else {
                 <div class="cover" [attr.data-tone]="card.tone" aria-hidden="true">
                   @if (cover) {

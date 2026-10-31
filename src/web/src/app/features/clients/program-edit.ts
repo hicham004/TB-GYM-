@@ -82,9 +82,11 @@ import {
   type SessionRef,
   startSessionWith,
 } from '../training/program-builder.models';
+import { AddingBar } from '../training/adding-bar';
 import { ExerciseDemo } from '../training/exercise-demo';
 import { readLibraryOpen, writeLibraryOpen } from '../training/builder-preferences';
-import { ProgramLibrary } from '../training/program-library';
+import { dayAddHere, ProgramAdding, sessionAddHere } from '../training/program-adding';
+import { type ChosenItem, ProgramLibrary } from '../training/program-library';
 import { ProgramLibrarySource } from '../training/program-library-source';
 import { ProgramSessionEditor } from '../training/program-session-editor';
 import { ProgramSetsEditor } from '../training/program-sets-editor';
@@ -150,6 +152,8 @@ interface SessionCell {
   menu: UiMenuItem[];
   menuLabel: string;
   addLabel: string;
+  /** The name of its Add here while a chosen exercise waits (critique B16); null otherwise. */
+  addHere: string | null;
 }
 
 interface DayCell {
@@ -164,6 +168,8 @@ interface DayCell {
   locked: readonly LockedSession[];
   sessions: SessionCell[];
   addLabel: string;
+  /** The name of the day's Add here while what was chosen can land on it; null otherwise. */
+  addHere: string | null;
 }
 
 interface WeekRow {
@@ -189,14 +195,16 @@ interface EditFailure {
 
 /**
  * A client's weeks in the builder's grid (P3b, TRN-028): the sessions still to come are edited
- * with the builder's drops, menus and sheets, beside the ones that started, finished or passed,
- * which are locked. Nothing is kept until the coach reviews what the server says the edit does,
+ * with the builder's drops, + and Add here (critique B16), menus and sheets, beside the ones that
+ * started, finished or passed, which are locked. Nothing is kept until the coach reviews what the
+ * server says the edit does,
  * every new weight worked out, and applies it; the server plans it again, checks the plan and the
  * program's version, and records it. Leaving with changes not applied asks first.
  */
 @Component({
   selector: 'app-program-edit',
   imports: [
+    AddingBar,
     Button,
     ButtonLink,
     CdkDrag,
@@ -227,10 +235,15 @@ interface EditFailure {
     '../training/program-builder.scss',
     '../training/program-week.scss',
     '../training/program-week-session.scss',
+    '../training/builder-adding.scss',
+    '../training/program-adding.scss',
     './program-edit.scss',
     '../training/program-set-lines.scss',
   ],
-  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
+  host: {
+    '(window:beforeunload)': 'onBeforeUnload($event)',
+    '(document:keydown.escape)': 'adding.onEscape($event)',
+  },
 })
 export class ProgramEditPage implements HoldsUnsavedWork {
   private readonly api = inject(ApiClient);
@@ -252,6 +265,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
   private readonly pickerSheet = viewChild.required<TemplateRef<unknown>>('pickerSheet');
+  private readonly chooseSheet = viewChild.required<TemplateRef<unknown>>('chooseSheet');
   private readonly reviewSheet = viewChild.required<TemplateRef<unknown>>('reviewSheet');
   /** The review sheet's summary, where a refused apply is said. */
   private readonly applySummary = viewChild(FormSummary);
@@ -310,6 +324,15 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   protected readonly dragDelay = { touch: 250, mouse: 0 };
   protected readonly maxWeeks = MAX_WEEKS;
   private readonly newSessionName = $localize`Training day`;
+  /** Adding without dragging, as the builder has it (critique B5b, B16). */
+  protected readonly adding = new ProgramAdding({
+    draft: () => this.draft(),
+    commit: (next) => this.commit(next),
+    shownWeek: () => this.shownWeek(),
+    focusWeek: (weekKey) => this.focusWeek(weekKey),
+    dayName: (at) => this.dayName(at),
+    newSessionName: this.newSessionName,
+  });
 
   protected readonly canEnter = (drag: CdkDrag<DragItem>, drop: CdkDropList<DropTarget>) =>
     accepts(drag.data, drop.data);
@@ -356,7 +379,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
   protected readonly grid = computed(() => {
     this.revision();
     const edit = this.edit();
-    return edit ? this.rows(edit, this.draft()) : [];
+    return edit ? this.rows(edit, this.draft(), this.adding.chosen()) : [];
   });
 
   protected readonly columns = computed(() => {
@@ -533,15 +556,32 @@ export class ProgramEditPage implements HoldsUnsavedWork {
     if (event.previousContainer === event.container && event.previousIndex === event.currentIndex) {
       return;
     }
-    this.commit(
-      applyDrop(
-        this.draft(),
-        event.item.data,
-        event.container.data,
-        event.currentIndex,
-        this.newSessionName,
-      ),
+    const before = this.draft();
+    const item = event.item.data;
+    const next = applyDrop(
+      before,
+      item,
+      event.container.data,
+      event.currentIndex,
+      this.newSessionName,
     );
+    this.commit(next);
+    // A row from the library ends a choice made with +, and folds the first-use tip.
+    const fromLibrary = item.kind === 'library' || item.kind === 'saved';
+    if (fromLibrary && next !== before) this.adding.added();
+  }
+
+  /** A phone's library, in a sheet: the row chosen closes it, and the grid offers Add here. */
+  protected openChooser(): void {
+    this.sheets.open(this.chooseSheet(), {
+      title: $localize`Exercises`,
+      closeLabel: this.closeLabel,
+    });
+  }
+
+  protected chooseFromSheet(item: ChosenItem, sheet: Closable): void {
+    sheet.close();
+    this.adding.start(item);
   }
 
   /** Opens or closes the library beside the grid, and keeps the choice for next time. */
@@ -881,7 +921,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
 
   // ---------- drawing the grid ----------
 
-  private rows(edit: ProgramEdit, draft: ProgramDraft): WeekRow[] {
+  private rows(edit: ProgramEdit, draft: ProgramDraft, adding: ChosenItem | null): WeekRow[] {
     const count = draft.weeks.length;
     const frozenLine = $localize`Weeks up to week ${edit.frozen}:number: have workouts that started or passed, so they stay where they are.`;
     return draft.weeks.map((week, index) => {
@@ -891,6 +931,8 @@ export class ProgramEditPage implements HoldsUnsavedWork {
       const first = dayDate(edit.startDate, index, 0);
       const last = dayDate(edit.startDate, index, 6);
       const locked = (week.sourceId && edit.locked.get(week.sourceId)) || [];
+      const dayName = (day: number) =>
+        formatDate(dayDate(edit.startDate, index, day), 'EEEE d MMMM', this.locale);
       return {
         key: week.key,
         number,
@@ -941,25 +983,38 @@ export class ProgramEditPage implements HoldsUnsavedWork {
           const sessions = daySessions(week, day);
           const date = dayDate(edit.startDate, index, day);
           const label = formatDate(date, 'EEE d', this.locale);
+          const closed = isClosedDay(edit, index, day);
+          const target: DropTarget = { kind: 'day', at, empty: sessions.length === 0 };
           return {
             day,
             listId: `day-${week.key}-${day}`,
             label,
-            closed: isClosedDay(edit, index, day),
+            closed,
             at,
-            target: { kind: 'day', at, empty: sessions.length === 0 },
+            target,
             locked: locked.filter((item) => item.day === day),
-            sessions: sessions.map((session) => this.sessionCell(week, session)),
-            addLabel: $localize`Add to week ${number}:week:, ${formatDate(date, 'EEEE d MMMM', this.locale)}:day:`,
+            sessions: sessions.map((session) =>
+              this.sessionCell(week, session, adding, number, dayName(session.dayOffset)),
+            ),
+            addLabel: $localize`Add to week ${number}:week:, ${dayName(day)}:day:`,
+            // A day already gone takes no drop, so it offers no Add here.
+            addHere: closed ? null : dayAddHere(adding, target, number, dayName(day)),
           };
         }),
       };
     });
   }
 
-  private sessionCell(week: DraftWeek, session: DraftSession): SessionCell {
+  private sessionCell(
+    week: DraftWeek,
+    session: DraftSession,
+    adding: ChosenItem | null,
+    weekNumber: number,
+    day: string,
+  ): SessionCell {
     const ref = { weekKey: week.key, sessionKey: session.key };
     const name = session.name.trim() || $localize`Unnamed workout`;
+    const target: DropTarget = { kind: 'session', ref };
     return {
       key: session.key,
       listId: `exercises-${session.key}`,
@@ -970,9 +1025,10 @@ export class ProgramEditPage implements HoldsUnsavedWork {
           : $localize`${session.exercises.length}:count: exercises`,
       ref,
       drag: { kind: 'session', ref },
-      target: { kind: 'session', ref },
+      target,
       menuLabel: $localize`More for ${name}:session:`,
       addLabel: $localize`Add exercise to ${name}:session:`,
+      addHere: sessionAddHere(adding, target, name, weekNumber, day),
       menu: [
         { label: $localize`Edit workout`, action: 'edit' },
         { label: $localize`Copy workout`, action: 'copy', hint: $localize`To the next free day` },
@@ -1077,5 +1133,6 @@ export class ProgramEditPage implements HoldsUnsavedWork {
     this.failure.set(null);
     this.reviewing.set(false);
     this.applying.set(false);
+    this.adding.reset();
   }
 }

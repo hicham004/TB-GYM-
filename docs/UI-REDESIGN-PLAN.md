@@ -1830,7 +1830,8 @@ limited to the coach's assigned clients.
     Escape, a second press or the bar's Cancel ends the choice. Where the library has no room beside
     the grid, "Exercises" opens it in a sheet to choose from. A first-use "How adding works" fold
     above the rows closes at the first add (kept in the browser, `tb.adding-tip:program`); the rows
-    lift on hover and the places a drag can land are outlined. Edit weeks keeps dragging only.
+    lift on hover and the places a drag can land are outlined. Edit weeks has the same since critique
+    B16, on the days still to come.
   - Sets × reps × load initially used the session sheet; R4.2b adds editing on the grid.
   - Save draft and Publish make a new version; Versions opens earlier ones. A save that lost a race
     says so and offers the newest version.

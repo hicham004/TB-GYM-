@@ -166,7 +166,7 @@ export function progressDashboard(overrides: Partial<ProgressDashboard> = {}): P
     bodyweight: {
       latestDate: '2026-10-01',
       latestDisplayValue: 71.2,
-      change: null,
+      weeklyChange: null,
       weeks: [
         { weekStart: '2026-09-07', displayMean: 72.6, observedDayCount: 6 },
         { weekStart: '2026-09-14', displayMean: 72.2, observedDayCount: 7 },
@@ -264,7 +264,7 @@ export function progressDashboardView(
               version: 1,
             },
       latestDisplayValue: view.bodyweight.latestDisplayValue,
-      change: null,
+      weeklyChange: null,
       weeks: (bodyweight.weeks ?? view.bodyweight.weeks).map((week) => ({
         weekStart: week.weekStart,
         weekEndExclusive: addDaysTo(week.weekStart, 7),

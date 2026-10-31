@@ -41,6 +41,7 @@
         </div>
         <div class="save">
           <p class="status" [class.unsaved]="dirty()">{{ statusLine() }}</p>
+          <p class="tb-visually-hidden" role="status">{{ adding.status() }}</p>
           <div class="save-buttons">
             @if (dirty()) {
               <button appButton type="button" variant="text" (click)="discard()" i18n>
@@ -103,8 +104,13 @@
             </div>
             <app-program-library
               mode="drag"
+              pastDays
               [source]="library"
               [connectedTo]="dropIds()"
+              [chosen]="adding.chosen()"
+              [tip]="adding.tipOpen()"
+              (choose)="adding.choose($event)"
+              (tipChange)="adding.tipChanged($event)"
               (retry)="loadLibrary()"
             />
           </aside>
@@ -125,6 +131,17 @@
           <div class="plan-tools">
             <h3 id="weeks-title" class="panel-title" i18n>Weeks</h3>
             <div class="plan-buttons">
+              <!-- Where the library has no room beside the grid, it opens in a sheet. -->
+              <button
+                appButton
+                class="library-sheet"
+                type="button"
+                variant="outlined"
+                (click)="openChooser()"
+              >
+                <app-icon name="plus" />
+                <span i18n>Exercises</span>
+              </button>
               <button
                 appButton
                 type="button"
@@ -318,29 +335,53 @@
                               <li class="drop-hint" i18n>Drop exercises here</li>
                             }
                           </ol>
-                          <button
-                            class="add-exercise"
-                            type="button"
-                            [attr.aria-label]="session.addLabel"
-                            (click)="openPicker({ kind: 'session', ref: session.ref })"
-                          >
-                            <app-icon name="plus" />
-                            <span i18n>Exercise</span>
-                          </button>
+                          @if (session.addHere; as label) {
+                            <button
+                              class="add-here"
+                              type="button"
+                              [attr.aria-label]="label"
+                              (click)="adding.addHere(session.target)"
+                            >
+                              <app-icon name="plus" />
+                              <span i18n>Add here</span>
+                            </button>
+                          } @else {
+                            <button
+                              class="add-exercise"
+                              type="button"
+                              [attr.aria-label]="session.addLabel"
+                              (click)="openPicker({ kind: 'session', ref: session.ref })"
+                            >
+                              <app-icon name="plus" />
+                              <span i18n>Exercise</span>
+                            </button>
+                          }
                         </article>
                       }
-                      @if (cell.sessions.length === 0 && cell.locked.length === 0) {
-                        <span class="rest-word" i18n>Rest</span>
-                      }
-                      @if (!cell.closed && cell.sessions.length === 0) {
+                      @if (cell.addHere; as label) {
                         <button
-                          class="add-day"
+                          class="add-here"
                           type="button"
-                          [attr.aria-label]="cell.addLabel"
-                          (click)="openPicker({ kind: 'day', at: cell.at })"
+                          [attr.aria-label]="label"
+                          (click)="adding.addHere(cell.target)"
                         >
                           <app-icon name="plus" />
+                          <span i18n>Add here</span>
                         </button>
+                      } @else {
+                        @if (cell.sessions.length === 0 && cell.locked.length === 0) {
+                          <span class="rest-word" i18n>Rest</span>
+                        }
+                        @if (!cell.closed && cell.sessions.length === 0) {
+                          <button
+                            class="add-day"
+                            type="button"
+                            [attr.aria-label]="cell.addLabel"
+                            (click)="openPicker({ kind: 'day', at: cell.at })"
+                          >
+                            <app-icon name="plus" />
+                          </button>
+                        }
                       }
                     </div>
                   }
@@ -348,6 +389,10 @@
               </section>
             }
           </div>
+          <!-- In the grid's column, so it never covers the library beside it. -->
+          @if (adding.name(); as name) {
+            <app-adding-bar [name]="name" (cancelled)="adding.stop()" />
+          }
         </section>
       </div>
     }
@@ -387,6 +432,26 @@
     <p class="tb-visually-hidden" role="status">{{ announcement() }}</p>
     <ng-template appModalFooter>
       <button appButton type="button" (click)="sheet.close()" i18n>Done</button>
+    </ng-template>
+  </div>
+</ng-template>
+
+<ng-template #chooseSheet let-sheet>
+  <div class="picker">
+    <p class="sheet-help" i18n>
+      Choose an exercise or a saved workout, then press Add here where it goes.
+    </p>
+    <app-program-library
+      mode="pick"
+      [source]="library"
+      (pickExercise)="chooseFromSheet({ kind: 'library', exercise: $event }, sheet)"
+      (pickSaved)="chooseFromSheet({ kind: 'saved', saved: $event }, sheet)"
+      (retry)="loadLibrary()"
+    />
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="outlined" (click)="sheet.close()" i18n>
+        Cancel
+      </button>
     </ng-template>
   </div>
 </ng-template>

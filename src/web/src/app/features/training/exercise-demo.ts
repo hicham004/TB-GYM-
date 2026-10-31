@@ -20,10 +20,11 @@ import { UiSheet } from '../../ui/sheet';
 import { externalVideo } from './external-video';
 
 /**
- * "Watch demo" for an exercise on a coach's screen (P4): the builder's grid and a client's session
- * sheet. Each opening asks the server for a short-lived grant (MED-003, MED-004), so the coach sees
- * the media only while the server still allows it. A YouTube or Vimeo demo opens on its own site, in
- * a new tab, as in the client's workout player (C18).
+ * "Watch demo" for an exercise on a coach's screen (P4): the builder's grid, a client's session sheet
+ * and the exercise library, whose tile is the button (critique B16). Each opening asks the server for a
+ * short-lived grant (MED-003, MED-004), so the coach sees the media only while the server still allows
+ * it. A YouTube or Vimeo demo opens on its own site, in a new tab, as in the client's workout player
+ * (C18).
  */
 @Component({
   selector: 'app-exercise-demo',
@@ -35,14 +36,17 @@ import { externalVideo } from './external-video';
         type="button"
         class="demo"
         [class.compact]="compact()"
-        [attr.aria-label]="compact() ? label() : null"
+        [class.tile]="tile()"
+        [attr.aria-label]="label()"
         [disabled]="opening()"
-        (click)="open(0)"
+        (click)="open()"
       >
-        <app-icon name="play" />
-        @if (!compact()) {
-          <span i18n>Watch demo</span>
-        }
+        <ng-content>
+          <app-icon name="play" />
+          @if (!compact()) {
+            <span i18n>Watch demo</span>
+          }
+        </ng-content>
       </button>
     }
 
@@ -137,6 +141,20 @@ import { externalVideo } from './external-video';
       background: var(--tb-surface-2);
     }
 
+    // The whole of a tile the page draws around the button, so the outline stays inside the tile.
+    .demo.tile {
+      align-self: stretch;
+      border-radius: 0;
+      flex: 1;
+      min-inline-size: 0;
+      padding: 0;
+    }
+
+    .demo.tile:focus-visible {
+      outline-offset: -3px;
+      outline-width: 3px;
+    }
+
     .demo:focus-visible,
     .pick-one:focus-visible {
       outline: 2px solid var(--tb-focus);
@@ -225,6 +243,8 @@ export class ExerciseDemo {
   readonly exerciseName = input.required<string>();
   /** An icon alone, named for assistive technology, where a row has little room. */
   readonly compact = input(false, { transform: booleanAttribute });
+  /** The whole of a tile: the page draws what is inside the button, and the button is named for it. */
+  readonly tile = input(false, { transform: booleanAttribute });
 
   protected readonly opening = signal(false);
   protected readonly shown = signal(0);
@@ -232,9 +252,11 @@ export class ExerciseDemo {
   protected readonly externalVideo = externalVideo;
   protected readonly failure = signal<string | null>(null);
 
-  protected readonly label = computed(
-    () => $localize`Watch the ${this.exerciseName()}:exercise: demo`,
-  );
+  /** Its name where its words are not enough; a tile's starts with the words it shows (WCAG 2.5.3). */
+  protected readonly label = computed(() => {
+    if (this.tile()) return $localize`Watch demo: ${this.exerciseName()}:exercise:`;
+    return this.compact() ? $localize`Watch the ${this.exerciseName()}:exercise: demo` : null;
+  });
   protected readonly altText = computed(
     () => $localize`How to do ${this.exerciseName()}:exercise:`,
   );
@@ -242,7 +264,7 @@ export class ExerciseDemo {
     () => $localize`Demos of ${this.exerciseName()}:exercise:`,
   );
 
-  protected async open(index: number): Promise<void> {
+  async open(index = 0): Promise<void> {
     const id = this.assetIds()[index];
     if (!id || this.opening()) return;
     this.shown.set(index);

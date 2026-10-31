@@ -28,6 +28,7 @@ import {
   previewAssetIds,
   startWords,
   type ProgressDashboard,
+  weightChangeWords,
 } from './progress-dashboard.models';
 import { mapProgress, type ProgressViewModel } from './progress.models';
 import { Button } from '../../ui/button';
@@ -99,6 +100,13 @@ export class ProgressDashboardView {
     return view ? addDays(view.toExclusive, -1) : deviceToday();
   });
   protected readonly weights = computed(() => weighInRows(this.progress(), this.audience()));
+  /** The change beside the weight, in weekly means as "Since start" is (critique B16). */
+  protected readonly weightChange = computed(() => {
+    const view = this.dashboard();
+    return view
+      ? weightChangeWords(view.bodyweight.weeklyChange, view.displayUnit, this.locale)
+      : null;
+  });
   /** Where the client started and the change since, for their coach only (critique B6). */
   protected readonly start = computed(() => {
     const view = this.dashboard();
@@ -165,7 +173,6 @@ export class ProgressDashboardView {
         ]
       : [];
   });
-  protected readonly abs = Math.abs;
 
   protected measurementLabel(type: MeasurementType): string {
     return type === 'BodyFatPercentage' ? $localize`Body fat` : type;

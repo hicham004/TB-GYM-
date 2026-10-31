@@ -52,12 +52,11 @@ export function chosenKey(item: ChosenItem): string {
 /**
  * The exercise library beside the program grid (C4): search, chips by movement and the coach's
  * saved sessions. Beside the grid (`drag`) every row can be dragged into a session or onto a rest
- * day; where the page offers it (`offerAdd`, the builder) a row's + chooses it too, so the grid
- * offers Add here wherever it can go (critique B5b, the way without dragging), with a "How adding
- * works" tip open until the coach's first add. In a sheet (`pick`) every row is a button, which is
- * also how a keyboard or a phone adds one. The rows are the first page the builder read once; a
- * search or a chip asks the server, and Show more brings the next page (WEA-14), so a library is
- * never read whole.
+ * day, and a row's + chooses it too, so the grid offers Add here wherever it can go (critique B5b,
+ * the way without dragging), with a "How adding works" tip open until the coach's first add. In a
+ * sheet (`pick`) every row is a button, which is also how a keyboard or a phone adds one. The rows are
+ * the first page the builder read once; a search or a chip asks the server, and Show more brings the
+ * next page (WEA-14), so a library is never read whole.
  */
 @Component({
   selector: 'app-program-library',
@@ -91,8 +90,8 @@ export class ProgramLibrary {
   readonly connectedTo = input<string[]>([]);
   /** Names the exercises already added from this sheet, so a second tap is visible. */
   readonly added = input<ReadonlySet<string>>(new Set());
-  /** A + on each row beside the grid; Edit weeks drags only. */
-  readonly offerAdd = input(false, { transform: booleanAttribute });
+  /** Edit weeks' grid has real days, and one already gone takes nothing: the tip says so. */
+  readonly pastDays = input(false, { transform: booleanAttribute });
   /** The row chosen with +, while the grid offers Add here for it. */
   readonly chosen = input<ChosenItem | null>(null);
   /** Whether "How adding works" is open beside the grid. */

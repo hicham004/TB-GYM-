@@ -83,3 +83,13 @@ triggers). A coach's dashboard read lists the person's starts across their profi
 and "since start", the versioned `BodyweightSinceStartWeeklyMean` 1.0: the latest weekly mean minus the
 mean of the workspace week holding the first start (PRG-005, approved by the owner on 2026-10-27). The
 client's own read carries none of it. See PRG-014.
+
+## Amendment: the change beside the weight (critique B16, 2026-10-31)
+
+The dashboard's bodyweight change no longer compares two single days, which could read as a second,
+different change beside "since start". `BodyweightChangeWeeklyMean` 1.0 replaces it: the latest weekly
+mean in the requested window minus the mean of the week holding the window's first observation. Each
+week is taken whole, whatever part of it the window covers, so the read's whole-week span is used
+rather than the weekly grid's window-only figures; a window opening mid-week still compares a week, and
+the two figures match when the chart begins at the start. Both readers get it, with the two weeks and
+their day counts. See PRG-005.

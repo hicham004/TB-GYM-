@@ -200,7 +200,8 @@ A profile's starting weight (critique B6) is a Progress record of its own, `Star
 append-only `StartingWeightCorrections`: the intake writes it beside the first observation, and only
 staff correct it. The coach's dashboard read composes the person's starts across their profiles in the
 workspace (a returning client's older, ended ones included) and the versioned
-`BodyweightSinceStartWeeklyMean` summary; the client's own read carries none of it. See PRG-014.
+`BodyweightSinceStartWeeklyMean` summary; the client's own read carries none of it. See PRG-014. The
+change beside the weight, for both readers, is the versioned `BodyweightChangeWeeklyMean` (PRG-005).
 
 Progress Phase 5B-1 mirrors that tenant/auth/history boundary for typed body measurements.
 Girths store canonical centimetres, body fat stores canonical percent, and corrections append

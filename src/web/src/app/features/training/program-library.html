@@ -13,10 +13,17 @@
   >
     <ng-template appDisclosureContent>
       <div class="tip">
-        <p i18n>
-          Drop an exercise in a workout or on a rest day, and a saved workout on any day. Without
-          dragging, press + on a row, then Add here.
-        </p>
+        @if (pastDays()) {
+          <p i18n>
+            Drop an exercise in a workout or on a rest day, and a saved workout on any day, from
+            today on. Without dragging, press + on a row, then Add here.
+          </p>
+        } @else {
+          <p i18n>
+            Drop an exercise in a workout or on a rest day, and a saved workout on any day. Without
+            dragging, press + on a row, then Add here.
+          </p>
+        }
         <button appButton type="button" variant="text" (click)="closeTip()" i18n>Got it</button>
       </div>
     </ng-template>
@@ -27,16 +34,12 @@
   <p class="help">
     @if (mode() === 'pick') {
       <ng-container i18n>Choose a saved workout to add a copy on this day.</ng-container>
-    } @else if (offerAdd()) {
-      <ng-container i18n>Drag a saved workout onto a day, or press + to add it.</ng-container>
     } @else {
-      <ng-container i18n>Drag a saved workout onto a day.</ng-container>
+      <ng-container i18n>Drag a saved workout onto a day, or press + to add it.</ng-container>
     }
   </p>
   @if (mode() === 'drag') {
-    @if (offerAdd()) {
-      <ng-container [ngTemplateOutlet]="how" />
-    }
+    <ng-container [ngTemplateOutlet]="how" />
     <ul
       class="items"
       role="list"
@@ -63,19 +66,17 @@
             <span class="name" dir="auto">{{ session.name }}</span>
             <span class="detail">{{ savedLine(session) }}</span>
           </span>
-          @if (offerAdd()) {
-            <!-- Pressed while the grid offers Add here for it; a second press lets it go. -->
-            <button
-              class="choose"
-              type="button"
-              [attr.data-choose]="'saved:' + session.id"
-              [attr.aria-label]="savedAddLabel(session)"
-              [attr.aria-pressed]="picked"
-              (click)="choose.emit(item)"
-            >
-              <app-icon name="plus" />
-            </button>
-          }
+          <!-- Pressed while the grid offers Add here for it; a second press lets it go. -->
+          <button
+            class="choose"
+            type="button"
+            [attr.data-choose]="'saved:' + session.id"
+            [attr.aria-label]="savedAddLabel(session)"
+            [attr.aria-pressed]="picked"
+            (click)="choose.emit(item)"
+          >
+            <app-icon name="plus" />
+          </button>
         </li>
       }
     </ul>
@@ -165,12 +166,8 @@
           </button>
         </div>
       } @else if (mode() === 'drag') {
-        @if (offerAdd()) {
-          <p class="help" i18n>Drag an exercise into a workout, or press + to add it.</p>
-          <ng-container [ngTemplateOutlet]="how" />
-        } @else {
-          <p class="help" i18n>Drag an exercise into a workout, or onto an empty day.</p>
-        }
+        <p class="help" i18n>Drag an exercise into a workout, or press + to add it.</p>
+        <ng-container [ngTemplateOutlet]="how" />
         <ul
           class="items"
           role="list"
@@ -210,19 +207,17 @@
                 <span class="name" dir="auto">{{ exercise.name }}</span>
                 <span class="detail">{{ exercise.detail }}</span>
               </span>
-              @if (offerAdd()) {
-                <!-- Pressed while the grid offers Add here for it; a second press lets it go. -->
-                <button
-                  class="choose"
-                  type="button"
-                  [attr.data-choose]="'exercise:' + exercise.id"
-                  [attr.aria-label]="addLabel(exercise)"
-                  [attr.aria-pressed]="picked"
-                  (click)="choose.emit(item)"
-                >
-                  <app-icon name="plus" />
-                </button>
-              }
+              <!-- Pressed while the grid offers Add here for it; a second press lets it go. -->
+              <button
+                class="choose"
+                type="button"
+                [attr.data-choose]="'exercise:' + exercise.id"
+                [attr.aria-label]="addLabel(exercise)"
+                [attr.aria-pressed]="picked"
+                (click)="choose.emit(item)"
+              >
+                <app-icon name="plus" />
+              </button>
             </li>
           }
         </ul>

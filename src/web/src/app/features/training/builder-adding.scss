@@ -1,6 +1,6 @@
-// Adding without dragging (critique B5b), in both builders: while a library row chosen with + waits,
-// every place a drop could land offers Add here, and a phone opens the library in a sheet. Kept apart
-// so each builder's own stylesheets stay under the component style budget.
+// Adding without dragging (critique B5b), in both builders and Edit weeks: while a library row chosen
+// with + waits, every place a drop could land offers Add here, and a phone opens the library in a
+// sheet. Kept apart so each page's own stylesheets stay under the component style budget.
 
 .add-here {
   align-items: center;
@@ -44,9 +44,12 @@
   text-align: center;
 }
 
+// Over the strip the library's sticky search paints above itself, which would cut its last line.
 .sheet-help {
   color: var(--tb-muted);
   margin: 0;
+  position: relative;
+  z-index: 2;
 }
 
 // The library opens in a sheet only where it has no room beside the grid.

@@ -208,7 +208,7 @@ public static class BodyweightSinceStart
         ArgumentNullException.ThrowIfNull(startProfileSamples);
         ArgumentNullException.ThrowIfNull(readProfileSamples);
         var startWeek = BodyweightWeekPolicy.GetWeekStart(startDate, weekStartsOn);
-        var startMean = WeekMean(startProfileSamples, startWeek);
+        var startMean = BodyweightWeekPolicy.WeekMean(startProfileSamples, startWeek);
         if (startMean is null)
         {
             return null;
@@ -226,24 +226,12 @@ public static class BodyweightSinceStart
             return null;
         }
 
-        var latestMean = WeekMean(read, latestWeek)!;
+        var latestMean = BodyweightWeekPolicy.WeekMean(read, latestWeek)!;
         var delta = latestMean.MeanKilograms - startMean.MeanKilograms;
         return new BodyweightSinceStartResult(
             startMean,
             latestMean,
             delta,
             decimal.Round(delta / startMean.MeanKilograms * 100m, 1, MidpointRounding.AwayFromZero));
-    }
-
-    private static BodyweightWeekMean? WeekMean(IEnumerable<BodyweightTrendSample> samples, DateOnly weekStart)
-    {
-        var weekEnd = weekStart.AddDays(7);
-        var week = samples.Where(sample => sample.Date >= weekStart && sample.Date < weekEnd).ToArray();
-        return week.Length == 0
-            ? null
-            : new BodyweightWeekMean(
-                weekStart,
-                decimal.Round(week.Average(sample => sample.ValueKilograms), 3, MidpointRounding.AwayFromZero),
-                week.Length);
     }
 }

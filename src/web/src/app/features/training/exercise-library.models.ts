@@ -443,11 +443,13 @@ export function exerciseCard(exercise: ExerciseView): ExerciseCard {
 }
 
 /**
- * What a card shows for its first media: a picture, a play tile, or a YouTube or Vimeo link that opens
- * the video on its own page, under the video's own title when its provider gave one (critique B9).
+ * What a card shows for its first media: a picture, an uploaded video whose tile opens its demo
+ * (critique B16), a YouTube or Vimeo link that opens the video on its own page, under the video's own
+ * title when its provider gave one (critique B9), or a play tile for a link that is neither page.
  */
 export type CardCover =
   | { readonly kind: 'image'; readonly url: string }
+  | { readonly kind: 'upload' }
   | { readonly kind: 'video'; readonly label: string }
   | {
       readonly kind: 'link';
@@ -468,13 +470,13 @@ function linkCover(
 }
 
 /**
- * What a card can show from the coach's media list alone: a link or a play tile for a video, or null
+ * What a card can show from the coach's media list alone: a link or a demo tile for a video, or null
  * for a picture, which needs a grant first (and for an asset the list did not include).
  */
 export function coverFromAsset(asset: MediaAssetView | undefined): CardCover | null {
   if (!asset || asset.status === 'Purged' || asset.status === 'Rejected') return null;
   if (asset.source === 'ExternalEmbed') return linkCover(asset.watchUrl, asset.externalTitle);
-  return asset.kind === 'Video' ? { kind: 'video', label: $localize`Video` } : null;
+  return asset.kind === 'Video' ? { kind: 'upload' } : null;
 }
 
 export function cardCover(access: MediaAccessView): CardCover {
@@ -485,7 +487,7 @@ export function cardCover(access: MediaAccessView): CardCover {
   if (access.source === 'ExternalEmbed') {
     return linkCover(externalVideo(access)?.url, access.externalTitle);
   }
-  return { kind: 'video', label: $localize`Video` };
+  return { kind: 'upload' };
 }
 
 /** "Watch on YouTube · opens in a new tab", under the video's own title on the tile (critique B9). */
@@ -493,8 +495,11 @@ export function watchCaption(provider: 'YouTube' | 'Vimeo'): string {
   return $localize`Watch on ${provider}:provider: · opens in a new tab`;
 }
 
-/** A card's menu, with "Watch on YouTube" first when its video is a link, as its tile opens it. */
+/** A card's menu, with what its video's tile opens first: "Watch demo", or "Watch on YouTube". */
 export function cardMenu(card: ExerciseCard, cover: CardCover | null): readonly UiMenuItem[] {
+  if (cover?.kind === 'upload') {
+    return [{ label: $localize`Watch demo`, action: 'demo' }, ...card.menu];
+  }
   if (cover?.kind !== 'link') return card.menu;
   return [
     {

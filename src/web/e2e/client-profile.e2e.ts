@@ -122,12 +122,18 @@ const dashboard = {
   bodyweight: {
     latest: { id: 'weight-1', measurementDate: '2026-10-01' },
     latestDisplayValue: 71.2,
-    change: {
+    weeklyChange: {
+      methodKey: 'BodyweightChangeWeeklyMean',
+      methodVersion: '1.0',
       fromDate: '2026-08-12',
-      fromValue: 74.8,
-      toDate: '2026-10-01',
-      toValue: 71.2,
-      delta: -3.6,
+      firstWeekStart: '2026-08-10',
+      firstWeekMeanKilograms: 74.8,
+      firstWeekObservedDayCount: 1,
+      latestWeekStart: '2026-09-28',
+      latestWeekMeanKilograms: 71.4,
+      latestWeekObservedDayCount: 1,
+      deltaKilograms: -3.4,
+      displayDelta: -3.4,
     },
     weeks: [
       { weekStart: '2026-09-07', displayMean: 72.6, observedDayCount: 6 },

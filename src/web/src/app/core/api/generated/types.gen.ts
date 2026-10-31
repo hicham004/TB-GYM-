@@ -1769,7 +1769,7 @@ export type DailyNutritionLogStatus = 'InProgress' | 'Completed';
 export type DashboardBodyweightSection = {
   latest: null | BodyweightObservationView;
   latestDisplayValue: null | number | string;
-  change: null | DashboardChange;
+  weeklyChange: null | DashboardWeeklyChange;
   weeks: Array<BodyweightWeekView>;
   trend: BodyweightTrendView;
   observedDayCount: number | string;
@@ -1885,6 +1885,20 @@ export type DashboardTrainingContext = {
   windowCompletedWorkoutCount: number | string;
   windowInProgressWorkoutCount: number | string;
   lastCompletedDate: null | string;
+};
+
+export type DashboardWeeklyChange = {
+  methodKey: string;
+  methodVersion: string;
+  fromDate: string;
+  firstWeekStart: string;
+  firstWeekMeanKilograms: number | string;
+  firstWeekObservedDayCount: number | string;
+  latestWeekStart: string;
+  latestWeekMeanKilograms: number | string;
+  latestWeekObservedDayCount: number | string;
+  deltaKilograms: number | string;
+  displayDelta: number | string;
 };
 
 export type DatedWorkoutView = {

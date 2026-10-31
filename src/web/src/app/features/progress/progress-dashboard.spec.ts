@@ -16,6 +16,20 @@ import { mapProgressDashboard, previewAssetIds } from './progress-dashboard.mode
 import { By } from '@angular/platform-browser';
 import { EntrySheets } from './entry-sheets';
 
+const WEEKLY_CHANGE = {
+  methodKey: 'BodyweightChangeWeeklyMean',
+  methodVersion: '1.0',
+  fromDate: '2026-08-05',
+  firstWeekStart: '2026-08-03',
+  firstWeekMeanKilograms: '83',
+  firstWeekObservedDayCount: '2',
+  latestWeekStart: '2026-08-17',
+  latestWeekMeanKilograms: '82',
+  latestWeekObservedDayCount: '2',
+  deltaKilograms: '-1',
+  displayDelta: '-1',
+};
+
 function contract(overrides: Record<string, unknown> = {}): ProgressDashboardContract {
   return {
     clientProfileId: 'client-1',
@@ -29,13 +43,7 @@ function contract(overrides: Record<string, unknown> = {}): ProgressDashboardCon
     bodyweight: {
       latest: { id: 'obs-1', measurementDate: '2026-08-22' },
       latestDisplayValue: '81.5',
-      change: {
-        fromDate: '2026-08-20',
-        fromValue: '82.5',
-        toDate: '2026-08-22',
-        toValue: '81.5',
-        delta: '-1',
-      },
+      weeklyChange: WEEKLY_CHANGE,
       weeks: [{ weekStart: '2026-08-17', displayMean: '82', observedDayCount: '2' }],
       trend: { availability: 'Available', latestDisplayEstimate: '81.9' },
       observedDayCount: '2',
@@ -124,7 +132,7 @@ const emptySections = {
   bodyweight: {
     latest: null,
     latestDisplayValue: null,
-    change: null,
+    weeklyChange: null,
     weeks: [],
     trend: { availability: 'NotEnoughData', latestDisplayEstimate: null },
     observedDayCount: '0',
@@ -254,12 +262,13 @@ describe('progress dashboard mapping', () => {
 
     expect(mapped.windowDayCount).toBe(83);
     expect(mapped.bodyweight.latestDisplayValue).toBe(81.5);
-    expect(mapped.bodyweight.change).toEqual({
-      fromDate: '2026-08-20',
-      fromValue: 82.5,
-      toDate: '2026-08-22',
-      toValue: 81.5,
-      delta: -1,
+    expect(mapped.bodyweight.weeklyChange).toEqual({
+      methodKey: 'BodyweightChangeWeeklyMean',
+      methodVersion: '1.0',
+      fromDate: '2026-08-05',
+      firstWeekStart: '2026-08-03',
+      latestWeekStart: '2026-08-17',
+      displayDelta: -1,
     });
     expect(mapped.bodyweight.weeks[0]).toEqual({
       weekStart: '2026-08-17',
@@ -939,6 +948,35 @@ describe('where a coach’s client started (critique B6)', () => {
     expect((open.mock.calls[0] as unknown as [unknown, { title: string }])[1].title).toBe(
       'Correct the starting weight',
     );
+  });
+
+  it('says the same change beside the weight when the chart begins at the start (critique B16)', async () => {
+    const days = [
+      { date: '2026-08-05', displayValue: 83, trendEstimate: null, observation: { id: 'a' } },
+      { date: '2026-08-22', displayValue: 81.5, trendEstimate: null, observation: { id: 'b' } },
+    ];
+    const dashboard = contract();
+    const withStart = {
+      ...dashboard,
+      bodyweight: {
+        ...(dashboard.bodyweight as object),
+        start: START,
+        weeklyChange: { ...WEEKLY_CHANGE, deltaKilograms: '-5.3', displayDelta: '-5.3' },
+      },
+    } as unknown as ProgressDashboardContract;
+    const api = {
+      ...coachApi(),
+      getClientProgressDashboard: vi.fn(() => of(withStart)) as never,
+      getClientProgress: vi.fn(() =>
+        of({ days, weeks: [], trend: TREND, displayUnit: 'Kilogram' } as never),
+      ) as never,
+    };
+    const { host } = await renderWith(of(withStart), api, { clientId: 'client-9' });
+
+    expect(query(host, '.delta').textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      '↓ 5.3 kg since 5 Aug',
+    );
+    expect(query(host, '.since-start').textContent?.trim()).toBe('Since start −5.3 kg (−5.4%)');
   });
 
   it('shows a former client’s start but offers no correction (ADR 0027)', async () => {

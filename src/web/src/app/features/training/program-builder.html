@@ -62,7 +62,7 @@
           <p class="status" [class.unsaved]="troubled()">{{ statusLine() }}</p>
           <!-- Autosave runs at every pause, so only a failure (and its recovery) is announced. -->
           <p class="tb-visually-hidden" role="status">{{ liveStatus() }}</p>
-          <p class="tb-visually-hidden" role="status">{{ addingStatus() }}</p>
+          <p class="tb-visually-hidden" role="status">{{ adding.status() }}</p>
           <div class="save-buttons">
             @if (canDiscard()) {
               <button appButton type="button" variant="text" (click)="discard()" i18n>
@@ -165,13 +165,12 @@
             </div>
             <app-program-library
               mode="drag"
-              offerAdd
               [source]="library"
               [connectedTo]="dropIds()"
-              [chosen]="adding()"
-              [tip]="tipOpen()"
-              (choose)="choose($event)"
-              (tipChange)="tipChanged($event)"
+              [chosen]="adding.chosen()"
+              [tip]="adding.tipOpen()"
+              (choose)="adding.choose($event)"
+              (tipChange)="adding.tipChanged($event)"
               (retry)="loadLibrary()"
             />
           </aside>
@@ -314,7 +313,7 @@
                           class="add-here"
                           type="button"
                           [attr.aria-label]="label"
-                          (click)="addHere(fold.target)"
+                          (click)="adding.addHere(fold.target)"
                         >
                           <app-icon name="plus" />
                           <span i18n>Add here</span>&ngsp;<span class="add-here-day"
@@ -447,7 +446,7 @@
                               class="add-here"
                               type="button"
                               [attr.aria-label]="label"
-                              (click)="addHere(session.target)"
+                              (click)="adding.addHere(session.target)"
                             >
                               <app-icon name="plus" />
                               <span i18n>Add here</span>
@@ -470,7 +469,7 @@
                           class="add-here"
                           type="button"
                           [attr.aria-label]="label"
-                          (click)="addHere(cell.target)"
+                          (click)="adding.addHere(cell.target)"
                         >
                           <app-icon name="plus" />
                           <span i18n>Add here</span>
@@ -493,11 +492,8 @@
             }
           </div>
           <!-- In the grid's column, so it never covers the library beside it. -->
-          @if (adding(); as item) {
-            <app-adding-bar
-              [name]="item.kind === 'library' ? item.exercise.name : item.saved.name"
-              (cancelled)="stopAdding()"
-            />
+          @if (adding.name(); as name) {
+            <app-adding-bar [name]="name" (cancelled)="adding.stop()" />
           }
         </section>
       </div>

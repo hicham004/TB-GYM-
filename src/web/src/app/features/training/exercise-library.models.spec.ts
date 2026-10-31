@@ -139,6 +139,26 @@ describe('the exercise library, in coach words', () => {
     expect(cardMenu(card, null)).toBe(card.menu);
   });
 
+  it('opens an uploaded video’s demo from its tile and its menu, and no other cover’s', () => {
+    expect(coverFromAsset(asset({ kind: 'Video', contentType: 'video/mp4' }))).toEqual({
+      kind: 'upload',
+    });
+    expect(cardCover(access({ kind: 'Video', contentType: 'video/mp4' }))).toEqual({
+      kind: 'upload',
+    });
+    const card = exerciseCard(exercise('Hip Hinge'));
+    expect(
+      cardMenu(card, { kind: 'upload' }).map((item) => [item.label, item.action, item.href]),
+    ).toEqual([
+      ['Watch demo', 'demo', undefined],
+      ['Edit', 'edit', undefined],
+      ['Archive', 'archive', undefined],
+    ]);
+    expect(cardMenu(card, { kind: 'image', url: '/thumb' })).toBe(card.menu);
+    // A link that is neither provider's page opens nothing, so its tile offers nothing either.
+    expect(cardMenu(card, { kind: 'video', label: 'Video link' })).toBe(card.menu);
+  });
+
   it('letters a tile from the first two words', () => {
     expect(initialsOf('Romanian deadlift')).toBe('RD');
     expect(initialsOf('Pull-up')).toBe('PU');

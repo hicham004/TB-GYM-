@@ -86,14 +86,10 @@
             >{{ entries()[0].displayValue | number: '1.0-2' }}
             <small>{{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</small></strong
           >
-          @if (range() !== 'all' && view.bodyweight.change; as change) {
-            <span class="delta" [class.up]="change.delta > 0"
-              ><span class="delta-mark" [class.level]="change.delta === 0">{{
-                change.delta > 0 ? '↑' : change.delta < 0 ? '↓' : '→'
-              }}</span>
-              {{ abs(change.delta) | number: '1.0-2' }}
-              {{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }} since
-              {{ change.fromDate | date: 'd MMM' }}</span
+          @if (range() !== 'all' && weightChange(); as change) {
+            <span class="delta" [class.up]="change.mark === '↑'"
+              ><span class="delta-mark" [class.level]="change.mark === '→'">{{ change.mark }}</span>
+              {{ change.text }}</span
             >
           } @else {
             <span class="delta" i18n

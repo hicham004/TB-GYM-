@@ -5,6 +5,7 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, throwError, type Observable } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiClient } from '../../core/api/api-client';
 import type { ExerciseSearchResult } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -41,6 +42,10 @@ async function render(
     of(results([BACK_SQUAT, BENCH_PRESS, PULL_UP])),
   overrides: Partial<Api> = {},
 ) {
+  // The demo sheet's grant, as the builder's Watch demo asks for it.
+  const createMediaAccess = vi.fn((assetId: string) =>
+    of(access({ assetId, kind: 'Video', url: `/api/media/${assetId}/content` })),
+  );
   const api: Api = {
     search: vi.fn(search),
     get: vi.fn((id: string) => of(exercise('Selected swap', { id }))),
@@ -83,6 +88,7 @@ async function render(
     providers: [
       provideRouter([{ path: 'training/exercises', component: ExerciseLibrary }]),
       { provide: ExerciseLibraryApi, useValue: api },
+      { provide: ApiClient, useValue: { createMediaAccess } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
     ],
@@ -90,7 +96,7 @@ async function render(
   const harness = await RouterTestingHarness.create();
   await harness.navigateByUrl(url, ExerciseLibrary);
   await settle(harness.fixture);
-  return { harness, host: harness.routeNativeElement as HTMLElement, api };
+  return { harness, host: harness.routeNativeElement as HTMLElement, api, createMediaAccess };
 }
 
 const textOf = (element: Element | null | undefined) =>
@@ -305,7 +311,7 @@ describe('the exercise library', () => {
     expect(params()).toEqual({ archived: '1' });
     expect(api.search).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'Archived' }));
     expect(textOf(host.querySelector('.archived-note'))).toBe(
-      'Archived exercises are left out of your pickers and of programs you build from now on. Programs already built keep them. Open one to restore it.',
+      'Archived exercises are left out of your pickers and of programs you build from now on. Programs already built keep them. Restore one from its menu.',
     );
     expect(textOf(host.querySelector('.lede'))).toBe('3 archived exercises');
   });
@@ -399,6 +405,107 @@ describe('the exercise library', () => {
       'Edit',
       'Archive',
     ]);
+  });
+
+  describe('an uploaded video (critique B16)', () => {
+    const LUNGE = exercise('Walking Lunge', { mediaAssetIds: ['m-lunge-video', 'm-lunge-photo'] });
+    const listMedia = vi.fn(() =>
+      of({
+        items: [asset({ id: 'm-lunge-video', kind: 'Video', contentType: 'video/mp4' })],
+        total: 1,
+        skip: 0,
+        take: 100,
+      }),
+    );
+    const open = () => render(undefined, () => of(results([LUNGE])), { listMedia });
+
+    it('opens the builder’s demo from its tile, every demo of the exercise in it', async () => {
+      const { harness, host, createMediaAccess } = await open();
+      const tile = host.querySelector<HTMLButtonElement>('app-exercise-demo.cover button')!;
+      expect(textOf(tile)).toBe('Watch demo');
+      // Its name starts with the words it shows (WCAG 2.5.3).
+      expect(tile.getAttribute('aria-label')).toBe('Watch demo: Walking Lunge');
+
+      tile.click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Walking Lunge');
+      expect(createMediaAccess).toHaveBeenCalledExactlyOnceWith('m-lunge-video');
+      expect(dialog()!.querySelector('video')?.getAttribute('src')).toBe(
+        '/api/media/m-lunge-video/content',
+      );
+      expect(
+        Array.from(dialog()!.querySelectorAll('.pick-one')).map((item) => textOf(item)),
+      ).toEqual(['Demo 1', 'Demo 2']);
+    });
+
+    it('opens the same demo from the card’s menu, above what the menu had', async () => {
+      const { harness, host, createMediaAccess } = await open();
+      const more = host.querySelector<HTMLButtonElement>(
+        'button[aria-label="More for Walking Lunge"]',
+      )!;
+      more.click();
+      await settle(harness.fixture);
+      const [watch, ...rest] = menuChoices(more);
+      expect(textOf(watch.querySelector('.item-title'))).toBe('Watch demo');
+      expect(watch.getAttribute('href')).toBeNull();
+      expect(rest.map((item) => textOf(item.querySelector('.item-title')))).toEqual([
+        'Edit',
+        'Archive',
+      ]);
+
+      watch.click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Walking Lunge');
+      expect(createMediaAccess).toHaveBeenCalledExactlyOnceWith('m-lunge-video');
+    });
+
+    it('stays on an archived card, beside Restore', async () => {
+      const archived = { ...LUNGE, isArchived: true };
+      const { harness, host } = await render(
+        '/training/exercises?archived=1',
+        () => of(results([archived])),
+        { listMedia },
+      );
+      expect(host.querySelector('app-exercise-demo.cover button')).not.toBeNull();
+      const more = host.querySelector<HTMLButtonElement>(
+        'button[aria-label="More for Walking Lunge"]',
+      )!;
+      more.click();
+      await settle(harness.fixture);
+      expect(menuChoices(more).map((item) => textOf(item.querySelector('.item-title')))).toEqual([
+        'Watch demo',
+        'Restore',
+      ]);
+    });
+
+    it('keeps a picture’s tile and its card’s menu as they were', async () => {
+      const { harness, host } = await render();
+      expect(host.querySelector('app-exercise-demo')).toBeNull();
+      const more = host.querySelector<HTMLButtonElement>(
+        'button[aria-label="More for Back Squat"]',
+      )!;
+      more.click();
+      await settle(harness.fixture);
+      expect(menuChoices(more).map((item) => textOf(item.querySelector('.item-title')))).toEqual([
+        'Edit',
+        'Archive',
+      ]);
+    });
+
+    it('shows an upload the media list did not reach from its grant', async () => {
+      const { host, api } = await render(undefined, () => of(results([LUNGE])), {
+        listMedia: vi.fn(() => of({ items: [], total: 0, skip: 0, take: 100 })),
+        grant: vi.fn(() =>
+          of({
+            items: [access({ assetId: 'm-lunge-video', kind: 'Video', contentType: 'video/mp4' })],
+          }),
+        ),
+      });
+      expect(api.grant).toHaveBeenCalledWith(['m-lunge-video']);
+      expect(textOf(host.querySelector('app-exercise-demo.cover button'))).toBe('Watch demo');
+    });
   });
 
   it('applies a chip at once and keeps it in the address; Any takes it off', async () => {
@@ -694,6 +801,6 @@ describe('the exercise library', () => {
     expect(menuChoices(more).map((item) => textOf(item.querySelector('.item-title')))).toEqual([
       'Restore',
     ]);
-    expect(textOf(host.querySelector('.archived-note'))).toContain('Open one to restore it.');
+    expect(textOf(host.querySelector('.archived-note'))).toContain('Restore one from its menu.');
   });
 });

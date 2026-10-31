@@ -660,6 +660,26 @@ Choices the rows from B12 on made, kept as built until the owner answers:
 - B15 · The words the row did not give. Built: "outside the Epley curve" on a line past the curve's limit, as "outside
   the RTS chart" says it; "Epley curve: reps plus RIR up to 12" under the effort box until the set fits. Recommendation:
   as built.
+- B16 · A chart that opens in the middle of a week, as 4 w usually does. Built: the week holding the range's first weigh-in
+  is compared whole, days just before the chart's first day included, so a range opening on a Sunday still compares a week
+  and a chart opening a day after the start still agrees with "Since start". The other way: only the days the range shows,
+  which can leave one weigh-in standing for a week. Recommendation: as built.
+- B16 · The day the label names. Built: the range's first weigh-in, as the row's example has it ("since 27 Aug"), though
+  the mean is that whole week's. The other way: the first day of the week. Recommendation: as built.
+- B16 · One week of weigh-ins, and All. Built: "Recorded from …", the sentence a single weigh-in already had, since one week
+  has nothing to compare, where two weigh-ins of a week used to give a change of days; All keeps it too, as the read stops
+  at 12 months and its chart goes further. The other way: on All, the change since the first weigh-in ever, with a read
+  past 12 months. Recommendation: as built.
+- B16 · Which uploaded video. Built: a card whose first media is an uploaded video, whose tile is the video's. A card
+  showing a picture first keeps its tile and menu, even with a video after the picture. The other way: Watch demo in the
+  menu of any card with an upload. Recommendation: as built until a coach asks.
+- B16 · Edit weeks' panel. Built: the +, the tip, the bar and a phone's Exercises sheet. "How adding works" shares the
+  builder's first visit, so a coach who folded it there does not meet it here. Left out, as the row names only + and Add
+  here: Manage in the panel's head, and folding weeks. The other way: a first visit of its own. Recommendation: as built.
+- B16 · The words the row did not give. Built: "Watch demo" on the tile and in the menu, the builder's own words; "No change
+  since 27 Aug" for a change that reads under 0.05, as "No change since start" does; the tip's "…, from today on.", since
+  a day gone takes nothing; Add here's names and its message give Edit weeks' dates ("Add here: Upper, week 2, Wednesday 7
+  October"), as its + on a day does. Recommendation: as built.
 
 Waits for Toufic's answers (section 1), kept as built until then:
 

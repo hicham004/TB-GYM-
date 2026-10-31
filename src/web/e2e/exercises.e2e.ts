@@ -263,7 +263,7 @@ for (const width of [390, 1440]) {
     await expect(page).toHaveURL(/archived=1/);
     expect(searches.at(-1)?.searchParams.get('status')).toBe('Archived');
     await expect(page.locator('.archived-note')).toHaveText(
-      'Archived exercises are left out of your pickers and of programs you build from now on. Programs already built keep them. Open one to restore it.',
+      'Archived exercises are left out of your pickers and of programs you build from now on. Programs already built keep them. Restore one from its menu.',
     );
     await expect(page.locator('.lede')).toHaveText('1 archived exercise');
     await expect(page.locator('.exercise .type')).toHaveText('Warm-up and activation');

@@ -3,6 +3,7 @@ import type {
   DashboardBodyweightSection as ContractBodyweight,
   DashboardStart as ContractStart,
   DashboardStartKind,
+  DashboardWeeklyChange as ContractWeeklyChange,
   StartingWeightView as ContractStartingWeight,
   DashboardChange as ContractChange,
   DashboardEntitledSectionOfDashboardNutritionContext as ContractNutritionSection,
@@ -29,10 +30,24 @@ export interface DashboardChange {
   delta: number;
 }
 
+/**
+ * The change beside the weight as the server worked it out (BodyweightChangeWeeklyMean, critique B16):
+ * the latest weekly mean minus the mean of the week holding `fromDate`, the range's first weigh-in,
+ * with the two weeks it compares so the figure can be explained. Null while they sit in one week.
+ */
+export interface DashboardWeeklyChange {
+  methodKey: string;
+  methodVersion: string;
+  fromDate: string;
+  firstWeekStart: string;
+  latestWeekStart: string;
+  displayDelta: number;
+}
+
 export interface DashboardBodyweight {
   latestDate: string | null;
   latestDisplayValue: number | null;
-  change: DashboardChange | null;
+  weeklyChange: DashboardWeeklyChange | null;
   weeks: { weekStart: string; displayMean: number | null; observedDayCount: number }[];
   trendEstimate: number | null;
   trendIsAvailable: boolean;
@@ -208,7 +223,7 @@ function mapBodyweight(value: ContractBodyweight): DashboardBodyweight {
   return {
     latestDate: value.latest?.measurementDate ?? null,
     latestDisplayValue: nullableNumber(value.latestDisplayValue),
-    change: mapChange(value.change),
+    weeklyChange: value.weeklyChange ? mapWeeklyChange(value.weeklyChange) : null,
     weeks: value.weeks.map((week) => ({
       weekStart: week.weekStart,
       displayMean: nullableNumber(week.displayMean),
@@ -218,6 +233,17 @@ function mapBodyweight(value: ContractBodyweight): DashboardBodyweight {
     trendIsAvailable: value.trend.availability === 'Available',
     observedDayCount: Number(value.observedDayCount),
     start: value.start ? mapStart(value.start) : null,
+  };
+}
+
+function mapWeeklyChange(value: ContractWeeklyChange): DashboardWeeklyChange {
+  return {
+    methodKey: value.methodKey,
+    methodVersion: value.methodVersion,
+    fromDate: value.fromDate,
+    firstWeekStart: value.firstWeekStart,
+    latestWeekStart: value.latestWeekStart,
+    displayDelta: Number(value.displayDelta),
   };
 }
 
@@ -297,21 +323,52 @@ export function startWords(
   return { lines, sinceStart: sinceStartText(start.sinceStart, word, locale) };
 }
 
+/**
+ * How much a weight changed, to one decimal, or null for no change: the same for "Since start" and the
+ * label beside the weight, so the two read alike. Less than 0.05 reads as 0.0. Otherwise formatNumber
+ * rounds the size by its decimal digits, half away from zero as the server does (Math.round would
+ * take −3.85 to −3.8).
+ */
+function changeSize(delta: number, locale: string): string | null {
+  const size = Math.abs(delta);
+  return size < 0.05 ? null : formatNumber(size, locale, '1.1-1');
+}
+
 function sinceStartText(
   since: DashboardSinceStart | null,
   word: string,
   locale: string,
 ): string | null {
   if (since === null) return null;
-  // Less than 0.05 reads as 0.0. Otherwise formatNumber rounds the size by its decimal digits, half
-  // away from zero as the server does (Math.round would take −3.85 to −3.8).
-  const size = Math.abs(since.displayDelta);
-  if (size < 0.05) return $localize`No change since start`;
+  const amount = changeSize(since.displayDelta, locale);
+  if (amount === null) return $localize`No change since start`;
   // A true minus sign, which is read aloud as "minus"; a gain says plus.
   const sign = since.displayDelta < 0 ? '−' : '+';
-  const amount = formatNumber(size, locale, '1.1-1');
   const percent = formatNumber(Math.abs(since.percent), locale, '1.1-1');
   return $localize`Since start ${sign}${amount}:change: ${word}:unit: (${sign}${percent}:percent:%)`;
+}
+
+/** The label beside the weight: an arrow, and "3.9 kg since 27 Aug" (critique B16). */
+export interface WeightChangeWords {
+  mark: '↑' | '↓' | '→';
+  text: string;
+}
+
+/** Never worked out here: the server sends the figure and the day it counts from. */
+export function weightChangeWords(
+  change: DashboardWeeklyChange | null,
+  unit: RecordedMassUnit,
+  locale: string,
+): WeightChangeWords | null {
+  if (change === null) return null;
+  const day = formatDate(change.fromDate, 'd MMM', locale);
+  const amount = changeSize(change.displayDelta, locale);
+  if (amount === null) return { mark: '→', text: $localize`No change since ${day}:day:` };
+  const word = unit === 'Pound' ? 'lb' : 'kg';
+  return {
+    mark: change.displayDelta < 0 ? '↓' : '↑',
+    text: $localize`${amount}:change: ${word}:unit: since ${day}:day:`,
+  };
 }
 
 function mapMeasurements(value: ContractMeasurements): {

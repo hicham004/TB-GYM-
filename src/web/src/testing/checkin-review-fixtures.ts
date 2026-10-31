@@ -383,7 +383,7 @@ export function reviewDashboard(
           }
         : null,
       latestDisplayValue: weighIns ? 71.2 : null,
-      change: null,
+      weeklyChange: null,
       weeks: weighIns
         ? [
             week('2026-09-07', 72.6, 6),

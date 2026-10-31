@@ -65,13 +65,31 @@ public sealed record DashboardChange(
 public sealed record DashboardBodyweightSection(
     BodyweightObservationView? Latest,
     decimal? LatestDisplayValue,
-    DashboardChange? Change,
+    DashboardWeeklyChange? WeeklyChange,
     IReadOnlyList<BodyweightWeekView> Weeks,
     BodyweightTrendView Trend,
     // The denominator is stated so "12" is never read as a rate: 12 observed days out of 84.
     int ObservedDayCount,
     // Only a coach's read carries it, whatever the window (critique B6); the client's own is null.
     DashboardStart? Start = null);
+
+/// <summary>
+/// The change over the window by <see cref="BodyweightWeeklyChange"/> (critique B16), with the two weekly
+/// means it compares, so the figure can always be explained; <see cref="FromDate"/> is the window's first
+/// weigh-in, the day the label names. Null while the window's weigh-ins sit in one week.
+/// </summary>
+public sealed record DashboardWeeklyChange(
+    string MethodKey,
+    string MethodVersion,
+    DateOnly FromDate,
+    DateOnly FirstWeekStart,
+    decimal FirstWeekMeanKilograms,
+    int FirstWeekObservedDayCount,
+    DateOnly LatestWeekStart,
+    decimal LatestWeekMeanKilograms,
+    int LatestWeekObservedDayCount,
+    decimal DeltaKilograms,
+    decimal DisplayDelta);
 
 /// <summary>
 /// Where the client started (critique B6, PRG-014), read for their coach. <see cref="Starts"/> lists the

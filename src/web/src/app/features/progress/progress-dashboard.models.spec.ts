@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DashboardStart as ContractStart } from '../../core/api/generated';
-import { mapStartingWeight, startWords, type DashboardStart } from './progress-dashboard.models';
+import {
+  type DashboardStart,
+  type DashboardWeeklyChange,
+  mapStartingWeight,
+  startWords,
+  weightChangeWords,
+} from './progress-dashboard.models';
 
 function start(overrides: Partial<DashboardStart> = {}): DashboardStart {
   return {
@@ -20,6 +26,55 @@ function start(overrides: Partial<DashboardStart> = {}): DashboardStart {
     ...overrides,
   };
 }
+
+function change(displayDelta: number): DashboardWeeklyChange {
+  return {
+    methodKey: 'BodyweightChangeWeeklyMean',
+    methodVersion: '1.0',
+    fromDate: '2026-08-27',
+    firstWeekStart: '2026-08-24',
+    latestWeekStart: '2026-10-26',
+    displayDelta,
+  };
+}
+
+describe('the change beside the weight (critique B16)', () => {
+  it('says the server’s weekly figure to one decimal, from the day the range begins', () => {
+    expect(weightChangeWords(change(-3.9), 'Kilogram', 'en')).toEqual({
+      mark: '↓',
+      text: '3.9 kg since 27 Aug',
+    });
+    expect(weightChangeWords(change(1.6), 'Kilogram', 'en')).toEqual({
+      mark: '↑',
+      text: '1.6 kg since 27 Aug',
+    });
+    expect(weightChangeWords(change(-11.654), 'Pound', 'en')).toEqual({
+      mark: '↓',
+      text: '11.7 lb since 27 Aug',
+    });
+  });
+
+  it('rounds as "Since start" does, so the two never read differently', () => {
+    for (const delta of [-3.85, -0.05, 0.05, -0.04, 0, 0.04, -5.286]) {
+      const since = startWords(
+        start({ sinceStart: { ...start().sinceStart!, displayDelta: delta } }),
+        'Kilogram',
+        'en',
+      )!.sinceStart!;
+      const label = weightChangeWords(change(delta), 'Kilogram', 'en')!.text;
+      const size = /(\d+\.\d) kg/.exec(since)?.[1];
+      expect(label).toBe(size ? `${size} kg since 27 Aug` : 'No change since 27 Aug');
+    }
+  });
+
+  it('says no change with the level arrow, and nothing without a comparison', () => {
+    expect(weightChangeWords(change(0.04), 'Kilogram', 'en')).toEqual({
+      mark: '→',
+      text: 'No change since 27 Aug',
+    });
+    expect(weightChangeWords(null, 'Kilogram', 'en')).toBeNull();
+  });
+});
 
 describe('where a client started (critique B6)', () => {
   it('names the first start and each comeback with the day, oldest first', () => {

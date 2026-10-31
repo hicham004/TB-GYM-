@@ -20,13 +20,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         var otherId = await InviteAndAcceptAsync(coach, otherClient, "p5b4-other@example.test", true);
         SetTenant(otherClient, workspaceId);
 
-        await Phase5B4RecordBodyweightAsync(owner, 82.5m, "2026-08-20");
+        await Phase5B4RecordBodyweightAsync(owner, 82.5m, "2026-08-10");
         await Phase5B4RecordBodyweightAsync(owner, 81.5m, "2026-08-22");
 
         var own = await Phase5B4OwnDashboardAsync(owner);
         Assert.AreEqual(ownerId, own.ClientProfileId);
         Assert.AreEqual(81.5m, own.Bodyweight.LatestDisplayValue);
-        Assert.AreEqual(-1.0m, own.Bodyweight.Change!.Delta);
+        Assert.AreEqual(-1.0m, own.Bodyweight.WeeklyChange!.DeltaKilograms);
         Assert.AreEqual(2, own.Bodyweight.ObservedDayCount);
 
         // Another client of the same workspace sees only their own, empty, dashboard.
@@ -51,6 +51,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var coachView = await Phase5B4ClientDashboardAsync(coach, ownerId);
         Assert.AreEqual(ownerId, coachView.ClientProfileId);
         Assert.AreEqual(81.5m, coachView.Bodyweight.LatestDisplayValue);
+        Assert.AreEqual(-1.0m, coachView.Bodyweight.WeeklyChange!.DeltaKilograms);
     }
 
     [TestMethod]
@@ -378,12 +379,12 @@ public sealed partial class Phase3TrainingWorkflowTests
     private sealed record Phase5B4Bodyweight(
         Phase5B4Observation? Latest,
         decimal? LatestDisplayValue,
-        Phase5B4Change? Change,
+        Phase5B4WeeklyChange? WeeklyChange,
         Phase5B4Week[] Weeks,
         int ObservedDayCount);
 
     private sealed record Phase5B4Observation(Guid Id, string MeasurementDate);
-    private sealed record Phase5B4Change(decimal Delta);
+    private sealed record Phase5B4WeeklyChange(decimal DeltaKilograms);
     private sealed record Phase5B4Week(string WeekStart, int ObservedDayCount);
     private sealed record Phase5B4Measurements(Phase5B4MeasurementSummary[] Measurements, int ObservedDayCount);
     private sealed record Phase5B4MeasurementSummary(string MeasurementType, decimal LatestDisplayValue);

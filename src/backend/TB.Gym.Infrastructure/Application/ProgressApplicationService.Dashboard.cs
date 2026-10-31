@@ -180,12 +180,12 @@ internal sealed partial class ProgressApplicationService
         var windowObservations = observations
             .Where(item => item.MeasurementDate >= window.From && item.MeasurementDate < window.ToExclusive)
             .ToArray();
+        var readSamples = observations
+            .Select(item => new BodyweightTrendSample(item.MeasurementDate, item.ValueKilograms))
+            .ToArray();
         var trendIsAvailable = windowObservations.Length >= BodyweightTrendEwma.MinimumWindowSampleCount;
         var trends = trendIsAvailable
-            ? BodyweightTrendEwma.Calculate(
-                observations.Select(item => new BodyweightTrendSample(item.MeasurementDate, item.ValueKilograms)),
-                window.From,
-                window.ToExclusive)
+            ? BodyweightTrendEwma.Calculate(readSamples, window.From, window.ToExclusive)
             : [];
 
         // The weekly grid keeps whole workspace weeks so the columns line up, but every figure in it
@@ -213,18 +213,27 @@ internal sealed partial class ProgressApplicationService
         }
 
         var latest = windowObservations.Length == 0 ? null : windowObservations[^1];
-        var change = windowObservations.Length < 2
-            ? null
-            : BuildChange(
-                windowObservations[0].MeasurementDate,
-                BodyweightUnitConverter.FromKilograms(windowObservations[0].ValueKilograms, displayUnit),
-                windowObservations[^1].MeasurementDate,
-                BodyweightUnitConverter.FromKilograms(windowObservations[^1].ValueKilograms, displayUnit));
+        // The widened read holds the whole of every week the window's weigh-ins fall in, which the
+        // change compares, unlike the grid above.
+        var change = BodyweightWeeklyChange.Calculate(readSamples, window.From, window.ToExclusive, calendar.WeekStartsOn);
         var latestTrend = trends.Count == 0 ? null : trends[^1];
         return new DashboardBodyweightSection(
             latest is null ? null : ToObservationView(latest),
             latest is null ? null : BodyweightUnitConverter.FromKilograms(latest.ValueKilograms, displayUnit),
-            change,
+            change is null
+                ? null
+                : new DashboardWeeklyChange(
+                    BodyweightWeeklyChange.MethodKey,
+                    BodyweightWeeklyChange.MethodVersion,
+                    change.FromDate,
+                    change.FirstWeek.WeekStart,
+                    change.FirstWeek.MeanKilograms,
+                    change.FirstWeek.ObservedDayCount,
+                    change.LatestWeek.WeekStart,
+                    change.LatestWeek.MeanKilograms,
+                    change.LatestWeek.ObservedDayCount,
+                    change.DeltaKilograms,
+                    BodyweightUnitConverter.FromKilograms(change.DeltaKilograms, displayUnit)),
             weeks,
             new BodyweightTrendView(
                 true,

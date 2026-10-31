@@ -13,6 +13,7 @@ import {
   TemplateRef,
   untracked,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -36,6 +37,7 @@ import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control
 import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import { UiToast } from '../../ui/toast';
+import { ExerciseDemo } from './exercise-demo';
 import { ExerciseLibraryApi } from './exercise-library-api';
 import {
   type CardCover,
@@ -73,7 +75,8 @@ const GRANT_BATCH = 32;
  * can be shared or reopened. "Your exercises" and "Archived (n)" are two views (critique B9): archived
  * exercises are left out of every picker, and programs already built keep them (LIB-004). New exercise
  * is the one main action; Edit, Archive and Restore sit in each card's menu, and archiving has Undo. A
- * YouTube or Vimeo demo's tile, and its menu, open the video on its own page in a new tab.
+ * YouTube or Vimeo demo's tile, and its menu, open the video on its own page in a new tab; an uploaded
+ * video's open the demo the builder's Watch demo opens (critique B16).
  */
 @Component({
   selector: 'app-exercise-library',
@@ -81,6 +84,7 @@ const GRANT_BATCH = 32;
     Button,
     Control,
     EmptyState,
+    ExerciseDemo,
     ExerciseSheet,
     Field,
     Icon,
@@ -108,6 +112,8 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
   private readonly sheetTemplate = viewChild.required<TemplateRef<unknown>>('exerciseSheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  /** The uploaded videos' tiles; a card's menu opens the demo its tile opens. */
+  private readonly demos = viewChildren(ExerciseDemo);
   private openSheet: DialogRef<unknown, ModalSurface> | null = null;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -377,6 +383,12 @@ export class ExerciseLibrary implements HoldsUnsavedWork {
 
   protected cardChosen(card: ExerciseCard, action: string): void {
     switch (action) {
+      case 'demo':
+        // An exercise's name is unique in the library, so it finds the card's own tile.
+        void this.demos()
+          .find((demo) => demo.exerciseName() === card.name)
+          ?.open();
+        return;
       case 'edit':
         this.open(card.exercise, $localize`Edit ${card.name}:exercise:`);
         return;
