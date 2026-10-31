@@ -55,6 +55,22 @@ describe('the program’s client preview', () => {
     );
   });
 
+  it('gives an Epley set its own share and no weight, since a template has no client (critique B15)', async () => {
+    const program = draftFromVersion(versionView());
+    const set = program.weeks[0].sessions[0].exercises[0].sets[0];
+    set.loadStrategy = 'RpeBasedEpley';
+    set.repetitionsMinimum = 5;
+    set.repetitionsMaximum = 5;
+    set.exertionDisplayPreference = 'Rpe';
+    set.exertionTarget = 8;
+    const fixture = TestBed.createComponent(ProgramPublishPreview);
+    fixture.componentRef.setInput('program', program);
+    await settle(fixture);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      '5 · RPE 8 · 81% of training max',
+    );
+  });
+
   it('says nothing of maxes for a program whose weights are typed', async () => {
     const program = draftFromVersion(versionView());
     for (const set of program.weeks

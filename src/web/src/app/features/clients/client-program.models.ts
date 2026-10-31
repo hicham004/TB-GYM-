@@ -634,6 +634,11 @@ export interface ExerciseLine {
   readonly media: readonly string[];
 }
 
+/** A weight as every line of a client's program says it: "162.5 kg". */
+export function weightText(load: number | string, unit: TrainingLoadUnit, locale: string): string {
+  return `${formatNumber(count(load), locale, '1.0-2')} ${unitLabel(unit)}`;
+}
+
 function setText(set: SetPrescriptionView, fallbackUnit: TrainingLoadUnit, locale: string): string {
   const minimum = set.repetitionsMinimum === null ? null : count(set.repetitionsMinimum);
   const maximum = set.repetitionsMaximum === null ? null : count(set.repetitionsMaximum);
@@ -648,10 +653,9 @@ function setText(set: SetPrescriptionView, fallbackUnit: TrainingLoadUnit, local
             ? $localize`at least ${minimum}:reps: reps`
             : $localize`${minimum}:min:–${maximum}:max: reps`;
   const load = set.prescribedLoad ?? set.directLoad;
-  const unit = unitLabel(set.loadUnit ?? fallbackUnit);
   const weight =
     load !== null
-      ? `${formatNumber(count(load), locale, '1.0-2')} ${unit}`
+      ? weightText(load, set.loadUnit ?? fallbackUnit, locale)
       : set.percentageWorkingMax !== null
         ? $localize`${formatNumber(count(set.percentageWorkingMax), locale, '1.0-2')}:percent:% of training max`
         : null;

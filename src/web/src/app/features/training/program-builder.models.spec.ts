@@ -118,8 +118,9 @@ describe('program builder grid', () => {
     expect(setSummary({ ...set, manualLoadOverride: 80, loadUnit: 'Pound' })).toBe(
       '3–6 · 80 lb fixed load · RPE 8',
     );
+    // 6 reps plus 2 in reserve is 8 along the Epley curve: 78.9%, in whole percents.
     expect(setSummary({ ...set, loadStrategy: 'RpeBasedEpley' })).toBe(
-      '3–6 · Load from training max & effort · RPE 8',
+      '3–6 · RPE 8 · 79% of training max',
     );
   });
 
@@ -229,6 +230,65 @@ describe('program builder grid', () => {
     expect(gridLines(emptyExercise('squat', false, 'Squat'))).toEqual(['1 × 5']);
     exercise.sets = [];
     expect(gridLines(exercise)).toEqual(['No sets yet']);
+  });
+
+  it('gives an Epley set its own share on a template, read like a chart set’s (critique B15)', () => {
+    const exercise = emptyExercise('squat');
+    const epley = {
+      ...emptySet(),
+      loadStrategy: 'RpeBasedEpley' as const,
+      exertionTarget: 8,
+    };
+    exercise.sets = [epley, { ...epley }, { ...epley }];
+    expect(gridLines(exercise)).toEqual(['3 × 5 · RPE 8 · 81% of training max']);
+
+    // RIR 2 is the same point of the curve; only the words follow the coach's choice.
+    exercise.sets = [{ ...epley, exertionDisplayPreference: 'Rir', exertionTarget: 2 }];
+    expect(gridLines(exercise)).toEqual(['1 × 5 · RIR 2 · 81% of training max']);
+
+    // Past the curve's limit it says so, and a typed weight beats the curve at any reps.
+    const past = { ...epley, repetitionsMinimum: 11, repetitionsMaximum: 11 };
+    exercise.sets = [past];
+    expect(gridLines(exercise)).toEqual(['1 × 11 · RPE 8 · outside the Epley curve']);
+    expect(setSummary(past)).toBe('11 · RPE 8 · outside the Epley curve');
+    exercise.sets = [{ ...past, manualLoadOverride: 80 }];
+    expect(gridLines(exercise)).toEqual(['1 × 11 · 80 kg · RPE 8']);
+
+    // Until it has an effort the set's summary still says where the load will come from.
+    expect(setSummary({ ...epley, exertionTarget: null })).toBe(
+      '5 · Load from training max & effort',
+    );
+  });
+
+  it('puts a client’s saved weight where the share stood, the weight first (critique B15)', () => {
+    const exercise = emptyExercise('squat');
+    const chart = { ...emptySet(), loadStrategy: 'RpeChart' as const, exertionTarget: 8 };
+    const percent = {
+      ...emptySet(),
+      loadStrategy: 'PercentageWorkingMax' as const,
+      loadValue: 81,
+      exertionTarget: 8,
+    };
+    const saved = (load: string) => () => load;
+
+    exercise.sets = [chart, { ...chart }, { ...chart }];
+    expect(gridLines(exercise, saved('81 kg'))).toEqual(['3 × 5 · 81 kg · RPE 8']);
+    exercise.sets = [percent, { ...percent }];
+    expect(gridLines(exercise, saved('162.5 kg'))).toEqual(['2 × 5 · 162.5 kg · RPE 8']);
+
+    // Equal saved weights are told once; a set with no saved weight keeps its share beside them.
+    const changed = { ...chart, key: 'changed', exertionTarget: 9 };
+    exercise.sets = [chart, { ...chart }, changed];
+    expect(gridLines(exercise, (set) => (set.key === 'changed' ? null : '110 kg'))).toEqual([
+      '2 × 5 · 110 kg · RPE 8',
+      '1 × 5 · RPE 9 · 84% of training max',
+    ]);
+
+    // A warm-up reads the same way, and the same exercise without a client keeps its share.
+    const warmUp = { ...percent, setType: 'WarmUp' as const };
+    exercise.sets = [warmUp, { ...warmUp }];
+    expect(gridLines(exercise, saved('60 kg'))).toEqual(['2 × 5 warm-up · 60 kg · RPE 8']);
+    expect(gridLines(exercise)).toEqual(['2 × 5 warm-up · 81% of training max · RPE 8']);
   });
 
   it('gives each run of sets that differ a line of its own, never one set’s effort for all', () => {

@@ -764,7 +764,8 @@ its set's own formula and rounding, as TRN-027 does. It follows preview, hash an
 program's version (STR-009); apply checks training coverage and primary overlap for the resulting dates
 (TRN-014), writes in one save, and leaves an append-only record with the rule, the counts, and every
 changed or removed session as it was before. An edit is reviewed and applied in one sitting: nothing is
-kept until it is applied (owner's question, decided 2026-10-06, ADR 0036).
+kept until it is applied (owner's question, decided 2026-10-06, ADR 0036). The grid reads each set's
+saved weight, and a set changed in the edit its share until then (critique B15, STR-018).
 
 **TRN-029** Where a set starts in the workout player (`PrescriptionThenLastTime` v1, R5.4a, UI review of
 2026-10-11). A set not yet logged starts at what the coach prescribed, the load with its unit and the
@@ -973,6 +974,21 @@ the same lift, unit and value; both are append-only. `POST /api/strength/estimat
 INV-9) gives the sheet the estimate, its sentence and the training max at 90 % while the coach types;
 nothing is worked out in the browser. Programs read neither directly: Assign program starts from the
 training max as from any recorded one (STR-014).
+
+**STR-018** Where a coach reads a weight (critique B15, built 2026-10-31; the owner's choice of
+2026-10-31, ADR 0036). On a client's program every set worked out from a max shows its weight, the
+program's rounded load from its own training max: 81 % of 200 kg reads 162.5 kg on a 2.5 kg step, so a
+coach who enters a 1RM as the training max gets that share of it, and one on a 90 % training max gets
+81 % of that. The Training tab, a workout, the client's own screens and Edit weeks' grid and Edit workout
+sheet all read the saved load (TRN-028). In Edit weeks a set keeps its saved weight until what it is
+worked out from changes (a % set's share, or a chart or Epley set's top reps or RPE, its formula, its
+unit or a typed weight), and a copied or new set has none: those show their share until the changes are
+applied, since only the server works a weight out and the review gives every one. The set editor
+keeps the share. A template has no client, so no weight: its lines keep the share, and an Epley set says
+its own after its effort ("3 × 5 · RPE 8 · 81% of training max"), in whole percents (the set editor's
+help gives 81.1%), from the builder's pinned copy of WorkingMaxLoad v2's curve (`epley-curve.ts`, one
+cell per half rep of reps plus reserve, compared cell by cell with the server's numbers by a domain
+test), as `rpe-chart.ts` pins the chart (STR-010). Past the curve's limit (STR-005) the line says so.
 
 ## 6. Nutrition, recipes, and calorie targets
 

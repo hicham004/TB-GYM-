@@ -646,6 +646,20 @@ Choices the rows from B12 on made, kept as built until the owner answers:
   would be untrue before the end; a refused request says "A renewal can be asked for only from three days before the
   whole plan ends."; "Your client sees this name." leads the price's help, before "Left empty it's called …".
   Recommendation: as built.
+- B15 · A change that leaves the weight alone. The row says a set changed in Edit weeks keeps its share until saved.
+  Built: only a change to what the weight comes from counts, a % set's share, or a chart or Epley set's top reps, RPE or
+  formula, so a % set's reps, a rest or a note keep the weight, which stays true, and changing a set back brings the
+  weight back. The other way: any change to a set shows its share. Recommendation: as built.
+- B15 · A copied or added set in Edit weeks. Built: its share until the changes are applied, even a copy of a set showing
+  a weight, as it has no saved load of its own, so Add a set like the last reads "3 × 5 · 162.5 kg · RPE 8" over "1 × 5 ·
+  81% of training max · RPE 8". The other way: a copy shows the weight it was copied from, which a max changed from
+  another week could make untrue. Recommendation: as built; the review gives every weight.
+- B15 · An Epley set in the set editor. The row names the line, and a chart set has also said its cell under the effort
+  box since B7a. Built: the same help ("Epley curve: 5 reps at RPE 8 is 81.1% of the training max."). The other way: the
+  summary line alone. Recommendation: as built.
+- B15 · The words the row did not give. Built: "outside the Epley curve" on a line past the curve's limit, as "outside
+  the RTS chart" says it; "Epley curve: reps plus RIR up to 12" under the effort box until the set fits. Recommendation:
+  as built.
 
 Waits for Toufic's answers (section 1), kept as built until then:
 

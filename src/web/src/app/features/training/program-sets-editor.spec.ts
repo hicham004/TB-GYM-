@@ -233,6 +233,27 @@ describe('a formula’s limit in the set editor (critique B7a)', () => {
     );
   });
 
+  it('says the Epley curve’s own number too, and its limit until the set fits (critique B15)', async () => {
+    const { fixture, host, exercise } = await chartSet(5, 8);
+    exercise.sets[0].loadStrategy = 'RpeBasedEpley';
+    fixture.componentRef.setInput('revision', 2);
+    await settle(fixture);
+    expect(host.textContent).toContain(
+      'Epley curve: 5 reps at RPE 8 is 81.1% of the training max.',
+    );
+    expect(host.querySelector('.set-summary')?.textContent).toContain(
+      '5 · RPE 8 · 81% of training max',
+    );
+
+    exercise.sets[0].repetitionsMaximum = 11;
+    fixture.componentRef.setInput('revision', 3);
+    await settle(fixture);
+    expect(host.textContent).toContain('Epley curve: reps plus RIR up to 12');
+    expect(host.querySelector('.set-summary')?.textContent).toContain(
+      'RPE 8 · outside the Epley curve',
+    );
+  });
+
   it('offers a way out past 12 reps that keeps a 20-rep set, and puts the cursor where it goes', async () => {
     const { fixture, host, exercise, edited } = await chartSet(20, 8);
     expect(ways(host)).toEqual([]);

@@ -73,6 +73,7 @@ import {
   insertSavedSession,
   type LibraryExercise,
   MAX_WEEKS,
+  noSavedLoad,
   programLibraryIds,
   removeExercise,
   removeSession,
@@ -115,6 +116,7 @@ import {
   moveEditWeek,
   programEdit,
   type ProgramEdit,
+  savedLoadOf,
 } from './program-edit.models';
 
 interface Closable {
@@ -128,7 +130,7 @@ interface ExerciseCell {
   draft: DraftExercise;
   editLabel: string;
   name: string;
-  /** Its working sets, equal neighbours told once (critique B7a). */
+  /** Its working sets, equal neighbours told once (critique B7a), at their saved weights (B15). */
   lines: string[];
   isMainLift: boolean;
   drag: DragItem;
@@ -343,6 +345,12 @@ export class ProgramEditPage implements HoldsUnsavedWork {
     const end = formatDate(addDays(edit.startDate, weeks * 7 - 1), 'EEE d MMM yyyy', this.locale);
     const count = weeks === 1 ? $localize`1 week` : $localize`${weeks}:count: weeks`;
     return `${count} · ${start} – ${end}`;
+  });
+
+  /** Each set's saved weight, for the grid's lines and the sheet's (critique B15). */
+  protected readonly savedLoad = computed(() => {
+    const edit = this.edit();
+    return edit ? savedLoadOf(edit, this.locale) : noSavedLoad;
   });
 
   protected readonly grid = computed(() => {
@@ -975,7 +983,7 @@ export class ProgramEditPage implements HoldsUnsavedWork {
         draft: exercise,
         editLabel: $localize`Edit sets for ${exercise.exerciseName || $localize`Exercise`}:exercise:`,
         name: exercise.exerciseName || $localize`Exercise`,
-        lines: gridLines(exercise),
+        lines: gridLines(exercise, this.savedLoad()),
         isMainLift: exercise.isMainLift,
         drag: { kind: 'exercise', ref: { ...ref, exerciseKey: exercise.key } },
         media: this.libraryMedia().get(exercise.exerciseId) ?? [],

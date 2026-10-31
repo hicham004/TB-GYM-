@@ -36,6 +36,26 @@ async function render() {
 describe('the program session editor', () => {
   afterEach(() => TestBed.resetTestingModule());
 
+  it('shows a client’s saved weight in its lines and keeps the share in the set editor (critique B15)', async () => {
+    const { fixture, host, exercise, redraw } = await render();
+    exercise.sets = [
+      { ...exercise.sets[0], loadStrategy: 'RpeChart', exertionTarget: 8 },
+      { ...exercise.sets[0], key: 'second', loadStrategy: 'RpeChart', exertionTarget: 8 },
+    ];
+    await redraw();
+    const lines = () =>
+      Array.from(host.querySelectorAll('.exercise-line')).map((line) => line.textContent);
+    // A template: no client, so the share.
+    expect(lines()).toEqual(['2 × 5 · RPE 8 · 81% of training max']);
+
+    fixture.componentRef.setInput('savedLoad', () => '110 kg');
+    await redraw();
+    expect(lines()).toEqual(['2 × 5 · 110 kg · RPE 8']);
+    expect(host.querySelector('.set-summary')?.textContent).toContain(
+      '5 · RPE 8 · 81% of training max',
+    );
+  });
+
   it('moves a rest still on 1:30 to 3:00 when the exercise becomes a main lift, and back (C1)', async () => {
     const { host, exercise, edited, redraw, restBox } = await render();
     expect(restBox()).toBe('90');

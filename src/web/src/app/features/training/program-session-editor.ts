@@ -6,7 +6,14 @@ import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { ProgramSetsEditor } from './program-sets-editor';
-import { DAYS, gridLines, type LibraryExercise, libraryNames } from './program-builder.models';
+import {
+  DAYS,
+  gridLines,
+  type LibraryExercise,
+  libraryNames,
+  noSavedLoad,
+  type SavedLoadOf,
+} from './program-builder.models';
 import {
   type DraftExercise,
   type DraftSession,
@@ -46,6 +53,8 @@ export class ProgramSessionEditor {
   /** A session saved with the program can be copied into the reusable library. */
   readonly canSaveToLibrary = input(false);
   readonly savingToLibrary = input(false);
+  /** A client's program shows each set's saved weight; a template keeps the share (critique B15). */
+  readonly savedLoad = input<SavedLoadOf>(noSavedLoad);
 
   readonly edited = output<void>();
   readonly addExercise = output<void>();
@@ -59,9 +68,12 @@ export class ProgramSessionEditor {
     value: String(day),
     label: String(day + 1),
   }));
-  protected readonly lines = gridLines;
 
   private readonly names = computed(() => libraryNames(this.library()));
+
+  protected lines(exercise: DraftExercise): string[] {
+    return gridLines(exercise, this.savedLoad());
+  }
 
   protected day(): string {
     return String(this.session().dayOffset);

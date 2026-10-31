@@ -1826,6 +1826,12 @@ test('Edit weeks opens the weeks still to come in the builder’s grid and appli
   await expect(page.locator('.locked-card app-status-pill')).toHaveText(['Done', 'Done', 'Past']);
   await expect(page.locator('section.week .session-card')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Review changes' })).toBeDisabled();
+  // A client's program shows the weight to lift, a chart set and a % set too (critique B15).
+  await expect(page.locator('section.week').nth(3).locator('app-set-lines .run')).toHaveText([
+    '1 × 5 · 77.5 kg · RPE 7',
+    '1 × 5 · 100 kg · RPE 7',
+    '1 × 5 · 70 kg',
+  ]);
   await expectNoHorizontalOverflow(page);
   await axe(page);
   await page.screenshot({ path: 'test-results/p3b-edit-1440.png', fullPage: true });

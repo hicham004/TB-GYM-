@@ -85,6 +85,23 @@ describe('the RTS chart in the builder', () => {
     expect(setSummary(chartSet({ exertionTarget: null }))).toBe('5 · Load from RTS chart & effort');
   });
 
+  it('summarises an Epley set with the curve’s share of the training max, never a weight', () => {
+    const epley = (overrides: Partial<DraftSet> = {}) =>
+      chartSet({ loadStrategy: 'RpeBasedEpley', ...overrides });
+    // 5 reps plus 3 in reserve is 8 along the curve: 78.9%.
+    expect(setSummary(epley())).toBe('5 · RPE 7 · 79% of training max');
+    expect(setSummary(epley({ exertionTarget: 8 }))).toBe('5 · RPE 8 · 81% of training max');
+    // A range takes its top reps, as the server works the weight out.
+    expect(
+      setSummary(epley({ repetitionsMinimum: 8, repetitionsMaximum: 10, exertionTarget: 8 })),
+    ).toBe('8–10 · RPE 8 · 71% of training max');
+    // The chart stops at RPE 6.5; the curve goes on while reps plus reserve fit.
+    expect(setSummary(epley({ exertionTarget: 5 }))).toBe('5 · RPE 5 · 75% of training max');
+    expect(
+      setSummary(epley({ repetitionsMinimum: 8, repetitionsMaximum: 8, exertionTarget: 5 })),
+    ).toBe('8 · RPE 5 · outside the Epley curve');
+  });
+
   it('says why a formula refuses a set, and offers ways out that keep its reps', () => {
     // Too far from failure for the chart: the Epley curve takes it while reps plus RIR fit.
     expect(setIssue(chartSet({ exertionTarget: 6 }))).toEqual({

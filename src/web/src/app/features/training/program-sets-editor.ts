@@ -17,8 +17,9 @@ import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
 import {
-  chartShare,
+  formulaShare,
   impossiblePercentage,
+  isRpeLoaded,
   parseReps,
   repsText,
   setIssue,
@@ -140,16 +141,20 @@ export class ProgramSetsEditor {
   }
 
   /**
-   * A chart set says the chart's own cell for its reps and effort, as the server will work the weight
-   * out at assignment; until it has one, what the chart covers.
+   * A chart or Epley set says its formula's own number for its reps and effort, as the server will
+   * work the weight out at assignment; until it has one, what the formula covers.
    */
   protected effortHelp(set: DraftSet): string | null {
-    if (set.loadStrategy !== 'RpeChart') return null;
-    const share = chartShare(set);
+    if (!isRpeLoaded(set)) return null;
+    const chart = set.loadStrategy === 'RpeChart';
+    const share = formulaShare(set);
     if (share !== null) {
       const effort = `${set.exertionDisplayPreference === 'Rir' ? 'RIR' : 'RPE'} ${set.exertionTarget}`;
-      return $localize`RTS chart: ${set.repetitionsMaximum}:reps: reps at ${effort}:effort: is ${share.toFixed(1)}:share:% of the training max.`;
+      return chart
+        ? $localize`RTS chart: ${set.repetitionsMaximum}:reps: reps at ${effort}:effort: is ${share.toFixed(1)}:share:% of the training max.`
+        : $localize`Epley curve: ${set.repetitionsMaximum}:reps: reps at ${effort}:effort: is ${share.toFixed(1)}:share:% of the training max.`;
     }
+    if (!chart) return $localize`Epley curve: reps plus RIR up to 12`;
     return set.exertionDisplayPreference === 'Rpe'
       ? $localize`RTS chart: RPE 6.5 to 10, up to 12 reps`
       : $localize`RTS chart: RIR 0 to 3.5, up to 12 reps`;

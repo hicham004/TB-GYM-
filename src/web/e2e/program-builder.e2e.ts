@@ -747,5 +747,9 @@ test('the program picks one formula for loads from RPE, and every set follows it
     .at(-1)!
     .weeks[0].sessions[0].exercises[0].sets.map((set) => set.loadStrategy);
   expect(strategies).toEqual(['RpeBasedEpley', 'RpeBasedEpley', 'RpeBasedEpley']);
+  // A template has no client, so the Epley curve's share shows, not a weight (critique B15).
+  await expect(page.locator('.session-card app-set-lines .run').first()).toHaveText(
+    '3 × 5 · RPE 7 · 79% of training max',
+  );
   await expectNoHorizontalOverflow(page);
 });

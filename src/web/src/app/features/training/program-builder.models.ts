@@ -16,6 +16,7 @@ import {
   RPE_CHART_MAXIMUM_RPE,
   RPE_CHART_MINIMUM_RPE,
 } from './rpe-chart';
+import { curvePercent } from './epley-curve';
 import {
   DraftExercise,
   DraftSession,
@@ -94,13 +95,20 @@ export function columnsFor(used: ReadonlySet<number>, editingDay: number | null)
   ).join(' ');
 }
 
+/** The weight a client's set was saved with, as it reads ("81 kg"); null keeps the set's share. */
+export type SavedLoadOf = (set: DraftSet) => string | null;
+
+/** A template has no client, so none of its sets has a weight (critique B15). */
+export const noSavedLoad: SavedLoadOf = () => null;
+
 /**
  * The grid's lines for an exercise (critique B7a): its working sets as a coach writes them, equal
  * neighbours told once as sets × reps ("2 × 10 · 70% of training max · RPE 7" is two sets of ten) and
  * each run of sets that differ on a line of its own, as the client's session sheet tells them. A
- * warm-up never counts (TRAIN-2), so an exercise of warm-ups only says so.
+ * warm-up never counts (TRAIN-2), so an exercise of warm-ups only says so. On a client's program a
+ * set's saved weight stands where its share would ("3 × 5 · 81 kg · RPE 8", critique B15).
  */
-export function gridLines(exercise: DraftExercise): string[] {
+export function gridLines(exercise: DraftExercise, savedLoad: SavedLoadOf = noSavedLoad): string[] {
   const sets = exercise.sets;
   if (sets.length === 0) return [$localize`No sets yet`];
   const working = sets.filter((set) => set.setType !== 'WarmUp');
@@ -108,7 +116,7 @@ export function gridLines(exercise: DraftExercise): string[] {
   const runs: { reps: string | null; rest: string; count: number }[] = [];
   for (const set of warmUps ? sets : working) {
     const reps = repsText(set) || null;
-    const rest = setParts(set, false).join(' · ');
+    const rest = setParts(set, false, savedLoad(set)).join(' · ');
     const last = runs.at(-1);
     if (last && last.reps === reps && last.rest === rest) last.count += 1;
     else runs.push({ reps, rest, count: 1 });
@@ -135,18 +143,21 @@ export function setSummary(set: DraftSet): string {
 }
 
 /**
- * What a set asks after its reps: its load, then its effort. A chart set's share follows its effort,
- * since the chart reads it from the reps and the RPE ("RPE 8 · 81% of training max"). The grid says
- * nothing for a set with no load; the set's own summary says so.
+ * What a set asks after its reps: its load, then its effort. The share of a chart or Epley set follows
+ * its effort, since the formula reads it from the reps and the RPE ("RPE 8 · 81% of training max"). A
+ * saved weight comes first, as any weight does. The grid says nothing for a set with no load; the
+ * set's own summary says so.
  */
-function setParts(set: DraftSet, sayEveryLoad: boolean): string[] {
+function setParts(set: DraftSet, sayEveryLoad: boolean, saved: string | null = null): string[] {
   const unit = set.loadUnit === 'Pound' ? 'lb' : 'kg';
   const effort =
     set.exertionTarget === null
       ? null
       : `${set.exertionDisplayPreference === 'Rir' ? 'RIR' : 'RPE'} ${set.exertionTarget}`;
   const parts: string[] = [];
-  if (set.manualLoadOverride !== null) {
+  if (saved !== null) {
+    parts.push(saved);
+  } else if (set.manualLoadOverride !== null) {
     parts.push(
       sayEveryLoad
         ? $localize`${set.manualLoadOverride}:load: ${unit}:unit: fixed load`
@@ -156,17 +167,15 @@ function setParts(set: DraftSet, sayEveryLoad: boolean): string[] {
     parts.push(`${set.loadValue} ${unit}`);
   } else if (set.loadStrategy === 'PercentageWorkingMax' && set.loadValue !== null) {
     parts.push($localize`${set.loadValue}:percentage:% of training max`);
-  } else if (
-    set.loadStrategy === 'RpeChart' &&
-    effort !== null &&
-    set.repetitionsMaximum !== null
-  ) {
-    const share = chartShare(set);
+  } else if (isRpeLoaded(set) && effort !== null && set.repetitionsMaximum !== null) {
+    const share = formulaShare(set);
     return [
       effort,
-      share === null
-        ? $localize`outside the RTS chart`
-        : $localize`${Math.round(share)}:percentage:% of training max`,
+      share !== null
+        ? $localize`${Math.round(share)}:percentage:% of training max`
+        : set.loadStrategy === 'RpeChart'
+          ? $localize`outside the RTS chart`
+          : $localize`outside the Epley curve`,
     ];
   } else if (sayEveryLoad) {
     parts.push(
@@ -182,21 +191,22 @@ function setParts(set: DraftSet, sayEveryLoad: boolean): string[] {
 }
 
 /** A set's RPE, read from RIR when the coach writes it that way (STR-003). */
-function rpeOf(set: DraftSet): number | null {
+export function rpeOf(set: DraftSet): number | null {
   if (set.exertionTarget === null) return null;
   return set.exertionDisplayPreference === 'Rpe' ? set.exertionTarget : 10 - set.exertionTarget;
 }
 
 /**
- * The share of the training max a chart set's weight will be (STR-010): the chart's cell for its top
- * reps at its RPE, as the server works the weight out at assignment. Null when the chart has no cell.
+ * The share of the training max an RPE-loaded set's weight will be: the chart's cell for its top reps
+ * at its RPE (STR-010) or the Epley curve's (STR-018), as the server works the weight out at
+ * assignment. Null when the formula has no answer for the set.
  */
-export function chartShare(set: DraftSet): number | null {
+export function formulaShare(set: DraftSet): number | null {
   const rpe = rpeOf(set);
-  if (set.loadStrategy !== 'RpeChart' || rpe === null || set.repetitionsMaximum === null) {
-    return null;
-  }
-  return chartPercent(set.repetitionsMaximum, rpe);
+  if (!isRpeLoaded(set) || rpe === null || set.repetitionsMaximum === null) return null;
+  return set.loadStrategy === 'RpeChart'
+    ? chartPercent(set.repetitionsMaximum, rpe)
+    : curvePercent(set.repetitionsMaximum, rpe);
 }
 
 /**

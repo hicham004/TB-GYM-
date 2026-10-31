@@ -242,6 +242,76 @@ public sealed class RpeChartDomainTests
         Assert.AreEqual(RtsRpeChart.MaximumRepetitions, int.Parse(Constant("RPE_CHART_MAXIMUM_REPS"), CultureInfo.InvariantCulture));
     }
 
+    [TestMethod]
+    public void TheBuildersPinnedCopyHasEveryCellAndLimitOfTheEpleyCurve()
+    {
+        // A template shows an Epley set's share from its own copy (critique B15); a cell that differed
+        // would show the coach a number the server never uses.
+        var source = File.ReadAllText(Path.Combine(
+            RepositoryRoot(), "src", "web", "src", "app", "features", "training", "epley-curve.ts"));
+        var table = Regex.Match(source, @"PERCENTAGES[^=]*=\s*\[(?<cells>.*?)\];", RegexOptions.Singleline);
+        Assert.IsTrue(table.Success, "epley-curve.ts no longer holds its PERCENTAGES table.");
+        var cells = table.Groups["cells"].Value
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(cell => decimal.Parse(cell, CultureInfo.InvariantCulture))
+            .ToArray();
+        string Constant(string name) =>
+            Regex.Match(source, $@"export const {name} = '?(?<value>[^';]+)'?;").Groups["value"].Value;
+        var maximumReps = int.Parse(Constant("EPLEY_CURVE_MAXIMUM_REPS"), CultureInfo.InvariantCulture);
+        var minimumRpe = decimal.Parse(Constant("EPLEY_CURVE_MINIMUM_RPE"), CultureInfo.InvariantCulture);
+        var maximumRpe = decimal.Parse(Constant("EPLEY_CURVE_MAXIMUM_RPE"), CultureInfo.InvariantCulture);
+        Assert.AreEqual(StrengthLoadRecommendationStrategy.CurrentVersion, Constant("EPLEY_CURVE_VERSION"));
+        Assert.HasCount((maximumReps - 1) * 2 + 1, cells);
+
+        var strategy = new StrengthLoadRecommendationStrategy();
+        LoadRecommendationInput Input(int reps, decimal rpe) =>
+            new(PrescriptionLoadStrategy.RpeBasedEpley, null, null, 100m, reps, rpe, LoadUnit.Kilogram);
+
+        var mismatches = new List<string>();
+        var covered = new HashSet<decimal>();
+        for (var reps = 1; reps <= maximumReps; reps++)
+        {
+            for (var rpe = minimumRpe; rpe <= maximumRpe; rpe += 0.5m)
+            {
+                var alongTheCurve = reps + (10m - rpe);
+                if (alongTheCurve > maximumReps)
+                {
+                    Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+                        () => strategy.Recommend(Input(reps, rpe)), $"{reps} reps at RPE {rpe}");
+                    continue;
+                }
+
+                // A training max of 100 makes the server's weight the share itself, to its three decimals.
+                var server = strategy.Recommend(Input(reps, rpe)).Value;
+                var cell = cells[(int)((alongTheCurve - 1m) * 2m)];
+                covered.Add(alongTheCurve);
+                if (cell != server)
+                {
+                    mismatches.Add($"{reps} reps at RPE {rpe}: web {cell}, server {server}");
+                }
+            }
+        }
+
+        Assert.IsEmpty(mismatches, string.Join("; ", mismatches));
+        Assert.HasCount(cells.Length, covered, "A cell of the copy matches no reps and RPE the server takes.");
+        Assert.AreEqual(81.081m, cells[12], "5 reps at RPE 8, the plan's own example.");
+    }
+
+    [TestMethod]
+    public void TheWeightACoachReadsIsTheProgramsRoundedLoadFromItsOwnTrainingMax()
+    {
+        // The partner's example (critique B15): 81% of 200 kg reads 162.5 kg on a 2.5 kg step, the same
+        // 81% of a 180 kg training max (90% of that 1RM) reads 145 kg, and the set saved is what is shown.
+        var strategy = new StrengthLoadRecommendationStrategy();
+        var policy = new LoadRoundingPolicy(LoadUnit.Kilogram, 2.5m, LoadRoundingMode.Nearest);
+        decimal Rounded(decimal max) => policy.Round(strategy.Recommend(new LoadRecommendationInput(
+            PrescriptionLoadStrategy.PercentageWorkingMax, null, 81m, max, null, null, LoadUnit.Kilogram)).Value);
+
+        Assert.AreEqual(162.5m, Rounded(200m));
+        Assert.AreEqual(145m, Rounded(180m));
+        Assert.AreEqual(80m, Rounded(100m));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

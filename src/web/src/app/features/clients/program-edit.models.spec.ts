@@ -6,7 +6,8 @@ import {
   sessionView,
   setView,
 } from '../../../testing/mesocycle-fixtures';
-import { moveSession } from '../training/program-builder.models';
+import { copySession, gridLines, moveSession } from '../training/program-builder.models';
+import { type DraftExercise, withExertionPreference } from '../training/training-builder.models';
 import {
   canMoveWeek,
   canRemoveWeek,
@@ -17,6 +18,7 @@ import {
   hasEdits,
   isClosedDay,
   programEdit,
+  savedLoadOf,
 } from './program-edit.models';
 
 // The program starts Mon 28 Sep and the workspace's today is Wed 7 Oct, in week 2.
@@ -91,6 +93,173 @@ describe('editing a client’s weeks: the grid', () => {
     const renamed = structuredClone(edit.draft);
     renamed.weeks[2].label = 'Deload';
     expect(hasEdits(edit.draft, renamed)).toBe(true);
+  });
+
+  describe('the weight a set shows (critique B15)', () => {
+    /** Week 3's Monday: 3 × 5 on the chart at 110 kg, 2 × 5 at 81% saved at 162.5 kg, one Epley set. */
+    function opened() {
+      const view = program();
+      view.weeks[2].sessions[0].exercises = [
+        exerciseView('squat', 'Back squat', [
+          chartSet(1, { targetRpe: 8, prescribedLoad: 110 }),
+          chartSet(2, { targetRpe: 8, prescribedLoad: 110 }),
+          chartSet(3, { targetRpe: 8, prescribedLoad: 110 }),
+        ]),
+        exerciseView('deadlift', 'Deadlift', [
+          setView({
+            position: 1,
+            loadStrategy: 'PercentageWorkingMax',
+            loadUnit: 'Kilogram',
+            percentageWorkingMax: 81,
+            prescribedLoad: 162.5,
+            targetRpe: 8,
+          }),
+          setView({
+            position: 2,
+            loadStrategy: 'PercentageWorkingMax',
+            loadUnit: 'Kilogram',
+            percentageWorkingMax: 81,
+            prescribedLoad: 162.5,
+            targetRpe: 8,
+          }),
+        ]),
+        exerciseView('press', 'Overhead press', [
+          setView({
+            position: 1,
+            loadStrategy: 'RpeBasedEpley',
+            loadUnit: 'Pound',
+            prescribedLoad: 81.25,
+            targetRpe: 8,
+          }),
+        ]),
+      ];
+      const edit = programEdit(view, TODAY, states);
+      const session = edit.draft.weeks[2].sessions[0];
+      const lines = (exercise: DraftExercise) => gridLines(exercise, savedLoadOf(edit, 'en-US'));
+      return { edit, session, lines };
+    }
+
+    it('reads the saved, rounded load of every set worked out from a max', () => {
+      const { session, lines } = opened();
+
+      expect(lines(session.exercises[0])).toEqual(['3 × 5 · 110 kg · RPE 8']);
+      // The program's rounded load: 81% of 200 kg is 162 kg, 162.5 kg on a 2.5 kg step.
+      expect(lines(session.exercises[1])).toEqual(['2 × 5 · 162.5 kg · RPE 8']);
+      expect(lines(session.exercises[2])).toEqual(['1 × 5 · 81.25 lb · RPE 8']);
+    });
+
+    it('has nothing to say for a set no max worked out, whose line was the weight already', () => {
+      const view = program();
+      view.weeks[2].sessions[0].exercises[0].sets = [
+        setView({
+          position: 1,
+          loadStrategy: 'Direct',
+          loadUnit: 'Kilogram',
+          directLoad: 100,
+          prescribedLoad: 100,
+          targetRpe: 7,
+        }),
+        setView({
+          position: 2,
+          loadStrategy: 'Direct',
+          loadUnit: 'Kilogram',
+          directLoad: 105,
+          prescribedLoad: 105,
+          isManualLoadOverride: true,
+        }),
+        setView({ position: 3 }),
+      ];
+      const edit = programEdit(view, TODAY, states);
+      const [typed, fixed, open] = edit.draft.weeks[2].sessions[0].exercises[0].sets;
+
+      expect(edit.savedLoads.size).toBeGreaterThan(0);
+      for (const set of [typed, fixed, open]) expect(edit.savedLoads.has(set.key)).toBe(false);
+      expect(
+        gridLines(edit.draft.weeks[2].sessions[0].exercises[0], savedLoadOf(edit, 'en-US')),
+      ).toEqual(['1 × 5 · 100 kg · RPE 7', '1 × 5 · 105 kg', '1 × 5']);
+    });
+
+    it('goes back to the share once what the weight came from changes, until the change is undone', () => {
+      const { session, lines } = opened();
+      const chart = session.exercises[0];
+      const percent = session.exercises[1];
+
+      chart.sets[2].exertionTarget = 9;
+      expect(lines(chart)).toEqual([
+        '2 × 5 · 110 kg · RPE 8',
+        '1 × 5 · RPE 9 · 84% of training max',
+      ]);
+      chart.sets[2].exertionTarget = 8;
+      expect(lines(chart)).toEqual(['3 × 5 · 110 kg · RPE 8']);
+
+      // A chart set's top reps are read by the chart, its lowest are not.
+      chart.sets[0].repetitionsMaximum = 6;
+      expect(lines(chart)[0]).toBe('1 × 5–6 · RPE 8 · 79% of training max');
+      chart.sets[0].repetitionsMaximum = 5;
+      chart.sets[0].repetitionsMinimum = 3;
+      expect(lines(chart)[0]).toBe('1 × 3–5 · 110 kg · RPE 8');
+
+      percent.sets[0].loadValue = 85;
+      expect(lines(percent)).toEqual([
+        '1 × 5 · 85% of training max · RPE 8',
+        '1 × 5 · 162.5 kg · RPE 8',
+      ]);
+
+      // Another formula is another weight, and a typed weight wins.
+      chart.sets[1].loadStrategy = 'RpeBasedEpley';
+      expect(lines(chart)[1]).toBe('1 × 5 · RPE 8 · 81% of training max');
+      chart.sets[1].loadStrategy = 'RpeChart';
+      chart.sets[1].manualLoadOverride = 112.5;
+      expect(lines(chart)[1]).toBe('1 × 5 · 112.5 kg · RPE 8');
+    });
+
+    it('keeps the weight through what does not touch it: a % set’s reps, RIR for RPE, the rest', () => {
+      const { session, lines } = opened();
+      const percent = session.exercises[1];
+      const chart = session.exercises[0];
+
+      percent.sets[0].repetitionsMinimum = 8;
+      percent.sets[0].repetitionsMaximum = 8;
+      expect(lines(percent)).toEqual(['1 × 8 · 162.5 kg · RPE 8', '1 × 5 · 162.5 kg · RPE 8']);
+
+      chart.sets = chart.sets.map((set) => withExertionPreference(set, 'Rir'));
+      chart.sets[0].restSeconds = 240;
+      chart.sets[0].setType = 'Top';
+      expect(lines(chart)).toEqual(['3 × 5 · 110 kg · RIR 2']);
+    });
+
+    it('survives a move, while a copy or a new set waits for the server', () => {
+      const { edit, session, lines } = opened();
+      const week = edit.draft.weeks[2];
+      const ref = { weekKey: week.key, sessionKey: session.key };
+
+      // Moved, the session keeps what is stored, weights and all (TRN-028).
+      const moved = moveSession(edit.draft, ref, { weekKey: week.key, day: 5 }, 0);
+      const movedSession = moved.weeks[2].sessions.find((item) => item.key === session.key)!;
+      expect(movedSession.dayOffset).toBe(5);
+      expect(lines(movedSession.exercises[0])).toEqual(['3 × 5 · 110 kg · RPE 8']);
+
+      const { draft, sessionKey } = copySession(edit.draft, ref);
+      const copy = draft.weeks[2].sessions.find((item) => item.key === sessionKey)!;
+      expect(lines(copy.exercises[0])).toEqual(['3 × 5 · RPE 8 · 81% of training max']);
+
+      // As the set editor's Add a set like the last makes one: the same set under a new key.
+      session.exercises[0].sets.push({ ...session.exercises[0].sets[2], key: 'added' });
+      expect(lines(session.exercises[0])).toEqual([
+        '3 × 5 · 110 kg · RPE 8',
+        '1 × 5 · RPE 8 · 81% of training max',
+      ]);
+    });
+
+    it('shows nothing it was not given, so a set with no saved load keeps its share', () => {
+      const view = program();
+      view.weeks[2].sessions[0].exercises[0].sets = [chartSet(1, { prescribedLoad: null })];
+      const edit = programEdit(view, TODAY, states);
+
+      expect(
+        gridLines(edit.draft.weeks[2].sessions[0].exercises[0], savedLoadOf(edit, 'en-US')),
+      ).toEqual(['1 × 5 · RPE 7 · 79% of training max']);
+    });
   });
 
   it('keeps the weeks that hold the past in place, and puts a copy of one after them', () => {

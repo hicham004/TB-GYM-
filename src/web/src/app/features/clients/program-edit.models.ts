@@ -14,19 +14,23 @@ import {
   draftProblem,
   type DraftProblem,
   duplicateWeekAfter,
+  isRpeLoaded,
   MAX_WEEKS,
   moveWeek,
+  rpeOf,
+  type SavedLoadOf,
 } from '../training/program-builder.models';
 import {
   type DraftExercise,
   type DraftSession,
+  type DraftSet,
   type DraftWeek,
   nullableNumeric,
   numeric,
   type ProgramDraft,
   toTrainingSessionRequest,
 } from '../training/training-builder.models';
-import { exerciseLines, type ExerciseLine } from './client-program.models';
+import { exerciseLines, type ExerciseLine, weightText } from './client-program.models';
 import { addDays } from './client-overview.models';
 
 /**
@@ -44,6 +48,13 @@ export interface LockedSession {
   readonly name: string;
   readonly label: string;
   readonly tone: StatusPillTone;
+}
+
+/** A set's weight as the server saved it, and what it was worked out from. */
+export interface SavedLoad {
+  readonly load: number;
+  readonly unit: TrainingLoadUnit;
+  readonly from: string;
 }
 
 /** The program as it was opened: what the grid edits, and what stays as it is. */
@@ -66,6 +77,11 @@ export interface ProgramEdit {
   readonly locked: ReadonlyMap<string, readonly LockedSession[]>;
   /** The open sessions in the builder's shape: what the coach edits and the server receives. */
   readonly draft: ProgramDraft;
+  /**
+   * The weights saved for the sets worked out from a max, under each set's key. A copy or a new set
+   * has a key of its own, so nothing here speaks for it (critique B15).
+   */
+  readonly savedLoads: ReadonlyMap<string, SavedLoad>;
 }
 
 let fallbackKey = 0;
@@ -98,7 +114,11 @@ function lockedSession(
 }
 
 /** A stored session as the builder holds one; its id travels so the server knows which row it is. */
-export function draftSession(session: TrainingSessionView, unit: TrainingLoadUnit): DraftSession {
+export function draftSession(
+  session: TrainingSessionView,
+  unit: TrainingLoadUnit,
+  savedLoads: Map<string, SavedLoad>,
+): DraftSession {
   return {
     key: newKey(),
     sourceId: session.id,
@@ -107,11 +127,15 @@ export function draftSession(session: TrainingSessionView, unit: TrainingLoadUni
     coachNotes: session.coachNotes ?? '',
     exercises: [...session.exercises]
       .sort((a, b) => numeric(a.position) - numeric(b.position))
-      .map((exercise) => draftExercise(exercise, unit)),
+      .map((exercise) => draftExercise(exercise, unit, savedLoads)),
   };
 }
 
-function draftExercise(exercise: ExercisePrescriptionView, unit: TrainingLoadUnit): DraftExercise {
+function draftExercise(
+  exercise: ExercisePrescriptionView,
+  unit: TrainingLoadUnit,
+  savedLoads: Map<string, SavedLoad>,
+): DraftExercise {
   return {
     key: newKey(),
     exerciseId: exercise.exerciseId,
@@ -122,28 +146,70 @@ function draftExercise(exercise: ExercisePrescriptionView, unit: TrainingLoadUni
     approvedAlternativeExerciseIds: [...exercise.approvedAlternativeExerciseIds],
     sets: [...exercise.sets]
       .sort((a, b) => numeric(a.position) - numeric(b.position))
-      .map((set) => ({
-        key: newKey(),
-        setType: set.setType,
-        repetitionsMinimum: nullableNumeric(set.repetitionsMinimum),
-        repetitionsMaximum: nullableNumeric(set.repetitionsMaximum),
-        loadStrategy: set.loadStrategy,
-        loadValue:
-          set.loadStrategy === 'Direct'
-            ? nullableNumeric(set.directLoad)
-            : nullableNumeric(set.percentageWorkingMax),
-        loadUnit: set.loadUnit ?? unit,
-        exertionDisplayPreference: set.exertionDisplayPreference,
-        exertionTarget:
-          set.exertionDisplayPreference === 'Rir'
-            ? nullableNumeric(set.targetRir)
-            : nullableNumeric(set.targetRpe),
-        restSeconds: nullableNumeric(set.restSeconds),
-        tempo: set.tempo ?? '',
-        coachNotes: set.coachNotes ?? '',
-        // A typed weight is kept as the weight the client was given, as the server stores it.
-        manualLoadOverride: set.isManualLoadOverride ? nullableNumeric(set.prescribedLoad) : null,
-      })),
+      .map((set) => {
+        const draft: DraftSet = {
+          key: newKey(),
+          setType: set.setType,
+          repetitionsMinimum: nullableNumeric(set.repetitionsMinimum),
+          repetitionsMaximum: nullableNumeric(set.repetitionsMaximum),
+          loadStrategy: set.loadStrategy,
+          loadValue:
+            set.loadStrategy === 'Direct'
+              ? nullableNumeric(set.directLoad)
+              : nullableNumeric(set.percentageWorkingMax),
+          loadUnit: set.loadUnit ?? unit,
+          exertionDisplayPreference: set.exertionDisplayPreference,
+          exertionTarget:
+            set.exertionDisplayPreference === 'Rir'
+              ? nullableNumeric(set.targetRir)
+              : nullableNumeric(set.targetRpe),
+          restSeconds: nullableNumeric(set.restSeconds),
+          tempo: set.tempo ?? '',
+          coachNotes: set.coachNotes ?? '',
+          // A typed weight is kept as the weight the client was given, as the server stores it.
+          manualLoadOverride: set.isManualLoadOverride ? nullableNumeric(set.prescribedLoad) : null,
+        };
+        const load = nullableNumeric(set.prescribedLoad);
+        if (load !== null && worksFromMax(draft)) {
+          savedLoads.set(draft.key, { load, unit: draft.loadUnit, from: loadSource(draft) });
+        }
+        return draft;
+      }),
+  };
+}
+
+/** Whether the server works this set's weight out from the program's max. */
+function worksFromMax(set: DraftSet): boolean {
+  return (
+    set.manualLoadOverride === null &&
+    (set.loadStrategy === 'PercentageWorkingMax' || isRpeLoaded(set))
+  );
+}
+
+/**
+ * What a set's weight is worked out from: a % set's share, or the top reps and the RPE of a chart or
+ * Epley set (WorkingMaxLoad v2, RpeChart v1). Anything else about the set leaves its weight alone.
+ */
+function loadSource(set: DraftSet): string {
+  return JSON.stringify([
+    set.loadStrategy,
+    set.loadUnit,
+    set.manualLoadOverride,
+    ...(set.loadStrategy === 'PercentageWorkingMax'
+      ? [set.loadValue]
+      : [set.repetitionsMaximum, rpeOf(set)]),
+  ]);
+}
+
+/**
+ * The weight a set shows on a client's grid (critique B15): the one the server saved, while nothing
+ * it was worked out from has changed. Only the server works a weight out, so a set changed or added
+ * here keeps its share until the changes are applied.
+ */
+export function savedLoadOf(edit: ProgramEdit, locale: string): SavedLoadOf {
+  return (set) => {
+    const saved = edit.savedLoads.get(set.key);
+    return saved?.from === loadSource(set) ? weightText(saved.load, saved.unit, locale) : null;
   };
 }
 
@@ -159,6 +225,7 @@ export function programEdit(
   const weeks = [...view.weeks].sort((a, b) => numeric(a.weekNumber) - numeric(b.weekNumber));
   let frozen = 0;
   const locked = new Map<string, LockedSession[]>();
+  const savedLoads = new Map<string, SavedLoad>();
   weeks.forEach((week, index) => {
     const closed = week.sessions
       .filter((session) => !isOpen(session, today))
@@ -193,9 +260,10 @@ export function programEdit(
         sessions: week.sessions
           .filter((session) => isOpen(session, today))
           .sort(bySchedule)
-          .map((session) => draftSession(session, view.loadUnit)),
+          .map((session) => draftSession(session, view.loadUnit, savedLoads)),
       })),
     },
+    savedLoads,
   };
 }
 

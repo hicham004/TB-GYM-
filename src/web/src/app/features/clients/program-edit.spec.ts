@@ -20,7 +20,7 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { chartSet, pastAndComingProgram, setView } from '../../../testing/mesocycle-fixtures';
 import { exercise, searchLibrary } from '../../../testing/program-builder-fixtures';
-import { field, formSummary, press, query, settle } from '../../../testing/dom';
+import { field, fill, formSummary, press, query, settle } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { ProgramEditPage } from './program-edit';
@@ -240,6 +240,46 @@ describe('editing a client’s weeks', () => {
     expect(week2Days[1].querySelector('.add-day')).toBeNull();
     expect(week2Days[3].querySelector('.add-day')).not.toBeNull();
     expect(named(host, 'Review changes').disabled).toBe(true);
+  });
+
+  it('shows each set’s saved weight on the grid and in the sheet until it changes (critique B15)', async () => {
+    const { harness, host } = await render();
+    const week3 = host.querySelectorAll('section.week')[2];
+    // Week 3's Monday is the fixture's chart squat: 5 reps at RPE 7, saved at 77.5 kg.
+    const onGrid = () => textOf(week3.querySelector('app-set-lines'));
+    expect(onGrid()).toBe('1 × 5 · 77.5 kg · RPE 7');
+
+    named(week3, 'Lower A').click();
+    await settle(harness.fixture);
+    const sheet = await dialogNamed(harness.fixture, 'Edit workout');
+    const inSheet = () => textOf(sheet.querySelector('.exercise-line'));
+    expect(inSheet()).toBe('1 × 5 · 77.5 kg · RPE 7');
+    // The set editor keeps the share: a weight there would go stale as the coach types.
+    expect(textOf(sheet.querySelector('.set-summary'))).toContain(
+      '5 · RPE 7 · 79% of training max',
+    );
+
+    fill(sheet, 'RPE target', '9');
+    await settle(harness.fixture);
+    expect(inSheet()).toBe('1 × 5 · RPE 9 · 84% of training max');
+    expect(onGrid()).toBe('1 × 5 · RPE 9 · 84% of training max');
+    expect(textOf(host.querySelector('.status'))).toBe('Changes not applied yet');
+
+    fill(sheet, 'RPE target', '7');
+    await settle(harness.fixture);
+    expect(onGrid()).toBe('1 × 5 · 77.5 kg · RPE 7');
+
+    fill(sheet, 'RPE target', '9');
+    await settle(harness.fixture);
+    named(sheet, 'Done').click();
+    await settle(harness.fixture);
+    press(host, 'Discard changes');
+    const asked = await dialogNamed(harness.fixture, 'Discard your changes?');
+    named(asked, 'Discard changes').click();
+    await settle(harness.fixture);
+    expect(textOf(host.querySelectorAll('section.week')[2].querySelector('app-set-lines'))).toBe(
+      '1 × 5 · 77.5 kg · RPE 7',
+    );
   });
 
   it('reviews what the server says the edit does, then applies exactly that and goes back', async () => {
