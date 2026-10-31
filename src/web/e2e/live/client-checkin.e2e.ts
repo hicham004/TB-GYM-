@@ -116,14 +116,19 @@ test('one question per screen, saved as you go, reviewed, sent and listed', asyn
   });
 
   await test.step('two answers, then a reload lands on the same question', async () => {
+    let answered = false;
     for (let i = 0; i < 2; i++) {
       const text = (await kicker.textContent()) ?? '';
       if (/photos|ready to send/i.test(text)) break;
       await answerCurrent(page);
       await primary.click();
       await expect(kicker).not.toHaveText(text);
+      answered = true;
     }
     const before = (await kicker.textContent()) ?? '';
+    // Next moves on while its save runs, and a reload in that moment cuts the save off: the browser
+    // asks a person first, and Playwright says yes. What is promised is what the screen calls saved.
+    if (answered) await expect(page.locator('.flow-save')).toHaveText('Saved');
     await page.reload();
     await expect(kicker).toBeVisible();
     await expect(kicker).toHaveText(before);
