@@ -19,12 +19,13 @@ import { EmptyState } from '../../ui/empty-state';
 import { Icon } from '../../ui/icon';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
-import { ownPlans, type OwnPlan } from './client-plan.models';
+import { ownPlans, type OwnPlan, type OwnSession } from './client-plan.models';
 
 /**
  * My plan (critique B10a): where a client reads what they agreed with their coach, its name, what's
- * included, the dates and the coach's description. Reached from Me. It only reads: renewing stays on
- * Today, and no price or payment shows here.
+ * included, the dates and the coach's description, and for a pack what is left and what happened to
+ * each session (B10c). Reached from Me. It only reads: renewing stays on Today, and no price or
+ * payment shows here.
  */
 @Component({
   selector: 'app-client-plan-page',
@@ -42,14 +43,18 @@ export class ClientPlanPage {
   private loadedTenantId: string | null = null;
 
   protected readonly loadingLabel = $localize`Loading your plan…`;
+  /** A pack's newest sessions; the rest on request, as Today's feed does. */
+  protected readonly preview = 5;
 
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly plans = signal<readonly OwnPlan[]>([]);
+  private readonly opened = signal<ReadonlySet<string>>(new Set());
 
   constructor() {
     this.scope.onReset(() => {
       this.loadedTenantId = null;
       this.plans.set([]);
+      this.opened.set(new Set());
       this.state.set('loading');
     });
     afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
@@ -61,6 +66,20 @@ export class ClientPlanPage {
         void this.load();
       }
     });
+  }
+
+  protected isOpen(planId: string): boolean {
+    return this.opened().has(planId);
+  }
+
+  protected shown(planId: string, history: readonly OwnSession[]): readonly OwnSession[] {
+    return this.isOpen(planId) ? history : history.slice(0, this.preview);
+  }
+
+  protected toggle(planId: string): void {
+    const opened = new Set(this.opened());
+    if (!opened.delete(planId)) opened.add(planId);
+    this.opened.set(opened);
   }
 
   protected async load(): Promise<void> {

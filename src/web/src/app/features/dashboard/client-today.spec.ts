@@ -71,6 +71,7 @@ async function render(
     getWorkspace: vi.fn(() => of({ currentDate: '2026-09-21' })),
     // No meal plan: "nothing here", a 200 with null (audit AUTH-12).
     getMyNutritionDay: vi.fn(() => of(null)),
+    getOwnPlans: vi.fn(() => of({ today: '2026-09-21', plans: [], coachName: null })),
     listOwnCheckInAssignments: vi.fn(() => of({ clientProfileId: 'c', total: 0, items: [] })),
     listConversations: vi.fn(() =>
       of({
@@ -331,6 +332,22 @@ describe('ClientToday', () => {
     const { host, read } = await render({
       day: day([], false, 'NoEntitlement'),
       access: fakeClientAccess({ Training: 'NoEntitlement' }),
+    });
+
+    expect(host.querySelector('.today-card')).toBeNull();
+    expect(read()).not.toContain('Nothing assigned yet');
+  });
+
+  it('tells a client on sessions alone nothing is missing from their plan (critique B10c)', async () => {
+    const { host, read } = await render({
+      day: day([], false, 'NoEntitlement'),
+      access: fakeClientAccess({
+        Training: 'NoEntitlement',
+        Nutrition: 'NoEntitlement',
+        CheckIns: 'NoEntitlement',
+        Messaging: 'NoEntitlement',
+        Sessions: 'Granted',
+      }),
     });
 
     expect(host.querySelector('.today-card')).toBeNull();

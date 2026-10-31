@@ -57,7 +57,8 @@ running keeps a client Running and keeps Ask to renew away (SUB-014: partly runn
 - Single sessions are packs of one. Service & access lists packs in 1-on-1 sessions alone, not under Other plans, with
   those that are over folded, so a coach selling many reads each once.
 - Not in v1: booking, a calendar, self-booking, reminders, automatic no-show charging, several kinds of session, pay
-  rates, packs with no end date. B10c adds what clients read, B10d the month's numbers.
+  rates, packs with no end date. B10c adds what clients read (SES-007), what coaches read (SES-008) and a pack's own
+  notices (SES-009), B10d the month's numbers.
 
 ## Migration and recovery
 

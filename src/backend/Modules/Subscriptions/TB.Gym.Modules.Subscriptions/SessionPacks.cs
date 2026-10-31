@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Modules.Subscriptions;
@@ -164,9 +165,14 @@ public sealed class SessionLedgerEntry : TenantEntity
 
 public static class SessionLedger
 {
+    /// <summary>What a row does to the balance, for a read that sums a pack's ledger in the database.</summary>
+    public static readonly Expression<Func<SessionLedgerEntry, int>> SignedCount = entry =>
+        entry.Kind == SessionEntryKind.Issued || entry.Kind == SessionEntryKind.Voided ? entry.Count : -entry.Count;
+
+    private static readonly Func<SessionLedgerEntry, int> Signed = SignedCount.Compile();
+
     /// <summary>Balance = issued − held − charged + voided (SES-003). A pack waiting for payment has none yet.</summary>
-    public static int Balance(IEnumerable<SessionLedgerEntry> entries) =>
-        entries.Sum(entry => entry.Kind is SessionEntryKind.Issued or SessionEntryKind.Voided ? entry.Count : -entry.Count);
+    public static int Balance(IEnumerable<SessionLedgerEntry> entries) => entries.Sum(Signed);
 
     /// <summary>
     /// A pack as the coach reads it. Held and Charged count what still stands. Once the pack is over, by its dates or

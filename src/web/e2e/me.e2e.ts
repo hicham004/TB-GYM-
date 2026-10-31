@@ -191,6 +191,30 @@ const ONLINE_COACHING = {
   features: ['Training', 'Nutrition', 'CheckIns', 'Messaging'],
 };
 
+/** A session pack (critique B10c), with what it holds and what happened to each session. */
+const PERSONAL_TRAINING = {
+  ...ONLINE_COACHING,
+  id: '00000000-0000-4000-8000-0000000000c3',
+  name: 'Personal training',
+  optionLabel: '10 sessions',
+  description: null,
+  startDate: '2026-10-01',
+  lastDay: '2026-12-29',
+  features: ['Sessions'],
+  sessions: {
+    count: 10,
+    left: 7,
+    used: 3,
+    lapsed: 0,
+    lapsedOn: null,
+    sessions: [
+      { day: '2026-10-14', outcome: 'Held', reason: null },
+      { day: '2026-10-09', outcome: 'Charged', reason: 'No-show: you didn’t come' },
+      { day: '2026-10-06', outcome: 'Held', reason: null },
+    ],
+  },
+};
+
 async function openPlan(
   page: Page,
   plans: object[],
@@ -200,7 +224,8 @@ async function openPlan(
   await mockClient(page, {
     ...options,
     extra: {
-      'GET /api/client-plan/me': (route) => json(route, 200, { today: '2026-10-15', plans }),
+      'GET /api/client-plan/me': (route) =>
+        json(route, 200, { today: '2026-10-15', plans, coachName: 'Hicham Haddad' }),
     },
   });
   await page.goto('/plan');
@@ -233,6 +258,79 @@ for (const [width, height] of [
     await page.screenshot({ path: `test-results/b10a-plan-${width}.png`, fullPage: true });
   });
 }
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`My plan at ${width}px says what is left on a pack and what happened`, async ({ page }) => {
+    await openPlan(page, [PERSONAL_TRAINING], { width, height });
+
+    const pack = page.getByRole('region', { name: 'Personal training' });
+    await expect(
+      pack.getByText('7 of 10 sessions with Hicham left, until 29 December'),
+    ).toBeVisible();
+    await expect(pack.getByRole('heading', { name: 'Sessions so far' })).toBeVisible();
+    await expect(pack.locator('.sessions li')).toHaveText([
+      /Wed 14 Oct\s+Held/,
+      /Fri 9 Oct\s+Charged\s+No-show: you didn’t come/,
+      /Tue 6 Oct\s+Held/,
+    ]);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/b10c-pack-${width}.png`, fullPage: true });
+  });
+}
+
+test('a pack follows dark mode, and a long reason and 200% text stay inside the page', async ({
+  page,
+}) => {
+  const reason =
+    'Cancelled less than twenty-four hours before the session, so it is charged. '.repeat(4);
+  await openPlan(
+    page,
+    [
+      {
+        ...PERSONAL_TRAINING,
+        sessions: {
+          ...PERSONAL_TRAINING.sessions,
+          sessions: [{ day: '2026-10-09', outcome: 'Charged', reason }],
+        },
+      },
+    ],
+    { user: { preferredThemeMode: 'dark' } },
+  );
+
+  await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await page.screenshot({ path: 'test-results/b10c-pack-dark-390.png', fullPage: true });
+
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '200%';
+  });
+  await expectNoHorizontalOverflow(page);
+});
+
+test('a long list of sessions opens on request', async ({ page }) => {
+  const sessions = Array.from({ length: 8 }, (_, index) => ({
+    day: `2026-10-${String(14 - index).padStart(2, '0')}`,
+    outcome: 'Held',
+    reason: null,
+  }));
+  await openPlan(page, [
+    {
+      ...PERSONAL_TRAINING,
+      sessions: { ...PERSONAL_TRAINING.sessions, left: 2, used: 8, sessions },
+    },
+  ]);
+
+  await expect(page.locator('.sessions li')).toHaveCount(5);
+  await page.getByRole('button', { name: 'Show all 8' }).click();
+  await expect(page.locator('.sessions li')).toHaveCount(8);
+  await page.getByRole('button', { name: 'Show less' }).click();
+  await expect(page.locator('.sessions li')).toHaveCount(5);
+});
 
 test('My plan follows dark mode and reads every state of a plan', async ({ page }) => {
   await openPlan(

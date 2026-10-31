@@ -46,6 +46,11 @@ public sealed record NotificationTemplate(string Key, int Version, string Cultur
 /// already-delivered snapshot exactly as it was read. Version 2 is the glossary pass of audit COACH-12
 /// (the plan and team notices in the screens' words, and the note notices naming the workout).
 /// </para>
+/// <para>
+/// A session pack hears the plan notices in its own words (critique B10c, SES-009): it runs beside a coaching plan, so
+/// "your plan has ended" could name the wrong thing. They are as generic as the rest, with no count and no date: the
+/// screens behind them say how many are left. The kind stays the plan's; only the wording differs.
+/// </para>
 /// </remarks>
 public static class NotificationTemplateCatalog
 {
@@ -174,6 +179,42 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             $"{ClientNameToken} left a note on {WorkoutToken}",
             "Open the workout on the client's Training to read it."),
+    };
+
+    /// <summary>The plan notices as a session pack hears them (SES-009), in English like the rest.</summary>
+    private static readonly Dictionary<CommercialNotificationKind, NotificationTemplate> PackEnglish = new()
+    {
+        [CommercialNotificationKind.PaymentRequired] = new NotificationTemplate(
+            "commercial.pack-payment-required",
+            FirstVersion,
+            DefaultCulture,
+            "Your new 1-on-1 sessions are waiting for payment",
+            "They start once your coach has your payment."),
+        [CommercialNotificationKind.EnrollmentActivated] = new NotificationTemplate(
+            "commercial.pack-activated",
+            FirstVersion,
+            DefaultCulture,
+            "Your 1-on-1 sessions are ready",
+            "Open Today to see how many you have."),
+        [CommercialNotificationKind.EnrollmentEndingSoon] = new NotificationTemplate(
+            "commercial.pack-ending-soon",
+            FirstVersion,
+            DefaultCulture,
+            "Your 1-on-1 sessions end soon",
+            "If you'd like to keep going, ask your coach to renew them."),
+        [CommercialNotificationKind.EnrollmentExpired] = new NotificationTemplate(
+            "commercial.pack-expired",
+            FirstVersion,
+            DefaultCulture,
+            "Your 1-on-1 sessions have ended",
+            "If you'd like to keep going, ask your coach to renew them."),
+        // Careful wording, as for a plan's renewal: it may still be waiting for payment.
+        [CommercialNotificationKind.EnrollmentRenewed] = new NotificationTemplate(
+            "commercial.pack-renewed",
+            FirstVersion,
+            DefaultCulture,
+            "Your coach set up more 1-on-1 sessions",
+            "Open Today to see where your sessions stand."),
     };
 
     /// <summary>The wordings by language; only English is written so far (audit INV-8).</summary>
@@ -319,8 +360,19 @@ public static class NotificationTemplateCatalog
         return English.TryGetValue(kind, out template!);
     }
 
+    /// <summary>
+    /// A plan notice for an enrollment, in a session pack's own words when it is one (SES-009); any other kind, and any
+    /// plan, as <see cref="TryResolve(CommercialNotificationKind, string, out NotificationTemplate)"/> answers it.
+    /// </summary>
+    public static bool TryResolveForEnrollment(
+        CommercialNotificationKind kind,
+        string culture,
+        bool isSessionPack,
+        out NotificationTemplate template) =>
+        (isSessionPack && PackEnglish.TryGetValue(kind, out template!)) || TryResolve(kind, culture, out template);
+
     /// <summary>Every published template, for tests and for documentation of the allowlist.</summary>
-    public static IReadOnlyCollection<NotificationTemplate> Published => English.Values;
+    public static IReadOnlyCollection<NotificationTemplate> Published => [.. English.Values, .. PackEnglish.Values];
 
     /// <summary>
     /// The one wording an email may carry in this phase.

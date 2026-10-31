@@ -107,7 +107,8 @@
 }
 
 .plan-when,
-.plan-note {
+.plan-note,
+.plan-sessions {
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -122,10 +123,18 @@
   display: inline-block;
 }
 
-.plan-note {
+.plan-note,
+.plan-sessions {
   color: var(--tb-on-brand);
   font-size: 0.9375rem;
   max-inline-size: 34rem;
+}
+
+// What is left on a pack: the card's news, so it reads ahead of the note under it.
+.plan-sessions {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin-block-start: var(--space-4);
 }
 
 .plan-action {
@@ -153,14 +162,18 @@ h3 {
   text-transform: uppercase;
 }
 
-// One column until two names fit side by side, however large the person's text is.
-.includes {
+.includes,
+.sessions {
   display: grid;
-  gap: var(--space-8) var(--space-16);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+// One column until two names fit side by side, however large the person's text is.
+.includes {
+  gap: var(--space-8) var(--space-16);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr));
 }
 
 .includes li {
@@ -182,6 +195,41 @@ h3 {
   flex: none;
   inline-size: 2.25rem;
   place-items: center;
+}
+
+// Each session on a line of its own: the day, what happened, and under a charge the coach's reason.
+.sessions {
+  gap: var(--space-8);
+}
+
+.sessions li {
+  align-items: baseline;
+  column-gap: var(--space-12);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sessions li + li {
+  border-block-start: 1px solid var(--tb-line);
+  padding-block-start: var(--space-8);
+}
+
+.session-day {
+  font-weight: 600;
+}
+
+.session-what,
+.session-reason {
+  color: var(--tb-muted);
+}
+
+.session-reason {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
+.sessions-toggle {
+  justify-self: start;
 }
 
 // The coach's own words, in the lines they wrote them.

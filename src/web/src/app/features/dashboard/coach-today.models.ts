@@ -15,7 +15,7 @@ import type {
 } from '../../core/api/generated';
 import { nearestLoadStep } from '../../core/units/load-steps';
 import { initialsOf } from '../../shell/initials';
-import { money } from '../clients/client-service.models';
+import { money, sessionsLeft } from '../clients/client-service.models';
 
 /**
  * Coach Today (C1) in coach words: the server's queue, This month, the plans ending soon or ended
@@ -98,6 +98,8 @@ export interface CoachMonth {
   moneyFrom: string;
   /** "9 of 12 clients": the clients whose plan runs today, out of every current client. */
   active: string;
+  /** The 1-on-1 sessions held (SES-008); null while there is nothing to count from. */
+  sessions: { held: string; by: string } | null;
   /** The owner's team, the owner first as "You"; null for a coach, who never sees it. */
   staff: StaffRow[] | null;
 }
@@ -190,7 +192,21 @@ export function thisMonth(month: CoachMonthView, clientCount: number, locale: st
       ? $localize`Received by your coaching space`
       : $localize`Received from your clients`,
     active: activeClients(Number(month.activeClientCount), clientCount),
+    sessions: sessionsHeld(month, owner, locale),
     staff: month.coaches?.map((member) => staffRow(member)) ?? null,
+  };
+}
+
+function sessionsHeld(
+  month: CoachMonthView,
+  owner: boolean,
+  locale: string,
+): CoachMonth['sessions'] {
+  const held = month.sessionsHeld;
+  if (held === null || held === undefined) return null;
+  return {
+    held: formatNumber(Number(held), locale, '1.0-0'),
+    by: owner ? $localize`Held by your coaching space` : $localize`Held by you`,
   };
 }
 
@@ -424,10 +440,23 @@ export function attentionRow(
         detail:
           count > 0
             ? $localize`Paid until ${date(item.date)}:date: · The renewal isn't paid yet`
-            : $localize`Last day ${date(item.date)}:date:`,
+            : withSessionsLeft(item, $localize`Last day ${date(item.date)}:date:`),
         tag: $localize`Ending soon`,
         tone: 'ending',
         action: go(count > 0 && item.subjectId ? $localize`Record payment` : $localize`Renew plan`),
+      };
+    case 'SessionsRunningOut':
+      // What is left is what matters; the packs' last day says how long there is to use it (SES-008).
+      return {
+        ...base,
+        heading: runningOutHeading(name, Number(item.sessionsLeft ?? 0)),
+        detail:
+          count > 0
+            ? $localize`Last day ${date(item.date)}:date: · The next pack isn’t paid yet`
+            : $localize`Last day ${date(item.date)}:date:`,
+        tag: $localize`Sessions`,
+        tone: 'ending',
+        action: go(count > 0 && item.subjectId ? $localize`Record payment` : $localize`Renew pack`),
       };
     case 'WeekNotShared': {
       const week = Number(item.weekNumber ?? 0);
@@ -554,6 +583,7 @@ export function attentionTarget(item: CoachAttentionItemView): {
     case 'RenewalRequested':
       return { link: `${page}/service`, queryParams: subject ? { renew: subject } : null };
     case 'PlanEndingSoon':
+    case 'SessionsRunningOut':
       // Only a paid plan covers days (BEB-7): with a renewal still unpaid, its payment is the action.
       return {
         link: `${page}/service`,
@@ -692,6 +722,22 @@ export function joinedDetail(joinedOn: string | null, today: string, locale: str
   if (daysAgo <= 0) return $localize`Today · no plan yet`;
   if (daysAgo === 1) return $localize`Yesterday · no plan yet`;
   return $localize`${formatDate(joinedOn, 'EEE d MMM', locale)}:date: · no plan yet`;
+}
+
+/** A pack standing as the client's plan says what is left on the plan's own item (ADR 0038). */
+export function withSessionsLeft(
+  item: Pick<CoachAttentionItemView, 'sessionsLeft'>,
+  detail: string,
+): string {
+  const left = item.sessionsLeft;
+  return left === null || left === undefined ? detail : `${sessionsLeft(Number(left))} · ${detail}`;
+}
+
+function runningOutHeading(name: string, left: number): string {
+  if (left <= 0) return $localize`${name}:name: has no sessions left`;
+  return left === 1
+    ? $localize`${name}:name: has 1 session left`
+    : $localize`${name}:name: has ${left}:count: sessions left`;
 }
 
 function endsHeading(name: string, inDays: number, date: string): string {

@@ -195,6 +195,13 @@
               <p class="month-value">{{ view.month.active }}</p>
               <p class="month-note" i18n>With a plan running today</p>
             </div>
+            @if (view.month.sessions; as sessions) {
+              <div class="month-part">
+                <h3 class="month-label" i18n>1-on-1 sessions held</h3>
+                <p class="month-value">{{ sessions.held }}</p>
+                <p class="month-note">{{ sessions.by }}</p>
+              </div>
+            }
             @if (view.month.staff; as staff) {
               <div class="month-part">
                 <h3 class="month-label" i18n>Coaches</h3>

@@ -114,10 +114,12 @@ export class ClientToday {
     if (day === null || upcoming === null) return null;
     // Training outside the plan says nothing when something else is in it; with nothing in the
     // plan at all, Today says nothing is assigned yet.
-    const somethingElse = (['Nutrition', 'CheckIns', 'Messaging'] as const).some((feature) => {
-      const decision = this.access.decision(feature);
-      return decision !== null && decision.reason !== 'NoEntitlement';
-    });
+    const somethingElse = (['Nutrition', 'CheckIns', 'Messaging', 'Sessions'] as const).some(
+      (feature) => {
+        const decision = this.access.decision(feature);
+        return decision !== null && decision.reason !== 'NoEntitlement';
+      },
+    );
     return trainingCard(day, upcoming, somethingElse);
   });
 

@@ -15,6 +15,7 @@ import {
   carriedMaxDetail,
   overdueDetail,
   suggestedMaxDetail,
+  withSessionsLeft,
 } from '../dashboard/coach-today.models';
 import type {
   DashboardNutrition,
@@ -22,6 +23,7 @@ import type {
   ProgressDashboard,
 } from '../progress/progress-dashboard.models';
 import { activeBlock, addDays, bodyweightSummary, daysBetween } from './client-overview.models';
+import { sessionsLeft } from './client-service.models';
 import { dayMark, type DayMark } from './clients.models';
 
 /**
@@ -151,7 +153,7 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
         detail:
           count > 0
             ? $localize`Paid until ${date(item.date)}:date: · The renewal isn’t paid yet`
-            : $localize`Last day ${date(item.date)}:date:`,
+            : withSessionsLeft(item, $localize`Last day ${date(item.date)}:date:`),
         action:
           count > 0 && item.subjectId
             ? {
@@ -162,6 +164,30 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
             : renewAction(page, item.subjectId),
       };
     }
+    case 'SessionsRunningOut':
+      // What is left is what matters; the packs' last day says how long there is to use it (SES-008).
+      return {
+        ...base,
+        tone: 'ending',
+        tag: $localize`Sessions`,
+        heading: sessionsLeft(Number(item.sessionsLeft ?? 0)),
+        detail:
+          count > 0
+            ? $localize`Last day ${date(item.date)}:date: · The next pack isn’t paid yet`
+            : $localize`Last day ${date(item.date)}:date:`,
+        action:
+          count > 0 && item.subjectId
+            ? {
+                label: $localize`Record payment`,
+                link: `${page}/service`,
+                queryParams: { pay: item.subjectId },
+              }
+            : {
+                label: $localize`Renew pack`,
+                link: `${page}/service`,
+                queryParams: item.subjectId ? { renew: item.subjectId } : null,
+              },
+      };
     case 'WeekNotShared': {
       const week = Number(item.weekNumber ?? 0);
       const startsIn = daysBetween(today, item.date ?? today);

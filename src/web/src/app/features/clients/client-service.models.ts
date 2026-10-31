@@ -462,6 +462,12 @@ export function sessionsCount(count: number): string {
   return count === 1 ? $localize`1 session` : $localize`${count}:count: sessions`;
 }
 
+/** "2 sessions left", "1 session left", "No sessions left": a client's balance, for the coach. */
+export function sessionsLeft(left: number): string {
+  if (left <= 0) return $localize`No sessions left`;
+  return left === 1 ? $localize`1 session left` : $localize`${left}:count: sessions left`;
+}
+
 export interface SessionLine {
   readonly id: string;
   /** "Tue 20 Oct" */

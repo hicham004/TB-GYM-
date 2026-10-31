@@ -660,7 +660,7 @@ internal sealed partial class CommercialApplicationService(
         var client = await dbContext.ClientProfiles
             .AsNoTracking()
             .CurrentFor(userId)
-            .Select(item => new { item.Id, item.IsCoachBlocked })
+            .Select(item => new { item.Id, item.IsCoachBlocked, item.AssignedCoachUserId })
             .SingleOrDefaultAsync(cancellationToken);
         if (client is null)
         {
@@ -674,6 +674,14 @@ internal sealed partial class CommercialApplicationService(
             .ToListAsync(cancellationToken);
         var (zone, today) = await GetWorkspaceDayAsync(cancellationToken);
         var shown = OwnPlans.Shown(enrollments, today, zone);
+        var packs = await LoadSessionPacksAsync(shown, today, zone, cancellationToken);
+        var coachName = packs.Count == 0
+            ? null
+            : await dbContext.Users
+                .AsNoTracking()
+                .Where(user => user.Id == client.AssignedCoachUserId)
+                .Select(user => user.DisplayName)
+                .SingleOrDefaultAsync(cancellationToken);
         var productIds = shown.Select(item => item.ProductId).ToArray();
         var descriptions = await dbContext.CoachingProducts
             .AsNoTracking()
@@ -691,8 +699,10 @@ internal sealed partial class CommercialApplicationService(
                     plan.EndDateExclusive.AddDays(-1),
                     plan.CancelledOn(zone),
                     OwnPlans.StatusOf(plan, today, client.IsCoachBlocked),
-                    plan.Entitlements.Select(item => item.Feature).Order().ToArray()))
-                .ToArray());
+                    plan.Entitlements.Select(item => item.Feature).Order().ToArray(),
+                    packs.TryGetValue(plan.Id, out var pack) ? OwnPlans.SessionsOf(pack) : null))
+                .ToArray(),
+            string.IsNullOrWhiteSpace(coachName) ? null : coachName);
     }
 
     private async Task<CommercialCommandResult> AssignCoreAsync(

@@ -7,6 +7,7 @@ import {
   ElementRef,
   inject,
   input,
+  LOCALE_ID,
   signal,
   untracked,
   viewChild,
@@ -16,20 +17,28 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom, map, type Observable } from 'rxjs';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
-import type { CheckInAssignmentListView } from '../../core/api/generated';
+import type { CheckInAssignmentListView, OwnPlansView } from '../../core/api/generated';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { Icon } from '../../ui/icon';
 import { mapNutritionDay, type NutritionDay } from '../nutrition/nutrition.models';
-import { checkInRow, nutritionRow, type ReadState, rowAccessLabel } from './today.models';
+import {
+  checkInRow,
+  nutritionRow,
+  type ReadState,
+  rowAccessLabel,
+  sessionsAreClosed,
+  sessionsRow,
+} from './today.models';
 
-type Row = 'nutrition' | 'checkIns';
+type Row = 'nutrition' | 'checkIns' | 'sessions';
 
 /**
- * "Also today": nutrition, then the check-in due first. Each row reads on its own and
- * fails on its own; a failure never hides the other row or the training card. The coach reviews a
- * check-in and the client completes a nutrition day, so no shared "n of m done" is invented.
+ * "Also today": nutrition, the check-in due first, then a pack's 1-on-1 sessions, which open My plan.
+ * Each row reads on its own and fails on its own; a failure never hides another row or the training
+ * card. The coach reviews a check-in and the client completes a nutrition day, so no shared "n of m
+ * done" is invented.
  */
 @Component({
   selector: 'app-today-also',
@@ -41,6 +50,7 @@ export class TodayAlso {
   private readonly api = inject(ApiClient);
   private readonly tenants = inject(TenantStore);
   private readonly access = inject(ClientAccessStore);
+  private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
@@ -49,6 +59,7 @@ export class TodayAlso {
 
   private readonly nutritionRead = signal<ReadState<NutritionDay>>({ kind: 'loading' });
   private readonly checkInRead = signal<ReadState<CheckInAssignmentListView>>({ kind: 'loading' });
+  private readonly sessionsRead = signal<ReadState<OwnPlansView>>({ kind: 'loading' });
 
   protected readonly nutrition = computed(() =>
     nutritionRow(this.access.decision('Nutrition'), this.access.status(), this.nutritionRead()),
@@ -73,12 +84,26 @@ export class TodayAlso {
       ? ['/checkins/me', row.value.assignmentId]
       : ['/checkins/me'];
   });
-  protected readonly visible = computed(
-    () => this.nutrition().kind !== 'hidden' || this.checkIn().kind !== 'hidden',
+  protected readonly sessions = computed(() =>
+    sessionsRow(
+      this.access.decision('Sessions'),
+      this.access.status(),
+      this.sessionsRead(),
+      this.locale,
+    ),
   );
-  /** Both rows have answered, so Today can draw this card at its final height (audit UIQ-5). */
+  protected readonly visible = computed(
+    () =>
+      this.nutrition().kind !== 'hidden' ||
+      this.checkIn().kind !== 'hidden' ||
+      this.sessions().kind !== 'hidden',
+  );
+  /** Every row has answered, so Today can draw this card at its final height (audit UIQ-5). */
   readonly settled = computed(
-    () => this.nutrition().kind !== 'loading' && this.checkIn().kind !== 'loading',
+    () =>
+      this.nutrition().kind !== 'loading' &&
+      this.checkIn().kind !== 'loading' &&
+      this.sessions().kind !== 'loading',
   );
   protected readonly accessLabel = rowAccessLabel;
 
@@ -87,6 +112,7 @@ export class TodayAlso {
     [
       this.nutrition().kind === 'failed' ? $localize`Couldn’t load nutrition.` : '',
       this.checkIn().kind === 'failed' ? $localize`Couldn’t load check-ins.` : '',
+      this.sessions().kind === 'failed' ? $localize`Couldn’t load your sessions.` : '',
     ]
       .filter(Boolean)
       .join(' '),
@@ -100,6 +126,7 @@ export class TodayAlso {
       this.requested.clear();
       this.nutritionRead.set({ kind: 'loading' });
       this.checkInRead.set({ kind: 'loading' });
+      this.sessionsRead.set({ kind: 'loading' });
     });
     // Each row waits for the access answer, and a feature the answer calls closed (outside the
     // plan, paused, ended…) is never asked for: its row is hidden or states that reason anyway, and
@@ -111,10 +138,12 @@ export class TodayAlso {
       const status = this.access.status();
       const nutritionClosed = this.access.decision('Nutrition')?.isAllowed === false;
       const checkInsClosed = this.access.decision('CheckIns')?.isAllowed === false;
+      const sessionsClosed = sessionsAreClosed(this.access.decision('Sessions'), status);
       if (!tenant || status === 'idle' || status === 'loading') return;
       untracked(() => {
         this.readOnce('nutrition', nutritionClosed);
         this.readOnce('checkIns', checkInsClosed);
+        this.readOnce('sessions', sessionsClosed);
       });
     });
   }
@@ -129,20 +158,30 @@ export class TodayAlso {
     // A day with no meals is only readable against the access decision, so a failed one is retried too.
     if (row === 'nutrition' && this.access.status() === 'failed') void this.access.load();
     await this.load(row);
-    const state = row === 'nutrition' ? this.nutrition() : this.checkIn();
+    const state =
+      row === 'nutrition'
+        ? this.nutrition()
+        : row === 'checkIns'
+          ? this.checkIn()
+          : this.sessions();
     if (state.kind !== 'failed') setTimeout(() => this.heading()?.nativeElement.focus());
   }
 
   private load(row: Row): Promise<void> {
-    return row === 'nutrition'
-      ? this.read(
+    switch (row) {
+      case 'nutrition':
+        return this.read(
           'nutrition',
           this.api
             .getMyNutritionDay()
             .pipe(map((day) => (day === null ? null : mapNutritionDay(day)))),
           this.nutritionRead,
-        )
-      : this.read('checkIns', this.api.listOwnCheckInAssignments(0, 50), this.checkInRead);
+        );
+      case 'checkIns':
+        return this.read('checkIns', this.api.listOwnCheckInAssignments(0, 50), this.checkInRead);
+      case 'sessions':
+        return this.read('sessions', this.api.getOwnPlans(), this.sessionsRead);
+    }
   }
 
   private read<T>(

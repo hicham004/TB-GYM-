@@ -32,6 +32,9 @@
             <p class="plan-when" [id]="'when-' + plan.id">
               <bdi>{{ plan.option }}</bdi> · <span class="plan-dates">{{ plan.dates }}</span>
             </p>
+            @if (plan.sessions?.line; as line) {
+              <p class="plan-sessions">{{ line }}</p>
+            }
             @if (plan.note; as note) {
               <p class="plan-note">{{ note }}</p>
             }
@@ -53,6 +56,42 @@
                 }
               </ul>
             </div>
+            @if (plan.sessions?.history; as history) {
+              @if (history.length > 0) {
+                <div class="plan-part">
+                  <h3 i18n>Sessions so far</h3>
+                  <ul class="sessions" role="list" [id]="'sessions-' + plan.id">
+                    @for (session of shown(plan.id, history); track session.key) {
+                      <!-- The kept spaces read "Fri 9 Oct Held" aloud, never "Fri 9 OctHeld". -->
+                      <li>
+                        <span class="session-day">{{ session.day }}</span
+                        >&ngsp;<span class="session-what">{{ session.what }}</span>
+                        @if (session.reason; as reason) {
+                          &ngsp;<span class="session-reason" dir="auto">{{ reason }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                  @if (history.length > preview) {
+                    <button
+                      appButton
+                      type="button"
+                      variant="text"
+                      class="sessions-toggle"
+                      [attr.aria-controls]="'sessions-' + plan.id"
+                      [attr.aria-expanded]="isOpen(plan.id)"
+                      (click)="toggle(plan.id)"
+                    >
+                      @if (isOpen(plan.id)) {
+                        <ng-container i18n>Show less</ng-container>
+                      } @else {
+                        <ng-container i18n>Show all {{ history.length }}</ng-container>
+                      }
+                    </button>
+                  }
+                </div>
+              }
+            }
             @if (plan.description; as description) {
               <div class="plan-part">
                 <h3 i18n>About this plan</h3>

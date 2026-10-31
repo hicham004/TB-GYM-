@@ -677,6 +677,14 @@ written by `POST /api/commercial/clients/{clientProfileId}/sessions` and `.../se
 in the module (SES-001 to SES-006). The receipt taken with a session goes through the same `ApplyReceiptAsync` as
 Record payment.
 
+Critique B10c adds no table, route or migration. `GET /api/client-plan/me` carries each pack's `OwnSessionsView` and the
+coach's name, and Today's row reads it only while the access answer says a pack is not over (SES-007). The Clients
+row and Needs you read the balance as a sum on the plan-ends read Today and the list already make, so it costs no query,
+and `CoachAttention` moves to v5 for `SessionsRunningOut` (SES-008). This month's count is one tagged query on the
+ledger's coach-and-day index. A pack's notices keep the plan's kinds: the dispatcher picks the words from the enrollment
+it already re-reads, through `NotificationTemplateCatalog.TryResolveForEnrollment` (SES-009), so nothing already
+scheduled needs rewriting.
+
 R2.5b adds two client reads for the Training tab (`/training/program`), with no schema or write
 change. `GET /api/training/me/program` describes one block: the one covering today, else the next,
 else the last finished (at most eight open blocks are read, as for coverage). It sends every week's
@@ -775,8 +783,9 @@ history as a collection (a coach's read narrowed to clients they ever coached), 
 receipt's day and coach and totals per currency. The owner's team is one more query, the owner's alone
 (`CoachClientScope.IsOwnerAsync` answers from the role it already reads). The lapsed plans' names ride on the
 plan-ends read, widened for Today alone to plans that ran out in the last 30 days, and the client's version on
-the clients read. Today's busiest case costs 28 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 25, the
-renewal requests' read, which runs only while some client's whole plan has run out, and This month's two. The
+the clients read. Today's busiest case costs 29 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 25, the
+renewal requests' read, which runs only while some client's whole plan has run out, and This month's three (critique
+B10c added the sessions held). The
 client list and a client's page read nothing new.
 
 On the web (B4a) every screen shows the server's ending-soon flag and counts no days of its own: the list

@@ -1155,6 +1155,8 @@ export type {
   OwnCoachView,
   OwnPlansView,
   OwnPlanView,
+  OwnSessionsView,
+  OwnSessionView,
   PauseClientEnrollmentData,
   PauseClientEnrollmentError,
   PauseClientEnrollmentErrors,

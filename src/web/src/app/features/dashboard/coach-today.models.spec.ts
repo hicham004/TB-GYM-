@@ -44,6 +44,70 @@ describe('Coach Today view model', () => {
     expect(today).not.toHaveProperty('week');
   });
 
+  describe('1-on-1 sessions (critique B10c, SES-008)', () => {
+    const running = (fields: Parameters<typeof attentionItem>[2]) =>
+      attentionRow(attentionItem('SessionsRunningOut', SARA, fields), COACH_TODAY, context);
+
+    it('says how many are left and the last day, and renews the pack ending last', () => {
+      expect(running({ sessionsLeft: 2, date: '2026-10-29', subjectId: 'pack-1' })).toMatchObject({
+        heading: 'Sara Mansour has 2 sessions left',
+        detail: 'Last day Thu 29 Oct',
+        tag: 'Sessions',
+        tone: 'ending',
+        action: {
+          label: 'Renew pack',
+          link: '/clients/c-sara/service',
+          queryParams: { renew: 'pack-1' },
+        },
+      });
+    });
+
+    it('words one session left and none', () => {
+      expect(running({ sessionsLeft: 1 }).heading).toBe('Sara Mansour has 1 session left');
+      expect(running({ sessionsLeft: 0 }).heading).toBe('Sara Mansour has no sessions left');
+    });
+
+    it('asks for the payment of a pack booked and unpaid, which holds nothing yet', () => {
+      expect(
+        running({ sessionsLeft: 1, date: '2026-10-29', count: 1, subjectId: 'pack-2' }),
+      ).toMatchObject({
+        detail: 'Last day Thu 29 Oct · The next pack isn’t paid yet',
+        action: { label: 'Record payment', queryParams: { pay: 'pack-2' } },
+      });
+    });
+
+    it('opens from the Clients table where Today opens it', () => {
+      expect(
+        attentionTarget(attentionItem('SessionsRunningOut', SARA, { subjectId: 'pack-1' })),
+      ).toEqual({ link: '/clients/c-sara/service', queryParams: { renew: 'pack-1' } });
+    });
+
+    it('adds what is left to a pack ending as the client’s plan, and to nothing else', () => {
+      const ending = (fields: Parameters<typeof attentionItem>[2]) =>
+        attentionRow(
+          attentionItem('PlanEndingSoon', SARA, { date: '2026-10-09', ...fields }),
+          COACH_TODAY,
+          context,
+        ).detail;
+
+      expect(ending({ sessionsLeft: 3 })).toBe('3 sessions left · Last day Fri 9 Oct');
+      expect(ending({ sessionsLeft: 0 })).toBe('No sessions left · Last day Fri 9 Oct');
+      expect(ending({})).toBe('Last day Fri 9 Oct');
+    });
+
+    it('counts the sessions held for whoever reads them, and only once there is something to count', () => {
+      expect(thisMonth(coachMonth({ sessionsHeld: 12 }), 12, 'en-US').sessions).toEqual({
+        held: '12',
+        by: 'Held by your coaching space',
+      });
+      expect(
+        thisMonth(coachMonth({ sessionsHeld: 0, coaches: null }), 2, 'en-US').sessions,
+      ).toEqual({ held: '0', by: 'Held by you' });
+      expect(thisMonth(coachMonth({ sessionsHeld: null }), 12, 'en-US').sessions).toBeNull();
+      expect(thisMonth(coachMonth(), 12, 'en-US').sessions).toBeNull();
+    });
+  });
+
   describe('This month (SUB-016, CLI-020)', () => {
     it('gives each currency its own line with its exact amount, never one total', () => {
       const month = mapCoachToday(coachTodayView(), context).month;

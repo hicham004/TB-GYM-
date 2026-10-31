@@ -6,7 +6,9 @@ import type {
   ClientTrainingDayResult,
   ClientTrainingWeekView,
   ClientWorkoutView,
+  OwnPlansView,
 } from '../../core/api/generated';
+import { todaySessions, type TodaySessions } from '../account/own-sessions.models';
 
 export interface TrainingWeek {
   isAllowed: boolean;
@@ -309,6 +311,42 @@ export function checkInRow(
     };
   }
   return { kind: 'ready', value: { kind: 'nothing-due' } };
+}
+
+/**
+ * A pack that has ended, or none at all: Today says nothing of sessions and need not ask the server.
+ * Any other answer, a pause or a pack still to come among them, is said in the row's own words.
+ */
+export function sessionsAreClosed(
+  decision: FeatureAccessDecision | null,
+  accessStatus: 'idle' | 'loading' | 'loaded' | 'failed',
+): boolean {
+  if (accessStatus !== 'loaded') return false;
+  return (
+    !decision ||
+    decision.reason === 'NoEntitlement' ||
+    decision.reason === 'Expired' ||
+    decision.reason === 'Cancelled'
+  );
+}
+
+/**
+ * The 1-on-1 sessions row (critique B10c, SES-007): the client's balance, from the read My plan makes.
+ * Unlike the rows beside it, it says nothing while it cannot be sure of a pack: with the access answer
+ * lost too, a failed read may be a client who has none.
+ */
+export function sessionsRow(
+  decision: FeatureAccessDecision | null,
+  accessStatus: 'idle' | 'loading' | 'loaded' | 'failed',
+  read: ReadState<OwnPlansView>,
+  locale: string,
+): RowState<TodaySessions> {
+  if (sessionsAreClosed(decision, accessStatus)) return { kind: 'hidden' };
+  if (read.kind === 'loading') return { kind: 'loading' };
+  if (read.kind === 'failed') return decision ? { kind: 'failed' } : { kind: 'hidden' };
+  if (read.kind !== 'ok') return { kind: 'hidden' };
+  const value = todaySessions(read.value, locale);
+  return value ? { kind: 'ready', value } : { kind: 'hidden' };
 }
 
 /**

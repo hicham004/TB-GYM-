@@ -45,6 +45,9 @@ internal sealed class CoachOverviewReader(
 
     internal const string CoachesTag = "Coach overview: the owner's team";
 
+    /// <summary>Names the read of This month's 1-on-1 sessions (critique B10c), for logs and for the test that counts it.</summary>
+    internal const string SessionsHeldTag = "Coach overview: 1-on-1 sessions held this month";
+
     public async Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken)
     {
         var scope = await LoadScopeAsync(null, cancellationToken);
@@ -120,7 +123,8 @@ internal sealed class CoachOverviewReader(
                 scope.FeaturesToday(state.Client.Id),
                 CoachAttentionPolicy.Rank(Items(state)),
                 last?.Title,
-                lastCheckIns.TryGetValue(state.Client.Id, out var sentAtUtc) ? sentAtUtc : null);
+                lastCheckIns.TryGetValue(state.Client.Id, out var sentAtUtc) ? sentAtUtc : null,
+                state.Signals.SessionsLeft);
         }).ToArray();
         return new ClientOverviewView(
             today,
@@ -264,6 +268,7 @@ internal sealed class CoachOverviewReader(
         var training = scope.Allowed(CoachingFeature.Training);
         var checkIns = scope.Allowed(CoachingFeature.CheckIns);
         var messaging = scope.Allowed(CoachingFeature.Messaging);
+        var sessionsOpen = scope.Allowed(CoachingFeature.Sessions).ToHashSet();
         var endedPlans = scope.Clients
             .Select(client => (client.Id, Plan: RenewalEligibility.EndedPlan(scope.Access[client.Id])))
             .Where(item => item.Plan is not null)
@@ -348,6 +353,21 @@ internal sealed class CoachOverviewReader(
             var pausedAtUtc = planState == ClientPlanState.Paused
                 ? livePlans.Where(item => item.StartDate <= today).Min(item => item.PausedAtUtc)
                 : null;
+
+            // The client's balance (SES-008), said only while sessions are in today's plan: what is left on the packs
+            // paid for and not over, one still to come included, so a pack already paid for quiets the item. A paused
+            // pack takes no session (SES-006), and one waiting for payment holds none until it is paid.
+            var paidPacks = sessionsOpen.Contains(client.Id)
+                ? livePlans.Where(item => item is { IsSessionPack: true, Paid: true, PausedAtUtc: null }).ToArray()
+                : [];
+            var lastPack = paidPacks.MaxBy(item => item.EndDateExclusive);
+            var unpaidPacks = paidPacks.Length > 0
+                ? livePlans
+                    .Where(item => item is { IsSessionPack: true, Paid: false })
+                    .OrderBy(item => item.StartDate)
+                    .ThenBy(item => item.EnrollmentId)
+                    .ToArray()
+                : [];
             var programs = maxes[client.Id].ToArray();
             var clientMaxes = Suggestions(programs.Where(item => item.IsOpen));
 
@@ -394,7 +414,9 @@ internal sealed class CoachOverviewReader(
                 trainingIncluded && clientBlocks.Length == 0,
                 clientMaxes.Length,
                 joinedOn,
-                late.Length);
+                late.Length,
+                lastPack is null ? null : paidPacks.Sum(item => item.SessionsLeft),
+                lastPack?.EndDateExclusive.AddDays(-1));
             return new ClientState(
                 client,
                 joinedOn,
@@ -425,7 +447,10 @@ internal sealed class CoachOverviewReader(
                     : null,
                 pausedAtUtc is { } pausedAt ? scope.LocalDate(pausedAt) : null,
                 livePlans.Count(item => item.EnrollmentId != runningPlan?.EnrollmentId),
-                notRenewed);
+                notRenewed,
+                runningPlan is { IsSessionPack: true },
+                unpaidPacks.Length,
+                unpaidPacks.FirstOrDefault()?.EnrollmentId ?? lastPack?.EnrollmentId);
         }).ToArray();
     }
 
@@ -439,7 +464,7 @@ internal sealed class CoachOverviewReader(
 
     /// <summary>One queue item for each kind the client raised, with what its one-tap action needs.</summary>
     private static IEnumerable<CoachAttentionItemView> Items(ClientState state) =>
-        state.Flags.Select(kind => kind switch
+        state.Flags.Where(kind => kind != CoachAttentionKind.SessionsRunningOut || !state.PackEndsAsPlan).Select(kind => kind switch
         {
             // The oldest waiting sets the rank; the newest is what the coach may not have seen yet (CLIENT-19).
             CoachAttentionKind.CheckInToReview => Item(kind, state, since: state.OldestCheckIn?.SubmittedAtUtc,
@@ -452,7 +477,12 @@ internal sealed class CoachOverviewReader(
                 date: state.EndedPlan?.LastDay, subjectId: state.EndedPlan?.EnrollmentId),
             CoachAttentionKind.PlanEndingSoon => Item(kind, state, date: state.PlanEndsOn,
                 count: state.UnpaidRenewals > 0 ? state.UnpaidRenewals : null,
-                subjectId: state.FirstUnpaidRenewalId ?? state.RunningEnrollmentId),
+                subjectId: state.FirstUnpaidRenewalId ?? state.RunningEnrollmentId,
+                sessionsLeft: state.PackEndsAsPlan ? state.Signals.SessionsLeft : null),
+            CoachAttentionKind.SessionsRunningOut => Item(kind, state, date: state.Signals.SessionsLastDay,
+                count: state.UnpaidPacks > 0 ? state.UnpaidPacks : null,
+                subjectId: state.PackToActOn,
+                sessionsLeft: state.Signals.SessionsLeft),
             CoachAttentionKind.WeekNotShared => Item(kind, state, date: state.WeekToShare?.StartsOn,
                 weekNumber: state.WeekToShare?.WeekNumber, subjectId: state.WeekToShare?.MesocycleId),
             CoachAttentionKind.MissedSessions => Item(kind, state, date: state.LastWorkoutOn,
@@ -482,8 +512,9 @@ internal sealed class CoachOverviewReader(
         int? weekNumber = null,
         Guid? subjectId = null,
         IReadOnlyList<CoachMaxSuggestionView>? maxes = null,
-        DateTimeOffset? newestAt = null) =>
-        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, maxes, newestAt, state.CanMessage);
+        DateTimeOffset? newestAt = null,
+        int? sessionsLeft = null) =>
+        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, maxes, newestAt, state.CanMessage, sessionsLeft);
 
     private static CoachMaxSuggestionView[] MaxViews(IEnumerable<MaxSuggestionRow> rows) =>
         [.. rows.Select(item => new CoachMaxSuggestionView(
@@ -551,8 +582,9 @@ internal sealed class CoachOverviewReader(
 
     /// <summary>
     /// This month: money received by money received v1 (SUB-016) in the workspace's calendar month, the clients
-    /// whose plan runs today, and for the owner alone the team with each member's clients. The owner reads every
-    /// receipt of the workspace; anyone else only the receipts that count for them, and no team.
+    /// whose plan runs today, the 1-on-1 sessions held (SES-008), and for the owner alone the team with each member's
+    /// clients. The owner reads every receipt and session of the workspace; anyone else only the receipts that count
+    /// for them and the sessions they recorded, and no team.
     /// </summary>
     private async Task<CoachMonthView> LoadMonthAsync(
         Scope scope,
@@ -568,6 +600,7 @@ internal sealed class CoachOverviewReader(
             .Where(state => state.PlanState == ClientPlanState.Running)
             .Select(state => state.Client.Id)
             .ToHashSet();
+        var held = await CountSessionsHeldAsync(countsFor, from, toExclusive, cancellationToken);
         return new CoachMonthView(
             from,
             toExclusive,
@@ -575,8 +608,28 @@ internal sealed class CoachOverviewReader(
             active.Count,
             scope.IsOwner ? await ReadCoachesAsync(scope, active, cancellationToken) : null,
             MoneyReceivedPolicy.Key,
-            MoneyReceivedPolicy.Version);
+            MoneyReceivedPolicy.Version,
+            held > 0 || scope.Allowed(CoachingFeature.Sessions).Length > 0 ? held : null);
     }
+
+    /// <summary>
+    /// The sessions held in the month that still stand: a session counts on its own workspace day, a former client's
+    /// too, for the coach who recorded it (SES-003), and an undone one counts for nobody. A charge is no session held.
+    /// </summary>
+    private Task<int> CountSessionsHeldAsync(
+        Guid? coachUserId,
+        DateOnly from,
+        DateOnly toExclusive,
+        CancellationToken cancellationToken) =>
+        dbContext.SessionLedgerEntries.AsNoTracking()
+            .Where(entry => entry.Kind == SessionEntryKind.Held &&
+                            entry.Day >= from &&
+                            entry.Day < toExclusive &&
+                            (coachUserId == null || entry.CoachUserId == coachUserId) &&
+                            !dbContext.SessionLedgerEntries.Any(undo =>
+                                undo.TenantId == entry.TenantId && undo.VoidsEntryId == entry.Id))
+            .TagWith(SessionsHeldTag)
+            .CountAsync(cancellationToken);
 
     /// <summary>
     /// In one read, the receipts whose instant falls in <c>[fromUtc, toUtc)</c>, the month and a day either side
@@ -791,7 +844,8 @@ internal sealed class CoachOverviewReader(
     /// <summary>
     /// Plans running now or still to come, each marked paid or not; the latest end of a paid one is the plan's
     /// last covered day (BEB-7). With <paramref name="endedFrom"/>, in the same query, also the plans that ran out
-    /// with a last day on or after it, unless cancelled, marked <see cref="PlanEnd.Ended"/> (critique B4b).
+    /// with a last day on or after it, unless cancelled, marked <see cref="PlanEnd.Ended"/> (critique B4b). A pack
+    /// carries what is left on it (critique B10c), summed here so a client's balance costs no query of its own.
     /// </summary>
     private async Task<ILookup<Guid, PlanEnd>> ReadPlanEndsAsync(
         Guid[] clientIds,
@@ -829,7 +883,12 @@ internal sealed class CoachOverviewReader(
                     item.Status != EnrollmentStatus.PendingPayment,
                     item.Status == EnrollmentStatus.Paused ? item.PausedAtUtc : null,
                     item.EndDateExclusive <= today,
-                    item.SessionCountSnapshot != null))
+                    item.SessionCountSnapshot != null,
+                    item.SessionCountSnapshot == null
+                        ? 0
+                        : dbContext.SessionLedgerEntries
+                            .Where(entry => entry.TenantId == item.TenantId && entry.EnrollmentId == item.Id)
+                            .Sum(SessionLedger.SignedCount)))
                 .ToListAsync(cancellationToken))
             .ToLookup(item => item.ClientProfileId);
     }
@@ -1481,10 +1540,21 @@ internal sealed class CoachOverviewReader(
         Guid? ChatId,
         DateOnly? PlanPausedSince,
         int OtherPlanCount,
-        EndedNotRenewed? NotRenewed)
+        EndedNotRenewed? NotRenewed,
+        bool PlanIsSessionPack,
+        int UnpaidPacks,
+        Guid? PackToActOn)
     {
         /// <summary>The plan the client's page names (R3.5b), whose last day is <see cref="PlanEndsOn"/>.</summary>
         public Guid? PlanEnrollmentId => RunningEnrollmentId ?? EndedPlan?.EnrollmentId;
+
+        /// <summary>
+        /// A pack standing as the client's plan is ending (ADR 0038), so it says so once: on the plan's own item, which
+        /// the client's page and the chat's panel read, with the sessions left.
+        /// </summary>
+        public bool PackEndsAsPlan => PlanIsSessionPack &&
+            Flags.Contains(CoachAttentionKind.PlanEndingSoon) &&
+            Flags.Contains(CoachAttentionKind.SessionsRunningOut);
     }
 
     /// <summary>A lapsed client's plan that ran out lately, and any plan after it waiting for payment (critique B4b).</summary>
@@ -1525,7 +1595,8 @@ internal sealed class CoachOverviewReader(
         bool Paid,
         DateTimeOffset? PausedAtUtc,
         bool Ended,
-        bool IsSessionPack);
+        bool IsSessionPack,
+        int SessionsLeft);
 
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);
 

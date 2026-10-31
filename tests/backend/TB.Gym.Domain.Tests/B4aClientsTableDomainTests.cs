@@ -49,8 +49,8 @@ public sealed class B4aClientsTableDomainTests
     public void TheRulesAreNamedAndVersioned()
     {
         Assert.AreEqual(("OverdueUnsentCheckIn", 1), (CheckInAttentionPolicy.Key, CheckInAttentionPolicy.Version));
-        Assert.AreEqual(("CoachAttention", 4), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version),
-            "Coach attention v4 counts overdue check-ins v1; a change there is a new version here.");
+        Assert.AreEqual(("CoachAttention", 5), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version),
+            "Coach attention counts overdue check-ins v1; a change there is a new version here.");
     }
 
     [TestMethod]

@@ -19,7 +19,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     /// Coach Today's SQL commands in its busiest case, sign-in and tenant checks included: every read in use, measured
     /// by <see cref="B4bTodayIsAFixedNumberOfQueriesInItsBusiestCase"/> and pinned exactly.
     /// </summary>
-    private const int B4bTodayQueryPin = 28;
+    private const int B4bTodayQueryPin = 29;
 
     [TestMethod]
     public async Task B4bMoneyReceivedCountsPerCurrencyForTheCoachTheClientHadWhenItArrived()
@@ -346,12 +346,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         await B4aBusyClientAsync(owner, rami, tenant, "rami", version, training, today);
         var (more, _) = await B4aMeasureAsync<CoachTodayView>(owner, CoachTodayUrl, "B4b Coach Today, 6 clients");
         Assert.AreEqual(fewer, more, "Two more clients cost Today no query.");
-        // 28: B4a's 25 (every read Today made then, in use in its busy scenario), plus the renewal requests' read,
-        // which runs only while some client's whole plan has run out (Jad's, here), and This month's two: money
-        // received, one query with each receipt's coach history (SUB-016), and the owner's team, the owner's alone.
-        // Ended plans' names and the client's version ride on reads Today already made. Pinned exactly, so one
-        // more read fails here, as a query per client fails the equality above.
+        // 29: B4a's 25 (every read Today made then, in use in its busy scenario), plus the renewal requests' read,
+        // which runs only while some client's whole plan has run out (Jad's, here), and This month's three: money
+        // received, one query with each receipt's coach history (SUB-016), the 1-on-1 sessions held (SES-008), and the
+        // owner's team, the owner's alone. Ended plans' names, the client's version and each pack's balance ride on
+        // reads Today already made. Pinned exactly, so one more read fails here, as a query per client fails the
+        // equality above.
         Assert.AreEqual(B4bTodayQueryPin, more, "Coach Today costs a fixed number of queries (docs/ARCHITECTURE.md).");
+        Assert.AreEqual(1, RequiredTodayQueryCounter.ReadsTagged(CoachOverviewReader.SessionsHeldTag).Commands);
 
         // A coach's Today reads no team.
         var (coach, _) = await B4aMeasureAsync<CoachTodayView>(lea, CoachTodayUrl, "B4b Coach Today, a coach");

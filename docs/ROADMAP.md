@@ -1134,7 +1134,7 @@ Work follows this order; anything outside it needs the user's approval first.
 - Fixes from Toufic's critique (chosen by the owner 2026-10-24 to 27): an outside coach tested the test copy,
   and the rows in section 0 of `docs/CRITIQUE-FIXES-2026-10.md` come next, in their order, one session each
   (cloud or local). Its B10 rows add session packs, the next commercial slice: a sixth coaching feature
-  (ADR 0038, SES-001 to SES-006).
+  (ADR 0038, SES-001 to SES-009).
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 - Suggested follow-up, not scheduled (owner, 2026-10-13): show the client what their coach changed

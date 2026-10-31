@@ -154,7 +154,7 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v4 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a) is what Coach Today asks a
+**CLI-018** Coach attention v5 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c) is what Coach Today asks a
 coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
 their own, the Owner all) and never a former client. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
@@ -168,6 +168,7 @@ decision of 2026-10-19); a running plan whose last covered day is within 14
 days, today counted (a last day 13 days on is, one 14 days on is not; screens show this flag and count no days
 of their own, critique B4a), counting paid renewals already in place: a renewal still waiting for payment covers nothing
 (SUB-008), so the item names it to record its payment (audit BEB-7, the owner's decision of 2026-10-19);
+sessions running out (SES-008);
 a week not shared (TRN-021); two or more missed sessions
 (TRN-021); a check-in overdue by CHK-015 (critique B4a: not sent, due 2 to 13 days ago, while check-ins are in
 today's plan), worked out from the missing submission alone: an absence is not an answer, so nothing is read into
@@ -176,8 +177,8 @@ and messaging is in the plan, else the client's check-ins (CLI-013); training in
 coming, which names the client's latest
 program and what its logged sets suggest for the next one (STR-014); and, last, the lifts of a running or
 coming block whose logged sets suggest a new max (STR-012, after any keep, STR-013), named with the max
-in use and the suggestion. The status is Needs attention for any of those but the plan's end and maxes
-to review (a client getting stronger is good news), else the plan's own status: Paused, Ending soon, On track for
+in use and the suggestion. The status is Needs attention for any of those but the plan's end, sessions running out
+and maxes to review (a client getting stronger is good news), else the plan's own status: Paused, Ending soon, On track for
 a running plan, or No active plan. That plan status is also shown on its own beside the reasons, whatever they are
 (critique B4a: a plan's end keeps its own status, outside Needs attention). A client is new for 14 days after
 joining. The list also says which clients have not
@@ -188,8 +189,8 @@ plan whose last day the row shows, which the client's page names (R3.5b), as wha
 and its price, exact, in its own currency, with how many other plans run or are booked beside it, their prices never
 added to it; while the plan is paused, the workspace day it was paused, as a pause has no end of its own (SUB-006);
 the features today's plan grants; when the client last sent a check-in, while check-ins are in today's plan
-(CHK-011); a last workout's session name; and its attention as Today's items, each with what its link needs and
-whether the caller may message the client. The activity feed holds finished workouts,
+(CHK-011); a last workout's session name; what is left on their packs (SES-008); and its attention as Today's items,
+each with what its link needs and whether the caller may message the client. The activity feed holds finished workouts,
 with their records (TRN-019), and sent check-ins of the last 7 days; a weigh-in counts only as a
 client's last activity. Counts carry their dates; no percentage is derived on the server.
 A client's own page (R3.3b, `GET /api/clients/{clientId}/overview`) reads the same rule for that one
@@ -209,7 +210,8 @@ brings them back to the page and the workspace they were in.
 **CLI-020** Coach Today (critique B4b; decided overnight on 2026-10-29, for the owner to confirm) shows, beside Needs
 you (CLI-018, unchanged) and the feed, three parts, all over the clients the caller coaches (CLI-013) and never a
 former client. **This month**: the money received by SUB-016; the active clients, current clients whose plan runs
-today (any feature granted), out of all their current clients; and for the owner alone every active member of staff,
+today (any feature granted), out of all their current clients; the 1-on-1 sessions held (SES-008); and for the owner
+alone every active member of staff,
 the owner first as You, then by name, each with their current clients and how many are active. A coach's Today
 carries no other coach's name, money or count. **Plans ending soon**: each client whose running plan raises CLI-018's
 ending-soon flag, with the plan's name and last paid day, the soonest first; a renewal booked after it and not paid
@@ -354,7 +356,8 @@ the one that ended last, a cancelled plan counting from the day it was cancelled
 option's name as sold, what's included, its first and last covered days, where it stands on the workspace's today, and
 the plan's description as it stands today, since an enrollment keeps no copy of it. A block speaks only of what still
 runs: a plan that is over reads as over. No price, payment or reason the coach typed reaches the client through this
-read, and it decides no access (SUB-009).
+read, the one exception being the reason a session was charged, which is written for them (SES-007), and it decides
+no access (SUB-009).
 
 ### Session packs (1-on-1 sessions, critique B10b, ADR 0038)
 
@@ -397,6 +400,34 @@ still takes the session if it ends first.
 or is cancelled has lapsed, on the calendar's word (SUB-006): it is read from the date, never stored, so an Undo after
 the end lapses with the rest. A pause stops access, not the pack's dates, and a paused pack takes no session until it
 is resumed.
+
+**SES-007** What a client reads of a pack (critique B10c, through SUB-017's read): how many it was sold with, how many
+are left, how many were used and how many lapsed and on which day, their coach's name as it stands today, and each
+session held or charged that still stands, newest day first, with a charge's reason. Never a coach's note, who recorded
+a session, or a session undone and the row that undid it. A blocked client still reads it (SUB-009), as they read their
+plan. My plan says it in a sentence ("7 of 10 sessions with Karim left, until 9 January") and lists the days; Today
+says the sentence for the pack a session goes on next, while a pack runs, is to come, is paused or waits for payment,
+and nothing once every pack is over.
+
+**SES-008** What the coach reads of a client's sessions (critique B10c), all over the clients they coach (CLI-013) and,
+but for the count in This month, read only while sessions are in today's plan, by the shared access decision, so a
+paused, blocked or unpaid pack says nothing here. **Sessions left**: the balance of every pack that is paid and not
+over, one still to come included, added up, on the client's row. **Running out**: 2 sessions left or fewer, or the last
+of those packs' last days within 14 days, today counted (a last day 13 days on is, one 14 days on is not), as CLI-018
+counts a plan's end. A pack already paid for and still to come quiets it; one waiting for payment does not, and the item
+then records its payment instead of renewing (BEB-7). It ranks right after a plan ending, and like one it never makes a
+client Needs attention. A pack standing as the client's plan (SES-002) says its end once, on the plan's own item, with
+the sessions left. **Sessions held**, on This month: sessions held that still stand, on their own workspace day in the
+workspace's calendar month: the owner reads every one of the workspace, a coach those they recorded (SES-003), a
+former client's too. A charge is no session held, and an undone one counts for nobody. It shows only while there is
+something to count: one held this month, or a client the caller coaches with sessions in today's plan. Nobody's money
+or name goes with it.
+
+**SES-009** A pack hears the plan notices in its own words (critique B10c), since it runs beside a coaching plan and
+"your plan has ended" could name the wrong thing: waiting for payment, set up, ending soon, ended and renewed, as
+generic as every notice, with no count and no date. The ending-soon notice works as a plan's does: three days before
+the end, at 09:00 on the workspace's clock, never before the first day (SUB-002), and it is suppressed when delivered
+if no session is left, as there is nothing to end. Clients get no notice for a low balance (not in v1, ADR 0038).
 
 ### Platform billing (what TB Gym charges workspaces, ADR 0028)
 

@@ -3,22 +3,29 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// Coach attention v4 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
-/// plan, v4 in critique B4a an overdue check-in and the plan's own status): which of a client's signals ask the
-/// coach to act, how the queue is ranked, the one status the client list shows and the plan's status beside it.
+/// Coach attention v5 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
+/// plan, v4 in critique B4a an overdue check-in and the plan's own status, v5 in critique B10c packs running out):
+/// which of a client's signals ask the coach to act, how the queue is ranked, the one status the client list shows
+/// and the plan's status beside it.
 /// The signals arrive already gated by the client's plan, so this rule only weighs them; what makes a check-in
 /// overdue is the CheckIns module's rule (CHK-015, overdue check-ins v1), counted here.
 /// </summary>
 public static class CoachAttentionPolicy
 {
     public const string Key = "CoachAttention";
-    public const int Version = 4;
+    public const int Version = 5;
 
     /// <summary>
     /// A running plan whose last covered day falls within this many days, today counted, is ending soon: a last
     /// day 13 days from today is, one 14 days from today is not. The screens show the flag, never their own count.
     /// </summary>
     public const int PlanEndingWithinDays = 14;
+
+    /// <summary>
+    /// With this many sessions left or fewer, on the packs paid for and not over, a client's sessions are running
+    /// out (SES-008). Their last day counts as a plan's does (<see cref="PlanEndingWithinDays"/>).
+    /// </summary>
+    public const int SessionsRunningOutAt = 2;
 
     /// <summary>Missed sessions since the last workout (TRN-021) that ask for the coach.</summary>
     public const int MissedSessionsThreshold = 2;
@@ -53,6 +60,7 @@ public static class CoachAttentionPolicy
         CoachAttentionKind.RenewalRequested,
         CoachAttentionKind.NoPlan,
         CoachAttentionKind.PlanEndingSoon,
+        CoachAttentionKind.SessionsRunningOut,
         CoachAttentionKind.WeekNotShared,
         CoachAttentionKind.MissedSessions,
         CoachAttentionKind.CheckInOverdue,
@@ -100,6 +108,13 @@ public static class CoachAttentionPolicy
             flags.Add(CoachAttentionKind.PlanEndingSoon);
         }
 
+        if (signals.SessionsLeft is { } sessionsLeft &&
+            (sessionsLeft <= SessionsRunningOutAt ||
+             (signals.SessionsLastDay is { } sessionsEnd && sessionsEnd < today.AddDays(PlanEndingWithinDays))))
+        {
+            flags.Add(CoachAttentionKind.SessionsRunningOut);
+        }
+
         if (signals.HasWeekToShare)
         {
             flags.Add(CoachAttentionKind.WeekNotShared);
@@ -129,14 +144,14 @@ public static class CoachAttentionPolicy
     }
 
     /// <summary>
-    /// Anything to act on besides a plan ending or maxes to review makes a client Needs attention; otherwise the
-    /// plan's own status (<see cref="PlanStatus"/>). A client whose sets suggest heavier maxes is doing well, so
-    /// that alone never turns them to Needs attention.
+    /// Anything to act on besides a plan ending, sessions running out or maxes to review makes a client Needs
+    /// attention; otherwise the plan's own status (<see cref="PlanStatus"/>). A client whose sets suggest heavier maxes
+    /// is doing well, so that alone never turns them to Needs attention.
     /// </summary>
     public static ClientOverviewStatus Status(
         IReadOnlyCollection<CoachAttentionKind> flags,
         ClientPlanState planState) =>
-        flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.MaxesToReview))
+        flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.SessionsRunningOut or CoachAttentionKind.MaxesToReview))
             ? ClientOverviewStatus.NeedsAttention
             : PlanStatus(flags, planState) switch
             {
@@ -253,6 +268,10 @@ public static class CoachAttentionPolicy
 /// Check-ins the client has not sent that are overdue by the CheckIns module's rule (CHK-015): due 2 to 13 days ago,
 /// read only while check-ins are in the plan.
 /// </param>
+/// <param name="SessionsLeft">
+/// What is left on the packs paid for and not over (SES-008), read only while sessions are in today's plan.
+/// </param>
+/// <param name="SessionsLastDay">The last of those packs' last days, a day still to run.</param>
 public sealed record ClientAttentionSignals(
     int CheckInsToReview,
     long UnreadMessages,
@@ -263,4 +282,6 @@ public sealed record ClientAttentionSignals(
     bool HasNoProgram,
     int MaxesToReview = 0,
     DateOnly? JoinedOn = null,
-    int CheckInsOverdue = 0);
+    int CheckInsOverdue = 0,
+    int? SessionsLeft = null,
+    DateOnly? SessionsLastDay = null);

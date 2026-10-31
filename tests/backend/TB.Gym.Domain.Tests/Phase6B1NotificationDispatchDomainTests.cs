@@ -640,9 +640,11 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             string.Empty,
             out var unnamed));
         Assert.AreEqual(NotificationTemplateCatalog.DefaultCulture, unnamed.Culture);
+        // One per kind, and the five plan notices in a session pack's words (SES-009).
         Assert.HasCount(
-            Enum.GetValues<CommercialNotificationKind>().Length,
+            Enum.GetValues<CommercialNotificationKind>().Length + 5,
             NotificationTemplateCatalog.Published);
+        Assert.IsTrue(NotificationTemplateCatalog.Published.All(template => template.Culture == NotificationTemplateCatalog.DefaultCulture));
     }
 
     [TestMethod]

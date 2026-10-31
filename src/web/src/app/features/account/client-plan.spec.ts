@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
-import type { OwnPlansView, OwnPlanView } from '../../core/api/generated';
+import type { OwnPlansView, OwnPlanView, OwnSessionsView } from '../../core/api/generated';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { click, settle } from '../../../testing/dom';
 import { ClientPlanPage } from './client-plan';
@@ -26,7 +26,36 @@ function plan(overrides: Partial<OwnPlanView> = {}): OwnPlanView {
   };
 }
 
-const view = (...plans: OwnPlanView[]): OwnPlansView => ({ today: TODAY, plans });
+const view = (...plans: OwnPlanView[]): OwnPlansView => ({
+  today: TODAY,
+  plans,
+  coachName: 'Karim Haddad',
+});
+
+const sessions = (fields: Partial<OwnSessionsView> = {}): OwnSessionsView => ({
+  count: 10,
+  left: 8,
+  used: 2,
+  lapsed: 0,
+  lapsedOn: null,
+  sessions: [
+    { day: '2026-10-13', outcome: 'Charged', reason: 'No-show: you didn’t come' },
+    { day: '2026-10-09', outcome: 'Held', reason: null },
+  ],
+  ...fields,
+});
+
+const pack = (fields: Partial<OwnPlanView> = {}) =>
+  plan({
+    id: 'pack-1',
+    name: 'Personal training',
+    optionLabel: '10 sessions',
+    description: null,
+    lastDay: '2027-01-09',
+    features: ['Sessions'],
+    sessions: sessions(),
+    ...fields,
+  });
 
 async function render(answer: () => ReturnType<ApiClient['getOwnPlans']>) {
   const api = { getOwnPlans: vi.fn(answer) };
@@ -117,6 +146,103 @@ describe('ClientPlanPage', () => {
 
     const running = await render(() => of(view(plan())));
     expect(running.host.querySelector('a.plan-action')).toBeNull();
+  });
+
+  it('says what is left on a pack, on the card, with whom and until when', async () => {
+    const { host } = await render(() => of(view(pack())));
+
+    expect(text(host.querySelector('.plan-sessions')!)).toBe(
+      '8 of 10 sessions with Karim left, until 9 January',
+    );
+    expect(host.querySelector('.plan-head .plan-sessions')).not.toBeNull();
+  });
+
+  it('lists what happened to each session, newest first, with a charge’s reason', async () => {
+    const { host } = await render(() => of(view(pack())));
+
+    const rows = Array.from(host.querySelectorAll('.sessions li'));
+    expect(rows.map(text)).toEqual([
+      'Tue 13 Oct Charged No-show: you didn’t come',
+      'Fri 9 Oct Held',
+    ]);
+    expect(rows[0].querySelector('.session-reason')?.getAttribute('dir')).toBe('auto');
+    expect(host.querySelector('.sessions-toggle')).toBeNull();
+    expect(text(host)).toContain('Sessions so far');
+  });
+
+  it('shows a pack’s newest five, and the rest on request', async () => {
+    const many = Array.from({ length: 7 }, (_, index) => ({
+      day: `2026-10-${String(14 - index).padStart(2, '0')}`,
+      outcome: 'Held' as const,
+      reason: null,
+    }));
+    const { fixture, host } = await render(() =>
+      of(view(pack({ sessions: sessions({ left: 3, used: 7, sessions: many }) }))),
+    );
+
+    const list = host.querySelector('.sessions')!;
+    expect(list.querySelectorAll('li')).toHaveLength(5);
+    const toggle = host.querySelector<HTMLButtonElement>('.sessions-toggle')!;
+    expect(text(toggle)).toBe('Show all 7');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-controls')).toBe(list.id);
+
+    toggle.click();
+    await settle(fixture);
+
+    expect(list.querySelectorAll('li')).toHaveLength(7);
+    expect(text(toggle)).toBe('Show less');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('leaves the list out until a session has counted', async () => {
+    const { host } = await render(() =>
+      of(view(pack({ sessions: sessions({ left: 10, used: 0, sessions: [] }) }))),
+    );
+
+    expect(text(host.querySelector('.plan-sessions')!)).toBe(
+      '10 of 10 sessions with Karim left, until 9 January',
+    );
+    expect(host.querySelector('.sessions')).toBeNull();
+    expect(text(host)).not.toContain('Sessions so far');
+  });
+
+  it('says nothing of sessions on a coaching plan or a pack waiting for payment', async () => {
+    const { host } = await render(() =>
+      of(
+        view(
+          plan({ sessions: null }),
+          pack({
+            status: 'PendingPayment',
+            sessions: sessions({ left: 0, used: 0, sessions: [] }),
+          }),
+        ),
+      ),
+    );
+
+    expect(host.querySelector('.plan-sessions')).toBeNull();
+    expect(host.querySelector('.sessions')).toBeNull();
+    expect(text(host)).toContain('It starts once your coach has your payment.');
+  });
+
+  it('says what became of a pack that is over, and keeps what happened', async () => {
+    const { host } = await render(() =>
+      of(
+        view(
+          pack({
+            status: 'Expired',
+            lastDay: '2026-10-14',
+            sessions: sessions({ left: 8, lapsed: 8, lapsedOn: '2026-10-14' }),
+          }),
+        ),
+      ),
+    );
+
+    expect(text(host.querySelector('.plan-sessions')!)).toBe(
+      '2 of 10 sessions with Karim used, and 8 lapsed on 14 October',
+    );
+    expect(host.querySelectorAll('.sessions li')).toHaveLength(2);
+    expect(host.querySelector('a[href="/"]')).not.toBeNull();
   });
 
   it('says so when there is no plan yet', async () => {

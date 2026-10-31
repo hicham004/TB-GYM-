@@ -61,6 +61,7 @@ public sealed class A8CoachScreensDomainTests
                 CoachAttentionKind.RenewalRequested,
                 CoachAttentionKind.NoPlan,
                 CoachAttentionKind.PlanEndingSoon,
+                CoachAttentionKind.SessionsRunningOut,
                 CoachAttentionKind.WeekNotShared,
                 CoachAttentionKind.MissedSessions,
                 CoachAttentionKind.CheckInOverdue,
@@ -88,10 +89,11 @@ public sealed class A8CoachScreensDomainTests
     }
 
     [TestMethod]
-    public void TheAttentionRuleIsVersionFour()
+    public void TheAttentionRuleIsVersionFive()
     {
-        // Version 3 came with audit A8's new client with no plan; version 4 with critique B4a's overdue check-in.
-        Assert.AreEqual(("CoachAttention", 4), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
+        // Version 3 came with audit A8's new client with no plan, version 4 with critique B4a's overdue check-in, and
+        // version 5 with critique B10c's sessions running out.
+        Assert.AreEqual(("CoachAttention", 5), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
     }
 
     private static ClientAttentionSignals Quiet() => new(0, 0, null, null, false, 0, false);

@@ -124,6 +124,37 @@ for (const [width, height] of [
   });
 }
 
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`Clients at ${width}px says what is left on a pack, warm as it runs out`, async ({
+    page,
+  }) => {
+    const view = clientListView();
+    const withPacks: ClientOverviewView = {
+      ...view,
+      clients: view.clients.map((row) =>
+        row.client.firstName === 'Maya'
+          ? { ...row, sessionsLeft: 2, attention: [...row.attention, 'SessionsRunningOut'] }
+          : row.client.firstName === 'Sara'
+            ? { ...row, sessionsLeft: 7 }
+            : row,
+      ),
+    };
+    await openClients(page, width, height, { view: withPacks });
+
+    const chip = (name: string) => clientRow(page, name).locator('app-status-pill').last();
+    await expect(chip('Maya Fakhoury')).toHaveText('2 sessions left');
+    await expect(chip('Maya Fakhoury')).toHaveClass(/warm/);
+    await expect(chip('Sara Mansour')).toHaveText('7 sessions left');
+    await expect(chip('Sara Mansour')).not.toHaveClass(/warm/);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/b10c-clients-${width}.png`, fullPage: true });
+  });
+}
+
 test('a tap anywhere on a row opens that client', async ({ page }) => {
   await openClients(page, 390, 844);
 

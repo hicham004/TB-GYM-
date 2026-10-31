@@ -61,9 +61,12 @@ describe('How these statuses work (critique B4a)', () => {
 
     expect(
       Array.from(sheet.querySelectorAll('app-status-pill')).map((pill) => squash(pill.textContent)),
-    ).toEqual(['On track', 'Plan ends soon', 'Plan paused', 'No active plan']);
+    ).toEqual(['On track', 'Plan ends soon', 'Plan paused', 'No active plan', '2 sessions left']);
     const text = squash(sheet.textContent);
     expect(text).toContain('13 days away is soon, 14 is not.');
+    // SES-008: the numbers behind the chip, which the server decides.
+    expect(text).toContain('at 2 sessions or fewer');
+    expect(text).toContain('within 14 days, today included');
     expect(
       Array.from(sheet.querySelectorAll('.marks app-day-mark')).map((mark) =>
         mark.getAttribute('data-mark'),

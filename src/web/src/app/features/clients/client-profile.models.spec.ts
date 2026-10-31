@@ -179,6 +179,59 @@ describe('what needs the coach on a client’s page', () => {
     });
   });
 
+  it('says what is left on a client’s packs and renews the pack ending last (critique B10c)', () => {
+    const [row] = needRows(
+      [
+        attentionItem('SessionsRunningOut', MAYA, {
+          sessionsLeft: 2,
+          date: '2026-10-20',
+          subjectId: 'pack-1',
+        }),
+      ],
+      COACH_TODAY,
+      context,
+    );
+
+    expect(row).toMatchObject({
+      tone: 'ending',
+      tag: 'Sessions',
+      heading: '2 sessions left',
+      detail: 'Last day Tue 20 Oct',
+      action: { label: 'Renew pack', link: `${page}/service`, queryParams: { renew: 'pack-1' } },
+    });
+  });
+
+  it('asks for the payment of a pack booked and unpaid, which holds nothing yet (critique B10c)', () => {
+    const [row] = needRows(
+      [
+        attentionItem('SessionsRunningOut', MAYA, {
+          sessionsLeft: 0,
+          date: '2026-10-20',
+          count: 1,
+          subjectId: 'pack-2',
+        }),
+      ],
+      COACH_TODAY,
+      context,
+    );
+
+    expect(row).toMatchObject({
+      heading: 'No sessions left',
+      detail: 'Last day Tue 20 Oct · The next pack isn’t paid yet',
+      action: { label: 'Record payment', queryParams: { pay: 'pack-2' } },
+    });
+  });
+
+  it('adds what is left to a pack ending as the client’s plan (ADR 0038)', () => {
+    const [row] = needRows(
+      [attentionItem('PlanEndingSoon', MAYA, { date: '2026-10-06', sessionsLeft: 3 })],
+      COACH_TODAY,
+      context,
+    );
+
+    expect(row.detail).toBe('3 sessions left · Last day Tue 6 Oct');
+  });
+
   it('asks for the payment of a renewal still waiting for it, which covers nothing yet (BEB-7)', () => {
     const [row] = needRows(
       [

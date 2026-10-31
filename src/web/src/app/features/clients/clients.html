@@ -190,6 +190,9 @@
                       >
                     }
                     <app-status-pill [label]="row.planPill.label" [tone]="row.planPill.tone" />
+                    @if (row.sessions; as sessions) {
+                      <app-status-pill [label]="sessions.label" [tone]="sessions.tone" />
+                    }
                     @if (row.notSetUp) {
                       <!-- The client has not finished their profile; the Intake says what is missing. -->
                       <span class="setup" data-not-set-up i18n>Not set up yet</span>

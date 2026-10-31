@@ -4,6 +4,7 @@ import type { CoachTodayView } from '../src/app/core/api/generated';
 import {
   attentionItem,
   COACH_NOW,
+  coachMonth,
   coachTodayView,
   emptyCoachTodayView,
   MAYA,
@@ -102,6 +103,45 @@ for (const [width, height] of [
     await expectNoHorizontalOverflow(page);
     await axe(page);
     await page.screenshot({ path: `test-results/r32-coach-today-${width}.png`, fullPage: true });
+  });
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`Coach Today at ${width}px says when sessions run out, and how many were held`, async ({
+    page,
+  }) => {
+    await openToday(
+      page,
+      width,
+      height,
+      coachTodayView({
+        attention: [
+          attentionItem('SessionsRunningOut', MAYA, {
+            sessionsLeft: 2,
+            date: '2026-10-29',
+            subjectId: 'pack-maya',
+          }),
+        ],
+        month: coachMonth({ sessionsHeld: 12 }),
+      }),
+    );
+
+    const item = page.locator('li.need');
+    await expect(item).toContainText('Maya Fakhoury has 2 sessions left');
+    await expect(item).toContainText('Last day Thu 29 Oct');
+    await expect(page.getByRole('link', { name: 'Renew pack for Maya Fakhoury' })).toHaveAttribute(
+      'href',
+      '/clients/c-maya/service?renew=pack-maya',
+    );
+    const held = page.locator('.month-part').filter({ hasText: '1-on-1 sessions held' });
+    await expect(held.locator('.month-value')).toHaveText('12');
+    await expect(held).toContainText('Held by your coaching space');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/b10c-coach-today-${width}.png`, fullPage: true });
   });
 }
 

@@ -15,6 +15,7 @@ import {
 } from '../../../testing/client-list-fixtures';
 import {
   activityLabel,
+  attentionReason,
   clientRow,
   clientWeek,
   coachChip,
@@ -602,5 +603,55 @@ describe('the chat panel’s plan line', () => {
       label: 'Plan ends Sat 10 Oct',
       soon: false,
     });
+  });
+});
+
+describe('what is left on a client’s packs (critique B10c, SES-008)', () => {
+  const client = coachClient('c-lynn', 'Lynn', 'Bou Khalil');
+  const context: ClientListContext = {
+    locale: 'en-US',
+    now: new Date(COACH_NOW),
+    userId: OWNER_ID,
+  };
+  const row = (fields: Parameters<typeof overviewRow>[1]) =>
+    clientRow(overviewRow(client, fields), COACH_TODAY, context);
+
+  it('says the balance while sessions are in today’s plan, and nothing without', () => {
+    expect(row({ sessionsLeft: 7 }).sessions).toEqual({
+      label: '7 sessions left',
+      tone: 'neutral',
+    });
+    expect(row({ sessionsLeft: 1 }).sessions?.label).toBe('1 session left');
+    expect(row({ sessionsLeft: 0 }).sessions?.label).toBe('No sessions left');
+    expect(row({ sessionsLeft: null }).sessions).toBeNull();
+    expect(row({}).sessions).toBeNull();
+  });
+
+  it('warms it on the server’s word alone, never a count of its own', () => {
+    const flagged = { attention: ['SessionsRunningOut' as const], attentionItems: [] };
+
+    expect(row({ sessionsLeft: 9, ...flagged }).sessions?.tone).toBe('warm');
+    expect(row({ sessionsLeft: 1 }).sessions?.tone).toBe('neutral');
+  });
+
+  it('has its own chip, so running out is no tag on the row', () => {
+    const item = attentionItem('SessionsRunningOut', client, { sessionsLeft: 2 });
+
+    expect(
+      row({ sessionsLeft: 2, attention: ['SessionsRunningOut'], attentionItems: [item] }).tags,
+    ).toEqual([]);
+    expect(attentionReason(item)).toBe('2 sessions left');
+  });
+
+  it('leaves the plan’s pill and the Ending soon chip to the plan', () => {
+    const flagged = row({
+      sessionsLeft: 2,
+      attention: ['SessionsRunningOut'],
+      attentionItems: [],
+    });
+
+    expect(flagged.planPill).toEqual({ label: 'On track', tone: 'success' });
+    expect(flagged.filters.has('ending')).toBe(false);
+    expect(flagged.filters.has('attention')).toBe(false);
   });
 });

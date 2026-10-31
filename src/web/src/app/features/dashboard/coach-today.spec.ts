@@ -206,6 +206,25 @@ describe('CoachToday', () => {
     expect(squash(month.textContent)).not.toContain('Coaches');
   });
 
+  it('shows the 1-on-1 sessions held only once a coach has any to count (critique B10c)', async () => {
+    const none = await render();
+    expect(none.host.querySelector('.month')?.textContent).not.toContain('1-on-1 sessions held');
+    TestBed.resetTestingModule();
+
+    const { host } = await render(() =>
+      of(coachTodayView({ month: coachMonth({ sessionsHeld: 12 }) })),
+    );
+    const parts = Array.from(host.querySelectorAll('.month-part'));
+    expect(parts.map((part) => part.querySelector('.month-label')?.textContent)).toEqual([
+      'Money received',
+      'Active clients',
+      '1-on-1 sessions held',
+      'Coaches',
+    ]);
+    expect(parts[2].querySelector('.month-value')?.textContent).toBe('12');
+    expect(parts[2].querySelector('.month-note')?.textContent).toBe('Held by your coaching space');
+  });
+
   it('says plainly when nothing has been received this month, in no currency', async () => {
     const view = coachTodayView({ month: coachMonth({ moneyReceived: [] }) });
     const { host } = await render(() => of(view));

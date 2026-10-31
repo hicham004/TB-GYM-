@@ -1,14 +1,33 @@
-import type { OwnPlansView, OwnPlanView } from '../../core/api/generated';
+import type { OwnPlansView, OwnPlanView, OwnSessionView } from '../../core/api/generated';
 import type { StatusPillTone } from '../../ui/status-pill';
 import { daysBetween } from '../clients/client-overview.models';
 import { dateRange, shortDate } from '../clients/client-service.models';
 import { featureChip, LISTED_FEATURES, type FeatureChip } from '../commercial/products.models';
+import { sessionsLine } from './own-sessions.models';
 
 /**
  * My plan (critique B10a, SUB-017): a client's own plans in their own words. Pure functions of the
  * server's answer and the workspace's today, which the answer carries, so every rule here has a
  * fixed test. The server decides each plan's status; this only says it.
  */
+
+/** A session held or charged that stands, as its client reads it (critique B10c, SES-007). */
+export interface OwnSession {
+  readonly key: string;
+  /** "Tue 20 Oct" */
+  readonly day: string;
+  /** "Held", or "Charged" with the reason the coach wrote for them. */
+  readonly what: string;
+  readonly reason: string | null;
+}
+
+/** What a pack holds: where it stands, and what happened to each session so far, newest first. */
+export interface OwnPackSessions {
+  /** "7 of 10 sessions with Karim left, until 9 January"; null while it waits for payment. */
+  readonly line: string | null;
+  readonly history: readonly OwnSession[];
+}
+
 export interface OwnPlan {
   readonly id: string;
   /** "Online Coaching" */
@@ -25,6 +44,8 @@ export interface OwnPlan {
   /** What's included, in one fixed order. */
   readonly includes: readonly FeatureChip[];
   readonly description: string | null;
+  /** A session pack's sessions; null on a coaching plan. */
+  readonly sessions: OwnPackSessions | null;
 }
 
 /** The days left in a running plan, its last two by name. */
@@ -81,7 +102,21 @@ function status(plan: OwnPlanView, today: string, locale: string): Pick<OwnPlan,
   }
 }
 
-export function ownPlan(plan: OwnPlanView, today: string, locale: string): OwnPlan {
+function ownSession(session: OwnSessionView, index: number, locale: string): OwnSession {
+  return {
+    key: `${session.day}-${index}`,
+    day: shortDate(session.day, locale),
+    what: session.outcome === 'Held' ? $localize`Held` : $localize`Charged`,
+    reason: session.reason,
+  };
+}
+
+export function ownPlan(
+  plan: OwnPlanView,
+  today: string,
+  locale: string,
+  coachName: string | null = null,
+): OwnPlan {
   return {
     id: plan.id,
     name: plan.name,
@@ -91,9 +126,17 @@ export function ownPlan(plan: OwnPlanView, today: string, locale: string): OwnPl
     ended: plan.status === 'Expired',
     includes: LISTED_FEATURES.filter((feature) => plan.features.includes(feature)).map(featureChip),
     description: plan.description,
+    sessions: plan.sessions
+      ? {
+          line: sessionsLine(plan, coachName, today, locale),
+          history: plan.sessions.sessions.map((session, index) =>
+            ownSession(session, index, locale),
+          ),
+        }
+      : null,
   };
 }
 
 export function ownPlans(view: OwnPlansView, locale: string): OwnPlan[] {
-  return view.plans.map((plan) => ownPlan(plan, view.today, locale));
+  return view.plans.map((plan) => ownPlan(plan, view.today, locale, view.coachName ?? null));
 }

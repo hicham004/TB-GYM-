@@ -908,9 +908,6 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   plan ended while a pack runs reads Running on Clients, shows in no Ended, not renewed and cannot Ask to renew (SUB-014
   says partly running). Other way: Sessions do not count for those three. Recommendation: that, a small change with
   B10c, if Toufic has such clients.
-- B10b · What the client reads, left out for B10c. My plan names a pack and "1-on-1 sessions" in What's included; "7 of
-  10 left", which B10a's status gave to this row, is in B10c's own word with the dates held, and no client reads a
-  charge's reason until then. Recommendation: build both in B10c.
 - B10b · The demo, left out (outside the row). Atlas has no pack, so the screenshots come from a throwaway copy where
   one was sold. Recommendation: one pack and one client on it, with B10c.
 - B10b · Words the row did not give. Built: "What you sell", "Coaching plan", "Session pack"; "Sessions" with "1 to
@@ -922,3 +919,53 @@ On 2026-10-29 the owner confirmed B4a's and B4b's overnight picks, except the pl
   this. The session comes off their pack."; "10 sessions added", "Charged · No-show"; "The session of Fri 30 Oct goes
   back on the pack. Both stay in its history."; "Earlier packs"; and the refusals in SES-005. Recommendation: keep, or
   have Toufic read them with B8c's words.
+- B10c · When the chip shows. Built: on every client with sessions in today's plan, "7 sessions left" in grey beside
+  the plan's pill, warm once they run out, with no link of its own (the row opens the client). Other way: only when
+  running out. Recommendation: keep, since a gym coach reads balances at a glance.
+- B10c · What running out means. Built: 2 sessions left or fewer, or the last pack's last day within 14 days, today
+  counted, as a plan ending soon. A pack used up early therefore stays in Needs you until it ends, is cancelled or is
+  renewed, since no item can be dismissed. Other way: another number, or the count alone, or an item that goes quiet
+  after a while. Recommendation: keep until Toufic says when he sells the next pack.
+- B10c · Whose balance. Built: one number added across the packs paid and not over, a pack still to come included, so
+  it quiets the item; a paused pack is out of it, and one waiting for payment keeps the item, which then offers Record
+  payment. Other way: a number per pack. Recommendation: keep; Service & access has each pack's own.
+- B10c · A pack that is the client's plan. Built: its end shows once, on the plan's item ("Lynn's plan ends Sat 14 Nov",
+  "2 sessions left · Last day Sat 14 Nov", Renew plan), and the sessions item shows for its count alone. A pack beside a
+  coaching plan has the sessions item and, as B10b settled, no row under Plans ending soon. Other way: two items, or
+  the sessions words on the plan's item too. Recommendation: keep.
+- B10c · The action. Built: Renew pack, the renew sheet for the paid pack ending last, or Record payment for a pack
+  already booked. Other way: Sell sessions, which lists every pack. Recommendation: keep.
+- B10c · Whose sessions held. Built: a coach counts those they recorded, the owner every one of the workspace, each on
+  its own day, a former client's too; a charge is no session held. It follows B10b's "Who held it" line. Other way: the
+  client's coach on that day, as money counts (SUB-016). Recommendation: decide with that line, before B10d.
+- B10c · When This month shows it. Built: once one was held this month or a client of the caller has sessions in today's
+  plan, as Maxes to review shows only when used. Other way: always, reading 0. Recommendation: keep.
+- B10c · Where the client reads it on Today. Built: a row in Also today, "1-on-1 sessions", opening My plan: the pack a
+  session goes on next, "+1 more pack", "Waiting for payment", "Paused · …", nothing once every pack is over. Today's
+  training card says nothing to a client on sessions alone. Other way: a card of its own. Recommendation: keep.
+- B10c · The coach's name. Built: the first word of the client's coach as they stand today, "with Karim", whoever held
+  the sessions. Other way: the full name, as the renewal card says it. Recommendation: keep, and revisit if a coach
+  signs as "Dr. Karim".
+- B10c · What a client reads of a session. Built: the day, Held or Charged, a charge's reason, the newest five and Show
+  all; never who held it, and a session undone is gone. Other way: who held it, in a team. Recommendation: keep.
+- B10c · A pack that is over. Built: "7 of 10 sessions with Karim used, and 3 lapsed on 30 October" with its sessions,
+  while My plan shows it (the plan that ended last, SUB-017); beside a running plan it leaves My plan and Today. Other
+  way: a fold of earlier packs. Recommendation: keep until a client asks.
+- B10c · A blocked client. Built: My plan still says what is left (SUB-009, B10a's choice), and Today's row says "Your
+  coach has paused your access". Other way: the sentence hidden too. Recommendation: keep.
+- B10c · The notices. Built: the plan's five notices in a pack's own words, since "Your plan has ended" could name the
+  wrong thing beside a coaching plan; as generic as every notice, opening Today as they do; and no ending-soon notice
+  for a pack with no session left. Other way: the plan's words for a pack too. Recommendation: keep, and answer B10a's
+  line on where notices open.
+- B10c · A low balance, left out (the row names the ending-soon notice alone, and ADR 0038 leaves reminders out of v1).
+  Clients hear nothing when two sessions are left. Recommendation: keep until a coach asks.
+- B10c · Words the row did not give. Built: "Sessions so far", "Held", "Charged", "Show all 7"; "All 10 sessions with
+  Karim used", "Your session with Karim is used", "1 session with Karim left, until 9 January", "7 of 10 sessions with
+  Karim used, and 3 lapsed on 30 October", "All 10 sessions with Karim lapsed on 30 October", "Your session with Karim
+  lapsed on 30 October"; "+1 more pack", "Couldn't load your sessions"; "Lynn has 2 sessions left", "Lynn has no
+  sessions left", the tag "Sessions", "Last day Sat 14 Nov", "The next pack isn't paid yet", "Renew pack"; "1-on-1
+  sessions held", "Held by you", "Held by your coaching space"; the sheet's "2 sessions left" entry; "Your new 1-on-1
+  sessions are waiting for payment", "They start once your coach has your payment.", "Your 1-on-1 sessions are ready",
+  "Open Today to see how many you have.", "Your 1-on-1 sessions end soon", "If you'd like to keep going, ask your coach
+  to renew them.", "Your 1-on-1 sessions have ended", "Your coach set up more 1-on-1 sessions", "Open Today to see where
+  your sessions stand." Recommendation: keep, or have Toufic read them with B8c's words.

@@ -16,7 +16,7 @@ import type { UiMenuItem } from '../../ui/menu';
 import type { StatusPillTone } from '../../ui/status-pill';
 import { duration } from '../commercial/products.models';
 import { ago, attentionTarget, daysBetween } from '../dashboard/coach-today.models';
-import { featureLabels, money } from './client-service.models';
+import { featureLabels, money, sessionsLeft } from './client-service.models';
 
 /**
  * The coach's client list (C2, critique B4a) in coach words: the server's status, attention, plan and
@@ -110,6 +110,11 @@ export interface ClientRow {
   tags: ReasonTag[];
   /** The plan's own status, shown beside the tags whatever they are (CLI-018 v4). */
   planPill: { label: string; tone: StatusPillTone };
+  /**
+   * "2 sessions left" (critique B10c), while sessions are in today's plan; warm once the server says
+   * they are running out (SES-008), so its count is never this screen's own.
+   */
+  sessions: { label: string; tone: StatusPillTone } | null;
   /** The client has not finished setting up their profile: "Not set up yet" (audit LOST-12). */
   notSetUp: boolean;
   /** Null when training is not in the client's plan. */
@@ -150,7 +155,11 @@ export interface ClientListContext {
 }
 
 /** Kinds that have a pill or a chip of their own instead of a warning tag on the row. */
-const NOT_TAGS: ReadonlySet<CoachAttentionKind> = new Set(['PlanEndingSoon', 'MaxesToReview']);
+const NOT_TAGS: ReadonlySet<CoachAttentionKind> = new Set([
+  'PlanEndingSoon',
+  'SessionsRunningOut',
+  'MaxesToReview',
+]);
 
 export function mapClientList(view: ClientOverviewView, context: ClientListContext): ClientList {
   const rows = view.clients.map((row) => clientRow(row, view.today, context));
@@ -199,6 +208,7 @@ export function clientRow(
       .filter((item) => !NOT_TAGS.has(item.kind))
       .map((item) => ({ kind: item.kind, label: attentionReason(item), ...attentionTarget(item) })),
     planPill: planPill(row.planStatus),
+    sessions: sessionsChip(row),
     notSetUp: row.onboardingStatus === 'NotStarted' || row.onboardingStatus === 'InProgress',
     week: row.recentSessions ? clientWeek(row.recentSessions, today) : null,
     plan: planCell(row, today, context.locale),
@@ -422,6 +432,17 @@ export function planPill(status: ClientPlanStatus): { label: string; tone: Statu
   }
 }
 
+function sessionsChip(
+  row: Pick<ClientOverviewRow, 'sessionsLeft' | 'attention'>,
+): ClientRow['sessions'] {
+  const left = row.sessionsLeft;
+  if (left === null || left === undefined) return null;
+  return {
+    label: sessionsLeft(Number(left)),
+    tone: row.attention.includes('SessionsRunningOut') ? 'warm' : 'neutral',
+  };
+}
+
 /** What waits for the coach, in a short tag with its count: "2 check-ins to review". */
 export function attentionReason(item: CoachAttentionItemView): string {
   const count = Number(item.count ?? 0);
@@ -436,6 +457,8 @@ export function attentionReason(item: CoachAttentionItemView): string {
       return $localize`Asked to renew`;
     case 'PlanEndingSoon':
       return $localize`Plan ends soon`;
+    case 'SessionsRunningOut':
+      return sessionsLeft(Number(item.sessionsLeft ?? 0));
     case 'WeekNotShared':
       return $localize`Week not shared`;
     case 'MissedSessions':

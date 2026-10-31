@@ -45,7 +45,21 @@ const trainingWeek = {
     completed: index === 0 || index === 2 ? 1 : 0,
   })),
 };
-const FEATURES = ['Training', 'Nutrition', 'CheckIns', 'Messaging', 'ResourceLibrary'];
+const FEATURES = ['Training', 'Nutrition', 'CheckIns', 'Messaging', 'ResourceLibrary', 'Sessions'];
+
+/** A pack with seven sessions left (critique B10c), as `GET /api/client-plan/me` answers. */
+const PERSONAL_TRAINING = {
+  id: '00000000-0000-4000-8000-0000000000c3',
+  name: 'Personal training',
+  optionLabel: '10 sessions',
+  description: null,
+  startDate: '2026-09-01',
+  lastDay: '2026-11-29',
+  cancelledOn: null,
+  status: 'Active',
+  features: ['Sessions'],
+  sessions: { count: 10, left: 7, used: 3, lapsed: 0, lapsedOn: null, sessions: [] },
+};
 
 const sets = (count: number, done = 0) =>
   Array.from({ length: count }, (_, index) => ({ isCompleted: index < done }));
@@ -263,6 +277,8 @@ async function openToday(
     path?: string;
     /** The whole plan has run out (ADR 0029): Today shows the renewal card instead of training. */
     ended?: boolean;
+    /** What `GET /api/client-plan/me` answers, for a client with sessions in their plan. */
+    plans?: object[];
   } = {},
 ) {
   const state = options.ended
@@ -270,7 +286,8 @@ async function openToday(
     : STATES[options.state ?? 'scheduled'];
   await page.setViewportSize({ width: options.width ?? 390, height: options.height ?? 844 });
   const decisions = FEATURES.map((feature) => {
-    const reason = options.reasons?.[feature] ?? 'Granted';
+    const reason =
+      options.reasons?.[feature] ?? (feature === 'Sessions' ? 'NoEntitlement' : 'Granted');
     return { feature, isAllowed: reason === 'Granted', reason };
   });
   await mockSession(page, {
@@ -290,6 +307,12 @@ async function openToday(
       'GET /api/client-renewal/me': (route: Route) =>
         json(route, 200, options.ended ? planEnded : planRunning),
       'POST /api/client-renewal/me/requests': (route: Route) => json(route, 201, renewalAsked),
+      'GET /api/client-plan/me': (route: Route) =>
+        json(route, 200, {
+          today: '2026-09-20',
+          plans: options.plans ?? [],
+          coachName: 'Hicham Haddad',
+        }),
     },
   });
   await page.goto(options.path ?? '/');
@@ -444,6 +467,41 @@ test('200% text scrolls down, never sideways, and the tabs never cover the last 
   const tabs = await page.locator('app-client-tabs').boundingBox();
   expect((last?.y ?? 0) + (last?.height ?? 0)).toBeLessThanOrEqual((tabs?.y ?? 0) + 1);
   await expect(page.locator('app-client-tabs .label').first()).toHaveText('Today');
+});
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a client with a pack reads what is left, and it opens My plan`, async ({
+    page,
+  }) => {
+    await openToday(page, {
+      width,
+      height,
+      reasons: { Sessions: 'Granted' },
+      plans: [PERSONAL_TRAINING],
+    });
+
+    const row = page.getByRole('link', { name: /1-on-1 sessions/ });
+    await expect(row).toContainText('7 of 10 sessions with Hicham left, until 29 November');
+    await expect(row).toHaveAttribute('href', '/plan');
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/b10c-today-${width}.png`, fullPage: true });
+  });
+}
+
+test('a client with no pack is not asked about, and has no sessions row', async ({ page }) => {
+  let asked = 0;
+  page.on('request', (request) => {
+    if (request.url().includes('/api/client-plan/me')) asked += 1;
+  });
+  await openToday(page);
+
+  await expect(page.locator('a.row[href="/nutrition/today"]')).toBeVisible();
+  await expect(page.locator('a[href="/plan"]')).toHaveCount(0);
+  expect(asked).toBe(0);
 });
 
 test('a feature outside the plan has no tab and no row', async ({ page }) => {

@@ -55,7 +55,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual((true, FeatureAccessReason.Granted, (DateOnly?)today.AddDays(90)), (access.IsAllowed, access.Reason, access.AccessibleUntilExclusive));
         Assert.HasCount(6, overview.FeatureAccess, "Sessions is the sixth coaching feature.");
 
-        // The client's own read names what's included, and says nothing of the ledger yet (B10c).
+        // The client's own read names what's included; what they read of the ledger is B10c's test.
         var plan = (await ReadSliceAsync<OwnPlansView>(maya, OwnPlansUrl)).Plans.Single();
         Assert.AreEqual("Personal training", plan.Name);
         Assert.AreEqual(CoachingFeature.Sessions, plan.Features.Single());

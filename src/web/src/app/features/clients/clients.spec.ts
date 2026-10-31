@@ -11,7 +11,7 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { COACH_NOW, LEA_ID, OWNER_ID } from '../../../testing/coach-today-fixtures';
-import { clientListView } from '../../../testing/client-list-fixtures';
+import { clientListView, KARL, overviewRow, TALA } from '../../../testing/client-list-fixtures';
 import { click, fill, menuChoices, press, query, settle, tick } from '../../../testing/dom';
 import { ClientListApi } from './client-list-api';
 import { Clients } from './clients';
@@ -220,6 +220,35 @@ describe('Clients', () => {
     );
     // A client with no plan has no name to show, only where they stand.
     expect(lines('Lynn Bou Khalil')).toEqual(['No plan yet']);
+  });
+
+  it('shows what is left on a pack beside the plan’s pill, warm as it runs out (critique B10c)', async () => {
+    const view = clientListView({
+      clients: [
+        overviewRow(KARL, { sessionsLeft: 2, attention: ['SessionsRunningOut'] }),
+        overviewRow(TALA, { sessionsLeft: 7 }),
+      ],
+    });
+    const { host } = await render({ getOverview: () => of(view) });
+
+    const pills = (name: string) => Array.from(row(host, name).querySelectorAll('app-status-pill'));
+    expect(pills('Karl Saade').map((pill) => squash(pill.textContent))).toEqual([
+      'On track',
+      '2 sessions left',
+    ]);
+    expect(pills('Karl Saade')[1].classList.contains('warm')).toBe(true);
+    expect(pills('Tala Rizk').map((pill) => squash(pill.textContent))).toEqual([
+      'On track',
+      '7 sessions left',
+    ]);
+    expect(pills('Tala Rizk')[1].classList.contains('warm')).toBe(false);
+    expect(row(host, 'Karl Saade').querySelector('app-tag')).toBeNull();
+  });
+
+  it('shows no sessions on a client with no pack running', async () => {
+    const { host } = await render();
+
+    expect(host.querySelector('li.client-row')?.textContent).not.toContain('sessions left');
   });
 
   it('says why check-ins show nothing: none sent yet, or not in the plan', async () => {

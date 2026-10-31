@@ -6,7 +6,7 @@ import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
-import type { CheckInAssignmentListItem } from '../../core/api/generated';
+import type { CheckInAssignmentListItem, OwnPlansView } from '../../core/api/generated';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import type { ClientNutritionDayView } from '../../core/api/generated';
 import { press, settle } from '../../../testing/dom';
@@ -35,12 +35,32 @@ const assignment = (dueDate: string, response: CheckInAssignmentListItem['respon
 const list = (...items: CheckInAssignmentListItem[]) =>
   of({ clientProfileId: 'c', total: items.length, items });
 const status = (code: number) => throwError(() => new HttpErrorResponse({ status: code }));
+/** A pack of ten with seven left, as `GET /api/client-plan/me` sends it. */
+const packView: OwnPlansView = {
+  today: TODAY,
+  coachName: 'Karim Haddad',
+  plans: [
+    {
+      id: 'pack-1',
+      name: 'Personal training',
+      optionLabel: '10 sessions',
+      description: null,
+      startDate: '2026-09-01',
+      lastDay: '2026-11-29',
+      cancelledOn: null,
+      status: 'Active',
+      features: ['Sessions'],
+      sessions: { count: 10, left: 7, used: 3, lapsed: 0, lapsedOn: null, sessions: [] },
+    },
+  ],
+};
 
 async function render(
   api: Record<string, unknown>,
   access: ReturnType<typeof fakeClientAccess> = fakeClientAccess(),
 ) {
   const client = {
+    getOwnPlans: vi.fn(() => of({ today: TODAY, plans: [], coachName: null })),
     getMyNutritionDay: vi.fn(() => of(meals('InProgress', ['a', 'b', null, null]))),
     listOwnCheckInAssignments: vi.fn(() =>
       list(
@@ -213,11 +233,86 @@ describe('TodayAlso', () => {
     expect(row('/checkins/me')).toBe('Check-ins, Your coaching plan is paused');
   });
 
+  it('asks about sessions too when the access answer could not be read, and stays quiet', async () => {
+    const getOwnPlans = vi.fn(() => status(500));
+    const { host, read } = await render({ getOwnPlans }, fakeClientAccess({}, 'failed'));
+
+    expect(getOwnPlans).toHaveBeenCalledTimes(1);
+    expect(read()).not.toContain('Couldn’t load your sessions');
+    expect(host.querySelector('a[href="/plan"]')).toBeNull();
+  });
+
   it('reads both rows when the access answer could not be read', async () => {
     const { client } = await render({}, fakeClientAccess({}, 'failed'));
 
     expect(client.getMyNutritionDay).toHaveBeenCalledTimes(1);
     expect(client.listOwnCheckInAssignments).toHaveBeenCalledTimes(1);
+  });
+
+  it('says what is left on a pack and opens My plan', async () => {
+    const { row, client } = await render(
+      { getOwnPlans: vi.fn(() => of(packView)) },
+      fakeClientAccess({ Sessions: 'Granted' }),
+    );
+
+    expect(row('/plan')).toContain(
+      '1-on-1 sessions, 7 of 10 sessions with Karim left, until 29 November',
+    );
+    expect(client.getOwnPlans).toHaveBeenCalledTimes(1);
+  });
+
+  it('never asks about sessions for a client with no pack, or one whose pack is over', async () => {
+    for (const reason of ['NoEntitlement', 'Expired', 'Cancelled'] as const) {
+      const getOwnPlans = vi.fn(() => of(packView));
+      const { host } = await render({ getOwnPlans }, fakeClientAccess({ Sessions: reason }));
+
+      expect(getOwnPlans).not.toHaveBeenCalled();
+      expect(host.querySelector('a[href="/plan"]')).toBeNull();
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('keeps a row for a pack paused or still to come, and says so in its own words', async () => {
+    const paused: OwnPlansView = {
+      ...packView,
+      plans: [{ ...packView.plans[0], status: 'Paused' }],
+    };
+    const { row } = await render(
+      { getOwnPlans: vi.fn(() => of(paused)) },
+      fakeClientAccess({ Sessions: 'Paused' }),
+    );
+
+    expect(row('/plan')).toContain('Paused · 7 of 10 sessions with Karim left');
+  });
+
+  it('fails the sessions row on its own and retries it', async () => {
+    const getOwnPlans = vi.fn().mockReturnValueOnce(status(500)).mockReturnValue(of(packView));
+    const { fixture, host, read, row } = await render(
+      { getOwnPlans },
+      fakeClientAccess({ Sessions: 'Granted' }),
+    );
+
+    expect(read()).toContain('Couldn’t load your sessions');
+    expect(row('/nutrition/today')).toBeTruthy();
+
+    press(host, 'Retry 1-on-1 sessions');
+    await settle(fixture);
+
+    expect(row('/plan')).toContain('7 of 10 sessions with Karim left');
+  });
+
+  it('shows the card for a pack alone, with nothing else in the plan', async () => {
+    const { host, row } = await render(
+      { getOwnPlans: vi.fn(() => of(packView)) },
+      fakeClientAccess({
+        Nutrition: 'NoEntitlement',
+        CheckIns: 'NoEntitlement',
+        Sessions: 'Granted',
+      }),
+    );
+
+    expect(host.querySelectorAll('li')).toHaveLength(1);
+    expect(row('/plan')).toContain('7 of 10 sessions with Karim left');
   });
 
   it('shows nothing when neither feature is in the plan', async () => {

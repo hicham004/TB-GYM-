@@ -799,6 +799,11 @@ of the implemented R1.3 screens before production rollout.
   reached the client in seconds and opened the right place).
   Since critique B10a the client has a plan page, My plan (`/plan`, the first row of Me's Account group);
   the plan notices still open Today, where Ask to renew lives.
+  Since critique B10c a pack's card on My plan says what is left ("7 of 10 sessions with Karim left, until 9
+  January") and Sessions so far lists each session held or charged, a charge with the coach's reason, the newest
+  five and the rest on request. Today's Also today gains "1-on-1 sessions", the same sentence for the pack a session
+  goes on next, opening My plan; it reads nothing for a client with no pack. A pack hears the plan notices in its own
+  words.
 
 - **Settings, Team, Billing, R5.2a (built 2026-10-09; screenshots `docs/design/r52a-*.png`). Decided by Claude
   for the owner on 2026-10-09**, after looking at Everfit (personal settings, timezone included, for everyone
@@ -1755,7 +1760,9 @@ limited to the coach's assigned clients.
 - Since critique B10b (ADR 0038), "1-on-1 sessions" sits under the plan in front, for a client with a pack or a
   coach who sells one: each pack's line, its ⋯ and its folded History, Record a session and Sell sessions. Packs
   are not listed under Other plans; one stands in front only with no coaching plan running or to come, or while it
-  waits for the payment of a sale just made.
+  waits for the payment of a sale just made. Since critique B10c the Clients row carries a "2 sessions left" pill
+  beside the plan's while sessions are in today's plan, warm once they run out; Today's and the client page's
+  Needs you say so with Renew pack or Record payment, and This month counts the 1-on-1 sessions held.
 - Built in R5.3b: **Intake** (`/clients/:clientId/intake`, from the header's Edit or View intake; follows dark
   mode): what a client answered as four cards (About, Goal, Day and food, Health), each with an Edit that opens
   that group in a sheet (the date of birth typed in three boxes, a refusal shown in the server's words, a

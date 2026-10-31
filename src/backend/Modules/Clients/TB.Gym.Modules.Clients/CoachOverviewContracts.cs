@@ -57,6 +57,12 @@ public enum CoachAttentionKind
     /// B4a). Ranked after missed sessions (<see cref="CoachAttentionPolicy.RankOf"/>).
     /// </summary>
     CheckInOverdue = 10,
+
+    /// <summary>
+    /// The sessions a client has paid for are nearly used, or the last of their packs is close to its end (critique
+    /// B10c, SES-008). A commercial matter like a plan's end, ranked right after it and outside Needs attention.
+    /// </summary>
+    SessionsRunningOut = 11,
 }
 
 /// <summary>The one status a client shows in the coach's list (CLI-018).</summary>
@@ -128,7 +134,8 @@ public sealed record CoachClientRef(
 /// <item><c>RenewalRequested</c>: Since the client asked, Date the ended plan's last day, SubjectId that enrollment.</item>
 /// <item><c>PlanEndingSoon</c>: Date the plan's last paid day (BEB-7). Count the renewals after it still waiting
 /// for payment (null when none), and then SubjectId the first of them, the plan to record a payment on;
-/// otherwise SubjectId the paid enrollment ending last, the plan to renew.</item>
+/// otherwise SubjectId the paid enrollment ending last, the plan to renew. SessionsLeft is set when that plan is a pack
+/// standing as the client's plan (ADR 0038), which says its end once, here, rather than as SessionsRunningOut too.</item>
 /// <item><c>WeekNotShared</c>: Date the week starts, WeekNumber, SubjectId the program block.</item>
 /// <item><c>MissedSessions</c>: Count missed since the last workout, Date that workout's day (null if none).</item>
 /// <item><c>NoProgram</c>: Date the client joined, SubjectId their latest program (null if they never had
@@ -140,6 +147,9 @@ public sealed record CoachClientRef(
 /// client for Remind, set only when <see cref="CanMessage"/> holds and that chat exists. With CanMessage and no
 /// chat yet, Remind starts it as the client page's Message does; without CanMessage (messaging not in the plan, or
 /// another coach's client, CLI-013) there is no chat to open, and the screen links to the client's check-ins.</item>
+/// <item><c>SessionsRunningOut</c>: SessionsLeft on the packs paid for and not over, Date the last of their last days.
+/// Count the packs still waiting for payment (null when none), and then SubjectId the first of them, the pack to
+/// record a payment on; otherwise SubjectId the paid pack ending last, the pack to renew.</item>
 /// </list>
 /// <see cref="CanMessage"/> is set on every item: the caller may message this client now, being the client's own
 /// coach with messaging in today's plan (CLI-013, ADR 0026).
@@ -154,7 +164,8 @@ public sealed record CoachAttentionItemView(
     Guid? SubjectId,
     IReadOnlyList<CoachMaxSuggestionView>? Maxes = null,
     DateTimeOffset? NewestAt = null,
-    bool CanMessage = false);
+    bool CanMessage = false,
+    int? SessionsLeft = null);
 
 /// <summary>
 /// A lift whose max the client's logged sets suggest changing (STR-012), named with both numbers so the coach
@@ -252,6 +263,11 @@ public sealed record CoachTodayView(
 /// The Owner's alone, null for a Coach (CLI-013): every active member of staff, the Owner first as You, then by
 /// name, each with their current clients and how many of them are active.
 /// </param>
+/// <param name="SessionsHeld">
+/// The 1-on-1 sessions held this month that still stand, on the workspace day they happened (SES-008): the Owner's
+/// every one of the workspace, a Coach's those they recorded. Null while there is nothing to count from: none held this
+/// month and no client the caller coaches with sessions in today's plan.
+/// </param>
 public sealed record CoachMonthView(
     DateOnly From,
     DateOnly ToExclusive,
@@ -259,7 +275,8 @@ public sealed record CoachMonthView(
     int ActiveClientCount,
     IReadOnlyList<CoachClientCountView>? Coaches,
     string MoneyRuleKey,
-    int MoneyRuleVersion);
+    int MoneyRuleVersion,
+    int? SessionsHeld = null);
 
 /// <summary>Money received in one currency, exact, with how many payments (part payments included) made it up.</summary>
 public sealed record CoachMoneyReceivedView(string Currency, decimal Amount, int PaymentCount);
@@ -323,7 +340,10 @@ public sealed record CoachPlanEndedView(
 /// covers, past when it has ended. <see cref="OnboardingStatus"/> says whether the client has finished
 /// setting up their profile, for the list's "Not set up yet" (audit LOST-12).
 /// </summary>
-/// <param name="Attention">The kinds of <see cref="AttentionItems"/>, in the same order.</param>
+/// <param name="Attention">
+/// Every kind the client raised, in rank order: the kinds of <see cref="AttentionItems"/>, and SessionsRunningOut even
+/// when its pack, standing as the client's plan, says so on PlanEndingSoon's item.
+/// </param>
 /// <param name="BirthDate">
 /// The current profile's date of birth, for the age worked out on screen for the view's today (CLI-005). A
 /// returning client's new profile has its own (CLI-016), never the old one's.
@@ -354,6 +374,10 @@ public sealed record CoachPlanEndedView(
 /// When the client last sent a check-in, read only while check-ins are in today's plan (CHK-011): null both when
 /// none was sent and when check-ins are not in the plan, which <see cref="FeaturesToday"/> tells apart.
 /// </param>
+/// <param name="SessionsLeft">
+/// What is left on the client's packs paid for and not over (SES-008), read only while sessions are in today's plan:
+/// null with no pack running, as for a paused, blocked or unpaid one.
+/// </param>
 public sealed record ClientOverviewRow(
     CoachClientRef Client,
     string? Goals,
@@ -375,7 +399,8 @@ public sealed record ClientOverviewRow(
     IReadOnlyList<CoachingFeature> FeaturesToday,
     IReadOnlyList<CoachAttentionItemView> AttentionItems,
     string? LastActivityTitle,
-    DateTimeOffset? LastCheckInSentAtUtc);
+    DateTimeOffset? LastCheckInSentAtUtc,
+    int? SessionsLeft = null);
 
 /// <summary>
 /// One enrollment as a client's row sums it up (critique B4a): its name, what it includes, its length as it was

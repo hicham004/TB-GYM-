@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import type { CheckInAssignmentListItem, ClientWorkoutView } from '../../core/api/generated';
+import type {
+  CheckInAssignmentListItem,
+  ClientWorkoutView,
+  OwnPlansView,
+} from '../../core/api/generated';
 import type { Conversation } from '../messaging/messaging.models';
 import type { NutritionDay } from '../nutrition/nutrition.models';
 import { day, decision, TODAY, upcoming, workout } from '../../../testing/today-fixtures';
-import { checkInRow, coachMessage, nutritionRow, trainingCard } from './today.models';
+import {
+  checkInRow,
+  coachMessage,
+  nutritionRow,
+  type ReadState,
+  sessionsAreClosed,
+  sessionsRow,
+  trainingCard,
+} from './today.models';
 
 describe('Today training card', () => {
   it('schedules today’s session with its exercise and set counts', () => {
@@ -344,5 +356,72 @@ describe('Today coach message', () => {
       kind: 'hidden',
     });
     expect(coachMessage(null, { kind: 'failed' })).toEqual({ kind: 'failed' });
+  });
+});
+
+describe('Today 1-on-1 sessions row (critique B10c)', () => {
+  const pack: OwnPlansView = {
+    today: TODAY,
+    coachName: 'Karim Haddad',
+    plans: [
+      {
+        id: 'pack-1',
+        name: 'Personal training',
+        optionLabel: '10 sessions',
+        description: null,
+        startDate: '2026-09-01',
+        lastDay: '2026-11-29',
+        cancelledOn: null,
+        status: 'Active',
+        features: ['Sessions'],
+        sessions: { count: 10, left: 7, used: 3, lapsed: 0, lapsedOn: null, sessions: [] },
+      },
+    ],
+  };
+  const ok = { kind: 'ok', value: pack } as const;
+  const granted = decision('Sessions');
+
+  it('reads nothing for a client with no pack or a pack that is over', () => {
+    for (const reason of ['NoEntitlement', 'Expired', 'Cancelled'] as const) {
+      expect(sessionsAreClosed(decision('Sessions', reason), 'loaded')).toBe(true);
+      expect(sessionsRow(decision('Sessions', reason), 'loaded', ok, 'en-US')).toEqual({
+        kind: 'hidden',
+      });
+    }
+    // An answer that does not list the feature says the same: it is not in the plan.
+    expect(sessionsAreClosed(null, 'loaded')).toBe(true);
+  });
+
+  it('reads on for any other answer, and while the access answer is unknown', () => {
+    for (const reason of ['Granted', 'Paused', 'NotStarted', 'PaymentRequired'] as const) {
+      expect(sessionsAreClosed(decision('Sessions', reason), 'loaded')).toBe(false);
+    }
+    expect(sessionsAreClosed(null, 'failed')).toBe(false);
+    expect(sessionsAreClosed(null, 'loading')).toBe(false);
+  });
+
+  it('follows its read', () => {
+    expect(sessionsRow(granted, 'loaded', { kind: 'loading' }, 'en-US')).toEqual({
+      kind: 'loading',
+    });
+    expect(sessionsRow(granted, 'loaded', { kind: 'failed' }, 'en-US')).toEqual({ kind: 'failed' });
+    expect(sessionsRow(granted, 'loaded', ok, 'en-US')).toEqual({
+      kind: 'ready',
+      value: { line: '7 of 10 sessions with Karim left, until 29 November', more: null },
+    });
+  });
+
+  it('says nothing of a read refused or empty', () => {
+    expect(sessionsRow(granted, 'loaded', { kind: 'missing' }, 'en-US')).toEqual({
+      kind: 'hidden',
+    });
+    expect(sessionsRow(granted, 'loaded', { kind: 'denied' }, 'en-US')).toEqual({ kind: 'hidden' });
+    const none: ReadState<OwnPlansView> = { kind: 'ok', value: { ...pack, plans: [] } };
+    expect(sessionsRow(granted, 'loaded', none, 'en-US')).toEqual({ kind: 'hidden' });
+  });
+
+  it('stays quiet when it fails with the access answer lost too: there may be no pack', () => {
+    expect(sessionsRow(null, 'failed', { kind: 'failed' }, 'en-US')).toEqual({ kind: 'hidden' });
+    expect(sessionsRow(null, 'failed', ok, 'en-US')).toMatchObject({ kind: 'ready' });
   });
 });

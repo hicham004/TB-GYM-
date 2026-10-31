@@ -89,11 +89,20 @@ const FEATURES: CoachingFeature[] = [
   'CheckIns',
   'Messaging',
   'ResourceLibrary',
+  'Sessions',
 ];
 
+/** Every feature is in the plan; sessions only for a client with a pack, as the server answers. */
+function reasonFor(
+  feature: CoachingFeature,
+  reasons: Partial<Record<CoachingFeature, FeatureAccessReason>>,
+): FeatureAccessReason {
+  return reasons[feature] ?? (feature === 'Sessions' ? 'NoEntitlement' : 'Granted');
+}
+
 /**
- * A stand-in for ClientAccessStore. Every feature is granted unless `reasons` says otherwise;
- * `status` other than 'loaded' means no decision is known yet.
+ * A stand-in for ClientAccessStore. Every feature but sessions is granted unless `reasons` says
+ * otherwise; `status` other than 'loaded' means no decision is known yet.
  */
 export function fakeClientAccess(
   reasons: Partial<Record<CoachingFeature, FeatureAccessReason>> = {},
@@ -101,7 +110,7 @@ export function fakeClientAccess(
 ) {
   const decisions = signal<FeatureAccessDecision[] | null>(
     status === 'loaded'
-      ? FEATURES.map((feature) => decision(feature, reasons[feature] ?? 'Granted'))
+      ? FEATURES.map((feature) => decision(feature, reasonFor(feature, reasons)))
       : null,
   );
   const statusState = signal<ClientAccessStatus>(status);
@@ -115,7 +124,7 @@ export function fakeClientAccess(
     load: vi.fn(async () => undefined),
     /** Replaces the decisions, as a completed read would. */
     set(next: Partial<Record<CoachingFeature, FeatureAccessReason>>) {
-      decisions.set(FEATURES.map((feature) => decision(feature, next[feature] ?? 'Granted')));
+      decisions.set(FEATURES.map((feature) => decision(feature, reasonFor(feature, next))));
       statusState.set('loaded');
     },
   };

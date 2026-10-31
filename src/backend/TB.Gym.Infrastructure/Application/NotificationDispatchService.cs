@@ -502,6 +502,7 @@ internal sealed class NotificationDispatchService(
                 candidate.Status,
                 candidate.EndDateExclusive,
                 candidate.RenewedFromEnrollmentId,
+                IsSessionPack = candidate.SessionCountSnapshot != null,
             })
             .SingleOrDefaultAsync(cancellationToken);
         if (enrollment is null || enrollment.ClientProfileId != payload.ClientProfileId)
@@ -531,9 +532,15 @@ internal sealed class NotificationDispatchService(
             CommercialNotificationKind.EnrollmentActivated =>
                 enrollment.Status is EnrollmentStatus.Active or EnrollmentStatus.Paused &&
                 tenantToday < enrollment.EndDateExclusive,
+            // A pack with no session left has nothing to end soon (SES-009).
             CommercialNotificationKind.EnrollmentEndingSoon =>
                 enrollment.Status is EnrollmentStatus.Active or EnrollmentStatus.Paused &&
-                tenantToday < enrollment.EndDateExclusive,
+                tenantToday < enrollment.EndDateExclusive &&
+                (!enrollment.IsSessionPack ||
+                 await context.SessionLedgerEntries
+                     .AsNoTracking()
+                     .Where(entry => entry.EnrollmentId == item.AggregateId)
+                     .SumAsync(SessionLedger.SignedCount, cancellationToken) > 0),
             CommercialNotificationKind.EnrollmentExpired =>
                 tenantToday >= enrollment.EndDateExclusive,
             CommercialNotificationKind.EnrollmentRenewed =>
@@ -548,9 +555,10 @@ internal sealed class NotificationDispatchService(
 
         return delivery.Channel switch
         {
-            NotificationChannel.InApp => NotificationTemplateCatalog.TryResolve(
+            NotificationChannel.InApp => NotificationTemplateCatalog.TryResolveForEnrollment(
                 item.Kind,
                 tenant.DefaultCulture,
+                enrollment.IsSessionPack,
                 out var template)
                 ? Eligibility.InApp(template)
                 : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing),

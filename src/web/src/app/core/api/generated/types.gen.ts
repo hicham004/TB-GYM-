@@ -824,6 +824,7 @@ export type ClientOverviewRow = {
   attentionItems: Array<CoachAttentionItemView>;
   lastActivityTitle: null | string;
   lastCheckInSentAtUtc: null | string;
+  sessionsLeft?: null | number | string;
 };
 
 export type ClientOverviewStatus =
@@ -1174,6 +1175,7 @@ export type CoachAttentionItemView = {
   maxes?: null | Array<CoachMaxSuggestionView>;
   newestAt?: null | string;
   canMessage?: boolean;
+  sessionsLeft?: null | number | string;
 };
 
 export type CoachAttentionKind =
@@ -1186,7 +1188,8 @@ export type CoachAttentionKind =
   | 'NoProgram'
   | 'MaxesToReview'
   | 'NoPlan'
-  | 'CheckInOverdue';
+  | 'CheckInOverdue'
+  | 'SessionsRunningOut';
 
 export type CoachChosenPalView = {
   methodKey: string;
@@ -1288,6 +1291,7 @@ export type CoachMonthView = {
   coaches: null | Array<CoachClientCountView>;
   moneyRuleKey: string;
   moneyRuleVersion: number | string;
+  sessionsHeld?: null | number | string;
 };
 
 export type CoachPalPick = {
@@ -2844,6 +2848,7 @@ export type OwnCoachView = {
 export type OwnPlansView = {
   today: string;
   plans: Array<OwnPlanView>;
+  coachName?: null | string;
 };
 
 export type OwnPlanView = {
@@ -2856,6 +2861,22 @@ export type OwnPlanView = {
   cancelledOn: null | string;
   status: EffectiveEnrollmentStatus;
   features: Array<CoachingFeature>;
+  sessions?: null | OwnSessionsView;
+};
+
+export type OwnSessionsView = {
+  count: number | string;
+  left: number | string;
+  used: number | string;
+  lapsed: number | string;
+  lapsedOn: null | string;
+  sessions: Array<OwnSessionView>;
+};
+
+export type OwnSessionView = {
+  day: string;
+  outcome: SessionOutcome;
+  reason: null | string;
 };
 
 export type PaymentInstructionsView = {

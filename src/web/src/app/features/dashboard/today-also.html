@@ -159,6 +159,44 @@
           }
         </li>
       }
+
+      @let packs = sessions();
+      @if (packs.kind !== 'hidden') {
+        <li>
+          @if (packs.kind === 'loading') {
+            <div class="row row-skeleton" aria-hidden="true">
+              <span class="bar"></span><span class="bar bar-short"></span>
+            </div>
+          } @else if (packs.kind === 'ready') {
+            <a class="row" routerLink="/plan">
+              <app-icon name="clients" />
+              <span class="row-copy">
+                <span class="row-title" i18n>1-on-1 sessions</span>
+                <span class="tb-visually-hidden">, </span>
+                <span class="row-status" dir="auto">{{ packs.value.line }}</span>
+                @if (packs.value.more; as more) {
+                  <span class="tb-visually-hidden">, </span>
+                  <span class="row-status">{{ more }}</span>
+                }
+              </span>
+              <app-icon name="chevron-down" class="chevron" />
+            </a>
+          } @else {
+            <div class="row">
+              <app-icon name="clients" />
+              <span class="row-copy">
+                <span class="row-title" i18n>1-on-1 sessions</span>
+                <span class="tb-visually-hidden">, </span>
+                <span class="row-status" i18n>Couldn’t load your sessions</span>
+              </span>
+              <button appButton type="button" variant="text" (click)="retry('sessions')">
+                <ng-container i18n>Retry</ng-container
+                ><span class="tb-visually-hidden" i18n> 1-on-1 sessions</span>
+              </button>
+            </div>
+          }
+        </li>
+      }
     </ul>
     <p class="tb-visually-hidden" role="status">{{ failures() }}</p>
   </section>
