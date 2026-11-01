@@ -48,6 +48,7 @@ public sealed class DemoWorkspaceCastTests
             Assert.AreEqual(before.IsHero, after.IsHero);
             Assert.AreEqual(before.Plans, after.Plans);
             Assert.AreEqual(before.Blocks, after.Blocks);
+            Assert.AreEqual(before.Pack, after.Pack, "Both casts have the demo's session pack (critique B17).");
             Assert.HasCount(before.Messages.Count, after.Messages);
             Assert.IsFalse(after.Welcome.Contains("Atlas", StringComparison.Ordinal), after.Welcome);
             Assert.IsFalse(after.Messages.Any(message => message.Text.Contains("Atlas", StringComparison.Ordinal)), after.FirstName);
@@ -58,6 +59,8 @@ public sealed class DemoWorkspaceCastTests
         Assert.AreEqual("Maya F.", hero.DisplayName);
         Assert.AreEqual("maya.f@mail.example", hero.Email);
         Assert.StartsWith("Welcome to Oakline, Maya!", hero.Welcome);
+        Assert.HasCount(4, hero.Pack!.Sessions);
+        Assert.AreEqual(1, sample.Clients.Count(client => client.Pack is not null), "One client is on the pack.");
         Assert.AreEqual("Lynn B.", sample.Clients.Single(client => client.Key == "lynn").DisplayName);
 
         // The owner's own demo is untouched by the sample cast.

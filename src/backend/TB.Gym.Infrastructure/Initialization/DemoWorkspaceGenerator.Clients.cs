@@ -32,6 +32,7 @@ internal sealed partial class DemoWorkspaceGenerator
         timeline.At(calendar.At(client.Plans[0].StartDay, 6, index), $"{name}: welcome message",
             () => OpenConversationAsync(state, seed));
         PlanEnrollments(state, random);
+        PlanSessionPack(state);
         PlanBlocks(state);
         PlanWorkouts(state, random);
         PlanWeighIns(state, random);
@@ -169,8 +170,17 @@ internal sealed partial class DemoWorkspaceGenerator
         var enrollment = Require(result.Enrollment, result.Status == CommercialCommandStatus.Success, $"{name}: plan", result);
         state.EnrollmentIds.Add(enrollment.Id);
 
+        await PayInFullAsync(state, enrollment, plan.Method, reference);
+    }
+
+    private async Task PayInFullAsync(
+        DemoClientState state,
+        ClientEnrollmentView enrollment,
+        ManualPaymentMethod method,
+        int reference)
+    {
         clock.Advance(TimeSpan.FromMinutes(2));
-        var (text, note) = plan.Method switch
+        var (text, note) = method switch
         {
             ManualPaymentMethod.MobileWallet => ($"WHISH-{reference}", (string?)null),
             ManualPaymentMethod.BankTransfer => ($"TRF-{reference}", null),
@@ -185,12 +195,64 @@ internal sealed partial class DemoWorkspaceGenerator
                     enrollment.PriceAmount,
                     enrollment.PriceCurrency,
                     calendar.DateOf(clock.UtcNow),
-                    plan.Method,
+                    method,
                     text,
                     note,
                     Guid.CreateVersion7()),
                 token));
-        Require(paid.Status == CommercialCommandStatus.Success, $"{name}: payment", paid);
+        Require(paid.Status == CommercialCommandStatus.Success, $"{state.Client.FirstName}: payment", paid);
+    }
+
+    /// <summary>
+    /// A pack beside the client's plans (critique B17), so never one of their <see cref="DemoClientState.EnrollmentIds"/>:
+    /// those are the plans that renew and carry programs. It draws nothing from the client's random numbers, which keeps
+    /// the rest of their story as it was.
+    /// </summary>
+    private void PlanSessionPack(DemoClientState state)
+    {
+        if (state.Client.Pack is not { } pack)
+        {
+            return;
+        }
+
+        var name = state.Client.FirstName;
+        timeline.At(calendar.At(pack.SoldDay, 17, 0), $"{name}: session pack", () => BuySessionPackAsync(state, pack));
+        foreach (var session in pack.Sessions)
+        {
+            var at = session.Day == 0 ? calendar.EarlierToday(TimeSpan.FromHours(3)) : calendar.At(session.Day, 10, 0);
+            timeline.At(at, $"{name}: 1-on-1 session", () => HoldSessionAsync(state, session));
+        }
+    }
+
+    private async Task BuySessionPackAsync(DemoClientState state, DemoPack pack)
+    {
+        var name = state.Client.FirstName;
+        var sold = await As<ICommercialApplicationService, CommercialCommandResult>(
+            CoachOf(state),
+            (service, token) => service.AssignAsync(
+                state.ClientProfileId,
+                new AssignProductRequest(sessionPackOfferId, calendar.Day(pack.SoldDay), Guid.CreateVersion7()),
+                token));
+        var enrollment = Require(sold.Enrollment, sold.Status == CommercialCommandStatus.Success, $"{name}: session pack", sold);
+        await PayInFullAsync(state, enrollment, ManualPaymentMethod.Cash, reference: 0);
+    }
+
+    private async Task HoldSessionAsync(DemoClientState state, DemoSession session)
+    {
+        var result = await As<ICommercialApplicationService, CommercialCommandResult>(
+            CoachOf(state),
+            (service, token) => service.RecordSessionAsync(
+                state.ClientProfileId,
+                new RecordSessionRequest(
+                    SessionOutcome.Held,
+                    calendar.Day(session.Day),
+                    session.Note,
+                    Reason: null,
+                    Receipt: null,
+                    Guid.CreateVersion7()),
+                token));
+        Require(result.Status == CommercialCommandStatus.Success, $"{state.Client.FirstName}: 1-on-1 session", result);
+        tally.SessionsHeld++;
     }
 
     private void PlanBlocks(DemoClientState state)

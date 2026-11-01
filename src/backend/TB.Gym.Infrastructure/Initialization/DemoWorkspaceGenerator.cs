@@ -48,6 +48,7 @@ internal sealed partial class DemoWorkspaceGenerator
     private Guid tenantId;
     private Guid checkInFormVersionId;
     private Guid mealPlanVersionId;
+    private Guid sessionPackOfferId;
 
     public DemoWorkspaceGenerator(
         IServiceProvider services,
@@ -212,6 +213,22 @@ internal sealed partial class DemoWorkspaceGenerator
                 offerIds[offer.Offer] = updated.Offers.Single(item => item.Label == offer.Label).Id;
             }
         }
+
+        var pack = SessionPack;
+        var sessionPack = await As<ICommercialApplicationService, CommercialCommandResult>(
+            OwnerActor,
+            (service, token) => service.CreateProductAsync(
+                new CreateCoachingProductRequest(
+                    pack.Name,
+                    pack.Description,
+                    new CreateProductOfferRequest(pack.Label, pack.ValidDays, OfferDurationUnit.Day, pack.Price, Currency, [], pack.Sessions),
+                    ProductKind.SessionPack),
+                token));
+        sessionPackOfferId = Require(
+            sessionPack.Product,
+            sessionPack.Status == CommercialCommandStatus.Success,
+            $"create {pack.Name}",
+            sessionPack).Offers.Single().Id;
     }
 
     private static CreateProductOfferRequest OfferRequest(DemoProduct product, DemoOfferInfo offer) =>
@@ -454,4 +471,6 @@ internal sealed class DemoWorkspaceTally
     public int Messages { get; set; }
 
     public int Notifications { get; set; }
+
+    public int SessionsHeld { get; set; }
 }

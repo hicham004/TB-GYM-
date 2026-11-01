@@ -73,6 +73,10 @@ Without progress photos a 4 GB server is enough (about half the price; see `.env
    `tb run --rm -v /root/key.txt:/key.txt:ro backup restore.sh latest tbgym_drill /key.txt`.
    The row counts it prints should match your data. Then
    `tb exec postgres dropdb -U tbgym tbgym_drill && shred -u /root/key.txt`. Repeat monthly.
+7. **Video titles**, once: `tb exec api dotnet TB.Gym.Api.dll video-titles`. It asks YouTube or Vimeo for
+   the title of every video link that has none and prints how many it filled. A new server has no links
+   yet, so this matters if data came across from the test copy. A video that is gone keeps its tile,
+   and running it again changes nothing.
 
 ## 3. Afterwards
 
@@ -127,3 +131,6 @@ and pages take 4-15 seconds instead of about one.
 3. To update the copy, push to GitHub, then Manual Deploy > Deploy latest commit, and check its
    edge with `.\scripts\edge-proof.ps1 -Url <the copy's link>`. To remove it, delete the service and
    the database in Render.
+4. Once it runs a build with the command, fill in the older video titles: in Render open tb-gym-test >
+   Shell and run `bash /app/start.sh video-titles`. It prints how many links it filled, and a second
+   run changes nothing. The script is what holds the copy's settings, so the command goes through it.

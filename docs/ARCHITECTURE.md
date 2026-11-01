@@ -454,8 +454,10 @@ grant's is (MED-016), and its `externalTitle`. That title is the one outside cal
 `OEmbedVideoTitles`, a typed `HttpClient` behind the module's `IExternalVideoTitles` port, asks the provider's
 public oEmbed endpoint once, on the server, while the link is added (a 4-second timeout, at most 64 KB read,
 only `title` kept and cleaned by `ExternalVideoTitle`), never while a page reads; any failure adds the link
-without one, and adding the same link again fills a missing one (MED-015). Nothing from the provider loads in
-a browser, so the CSP is unchanged.
+without one, and adding the same link again fills a missing one (MED-015). The operator's one-time
+`video-titles` command (`VideoTitlesCommand`, critique B17) goes through the same port for every link with no
+title, one at a time, each saved on its own inside its workspace. Nothing from the provider loads in a browser,
+so the CSP is unchanged.
 
 ## 7. Persistence
 

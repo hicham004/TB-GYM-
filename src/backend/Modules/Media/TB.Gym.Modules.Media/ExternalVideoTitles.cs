@@ -5,8 +5,9 @@ namespace TB.Gym.Modules.Media;
 
 /// <summary>
 /// Reads a YouTube or Vimeo video's own title from its provider (critique B9, MED-015). It is asked once, when a
-/// link is added, never while a page reads the library, and its answer is the provider's text: untrusted until
-/// <see cref="ExternalVideoTitle.Clean"/> has read it.
+/// link is added or by the one-time <c>video-titles</c> command for a link with none (B17), never while a page reads
+/// the library, and its answer is the provider's text: untrusted until <see cref="ExternalVideoTitle.Clean"/> has
+/// read it.
 /// </summary>
 public interface IExternalVideoTitles
 {

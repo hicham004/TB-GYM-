@@ -63,6 +63,12 @@ export Messaging__Realtime__ScaleOut=SingleProcess Messaging__Realtime__ApiRepli
 # nginx in this container is the API's only caller, and it passes on the visitor's address.
 export ReverseProxy__Enabled=true ReverseProxy__TrustedProxies__0=127.0.0.1
 
+# `bash /app/start.sh video-titles` in Render's Shell tab runs one of the API's commands with the settings
+# above, which exist only in this script, and exits (docs/GO-LIVE.md).
+if [ "$#" -gt 0 ]; then
+    exec dotnet /app/api/TB.Gym.Api.dll "$@"
+fi
+
 # The bundle is slow to start on a small CPU (over a minute on the free plan's tenth), so a start that
 # finds the newest migration already applied (every start after a deploy's first) skips it.
 latest=$(cat /app/latest-migration)

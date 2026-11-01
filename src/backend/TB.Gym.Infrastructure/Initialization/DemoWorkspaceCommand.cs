@@ -128,7 +128,8 @@ public static class DemoWorkspaceCommand
         await output.WriteLineAsync(
             $"  {tally.Clients} clients and {tally.PendingInvitations} pending invitations, {tally.Workouts} workouts " +
             $"({tally.Sets} sets, {tally.PersonalBests} personal bests), {tally.WeighIns} weigh-ins, " +
-            $"{tally.Measurements} waist measurements, {tally.CheckInsSubmitted} check-ins ({waiting} waiting for review), " +
+            $"{tally.Measurements} waist measurements, {tally.SessionsHeld} 1-on-1 sessions held, " +
+            $"{tally.CheckInsSubmitted} check-ins ({waiting} waiting for review), " +
             $"{tally.Messages} messages, {tally.Notifications} notifications delivered.");
         await output.WriteLineAsync();
         await output.WriteLineAsync($"Sign in with any of these, password {password}:");

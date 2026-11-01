@@ -126,9 +126,9 @@ public sealed class MediaAsset : TenantEntity
     public string? ExternalMediaId { get; private set; }
 
     /// <summary>
-    /// A link's own title, as YouTube or Vimeo gave it when the link was added (critique B9, MED-015); null
-    /// when the provider did not say, as for every link added before B9. <see cref="Title"/> stays the name
-    /// the coach's screen gave it.
+    /// A link's own title, as YouTube or Vimeo gave it (critique B9, MED-015); null when the provider did not say,
+    /// as for every link added before B9 until the one-time <c>video-titles</c> command asks (B17). <see cref="Title"/>
+    /// stays the name the coach's screen gave it.
     /// </summary>
     public string? ExternalTitle { get; private set; }
 

@@ -680,6 +680,30 @@ Choices the rows from B12 on made, kept as built until the owner answers:
   since 27 Aug" for a change that reads under 0.05, as "No change since start" does; the tip's "…, from today on.", since
   a day gone takes nothing; Add here's names and its message give Edit weeks' dates ("Add here: Upper, week 2, Wednesday 7
   October"), as its + on a day does. Recommendation: as built.
+- B17 · Running it on the test copy. The row asks for this and it is not done: it needs a deploy and the Render account,
+  which no chat has. Built: `bash /app/start.sh video-titles` for Render's Shell tab, as the copy's settings exist only in
+  that script, and step 4 in GO-LIVE.md's test copy section. Proved inside a running copy of its own image in Docker, in
+  Production mode with PostgreSQL 18 and the real YouTube, and for Vimeo through the same command on the laptop; Render's
+  page on its Shell does not say a session sees the service's settings, so that one thing is unproved. The demo has no links, so only links people added on the copy gain anything, and its free
+  database expires about 14 November. Recommendation: at the next deploy run it once; if the Shell cannot see the
+  settings, skip it, as adding the link again fills the title too.
+- B17 · Which client has the pack. Built: Maya, the client every list of demo sign-ins names, with Lea, so Lea's own This
+  month and the owner's By coach both show it. Her Today gains a line under Also today and her Clients row a pill, so
+  the next shoot of the homepage's pictures shows them. The other way: another client, such as Tarek, and pictures that
+  do not change. Recommendation: as built.
+- B17 · The last session is today. Built: four held, on days 19, 12 and 5 ago and today, so This month has one to count
+  on any day the demo is built, the 1st included, though Maya's Lower A still waits for tonight. The other way: past days
+  only, leaving This month without one in a month's first days. Recommendation: as built.
+- B17 · Links removed from the library. The row says every link with no title. Built: those too, as adding one again
+  brings it back, and they stay removed. The other way: only links still in the library, as adding one again fills its
+  title anyway. Recommendation: as built.
+- B17 · Asking twice. Built: a second run changes nothing, but it does ask again about a video that gave no title, as a
+  video that is gone reads the same as a provider that was down, so a later run can fill in the second. The other way:
+  remember each link asked, a new column, and ask once ever. Recommendation: as built.
+- B17 · The words the row did not give. Built: "Personal Training" at USD 300, the price option "10 sessions", "1-on-1
+  sessions at the studio, with your coach beside you on every set."; Lea's notes on three of the sessions, which only the
+  team reads; the command's name, `video-titles`, and its lines "Video links with no title: 7", "Given their title: 4",
+  "Left as they are: 3". Recommendation: as built.
 
 Waits for Toufic's answers (section 1), kept as built until then:
 

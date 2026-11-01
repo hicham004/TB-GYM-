@@ -2393,6 +2393,7 @@ history:
 - message threads;
 - plans ending soon;
 - a renewal request;
+- a 10-session pack on Maya, paid, with four sessions held, the last of them today (critique B17);
 - initials avatars.
 
 It is used for development, every screenshot review and every sales demo. The rule is to never

@@ -351,7 +351,10 @@ internal sealed class OEmbedFake : HttpMessageHandler
 
     public ConcurrentQueue<string> Asked { get; } = new();
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    /// <summary>Runs while the provider is answering, with the video's id: what happens meanwhile (critique B17).</summary>
+    public Func<string, Task>? WhileAsking { get; set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var address = request.RequestUri!.AbsoluteUri;
         Asked.Enqueue(address);
@@ -359,6 +362,11 @@ internal sealed class OEmbedFake : HttpMessageHandler
         var id = page.Contains("youtube.com/watch?v=", StringComparison.Ordinal)
             ? page[(page.IndexOf("watch?v=", StringComparison.Ordinal) + "watch?v=".Length)..]
             : page[(page.LastIndexOf('/') + 1)..];
+        if (WhileAsking is { } meanwhile)
+        {
+            await meanwhile(id);
+        }
+
         switch (id)
         {
             case UnreachableId:
@@ -366,16 +374,16 @@ internal sealed class OEmbedFake : HttpMessageHandler
             case TimeoutId:
                 throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout (test).");
             case NotJsonId:
-                return Task.FromResult(Answer("<html>Sign in</html>", "text/html"));
+                return Answer("<html>Sign in</html>", "text/html");
             case NoTitleId:
-                return Task.FromResult(Answer("{\"type\":\"video\",\"title\":42}"));
+                return Answer("{\"type\":\"video\",\"title\":42}");
             case TooLongId:
-                return Task.FromResult(Answer("{\"title\":\"" + new string('x', 70_000) + "\"}"));
+                return Answer("{\"title\":\"" + new string('x', 70_000) + "\"}");
         }
 
-        return Task.FromResult(Titles.TryGetValue(id, out var title)
+        return Titles.TryGetValue(id, out var title)
             ? Answer(JsonSerializer.Serialize(new { type = "video", title, provider_name = "Test" }))
-            : new HttpResponseMessage(HttpStatusCode.NotFound) { RequestMessage = request });
+            : new HttpResponseMessage(HttpStatusCode.NotFound) { RequestMessage = request };
     }
 
 

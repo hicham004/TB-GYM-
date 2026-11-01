@@ -226,6 +226,8 @@ is precisely why they are written down here.
       dated run output plus the resulting rows, from a staging deployment carrying no development
       credentials or seed data. *For launch there is no staging: do this on the production server
       before the first invitation (GO-LIVE.md, Deploy step 4).*
+- [ ] Run `video-titles` once, so every video link has its title (MED-015). Evidence: the counts it
+      prints. *Added 2026-11-01, critique B17; `docs/GO-LIVE.md` Deploy step 7.*
 
 ## Release gate
 

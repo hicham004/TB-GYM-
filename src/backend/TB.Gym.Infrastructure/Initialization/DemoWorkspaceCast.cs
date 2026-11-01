@@ -36,6 +36,18 @@ internal static class DemoWorkspaceCast
     ];
 
     /// <summary>
+    /// The one session pack the demo sells, apart from the coaching plans (critique B17): ten 1-on-1 sessions for the
+    /// default 90 days, so the sessions screens and This month have something to show.
+    /// </summary>
+    public static readonly DemoSessionPack SessionPack = new(
+        "Personal Training",
+        "1-on-1 sessions at the studio, with your coach beside you on every set.",
+        "10 sessions",
+        Sessions: 10,
+        ValidDays: 90,
+        Price: 300m);
+
+    /// <summary>
     /// Base working loads for a trained adult (strength factor 1). A client's accessory load is this
     /// times their factor, climbing a little every week. Null means bodyweight.
     /// </summary>
@@ -317,6 +329,13 @@ internal static class DemoWorkspaceCast
             CoachNotes: "Wedding in mid-December. Loves hip thrusts, hates burpees. Prefers messages in the morning.",
             Plans: [new(DemoOffer.Coaching12Weeks, -63, ManualPaymentMethod.MobileWallet)],
             Blocks: [new("lean-1", -63), new("lean-2", -21)],
+            Pack: new(-20,
+            [
+                new(-19, "First session: bar path on the squat and how to brace."),
+                new(-12, "Deadlift setup. Pulling the slack out is starting to click."),
+                new(-5),
+                new(0, "Squat warm-up, ahead of tonight's Lower A."),
+            ]),
             Maxes: new(60m, 32.5m, 75m, 25m), StrengthFactor: 0.55m, SetsPersonalBests: true,
             StartWeight: 68.4m, WeeklyTrend: -0.45m, WeighInRate: 0.85, Waist: 76m, WaistTrend: -0.4m,
             Adherence: 0.95, TrainingHour: 18, TrainingMinute: 30, Mood: new(7, 7, 5),
@@ -717,6 +736,14 @@ internal sealed record DemoProduct(
 
 internal sealed record DemoOfferInfo(DemoOffer Offer, string Label, int Weeks, decimal Price);
 
+internal sealed record DemoSessionPack(
+    string Name,
+    string Description,
+    string Label,
+    int Sessions,
+    int ValidDays,
+    decimal Price);
+
 internal sealed record DemoExercise(
     string Key,
     string Name,
@@ -774,6 +801,12 @@ internal sealed record DemoCheckInQuestion(
 
 /// <summary>A plan the client buys. The first starts the relationship; each later one is a renewal.</summary>
 internal sealed record DemoPlan(DemoOffer Offer, int StartDay, ManualPaymentMethod Method);
+
+/// <summary>The session pack a client buys and pays for at the studio on <paramref name="SoldDay"/>, with the sessions held on it.</summary>
+internal sealed record DemoPack(int SoldDay, IReadOnlyList<DemoSession> Sessions);
+
+/// <summary>A 1-on-1 session their coach held. Day 0 is earlier today, so This month always has one to count.</summary>
+internal sealed record DemoSession(int Day, string? Note = null);
 
 /// <summary>
 /// A program block. <paramref name="AssignedDay"/> defaults to two days before it starts.
@@ -843,7 +876,8 @@ internal sealed record DemoClient(
     TimeSpan? SubmitsTodayAgo = null,
     int? PausedDay = null,
     string? PauseReason = null,
-    int? AsksToRenewDay = null)
+    int? AsksToRenewDay = null,
+    DemoPack? Pack = null)
 {
     /// <summary>Letters only, so "Bou Khalil" and the sample cast's "K." both make a valid address.</summary>
     public string Email => $"{FirstName}.{new string([.. LastName.Where(char.IsLetter)])}@mail.example".ToLowerInvariant();

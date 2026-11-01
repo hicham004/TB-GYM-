@@ -2294,6 +2294,10 @@ from TB Gym only. Amended by critique B9: a link also keeps the video's own titl
 provider's public oEmbed page once on TB Gym's server when the link is added, cut to 200 characters, one
 line, with no control or direction-override marks; it is optional, so a provider that does not answer adds
 the link without one, and adding the same link again fills in a missing one, never replacing one it has.
+For the links from before B9, the one-time `video-titles` command asks the same page once for every link
+with no title, in every workspace, removed ones too (critique B17): a video that is gone, or a provider that
+cannot say just now, leaves the link exactly as it is, so a second run changes nothing and may fill in what a
+provider could not say the first time.
 The library's tile, and its card's menu, read "Watch on YouTube · opens in a new tab" under that title and
 open the watch page MED-016 builds (`rel="noopener noreferrer"`); the coach's media list carries that page.
 An uploaded video's tile, and its card's menu, read "Watch demo" and open the demo the builder's Watch demo

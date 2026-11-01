@@ -64,6 +64,12 @@ if (SendTestEmailCommand.IsInvocation(args))
     return await SendTestEmailCommand.RunAsync(app.Services, args, Console.Out);
 }
 
+// `video-titles` asks YouTube or Vimeo once for every video link with no title yet, then exits (critique B17).
+if (VideoTitlesCommand.IsInvocation(args))
+{
+    return await VideoTitlesCommand.RunAsync(app.Services, args, Console.Out);
+}
+
 // `demo-workspace` fills a development database with the Atlas Performance demo, then exits.
 if (DemoWorkspaceCommand.IsInvocation(args))
 {

@@ -29,8 +29,9 @@ public sealed class DemoWorkspaceTests
 {
     /// <summary>
     /// The full cast takes minutes, almost all of it logging sets through the real workout service.
-    /// These seven still reach every path: the hero's workout today, renewals and a renewal request,
-    /// a pause, an overdue and a waiting check-in, a plan ending soon and a client with no program.
+    /// These seven still reach every path: the hero's workout today and session pack, renewals and a
+    /// renewal request, a pause, an overdue and a waiting check-in, a plan ending soon and a client with
+    /// no program.
     /// </summary>
     private static readonly string[] CastForTheTest = ["maya", "jad", "sara", "elie", "karl", "rita", "lynn"];
 
@@ -152,6 +153,22 @@ public sealed class DemoWorkspaceTests
                 item.Status == EnrollmentStatus.Active && item.EndDateExclusive > today && item.EndDateExclusive <= today.AddDays(14)));
             Assert.AreEqual(1, await db.RenewalRequests.IgnoreQueryFilters().CountAsync(item => item.TenantId == tenant.Id));
 
+            // One 10-session pack, sold to Maya beside her coaching plan and paid in full, with a few sessions held,
+            // the last of them today, so This month always has one to count (critique B17).
+            var pack = enrollments.Single(item => item.IsSessionPack);
+            var maya = clients.Single(client => client.FirstName == "Maya");
+            Assert.AreEqual(
+                (maya.Id, 10, EnrollmentStatus.Active, today.AddDays(-20), today.AddDays(70)),
+                (pack.ClientProfileId, pack.SessionCountSnapshot, pack.Status, pack.StartDate, pack.EndDateExclusive));
+            Assert.AreEqual(2, enrollments.Count(item => item.ClientProfileId == maya.Id), "Her coaching plan and the pack.");
+            Assert.AreEqual(pack.PriceAmount, await db.PaymentRecords.IgnoreQueryFilters()
+                .Where(item => item.EnrollmentId == pack.Id).SumAsync(item => item.Amount));
+            var ledger = await db.SessionLedgerEntries.IgnoreQueryFilters().Where(item => item.EnrollmentId == pack.Id).ToListAsync();
+            Assert.AreEqual(6, SessionLedger.Balance(ledger));
+            CollectionAssert.AreEqual(
+                new[] { today.AddDays(-19), today.AddDays(-12), today.AddDays(-5), today },
+                ledger.Where(item => item.Kind == SessionEntryKind.Held).OrderBy(item => item.Day).Select(item => item.Day).ToArray());
+
             // Check-ins: most reviewed, some waiting, and one client behind.
             var responses = await db.CheckInResponses.IgnoreQueryFilters().Where(item => item.TenantId == tenant.Id).ToListAsync();
             Assert.IsGreaterThanOrEqualTo(1, responses.Count(item => item.Status == CheckInResponseStatus.Submitted));
@@ -243,21 +260,52 @@ public sealed class DemoWorkspaceTests
             (overdue.Client.ClientProfileId, overdue.Date, false, (Guid?)null),
             (ownersItem.Client.ClientProfileId, ownersItem.Date, ownersItem.CanMessage, ownersItem.SubjectId));
 
+        // The sessions screens have something to show (critique B17): Lea's row and Today, her month and the owner's
+        // line for her, and what Maya reads. Nineteen days back is this month or the last, whatever day this runs.
+        var lea = new DemoActor(people.LeaId, people.TenantId);
+        var leaClients = await requests.AsAsync<ICoachOverviewService, ClientOverviewView>(
+            lea, service => service.ListAsync(CancellationToken.None));
+        Assert.AreEqual(6, leaClients.Clients.Single(row => row.Client.FirstName == "Maya").SessionsLeft);
+        var leaToday = await requests.AsAsync<ICoachOverviewService, CoachTodayView>(
+            lea, service => service.GetTodayAsync(CancellationToken.None));
+        Assert.IsGreaterThanOrEqualTo(1, leaToday.Month.SessionsHeld ?? 0);
+        Assert.DoesNotContain(
+            CoachAttentionKind.SessionsRunningOut,
+            leaToday.Attention.Select(item => item.Kind).ToArray(),
+            "A pack with six left is not running out.");
+        var leaMonth = await requests.AsAsync<ICoachMonthService, CoachMonthReportView>(
+            lea, service => service.GetAsync(CancellationToken.None));
+        Assert.AreEqual(4, leaMonth.ThisMonth.SessionsHeld + leaMonth.LastMonth.SessionsHeld);
+        Assert.AreEqual(1, leaMonth.ThisMonth.PacksSold + leaMonth.LastMonth.PacksSold);
+        var ownerMonth = await requests.AsAsync<ICoachMonthService, CoachMonthReportView>(
+            new DemoActor(people.OwnerId, people.TenantId), service => service.GetAsync(CancellationToken.None));
+        var leaRow = ownerMonth.Coaches!.Single(row => row.Name == "Lea Khoury");
+        Assert.AreEqual(
+            (leaMonth.ThisMonth.SessionsHeld, leaMonth.LastMonth.SessionsHeld),
+            (leaRow.ThisMonth.SessionsHeld, leaRow.LastMonth.SessionsHeld));
+        var mayaPlans = await requests.AsAsync<ICommercialApplicationService, OwnPlansView?>(
+            new DemoActor(people.MayaId, people.TenantId), service => service.GetOwnPlansAsync(CancellationToken.None));
+        var mayaPack = mayaPlans!.Plans.Single(plan => plan.Sessions is not null);
+        Assert.AreEqual(
+            ("Personal Training", "10 sessions", 10, 6, 4),
+            (mayaPack.Name, mayaPack.OptionLabel, mayaPack.Sessions!.Count, mayaPack.Sessions.Left, mayaPack.Sessions.Sessions.Count));
+
         using var again = new StringWriter();
         Assert.AreEqual(2, await DemoWorkspaceCommand.RunAsync(
             factory.Services, DemoWorkspaceCommand.DefaultPassword, again, demo, CancellationToken.None));
         Assert.Contains("already in this database", again.ToString());
     }
 
-    private static async Task<(Guid TenantId, Guid OwnerId, Guid OmarId, Guid MayaId)> PeopleAsync(IServiceProvider services)
+    private static async Task<(Guid TenantId, Guid OwnerId, Guid OmarId, Guid LeaId, Guid MayaId)> PeopleAsync(IServiceProvider services)
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GymDbContext>();
         var tenantId = await db.Tenants.Where(item => item.Name == DemoWorkspaceCast.WorkspaceName).Select(item => item.Id).SingleAsync();
         var owner = await db.Users.SingleAsync(user => user.Email == DemoWorkspaceCast.Atlas.Owner.Email);
         var omar = await db.Users.SingleAsync(user => user.Email == "omar@atlas.example");
+        var lea = await db.Users.SingleAsync(user => user.Email == "lea@atlas.example");
         var heroEmail = DemoWorkspaceCast.Atlas.Clients.Single(client => client.IsHero).Email;
         var maya = await db.Users.SingleAsync(user => user.Email == heroEmail);
-        return (tenantId, owner.Id, omar.Id, maya.Id);
+        return (tenantId, owner.Id, omar.Id, lea.Id, maya.Id);
     }
 }
