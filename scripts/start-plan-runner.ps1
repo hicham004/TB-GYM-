@@ -5,7 +5,7 @@ Starts scripts/plan-runner.ps1 as the scheduled task "TB Gym plan runner", so it
 .DESCRIPTION
 Registers (or replaces) a scheduled task that runs the plan runner in its own PowerShell window
 under the current user with no time limit, then starts it. The runner builds the plan's Open rows
-(by default the critique's fixes, -Plan critique; -Plan audit and -Plan ui are finished) one fresh
+(by default the motion plan, -Plan motion; -Plan critique, -Plan audit and -Plan ui are finished) one fresh
 chat at a time until every row is Done or waits for the owner, pushing each row that ends Done
 (-NoPush keeps commits local) and waiting out a used-up weekly limit (-OnWeeklyLimit stop ends the
 run instead), the owner's choices of 2026-10-29. It stops early at the first gate, Optional row or
@@ -23,8 +23,11 @@ the lid open). Windows asks for nothing: the task runs as you, already signed in
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('audit', 'ui', 'critique')]
-    [string]$Plan = 'critique',
+    [ValidateSet('audit', 'ui', 'critique', 'motion')]
+    [string]$Plan = 'motion',
+    # The most hours one chat may run before the runner ends it (and the run stops); the motion plan's
+    # rows are sized for about an hour (the owner, 2026-11-01).
+    [double]$StepHours = 8,
     # A clock time such as 08:00: no step starts after its next occurrence (empty: run on; the owner, 2026-10-19).
     [string]$NoNewStepAfter = '',
     # The session id of the chat a limit stopped (runner.log names it); its work is still in the tree.
@@ -84,9 +87,9 @@ if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Aut
 if (Test-Path $stopFile) { Remove-Item $stopFile -Force }
 
 Write-Host '--- what the runner would do now ---'
-& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter -ResumeSession $ResumeSession -OnWeeklyLimit $OnWeeklyLimit -NoPush:$NoPush
+& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter -ResumeSession $ResumeSession -OnWeeklyLimit $OnWeeklyLimit -StepHours $StepHours -NoPush:$NoPush
 
-$arguments = '-NoExit -ExecutionPolicy Bypass -File "{0}" -Plan {1} -WaitForIdle -MaxSteps {2} -OnWeeklyLimit {3}' -f $runner, $Plan, $MaxSteps, $OnWeeklyLimit
+$arguments = '-NoExit -ExecutionPolicy Bypass -File "{0}" -Plan {1} -WaitForIdle -MaxSteps {2} -OnWeeklyLimit {3} -StepHours {4}' -f $runner, $Plan, $MaxSteps, $OnWeeklyLimit, $StepHours
 if ($NoPush) { $arguments += ' -NoPush' }
 if ($NoNewStepAfter) { $arguments += ' -NoNewStepAfter {0}' -f $NoNewStepAfter }
 if ($ResumeSession) { $arguments += ' -ResumeSession {0}' -f $ResumeSession }

@@ -3,7 +3,9 @@
 Runs a plan's status table unattended: one fresh Claude chat per row.
 
 .DESCRIPTION
--Plan critique (the default since 2026-10-29) runs the rows in section 0 of
+-Plan motion (the default since 2026-11-02) runs the rows in section 0 of
+docs/MOTION-PLAN-2026-11.md, the motion and play the owner asked for on 2026-11-01 (its W rows
+run on Fable, the owner's word that night); -Plan critique runs the rows in section 0 of
 docs/CRITIQUE-FIXES-2026-10.md, the fixes from Toufic's critique (2026-10-27); -Plan audit runs
 the fix batches in section 0 of docs/FULL-AUDIT-2026-10.md, all Done on 2026-10-23; -Plan ui
 runs the section 0 table of docs/UI-REDESIGN-PLAN.md, which the owner marked complete on
@@ -46,8 +48,8 @@ with its context, instead of refusing to start on the changed tree.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('audit', 'ui', 'critique')]
-    [string]$Plan = 'critique',
+    [ValidateSet('audit', 'ui', 'critique', 'motion')]
+    [string]$Plan = 'motion',
     # A clock time such as 08:00: no step starts after its next occurrence (empty: no limit).
     [string]$NoNewStepAfter = '',
     # The session id of a chat a limit stopped: the first step resumes it, its changes still in the tree.
@@ -57,7 +59,7 @@ param(
     [int]$IdleMinutes = 20,
     [int]$MaxLimitWaits = 12,
     # Row id pattern (-like) to model; a row matching none runs on $model below.
-    [hashtable]$RowModels = @{ 'R6.2*' = 'claude-fable-5-1' },
+    [hashtable]$RowModels = @{ 'R6.2*' = 'claude-fable-5-1'; 'W*' = 'claude-fable-5-1' },
     # After a weekly limit the chat carries on with this model, and so do later rows until that
     # limit resets (the owner, 2026-10-12). An empty string stops the runner instead.
     [string]$FallbackModel = 'claude-opus-5-5',
@@ -76,7 +78,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$planFiles = @{ audit = 'docs\FULL-AUDIT-2026-10.md'; ui = 'docs\UI-REDESIGN-PLAN.md'; critique = 'docs\CRITIQUE-FIXES-2026-10.md' }
+$planFiles = @{ audit = 'docs\FULL-AUDIT-2026-10.md'; ui = 'docs\UI-REDESIGN-PLAN.md'; critique = 'docs\CRITIQUE-FIXES-2026-10.md'; motion = 'docs\MOTION-PLAN-2026-11.md' }
 $planPath = Join-Path $repositoryRoot $planFiles[$Plan]
 $logDir = Join-Path $repositoryRoot 'artifacts\plan-runner'
 $stopFile = Join-Path $logDir 'STOP'
@@ -187,6 +189,58 @@ The owner's decisions for this run (2026-10-27, and 2026-10-29 for running unatt
 - A row too big to finish well in one chat: split it into parts (B5a1, B5a2), each with
   its scope, build and commit the first, and leave the others Open for the next chat.
 - Where a row changes a rule, update DOMAIN-RULES, the ADR or ARCHITECTURE in a few
+  lines, as AGENTS.md asks.
+'@
+    motion = @'
+Read docs/MOTION-PLAN-2026-11.md and do the next step: the first row of its section 0
+status table that is not Done, passing over rows marked "Open, not blocking". Build it as
+section 2 describes that row, under the rules of section 1.
+
+This chat runs unattended. scripts/plan-runner.ps1 started it, and nobody will see or
+answer anything until it has finished. The runner expects the next step to be <<ROW>>.
+If section 0 gives a different row, change nothing and say why.
+
+The clock (the owner's deadline is a demo this afternoon):
+- The row is sized for about an hour. At 75 minutes stop adding: finish the checks on
+  what is complete, leave the rest out with a line in section 3, and commit. The runner
+  ends this chat at 1.75 hours and the whole run stops if you have not committed by then.
+- A moment is complete and smooth, or absent. Never commit half-built motion. If nothing
+  is complete in time, revert only your own changes, set the row to "Open, not blocking:
+  ran out of time at HH:MM, <what was tried>", commit only the plan file, and end with
+  RUNNER-RESULT: done so the run carries on.
+- Read the clock before any long command. Start the API, ng serve and any command over a
+  minute with run_in_background and a timeout.
+
+Traps on this laptop (your memory notes have more):
+- The live pass and the videos run against a fresh demo in a throwaway database of your
+  own (ConnectionStrings__Database pointed at it), never against the owner's own API
+  (port 5134), web (port 4200) or the tbgym and tbgym_demo databases. Never drop a
+  database you did not create; name yours in your report.
+- The owner's bin/Debug may be locked: build and run Release or a scratch output of your
+  own for the API you start.
+- GSAP's clock is Date.now, so a spec that freezes the clock freezes every tween; the
+  mocked Playwright config runs with reduced motion by default after W1, and a motion
+  spec opts in with emulateMedia.
+- The first download is 510.74 kB against a 520 kB error budget: measure it before and
+  after. No GSAP in the app (the Web Animations API carries every moment); core/motion is
+  tiny and imports nothing but Angular.
+
+The owner's decisions for this run (2026-11-01, "go"):
+- The owner asked for animation and visible interactive things so that a friend trying
+  the app tomorrow is amazed, and approved building the rows of section 0 in order
+  without a preview round: the owner judges the videos and screenshots afterwards. The
+  row's third column is the owner's word; an item it leaves out is not built.
+- Never stop the run for a decision. A technical question is yours (AGENTS.md). A product
+  choice the row and the docs do not settle (a duration, an easing, a place, the words):
+  build the way closest to the prototype in docs/design/prototype/tb-gym-prototype.html
+  and the owner's earlier choices, and add a line to section 3, "Waiting for the owner"
+  (the row, the question, what you built, the other way, your recommendation). A new
+  money rule, legal wording, points, levels, ranks or work outside the row: leave that
+  item out, add it to section 3 with your recommendation, and build the rest.
+- Only a row that changes server code runs the full backend suite (scripts/TestPostgres.ps1
+  with a container name of your own). Web rows run the web checks, the mocked specs of the
+  screens they changed, and the live pass with videos, as section 1 says.
+- Where a row changes a rule or a motion layer, update docs/UI-REDESIGN-PLAN.md in a few
   lines, as AGENTS.md asks.
 '@
 }
