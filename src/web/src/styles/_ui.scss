@@ -731,3 +731,54 @@
   justify-content: flex-end;
   margin-block-start: var(--space-24);
 }
+
+// ----------------------------------------------------------------------------------------------
+// Motion: the everyday layer (docs/MOTION-PLAN-2026-11.md W1; UI plan §3, rule 9 as loosened)
+// ----------------------------------------------------------------------------------------------
+
+// A press dips the kit's buttons and the tappable chips (a button, a link or a filter's label; never
+// a static chip, an input, a row link or a list row: iOS sets :active at the start of every scroll,
+// so a list would flicker, and 0.97 pulls a wide row's edges in by 20 px). A page arriving inside the
+// client or coach frame fades in: opacity only, since a routed host is inline, and `backwards`
+// rather than `both`, or a finished fade would stay in effect on every page host. The workout player
+// (`.full-screen` on the same <main>) owns its own entrance. The keyframes sit inside the same block
+// as the rule that uses them. `<html data-tb-motion="off">` (core/motion, `?motion=off`) rests both.
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-tb-motion='off']) {
+    .tb-button,
+    .tb-icon-button,
+    :is(button, a, label).chip {
+      transition: transform var(--tb-duration-fast) var(--tb-ease);
+    }
+
+    .tb-button:active:not(:disabled, [aria-disabled='true']),
+    .tb-icon-button:active:not(:disabled, [aria-disabled='true']),
+    :is(button, a, label).chip:active:not(:disabled, [aria-disabled='true']) {
+      transform: scale(0.97);
+    }
+
+    .client-main:not(.full-screen) > router-outlet + *,
+    .coach-main > router-outlet + * {
+      animation: tb-page-in var(--tb-duration) var(--tb-ease) backwards;
+    }
+  }
+
+  @keyframes tb-page-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+// Later rows need these where component styles cannot reach: a view transition's overlay must not
+// swallow taps (the theme switch already does this for its own), and a ring's progress animates
+// only as a registered custom property.
+::view-transition {
+  pointer-events: none;
+}
+
+@property --progress {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}

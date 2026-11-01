@@ -1281,7 +1281,9 @@ of TB Gym today is an empty admin panel.
 8. **It must feel instant.** Skeletons instead of spinners, optimistic updates, live data with no
    "Refresh" buttons, and a native date picker never shown raw.
 9. **Delight only at real moments:** a set done, a personal record, a week completed, a program
-   finished. Nothing on ordinary taps.
+   finished. Nothing on ordinary taps. Small, quick feedback may answer an ordinary tap (a press, a
+   tick, a ring, a rolling number; under 300 ms, never blocking, never repeating on its own); a
+   celebration stays for a real moment (the owner, 2026-11-01).
 10. **Empty states invite.** Every empty screen says what will appear there and offers the one
     action that fills it.
 
@@ -1348,6 +1350,12 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     - onboarding.
   - *Website:* GSAP ScrollTrigger for the homepage story, on the homepage only.
   - Everything respects reduced motion, and no animation blocks input.
+  - *Built in docs/MOTION-PLAN-2026-11.md (W1 to W14, from 2026-11-02):* the Web Animations API
+    carries the app's everyday layer and its signature moments through `core/motion` (the
+    reduced-motion read, the `?motion=off` switch and `tb-motion-off` per row, `countUp`, `ring`,
+    `drawLine`, `rise`, `pop`), with no GSAP in the app; GSAP stays on the homepage. The everyday
+    press and page fade live in `_ui.scss`; Playwright runs with reduced motion by default and a
+    motion spec opts in. Route view transitions wait for Angular's feature to leave developer preview.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

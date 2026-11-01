@@ -34,5 +34,7 @@ export default defineConfig({
     deviceScaleFactor: 1,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    // Reduced motion by default, as in playwright.config.ts (motion plan W1); a motion spec opts in.
+    contextOptions: { reducedMotion: 'reduce' },
   },
 });

@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { provideHttpClient, withInterceptors, withXsrfConfiguration } from '@angular/common/http';
 import {
   ApplicationConfig,
@@ -16,6 +17,7 @@ import { provideRouter, withInMemoryScrolling, withNavigationErrorHandler } from
 import { routes } from './app.routes';
 import { SessionExpiry } from './core/auth/session-expiry';
 import { sessionInterceptor } from './core/auth/session.interceptor';
+import { readMotionSwitch } from './core/motion/motion-switch';
 import { InstallPrompt } from './core/pwa/install-prompt';
 import { NavigationFailure, reportNavigationFailure } from './core/routing/navigation-failure';
 import { tenantInterceptor } from './core/tenancy/tenant.interceptor';
@@ -40,10 +42,13 @@ export const appConfig: ApplicationConfig = {
     // already there; the screens that offer the install load later. The navigation failure toast is
     // fetched ahead once someone signs in, so it can still be shown when the connection is gone. The
     // session watch must see the tab hide to know, on its return, that it was away long (WEB-1).
+    // The motion switch (`?motion=off`, core/motion) is read from the first address, before any page
+    // could move; the function alone, so the moves stay out of the first download (W1).
     provideAppInitializer(() => {
       inject(InstallPrompt);
       inject(NavigationFailure);
       inject(SessionExpiry);
+      readMotionSwitch(inject(DOCUMENT));
     }),
     // A new page starts at its top and Back returns to where the reader was (A11Y-02). Anchor
     // scrolling keeps in-page links such as the homepage's #tour working: the browser reports them

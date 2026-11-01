@@ -37,6 +37,44 @@ module.exports = defineConfig([
     },
   },
   {
+    // GSAP stays on the homepage (docs/MOTION-PLAN-2026-11.md, W1): the app's moments run on the Web
+    // Animations API through core/motion, so nothing downloads at a moment.
+    files: ['**/*.ts'],
+    ignores: ['src/app/features/home/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['gsap', 'gsap/*'],
+              message: 'GSAP stays on the homepage; the app moves through core/motion (W1).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // core/motion imports nothing but Angular (and its own files), so ui/** can import it without
+    // pulling anything else in.
+    files: ['src/app/core/motion/**/*.ts'],
+    ignores: ['**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(?!@angular/|\\./)',
+              message: 'core/motion imports nothing but Angular (W1).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.html'],
     extends: [angular.configs.templateRecommended, angular.configs.templateAccessibility],
     rules: {},

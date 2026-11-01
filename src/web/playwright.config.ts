@@ -58,6 +58,10 @@ export default defineConfig({
     timezoneId: 'UTC',
     deviceScaleFactor: 1,
     trace: 'retain-on-failure',
+    // Reduced motion by default (motion plan W1): 18 specs freeze the clock, and a moment that
+    // waits on it would never end; the pixel snapshots and axe meet the settled screen. A spec about
+    // motion opts back in with `page.emulateMedia({ reducedMotion: 'no-preference' })`.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   projects: [
     {
