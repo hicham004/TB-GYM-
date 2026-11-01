@@ -75,6 +75,12 @@ public interface ITrainingApplicationService
         UpdateMesocycleVisibilityRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>"Can see finished programs" (TRN-031): the coach's choice for one client, on by default.</summary>
+    Task<TrainingCommandResult> SetFinishedProgramsVisibilityAsync(
+        Guid clientProfileId,
+        SetFinishedProgramsVisibilityRequest request,
+        CancellationToken cancellationToken);
+
     Task<TrainingCommandResult> SetWeekPublishedAsync(
         Guid mesocycleId,
         Guid weekId,
@@ -741,6 +747,12 @@ public sealed record SetPrescriptionView(
 
 public sealed record UpdateMesocycleVisibilityRequest(bool RevealAllWeeks, uint Version);
 
+/// <summary><c>Version</c> is the one the coach's program read gave: 0 until a coach has first chosen.</summary>
+public sealed record SetFinishedProgramsVisibilityRequest(bool CanSeeFinishedPrograms, uint Version);
+
+/// <summary>"Can see finished programs" for one client (TRN-031), and the version a change sends back.</summary>
+public sealed record FinishedProgramsVisibilityView(bool CanSeeFinishedPrograms, uint Version);
+
 public sealed record SetWeekPublishedRequest(bool IsPublished, uint Version);
 
 public sealed record RescheduleMesocycleRequest(DateOnly StartDate, uint Version);
@@ -1027,9 +1039,10 @@ public sealed record ClientPersonalRecordsResult(
 
 /// <summary>
 /// The client's Training page (R2.5b): the program it describes (the one covering today, else the
-/// next, else the last one finished) and, separately, the start of a later program. With training
-/// closed today (<c>IsAllowed</c> false) <c>Program</c> is empty unless the coach shows a program before
-/// its first day (TRN-023). <c>NextProgram</c> is a program shown early that <c>Program</c> is not.
+/// next, else the last one finished while the coach lets them see it, TRN-031) and, separately, the
+/// start of a later program. With training closed today (<c>IsAllowed</c> false) <c>Program</c> is empty
+/// unless the coach shows a program before its first day (TRN-023). <c>NextProgram</c> is a program shown
+/// early that <c>Program</c> is not.
 /// </summary>
 public sealed record ClientTrainingProgramView(
     bool IsAllowed,
@@ -1089,7 +1102,7 @@ public sealed record ClientProgramSessionView(
 /// <summary>
 /// A client's programs as their coach reads them (R3.4a, TRN-022): the newest blocks first, each with
 /// every week, shared or not, and the state of each session. A closed feature carries its reason and
-/// no blocks, never an empty list.
+/// no blocks, never an empty list, and no <c>FinishedPrograms</c>: that choice opens with the read (TRN-031).
 /// </summary>
 public sealed record CoachClientProgramView(
     bool IsAllowed,
@@ -1097,7 +1110,8 @@ public sealed record CoachClientProgramView(
     DateOnly LocalDate,
     IReadOnlyList<CoachProgramBlockView> Blocks,
     string SessionStateRuleKey,
-    int SessionStateRuleVersion);
+    int SessionStateRuleVersion,
+    FinishedProgramsVisibilityView? FinishedPrograms);
 
 /// <summary>
 /// Counts cover every session of the block, shared or not. <c>CurrentWeekNumber</c> is set only while
@@ -1307,7 +1321,8 @@ public sealed record TrainingCommandResult(
     string? Code = null,
     string? Message = null,
     ProgramDraftSaveView? Draft = null,
-    TrainingMaxesView? TrainingMaxes = null);
+    TrainingMaxesView? TrainingMaxes = null,
+    FinishedProgramsVisibilityView? FinishedPrograms = null);
 
 public enum TrainingCommandStatus
 {

@@ -561,6 +561,168 @@ describe('a client’s Training', () => {
     });
   });
 
+  describe('can see finished programs (critique B19)', () => {
+    const LABEL = 'Can see finished programs';
+
+    function finishedBox(host: HTMLElement): HTMLInputElement | null {
+      const label = all(host, 'label').find((item) => textOf(item) === LABEL);
+      return label ? (label.parentElement!.querySelector('input') as HTMLInputElement) : null;
+    }
+
+    it('starts ticked and says what turning it off does, naming the client', async () => {
+      const { host } = await render();
+      const box = finishedBox(host)!;
+
+      expect(box.checked).toBe(true);
+      expect(box.disabled).toBe(false);
+      const help = host.querySelector(`#${box.getAttribute('aria-describedby')}`);
+      expect(textOf(help)).toBe(
+        'Turn this off and Maya no longer sees finished programs on Training. Their running and next programs, logged workouts, records and progress stay.',
+      );
+    });
+
+    it('shows the choice the coach made, with a finished program in front of them too', async () => {
+      const { host } = await render({
+        program: coachProgram([completedBlock()], {
+          finishedPrograms: { canSeeFinishedPrograms: false, version: 12 },
+        }),
+      });
+
+      expect(finishedBox(host)!.checked).toBe(false);
+    });
+
+    it('is offered only while the coach can read the client’s programs', async () => {
+      const closed = await render({ program: closedProgram('Paused') });
+      expect(finishedBox(closed.host)).toBeNull();
+      closed.harness.fixture.destroy();
+      TestBed.resetTestingModule();
+
+      const none = await render({ program: coachProgram([]) });
+      expect(finishedBox(none.host)).toBeNull();
+    });
+
+    it('saves with the read’s version, says so and reads the program again', async () => {
+      const setFinishedPrograms = vi.fn(() => of({ canSeeFinishedPrograms: false, version: 13 }));
+      let reads = 0;
+      const { harness, host, csrf, getProgram, context } = await render({
+        programApi: { setFinishedPrograms },
+        getProgram: () =>
+          of(
+            coachProgram([runningBlock()], {
+              finishedPrograms:
+                ++reads === 1
+                  ? { canSeeFinishedPrograms: true, version: 12 }
+                  : { canSeeFinishedPrograms: false, version: 13 },
+            }),
+          ),
+      });
+      const box = finishedBox(host)!;
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+
+      expect(csrf.refresh).toHaveBeenCalled();
+      expect(setFinishedPrograms).toHaveBeenCalledWith('client-1', {
+        canSeeFinishedPrograms: false,
+        version: 12,
+      });
+      expect(getProgram).toHaveBeenCalledTimes(2);
+      expect(context.notice()).toBe('Maya no longer sees finished programs.');
+      expect(finishedBox(host)!.checked).toBe(false);
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+
+      expect(setFinishedPrograms).toHaveBeenLastCalledWith('client-1', {
+        canSeeFinishedPrograms: true,
+        version: 13,
+      });
+      expect(context.notice()).toBe('Maya can see finished programs.');
+    });
+
+    it('puts the box back and says why under it when the choice was changed elsewhere', async () => {
+      const conflict = new HttpErrorResponse({
+        status: 409,
+        error: {
+          code: 'finished_programs_changed',
+          message:
+            'This was changed somewhere else since you opened it. It has been reloaded: check it, then try again.',
+        },
+      });
+      const { harness, host, context, getProgram } = await render({
+        programApi: { setFinishedPrograms: vi.fn(() => throwError(() => conflict)) },
+      });
+      const box = finishedBox(host)!;
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+
+      expect(box.checked).toBe(true);
+      expect(textOf(host.querySelector('.finished-problem[role="alert"]'))).toBe(
+        'This was changed somewhere else since you opened it. It has been reloaded: check it, then try again.',
+      );
+      expect(context.error()).toBeNull();
+      expect(context.notice()).toBeNull();
+      expect(getProgram).toHaveBeenCalledTimes(2);
+    });
+
+    it('says what to do next when the save fails with no reason from the server', async () => {
+      const setFinishedPrograms = vi
+        .fn()
+        .mockImplementationOnce(() => throwError(() => new Error('offline')))
+        .mockImplementation(() => of({ canSeeFinishedPrograms: false, version: 1 }));
+      const { harness, host, context } = await render({ programApi: { setFinishedPrograms } });
+      const box = finishedBox(host)!;
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+
+      expect(box.checked).toBe(true);
+      expect(textOf(host.querySelector('.finished-problem'))).toBe(
+        'The setting could not be changed. Try again.',
+      );
+
+      // The next try starts clean, and a saved change leaves nothing behind.
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      await settle(harness.fixture);
+
+      expect(host.querySelector('.finished-problem')).toBeNull();
+      expect(context.notice()).toBe('Maya no longer sees finished programs.');
+    });
+
+    it('holds one change at a time and stays enabled, so keyboard focus stays on it', async () => {
+      const answer = new Subject<{ canSeeFinishedPrograms: boolean; version: number }>();
+      const setFinishedPrograms = vi.fn(() => answer);
+      const { harness, host } = await render({ programApi: { setFinishedPrograms } });
+      const box = finishedBox(host)!;
+
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      await new Promise((resolve) => setTimeout(resolve));
+      harness.fixture.detectChanges();
+
+      expect(box.disabled).toBe(false);
+      expect(all(host, '.share input')[0].hasAttribute('disabled')).toBe(true);
+
+      // A second press while the first is on its way changes nothing and asks for nothing.
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(setFinishedPrograms).toHaveBeenCalledTimes(1);
+
+      answer.next({ canSeeFinishedPrograms: false, version: 1 });
+      answer.complete();
+      await settle(harness.fixture);
+
+      expect(setFinishedPrograms).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('the Actions menu', () => {
     it('lists what a coach can do about a running program, and says why one is not available', async () => {
       const { harness, host } = await render();

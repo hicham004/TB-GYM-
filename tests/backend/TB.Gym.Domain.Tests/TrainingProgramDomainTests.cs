@@ -15,6 +15,21 @@ public sealed class TrainingProgramDomainTests
     private static readonly Guid Bench = Guid.Parse("30000000-0000-0000-0000-000000000102");
 
     [TestMethod]
+    public void AChoiceAboutFinishedProgramsBelongsToOneClientInOneWorkspaceAndChanges()
+    {
+        var tenant = Guid.NewGuid();
+        var client = Guid.NewGuid();
+        var choice = ClientProgramVisibility.Choose(tenant, client, false);
+        Assert.AreEqual((tenant, client, false), (choice.TenantId, choice.ClientProfileId, choice.CanSeeFinishedPrograms));
+
+        choice.SetCanSeeFinishedPrograms(true);
+        Assert.IsTrue(choice.CanSeeFinishedPrograms);
+
+        Assert.ThrowsExactly<ArgumentException>(() => ClientProgramVisibility.Choose(tenant, Guid.Empty, true));
+        Assert.ThrowsExactly<ArgumentException>(() => ClientProgramVisibility.Choose(Guid.Empty, client, true));
+    }
+
+    [TestMethod]
     public void ANeverStartedSessionIsJudgedByItsDateAgainstTheWorkspaceToday()
     {
         Assert.AreEqual(ClientSessionState.Missed,

@@ -401,6 +401,7 @@ export function programView(
     ],
     sessionStateRuleKey: 'ClientSessionState',
     sessionStateRuleVersion: 1,
+    finishedPrograms: { canSeeFinishedPrograms: true, version: 0 },
     ...overrides,
   };
 }

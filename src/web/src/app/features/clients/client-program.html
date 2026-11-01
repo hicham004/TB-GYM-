@@ -250,6 +250,27 @@
               </div>
             </section>
           }
+
+          <!-- About the client rather than the program in front, so it stays when that one is over (TRN-031). -->
+          @if (finishedPrograms(); as finished) {
+            <div class="panel panel-body">
+              <app-checkbox label="Can see finished programs" i18n-label>
+                <input
+                  type="checkbox"
+                  appControl
+                  aria-describedby="finished-programs-help"
+                  [checked]="finished.canSeeFinishedPrograms"
+                  (change)="toggleFinishedPrograms($any($event.target))"
+                />
+              </app-checkbox>
+              <p id="finished-programs-help" class="finished-help" dir="auto">
+                {{ finishedProgramsHelp() }}
+              </p>
+              @if (finishedProblem(); as problem) {
+                <p class="finished-help finished-problem" role="alert" dir="auto">{{ problem }}</p>
+              }
+            </div>
+          }
         } @else {
           <section class="panel">
             <app-empty-state [heading]="emptyHeading" [description]="emptyDescription()">

@@ -468,6 +468,20 @@ describe('TrainingProgram', () => {
     expect(host.querySelector('a[href="/messages"]')).not.toBeNull();
   });
 
+  it('keeps a client’s finished workouts when the coach keeps their finished programs back', async () => {
+    // The server sends no program (TRN-031), so the page says nothing about what it left out.
+    const { host, read } = await render({
+      getMyTrainingProgram: vi.fn(() => of(programView({ program: null }))),
+    });
+
+    expect(read()).toContain('Nothing assigned yet');
+    expect(read()).not.toContain('Program finished');
+    expect(host.querySelector('.hero')).toBeNull();
+    const history = host.querySelector('section[aria-labelledby="history-heading"]');
+    expect(history).not.toBeNull();
+    expect(history!.querySelectorAll('.history-item').length).toBeGreaterThan(0);
+  });
+
   it('invites a client with nothing assigned to message their coach, when they can', async () => {
     const view = await render({
       getMyTrainingProgram: vi.fn(() => of(programView({ program: null }))),

@@ -121,6 +121,27 @@ for (const [width, height] of [
   });
 }
 
+// Critique B19: the server sends no finished program, so the page is the one with nothing assigned.
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`with finished programs kept back the client keeps their workouts at ${width}px`, async ({
+    page,
+  }) => {
+    await openTraining(page, width, height, programView({ program: null }));
+
+    await expect(page.getByRole('heading', { name: 'Nothing assigned yet' })).toBeVisible();
+    await expect(page.locator('.hero')).toHaveCount(0);
+    await expect(page.getByText('Program finished')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Finished workouts' })).toBeVisible();
+    await expect(page.locator('.history-item').first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/b19-kept-back-${width}.png` });
+  });
+}
+
 test('a next program with a very long name wraps instead of pushing the phone page sideways', async ({
   page,
 }) => {

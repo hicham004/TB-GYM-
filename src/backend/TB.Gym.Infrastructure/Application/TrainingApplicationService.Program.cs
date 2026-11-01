@@ -47,9 +47,7 @@ internal sealed partial class TrainingApplicationService
         // With training closed today only a program shown early is read (TRN-023).
         var described = !access.IsAllowed
             ? early.FirstOrDefault()
-            : current ?? next ?? await dbContext.TrainingMesocycles.AsNoTracking()
-                .Where(item => item.ClientProfileId == client.Id)
-                .Where(FinishedBy(today))
+            : current ?? next ?? await FinishedProgramsShownTo(client.Id, today)
                 .OrderByDescending(item => item.StartDate).ThenByDescending(item => item.Id)
                 .Select(item => new ProgramBlockRow(item.Id, item.Name, item.Kind, item.StartDate,
                     item.EndDateExclusive, item.TimeZoneId, item.RevealAllWeeks))
@@ -165,7 +163,7 @@ internal sealed partial class TrainingApplicationService
         if (!access.IsAllowed)
         {
             return new(false, access.Reason.ToString(), today, [],
-                ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);
+                ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version, null);
         }
 
         var blocks = await dbContext.TrainingMesocycles.AsNoTracking()
@@ -276,7 +274,8 @@ internal sealed partial class TrainingApplicationService
                 shownEarly.Contains(block.Id));
         }).ToArray();
         return new(true, access.Reason.ToString(), today, views,
-            ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);
+            ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version,
+            await ReadFinishedProgramsVisibilityAsync(clientProfileId, cancellationToken));
     }
 
     public async Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(

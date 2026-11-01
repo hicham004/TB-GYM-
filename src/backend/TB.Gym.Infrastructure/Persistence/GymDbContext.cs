@@ -189,6 +189,8 @@ public sealed partial class GymDbContext(
 
     public DbSet<TrainingMesocycle> TrainingMesocycles => Set<TrainingMesocycle>();
 
+    public DbSet<ClientProgramVisibility> ClientProgramVisibilities => Set<ClientProgramVisibility>();
+
     public DbSet<MesocycleLifecycleEvent> MesocycleLifecycleEvents => Set<MesocycleLifecycleEvent>();
 
     public DbSet<MesocycleWeek> MesocycleWeeks => Set<MesocycleWeek>();

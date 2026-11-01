@@ -207,11 +207,12 @@ export function coachProgram(
     blocks: [...blocks],
     sessionStateRuleKey: 'WorkoutThenScheduledDate',
     sessionStateRuleVersion: 1,
+    finishedPrograms: { canSeeFinishedPrograms: true, version: 0 },
     ...overrides,
   };
 }
 
 /** The read for a client whose training is closed: the reason, and no blocks. */
 export function closedProgram(accessReason: string): CoachClientProgramView {
-  return coachProgram([], { isAllowed: false, accessReason });
+  return coachProgram([], { isAllowed: false, accessReason, finishedPrograms: null });
 }

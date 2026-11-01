@@ -23,9 +23,8 @@ internal sealed partial class TrainingApplicationService
         }
 
         var today = await GetTenantTodayAsync(cancellationToken);
-        var program = await dbContext.TrainingMesocycles.AsNoTracking()
-            .Where(item => item.Id == programId && item.ClientProfileId == client.Id)
-            .Where(FinishedBy(today))
+        var program = await FinishedProgramsShownTo(client.Id, today)
+            .Where(item => item.Id == programId)
             .Select(item => new FinishedProgramRow(item.Id, item.ClientProfileId, item.Name, item.StartDate,
                 item.EndDateExclusive))
             .SingleOrDefaultAsync(cancellationToken);

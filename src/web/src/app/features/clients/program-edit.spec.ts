@@ -48,6 +48,7 @@ const READ: CoachClientProgramView = {
   blocks: [],
   sessionStateRuleKey: 'ClientSessionState',
   sessionStateRuleVersion: 1,
+  finishedPrograms: { canSeeFinishedPrograms: true, version: 0 },
 };
 
 function preview(overrides: Partial<ProgramEditPreviewView> = {}): ProgramEditPreviewView {

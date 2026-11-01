@@ -200,6 +200,15 @@ export class ClientProgram {
     () => this.others().coming.length + this.others().earlier.length > 0,
   );
 
+  /** "Can see finished programs" (TRN-031); the read leaves it out while training is closed. */
+  protected readonly finishedPrograms = computed(() => this.read()?.finishedPrograms ?? null);
+  /** Why the last change was refused, said under the box: the page's banner is far above it. */
+  protected readonly finishedProblem = signal<string | null>(null);
+  protected readonly finishedProgramsHelp = computed(
+    () =>
+      $localize`Turn this off and ${this.firstName()}:name: no longer sees finished programs on Training. Their running and next programs, logged workouts, records and progress stay.`,
+  );
+
   /** The week a phone shows; every week shows on a wide screen. */
   protected readonly shownWeek = computed(() => this.pickedWeek() ?? this.card()?.openWeek ?? 1);
 
@@ -398,6 +407,7 @@ export class ClientProgram {
     this.picked.set(id);
     this.pickedWeek.set(null);
     this.focusedKey = null;
+    this.finishedProblem.set(null);
     this.context.clearMessages();
   }
 
@@ -604,6 +614,48 @@ export class ClientProgram {
     }
   }
 
+  // ---------- finished programs ----------
+
+  /**
+   * The server keeps them from the client's Training page (TRN-031); this only says which way. The box
+   * is never disabled, so keyboard focus stays on it through the save: a press meanwhile is put back.
+   */
+  protected async toggleFinishedPrograms(input: HTMLInputElement): Promise<void> {
+    const finished = this.finishedPrograms();
+    if (!finished || this.sharing()) {
+      input.checked = finished?.canSeeFinishedPrograms ?? true;
+      return;
+    }
+    const canSee = input.checked;
+    const name = this.firstName();
+    this.sharing.set(true);
+    this.finishedProblem.set(null);
+    this.context.clearMessages();
+    try {
+      await this.csrf.refresh();
+      await firstValueFrom(
+        this.programApi.setFinishedPrograms(this.context.clientId(), {
+          canSeeFinishedPrograms: canSee,
+          version: finished.version,
+        }),
+      );
+      this.context.notice.set(
+        canSee
+          ? $localize`${name}:name: can see finished programs.`
+          : $localize`${name}:name: no longer sees finished programs.`,
+      );
+    } catch (error) {
+      // The box was ticked by hand; put it back to what the server still holds.
+      input.checked = !canSee;
+      this.finishedProblem.set(
+        programWriteError(error, $localize`The setting could not be changed. Try again.`, name),
+      );
+    } finally {
+      await this.load();
+      this.sharing.set(false);
+    }
+  }
+
   // ---------- the timeline ----------
 
   /** Scrolls the week strip, not the page, so the current week sits in the middle of the strip. */
@@ -625,6 +677,7 @@ export class ClientProgram {
     this.picked.set(null);
     this.pickedWeek.set(null);
     this.sharing.set(false);
+    this.finishedProblem.set(null);
     this.active.set(null);
   }
 }

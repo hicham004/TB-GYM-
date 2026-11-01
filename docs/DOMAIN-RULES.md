@@ -808,8 +808,23 @@ finished. Its facts (`GET /api/training/me/programs/{programId}/summary`) are it
 weeks, the workouts finished in it, and the records those workouts set, each counted as the finish
 summary and history showed it, so a record beaten twice counts twice. The finish summary of the workout
 that completes a program carries the same facts. Another client's or workspace's program, a cancelled
-one and one still running answer 404; a closed plan answers with its reason and no facts; a former
-client is refused at the workspace (ADR 0027).
+one, one still running and one the coach keeps back (TRN-031) answer 404; a closed plan answers with its
+reason and no facts; a former client is refused at the workspace (ADR 0027).
+
+**TRN-031** Can see finished programs (critique B19, the partner's note of 2026-10-31). A coach protects
+what they wrote by deciding whether a client keeps seeing the programs that finished: one choice per
+client on the Training tab, on by default (`ClientProgramVisibility`, whose absence is the default, so
+nothing was backfilled). Off, the server keeps finished programs (TRN-030) from the client's Training page
+alone: its read sends no program, so the page reads "Nothing assigned yet", and the share card's read
+answers 404. A cancelled program has never reached that page, so on and off read alike. Nothing else
+moves: a running or next program and a program shown early (TRN-023) stay, the client's own logged workouts
+keep their program's name, records and progress read as before, the workout that finishes a program
+still says so in its finish summary, and Today, the week strip and every coach screen do not change. The
+client is told nothing, as their wording never blames the coach (TRN-018). The choice opens and closes
+with the coach's read (TRN-023): closed, the read leaves it out and a change answers 403. A change carries
+the version that read gave, 0 before the first choice, and an older one answers 409
+`finished_programs_changed`. It belongs to the client's profile, so a returning client starts from the
+default, and nothing from before their return reaches them anyway (ADR 0027).
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 

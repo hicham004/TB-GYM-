@@ -733,6 +733,37 @@ Choices the rows from B12 on made, kept as built until the owner answers:
   read Strength Base now.", "… once the plan is paid." and "Maya sees Strength Base from its first day."; "Next program";
   and "12 sessions" where a program not begun used to say "0 of 12 sessions done". Recommendation: as built.
 
+- B19 · Where the choice sits. Built: one box in a card of its own under Other programs, with the row's words and a line
+  under it saying what turning it off does. It is about the client, not the program in front, and Manage program is empty
+  on a finished program, which is when it matters. The other way: an item in Manage program. Recommendation: as built.
+- B19 · A client with no program yet. Built: no box, as there is nothing to keep back, so a coach chooses once a first
+  program is assigned. The other way: the box on the empty tab too. Recommendation: as built.
+- B19 · A cancelled program. The row says Off hides finished and cancelled programs. No client screen has ever shown a
+  cancelled program, so on and off read alike, and it is pinned by a test. The other way: on starts showing them, a new
+  state of the page the row does not ask for. Recommendation: as built.
+- B19 · What the client reads. Built: with nothing running or coming, Training says "Nothing assigned yet", as Today
+  already does, from the moment their last workout is done, with Finished workouts under it. Nothing tells them why and
+  no notice goes out, on or off, as a client's words never blame the coach (TRN-018). The other way: a line such as "Your
+  coach keeps your finished programs". Recommendation: as built.
+- B19 · The share card. Built: Off takes Share your program off Training and its read answers 404, so the page is not all
+  that hides it. The finish screen of the workout that finishes a program still offers the card, as that is the client's
+  own moment and not on Training. The other way: the finish screen loses it too. Recommendation: as built.
+- B19 · A program's name on a logged workout. Built: it stays, as part of the client's own workout, so Finished workouts
+  still says "Base Block" with the program gone from the page, on every row since no program is above them. The other way:
+  the server leaves the name out for a program kept back. Recommendation: as built, as a name is not what a coach protects.
+- B19 · While training is closed. Built: the box goes with the rest of the tab and a change answers 403, as the client
+  reads no program then either, and it comes back as it was. The other way: a box on "Training isn't open". Recommendation:
+  as built.
+- B19 · A returning client. Built: a new profile starts ticked, and programs from before they left never reach them
+  anyway (ADR 0027). The other way: carry the choice over. Recommendation: as built.
+- B19 · A week's "Shared with" box, outside the row. Left out: saving it disables it, so a keyboard user's focus falls to
+  the top of the page, checked live. The new box stays enabled through its save and keeps focus. Recommendation: the same
+  small change on the week boxes, in a row of its own.
+- B19 · The words the row did not give. Built: "Turn this off and Maya no longer sees finished programs on Training. Their
+  running and next programs, logged workouts, records and progress stay."; "Maya no longer sees finished programs." and
+  "Maya can see finished programs."; "This was changed somewhere else since you opened it. It has been reloaded: check it,
+  then try again."; "The setting could not be changed. Try again." Recommendation: as built.
+
 Waits for Toufic's answers (section 1), kept as built until then:
 
 - B10b · What else a pack can include. Built: 1-on-1 sessions ticked and locked, the rest free to tick.

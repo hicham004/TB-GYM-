@@ -1744,6 +1744,10 @@ limited to the coach's assigned clients.
   - Other programs: the ones running or coming and the earlier ones, each opening on a tap (a program
     past its last day that never closed reads "Ended"). Training max history and an exercise's history
     were the older forms behind one collapsed "More training tools" until R5.3d2 replaced them.
+  - "Can see finished programs" (critique B19, TRN-031): one box in a card of its own under them, on by
+    default, offered once the client has a program and while the coach's read is open. It is about the
+    client, not the program in front, so it is not in Manage program, which is empty on a finished one.
+    A refusal says why under the box, since the page's banner is out of view at the foot of a long page.
   - Follows dark mode. Screenshots on the Atlas demo: `docs/design/r34a-*.png`.
 - Built in R3.4b (Service & access), on the existing plan, payment and access endpoints; no backend
   change.
@@ -2175,6 +2179,8 @@ limited to the coach's assigned clients.
   since a program's week can start on any weekday while Today's strip is the calendar week; a missed
   session of the running program offers "Do it now" (asked once, then the player), and a session done
   late reads "Done late" with the day it was done, as the coach's timeline does (TRN-020 v2).
+- Critique B19 (TRN-031): a coach can keep finished programs back, and the server then sends none, so with
+  nothing running or coming the page shows its empty state above Finished workouts. No word of why.
 
 **M4. Nutrition day**
 - A **day strip** instead of a date input.

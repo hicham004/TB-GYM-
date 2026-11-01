@@ -206,6 +206,19 @@ public sealed partial class GymDbContext
 
     private void ConfigureMesocycles(ModelBuilder builder)
     {
+        builder.Entity<ClientProgramVisibility>(entity =>
+        {
+            entity.ToTable("ClientProgramVisibilities", "training");
+            entity.HasKey(item => item.Id);
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId }).IsUnique();
+            entity.HasOne<ClientProfile>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            ConfigureTenantEntity(entity);
+        });
+
         builder.Entity<TrainingMesocycle>(entity =>
         {
             entity.ToTable("Mesocycles", "training");

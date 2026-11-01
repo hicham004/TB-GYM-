@@ -437,6 +437,8 @@ interface OpenOptions {
   path?: string;
   /** A sheet that opens with the page hides the page from assistive technology, heading included. */
   opensSheet?: boolean;
+  /** The page's heading, when a test gives the client another name. */
+  heading?: string;
   /** The program reads in order; the last one repeats. */
   programs?: CoachClientProgramView[];
   enrollment?: Record<string, unknown>;
@@ -506,7 +508,9 @@ async function openTraining(page: Page, width: number, height: number, options: 
   if (options.opensSheet) {
     await expect(page.getByRole('dialog')).toBeVisible();
   } else {
-    await expect(page.getByRole('heading', { level: 1, name: 'Maya Fakhoury' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: options.heading ?? 'Maya Fakhoury' }),
+    ).toBeVisible();
   }
   await waitForFonts(page);
 }
@@ -1061,6 +1065,86 @@ for (const [width, height] of [
     ]);
   });
 }
+
+// Critique B19: whether the client keeps seeing the programs that finished.
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`a coach chooses whether the client sees finished programs at ${width}px, at 200% text too`, async ({
+    page,
+  }) => {
+    const requests: NonNullable<OpenOptions['requests']> = [];
+    await openTraining(page, width, height, {
+      programs: [
+        coachProgram([completedBlock()]),
+        coachProgram([completedBlock()], {
+          finishedPrograms: { canSeeFinishedPrograms: false, version: 8 },
+        }),
+      ],
+      requests,
+      extra: {
+        [`PUT /api/training/clients/${ID}/finished-programs`]: (route) =>
+          json(route, 200, { canSeeFinishedPrograms: false, version: 8 }),
+      },
+    });
+
+    const box = page.getByRole('checkbox', { name: 'Can see finished programs' });
+    await expect(box).toBeChecked();
+    await expect(box).toHaveAccessibleDescription(
+      'Turn this off and Maya no longer sees finished programs on Training. Their running and next programs, logged workouts, records and progress stay.',
+    );
+    await axe(page);
+    await box.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/b19-choice-${width}.png` });
+
+    await box.click();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Maya no longer sees finished programs.' }),
+    ).toBeVisible();
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeEnabled();
+    expect(requests).toEqual([
+      {
+        method: 'PUT',
+        path: `/api/training/clients/${ID}/finished-programs`,
+        body: { canSeeFinishedPrograms: false, version: 0 },
+      },
+    ]);
+
+    await axe(page);
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await expectNoHorizontalOverflow(page);
+    await expect(box).toBeVisible();
+  });
+}
+
+test('the choice is not offered while training is closed', async ({ page }) => {
+  await openTraining(page, 1440, 900, { programs: [closedProgram('Paused')] });
+  await expect(page.getByRole('heading', { name: 'Training isn’t open' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Can see finished programs' })).toHaveCount(0);
+});
+
+test('a very long first name wraps in the choice’s line on a phone, nothing cut off', async ({
+  page,
+}) => {
+  const firstName = 'Maximiliana'.repeat(6);
+  await openTraining(page, 390, 844, {
+    programs: [coachProgram([completedBlock()])],
+    heading: `${firstName} Fakhoury`,
+    extra: {
+      [`GET /api/clients/${ID}`]: (route) => json(route, 200, { ...clientDetails, firstName }),
+    },
+  });
+
+  const help = page.locator('.finished-help');
+  await expect(help).toContainText(firstName);
+  const { scroll, client } = await help.evaluate((line) => ({
+    scroll: line.scrollWidth,
+    client: line.clientWidth,
+  }));
+  expect(scroll).toBeLessThanOrEqual(client);
+});
 
 // ------------------------------------------------------------------------------------------------
 // P2: the program's own training maxes

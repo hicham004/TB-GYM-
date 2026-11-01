@@ -6,6 +6,7 @@ import type {
   ApplyTrainingMaxesRequest,
   CoachClientProgramView,
   EstimateRpeChartMaxRequest,
+  FinishedProgramsVisibilityView,
   KeepTrainingMaxRequest,
   PreviewProgramEditRequest,
   PreviousProgramMaxesView,
@@ -13,6 +14,7 @@ import type {
   ProgramEditPreviewView,
   RenameMesocycleRequest,
   RpeChartMaxEstimateView,
+  SetFinishedProgramsVisibilityRequest,
   TrainingMaxesPreviewView,
   TrainingMaxesView,
   TrainingMesocycleView,
@@ -30,6 +32,17 @@ export class ClientProgramApi {
   /** Every program block of the client, newest first, with the state of each session (TRN-022). */
   getProgram(clientId: string): Observable<CoachClientProgramView> {
     return this.http.get<CoachClientProgramView>(`/api/training/clients/${clientId}/program`);
+  }
+
+  /** "Can see finished programs" (TRN-031), answered with the version the next change sends back. */
+  setFinishedPrograms(
+    clientId: string,
+    request: SetFinishedProgramsVisibilityRequest,
+  ): Observable<FinishedProgramsVisibilityView> {
+    return this.http.put<FinishedProgramsVisibilityView>(
+      `/api/training/clients/${clientId}/finished-programs`,
+      request,
+    );
   }
 
   /**

@@ -135,6 +135,23 @@ public static class TrainingEndpoints
         .Produces<TrainingMesocycleView>()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        coach.MapPut("/clients/{clientProfileId:guid}/finished-programs", async (
+            Guid clientProfileId,
+            SetFinishedProgramsVisibilityRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.SetFinishedProgramsVisibilityAsync(clientProfileId, request, cancellationToken));
+        })
+        .WithName("SetClientFinishedProgramsVisibility")
+        .Produces<FinishedProgramsVisibilityView>()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         coach.MapPut("/mesocycles/{mesocycleId:guid}/weeks/{weekId:guid}/publish", async (
             Guid mesocycleId,
             Guid weekId,
@@ -789,6 +806,7 @@ public static class TrainingEndpoints
                 (object?)result.SetSave ??
                 (object?)result.Draft ??
                 (object?)result.TrainingMaxes ??
+                (object?)result.FinishedPrograms ??
                 result.WorkoutExecution),
             TrainingCommandStatus.NotFound => Results.NotFound(),
             TrainingCommandStatus.Forbidden => Results.Forbid(),

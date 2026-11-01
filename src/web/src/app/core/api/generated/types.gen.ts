@@ -1248,6 +1248,7 @@ export type CoachClientProgramView = {
   blocks: Array<CoachProgramBlockView>;
   sessionStateRuleKey: string;
   sessionStateRuleVersion: number | string;
+  finishedPrograms: null | FinishedProgramsVisibilityView;
 };
 
 export type CoachClientRef = {
@@ -2158,6 +2159,11 @@ export type FeatureAccessReason =
   | 'Paused'
   | 'Cancelled'
   | 'PlatformBlocked';
+
+export type FinishedProgramsVisibilityView = {
+  canSeeFinishedPrograms: boolean;
+  version: number | string;
+};
 
 export type FoodItemPage = {
   total: number | string;
@@ -3894,6 +3900,11 @@ export type SessionReceiptRequest = {
 
 export type SetExerciseArchivedRequest = {
   isArchived: boolean;
+  version: number | string;
+};
+
+export type SetFinishedProgramsVisibilityRequest = {
+  canSeeFinishedPrograms: boolean;
   version: number | string;
 };
 
@@ -7543,6 +7554,43 @@ export type UpdateMesocycleVisibilityResponses = {
 
 export type UpdateMesocycleVisibilityResponse =
   UpdateMesocycleVisibilityResponses[keyof UpdateMesocycleVisibilityResponses];
+
+export type SetClientFinishedProgramsVisibilityData = {
+  body: SetFinishedProgramsVisibilityRequest;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/training/clients/{clientProfileId}/finished-programs';
+};
+
+export type SetClientFinishedProgramsVisibilityErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SetClientFinishedProgramsVisibilityError =
+  SetClientFinishedProgramsVisibilityErrors[keyof SetClientFinishedProgramsVisibilityErrors];
+
+export type SetClientFinishedProgramsVisibilityResponses = {
+  /**
+   * OK
+   */
+  200: FinishedProgramsVisibilityView;
+};
+
+export type SetClientFinishedProgramsVisibilityResponse =
+  SetClientFinishedProgramsVisibilityResponses[keyof SetClientFinishedProgramsVisibilityResponses];
 
 export type SetMesocycleWeekPublishedData = {
   body: SetWeekPublishedRequest;
