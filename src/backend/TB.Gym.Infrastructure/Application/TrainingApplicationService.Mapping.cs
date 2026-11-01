@@ -700,6 +700,7 @@ internal sealed partial class TrainingApplicationService
             existing.LoadUnit != request.LoadUnit ||
             existing.LoadIncrement != decimal.Round(request.LoadIncrement, 3, MidpointRounding.AwayFromZero) ||
             existing.LoadRoundingMode != request.LoadRoundingMode ||
+            existing.RevealAllWeeks != request.RevealAllWeeks ||
             (!string.IsNullOrWhiteSpace(request.Name) && existing.Name != request.Name.Trim()))
         {
             return false;
@@ -852,6 +853,7 @@ internal sealed partial class TrainingApplicationService
             .ThenBy(item => item.Id)
             .ToListAsync(cancellationToken);
 
+        var revealed = await RevealCountsAsync(mesocycle, cancellationToken);
         return new TrainingMesocycleView(
             mesocycle.Id,
             mesocycle.ClientProfileId,
@@ -880,7 +882,7 @@ internal sealed partial class TrainingApplicationService
                 item.Snapshot.Reason,
                 ToTrainingSource(item.Snapshot.Source))).ToArray(),
             mesocycle.Weeks.OrderBy(item => item.WeekNumber)
-                .Select(week => ToView(mesocycle, week, executionIds, clock.UtcNow)).ToArray(),
+                .Select(week => ToView(mesocycle, week, executionIds, clock.UtcNow, revealed)).ToArray(),
             lifecycle.Select(item => new MesocycleLifecycleEventView(
                 item.Id,
                 item.EventType,
@@ -896,14 +898,15 @@ internal sealed partial class TrainingApplicationService
         TrainingMesocycle mesocycle,
         MesocycleWeek week,
         IReadOnlyDictionary<Guid, Guid> executionIds,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool revealed)
     {
         var availability = TrainingCalendarPolicy.GetWeekAvailability(
             mesocycle.StartDate,
             week.WeekNumber,
             mesocycle.TimeZoneId,
             now,
-            mesocycle.RevealAllWeeks,
+            revealed,
             week.IsPublished);
         return new TrainingWeekView(
             week.Id,

@@ -25,7 +25,8 @@ public sealed class TrainingMesocycle : TenantEntity
         TrainingLoadRoundingMode loadRoundingMode,
         Guid assignmentCommandId,
         ProgramBlueprint snapshot,
-        Guid? id)
+        Guid? id,
+        bool revealAllWeeks)
         : base(tenantId)
     {
         if (clientProfileId == Guid.Empty || enrollmentId == Guid.Empty ||
@@ -65,6 +66,7 @@ public sealed class TrainingMesocycle : TenantEntity
         Kind = kind;
         Status = MesocycleStatus.Planned;
         BlocksPrimaryOverlap = true;
+        RevealAllWeeks = revealAllWeeks;
         LoadUnit = loadUnit;
         LoadIncrement = decimal.Round(loadIncrement, 3, MidpointRounding.AwayFromZero);
         LoadRoundingMode = loadRoundingMode;
@@ -142,7 +144,8 @@ public sealed class TrainingMesocycle : TenantEntity
         TrainingLoadRoundingMode loadRoundingMode,
         Guid assignmentCommandId,
         ProgramBlueprint snapshot,
-        Guid? id = null) =>
+        Guid? id = null,
+        bool revealAllWeeks = false) =>
         new(
             tenantId,
             clientProfileId,
@@ -158,7 +161,8 @@ public sealed class TrainingMesocycle : TenantEntity
             loadRoundingMode,
             assignmentCommandId,
             snapshot,
-            id);
+            id,
+            revealAllWeeks);
 
     public void SetRevealAllWeeks(bool reveal)
     {

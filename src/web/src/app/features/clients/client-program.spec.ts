@@ -59,6 +59,7 @@ function plan(overrides: Partial<ClientEnrollment> = {}): ClientEnrollment {
     lastActiveDate: '2026-11-23',
     storedStatus: 'Active',
     effectiveStatus: 'Active',
+    balanceAmount: 0,
     features: ['Training'],
     ...overrides,
   } as ClientEnrollment;
@@ -682,6 +683,129 @@ describe('a client’s Training', () => {
         version: 1,
       });
       expect(context.notice()).toBe('Strength Base is moved.');
+    });
+
+    describe('the client sees it (critique B18)', () => {
+      const openDialog = async (options: Options) => {
+        const rendered = await render(options);
+        press(rendered.host, 'Manage program');
+        await settle(rendered.harness.fixture);
+        all(rendered.host, 'app-client-actions .item')
+          .find((item) => textOf(item).startsWith('The client sees it'))!
+          .click();
+        await settle(rendered.harness.fixture);
+        const dialog = document.querySelector<HTMLElement>('app-program-client-sees')!;
+        return { ...rendered, dialog };
+      };
+
+      it('shows a program now, and tells the coach so', async () => {
+        const { harness, api, context, dialog } = await openDialog({
+          program: coachProgram([plannedBlock({ enrollmentId: 'enrollment-1' })]),
+          enrollments: [plan()],
+        });
+        expect(dialog.querySelector<HTMLInputElement>('input[value="firstDay"]')!.checked).toBe(
+          true,
+        );
+
+        dialog.querySelector<HTMLInputElement>('input[value="now"]')!.click();
+        await settle(harness.fixture);
+        expect(textOf(dialog)).toContain('Maya reads the shared weeks now.');
+        press(dialog.closest('[role="dialog"]') as HTMLElement, 'Save');
+        await settle(harness.fixture);
+
+        expect(api['updateMesocycleVisibility']).toHaveBeenCalledWith('block-next', {
+          revealAllWeeks: true,
+          version: 1,
+        });
+        expect(context.notice()).toBe('Maya can read Strength Base now.');
+      });
+
+      it('keeps it for its first day again', async () => {
+        const { harness, api, context, dialog } = await openDialog({
+          program: coachProgram([
+            plannedBlock({
+              enrollmentId: 'enrollment-1',
+              revealAllWeeks: true,
+              isShownEarly: true,
+            }),
+          ]),
+          enrollments: [plan()],
+        });
+
+        dialog.querySelector<HTMLInputElement>('input[value="firstDay"]')!.click();
+        await settle(harness.fixture);
+        press(dialog.closest('[role="dialog"]') as HTMLElement, 'Save');
+        await settle(harness.fixture);
+
+        expect(api['updateMesocycleVisibility']).toHaveBeenCalledWith('block-next', {
+          revealAllWeeks: false,
+          version: 1,
+        });
+        expect(context.notice()).toBe('Maya sees Strength Base from its first day.');
+      });
+
+      it('says Now waits for a plan still to be paid', async () => {
+        const { harness, context, dialog } = await openDialog({
+          program: coachProgram([plannedBlock({ enrollmentId: 'enrollment-1' })]),
+          enrollments: [plan({ effectiveStatus: 'PendingPayment', balanceAmount: 200 })],
+        });
+
+        dialog.querySelector<HTMLInputElement>('input[value="now"]')!.click();
+        await settle(harness.fixture);
+        expect(textOf(dialog)).toContain('Maya reads the shared weeks once the plan is paid.');
+        press(dialog.closest('[role="dialog"]') as HTMLElement, 'Save');
+        await settle(harness.fixture);
+
+        expect(context.notice()).toBe('Maya can read Strength Base once the plan is paid.');
+      });
+
+      it('sends nothing when the choice did not change', async () => {
+        const { harness, api, context, dialog } = await openDialog({
+          program: coachProgram([plannedBlock({ enrollmentId: 'enrollment-1' })]),
+          enrollments: [plan()],
+        });
+
+        press(dialog.closest('[role="dialog"]') as HTMLElement, 'Save');
+        await settle(harness.fixture);
+
+        expect(api['updateMesocycleVisibility']).not.toHaveBeenCalled();
+        expect(context.notice()).toBeNull();
+      });
+
+      it('says a refusal in the dialog and stays open', async () => {
+        const { harness, dialog } = await openDialog({
+          program: coachProgram([plannedBlock({ enrollmentId: 'enrollment-1' })]),
+          enrollments: [plan()],
+          api: {
+            updateMesocycleVisibility: vi.fn(() =>
+              throwError(() => new HttpErrorResponse({ status: 503 })),
+            ),
+          },
+        });
+
+        dialog.querySelector<HTMLInputElement>('input[value="now"]')!.click();
+        await settle(harness.fixture);
+        press(dialog.closest('[role="dialog"]') as HTMLElement, 'Save');
+        await settle(harness.fixture);
+
+        expect(textOf(formSummary(dialog))).toBe('The setting could not be changed.');
+      });
+
+      it('tells the coach a program shown early is read now, not from when the plan starts', async () => {
+        const { host } = await render({
+          program: coachProgram(
+            [plannedBlock({ start: '2026-10-12', revealAllWeeks: true, isShownEarly: true })],
+            { accessReason: 'NotStarted' },
+          ),
+          featureAccess: [
+            { feature: 'Training', accessibleFrom: '2026-10-12' },
+          ] as ClientCommercialOverview['featureAccess'],
+        });
+
+        const facts = all(host, '.facts li').map(textOf);
+        expect(facts).toContain('Maya reads its shared weeks now');
+        expect(facts.some((fact) => fact.includes('when the plan starts'))).toBe(false);
+      });
     });
 
     it('opens every shared week now, or goes back to opening them as they start', async () => {

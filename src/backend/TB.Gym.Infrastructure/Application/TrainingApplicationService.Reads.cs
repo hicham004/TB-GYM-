@@ -46,10 +46,15 @@ internal sealed partial class TrainingApplicationService
                 block.StartDate <= through && block.Status != MesocycleStatus.Cancelled &&
                 block.Status != MesocycleStatus.Completed && week.IsPublished
             orderby block.StartDate, week.WeekNumber
-            select new { week.Id, block.StartDate, week.WeekNumber, block.TimeZoneId, block.RevealAllWeeks })
+            select new { week.Id, BlockId = block.Id, block.StartDate, block.EndDateExclusive, week.WeekNumber,
+                block.TimeZoneId, block.RevealAllWeeks })
             .Take(128).ToListAsync(cancellationToken);
+        var shownEarly = await ProgramsShownEarlyAsync(client.Id, access, today,
+            weeks.Select(item => (item.BlockId, item.RevealAllWeeks, item.StartDate, item.EndDateExclusive)),
+            cancellationToken);
         var visibleWeekIds = weeks.Where(item => TrainingCalendarPolicy.GetWeekAvailability(
-                item.StartDate, item.WeekNumber, item.TimeZoneId, clock.UtcNow, item.RevealAllWeeks, true).IsVisible)
+                item.StartDate, item.WeekNumber, item.TimeZoneId, clock.UtcNow,
+                RevealCounts(item.BlockId, item.RevealAllWeeks, item.StartDate, today, shownEarly), true).IsVisible)
             .Select(item => item.Id).ToArray();
         var hasVisibleSessions = await dbContext.TrainingSessions.AsNoTracking()
             .AnyAsync(item => visibleWeekIds.Contains(item.MesocycleWeekId), cancellationToken);

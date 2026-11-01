@@ -35,7 +35,12 @@ import { StatusPill } from '../../ui/status-pill';
 import { UiDialog } from '../../ui/dialog';
 import { UiSheet } from '../../ui/sheet';
 import { ClientActions } from './client-actions';
-import { planChoices, programWriteError } from './client-program-forms.models';
+import {
+  planChoices,
+  planPaid,
+  programWriteError,
+  type ClientSees,
+} from './client-program-forms.models';
 import { ClientProgramApi } from './client-program-api';
 import {
   blockCard,
@@ -53,6 +58,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
 import { ProgramAssign } from './program-assign';
 import {
   ProgramCancel,
+  ProgramClientSees,
   ProgramComplete,
   ProgramRename,
   ProgramReschedule,
@@ -80,6 +86,7 @@ import { ProgramSession } from './program-session';
     EmptyState,
     ProgramAssign,
     ProgramCancel,
+    ProgramClientSees,
     ProgramComplete,
     ProgramMaxes,
     ProgramMaxesUpdate,
@@ -136,6 +143,8 @@ export class ClientProgram {
   protected readonly nextSheet = viewChild.required<TemplateRef<unknown>>('nextSheet');
   protected readonly maxesSheet = viewChild.required<TemplateRef<unknown>>('maxesSheet');
   protected readonly renameDialog = viewChild.required<TemplateRef<unknown>>('renameDialog');
+  protected readonly clientSeesDialog =
+    viewChild.required<TemplateRef<unknown>>('clientSeesDialog');
   protected readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
   protected readonly rescheduleDialog =
     viewChild.required<TemplateRef<unknown>>('rescheduleDialog');
@@ -237,10 +246,21 @@ export class ClientProgram {
     return from ? formatDate(from, 'EEE d MMM', this.locale) : null;
   });
 
-  /** Beside the program: the client does not see it yet, and from when they will. */
+  /** Whether the plan the program in front of the coach sits under is paid, for the dialog's words. */
+  protected readonly cardPlanPaid = computed(() => {
+    const id = this.blocks().find((block) => block.id === this.openId())?.enrollmentId;
+    return planPaid(this.context.plans()?.enrollments.find((plan) => plan.id === id));
+  });
+
+  /**
+   * Beside the program: the client does not see it yet, and from when they will. A program the coach
+   * shows Now says so among its own facts instead.
+   */
   protected readonly bookedLine = computed(() => {
     const view = this.read();
     if (!view?.isAllowed || view.accessReason === 'Granted') return '';
+    const card = this.card();
+    if (card?.status === 'Planned' && card.revealAll) return '';
     const name = this.firstName();
     const starts = this.bookedStart();
     if (view.accessReason === 'PaymentRequired') {
@@ -432,6 +452,8 @@ export class ClientProgram {
           $localize`Cancel program`,
           () => $localize`${name}:program: is cancelled.`,
         );
+      case 'client-sees':
+        return this.openClientSees();
       case 'reveal-all':
         return void this.setReveal(true);
       case 'reveal-weekly':
@@ -448,6 +470,27 @@ export class ClientProgram {
       if (!assigned) return;
       this.done(
         $localize`${assigned.name}:program: is assigned to ${this.firstName()}:name:. It starts ${formatDate(assigned.startDate, 'EEE d MMM', this.locale)}:date:.`,
+      );
+    });
+  }
+
+  /** "The client sees it" (TRN-023): the dialog answers with the choice it saved, or null. */
+  private openClientSees(): void {
+    const name = this.card()?.name ?? '';
+    const firstName = this.firstName();
+    const paid = this.cardPlanPaid();
+    const ref = this.dialogs.open<ClientSees | null>(this.clientSeesDialog(), {
+      title: $localize`The client sees it`,
+      closeLabel: this.closeLabel,
+    });
+    ref.closed.subscribe((sees) => {
+      if (!sees) return;
+      this.done(
+        sees === 'firstDay'
+          ? $localize`${firstName}:name: sees ${name}:program: from its first day.`
+          : paid
+            ? $localize`${firstName}:name: can read ${name}:program: now.`
+            : $localize`${firstName}:name: can read ${name}:program: once the plan is paid.`,
       );
     });
   }

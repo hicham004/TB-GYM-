@@ -38,6 +38,7 @@ function plan(overrides: Partial<ClientEnrollment> = {}): ClientEnrollment {
     lastActiveDate: '2026-11-23',
     storedStatus: 'Active',
     effectiveStatus: 'Active',
+    balanceAmount: 0,
     features: ['Training'],
     ...overrides,
   } as ClientEnrollment;
@@ -730,6 +731,7 @@ describe('Assign program', () => {
       workingMaxes: [
         { exerciseId: 'squat', strengthMaxRecordId: 'max-1', value: 100, unit: 'Kilogram' },
       ],
+      revealAllWeeks: false,
       idempotencyKey: expect.any(String),
     });
     // The retry of the same payload is the same request, so it cannot assign twice.
@@ -761,6 +763,52 @@ describe('Assign program', () => {
     const calls = (api['assignClientMesocycle'] as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls[1][1].idempotencyKey).not.toBe(calls[0][1].idempotencyKey);
     expect(calls[1][1].workingMaxes[0]).toMatchObject({ value: 110, strengthMaxRecordId: null });
+  });
+
+  it('opens from its first day unless the coach chooses Now, which is a new request (critique B18)', async () => {
+    const failure = new HttpErrorResponse({ status: 503 });
+    const { fixture, host, api } = await render({
+      api: {
+        assignClientMesocycle: vi
+          .fn()
+          .mockReturnValueOnce(throwError(() => failure))
+          .mockReturnValue(of(assigned)),
+      },
+    });
+    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
+    const sees = host.querySelector('.sees')!;
+    expect(textOf(sees.querySelector('legend'))).toBe('The client sees it');
+    expect([...sees.querySelectorAll('label')].map(textOf)).toEqual(['From its first day', 'Now']);
+    expect(sees.querySelector<HTMLInputElement>('input[value="firstDay"]')!.checked).toBe(true);
+    expect(textOf(sees.querySelector('p'))).toBe('Each shared week opens on its first day.');
+
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    sees.querySelector<HTMLInputElement>('input[value="now"]')!.click();
+    await settle(fixture);
+    expect(textOf(sees.querySelector('p'))).toBe(
+      'Maya reads the shared weeks now. Each workout opens on its day.',
+    );
+    press(host, 'Assign program');
+    await settle(fixture);
+
+    const calls = (api['assignClientMesocycle'] as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0][1].revealAllWeeks).toBe(false);
+    expect(calls[1][1].revealAllWeeks).toBe(true);
+    expect(calls[1][1].idempotencyKey).not.toBe(calls[0][1].idempotencyKey);
+  });
+
+  it('says Now waits for the payment under a plan not paid yet (critique B18)', async () => {
+    const { fixture, host } = await render({
+      enrollments: [plan({ effectiveStatus: 'PendingPayment', balanceAmount: 200 })],
+    });
+    host.querySelector<HTMLInputElement>('.sees input[value="now"]')!.click();
+    await settle(fixture);
+
+    expect(textOf(host.querySelector('.sees p'))).toBe(
+      'Maya reads the shared weeks once the plan is paid. Each workout opens on its day.',
+    );
   });
 
   it('says an overlap in coach words and stays open', async () => {

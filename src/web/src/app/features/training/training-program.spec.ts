@@ -12,7 +12,12 @@ import { button, press, settle } from '../../../testing/dom';
 import { programSummary } from '../../../testing/share-card-fixtures';
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
-import { historyItem, historyPage, programView } from '../../../testing/training-program-fixtures';
+import {
+  historyItem,
+  historyPage,
+  nextProgramView,
+  programView,
+} from '../../../testing/training-program-fixtures';
 import { ShareCardMaker } from '../share-cards/share-card-maker';
 import { TrainingProgram } from './training-program';
 
@@ -89,6 +94,81 @@ describe('TrainingProgram', () => {
     Element.prototype.scrollIntoView = scrolled;
     await render({}, fakeClientAccess(), '/?week=4');
     expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  describe('a next program shown early (critique B18)', () => {
+    const beside = programView({ nextProgram: nextProgramView() });
+
+    it('lists it under the weeks, week by week, with nothing to start', async () => {
+      const {
+        host,
+        settle: redraw,
+        textOf,
+      } = await render({
+        getMyTrainingProgram: vi.fn(() => of(beside)),
+      });
+
+      const section = host.querySelector('section[aria-labelledby="next-program-heading"]')!;
+      expect(textOf(section.querySelector('h2'))).toBe('Next program');
+      expect(textOf(section.querySelector('.block-dates'))).toBe(
+        'Summer Strength · Starts Mon 12 Oct',
+      );
+      const rows = [...section.querySelectorAll<HTMLButtonElement>('button.week-row')];
+      expect(rows.map(textOf)).toEqual(['Week 1, 2 sessions', 'Week 2, 1 session']);
+      expect(rows[0].getAttribute('aria-controls')).toBe('next-week-1');
+
+      rows[0].click();
+      await redraw();
+      const sessions = [...section.querySelectorAll('.session')];
+      expect(sessions.map((session) => session.tagName)).toEqual(['DIV', 'DIV']);
+      expect(textOf(sessions[0])).toContain('Squat day');
+      expect(section.querySelector('.do-now, a')).toBeNull();
+      // The running program's own week 2 stays closed: the two programs' weeks are apart.
+      expect(host.querySelector('#week-2')).toBeNull();
+    });
+
+    it('follows a notice to the week of the next program', async () => {
+      Element.prototype.scrollIntoView = vi.fn();
+      const { host, settle: redraw } = await render(
+        { getMyTrainingProgram: vi.fn(() => of(beside)) },
+        fakeClientAccess(),
+        '/?week=2&program=block-2',
+      );
+      await redraw();
+
+      expect(host.querySelector('#next-week-2')).not.toBeNull();
+      expect(host.querySelector('#week-2')).toBeNull();
+    });
+
+    it('reads as the program itself while training is closed, without the closed card', async () => {
+      const closed = programView({
+        isAllowed: false,
+        accessReason: 'NotStarted',
+        nextProgramStartDate: '2026-10-12',
+        program: nextProgramView(),
+      });
+      const { host, textOf } = await render({ getMyTrainingProgram: vi.fn(() => of(closed)) });
+
+      expect(host.querySelector('.state-card')).toBeNull();
+      const hero = host.querySelector('.hero')!;
+      expect(textOf(hero.querySelector('.hero-eyebrow'))).toBe('Starts Mon 12 Oct');
+      expect([...hero.querySelectorAll('.hero-chips li')].map(textOf)).toEqual([
+        '3 sessions',
+        'Ends Sun 25 Oct',
+      ]);
+      expect(textOf(hero.querySelector('.hero-today'))).toBe('Next: Mon 12 Oct · Squat day');
+      expect(hero.querySelector('a.hero-action')).toBeNull();
+      const week = host.querySelector('section[aria-labelledby="focus-heading"]')!;
+      expect(week.querySelector('.block-meta')).toBeNull();
+      expect(host.querySelector('#history-heading')).toBeNull();
+    });
+
+    it('still says why when training is closed and nothing is shown', async () => {
+      const closed = programView({ isAllowed: false, accessReason: 'NotStarted', program: null });
+      const { host, textOf } = await render({ getMyTrainingProgram: vi.fn(() => of(closed)) });
+
+      expect(textOf(host.querySelector('.state-card h2'))).toBe('Training is not available');
+    });
   });
 
   it('leads with the program, its week, what is done and missed, and today’s workout', async () => {

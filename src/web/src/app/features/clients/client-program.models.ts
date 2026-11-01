@@ -412,6 +412,19 @@ export function blockCard(block: CoachProgramBlockView, context: ProgramContext)
       { text: range, warm: false },
       { text: progress, warm: false },
       ...(missed > 0 ? [{ text: $localize`${missed}:count: missed`, warm: true }] : []),
+      ...(block.status === 'Planned' && block.revealAllWeeks
+        ? [
+            block.isShownEarly
+              ? {
+                  text: $localize`${context.firstName}:name: reads its shared weeks now`,
+                  warm: false,
+                }
+              : {
+                  text: $localize`${context.firstName}:name: reads it once a paid plan covers its dates`,
+                  warm: true,
+                },
+          ]
+        : []),
     ],
     weeks,
     weekCount,
@@ -503,6 +516,7 @@ export type ProgramActionId =
   | 'next-block'
   | 'edit-weeks'
   | 'reschedule'
+  | 'client-sees'
   | 'reveal-all'
   | 'reveal-weekly'
   | 'complete'
@@ -561,18 +575,25 @@ export function programMenu(
             action: 'reschedule',
           },
     );
+    // Before its first day the same setting says when the client sees the program at all (TRN-023).
     items.push(
-      block.revealAll
+      block.status === 'Planned'
         ? {
-            label: $localize`Open weeks as they start`,
-            hint: $localize`Each shared week opens on its first day`,
-            action: 'reveal-weekly',
+            label: $localize`The client sees it`,
+            hint: block.revealAll ? $localize`Now` : $localize`From its first day`,
+            action: 'client-sees',
           }
-        : {
-            label: $localize`Open every shared week now`,
-            hint: $localize`${context.firstName}:name: sees every shared week now, not only the ones that have started`,
-            action: 'reveal-all',
-          },
+        : block.revealAll
+          ? {
+              label: $localize`Open weeks as they start`,
+              hint: $localize`Each shared week opens on its first day`,
+              action: 'reveal-weekly',
+            }
+          : {
+              label: $localize`Open every shared week now`,
+              hint: $localize`${context.firstName}:name: sees every shared week now, not only the ones that have started`,
+              action: 'reveal-all',
+            },
     );
   }
   if (block.status === 'Active') {

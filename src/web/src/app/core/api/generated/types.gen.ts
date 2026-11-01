@@ -209,6 +209,7 @@ export type AssignMesocycleRequest = {
   workingMaxes: Array<WorkingMaxSelectionRequest>;
   idempotencyKey: string;
   name?: null | string;
+  revealAllWeeks?: boolean;
 };
 
 export type AssignNutritionPlanRequest = {
@@ -1078,6 +1079,7 @@ export type ClientTrainingProgramView = {
   nextProgramStartDate: null | string;
   sessionStateRuleKey: string;
   sessionStateRuleVersion: number | string;
+  nextProgram: null | ClientProgramView;
 };
 
 export type ClientTrainingUpcomingView = {
@@ -1368,6 +1370,7 @@ export type CoachProgramBlockView = {
   missedCount: number | string;
   weeks: Array<CoachProgramWeekView>;
   lifecycle: Array<MesocycleLifecycleEventView>;
+  isShownEarly: boolean;
 };
 
 export type CoachProgramSessionView = {

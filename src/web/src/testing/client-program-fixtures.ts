@@ -64,11 +64,13 @@ export function programWeek(
 
 export interface BlockOptions {
   id?: string;
+  enrollmentId?: string;
   name?: string;
   start?: string;
   status?: MesocycleStatus;
   currentWeekNumber?: number | null;
   revealAllWeeks?: boolean;
+  isShownEarly?: boolean;
   version?: number;
   /** The block's history, oldest first (LOST-6); none by default. */
   lifecycle?: CoachProgramBlockView['lifecycle'];
@@ -83,12 +85,13 @@ export function programBlock(
   const start = options.start ?? BLOCK_START;
   return {
     id: options.id ?? 'block-lean',
-    enrollmentId: 'enrollment-1',
+    enrollmentId: options.enrollmentId ?? 'enrollment-1',
     name: options.name ?? 'Lean & Strong · Phase 2',
     startDate: start,
     endDateExclusive: addDays(start, 7 * weeks.length),
     status: options.status ?? 'Active',
     revealAllWeeks: options.revealAllWeeks ?? false,
+    isShownEarly: options.isShownEarly ?? false,
     version: options.version ?? 4,
     weekCount: weeks.length,
     currentWeekNumber: options.currentWeekNumber ?? null,

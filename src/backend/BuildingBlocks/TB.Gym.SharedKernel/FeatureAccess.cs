@@ -46,6 +46,18 @@ public interface ICoachingFeatureAccessService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The decision <see cref="EvaluateAsync"/> would make on <paramref name="day"/>, with the plans and
+    /// payments as they stand now: only the day they are read against moves, so a plan waiting for
+    /// payment or part paid grants nothing on any day. Who the client is decides as ever.
+    /// </summary>
+    Task<FeatureAccessDecision> EvaluateOnDayAsync(
+        Guid tenantId,
+        Guid clientProfileId,
+        CoachingFeature feature,
+        DateOnly day,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The decisions <see cref="EvaluateAllAsync"/> makes, for several clients in one pass, keyed by
     /// client. Every requested id is answered; one this workspace does not know grants nothing.
     /// </summary>

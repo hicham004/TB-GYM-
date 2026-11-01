@@ -724,6 +724,8 @@ test('Assign program opens from the address, asks for a training max, and sends 
   await expect(sheet.getByText('Your recorded training max')).toBeVisible();
   await chooseDay(sheet, 'Start date', '2026-10-26');
   await expect(sheet.locator('.run')).toHaveText('Runs Mon 26 Oct – Sun 6 Dec');
+  // From its first day, unless the coach chooses Now (critique B18).
+  await expect(sheet.getByRole('radio', { name: 'From its first day' })).toBeChecked();
   await axe(page);
   await page.screenshot({ path: 'test-results/r34a-training-assign-1440.png' });
 
@@ -744,6 +746,7 @@ test('Assign program opens from the address, asks for a training max, and sends 
       workingMaxes: [
         { exerciseId: 'ex-squat', strengthMaxRecordId: 'max-1', value: 70, unit: 'Kilogram' },
       ],
+      revealAllWeeks: false,
     },
   });
   // The program is read again, and the page says what happened.
@@ -1002,6 +1005,60 @@ for (const width of [390, 1440]) {
     await expectNoHorizontalOverflow(page);
     await expect(page.getByRole('button', { name: 'Manage program' })).toBeVisible();
     await expect(page.locator('.week.current button.session').first()).toBeVisible();
+  });
+}
+
+// Critique B18: when the client sees a program that has not begun.
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`a program not begun says when the client sees it at ${width}px, at 200% text too`, async ({
+    page,
+  }) => {
+    const requests: NonNullable<OpenOptions['requests']> = [];
+    await openTraining(page, width, height, {
+      programs: [
+        coachProgram([plannedBlock({ enrollmentId: 'e-1' })]),
+        coachProgram([
+          plannedBlock({ enrollmentId: 'e-1', revealAllWeeks: true, isShownEarly: true }),
+        ]),
+      ],
+      requests,
+      extra: {
+        'PUT /api/training/mesocycles/block-next/visibility': (route) => json(route, 200, {}),
+      },
+    });
+
+    await page.getByRole('button', { name: 'Manage program' }).click();
+    const item = page.locator('.hero-actions button.item', { hasText: 'The client sees it' });
+    await expect(item).toContainText('From its first day');
+    await item.click();
+    const dialog = page.getByRole('dialog', { name: 'The client sees it' });
+    await expect(dialog.getByRole('radio', { name: 'From its first day' })).toBeChecked();
+    await dialog.getByRole('radio', { name: 'Now' }).check();
+    await expect(dialog).toContainText(
+      'Maya reads the shared weeks now. Each workout opens on its day.',
+    );
+    await axe(page);
+    await page.screenshot({ path: `test-results/b18-client-sees-${width}.png` });
+
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await expectNoHorizontalOverflow(page);
+    await expect(dialog.getByRole('radio', { name: 'Now' })).toBeChecked();
+
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Maya can read Strength Base now.' }),
+    ).toBeVisible();
+    await expect(page.locator('.hero .facts')).toContainText('Maya reads its shared weeks now');
+    expect(requests).toEqual([
+      {
+        method: 'PUT',
+        path: '/api/training/mesocycles/block-next/visibility',
+        body: { revealAllWeeks: true, version: 1 },
+      },
+    ]);
   });
 }
 

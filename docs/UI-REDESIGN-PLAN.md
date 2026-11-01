@@ -492,7 +492,9 @@ of the implemented R1.3 screens before production rollout.
   program, workout and records reads open before a booked plan begins (TRN-023): a new client, or the
   gap before a renewal, since the coach may already assign and change programs on those dates. The
   program's header says "Maya sees it from Mon 12 Oct, when the plan starts". The client's own reads
-  still follow today.
+  still follow today, but for a program the coach shows early (critique B18, TRN-023): "The client sees
+  it" on Assign program and on a program not begun, and the client's Training shows a Next program, or
+  that program in place of "Training is not available", once a paid plan covers its dates.
 - **Engine sentences (from R3.4a).** The sheets rewrite the refusals the server is known to send
   (overlap, coverage, a stale version, a started program) into coach words in `programWriteError`, and
   show a generic line for anything else that still names the engine. The backend words pass above is

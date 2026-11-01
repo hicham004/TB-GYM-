@@ -199,7 +199,7 @@ internal sealed partial class TrainingApplicationService
         }
 
         // What the client can open before the new weights land, to tell them which of those weeks changed.
-        var visibleBefore = ClientVisibleWeeks(mesocycle);
+        var visibleBefore = await ClientVisibleWeeksAsync(mesocycle, cancellationToken);
         string reason;
         string fingerprint;
         try

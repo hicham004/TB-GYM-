@@ -17,7 +17,7 @@
       </button>
     </section>
   } @else if (read(); as current) {
-    @if (!current.isAllowed) {
+    @if (!current.isAllowed && !program()) {
       <section class="state-card" role="status">
         <h2 i18n>Training is not available</h2>
         <p>{{ accessLabel(current.accessReason) }}</p>
@@ -45,12 +45,18 @@
         <h2 id="program-heading" dir="auto">{{ plan.name }}</h2>
         <ul class="hero-chips">
           @if (plan.sessionCount > 0) {
-            <li i18n>
-              {plan.sessionCount, plural,
-                =1 {{{ plan.completedCount }} of 1 session done}
-                other {{{ plan.completedCount }} of {{ plan.sessionCount }} sessions done}
-              }
-            </li>
+            @if (plan.phase === 'Upcoming') {
+              <li i18n>
+                {plan.sessionCount, plural, =1 {1 session} other {{{ plan.sessionCount }} sessions}}
+              </li>
+            } @else {
+              <li i18n>
+                {plan.sessionCount, plural,
+                  =1 {{{ plan.completedCount }} of 1 session done}
+                  other {{{ plan.completedCount }} of {{ plan.sessionCount }} sessions done}
+                }
+              </li>
+            }
           }
           @if (plan.missedCount > 0) {
             <li class="chip-missed" i18n>{{ plan.missedCount }} missed</li>
@@ -178,7 +184,7 @@
                 }
               </p>
             </div>
-            @if (week.visible && week.sessions.length > 0) {
+            @if (week.visible && week.sessions.length > 0 && plan.phase !== 'Upcoming') {
               <span class="block-meta" i18n
                 >{{ week.done }} of {{ week.sessions.length }} done</span
               >
@@ -202,52 +208,39 @@
               }
             </h2>
           </div>
-          <ol class="weeks">
-            @for (week of otherWeeks(); track week.number) {
-              <li class="week" [id]="'week-row-' + week.number">
-                @if (week.visible && week.sessions.length > 0) {
-                  <button
-                    type="button"
-                    class="week-row"
-                    [attr.aria-expanded]="isOpen(week)"
-                    [attr.aria-controls]="'week-' + week.number"
-                    (click)="toggleWeek(week)"
-                  >
-                    <span class="week-name" i18n>Week {{ week.number }}</span
-                    ><span class="tb-visually-hidden">, </span>
-                    <span class="week-summary">
-                      <ng-container i18n
-                        >{{ week.done }} of {{ week.sessions.length }} done</ng-container
-                      >
-                      @if (week.missed > 0) {
-                        <ng-container i18n> · {{ week.missed }} missed</ng-container>
-                      }
-                    </span>
-                    <app-icon name="chevron-down" class="week-chevron" />
-                  </button>
-                  @if (isOpen(week)) {
-                    <div class="week-body" [id]="'week-' + week.number">
-                      <ng-container
-                        [ngTemplateOutlet]="weekBody"
-                        [ngTemplateOutletContext]="{ $implicit: week }"
-                      />
-                    </div>
-                  }
-                } @else {
-                  <div class="week-row is-static">
-                    <span class="week-name" i18n>Week {{ week.number }}</span
-                    ><span class="tb-visually-hidden">, </span>
-                    <span class="week-summary">
-                      <ng-container
-                        [ngTemplateOutlet]="weekClosed"
-                        [ngTemplateOutletContext]="{ $implicit: week }"
-                      />
-                    </span>
-                  </div>
-                }
-              </li>
-            }
-          </ol>
+          <ng-container
+            [ngTemplateOutlet]="weekRows"
+            [ngTemplateOutletContext]="{
+              $implicit: otherWeeks(),
+              prefix: 'week',
+              upcoming: plan.phase === 'Upcoming',
+            }"
+          />
+        </section>
+      }
+
+      <!-- The next program, when the coach shows it before its first day (TRN-023). -->
+      @if (nextProgram(); as next) {
+        <section class="block" aria-labelledby="next-program-heading">
+          <div class="block-head">
+            <div class="block-title">
+              <h2 id="next-program-heading" i18n>Next program</h2>
+              <p class="block-dates">
+                <bdi dir="auto">{{ next.name }}</bdi> ·
+                <ng-container i18n
+                  >Starts {{ next.startDate + 'T12:00:00' | date: 'EEE d MMM' }}</ng-container
+                >
+              </p>
+            </div>
+          </div>
+          <ng-container
+            [ngTemplateOutlet]="weekRows"
+            [ngTemplateOutletContext]="{
+              $implicit: next.weeks,
+              prefix: 'next-week',
+              upcoming: true,
+            }"
+          />
         </section>
       }
     } @else {
@@ -383,6 +376,61 @@
     [cancelLabel]="doItNowCancel"
     (answer)="dialog.close($event)"
   />
+</ng-template>
+
+<!-- One program's weeks, each opening on its own: `prefix` keeps two programs' week numbers apart. -->
+<ng-template #weekRows let-weeks let-prefix="prefix" let-upcoming="upcoming">
+  <ol class="weeks">
+    @for (week of weeks; track week.number) {
+      <li class="week" [id]="prefix + '-row-' + week.number">
+        @if (week.visible && week.sessions.length > 0) {
+          <button
+            type="button"
+            class="week-row"
+            [attr.aria-expanded]="isOpen(week)"
+            [attr.aria-controls]="prefix + '-' + week.number"
+            (click)="toggleWeek(week)"
+          >
+            <span class="week-name" i18n>Week {{ week.number }}</span
+            ><span class="tb-visually-hidden">, </span>
+            <span class="week-summary">
+              @if (upcoming) {
+                <ng-container i18n>{week.sessions.length, plural,
+                  =1 {1 session}
+                  other {{{ week.sessions.length }} sessions}
+                }</ng-container>
+              } @else {
+                <ng-container i18n>{{ week.done }} of {{ week.sessions.length }} done</ng-container>
+              }
+              @if (week.missed > 0) {
+                <ng-container i18n> · {{ week.missed }} missed</ng-container>
+              }
+            </span>
+            <app-icon name="chevron-down" class="week-chevron" />
+          </button>
+          @if (isOpen(week)) {
+            <div class="week-body" [id]="prefix + '-' + week.number">
+              <ng-container
+                [ngTemplateOutlet]="weekBody"
+                [ngTemplateOutletContext]="{ $implicit: week }"
+              />
+            </div>
+          }
+        } @else {
+          <div class="week-row is-static">
+            <span class="week-name" i18n>Week {{ week.number }}</span
+            ><span class="tb-visually-hidden">, </span>
+            <span class="week-summary">
+              <ng-container
+                [ngTemplateOutlet]="weekClosed"
+                [ngTemplateOutletContext]="{ $implicit: week }"
+              />
+            </span>
+          </div>
+        }
+      </li>
+    }
+  </ol>
 </ng-template>
 
 <ng-template #weekBody let-week>

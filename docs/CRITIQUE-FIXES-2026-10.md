@@ -704,6 +704,34 @@ Choices the rows from B12 on made, kept as built until the owner answers:
   sessions at the studio, with your coach beside you on every set."; Lea's notes on three of the sessions, which only the
   team reads; the command's name, `video-titles`, and its lines "Video links with no title: 7", "Given their title: 4",
   "Left as they are: 3". Recommendation: as built.
+- B18 · One setting, or two. Built: Now is the setting a program already had behind "Open every shared week now", so a
+  program shown early keeps every shared week open once it runs. "The client sees it" stays in the menu until the first
+  day, and from then on the menu keeps its two lines. The other way: a setting of its own, so weeks go back to opening as
+  they start once the program runs. Recommendation: as built.
+- B18 · What a shared week says. The row says the client reads the shared weeks. Built: what Training says of any week,
+  each workout's day, name and how many exercises and sets. The exercises are not shown, as no client screen shows a
+  workout before its day. The other way: open a workout to read what is in it, a new read and a new screen.
+  Recommendation: that way, as a row of its own, since what is in the program is what a client wants to read; ask the
+  partner first.
+- B18 · Where it sits. Built: beside a running program, a Next program section between the weeks and Finished workouts,
+  each week folded, for the soonest program shown early. With nothing running, or before the plan begins, it is the
+  page's own program ("Starts Fri 6 Nov"). The other way: a switch between the two programs at the top of the page.
+  Recommendation: as built.
+- B18 · A plan paused or cancelled today. Built: Now stays shut, though a later paid plan covers the program, as the
+  coach's own read is shut then too (TRN-023) and a client should not read more than their coach. The other way: only the
+  later plan counts. Recommendation: as built.
+- B18 · Today before the plan begins. Built: unchanged, so Today still says "Training is not available. Your coaching
+  plan has not started yet." while the Training tab shows the program. The other way: a line on Today that links to it,
+  which needs one more field on Today's read. Recommendation: that way, a small row.
+- B18 · When the payment arrives. Built: Now under a plan waiting for payment sends no notice, and the payment brings no
+  notice either: the client heard of the program when it was assigned, and it is simply there. Now under a paid plan
+  sends the usual "Your coach shared weeks 1 and 2". The other way: that notice when the payment lands, which reaches from
+  the plans into training. Recommendation: as built until a coach asks.
+- B18 · The words the row did not give. Built: "Each shared week opens on its first day."; "Maya reads the shared weeks
+  now. Each workout opens on its day." and "… once the plan is paid. …"; on the program "Maya reads its shared weeks now"
+  and "Maya reads it once a paid plan covers its dates", for a plan unpaid, part paid, paused or cancelled alike; "Maya can
+  read Strength Base now.", "… once the plan is paid." and "Maya sees Strength Base from its first day."; "Next program";
+  and "12 sessions" where a program not begun used to say "0 of 12 sessions done". Recommendation: as built.
 
 Waits for Toufic's answers (section 1), kept as built until then:
 

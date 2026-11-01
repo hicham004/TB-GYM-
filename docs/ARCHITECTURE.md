@@ -735,6 +735,8 @@ shape and `CoachAttentionPolicy` (CLI-018), Training owns `TrainingAttentionPoli
 read is one set-based query over every client in scope, about 22 commands for a whole Coach Today.
 To decide every client's access at once, `ICoachingFeatureAccessService` gained `EvaluateManyAsync`;
 `EvaluateAllAsync` and `EvaluateAsync` are now a batch of one, so all features share one decision path.
+Critique B18 added `EvaluateOnDayAsync`, the same path read against a day still to come, so a program
+shown early (TRN-023) asks the rule that will open it on its first day rather than a second payment check.
 Since audit A13c (BEB-2) the feed's records, and the client page's last workout, read the history once,
 grouped by the database: each client's heaviest load per lift, exact rep count and unit among the workouts
 finished before the earliest shown workout began, the shown ones left out by id. Beside it come the shown

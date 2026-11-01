@@ -24,17 +24,21 @@ import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
+import { SegmentedControl } from '../../ui/segmented-control';
 import { ClientProgramApi } from './client-program-api';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import type { BlockCard } from './client-program.models';
 import {
   CANCEL_REASON_LIMIT,
   cancelReasonErrors,
+  clientSeesHelp,
+  clientSeesOptions,
   lastDayOf,
   PROGRAM_NAME_LIMIT,
   programNameErrors,
   programWriteError,
   rescheduleErrors,
+  type ClientSees,
 } from './client-program-forms.models';
 
 /**
@@ -175,6 +179,102 @@ export class ProgramRename {
     } catch (error) {
       this.error.set(
         programWriteError(error, $localize`The program could not be renamed.`, this.firstName()),
+      );
+      this.summary().focus();
+    } finally {
+      this.busy.set(false);
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+
+/**
+ * When the client sees a program that has not begun (TRN-023): from its first day, or now. The choice
+ * is the program's, and the server decides whether a paid plan lets it open.
+ */
+@Component({
+  selector: 'app-program-client-sees',
+  imports: [Button, FormSummary, ModalFooter, SegmentedControl],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+      <app-segmented-control
+        [label]="seesLabel"
+        hideLabel
+        [options]="seesOptions"
+        [selected]="sees()"
+        (selectedChange)="sees.set($any($event))"
+      />
+      <p class="muted" dir="auto" aria-live="polite">{{ help() }}</p>
+      <app-form-summary>
+        @if (error(); as message) {
+          {{ message }}
+        }
+      </app-form-summary>
+    </form>
+    <ng-template appModalFooter>
+      <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>
+        Not now
+      </button>
+      <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+        @if (busy()) {
+          <ng-container i18n>Saving…</ng-container>
+        } @else {
+          <ng-container i18n>Save</ng-container>
+        }
+      </button>
+    </ng-template>
+  `,
+  styles: DIALOG_STYLES,
+})
+export class ProgramClientSees {
+  private readonly api = inject(ApiClient);
+  private readonly csrf = inject(CsrfService);
+
+  readonly block = input.required<BlockCard>();
+  readonly firstName = input.required<string>();
+  readonly planPaid = input.required<boolean>();
+  /** The choice saved; null when nothing changed. */
+  readonly closed = output<ClientSees | null>();
+  private readonly summary = viewChild.required(FormSummary);
+
+  protected readonly formId = modalFormId('program-client-sees');
+  protected readonly busy = signal(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly seesLabel = $localize`The client sees it`;
+  protected readonly seesOptions = clientSeesOptions();
+  /** Starts on the program's own setting, and follows it if the program is reloaded. */
+  protected readonly sees = linkedSignal<ClientSees>(() =>
+    this.block().revealAll ? 'now' : 'firstDay',
+  );
+
+  protected readonly help = computed(() =>
+    clientSeesHelp(this.sees(), this.firstName(), this.planPaid()),
+  );
+
+  protected async submit(): Promise<void> {
+    if (this.busy()) return;
+    const block = this.block();
+    const sees = this.sees();
+    if ((sees === 'now') === block.revealAll) {
+      this.closed.emit(null);
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      await this.csrf.refresh();
+      await firstValueFrom(
+        this.api.updateMesocycleVisibility(block.id, {
+          revealAllWeeks: sees === 'now',
+          version: block.version,
+        }),
+      );
+      this.closed.emit(sees);
+    } catch (error) {
+      this.error.set(
+        programWriteError(error, $localize`The setting could not be changed.`, this.firstName()),
       );
       this.summary().focus();
     } finally {

@@ -469,7 +469,7 @@ describe('what a coach can do about a program', () => {
       'Build next block',
       'Edit weeks',
       'Reschedule',
-      'Open every shared week now',
+      'The client sees it',
       'Cancel program',
     ]);
     expect(items[4]).toMatchObject({ hint: 'Move the start date' });
@@ -478,7 +478,7 @@ describe('what a coach can do about a program', () => {
 
   it('turns the weekly opening back on when every shared week is already open', () => {
     const items = programMenu(
-      blockCard(plannedBlock({ revealAllWeeks: true }), context),
+      blockCard(runningBlock({ revealAllWeeks: true }), context),
       false,
       context,
     );
@@ -488,6 +488,44 @@ describe('what a coach can do about a program', () => {
     });
     expect(items.some((item) => item.action === 'reveal-all')).toBe(false);
     expect(items.some((item) => item.action === 'assign')).toBe(false);
+  });
+
+  it('asks when the client sees a program that has not begun, and says the choice (critique B18)', () => {
+    const keeps = programMenu(blockCard(plannedBlock(), context), false, context);
+    const shows = programMenu(
+      blockCard(plannedBlock({ revealAllWeeks: true }), context),
+      false,
+      context,
+    );
+
+    expect(keeps.find((item) => item.action === 'client-sees')).toMatchObject({
+      label: 'The client sees it',
+      hint: 'From its first day',
+    });
+    expect(shows.find((item) => item.action === 'client-sees')).toMatchObject({
+      label: 'The client sees it',
+      hint: 'Now',
+    });
+    for (const items of [keeps, shows]) {
+      expect(items.some((item) => item.action?.startsWith('reveal-'))).toBe(false);
+    }
+  });
+
+  it('says on a program not begun whether the client reads it yet (critique B18)', () => {
+    const facts = (options: Parameters<typeof plannedBlock>[0]) =>
+      blockCard(plannedBlock(options), context).facts.slice(2);
+
+    expect(facts({})).toEqual([]);
+    expect(facts({ revealAllWeeks: true, isShownEarly: true })).toEqual([
+      { text: 'Maya reads its shared weeks now', warm: false },
+    ]);
+    expect(facts({ revealAllWeeks: true })).toEqual([
+      { text: 'Maya reads it once a paid plan covers its dates', warm: true },
+    ]);
+    // Once it runs the shared weeks are simply open.
+    expect(
+      blockCard(runningBlock({ revealAllWeeks: true }), context).facts.map((fact) => fact.text),
+    ).not.toContain('Maya reads its shared weeks now');
   });
 
   it('will not cancel a program with a workout open', () => {

@@ -28,14 +28,31 @@ internal sealed class CoachingFeatureAccessService(
         CancellationToken cancellationToken) =>
         (await EvaluateManyAsync(tenantId, [clientProfileId], cancellationToken))[clientProfileId];
 
+    public async Task<FeatureAccessDecision> EvaluateOnDayAsync(
+        Guid tenantId,
+        Guid clientProfileId,
+        CoachingFeature feature,
+        DateOnly day,
+        CancellationToken cancellationToken) =>
+        (await EvaluateManyOnAsync(tenantId, [clientProfileId], day, cancellationToken))[clientProfileId]
+            .Single(item => item.Feature == feature);
+
+    public Task<IReadOnlyDictionary<Guid, IReadOnlyList<FeatureAccessDecision>>> EvaluateManyAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> clientProfileIds,
+        CancellationToken cancellationToken) =>
+        EvaluateManyOnAsync(tenantId, clientProfileIds, null, cancellationToken);
+
     /// <remarks>
     /// One client is a batch of one, so every feature is decided by this one path. The checks run in
     /// the same order for each client, and each is a single query however many clients are asked
-    /// about, so a coach's list of clients costs what one client does.
+    /// about, so a coach's list of clients costs what one client does. Without a day they are read
+    /// against the workspace's today.
     /// </remarks>
-    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<FeatureAccessDecision>>> EvaluateManyAsync(
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<FeatureAccessDecision>>> EvaluateManyOnAsync(
         Guid tenantId,
         IReadOnlyCollection<Guid> clientProfileIds,
+        DateOnly? day,
         CancellationToken cancellationToken)
     {
         var ids = clientProfileIds.Distinct().ToArray();
@@ -107,15 +124,7 @@ internal sealed class CoachingFeatureAccessService(
             return decisions;
         }
 
-        var tenantSettings = await dbContext.Tenants
-            .AsNoTracking()
-            .Where(tenant => tenant.Id == tenantId)
-            .Select(tenant => new { tenant.TimeZoneId })
-            .SingleAsync(cancellationToken);
-        var localNow = TimeZoneInfo.ConvertTime(
-            clock.UtcNow,
-            TimeZoneInfo.FindSystemTimeZoneById(tenantSettings.TimeZoneId));
-        var tenantToday = DateOnly.FromDateTime(localNow.DateTime);
+        var readOn = day ?? await GetTenantTodayAsync(tenantId, cancellationToken);
 
         var entitledIds = entitled.ToArray();
         var candidates = (await (
@@ -147,11 +156,24 @@ internal sealed class CoachingFeatureAccessService(
         {
             var clientCandidates = candidates[clientProfileId].ToArray();
             decisions[clientProfileId] = Enum.GetValues<CoachingFeature>()
-                .Select(feature => EvaluateFeature(feature, clientCandidates, tenantToday))
+                .Select(feature => EvaluateFeature(feature, clientCandidates, readOn))
                 .ToArray();
         }
 
         return decisions;
+    }
+
+    private async Task<DateOnly> GetTenantTodayAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenantSettings = await dbContext.Tenants
+            .AsNoTracking()
+            .Where(tenant => tenant.Id == tenantId)
+            .Select(tenant => new { tenant.TimeZoneId })
+            .SingleAsync(cancellationToken);
+        var localNow = TimeZoneInfo.ConvertTime(
+            clock.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById(tenantSettings.TimeZoneId));
+        return DateOnly.FromDateTime(localNow.DateTime);
     }
 
     private static FeatureAccessDecision EvaluateFeature(

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   historyItem,
   historyPage,
+  nextProgramView,
   PROGRAM_TODAY,
   programSession,
   programView,
@@ -42,6 +43,22 @@ describe('mapTrainingProgram', () => {
       ],
     );
     expect(plan.weeks[3].visible).toBe(false);
+  });
+
+  it('reads a next program shown early beside the one that runs (critique B18)', () => {
+    const read = mapTrainingProgram(programView({ nextProgram: nextProgramView() }));
+
+    expect(read.program?.name).toBe('Strength Foundations');
+    expect(read.nextProgram).toMatchObject({
+      name: 'Summer Strength',
+      phase: 'Upcoming',
+      lastDate: '2026-10-25',
+      currentWeek: null,
+    });
+    const sessions = read.nextProgram!.weeks.flatMap((week) => week.sessions);
+    expect(sessions.map((session) => session.state)).toEqual(['Upcoming', 'Upcoming', 'Upcoming']);
+    expect(sessions.some((session) => session.opensPlayer || session.canDoNow)).toBe(false);
+    expect(mapTrainingProgram(programView()).nextProgram).toBeNull();
   });
 
   it('gives each week its last day, seven days from its first (CLIENT-4)', () => {

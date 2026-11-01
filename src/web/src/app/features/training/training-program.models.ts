@@ -1,5 +1,6 @@
 import type {
   ClientProgramPhase,
+  ClientProgramView,
   ClientSessionState,
   ClientTrainingProgramView,
   ClientWorkoutHistoryPage,
@@ -60,7 +61,10 @@ export interface TrainingProgramRead {
   readonly isAllowed: boolean;
   readonly accessReason: string;
   readonly localDate: string;
+  /** With training closed today, only a program the coach shows before its first day (TRN-023). */
   readonly program: TrainingProgram | null;
+  /** A later program the coach shows before its first day, beside the one above (TRN-023). */
+  readonly nextProgram: TrainingProgram | null;
   readonly nextProgramStart: string | null;
 }
 
@@ -108,58 +112,58 @@ export type ProgramAction =
 
 export function mapTrainingProgram(value: ClientTrainingProgramView): TrainingProgramRead {
   const today = value.localDate;
-  const program = value.program;
   return {
     isAllowed: value.isAllowed,
     accessReason: value.accessReason,
     localDate: today,
     nextProgramStart: value.nextProgramStartDate,
-    program:
-      program === null
-        ? null
-        : {
-            id: program.id,
-            name: program.name,
-            startDate: program.startDate,
-            lastDate: addDays(program.endDateExclusive, -1),
-            phase: program.phase,
-            weekCount: Number(program.weekCount),
-            currentWeek:
-              program.currentWeekNumber == null ? null : Number(program.currentWeekNumber),
-            sessionCount: Number(program.sessionCount),
-            completedCount: Number(program.completedCount),
-            missedCount: Number(program.missedCount),
-            weeks: program.weeks.map((week) => {
-              const sessions = week.sessions.map((session) => ({
-                sessionId: session.sessionId,
-                name: session.name,
-                date: session.scheduledDate,
-                state: session.state,
-                exerciseCount: Number(session.exerciseCount),
-                setCount: Number(session.setCount),
-                opensPlayer:
-                  session.state === 'Today' ||
-                  session.state === 'InProgress' ||
-                  (session.state === 'Completed' && session.scheduledDate === today),
-                startedOn: session.startedOn ?? null,
-                isLate: session.isLate ?? false,
-                canDoNow: session.state === 'Missed' && program.phase === 'Current',
-              }));
-              return {
-                number: Number(week.weekNumber),
-                startDate: week.startDate,
-                lastDate: addDays(week.startDate, 6),
-                visible: week.isVisible,
-                shared: week.isShared,
-                isCurrent:
-                  program.phase === 'Current' &&
-                  Number(week.weekNumber) === Number(program.currentWeekNumber),
-                sessions,
-                done: sessions.filter((session) => session.state === 'Completed').length,
-                missed: sessions.filter((session) => session.state === 'Missed').length,
-              };
-            }),
-          },
+    program: value.program === null ? null : mapProgram(value.program, today),
+    nextProgram: value.nextProgram ? mapProgram(value.nextProgram, today) : null,
+  };
+}
+
+function mapProgram(program: ClientProgramView, today: string): TrainingProgram {
+  return {
+    id: program.id,
+    name: program.name,
+    startDate: program.startDate,
+    lastDate: addDays(program.endDateExclusive, -1),
+    phase: program.phase,
+    weekCount: Number(program.weekCount),
+    currentWeek: program.currentWeekNumber == null ? null : Number(program.currentWeekNumber),
+    sessionCount: Number(program.sessionCount),
+    completedCount: Number(program.completedCount),
+    missedCount: Number(program.missedCount),
+    weeks: program.weeks.map((week) => {
+      const sessions = week.sessions.map((session) => ({
+        sessionId: session.sessionId,
+        name: session.name,
+        date: session.scheduledDate,
+        state: session.state,
+        exerciseCount: Number(session.exerciseCount),
+        setCount: Number(session.setCount),
+        opensPlayer:
+          session.state === 'Today' ||
+          session.state === 'InProgress' ||
+          (session.state === 'Completed' && session.scheduledDate === today),
+        startedOn: session.startedOn ?? null,
+        isLate: session.isLate ?? false,
+        canDoNow: session.state === 'Missed' && program.phase === 'Current',
+      }));
+      return {
+        number: Number(week.weekNumber),
+        startDate: week.startDate,
+        lastDate: addDays(week.startDate, 6),
+        visible: week.isVisible,
+        shared: week.isShared,
+        isCurrent:
+          program.phase === 'Current' &&
+          Number(week.weekNumber) === Number(program.currentWeekNumber),
+        sessions,
+        done: sessions.filter((session) => session.state === 'Completed').length,
+        missed: sessions.filter((session) => session.state === 'Missed').length,
+      };
+    }),
   };
 }
 

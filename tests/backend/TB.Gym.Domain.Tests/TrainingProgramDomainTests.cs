@@ -128,6 +128,53 @@ public sealed class TrainingProgramDomainTests
         }
     }
 
+    [TestMethod]
+    public void AClientReadsAProgramEarlyOnlyWhileAPaidPlanCoversItsDates()
+    {
+        var training = CoachingFeature.Training;
+        var firstDay = Today.AddDays(5);
+        var end = firstDay.AddDays(28);
+        var paid = new FeatureAccessDecision(training, true, FeatureAccessReason.Granted, Guid.NewGuid(), firstDay, end);
+        var running = new FeatureAccessDecision(training, true, FeatureAccessReason.Granted);
+        var booked = new FeatureAccessDecision(training, false, FeatureAccessReason.NotStarted, Guid.NewGuid(), firstDay);
+
+        // Beside a running plan, and before the paid plan itself begins.
+        Assert.IsTrue(ProgramShownEarlyPolicy.Opens(running, Today, paid, end));
+        Assert.IsTrue(ProgramShownEarlyPolicy.Opens(booked, Today, paid, end));
+        Assert.IsTrue(ProgramShownEarlyPolicy.Opens(running, Today, paid, end.AddDays(-7)));
+
+        // The plan on the program's first day decides: waiting for payment, part paid, paused or none at all.
+        foreach (var notPaid in new[]
+                 {
+                     FeatureAccessReason.PaymentRequired, FeatureAccessReason.Paused,
+                     FeatureAccessReason.NotStarted, FeatureAccessReason.Expired,
+                     FeatureAccessReason.Cancelled, FeatureAccessReason.NoEntitlement,
+                 })
+        {
+            Assert.IsFalse(
+                ProgramShownEarlyPolicy.Opens(running, Today, new FeatureAccessDecision(training, false, notPaid), end),
+                notPaid.ToString());
+        }
+
+        // A plan that stops before the program does covers only part of its dates.
+        Assert.IsFalse(ProgramShownEarlyPolicy.Opens(running, Today, paid, end.AddDays(1)));
+        Assert.IsFalse(ProgramShownEarlyPolicy.Opens(
+            running, Today, new FeatureAccessDecision(training, true, FeatureAccessReason.Granted), end));
+
+        // It never opens wider than the coach's own read (TRN-023).
+        foreach (var closed in new[]
+                 {
+                     FeatureAccessReason.Expired, FeatureAccessReason.Paused, FeatureAccessReason.Cancelled,
+                     FeatureAccessReason.NoEntitlement, FeatureAccessReason.RelationshipBlocked,
+                     FeatureAccessReason.MembershipInactive, FeatureAccessReason.PlatformBlocked,
+                 })
+        {
+            Assert.IsFalse(
+                ProgramShownEarlyPolicy.Opens(new FeatureAccessDecision(training, false, closed, Guid.NewGuid(), firstDay), Today, paid, end),
+                closed.ToString());
+        }
+    }
+
     private static PerformedSet Set(
         Guid exerciseId,
         int reps,

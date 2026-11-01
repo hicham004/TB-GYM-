@@ -20,6 +20,7 @@ import {
   assignmentErrors,
   assignmentRequest,
   cancelReasonErrors,
+  clientSeesHelp,
   copiesThatFit,
   coverageText,
   defaultStartDate,
@@ -29,6 +30,7 @@ import {
   maxRow,
   nextBlockFormula,
   planChoices,
+  planPaid,
   previewWeeks,
   programChoices,
   programNameErrors,
@@ -80,12 +82,13 @@ function template(
 
 describe('choosing a plan', () => {
   it('names a plan by product, price option and dates', () => {
-    expect(planChoices([enrollment({})], 'en-US')).toEqual([
+    expect(planChoices([enrollment({ balanceAmount: 0 })], 'en-US')).toEqual([
       {
         id: 'enrollment-1',
         label: 'Online Coaching · 12 weeks · 1 Sep – 23 Nov 2026',
         startDate: '2026-09-01',
         lastDay: '2026-11-23',
+        paid: true,
       },
     ]);
   });
@@ -435,6 +438,33 @@ describe('training maxes', () => {
   });
 });
 
+describe('The client sees it (critique B18)', () => {
+  const plan = (overrides: Partial<ClientEnrollment>) =>
+    enrollment({ effectiveStatus: 'Active', balanceAmount: 0, ...overrides });
+
+  it('counts a plan as paid only when nothing is left to pay and it can still run', () => {
+    expect(planPaid(plan({}))).toBe(true);
+    expect(planPaid(plan({ effectiveStatus: 'Upcoming' }))).toBe(true);
+    expect(planPaid(plan({ balanceAmount: 40 }))).toBe(false);
+    expect(planPaid(plan({ effectiveStatus: 'PendingPayment' }))).toBe(false);
+    expect(planPaid(plan({ effectiveStatus: 'Paused' }))).toBe(false);
+    expect(planPaid(plan({ effectiveStatus: 'Cancelled' }))).toBe(false);
+    expect(planPaid(undefined)).toBe(false);
+  });
+
+  it('says what the choice means', () => {
+    expect(clientSeesHelp('firstDay', 'Maya', false)).toBe(
+      'Each shared week opens on its first day.',
+    );
+    expect(clientSeesHelp('now', 'Maya', true)).toBe(
+      'Maya reads the shared weeks now. Each workout opens on its day.',
+    );
+    expect(clientSeesHelp('now', 'Maya', false)).toBe(
+      'Maya reads the shared weeks once the plan is paid. Each workout opens on its day.',
+    );
+  });
+});
+
 describe('assigning a program', () => {
   const values: AssignmentValues = {
     enrollmentId: 'enrollment-1',
@@ -533,7 +563,9 @@ describe('assigning a program', () => {
       workingMaxes: [
         { exerciseId: 'squat', strengthMaxRecordId: 'max-1', value: 100, unit: 'Kilogram' },
       ],
+      revealAllWeeks: false,
     });
+    expect(assignmentRequest({ ...values, clientSees: 'now' }).revealAllWeeks).toBe(true);
   });
 });
 

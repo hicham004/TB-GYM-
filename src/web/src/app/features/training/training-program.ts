@@ -109,7 +109,7 @@ export class TrainingProgram {
   protected readonly loadingMore = signal(false);
   protected readonly showAllHistory = signal(false);
   /** Weeks the client opened below the one in focus, which is always shown; all start closed. */
-  protected readonly openWeeks = signal<ReadonlySet<number>>(new Set());
+  protected readonly openWeeks = signal<ReadonlySet<ProgramWeek>>(new Set());
 
   protected readonly accessLabel = trainingReadAccessLabel;
   protected readonly unitLabel = unitLabel;
@@ -118,6 +118,8 @@ export class TrainingProgram {
     () => this.access.decision('Messaging')?.isAllowed ?? false,
   );
   protected readonly program = computed(() => this.read()?.program ?? null);
+  /** The next program when the coach shows it early, beside the one above (TRN-023). */
+  protected readonly nextProgram = computed(() => this.read()?.nextProgram ?? null);
   protected readonly action = computed(() => {
     const read = this.read();
     return read?.program ? programAction(read.program, read.localDate) : { kind: 'none' as const };
@@ -175,13 +177,13 @@ export class TrainingProgram {
   }
 
   protected isOpen(week: ProgramWeek): boolean {
-    return this.openWeeks().has(week.number);
+    return this.openWeeks().has(week);
   }
 
   protected toggleWeek(week: ProgramWeek): void {
     this.openWeeks.update((open) => {
       const next = new Set(open);
-      if (!next.delete(week.number)) next.add(week.number);
+      if (!next.delete(week)) next.add(week);
       return next;
     });
   }
@@ -343,15 +345,20 @@ export class TrainingProgram {
   private followWeekLink(): void {
     const number = this.linkedWeek;
     this.linkedWeek = NaN;
-    const week = this.program()?.weeks.find((item) => item.number === number);
-    if (!week || !week.visible || (this.linkedProgram && this.program()?.id !== this.linkedProgram))
+    const next = this.nextProgram();
+    const isNext = next !== null && next.id === this.linkedProgram;
+    const program = isNext ? next : this.program();
+    const week = program?.weeks.find((item) => item.number === number);
+    if (!week || !week.visible || (this.linkedProgram && program?.id !== this.linkedProgram))
       return;
     const inFocus = week === this.focus();
     if (!inFocus && week.visible && week.sessions.length > 0 && !this.isOpen(week)) {
       this.toggleWeek(week);
     }
 
-    this.bringIntoView(inFocus ? 'focus-heading' : `week-row-${week.number}`);
+    this.bringIntoView(
+      inFocus ? 'focus-heading' : `${isNext ? 'next-week' : 'week'}-row-${week.number}`,
+    );
   }
 
   /** Shows the finished workout a coach's note is on, beyond the first few if need be. */

@@ -107,7 +107,7 @@ internal sealed partial class TrainingApplicationService
             }
 
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.MesocycleVersion;
-            var visibleBefore = ClientVisibleWeeks(mesocycle);
+            var visibleBefore = await ClientVisibleWeeksAsync(mesocycle, cancellationToken);
             var existingWeekIds = mesocycle.Weeks.Select(item => item.Id).ToHashSet();
             mesocycle.AppendWeeks(preview.GeneratedWeeks);
             dbContext.MesocycleWeeks.AddRange(

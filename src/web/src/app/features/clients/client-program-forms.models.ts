@@ -15,6 +15,7 @@ import type {
   TrainingMesocycleView,
   TrainingSessionView,
 } from '../../core/api/generated';
+import type { SegmentOption } from '../../ui/segmented-control';
 import { liftsNeedingMax, maxReason } from '../training/training-max-needs';
 import { unitLabel } from '../training/training-program.models';
 import { setLines } from './client-program.models';
@@ -38,6 +39,17 @@ export interface PlanChoice {
   readonly startDate: string;
   /** The last day the plan covers. */
   readonly lastDay: string;
+  /** Nothing is left to pay, so a program shown early can open under it (TRN-023). */
+  readonly paid: boolean;
+}
+
+/** Paid in full and not paused: the words follow this, and the server decides it again. */
+export function planPaid(enrollment: ClientEnrollment | undefined): boolean {
+  return (
+    enrollment !== undefined &&
+    Number(enrollment.balanceAmount) <= 0 &&
+    (enrollment.effectiveStatus === 'Active' || enrollment.effectiveStatus === 'Upcoming')
+  );
 }
 
 /**
@@ -61,7 +73,26 @@ export function planChoices(
       label: `${enrollment.productName} · ${enrollment.offerLabel} · ${formatDate(enrollment.startDate, 'd MMM', locale)} – ${formatDate(enrollment.lastActiveDate, 'd MMM y', locale)}`,
       startDate: enrollment.startDate,
       lastDay: enrollment.lastActiveDate,
+      paid: planPaid(enrollment),
     }));
+}
+
+/** "The client sees it": on the program's first day, or now (TRN-023). */
+export type ClientSees = 'firstDay' | 'now';
+
+export function clientSeesOptions(): SegmentOption[] {
+  return [
+    { value: 'firstDay', label: $localize`From its first day` },
+    { value: 'now', label: $localize`Now` },
+  ];
+}
+
+/** What the choice means for this client, under a plan paid or still to be paid. */
+export function clientSeesHelp(sees: ClientSees, firstName: string, paid: boolean): string {
+  if (sees === 'firstDay') return $localize`Each shared week opens on its first day.`;
+  return paid
+    ? $localize`${firstName}:name: reads the shared weeks now. Each workout opens on its day.`
+    : $localize`${firstName}:name: reads the shared weeks once the plan is paid. Each workout opens on its day.`;
 }
 
 export interface ProgramChoice {
@@ -298,6 +329,8 @@ export interface AssignmentValues {
   maxes: readonly MaxRow[];
   /** What the client's copy is called; empty keeps the program's own name (TRN-002). */
   name?: string;
+  /** Left out, the program opens from its first day. */
+  clientSees?: ClientSees;
 }
 
 export const PROGRAM_NAME_LIMIT = 160;
@@ -381,6 +414,7 @@ export function assignmentRequest(values: AssignmentValues): AssignmentRequest {
             },
     ),
     ...(name ? { name } : {}),
+    revealAllWeeks: values.clientSees === 'now',
   };
 }
 

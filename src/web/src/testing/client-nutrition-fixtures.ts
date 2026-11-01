@@ -358,6 +358,7 @@ export function programView(
         endDateExclusive: '2026-10-31',
         status: 'Active',
         revealAllWeeks: false,
+        isShownEarly: false,
         version: 1,
         weekCount: 4,
         currentWeekNumber: 2,

@@ -565,7 +565,8 @@ rule. An empty rest stays allowed and means no rest and no timer.
 
 **TRN-006** Client-visible future weeks are calculated from program start, snapshotted workspace
 time zone, and week index. A week must be published and locally unlocked, unless the coach
-enables `RevealAllWeeks`. The API filters locked content; Angular visibility is not protection.
+enables `RevealAllWeeks`, which before a program's first day counts only while it is shown early
+(TRN-023). The API filters locked content; Angular visibility is not protection.
 
 **TRN-007** The phrase "international calendar" is rejected as ambiguous. Week 1 starts on the
 explicit mesocycle start date, even when it is not Monday. Sessions use offsets 0 through 6,
@@ -668,8 +669,9 @@ missed for the client, on Coach Today or in the coach's timeline (TRN-021, TRN-0
 the day the workout was started in the program's time zone (`StartedOn`) and whether that was after the
 session's own day (`IsLate`), so each says it was done late. A workout started on its day and finished
 after midnight is not late. The start refuses a session whose day has not come with 409
-`session_not_due`, and a missed one once the program's last day has passed with 409 `program_ended`
-(the coach closes it, TRN-013); a week the client cannot see stays a bare 403.
+`session_not_due`, a program shown early included (TRN-023) even while its plan has not begun, and a
+missed one once the program's last day has passed with 409 `program_ended` (the coach closes it,
+TRN-013); a week the client cannot see stays a bare 403.
 
 **TRN-021** Training signals v1 (`MissedSinceLastWorkoutAndUnsharedWeek`, R3.1) tell a coach about a
 client's training. Missed sessions are those TRN-020 calls Missed, scheduled after the day the
@@ -697,9 +699,21 @@ records (TRN-019). Today's training access decides, as for the client, with one 
 booked plan begins (`NotStarted`, or `PaymentRequired` for a plan whose first day is still ahead) the
 read opens, so a coach can check a program for a new client or across the gap before a renewal; they
 may already assign and change programs on those dates (TRN-014). The answer keeps the plan's own
-reason, so the page can say from when the client sees it. The client's own reads still follow today.
-A lapsed, paused or cancelled plan with nothing booked, a blocked relationship and a former client
-close it.
+reason, so the page can say from when the client sees it. The client's own reads still follow today,
+but for a program shown early, below. A lapsed, paused or cancelled plan with nothing booked, a blocked
+relationship and a former client close it.
+
+A program shown early v1 (`PaidPlanCoversProgram`, `ProgramShownEarlyPolicy`, critique B18, the partner's
+note of 2026-10-31). "The client sees it", on Assign program and on the menu of a program not begun, is
+From its first day, the default, or Now, and Now is the program's `RevealAllWeeks` (TRN-006), so a program
+keeps every shared week open once it runs, where the menu keeps its own two lines. Before the first day Now
+opens only while the coach's read above is open and the training decision for that first day, with the plans
+and payments as they stand (`EvaluateOnDayAsync`), grants training up to the program's end: a plan waiting
+for payment, part paid (SUB-008), paused or cancelled shows nothing, and the coach's read says which it is
+(`IsShownEarly`). The client then reads the shared weeks on Training, as `NextProgram` beside a program that
+runs, or as the page's program while nothing runs or training is closed today (`IsAllowed` stays false, and
+Today, the week, history and records keep following today). The week strip, the next session and the week
+notices count those weeks too. Reading starts nothing: the workout waits for its day (TRN-020).
 
 **TRN-024** Program working drafts v1 (R4.2a, decided by the owner 2026-10-05, ADR 0033). The program
 builder keeps a coach's changes on the server as they work, as a `ProgramDraft`: one per person and

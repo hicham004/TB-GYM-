@@ -13,16 +13,17 @@ internal sealed partial class TrainingApplicationService
     {
         var today = await GetTenantTodayAsync(cancellationToken);
         var client = await FindSelfClientAsync(cancellationToken);
-        var access = client is null ? null : await GetTrainingAccessAsync(client.Id, cancellationToken);
-        if (client is null || access is not { IsAllowed: true })
+        if (client is null)
         {
-            return new(false, (access?.Reason ?? FeatureAccessReason.MembershipInactive).ToString(), today,
-                null, null, ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);
+            return new(false, FeatureAccessReason.MembershipInactive.ToString(), today,
+                null, null, ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version, null);
         }
+
+        var access = await GetTrainingAccessAsync(client.Id, cancellationToken);
 
         // The same open blocks as Today's coverage: primary blocks cannot overlap (TRN-011), so the
         // first few by start answer both "covering today" and "next".
-        var open = await dbContext.TrainingMesocycles.AsNoTracking()
+        var blocks = await dbContext.TrainingMesocycles.AsNoTracking()
             .Where(item => item.ClientProfileId == client.Id && item.EndDateExclusive > today &&
                 item.Status != MesocycleStatus.Cancelled && item.Status != MesocycleStatus.Completed)
             .OrderBy(item => item.StartDate).ThenBy(item => item.Id)
@@ -30,24 +31,111 @@ internal sealed partial class TrainingApplicationService
             .Select(item => new ProgramBlockRow(item.Id, item.Name, item.Kind, item.StartDate,
                 item.EndDateExclusive, item.TimeZoneId, item.RevealAllWeeks))
             .ToListAsync(cancellationToken);
+        var shownEarly = await ProgramsShownEarlyAsync(client.Id, access, today,
+            blocks.Select(item => (item.Id, item.RevealAllWeeks, item.StartDate, item.EndDateExclusive)),
+            cancellationToken);
+        var open = blocks.Select(item => item with
+        {
+            RevealAllWeeks = RevealCounts(item.Id, item.RevealAllWeeks, item.StartDate, today, shownEarly),
+        }).ToArray();
+        var early = open.Where(item => shownEarly.Contains(item.Id)).ToArray();
         var current = open.Where(item => item.StartDate <= today)
             .OrderBy(item => item.Kind == MesocycleKind.Primary ? 0 : 1)
             .FirstOrDefault();
         var next = open.FirstOrDefault(item => item.StartDate > today);
-        var described = current ?? next ?? await dbContext.TrainingMesocycles.AsNoTracking()
-            .Where(item => item.ClientProfileId == client.Id)
-            .Where(FinishedBy(today))
-            .OrderByDescending(item => item.StartDate).ThenByDescending(item => item.Id)
-            .Select(item => new ProgramBlockRow(item.Id, item.Name, item.Kind, item.StartDate,
-                item.EndDateExclusive, item.TimeZoneId, item.RevealAllWeeks))
-            .FirstOrDefaultAsync(cancellationToken);
+
+        // With training closed today only a program shown early is read (TRN-023).
+        var described = !access.IsAllowed
+            ? early.FirstOrDefault()
+            : current ?? next ?? await dbContext.TrainingMesocycles.AsNoTracking()
+                .Where(item => item.ClientProfileId == client.Id)
+                .Where(FinishedBy(today))
+                .OrderByDescending(item => item.StartDate).ThenByDescending(item => item.Id)
+                .Select(item => new ProgramBlockRow(item.Id, item.Name, item.Kind, item.StartDate,
+                    item.EndDateExclusive, item.TimeZoneId, item.RevealAllWeeks))
+                .FirstOrDefaultAsync(cancellationToken);
         var program = described is null
             ? null
             : await ReadProgramAsync(described, described == current ? ClientProgramPhase.Current
-                : described == next ? ClientProgramPhase.Upcoming : ClientProgramPhase.Finished,
+                : described.StartDate > today ? ClientProgramPhase.Upcoming : ClientProgramPhase.Finished,
                 today, cancellationToken);
-        return new(true, access.Reason.ToString(), today, program, next?.StartDate,
-            ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);
+        var nextShown = early.FirstOrDefault(item => item != described);
+        return new(access.IsAllowed, access.Reason.ToString(), today, program,
+            access.IsAllowed ? next?.StartDate : described?.StartDate,
+            ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version,
+            nextShown is null
+                ? null
+                : await ReadProgramAsync(nextShown, ClientProgramPhase.Upcoming, today, cancellationToken));
+    }
+
+    /// <summary>
+    /// Which of these programs the client reads before their first day (TRN-023): those still to begin
+    /// that the coach shows now and a paid plan covers. Asks about nothing else, so a client with no
+    /// such program costs no read.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>> ProgramsShownEarlyAsync(
+        Guid clientProfileId,
+        FeatureAccessDecision access,
+        DateOnly today,
+        IEnumerable<(Guid Id, bool RevealAllWeeks, DateOnly StartDate, DateOnly EndDateExclusive)> blocks,
+        CancellationToken cancellationToken)
+    {
+        var shown = new HashSet<Guid>();
+        foreach (var block in blocks.Where(item => item.RevealAllWeeks && item.StartDate > today).Distinct())
+        {
+            var onFirstDay = await featureAccessService.EvaluateOnDayAsync(
+                tenantContext.TenantId,
+                clientProfileId,
+                CoachingFeature.Training,
+                block.StartDate,
+                cancellationToken);
+            if (ProgramShownEarlyPolicy.Opens(access, today, onFirstDay, block.EndDateExclusive))
+            {
+                shown.Add(block.Id);
+            }
+        }
+
+        return shown;
+    }
+
+    /// <summary>
+    /// Whether the coach's Now counts today: always once a program has begun, and before that only while
+    /// it is shown early, so a plan waiting for payment shows nothing (TRN-006, TRN-023).
+    /// </summary>
+    private static bool RevealCounts(
+        Guid blockId,
+        bool revealAllWeeks,
+        DateOnly startDate,
+        DateOnly today,
+        IReadOnlySet<Guid> shownEarly) =>
+        revealAllWeeks && (startDate <= today || shownEarly.Contains(blockId));
+
+    /// <summary><see cref="RevealCounts"/> for the one program a command or a coach's page holds.</summary>
+    private async Task<bool> RevealCountsAsync(TrainingMesocycle mesocycle, CancellationToken cancellationToken)
+    {
+        if (!mesocycle.RevealAllWeeks)
+        {
+            return false;
+        }
+
+        var today = await GetTenantTodayAsync(cancellationToken);
+        if (mesocycle.StartDate <= today)
+        {
+            return true;
+        }
+
+        if (mesocycle.Status is MesocycleStatus.Cancelled or MesocycleStatus.Completed)
+        {
+            return false;
+        }
+
+        var shownEarly = await ProgramsShownEarlyAsync(
+            mesocycle.ClientProfileId,
+            await GetTrainingAccessAsync(mesocycle.ClientProfileId, cancellationToken),
+            today,
+            [(mesocycle.Id, mesocycle.RevealAllWeeks, mesocycle.StartDate, mesocycle.EndDateExclusive)],
+            cancellationToken);
+        return shownEarly.Contains(mesocycle.Id);
     }
 
     /// <summary>
@@ -85,6 +173,10 @@ internal sealed partial class TrainingApplicationService
             .OrderByDescending(item => item.StartDate).ThenByDescending(item => item.Id)
             .Take(CoachProgramBlockLimit)
             .ToListAsync(cancellationToken);
+        var shownEarly = await ProgramsShownEarlyAsync(clientProfileId, access, today,
+            blocks.Where(item => item.Status is not (MesocycleStatus.Cancelled or MesocycleStatus.Completed))
+                .Select(item => (item.Id, item.RevealAllWeeks, item.StartDate, item.EndDateExclusive)),
+            cancellationToken);
         var blockIds = blocks.Select(item => item.Id).ToArray();
         var weeks = await dbContext.MesocycleWeeks.AsNoTracking()
             .Where(item => blockIds.Contains(item.MesocycleId))
@@ -137,7 +229,8 @@ internal sealed partial class TrainingApplicationService
             var weekViews = weeksByBlock[block.Id].Select(week =>
             {
                 var availability = TrainingCalendarPolicy.GetWeekAvailability(block.StartDate, week.WeekNumber,
-                    block.TimeZoneId, clock.UtcNow, block.RevealAllWeeks, week.IsPublished);
+                    block.TimeZoneId, clock.UtcNow,
+                    RevealCounts(block.Id, block.RevealAllWeeks, block.StartDate, today, shownEarly), week.IsPublished);
                 var sessionViews = sessionsByWeek[week.Id].Select(session =>
                 {
                     workouts.TryGetValue(session.Id, out var workout);
@@ -179,7 +272,8 @@ internal sealed partial class TrainingApplicationService
                 all.Count(item => item.State == ClientSessionState.Completed),
                 all.Count(item => item.State == ClientSessionState.Missed),
                 weekViews,
-                lifecycle[block.Id].ToArray());
+                lifecycle[block.Id].ToArray(),
+                shownEarly.Contains(block.Id));
         }).ToArray();
         return new(true, access.Reason.ToString(), today, views,
             ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version);

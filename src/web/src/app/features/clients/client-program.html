@@ -318,6 +318,17 @@
   }
 </ng-template>
 
+<ng-template #clientSeesDialog let-dialog>
+  @if (card(); as block) {
+    <app-program-client-sees
+      [block]="block"
+      [firstName]="firstName()"
+      [planPaid]="cardPlanPaid()"
+      (closed)="dialog.close($event)"
+    />
+  }
+</ng-template>
+
 <ng-template #sessionSheet let-sheet>
   @if (active(); as open) {
     @if (card(); as block) {

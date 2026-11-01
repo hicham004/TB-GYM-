@@ -48,6 +48,8 @@ import { ClientWorkspaceContext } from './client-workspace.context';
 import {
   assignmentErrors,
   assignmentRequest,
+  clientSeesHelp,
+  clientSeesOptions,
   defaultStartDate,
   exercisesNeedingMax,
   maxRow,
@@ -61,6 +63,7 @@ import {
   withSuggestedMax,
   withTypedMax,
   type AssignmentValues,
+  type ClientSees,
   type MaxRow,
 } from './client-program-forms.models';
 
@@ -174,6 +177,16 @@ import {
                 <p class="warn-text" dir="auto" role="status">{{ pastEnd() }}</p>
               }
             }
+
+            <div class="sees">
+              <app-segmented-control
+                [label]="seesLabel"
+                [options]="seesOptions"
+                [selected]="sees()"
+                (selectedChange)="sees.set($any($event))"
+              />
+              <p class="muted" dir="auto" aria-live="polite">{{ seesHelp() }}</p>
+            </div>
 
             <app-field
               [label]="nameLabel"
@@ -396,6 +409,16 @@ import {
       align-self: flex-start;
     }
 
+    .sees {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .sees .muted {
+      font-size: 0.875rem;
+    }
+
     .run {
       font-weight: 600;
       margin-block-start: -0.5rem;
@@ -550,6 +573,8 @@ export class ProgramAssign {
   protected readonly maxNone = $localize`Nothing recorded yet`;
   protected readonly nameLabel = $localize`Program name (optional)`;
   protected readonly nameLimit = PROGRAM_NAME_LIMIT;
+  protected readonly seesLabel = $localize`The client sees it`;
+  protected readonly seesOptions = clientSeesOptions();
   protected readonly howOptions: SegmentOption[] = [
     { value: 'number', label: $localize`Type it` },
     { value: 'weekOne', label: $localize`From week 1’s weight` },
@@ -592,6 +617,8 @@ export class ProgramAssign {
   protected readonly openRows = signal<ReadonlySet<string>>(new Set());
   /** What the program's own name is replaced by in the client's copy; empty keeps it (TRN-002). */
   protected readonly name = signal('');
+  /** From its first day until the coach chooses otherwise (TRN-023). */
+  protected readonly sees = signal<ClientSees>('firstDay');
   /** The server's words for each lift worked out from week 1's weight, by exercise (STR-011). */
   protected readonly estimates = signal<Record<string, string>>({});
 
@@ -617,6 +644,7 @@ export class ProgramAssign {
     loadRoundingMode: this.rounding(),
     maxes: this.maxes(),
     name: this.name(),
+    clientSees: this.sees(),
   }));
 
   protected readonly errors = computed(() => assignmentErrors(this.values()));
@@ -627,6 +655,10 @@ export class ProgramAssign {
   );
   protected readonly chosen = computed(() =>
     this.programs().find((item) => item.versionId === this.versionId()),
+  );
+
+  protected readonly seesHelp = computed(() =>
+    clientSeesHelp(this.sees(), this.firstName(), this.plan()?.paid ?? false),
   );
 
   protected readonly nameHelp = computed(() => {

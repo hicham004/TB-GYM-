@@ -330,7 +330,8 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 request.LoadRoundingMode,
                 request.IdempotencyKey,
                 snapshot,
-                mesocycleId);
+                mesocycleId,
+                request.RevealAllWeeks);
 
             dbContext.MesocycleWorkingMaxSnapshots.AddRange(workingMaxes.Values);
             dbContext.TrainingMesocycles.Add(mesocycle);
@@ -442,7 +443,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             }
 
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.Version;
-            var visibleBefore = ClientVisibleWeeks(mesocycle);
+            var visibleBefore = await ClientVisibleWeeksAsync(mesocycle, cancellationToken);
             mesocycle.Reschedule(request.StartDate);
             await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -575,7 +576,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             var workingMaxes = await LoadWorkingMaxDictionaryAsync(mesocycle.Id, cancellationToken);
             var calculated = CalculateSessionBlueprint(baseBlueprint, mesocycle, workingMaxes);
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = request.Version;
-            var visibleBefore = ClientVisibleWeeks(mesocycle);
+            var visibleBefore = await ClientVisibleWeeksAsync(mesocycle, cancellationToken);
             mesocycle.ReplaceFutureSession(sessionId, calculated);
             dbContext.ExercisePrescriptions.AddRange(session.Exercises);
             await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
@@ -611,7 +612,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         try
         {
             dbContext.Entry(mesocycle).Property(item => item.Version).OriginalValue = version;
-            var visibleBefore = ClientVisibleWeeks(mesocycle);
+            var visibleBefore = await ClientVisibleWeeksAsync(mesocycle, cancellationToken);
             mutation(mesocycle);
             await QueueClientWeekNoticesAsync(mesocycle, visibleBefore, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);

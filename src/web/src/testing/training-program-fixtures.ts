@@ -1,5 +1,6 @@
 import type {
   ClientProgramSessionView,
+  ClientProgramView,
   ClientProgramWeekView,
   ClientSessionState,
   ClientTrainingProgramView,
@@ -49,6 +50,7 @@ export function programView(
     nextProgramStartDate: null,
     sessionStateRuleKey: 'WorkoutThenScheduledDate',
     sessionStateRuleVersion: 2,
+    nextProgram: null,
     program: {
       id: 'block-1',
       name: 'Strength Foundations',
@@ -76,6 +78,30 @@ export function programView(
         week(4, '2026-10-05', [], false),
       ],
     },
+    ...overrides,
+  };
+}
+
+/** "Summer Strength", two weeks from Mon 12 Oct, read before its first day (TRN-023). */
+export function nextProgramView(overrides: Partial<ClientProgramView> = {}): ClientProgramView {
+  return {
+    id: 'block-2',
+    name: 'Summer Strength',
+    startDate: '2026-10-12',
+    endDateExclusive: '2026-10-26',
+    phase: 'Upcoming',
+    weekCount: 2,
+    currentWeekNumber: null,
+    sessionCount: 3,
+    completedCount: 0,
+    missedCount: 0,
+    weeks: [
+      week(1, '2026-10-12', [
+        programSession('n1', 'Squat day', '2026-10-12', 'Upcoming'),
+        programSession('n2', 'Bench day', '2026-10-15', 'Upcoming'),
+      ]),
+      week(2, '2026-10-19', [programSession('n3', 'Pull day', '2026-10-19', 'Upcoming')]),
+    ],
     ...overrides,
   };
 }

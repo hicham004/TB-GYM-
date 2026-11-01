@@ -410,6 +410,10 @@ public sealed record SaveSessionTemplateRequest(
     Guid SourceTemplateSessionId);
 
 /// <param name="Name">The program's name for this client; the template's own name when left out (TRN-002).</param>
+/// <param name="RevealAllWeeks">
+/// "The client sees it: Now": every shared week is read now, before the program's first day once a paid plan
+/// covers its dates (TRN-023). Left out, weeks open from their first day.
+/// </param>
 public sealed record AssignMesocycleRequest(
     Guid EnrollmentId,
     Guid TemplateVersionId,
@@ -420,7 +424,8 @@ public sealed record AssignMesocycleRequest(
     TrainingLoadRoundingMode LoadRoundingMode,
     IReadOnlyList<WorkingMaxSelectionRequest> WorkingMaxes,
     Guid IdempotencyKey,
-    string? Name = null);
+    string? Name = null,
+    bool RevealAllWeeks = false);
 
 /// <summary>
 /// The training max for one exercise: a number the coach typed or picked from the client's saved maxes
@@ -1022,7 +1027,9 @@ public sealed record ClientPersonalRecordsResult(
 
 /// <summary>
 /// The client's Training page (R2.5b): the program it describes (the one covering today, else the
-/// next, else the last one finished) and, separately, the start of a later program.
+/// next, else the last one finished) and, separately, the start of a later program. With training
+/// closed today (<c>IsAllowed</c> false) <c>Program</c> is empty unless the coach shows a program before
+/// its first day (TRN-023). <c>NextProgram</c> is a program shown early that <c>Program</c> is not.
 /// </summary>
 public sealed record ClientTrainingProgramView(
     bool IsAllowed,
@@ -1031,7 +1038,8 @@ public sealed record ClientTrainingProgramView(
     ClientProgramView? Program,
     DateOnly? NextProgramStartDate,
     string SessionStateRuleKey,
-    int SessionStateRuleVersion);
+    int SessionStateRuleVersion,
+    ClientProgramView? NextProgram);
 
 public enum ClientProgramPhase
 {
@@ -1097,6 +1105,8 @@ public sealed record CoachClientProgramView(
 /// has none. <c>Version</c> is the concurrency token the block's changes (share a week, reschedule,
 /// complete, cancel, add weeks) must send back. <c>Lifecycle</c> is the block's audited history, oldest
 /// first: assigned, renamed, cancelled with the coach's reason, completed (audit LOST-6).
+/// <c>IsShownEarly</c> says the client reads it now, before its first day (TRN-023): the coach chose Now
+/// (<c>RevealAllWeeks</c>) and a paid plan covers its dates.
 /// </summary>
 public sealed record CoachProgramBlockView(
     Guid Id,
@@ -1113,7 +1123,8 @@ public sealed record CoachProgramBlockView(
     int CompletedCount,
     int MissedCount,
     IReadOnlyList<CoachProgramWeekView> Weeks,
-    IReadOnlyList<MesocycleLifecycleEventView> Lifecycle);
+    IReadOnlyList<MesocycleLifecycleEventView> Lifecycle,
+    bool IsShownEarly);
 
 /// <summary>
 /// <c>IsShared</c> is the coach's choice; <c>IsVisible</c> is what the client can open today (shared

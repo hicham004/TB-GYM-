@@ -131,12 +131,16 @@ internal sealed partial class TrainingApplicationService
             where block.ClientProfileId == client.Id && block.Status != MesocycleStatus.Cancelled &&
                   session.ScheduledDate >= start && session.ScheduledDate < end && week.IsPublished
             orderby session.ScheduledDate, session.Position
-            select new { session.Id, session.ScheduledDate, block.StartDate, week.WeekNumber,
-                block.TimeZoneId, block.RevealAllWeeks })
+            select new { session.Id, session.ScheduledDate, BlockId = block.Id, block.StartDate,
+                block.EndDateExclusive, week.WeekNumber, block.TimeZoneId, block.RevealAllWeeks })
             .Take(50).ToListAsync(cancellationToken);
+        var shownEarly = await ProgramsShownEarlyAsync(client.Id, access, today,
+            rows.Select(row => (row.BlockId, row.RevealAllWeeks, row.StartDate, row.EndDateExclusive)),
+            cancellationToken);
         var visible = rows.Where(row => TrainingCalendarPolicy.GetWeekAvailability(
                 row.StartDate, row.WeekNumber, row.TimeZoneId, clock.UtcNow,
-                row.RevealAllWeeks, true).IsVisible).ToArray();
+                RevealCounts(row.BlockId, row.RevealAllWeeks, row.StartDate, today, shownEarly), true).IsVisible)
+            .ToArray();
         var ids = visible.Select(row => row.Id).ToArray();
         var completed = await dbContext.WorkoutExecutions.AsNoTracking()
             .Where(item => ids.Contains(item.TrainingSessionId) &&
@@ -254,33 +258,37 @@ internal sealed partial class TrainingApplicationService
         }
 
         var access = await GetTrainingAccessAsync(client.Id, cancellationToken);
-        if (!access.IsAllowed)
-        {
-            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
-        }
-
         var mesocycle = await LoadMesocycleBySessionAsync(sessionId, cancellationToken);
         if (mesocycle is null || mesocycle.ClientProfileId != client.Id)
         {
-            return NotFound();
+            return access.IsAllowed ? NotFound() : new TrainingCommandResult(TrainingCommandStatus.Forbidden);
         }
 
         var week = mesocycle.Weeks.Single(item => item.Sessions.Any(session => session.Id == sessionId));
         var session = week.Sessions.Single(item => item.Id == sessionId);
         var today = await GetTenantTodayAsync(cancellationToken);
-        if (mesocycle.GetEffectiveStatus(clock.UtcNow) != MesocycleStatus.Active)
-        {
-            return Conflict("mesocycle_not_active", "Only an active mesocycle can start a workout.");
-        }
-
-        // Visibility first, so a week the client cannot see says nothing about its sessions' days.
         var availability = TrainingCalendarPolicy.GetWeekAvailability(
             mesocycle.StartDate,
             week.WeekNumber,
             mesocycle.TimeZoneId,
             clock.UtcNow,
-            mesocycle.RevealAllWeeks,
+            await RevealCountsAsync(mesocycle, cancellationToken),
             week.IsPublished);
+        var status = mesocycle.GetEffectiveStatus(clock.UtcNow);
+
+        // A program shown early reads before its plan begins, and its sessions wait for their day (TRN-020).
+        var readEarly = status == MesocycleStatus.Planned && availability.IsVisible;
+        if (!access.IsAllowed && !readEarly)
+        {
+            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
+        }
+
+        if (status != MesocycleStatus.Active && !readEarly)
+        {
+            return Conflict("mesocycle_not_active", "Only an active mesocycle can start a workout.");
+        }
+
+        // Visibility first, so a week the client cannot see says nothing about its sessions' days.
         if (!availability.IsVisible)
         {
             return new TrainingCommandResult(TrainingCommandStatus.Forbidden);

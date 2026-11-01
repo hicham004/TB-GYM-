@@ -21,16 +21,19 @@ namespace TB.Gym.Infrastructure.Application;
 internal sealed partial class TrainingApplicationService
 {
     /// <summary>The week numbers of <paramref name="mesocycle"/> its client can open now.</summary>
-    private HashSet<int> ClientVisibleWeeks(TrainingMesocycle mesocycle)
+    private async Task<HashSet<int>> ClientVisibleWeeksAsync(
+        TrainingMesocycle mesocycle,
+        CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
+        var revealed = await RevealCountsAsync(mesocycle, cancellationToken);
         return mesocycle.Weeks
             .Where(week => TrainingCalendarPolicy.GetWeekAvailability(
                 mesocycle.StartDate,
                 week.WeekNumber,
                 mesocycle.TimeZoneId,
                 now,
-                mesocycle.RevealAllWeeks,
+                revealed,
                 week.IsPublished).IsVisible)
             .Select(week => week.WeekNumber)
             .ToHashSet();
@@ -39,7 +42,7 @@ internal sealed partial class TrainingApplicationService
     /// <summary>
     /// Queues "shared" for week numbers the client can open now and could not before, and "updated" for
     /// week numbers they could open before and still can whose content changed. Call it after the change
-    /// and before saving, with what <see cref="ClientVisibleWeeks"/> said before the change.
+    /// and before saving, with what <see cref="ClientVisibleWeeksAsync"/> said before the change.
     /// </summary>
     private async Task QueueClientWeekNoticesAsync(
         TrainingMesocycle mesocycle,
@@ -51,7 +54,7 @@ internal sealed partial class TrainingApplicationService
             return;
         }
 
-        var visibleNow = ClientVisibleWeeks(mesocycle);
+        var visibleNow = await ClientVisibleWeeksAsync(mesocycle, cancellationToken);
         var changedRows = ChangedWeekIds();
         // The number each changed row stands at now; a row taken out leaves its number to whatever replaced it.
         var changed = mesocycle.Weeks
