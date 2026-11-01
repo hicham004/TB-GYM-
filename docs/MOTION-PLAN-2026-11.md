@@ -20,7 +20,7 @@ What a row left out or chose on its own waits for the owner in section 3.
 
 | Step | What | What it builds, and what is left out | Status |
 | --- | --- | --- | --- |
-| W1 | Foundations | `core/motion`: the reduced-motion read with a `?motion=off` switch, the four moves with the prototype's numbers on the Web Animations API (no GSAP in the app), a fake for tests; the everyday layer (a 120 ms press on the kit's buttons and tappable cards, a 200 ms fade when a page changes inside the client and coach frames); mocked Playwright runs with reduced motion by default; rule 9 loosened in the UI plan. Left out: GSAP (it stays on the homepage), route view transitions, `animate.leave`, any change to the theme switch. | Open |
+| W1 | Foundations | `core/motion`: the reduced-motion read with a `?motion=off` switch, the four moves with the prototype's numbers on the Web Animations API (no GSAP in the app), a fake for tests; the everyday layer (a 120 ms press on the kit's buttons and tappable cards, a 200 ms fade when a page changes inside the client and coach frames); mocked Playwright runs with reduced motion by default; rule 9 loosened in the UI plan. Left out: GSAP (it stays on the homepage), route view transitions, `animate.leave`, any change to the theme switch. | Done · 2026-11-02 · f3f44a7 |
 | W2 | Demo day | `scripts/demo-day.ps1`: one command that rebuilds the demo into `tbgym_demo`, starts the API and the web app over HTTPS on the laptop's own address, opens the firewall once, and prints the address, the sign-ins and a QR code; `crypto.randomUUID` guarded so a plain http address works too; second, `-HeroName`, which gives Maya the friend's first name in the demo database only. Left out: Render, the test copy, email. | Open |
 | W3 | The set tick and the record burst | A logged set springs into its done form and its tick draws, the exercise's segment fills; a record pops its chip and bursts 16 dots from it, with the buzz Android gives, and its sentence becomes a pinned pill that never shifts the sets; a second record in the same workout gets the small form. Left out: sound, anything before the server's answer. | Open |
 | W4 | The finish | The finish summary rises and its four numbers count up to the server's own strings, the records list follows and the share card lands with a spring. Left out: a new share card design, a hold-to-finish button. | Open |
@@ -555,6 +555,11 @@ link). Clients' filter chips swap the rows instantly (`features/clients/clients.
 A chat that meets a choice adds one line here: the row, the question, what it built (or that it left the item out),
 the other way, and its recommendation. The owner answers in chat; the answer goes into the row's status and the line
 is removed, and a changed answer becomes a new row.
+
+- **W1 · The press on tappable cards.** The row's third column names tappable cards; section 2 limits the
+  press to the kit's buttons, icon buttons and the chips that are a button, a link or a filter's label, and keeps it off
+  row links and list rows (iOS sets :active at the start of every scroll). Built section 2's list: cards and rows do not
+  dip. The other way: a class a card opts into. Recommendation: keep as built; W7 gives the workout card its own motion.
 
 ## 4. The arc on the day
 
