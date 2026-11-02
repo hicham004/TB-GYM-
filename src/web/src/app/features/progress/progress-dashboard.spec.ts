@@ -3,13 +3,14 @@ import { type Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { type Observable, of, Subject, throwError } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type { ProgressDashboardView as ProgressDashboardContract } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, query, settle, toggleFold } from '../../../testing/dom';
+import { fakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
 import { ProgressDashboardView } from './progress-dashboard';
 import { UiSheet } from '../../ui/sheet';
 import { mapProgressDashboard, previewAssetIds } from './progress-dashboard.models';
@@ -997,5 +998,94 @@ describe('where a coach’s client started (critique B6)', () => {
     const host = await render(of(coachDashboard()));
 
     expect(host.querySelector('[data-start]')).toBeNull();
+  });
+});
+
+/**
+ * Progress draws itself (motion plan W13): once the first read is on screen the weight counts up to
+ * the page's own string and the charts draw in; a range tap afterwards fades the charts in and
+ * draws nothing twice.
+ */
+describe('ProgressDashboardView draws itself (W13)', () => {
+  const animate = vi.fn(() => ({ finished: Promise.resolve(), cancel: vi.fn() }));
+  const names = () =>
+    (animate.mock.contexts as Element[]).map((element) => element.tagName.toLowerCase());
+
+  beforeEach(() => {
+    Object.defineProperty(Element.prototype, 'animate', {
+      configurable: true,
+      writable: true,
+      value: animate,
+    });
+  });
+
+  afterEach(() => {
+    animate.mockClear();
+    delete (Element.prototype as { animate?: unknown }).animate;
+    TestBed.resetTestingModule();
+  });
+
+  it('counts the weight up once the read has drawn, and only fades a range tap in', async () => {
+    const motion = fakeMotion({ allowed: true });
+    const { host, fixture } = await renderWith(
+      of(contract()),
+      {},
+      {
+        providers: [provideFakeMotion(motion)],
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle(fixture);
+
+    expect(motion.allowed).toHaveBeenCalledWith('W13');
+    expect(motion.countUp).toHaveBeenCalledTimes(1);
+    const [figure, to, format, options] = (
+      motion.countUp.mock.calls as unknown as [
+        Element,
+        number,
+        (value: number) => string,
+        Record<string, unknown>,
+      ][]
+    )[0];
+    expect(figure).toBe(query(host, '.weight-figure [data-figure]'));
+    expect(figure.textContent).toBe('81.5');
+    expect(to).toBe(81.5);
+    // Values on the way keep the figure's decimals and the page's locale.
+    expect(format(40.333)).toBe('40.3');
+    expect(options).toEqual({ moment: 'W13', duration: 1100 });
+    // The chart's dots and area draw in with the line; nothing fades yet.
+    expect(names()).toContain('i');
+    expect(names()).not.toContain('app-trend-chart');
+
+    animate.mockClear();
+    press(host, '4 w');
+    await settle(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle(fixture);
+
+    expect(motion.countUp).toHaveBeenCalledTimes(1);
+    expect(names()).toEqual(['app-trend-chart']);
+    const [keyframes, timing] = (
+      animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][]
+    )[0];
+    expect(keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+    expect(timing.duration).toBe(200);
+  });
+
+  it('draws nothing where motion is not allowed, the weight standing as rendered', async () => {
+    const motion = fakeMotion();
+    const { host, fixture } = await renderWith(
+      of(contract()),
+      {},
+      {
+        providers: [provideFakeMotion(motion)],
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle(fixture);
+
+    expect(motion.countUp).not.toHaveBeenCalled();
+    expect(animate).not.toHaveBeenCalled();
+    expect(query(host, '.weight-figure [data-figure]').textContent).toBe('81.5');
   });
 });

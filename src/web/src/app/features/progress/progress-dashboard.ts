@@ -1,10 +1,14 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe, formatNumber } from '@angular/common';
 import {
+  afterNextRender,
   Component,
   computed,
+  DestroyRef,
   effect,
+  ElementRef,
   inject,
+  Injector,
   input,
   LOCALE_ID,
   output,
@@ -21,8 +25,10 @@ import type {
   MeasurementType,
 } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
+import { Motion, type Stop } from '../../core/motion/motion';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { drawProgress, fadeProgress } from './progress-moment';
 import {
   mapProgressDashboard,
   previewAssetIds,
@@ -71,8 +77,14 @@ export class ProgressDashboardView {
   private readonly locale = inject(LOCALE_ID);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  private readonly motion = inject(Motion);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private loadedKey: string | null = null;
   private loadGeneration = 0;
+  /** The page has drawn itself once (W13); later reads fade the charts in instead. */
+  private drawn = false;
+  private stopDraw: Stop | null = null;
 
   protected readonly dashboard = signal<ProgressDashboard | null>(null);
   protected readonly progress = signal<ProgressViewModel | null>(null);
@@ -182,6 +194,7 @@ export class ProgressDashboardView {
     effect(() => {
       if (this.settled()) untracked(() => this.answered.emit());
     });
+    inject(DestroyRef).onDestroy(() => this.stopDraw?.());
     this.scope.onReset(() => this.resetTenantState());
     effect(() => {
       this.scope.epoch();
@@ -194,6 +207,7 @@ export class ProgressDashboardView {
 
       this.loadedKey = key;
       ++this.loadGeneration;
+      this.forgetDraw();
       this.dashboard.set(null);
       this.progress.set(null);
       this.personalRecords.set(null);
@@ -330,10 +344,47 @@ export class ProgressDashboardView {
         if (owner.current) {
           if (this.ownsLoad(key, generation)) {
             this.loading.set(false);
+            if (this.dashboard() !== null && this.error() === null) this.draw();
           }
         }
       }
     });
+  }
+
+  /**
+   * The page draws itself once the read is on screen (W13): the first time it draws in, a later
+   * read (a range tap) fades in. The figure counts to the page's own string in the page's locale.
+   */
+  private draw(): void {
+    const first = !this.drawn;
+    this.drawn = true;
+    this.stopDraw?.();
+    const weight = this.entries()[0]?.displayValue ?? null;
+    // Values on the way keep the figure's own decimals, so the digits never grow past the end.
+    const decimals = weight === null ? 0 : Math.min(2, (String(weight).split('.')[1] ?? '').length);
+    const figure =
+      weight === null
+        ? null
+        : {
+            to: weight,
+            format: (value: number) =>
+              formatNumber(Number(value.toFixed(decimals)), this.locale, '1.0-2'),
+          };
+    afterNextRender(
+      () => {
+        this.stopDraw = first
+          ? drawProgress(this.host.nativeElement, this.motion, figure)
+          : fadeProgress(this.host.nativeElement, this.motion);
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /** Another client or workspace: the next read is a first draw again. */
+  private forgetDraw(): void {
+    this.stopDraw?.();
+    this.stopDraw = null;
+    this.drawn = false;
   }
 
   /**
@@ -385,6 +436,7 @@ export class ProgressDashboardView {
   private resetTenantState(): void {
     this.loadedKey = null;
     ++this.loadGeneration;
+    this.forgetDraw();
     this.dashboard.set(null);
     this.progress.set(null);
     this.personalRecords.set(null);

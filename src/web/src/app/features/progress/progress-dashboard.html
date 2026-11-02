@@ -82,8 +82,10 @@
       </div>
       @if (entries().length) {
         <div class="weight-figure">
+          <!-- The number in its own span: it counts up on the first draw (W13) through that span's
+               one text node, with the unit left alone. -->
           <strong
-            >{{ entries()[0].displayValue | number: '1.0-2' }}
+            ><span data-figure>{{ entries()[0].displayValue | number: '1.0-2' }}</span>
             <small>{{ view.displayUnit === 'Kilogram' ? 'kg' : 'lb' }}</small></strong
           >
           @if (range() !== 'all' && weightChange(); as change) {

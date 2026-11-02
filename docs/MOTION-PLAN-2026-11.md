@@ -841,7 +841,45 @@ is removed, and a changed answer becomes a new row.
   built strings and a plural, and nothing counts. A failed first read builds on Try again, the first
   successful read being the first view. The mocked `coach-today` spec runs under reduced motion and sees
   the page as it was; the live video shows the build.
-
+- **W13 · The readings line over the full chart.** Section 2 names the readings' "last" reading, which the chart
+  showed only for two weigh-ins; built: the readings line (the first weigh-in of the window, the change since it,
+  the latest) over the full chart too, and the scrub swaps its last reading for the day under the finger, so
+  the plot never moves under a finger. The hero's own line above says the latest weight and its change in
+  weekly means, so the two read close together. The other way: the readings line only while scrubbing, with
+  its space kept. Recommendation: keep as built.
+- **W13 · The line is revealed, not dashed along.** Section 2 names `drawLine` (a dash as long as the path,
+  offset to nothing); live, the trend line is several subpaths, since a day without an estimate breaks it, and
+  a dash restarts at each subpath, so a dash draw showed every piece at once (and the non-scaling stroke
+  measures its dash in screen pixels besides). Built: the chart's SVG is revealed with a clip-path whose
+  edge sweeps from the line's first day to its last (1.4 s, eased at both ends, `lineSpan` from the path's
+  box), the dots appearing under the edge; `core/motion`'s `drawLine` stays as it is for a continuous line
+  drawn to scale. The other way: joining the estimate across a missing day, so the line is one piece and
+  draws along itself. Recommendation: keep as built; whether the line should join across a missing day is a
+  chart question, not a motion one.
+- **W13 · The numbers.** Built: the line 1.4 s eased at both ends (the prototype's `draw`), each weigh-in's dot
+  appearing in 150 ms as the line's edge reaches it (the inverse of that easing), the weekly averages and the
+  soft area under the line fading in over 500 ms from 1.2 s, the bars 0.8 s with `power3.out` 60 ms apart from
+  nothing (`scaleX` from their start: the prototype's `scaleY`, turned for horizontal bars), the weight
+  counting 1.1 s to the page's own string with its box held and its own decimals on the way, a range tap's
+  fade 200 ms on both charts. The other way: W9's rise for the hero and the panels too. Recommendation: keep.
+- **W13 · What the scrub reads.** Built: "Tue 14 Oct · 71.2 kg" as the slider's value text and the readings'
+  last reading (the weekday only while scrubbing); a day with the trend's estimate alone reads "trend 71.4 kg";
+  the change pill is the difference to the first weigh-in of the window (the subtraction the two-reading chart
+  already made); release, a vertical finger (the page scrolls) and leaving the slider return to the latest;
+  End and ArrowRight at rest show the dot on the latest. Nothing else is worked out in the browser. The other
+  way: the hero's weekly change beside the scrubbed day. Recommendation: keep.
+- **W13 · The soft area.** Built as section 2 says: an `--tb-accent-soft` fill under the trend down to the
+  plot's floor, a presentation change on every full chart, since the row's third column names only the line,
+  the bars, the number and the scrub. The other way: no area. Recommendation: keep; it is the prototype's
+  trend tile.
+- **W13 · The first download: 513.38 kB before and 513.38 kB after.** The moment lives in the lazy
+  progress chunk with the dashboard, the slider and the area in the chart's own chunk; the 520 kB error
+  budget holds. Recommendation: accept.
+- **W13 · Nothing else was left out.** Progress photos and a before-and-after slider stay out as the row says.
+  The mocked Progress specs run under reduced motion and see the chart drawn; the live videos show the draw
+  and the scrub on the phone and on the coach's laptop. On a phone axe reads the kit's "Chart values"
+  disclosure as partly covered when the page's scroll leaves it under the fixed tab bar (the readings line
+  moved it 52 px down); the live pass reads the page with the chart's foot scrolled clear, where axe is clean.
 
 ## 4. The arc on the day
 

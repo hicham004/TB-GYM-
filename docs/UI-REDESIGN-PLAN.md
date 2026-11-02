@@ -1392,6 +1392,13 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     order (`features/dashboard/build-moment.ts`, 18 px up, 320 ms, 40 ms apart, `power3.out`, six at most),
     once; a quiet re-read, Clients and back, and a workspace switch replay nothing, the greeting never moves
     and nothing counts; with reduced motion the page is as it was.
+    Progress draws itself (W13): on the dashboard's first draw per visit the chart is revealed from the
+    trend line's first day to its last (`features/progress/progress-moment.ts`, 1.4 s), the weigh-ins'
+    dots appear under the edge, the averages and the soft area fade in after it, the training bars grow
+    from their start (0.8 s, `power3.out`, 60 ms apart) and the weight counts up to the page's own string;
+    a range tap fades the charts in over 200 ms; the plot is a slider (`ui/trend-chart.ts`) a finger, the
+    mouse or the arrow keys scrub to read any day, for the client and for the coach on the client's page;
+    with reduced motion the chart appears drawn and the scrub still reads.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

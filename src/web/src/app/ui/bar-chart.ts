@@ -75,11 +75,16 @@ export interface ChartBar {
         background: var(--tb-line, #d9dfd1);
         overflow: hidden;
       }
+      /* A bar grows from its start on the first draw (motion plan W13), so it scales from there. */
       .track i {
         display: block;
         block-size: 100%;
         border-radius: inherit;
         background: var(--tb-accent-ink, #153d33);
+        transform-origin: 0 50%;
+      }
+      :host-context(html[dir='rtl']) .track i {
+        transform-origin: 100% 50%;
       }
       .values {
         margin-block-start: 0.75rem;
