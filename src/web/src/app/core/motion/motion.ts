@@ -68,8 +68,18 @@ export class Motion {
     options: MoveOptions & { from?: number; duration?: number } = {},
   ): Stop {
     const final = element.textContent?.trim() ? element.textContent : format(to);
+    // Through the element's one text node where it has one: a template binding holds that node,
+    // so what the page writes later still lands on what it shows.
+    const node =
+      element.childNodes.length === 1 && element.firstChild?.nodeType === 3
+        ? (element.firstChild as CharacterData)
+        : null;
+    const write = (value: string) => {
+      if (node) node.data = value;
+      else element.textContent = value;
+    };
     if (!this.allowed(options.moment)) {
-      element.textContent = final;
+      write(final);
       return noop;
     }
     const from = options.from ?? 0;
@@ -84,7 +94,7 @@ export class Motion {
       if (ended) return;
       ended = true;
       view.cancelAnimationFrame(frame);
-      element.textContent = final;
+      write(final);
     };
     const tick = () => {
       if (ended) return;
@@ -94,7 +104,7 @@ export class Motion {
         end();
         return;
       }
-      element.textContent = format(from + (to - from) * easeOutCubic(progress));
+      write(format(from + (to - from) * easeOutCubic(progress)));
       frame = view.requestAnimationFrame(tick);
     };
     clock.finished.then(end, end);

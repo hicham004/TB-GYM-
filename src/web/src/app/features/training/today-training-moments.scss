@@ -1,5 +1,12 @@
 // The set tick and the record burst (docs/MOTION-PLAN-2026-11.md, W3): the rules the moment needs
 // that the player's other sheets do not hold. The moves themselves run from set-moment.ts.
+// The finish (W4) runs from finish-moment.ts; the one rule it needs is the share card's delay.
+
+// The share card lands once the summary's parts have risen (W4): one entrance, not two. The
+// teaser's own styles read the delay; with reduced motion the card has no entrance at all.
+.finish-summary {
+  --tb-share-delay: 500ms;
+}
 
 // The segment's bar grows from its start, so the fill reads as the set being added.
 .segments b {

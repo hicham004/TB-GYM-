@@ -62,7 +62,50 @@ import { ShareSheet, shareSheetTitle } from './share-sheet';
     }
 
     .card {
-      animation: share-teaser-in 900ms cubic-bezier(0.34, 1.56, 0.64, 1) 350ms both;
+      // The finish summary sets the delay so the card lands after its parts have risen (W4);
+      // backwards, so a landed card is at rest, with no animation left on the page.
+      animation:
+        share-teaser-in 900ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--tb-share-delay, 350ms)
+          backwards,
+        share-teaser-fade 300ms var(--tb-ease, ease-out) var(--tb-share-delay, 350ms) backwards;
+      // The prototype's elastic.out(1, .6) spring, where the browser draws linear() easings.
+      animation-timing-function:
+        linear(
+          0 0%,
+          0.237 3.13%,
+          0.486 6.25%,
+          0.71 9.38%,
+          0.891 12.5%,
+          1.022 15.63%,
+          1.104 18.75%,
+          1.145 21.88%,
+          1.153 25%,
+          1.14 28.13%,
+          1.114 31.25%,
+          1.083 34.38%,
+          1.053 37.5%,
+          1.026 40.63%,
+          1.006 43.75%,
+          0.992 46.88%,
+          0.984 50%,
+          0.981 53.13%,
+          0.981 56.25%,
+          0.984 59.38%,
+          0.987 62.5%,
+          0.991 65.63%,
+          0.995 68.75%,
+          0.998 71.88%,
+          1 75%,
+          1.001 78.13%,
+          1.002 81.25%,
+          1.002 84.38%,
+          1.002 87.5%,
+          1.002 90.63%,
+          1.001 93.75%,
+          1.001 96.88%,
+          1 100%
+        ),
+        var(--tb-ease, ease-out);
       background: var(--tb-accent);
       border-radius: 1.6rem;
       box-shadow: 0 30px 40px -24px rgb(0 0 0 / 70%);
@@ -71,13 +114,18 @@ import { ShareSheet, shareSheetTitle } from './share-sheet';
       margin-inline: 0.5rem;
       max-inline-size: min(26rem, calc(100% - 1rem));
       padding: 1.15rem 1.15rem 1rem;
-      transform: rotate(-2deg);
+      transform: translateY(0) rotate(-2deg);
     }
 
     @keyframes share-teaser-in {
       from {
-        opacity: 0;
         transform: translateY(2.5rem) rotate(-10deg);
+      }
+    }
+
+    @keyframes share-teaser-fade {
+      from {
+        opacity: 0;
       }
     }
 
@@ -157,6 +205,10 @@ import { ShareSheet, shareSheetTitle } from './share-sheet';
       .card {
         animation: none;
       }
+    }
+
+    :host-context(html[data-tb-motion='off']) .card {
+      animation: none;
     }
   `,
 })

@@ -191,6 +191,20 @@ describe('Motion', () => {
       expect(number.textContent).toBe('12');
     });
 
+    it('counts through the element’s one text node, which a template binding holds', () => {
+      const number = document.createElement('strong');
+      const node = document.createTextNode('42');
+      number.append(node);
+      motion.countUp(number, 42, (value) => String(Math.round(value)));
+      browser.runFrame();
+      expect(node.data).toBe('0');
+      expect(number.firstChild).toBe(node);
+      browser.animations[0].currentTime = 1100;
+      browser.runFrame();
+      expect(node.data).toBe('42');
+      expect(number.childNodes).toHaveLength(1);
+    });
+
     it('is off while ?motion=off has been seen, until ?motion=on, and marks <html>', () => {
       history.replaceState(null, '', '/?motion=off');
       motion.readSwitch();

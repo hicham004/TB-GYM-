@@ -1,5 +1,5 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
-import { DatePipe, DecimalPipe, formatDate } from '@angular/common';
+import { DatePipe, DecimalPipe, formatDate, formatNumber } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
@@ -48,6 +48,7 @@ import { StatusLabel } from '../../ui/status-label';
 import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareTeaser } from '../share-cards/share-teaser';
 import { externalVideo } from './external-video';
+import { type FinishFormats, playFinishMoment } from './finish-moment';
 import { RestTimer } from './rest-timer';
 import { buzzSet, planSetMoment, playSetMoment, recordNotice } from './set-moment';
 import { nullableNumeric, numeric } from './training-builder.models';
@@ -181,6 +182,11 @@ export class TodayTraining implements HoldsUnsavedWork {
     ];
   });
   protected readonly finishedWorkoutName = signal('');
+  /** How the summary writes its time and its volume, so the count ends on the page's own strings (W4). */
+  private readonly finishFormats: FinishFormats = {
+    time: (seconds) => this.clockLabel(seconds),
+    volume: (value) => formatNumber(value, this.locale, '1.0-1'),
+  };
   protected readonly activeExerciseIndex = signal(0);
   protected readonly workoutUnit = signal<TrainingLoadUnit | null>(null);
   protected readonly prSetIds = signal<ReadonlySet<string>>(new Set());
@@ -1036,6 +1042,15 @@ export class TodayTraining implements HoldsUnsavedWork {
             navigator.vibrate([80, 40, 80]);
           }
           this.say($localize`Workout completed.`);
+          const summary = response.finishSummary;
+          if (summary) {
+            // The summary is complete in this render; its moment runs after it (W4).
+            afterNextRender(
+              () =>
+                playFinishMoment(this.host.nativeElement, summary, this.motion, this.finishFormats),
+              { injector: this.injector },
+            );
+          }
         }),
       );
     });

@@ -53,20 +53,20 @@
       <h2 i18n>Workout <em>done.</em></h2>
       <p dir="auto">{{ finishedWorkoutName() }}</p>
       <div class="summary-stats">
-        <div>
+        <div data-stat="time">
           <strong>{{ clockLabel(summary.durationSeconds) }}</strong
           ><span i18n>time</span>
         </div>
-        <div>
+        <div data-stat="sets">
           <strong>{{ summary.completedSetCount }} / {{ summary.totalSetCount }}</strong
           ><span i18n>sets logged</span>
         </div>
-        <div>
+        <div data-stat="records">
           <strong>{{ summary.personalRecords.length }}</strong
           ><span i18n>personal records</span>
         </div>
         @for (volume of summary.volume; track volume.unit) {
-          <div>
+          <div data-stat="volume">
             <strong>{{ volume.loadTimesRepetitions | number: '1.0-1' }}</strong
             ><span i18n>{{ unitWord(volume.unit) }} lifted</span>
           </div>
