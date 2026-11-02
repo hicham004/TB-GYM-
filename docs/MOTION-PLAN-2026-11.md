@@ -23,7 +23,7 @@ What a row left out or chose on its own waits for the owner in section 3.
 | W1 | Foundations | `core/motion`: the reduced-motion read with a `?motion=off` switch, the four moves with the prototype's numbers on the Web Animations API (no GSAP in the app), a fake for tests; the everyday layer (a 120 ms press on the kit's buttons and tappable cards, a 200 ms fade when a page changes inside the client and coach frames); mocked Playwright runs with reduced motion by default; rule 9 loosened in the UI plan. Left out: GSAP (it stays on the homepage), route view transitions, `animate.leave`, any change to the theme switch. | Done · 2026-11-02 · f3f44a7 |
 | W2 | Demo day | `scripts/demo-day.ps1`: one command that rebuilds the demo into `tbgym_demo`, starts the API and the web app over HTTPS on the laptop's own address, opens the firewall once, and prints the address, the sign-ins and a QR code; `crypto.randomUUID` guarded so a plain http address works too; second, `-HeroName`, which gives Maya the friend's first name in the demo database only. Left out: Render, the test copy, email. | Done · 2026-11-02 · 6294bc9 |
 | W3 | The set tick and the record burst | A logged set springs into its done form and its tick draws, the exercise's segment fills; a record pops its chip and bursts 16 dots from it, with the buzz Android gives, and its sentence becomes a pinned pill that never shifts the sets; a second record in the same workout gets the small form. Left out: sound, anything before the server's answer. | Done · 2026-11-02 · c3dc42d |
-| W4 | The finish | The finish summary rises and its four numbers count up to the server's own strings, the records list follows and the share card lands with a spring. Left out: a new share card design, a hold-to-finish button. | Open |
+| W4 | The finish | The finish summary rises and its four numbers count up to the server's own strings, the records list follows and the share card lands with a spring. Left out: a new share card design, a hold-to-finish button. | Done · 2026-11-02 · ff5b195 |
 | W5 | The rest timer | The rest card slides in and out, its ring drains in one continuous sweep instead of stepping, it pulses in the last three seconds, and it keeps time while the phone is locked. Left out: a flick to skip, the end tone's words. | Open |
 | W6 | Coach Today hears the phone | While the tab is in view Coach Today re-reads quietly every 4 seconds, and a workout finished on the phone lands as a strip under the greeting and slides into the feed with its record and a highlight that fades; a message bumps a re-read at once; a resolved row leaves. Left out: a server event (the live finish frame, "Later"), set-by-set progress, count-ups. | Open |
 | W7 | The card opens into the player | On Today, Start or Open workout grows the card into the dark player (a clip-path reveal, 500 ms) and the player's parts rise in once the workout has loaded; the training chunks preload on idle. Left out: the way back (the leave guard); the row is left out whole if the reveal cannot be kept smooth and the console clean. | Open |
@@ -589,6 +589,21 @@ is removed, and a changed answer becomes a new row.
   coach's 52.5 kg × 5 answered a record ("New personal record · Back Squat 52.5 kg × 5"), set 2 at the same numbers
   was a plain "Set saved.", and set 3 at 55 kg × 5 a second record; Sara's set 1 at 40 × 8 and Jad's at 100 × 5
   were records too, and leg press set 1 at the coach's 85 kg was not.
+
+- **W4 · The counts start with the panel.** The four numbers start counting on the first frame, while the stats block
+  is still rising in (it shows from 330 ms, where the prototype's stagger puts it), so the eye catches each count in
+  flight. The other way: start the counts once the stats block has landed. Recommendation: keep as built; the
+  prototype does the same.
+- **W4 · The records rise one by one.** Section 2 says the records list rises; built: each record's row takes its own
+  turn in the stagger, 60 ms after the last, rather than the list as one block. The other way: the list as one part.
+  Recommendation: keep as built.
+- **W4 · The share card's spring in older browsers.** The landing is the prototype's `elastic.out(1, .6)` where the
+  browser draws `linear()` easings (Chrome 113, Safari 17.2 and Firefox 112 and later); an older browser keeps the
+  earlier back-out curve. The other way: the back-out everywhere. Recommendation: keep as built.
+- **W4 · The summary shown from its top.** The summary replaces the player where the page was scrolled (at the Finish
+  button, near the bottom), so before W4 a finished workout showed the middle of its summary; built: the finish
+  scrolls the page to the top first, with or without motion, as the prototype opens its summary, so the rise and the
+  counts play in view. The other way: leave the scroll where it was. Recommendation: keep as built.
 
 ## 4. The arc on the day
 
