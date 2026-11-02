@@ -85,3 +85,23 @@
     }
   }
 }
+
+// The barbell (W11): the target weight in the set's target line is a tap that opens its plates, drawn
+// as the text it replaces with a dotted underline, and tall enough to tap (24 px) without moving the line.
+.target-weight {
+  display: inline-block;
+  margin-block: -0.35rem;
+  padding: 0.35rem 0.2rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.target-weight:focus-visible {
+  outline: 2px solid var(--tb-brand, #153d33);
+  outline-offset: 1px;
+}

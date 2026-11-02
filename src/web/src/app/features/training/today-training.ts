@@ -15,6 +15,7 @@ import {
   TemplateRef,
   viewChild,
 } from '@angular/core';
+import type { DialogRef } from '@angular/cdk/dialog';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -43,11 +44,14 @@ import { UiDialog } from '../../ui/dialog';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { UiMenu, type UiMenuItem } from '../../ui/menu';
+import type { ModalSurface } from '../../ui/modal-surface';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
+import { UiSheet } from '../../ui/sheet';
 import { StatusLabel } from '../../ui/status-label';
 import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareTeaser } from '../share-cards/share-teaser';
 import { externalVideo } from './external-video';
+import { PlatesSheet } from './plates-sheet';
 import { type FinishFormats, playFinishMoment } from './finish-moment';
 import { playPlayerMoment } from './player-moment';
 import { RestTimer } from './rest-timer';
@@ -116,6 +120,7 @@ function isConflict(error: unknown): error is HttpErrorResponse {
     UiDisclosure,
     UiDisclosureContent,
     UiMenu,
+    PlatesSheet,
   ],
   templateUrl: './today-training.html',
   // The set rows and the demo overlay's link panel have their own sheets: the main one sits near the
@@ -134,6 +139,7 @@ export class TodayTraining implements HoldsUnsavedWork {
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly dialogs = inject(UiDialog);
+  private readonly sheets = inject(UiSheet);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly route = inject(ActivatedRoute, { optional: true });
   private readonly locale = inject(LOCALE_ID);
@@ -229,6 +235,11 @@ export class TodayTraining implements HoldsUnsavedWork {
   protected readonly workoutNotes: Record<string, string> = {};
   private readonly errorSummary = viewChild<ElementRef<HTMLElement>>('errorSummary');
   protected readonly mediaDialog = viewChild<ElementRef<HTMLElement>>('mediaDialog');
+  // The barbell (W11): a reading of a set's draft weight as plates, in the kit's sheet over the player.
+  private readonly platesSheet = viewChild<TemplateRef<unknown>>('platesSheet');
+  protected readonly platesWeight = signal<number | null>(null);
+  protected readonly platesUnit = signal<TrainingLoadUnit | null>(null);
+  private platesRef: DialogRef<unknown, ModalSurface> | null = null;
   protected readonly mediaCloseButton = viewChild<ElementRef<HTMLButtonElement>>('mediaClose');
   protected readonly externalVideo = externalVideo;
   protected readonly accessReasonLabel = trainingReadAccessLabel;
@@ -277,6 +288,7 @@ export class TodayTraining implements HoldsUnsavedWork {
     this.destroyRef.onDestroy(() => {
       if (this.timerHandle) clearInterval(this.timerHandle);
       void this.wakeLock?.release();
+      this.platesRef?.close();
       document.removeEventListener('visibilitychange', this.onVisibilityChange);
     });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
@@ -1057,6 +1069,42 @@ export class TodayTraining implements HoldsUnsavedWork {
     });
   }
 
+  /** The set being entered in this exercise, whose draft weight the Plates sheet reads; null once all are logged. */
+  protected editableSet(exercise: ClientExerciseView): ClientSetView | null {
+    return exercise.sets.find((set) => set.performanceId && !this.collapsed(set)) ?? null;
+  }
+
+  /**
+   * Opens the Plates sheet (W11) on the exercise's draft weight in the client's own unit, or on the
+   * target weight tapped. A reading and a guide: it changes nothing in the set.
+   */
+  protected openPlates(
+    exercise: ClientExerciseView,
+    weight?: string | number | null,
+    unit?: TrainingLoadUnit | null,
+  ): void {
+    const set = this.editableSet(exercise);
+    const draft = set ? this.setDraft(set) : null;
+    const load =
+      weight !== undefined ? weight : draft ? draft.actualLoad : (set?.prescribedLoad ?? null);
+    const loadUnit =
+      unit ?? draft?.actualLoadUnit ?? this.workoutUnit() ?? set?.prescribedLoadUnit ?? null;
+    this.platesWeight.set(plateWeight(load));
+    this.platesUnit.set(loadUnit);
+    const template = this.platesSheet();
+    if (!template) return;
+    this.platesRef?.close();
+    const ref = this.sheets.open(template, {
+      title: $localize`Plates`,
+      closeLabel: $localize`Close`,
+      mode: 'dark',
+    });
+    this.platesRef = ref;
+    ref.closed.subscribe(() => {
+      if (this.platesRef === ref) this.platesRef = null;
+    });
+  }
+
   protected async showMedia(assetId: string, event: Event): Promise<void> {
     return this.scope.run('showMedia', async (owner) => {
       const trigger = event.currentTarget as HTMLElement | null;
@@ -1397,4 +1445,11 @@ export class TodayTraining implements HoldsUnsavedWork {
     this.savingWorkoutIds.set(new Set());
     for (const key of Object.keys(this.workoutNotes)) delete this.workoutNotes[key];
   }
+}
+
+/** A load as the sheet reads it: the API hands decimals as strings too; nothing numeric is null. */
+function plateWeight(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }

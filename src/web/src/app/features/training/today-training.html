@@ -384,8 +384,28 @@
                           <span i18n>Target:</span> {{ prescribedReps(set) }} <span i18n>reps</span>
                           <!-- The coach's load is for the prescribed lift, not a swap (TRN-029). -->
                           @if (set.prescribedLoad !== null && !exercise.wasSubstituted) {
-                            · {{ set.prescribedLoad }}
-                            {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                            ·
+                            <!-- A tap on the target opens its plates (W11), in the unit the workout is in. -->
+                            @if (
+                              !readOnly &&
+                              !collapsed(set) &&
+                              set.prescribedLoadUnit === workoutUnit()
+                            ) {
+                              <button
+                                type="button"
+                                class="target-weight"
+                                aria-haspopup="dialog"
+                                (click)="
+                                  openPlates(exercise, set.prescribedLoad, set.prescribedLoadUnit)
+                                "
+                              >
+                                {{ set.prescribedLoad }}
+                                {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                              </button>
+                            } @else {
+                              {{ set.prescribedLoad }}
+                              {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                            }
                           }
                           @if (set.prescribedTargetRpe !== null) {
                             · {{ prescribedEffort(set) }}
@@ -481,6 +501,19 @@
                     }
                   </div>
                   <div class="exercise-actions">
+                    <!-- The barbell (W11): the draft weight as plates, a reading that changes no set. -->
+                    @if (!readOnly && editableSet(exercise) !== null) {
+                      <button
+                        type="button"
+                        class="plates-tool"
+                        aria-haspopup="dialog"
+                        [disabled]="busy()"
+                        (click)="openPlates(exercise)"
+                        i18n
+                      >
+                        Plates
+                      </button>
+                    }
                     @for (
                       assetId of exercise.mediaAssetIds;
                       track assetId;
@@ -694,4 +727,9 @@
     [cancelLabel]="leaveCancel"
     (answer)="dialog.close($event)"
   />
+</ng-template>
+
+<!-- The barbell (W11): the sheet reads the weight the tap set and keeps its own steppers. -->
+<ng-template #platesSheet>
+  <app-plates-sheet [weight]="platesWeight()" [unit]="platesUnit()" />
 </ng-template>

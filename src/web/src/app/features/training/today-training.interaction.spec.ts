@@ -374,6 +374,49 @@ describe('TodayTraining interactions', () => {
     );
   });
 
+  it('opens the Plates sheet on the set being entered, a reading that changes no set (W11)', async () => {
+    const { fixture, host } = await render();
+    const plates = () => document.querySelector<HTMLElement>('[role="dialog"] app-plates-sheet');
+
+    // The coach's 60 kg: 20 a side on the 20 kg bar.
+    press(host, 'Plates');
+    await settle(fixture);
+    expect(document.querySelector('[role="dialog"] h2')?.textContent?.trim()).toBe('Plates');
+    expect(plates()?.querySelector('.weight')?.textContent?.replace(/s+/g, ' ').trim()).toBe(
+      '60 kg',
+    );
+    expect(plates()?.querySelector('.per-side')?.textContent?.trim()).toBe('Per side: 20');
+    // The sheet's stepper moves the sheet's weight; the set keeps its own.
+    plates()?.querySelector<HTMLButtonElement>('button[aria-label="More weight"]')?.click();
+    await settle(fixture);
+    expect(plates()?.querySelector('.per-side')?.textContent?.trim()).toBe('Per side: 20, 1.25');
+    expect(field(host, 'Actual load').value).toBe('60');
+    document.querySelector<HTMLButtonElement>('[role="dialog"] .tb-modal__header button')?.click();
+    await settle(fixture);
+    expect(plates()).toBeNull();
+
+    // A typed draft is what the sheet reads next time.
+    fill(host, 'Actual load', '82.5');
+    await settle(fixture);
+    press(host, 'Plates');
+    await settle(fixture);
+    expect(plates()?.querySelector('.per-side')?.textContent?.trim()).toBe(
+      'Per side: 20, 10, 1.25',
+    );
+    document.querySelector<HTMLButtonElement>('[role="dialog"] .tb-modal__header button')?.click();
+    await settle(fixture);
+
+    // The target weight in the set's target line is a tap on the coach's number.
+    const target = query<HTMLButtonElement>(host, '.target-weight');
+    expect(target.textContent?.replace(/s+/g, ' ').trim()).toBe('60 kg');
+    target.click();
+    await settle(fixture);
+    expect(plates()?.querySelector('.weight')?.textContent?.replace(/s+/g, ' ').trim()).toBe(
+      '60 kg',
+    );
+    expect(field(host, 'Actual load').value).toBe('82.5');
+  });
+
   it('starts a workout that has not been started', async () => {
     const notStarted = day({
       workouts: [workout({ workoutExecutionId: null, status: null, executionVersion: null })],

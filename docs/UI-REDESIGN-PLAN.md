@@ -1381,6 +1381,13 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     a rubber band, shifting and turning it) and springs back when let go, on the Web Animations API in
     `features/share-cards/share-moment.ts`, the card itself listening since it never tilts; with reduced
     motion the card stays as it is.
+    The barbell (W11): in the player, Plates in the exercise's tools row (and a tap on the target weight)
+    opens the kit's sheet on the set's draft weight in the workout's unit, drawn as a bar loaded from the
+    collar out on a fixed plate set (`features/training/plates.ts`, `plates-greedy-v1`, the 25 kg plate only
+    where it saves a plate), the plates sliding on 60 ms apart and a leaving plate sliding off first
+    (`plates-moment.ts`), with steppers to the next loadable weight, one tap to the lighter bar and the
+    nearest loadable weights where none fits; a reading that changes nothing in the set, in place at once
+    with reduced motion.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.
@@ -2386,6 +2393,7 @@ The engine keeps its precise names in code. Screens use the words on the right.
 | Set type Normal | Working *(top, back-off, drop and failure sets are working sets too)* |
 | Product offer label | Name for this price |
 | Coaching product description | Description |
+| Plate split (`plates-greedy-v1`, presentation only) | Plates; "Per side: 15, 1.25", "Just the bar", "Lighter than the bar" (motion plan W11) |
 
 Critique B1 (2026-10-27): coach screens say "workout", never "session", for a day's training, and
 "% of training max"; the client's own screens keep their words until a later pass.

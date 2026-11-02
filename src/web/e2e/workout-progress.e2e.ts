@@ -376,6 +376,24 @@ test.describe('Workout player', () => {
         page.getByRole('spinbutton', { name: 'Actual repetitions', exact: true }),
       ).toHaveValue('5');
       await expect(page.getByRole('radio', { name: 'kg' })).toBeChecked();
+      // The barbell (motion plan W11): Plates reads the row's 100 kg as 20 and 20 a side, and its
+      // steppers move the sheet's own weight, never the set's.
+      await page.getByRole('button', { name: 'Plates' }).click();
+      const plates = page.getByRole('dialog', { name: 'Plates' });
+      // The words once, visibly; the live region repeats them for a screen reader.
+      const perSide = plates.locator('.per-side');
+      await expect(perSide).toHaveText('Per side: 20, 20');
+      await expect(plates.locator('.bar-line span')).toHaveText('20 kg bar');
+      await plates.getByRole('button', { name: 'More weight' }).click();
+      await expect(perSide).toHaveText('Per side: 20, 20, 1.25');
+      await plates.getByRole('button', { name: 'Use 15 kg bar' }).click();
+      await expect(perSide).toHaveText('Per side: 20, 20, 2.5, 1.25');
+      await accessible(page);
+      await plates.getByRole('button', { name: 'Close' }).click();
+      await expect(plates).toHaveCount(0);
+      await expect(page.getByRole('spinbutton', { name: 'Actual load', exact: true })).toHaveValue(
+        '100',
+      );
       // The player fills the screen: no tab bar over Finish workout.
       await expect(page.getByRole('navigation', { name: 'Client navigation' })).toHaveCount(0);
       await waitForFonts(page);
@@ -384,6 +402,9 @@ test.describe('Workout player', () => {
       // The set's More options row is the kit's fold: on the light card it reads in the card's ink
       // and rings in the brand, not in the player's dark tokens.
       await page.getByRole('button', { name: 'Log set' }).focus();
+      // The target weight's tap (W11) is the next stop, then the fold.
+      await page.keyboard.press('Tab');
+      await expect(page.locator('.target-weight').first()).toBeFocused();
       await page.keyboard.press('Tab');
       const moreOptions = page.locator('.set-note summary');
       await expect(moreOptions).toBeFocused();

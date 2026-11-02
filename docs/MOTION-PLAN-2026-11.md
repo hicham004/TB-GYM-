@@ -782,6 +782,39 @@ is removed, and a changed answer becomes a new row.
   Share keeps its button and its words; the mocked `share-cards` spec runs under reduced motion and never
   meets the tilt, so the live videos are the proof. Section 2's line that the player's swipe would change
   the exercise behind the summary at 70 px: the card stops its touch events at the card either way.
+- **W11 · The 25 kg plate goes on only where it saves a plate.** Section 2 names the plates 25 to 1.25 kg
+  and a biggest-first split, and pins 100 kg as 20 and 20 a side and 82.5 as 20, 10 and 1.25, which the 25
+  first would not give (25 and 15; 25, 5 and 1.25). Built: `plates-greedy-v1` loads the biggest plate first
+  with the 25, which many gyms lack, used only where it makes the side with fewer plates (120 kg is 25 and
+  25, 110 is 25 and 20, 70 is 25; 140 is 20, 20 and 20). The other way: the 25 first always.
+  Recommendation: keep as built; the pinned numbers are what a lifter expects to see.
+- **W11 · The steppers move by a plate on each side.** Section 2 says the steppers change the weight by the
+  smallest plate; built: by the smallest plate on each side (2.5 kg, 5 lb, the set row's own step), so
+  every step is loadable, and from a weight no plate makes to the nearest loadable one that way (21 kg: +
+  gives 22.5, − gives 20); − stops at the bar. The other way: 1.25 kg a tap, every other step unloadable.
+  Recommendation: keep as built.
+- **W11 · A weight no plate makes.** Built: the bar draws the nearest loadable weight below, the per-side
+  line names its plates ("Just the bar" where none is on), and a line under the bar says "21 kg is not
+  loadable with these plates; the bar shows 20 kg. Next up: 22.5 kg."; under the bar a weight reads
+  "Lighter than the bar" with an empty bar. The other way: an empty bar and the two numbers alone.
+  Recommendation: keep as built.
+- **W11 · Where the tool sits and what it reads.** Built: Plates is a plain button in the exercise's tools
+  row beside Watch demo, shown while the exercise has a set to enter (it leaves with the steppers once the
+  last set is logged), opening the kit's sheet in the player's dark mode on the set being entered: its draft
+  weight in the workout's unit, the bar alone where the draft has no load (a set the coach wrote in the
+  other unit). The tap on the target weight is a tap only while the set is being entered and the coach's
+  unit is the workout's (TRN-019, never a conversion); a logged set's and a swapped exercise's targets stay
+  text. The sheet keeps its own weight and bar: + and − there never touch the set. Recommendation: keep.
+- **W11 · The first download: 513.38 kB before and after.** The split, the sheet and its motion
+  live in the training chunk with the player, and the sheet keeps every style of its own (under the 5 kB
+  warning); `today-training-moments.scss` gains the target weight's one rule; the 520 kB error budget holds.
+  Recommendation: accept.
+- **W11 · Nothing else was left out.** A drag along the bar and a per-gym plate set stay out as the row
+  says (the guide line says the gym's plates may differ). The plates' colours are the competition's for
+  kilograms (red 25, blue 20, yellow 15, green 10, white 5, red 2.5, chrome 1.25) and the common colour
+  plates for pounds (blue 45, yellow 35, green 25, white 10, grey 5, chrome 2.5), presentation only. The
+  mocked `workout-progress` spec opens the sheet under reduced motion and steps it; the live videos show
+  the plates move.
 
 
 ## 4. The arc on the day
