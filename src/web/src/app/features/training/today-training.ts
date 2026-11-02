@@ -34,6 +34,7 @@ import type {
 import type { HoldsUnsavedWork } from '../../core/forms/leave-guard';
 import { UnsavedWork } from '../../core/forms/unsaved-work';
 import { workoutStatusLabel } from '../../core/i18n/display-labels';
+import { Motion } from '../../core/motion/motion';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button, ButtonLink } from '../../ui/button';
@@ -48,6 +49,7 @@ import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareTeaser } from '../share-cards/share-teaser';
 import { externalVideo } from './external-video';
 import { RestTimer } from './rest-timer';
+import { buzzSet, planSetMoment, playSetMoment, recordNotice } from './set-moment';
 import { nullableNumeric, numeric } from './training-builder.models';
 import {
   mapUpcomingTraining,
@@ -116,7 +118,12 @@ function isConflict(error: unknown): error is HttpErrorResponse {
   templateUrl: './today-training.html',
   // The set rows and the demo overlay's link panel have their own sheets: the main one sits near the
   // 8 kB style budget.
-  styleUrls: ['./today-training.scss', './today-training-sets.scss', './today-training-media.scss'],
+  styleUrls: [
+    './today-training.scss',
+    './today-training-sets.scss',
+    './today-training-media.scss',
+    './today-training-moments.scss',
+  ],
   // The player is always drawn on the night colour, so the kit pieces inside it read the dark tokens.
   host: { 'data-mode': 'dark', '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
@@ -128,6 +135,7 @@ export class TodayTraining implements HoldsUnsavedWork {
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly route = inject(ActivatedRoute, { optional: true });
   private readonly locale = inject(LOCALE_ID);
+  private readonly motion = inject(Motion);
   private loadedTenantId: string | null = null;
   private contextGeneration = 0;
   private loadGeneration = 0;
@@ -150,6 +158,12 @@ export class TodayTraining implements HoldsUnsavedWork {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  /** Counts every sentence said, so the pinned pill is drawn anew even for the same words (W3). */
+  private readonly noticeVersion = signal(0);
+  protected readonly noticeLines = computed(() => {
+    const text = this.notice();
+    return text === null ? [] : [{ version: this.noticeVersion(), text }];
+  });
   protected readonly upcoming = signal<UpcomingTraining | null>(null);
   protected readonly setErrors = signal<Readonly<Record<string, string>>>({});
   protected readonly editingSetIds = signal<ReadonlySet<string>>(new Set());
@@ -292,7 +306,7 @@ export class TodayTraining implements HoldsUnsavedWork {
           }
           await owner.wait(this.load(false));
           if (this.ownsContext(generation)) {
-            this.notice.set($localize`Workout started.`);
+            this.say($localize`Workout started.`);
             void this.keepScreenAwake();
           }
         }),
@@ -399,6 +413,8 @@ export class TodayTraining implements HoldsUnsavedWork {
               return false;
             }
             const recorded = response;
+            // Read before the page updates: what the answer changes is the moment (W3).
+            const moment = planSetMoment(this.day(), recorded, this.prSetIds());
             this.day.update((day) => (day ? applyWorkoutSetSaveToDay(day, recorded) : day));
             this.setDrafts.update((drafts) =>
               applyWorkoutSetSave(drafts, recorded, snapshot.revision),
@@ -410,12 +426,21 @@ export class TodayTraining implements HoldsUnsavedWork {
               return next;
             });
             if (recorded.isPersonalRecord) {
-              this.notice.set($localize`New personal record!`);
-              if ('vibrate' in navigator) navigator.vibrate([80, 40, 80]);
+              this.say(
+                moment
+                  ? recordNotice(moment.exerciseName, recorded)
+                  : $localize`New personal record!`,
+              );
             } else {
-              this.notice.set($localize`Set saved.`);
+              this.say($localize`Set saved.`);
             }
+            buzzSet(recorded.isPersonalRecord === true, navigator);
             this.editingSetIds.update((ids) => new Set([...ids].filter((id) => id !== setId)));
+            if (moment) {
+              afterNextRender(() => playSetMoment(this.host.nativeElement, moment, this.motion), {
+                injector: this.injector,
+              });
+            }
             return true;
           } catch (error) {
             if (!owner.current) return false;
@@ -927,7 +952,7 @@ export class TodayTraining implements HoldsUnsavedWork {
           }
           await owner.wait(this.load(false));
           if (this.ownsContext(writeGeneration)) {
-            this.notice.set($localize`Swapped to ${name}.`);
+            this.say($localize`Swapped to ${name}.`);
           }
         }),
       );
@@ -956,7 +981,7 @@ export class TodayTraining implements HoldsUnsavedWork {
           this.workoutNotes[workout.sessionId] = '';
           await owner.wait(this.load(false));
           if (this.ownsContext(generation)) {
-            this.notice.set($localize`Workout note added.`);
+            this.say($localize`Workout note added.`);
           }
         }),
       );
@@ -1010,7 +1035,7 @@ export class TodayTraining implements HoldsUnsavedWork {
           if (response.finishSummary?.personalRecords.length && 'vibrate' in navigator) {
             navigator.vibrate([80, 40, 80]);
           }
-          this.notice.set($localize`Workout completed.`);
+          this.say($localize`Workout completed.`);
         }),
       );
     });
@@ -1278,7 +1303,13 @@ export class TodayTraining implements HoldsUnsavedWork {
 
   private clearMessages(): void {
     this.error.set(null);
-    this.notice.set(null);
+    this.say(null);
+  }
+
+  /** The status line's sentence; each one is counted so the pinned pill starts afresh (W3). */
+  private say(text: string | null): void {
+    this.notice.set(text);
+    this.noticeVersion.update((version) => version + 1);
   }
 
   private markSaving(setId: string, workoutId: string, saving: boolean): void {
@@ -1322,7 +1353,7 @@ export class TodayTraining implements HoldsUnsavedWork {
     this.loading.set(false);
     this.busy.set(false);
     this.error.set(null);
-    this.notice.set(null);
+    this.say(null);
     this.upcoming.set(null);
     this.setErrors.set({});
     this.editingSetIds.set(new Set());

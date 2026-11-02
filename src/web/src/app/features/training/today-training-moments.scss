@@ -1,0 +1,80 @@
+// The set tick and the record burst (docs/MOTION-PLAN-2026-11.md, W3): the rules the moment needs
+// that the player's other sheets do not hold. The moves themselves run from set-moment.ts.
+
+// The segment's bar grows from its start, so the fill reads as the set being added.
+.segments b {
+  transform-origin: 0 50%;
+}
+.segments b:dir(rtl) {
+  transform-origin: 100% 50%;
+}
+// The PR chip the record pops: a small accent pill at the start of the row, as the prototype draws it.
+.pr-badge {
+  justify-self: start;
+  padding: 0.1rem 0.55rem;
+  border-radius: 0.5rem;
+  background: var(--tb-accent, #d9ed94);
+  color: var(--tb-on-accent, #11201b);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+// While a workout is open the status line is a pill pinned at the top of the screen, over the
+// header's band and out of the flow, so "Set saved." or a record's sentence never shifts the sets
+// and never covers the segment that fills or the row that springs. The sentence stays in the live
+// region for screen readers; the pill fades after a few seconds, and a new sentence is a new span,
+// so the fade starts again. Taps pass through it; the media overlay (z 20) stays above it.
+.save-status-pinned {
+  position: fixed;
+  inset-block-start: calc(env(safe-area-inset-top, 0px) + 0.95rem);
+  inset-inline-start: 50%;
+  z-index: 18;
+  max-inline-size: min(92vw, 30rem);
+  margin: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  text-align: center;
+}
+.save-status-pinned .save-status-text {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border-radius: 1rem;
+  background: var(--tb-accent, #d9ed94);
+  color: var(--tb-on-accent, #11201b);
+  font-size: 0.9rem;
+  font-weight: 650;
+  box-shadow: 0 12px 30px -12px #000000aa;
+  animation: set-notice 4.5s var(--tb-ease, ease-out) forwards;
+}
+@keyframes set-notice {
+  0% {
+    opacity: 0;
+  }
+  8%,
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :host-context(html:not([data-tb-motion='off'])) .save-status-pinned .save-status-text {
+    animation-name: set-notice-rise;
+  }
+  @keyframes set-notice-rise {
+    0% {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    8%,
+    88% {
+      opacity: 1;
+      transform: none;
+    }
+    100% {
+      opacity: 0;
+      visibility: hidden;
+    }
+  }
+}

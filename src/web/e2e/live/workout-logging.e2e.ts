@@ -159,7 +159,7 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
 
   await test.step('One tap logs the set as prescribed and starts the rest', async () => {
     await setCard(firstIndex).getByRole('button', { name: 'Log set' }).click();
-    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    await expect(notice).toHaveText(/Set saved\.|New personal record/);
     const logged = setCard(firstIndex).locator('.logged-set');
     if (firstSet.prescribedLoad !== null)
       await expect(logged).toContainText(`${firstSet.prescribedLoad}`);
@@ -181,7 +181,7 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
     await card.getByRole('spinbutton', { name: 'Actual load', exact: true }).fill(String(edited));
     await card.getByRole('spinbutton', { name: 'Actual repetitions', exact: true }).fill('3');
     await card.getByRole('button', { name: 'Log set' }).click();
-    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    await expect(notice).toHaveText(/Set saved\.|New personal record/);
     await expect(card.locator('.logged-set')).toContainText(`${edited}`);
     await expect(card.locator('.logged-set')).toContainText('× 3');
     await page
@@ -238,7 +238,7 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
     const lb = page.getByRole('radio', { name: 'lb' });
     if (!(await kg.isChecked()) && !(await lb.isChecked())) await kg.click();
     await card.getByRole('button', { name: 'Log set' }).click();
-    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    await expect(notice).toHaveText(/Set saved\.|New personal record/);
     await page
       .getByRole('timer')
       .getByRole('button', { name: 'Skip' })
@@ -302,7 +302,7 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
     await card.getByRole('spinbutton', { name: 'Actual reps left' }).fill('1.5');
     await expect(rpe).toHaveValue('');
     await card.getByRole('button', { name: 'Log set' }).click();
-    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    await expect(notice).toHaveText(/Set saved\.|New personal record/);
     page.off('request', watchSaves);
     expect(saves).toHaveLength(1);
     await page
@@ -401,7 +401,7 @@ test('a client starts today’s workout, logs sets, finishes and finds it in his
     }
     const sets = current.exercises[here.index].sets;
     await setCard(sets.indexOf(here.set)).getByRole('button', { name: 'Log set' }).click();
-    await expect(notice).toHaveText(/Set saved\.|New personal record!/);
+    await expect(notice).toHaveText(/Set saved\.|New personal record/);
     await expect(page.locator('#training-error-summary')).toHaveText('');
     if (elsewhere.index === here.index) {
       await expect(setCard(sets.indexOf(elsewhere.set)).locator('.logged-set')).toBeVisible();

@@ -35,8 +35,17 @@
   >
     {{ error() ?? '' }}
   </p>
-  <p class="save-status" [class.save-status-empty]="!notice()" role="status" aria-live="polite">
-    {{ notice() ?? '' }}
+  <!-- Pinned as a pill while a workout is open, so a sentence never shifts the sets (W3). -->
+  <p
+    class="save-status"
+    [class.save-status-empty]="!notice()"
+    [class.save-status-pinned]="!finishSummary()"
+    role="status"
+    aria-live="polite"
+  >
+    @for (line of noticeLines(); track line.version) {
+      <span class="save-status-text">{{ line.text }}</span>
+    }
   </p>
   @if (finishSummary(); as summary) {
     <section class="finish-summary" aria-label="Workout summary" i18n-aria-label>
@@ -232,6 +241,7 @@
                         class="set-card"
                         [class.done]="collapsed(set)"
                         [attr.aria-label]="'Set ' + (setIndex + 1)"
+                        [attr.data-set-id]="set.performanceId"
                       >
                         <span class="set-number">{{ setIndex + 1 }}</span
                         ><!-- Last time's set stays beside it on a phone too (TRN-029, WEA-7). -->
