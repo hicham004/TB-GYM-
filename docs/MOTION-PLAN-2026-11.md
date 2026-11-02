@@ -24,7 +24,7 @@ What a row left out or chose on its own waits for the owner in section 3.
 | W2 | Demo day | `scripts/demo-day.ps1`: one command that rebuilds the demo into `tbgym_demo`, starts the API and the web app over HTTPS on the laptop's own address, opens the firewall once, and prints the address, the sign-ins and a QR code; `crypto.randomUUID` guarded so a plain http address works too; second, `-HeroName`, which gives Maya the friend's first name in the demo database only. Left out: Render, the test copy, email. | Done · 2026-11-02 · 6294bc9 |
 | W3 | The set tick and the record burst | A logged set springs into its done form and its tick draws, the exercise's segment fills; a record pops its chip and bursts 16 dots from it, with the buzz Android gives, and its sentence becomes a pinned pill that never shifts the sets; a second record in the same workout gets the small form. Left out: sound, anything before the server's answer. | Done · 2026-11-02 · c3dc42d |
 | W4 | The finish | The finish summary rises and its four numbers count up to the server's own strings, the records list follows and the share card lands with a spring. Left out: a new share card design, a hold-to-finish button. | Done · 2026-11-02 · ff5b195 |
-| W5 | The rest timer | The rest card slides in and out, its ring drains in one continuous sweep instead of stepping, it pulses in the last three seconds, and it keeps time while the phone is locked. Left out: a flick to skip, the end tone's words. | Open |
+| W5 | The rest timer | The rest card slides in and out, its ring drains in one continuous sweep instead of stepping, it pulses in the last three seconds, and it keeps time while the phone is locked. Left out: a flick to skip, the end tone's words. | Done · 2026-11-02 · 78e06e1 |
 | W6 | Coach Today hears the phone | While the tab is in view Coach Today re-reads quietly every 4 seconds, and a workout finished on the phone lands as a strip under the greeting and slides into the feed with its record and a highlight that fades; a message bumps a re-read at once; a resolved row leaves. Left out: a server event (the live finish frame, "Later"), set-by-set progress, count-ups. | Open |
 | W7 | The card opens into the player | On Today, Start or Open workout grows the card into the dark player (a clip-path reveal, 500 ms) and the player's parts rise in once the workout has loaded; the training chunks preload on idle. Left out: the way back (the leave guard); the row is left out whole if the reveal cannot be kept smooth and the console clean. | Open |
 | W8 | Messages that move | A sent bubble rises from the composer, a received one slides in from its side, the thread list's row rises when a message lands, and Today's coach card rises with a pulse when the coach's reply arrives, on the phone and the laptop; the unread pill ticks. Left out: typing indicators, optimistic sends. | Open |
@@ -604,6 +604,24 @@ is removed, and a changed answer becomes a new row.
   button, near the bottom), so before W4 a finished workout showed the middle of its summary; built: the finish
   scrolls the page to the top first, with or without motion, as the prototype opens its summary, so the rise and the
   counts play in view. The other way: leave the scroll where it was. Recommendation: keep as built.
+
+- **W5 · The over card leaves as the running card does.** Section 2 slides the rest card in and out; built: the
+  running card slides out on Skip, and the "Rest is over" card slides out too, on Dismiss and after its six seconds,
+  so no card vanishes in a cut; at zero the running card is replaced in place by the over card with its 200 ms rise,
+  as before. The other way: the over card vanishing at once, as before. Recommendation: keep as built.
+- **W5 · The pulse.** Section 2 says the card pulses gently through the last three seconds and the prototype has no
+  pulse; built: three beats of one second from three seconds left, the card 2.5 % larger at the middle of each, added
+  over any slide still running, with no colour or ring change. The other way: the ring or the digits brightening once
+  a second. Recommendation: keep as built.
+- **W5 · A set logged during a rest.** A rest that starts while the card is still up (the next set logged early) does
+  not slide the card in again: the card stays and its ring sweeps afresh from full; a rest that starts while "Rest is
+  over" shows slides a new card in, and the over card goes at once. The other way: a slide every time. Recommendation:
+  keep as built.
+- **W5 · The status pill mid-fade fails axe's contrast for half a second.** Seen at 1440 light with the rest card up:
+  W3's pinned pill ("New personal record · ...") between 4.0 and 4.5 s after a set, while its fade runs (contrast 1.3
+  through the fading opacity); clean before and after, and nothing in W5 (the rest card itself is clean at 390 and
+  1440 in light and dark). Not built here (W3's file). The other way: hide the pill (`visibility: hidden`) from the
+  fade's start rather than its end. Recommendation: a one-line W3 follow-up in a later row.
 
 ## 4. The arc on the day
 
