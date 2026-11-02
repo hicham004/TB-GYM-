@@ -1356,6 +1356,11 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     `drawLine`, `rise`, `pop`), with no GSAP in the app; GSAP stays on the homepage. The everyday
     press and page fade live in `_ui.scss`; Playwright runs with reduced motion by default and a
     motion spec opts in. Route view transitions wait for Angular's feature to leave developer preview.
+    Coach Today hears the phone (W6): while its tab is in view it reads again quietly every 4 s (one a
+    minute after fifteen idle minutes, 15 s after a failure, nothing while hidden), at once when a
+    message lands, and a workout a client just finished arrives as a strip under the greeting and
+    slides into the feed; the strip and the row slide on `grid-template-rows` (0fr to 1fr), never a
+    height.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

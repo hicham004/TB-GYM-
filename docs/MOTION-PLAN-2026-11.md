@@ -623,6 +623,33 @@ is removed, and a changed answer becomes a new row.
   1440 in light and dark). Not built here (W3's file). The other way: hide the pill (`visibility: hidden`) from the
   fade's start rather than its end. Recommendation: a one-line W3 follow-up in a later row.
 
+- **W6 · A second workout within the minute.** Section 2 has the strip stay until it is clicked, dismissed
+  or a minute has passed; built: a workout that lands while the strip is up takes the strip over (its words,
+  its ring's pulse) and starts its minute again, and slides into the feed as its own row. The other way: one
+  strip per workout, stacked. Recommendation: keep as built; on the day one client finishes.
+- **W6 · The live dot.** Built: drawn beside the feed's heading only while reads succeed and the tab is in
+  view (gone, not grey, after a failed read or while the tab is hidden), green as the prototype's, its 2 s
+  pulse resting with reduced motion and under `?motion=off`; the pulse is a stylesheet rule, so
+  `tb-motion-off = W6` stops the strip, the row and the ring but not the dot. The other way: a dot always
+  drawn, grey when reads fail. Recommendation: keep as built.
+- **W6 · The highlight with reduced motion and the switch.** Section 2 keeps the row's lime highlight with
+  reduced motion; built: it fades over 2 s there and under `?motion=off` too, since it is colour and not
+  movement, while the strip and the row are in place at once. The other way: no highlight under the switch.
+  Recommendation: keep as built.
+- **W6 · The strip's words.** Built: "Just now:" in bold, then the feed row's own sentence ("Maya Fakhoury
+  finished Lower A in 42 min"; without the minutes when the workout took under one, as the feed phrases
+  it) and "· 1 record" counting the records; the same words reach screen readers through a status region
+  that is always on the page. The other way: the client's first name alone. Recommendation: keep as built.
+- **W6 · The beat's idle rule.** Section 2 slows the re-read to a minute after fifteen minutes without input
+  or a realtime bump; built: input is a pointer press or a key anywhere on the page, a bump is the chat
+  hub's conversation change, and a tab brought back into view counts too; any of them brings the 4 s beat
+  back from the next read. The other way: pointer movement as input too. Recommendation: keep as built.
+
+- **W6 · Which read lets a row leave.** Built: a Needs-you row leaves with its slide only when the quiet
+  re-read finds it resolved; a full read (Try again, or after End coaching) replaces the list at once, as
+  before, and the feed row of a workout older than two minutes appears without the strip or the slide. The
+  other way: the slide on every read. Recommendation: keep as built.
+
 ## 4. The arc on the day
 
 Ten minutes, three peaks, the strongest last; between them only quiet speed. Before he arrives: the demo rebuilt

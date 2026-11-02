@@ -8,11 +8,14 @@ import { ApiClient } from '../../core/api/api-client';
 import type { CoachClientDetails } from '../../core/api/api.models';
 import type { CoachTodayView } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
+import { MessagingRealtimeService } from '../../core/messaging/messaging-realtime.service';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { installDialogSupport } from '../../../testing/dialog';
 import { fill, formSummary, press, settle, toggleFold } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
+import { fakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
+import { IDLE_AFTER_MS } from './arrival-moment';
 import {
   attentionItem,
   coachMonth,
@@ -32,6 +35,8 @@ import { CoachToday } from './coach-today';
 interface RenderOptions {
   releaseClient?: ReturnType<typeof vi.fn>;
   user?: { id: string; displayName: string };
+  /** A browser that moves (W6): the moment's moves are asked for rather than landed at once. */
+  motionAllowed?: boolean;
 }
 
 async function render(
@@ -43,6 +48,8 @@ async function render(
   const tenant = signal<string | null>('tenant-1');
   const membership = signal({ tenantId: 'tenant-1', tenantName: 'Atlas Performance', role });
   const api = { getCoachToday: vi.fn(getCoachToday) };
+  /** The chat hub's "a conversation changed" count, which bumps the quiet re-read (W6). */
+  const bumps = signal(0);
   const releaseClient =
     options.releaseClient ??
     vi.fn(() => of({ id: 'c-elie', firstName: 'Elie' } as CoachClientDetails));
@@ -51,6 +58,8 @@ async function render(
     providers: [
       provideRouter([]),
       provideEmailDelivery(false),
+      provideFakeMotion(fakeMotion({ allowed: options.motionAllowed ?? false })),
+      { provide: MessagingRealtimeService, useValue: { listRefreshRequests: bumps } },
       { provide: ApiClient, useValue: api },
       { provide: ConversationStarter, useValue: starter },
       { provide: FormerClientsApi, useValue: { releaseClient } },
@@ -73,6 +82,7 @@ async function render(
     host,
     api,
     tenant,
+    bumps,
     releaseClient,
     read: () => (host.textContent ?? '').replace(/\s+/g, ' '),
   };
@@ -651,5 +661,282 @@ describe('CoachToday', () => {
 
     expect(api.getCoachToday).toHaveBeenCalledTimes(2);
     expect(host.querySelector('li.need')).toBeNull();
+  });
+
+  /**
+   * Coach Today hears the phone (motion plan W6): a quiet re-read every 4 s while the tab is in
+   * view, a workout a client just finished as a strip under the greeting and a highlighted row in
+   * the feed, a message bumping the read at once. jsdom moves nothing, so every state is at once.
+   * Today is rendered with the tab hidden (no timer armed on the real clock), then brought into
+   * view on the faked one.
+   */
+  describe('hears the phone (W6)', () => {
+    let visibility: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      visibility = vi.spyOn(Document.prototype, 'visibilityState', 'get').mockReturnValue('hidden');
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      visibility.mockRestore();
+    });
+
+    /** `milliseconds` pass on the faked clock, and what they trigger settles. */
+    async function pass(fixture: { detectChanges(): void }, milliseconds: number): Promise<void> {
+      await vi.advanceTimersByTimeAsync(milliseconds);
+      fixture.detectChanges();
+      for (let index = 0; index < 4; index++) await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    /** The tab comes into view on the faked clock: Today reads at once and starts its beat. */
+    async function listen(fixture: { detectChanges(): void }): Promise<void> {
+      vi.useFakeTimers();
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await pass(fixture, 0);
+    }
+
+    /** A workout Maya finished half a minute ago, as the feed's newest row. */
+    function justFinished() {
+      const base = coachTodayView();
+      return coachTodayView({
+        activity: [
+          {
+            ...base.activity[0],
+            client: MAYA,
+            subjectId: 'w-maya-now',
+            title: 'Lower A',
+            durationSeconds: 2520,
+            occurredAtUtc: new Date(Date.now() - 30_000).toISOString(),
+            personalRecords: [base.activity[0].personalRecords[0]],
+          },
+          ...base.activity,
+        ],
+      });
+    }
+
+    it('reads Today again every 4 seconds while in view, quietly, and animates nothing on a first read', async () => {
+      const { fixture, host, api } = await render();
+      expect(api.getCoachToday).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('.live-dot')).toBeNull();
+
+      await listen(fixture);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+      expect(host.querySelector('.live-dot')).not.toBeNull();
+      expect(host.querySelector('.arrival')).toBeNull();
+
+      await pass(fixture, 3999);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+      await pass(fixture, 1);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(3);
+      await pass(fixture, 4000);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(4);
+      // The view stayed: no placeholder, no failure, and the known rows raised no strip.
+      expect(host.querySelector('app-skeleton')).toBeNull();
+      expect(host.querySelector('.arrival')).toBeNull();
+      expect(host.querySelectorAll('li.need')).toHaveLength(7);
+      expect(host.querySelector('li.event.arrived')).toBeNull();
+    });
+
+    it('lands a workout finished on the phone as a strip under the greeting and a row in the feed, once', async () => {
+      let reads = 0;
+      const { fixture, host, api } = await render(() =>
+        of(++reads >= 3 ? justFinished() : coachTodayView()),
+      );
+      await listen(fixture);
+      expect(host.querySelector('.arrival')).toBeNull();
+
+      await pass(fixture, 4000);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(3);
+      const strip = host.querySelector<HTMLElement>('.arrival')!;
+      expect(strip).not.toBeNull();
+      expect(strip.previousElementSibling?.matches('[role="status"]')).toBe(true);
+      expect(squash(strip.querySelector('app-avatar')?.textContent)).toBe('MF');
+      expect(squash(strip.querySelector('.arrival-copy')?.textContent)).toBe(
+        'Just now: Maya Fakhoury finished Lower A in 42 min · 1 record',
+      );
+      expect(strip.querySelector('a.arrival-link')?.getAttribute('href')).toBe(
+        '/clients/c-maya/training',
+      );
+      expect(strip.querySelector('button.arrival-dismiss')?.getAttribute('aria-label')).toBe(
+        'Dismiss',
+      );
+      expect(squash(host.querySelector('[role="status"]')?.textContent)).toBe(
+        'Maya Fakhoury finished Lower A in 42 min · 1 record',
+      );
+      const row = host.querySelector<HTMLElement>('li.event')!;
+      expect(row.dataset['key']).toBe('WorkoutCompleted:w-maya-now');
+      expect(row.classList).toContain('arrived');
+      expect(squash(row.textContent)).toContain('Maya Fakhoury finished Lower A in 42 min');
+
+      // The next read knows the row: nothing is raised again.
+      await pass(fixture, 4000);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(4);
+      expect(host.querySelectorAll('.arrival')).toHaveLength(1);
+      expect(host.querySelectorAll('li.event.arrived')).toHaveLength(1);
+
+      // Dismiss takes the strip away at once here (no motion), and clears the live region.
+      strip.querySelector<HTMLButtonElement>('button.arrival-dismiss')!.click();
+      fixture.detectChanges();
+      expect(host.querySelector('.arrival')).toBeNull();
+      expect(squash(host.querySelector('[role="status"]')?.textContent)).toBe('');
+    });
+
+    it('takes the strip away on its own after a minute', async () => {
+      let reads = 0;
+      const { fixture, host } = await render(() =>
+        of(++reads >= 3 ? justFinished() : coachTodayView()),
+      );
+      await listen(fixture);
+      await pass(fixture, 4000);
+      expect(host.querySelector('.arrival')).not.toBeNull();
+
+      await pass(fixture, 59_000);
+      expect(host.querySelector('.arrival')).not.toBeNull();
+      await pass(fixture, 1000);
+      expect(host.querySelector('.arrival')).toBeNull();
+    });
+
+    it('keeps the view when a quiet read fails, and tries again after 15 seconds', async () => {
+      let reads = 0;
+      const { fixture, host, api, read } = await render(() =>
+        ++reads === 3
+          ? throwError(() => new HttpErrorResponse({ status: 503 }))
+          : of(coachTodayView()),
+      );
+      await listen(fixture);
+
+      await pass(fixture, 4000);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(3);
+      expect(host.querySelectorAll('li.need')).toHaveLength(7);
+      expect(read()).not.toContain('Today could not be loaded.');
+      expect(host.querySelector('.live-dot')).toBeNull();
+
+      await pass(fixture, 14_999);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(3);
+      await pass(fixture, 1);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(4);
+      expect(host.querySelector('.live-dot')).not.toBeNull();
+    });
+
+    it('stops reading while the tab is hidden, and reads at once when it is back', async () => {
+      const { fixture, host, api } = await render();
+      await listen(fixture);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges();
+      expect(host.querySelector('.live-dot')).toBeNull();
+      await pass(fixture, 30_000);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await pass(fixture, 0);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(3);
+      expect(host.querySelector('.live-dot')).not.toBeNull();
+    });
+
+    it('reads at once when a message lands, and slows to a minute after fifteen quiet minutes', async () => {
+      const { fixture, api, bumps } = await render();
+      await listen(fixture);
+
+      await pass(fixture, 1000);
+      bumps.set(1);
+      fixture.detectChanges();
+      await pass(fixture, 0);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(3);
+
+      // Nothing touched for fifteen minutes: the beat becomes one a minute (two reads in the next
+      // two minutes, against thirty at the 4 s beat).
+      await pass(fixture, IDLE_AFTER_MS + 8000);
+      const idle = api.getCoachToday.mock.calls.length;
+      await pass(fixture, 120_000);
+      expect(api.getCoachToday.mock.calls.length - idle).toBeGreaterThanOrEqual(1);
+      expect(api.getCoachToday.mock.calls.length - idle).toBeLessThanOrEqual(3);
+
+      // A key press brings the 4 s beat back from the next read on.
+      document.dispatchEvent(new Event('keydown'));
+      await pass(fixture, 60_000);
+      const awake = api.getCoachToday.mock.calls.length;
+      await pass(fixture, 20_000);
+      expect(api.getCoachToday.mock.calls.length - awake).toBeGreaterThanOrEqual(4);
+    });
+
+    it('keeps a resolved Needs-you row in place, leaving, until its slide out has ended', async () => {
+      // A browser that moves: Element.animate hands back a clock the test settles by hand.
+      const settles: (() => void)[] = [];
+      Object.defineProperty(Element.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: vi.fn(() => {
+          let settle: () => void = () => undefined;
+          const finished = new Promise<void>((resolve) => {
+            settle = resolve;
+          });
+          settles.push(settle);
+          return { finished, cancel: vi.fn() };
+        }),
+      });
+      try {
+        let reads = 0;
+        const base = coachTodayView();
+        const { fixture, host } = await render(
+          () => of(++reads >= 3 ? coachTodayView({ attention: base.attention.slice(1) }) : base),
+          'Owner',
+          undefined,
+          { motionAllowed: true },
+        );
+        await listen(fixture);
+        expect(host.querySelectorAll('li.need')).toHaveLength(7);
+
+        // The third read has no check-in from Maya any more: her row stays, leaving, first.
+        await pass(fixture, 4000);
+        const rows = host.querySelectorAll<HTMLElement>('li.need');
+        expect(rows).toHaveLength(7);
+        expect(rows[0].classList).toContain('leaving');
+        expect(rows[0].dataset['kind']).toBe('CheckInToReview');
+        expect(host.querySelector('#needs-heading .badge')?.textContent?.trim()).toBe('6');
+        expect(settles).toHaveLength(1);
+
+        // The slide ends, the collapse runs, and only then does the list close over it.
+        settles[0]();
+        await pass(fixture, 0);
+        expect(settles).toHaveLength(2);
+        expect(host.querySelectorAll('li.need')).toHaveLength(7);
+        settles[1]();
+        await pass(fixture, 0);
+        expect(host.querySelectorAll('li.need')).toHaveLength(6);
+        expect(host.querySelector('li.need.leaving')).toBeNull();
+        expect(host.querySelector<HTMLElement>('li.need')?.dataset['kind']).toBe('UnreadMessages');
+      } finally {
+        delete (Element.prototype as { animate?: unknown }).animate;
+      }
+    });
+
+    it('closes the list over a resolved row at once where motion is not allowed', async () => {
+      let reads = 0;
+      const base = coachTodayView();
+      const { fixture, host } = await render(() =>
+        of(++reads >= 3 ? coachTodayView({ attention: base.attention.slice(1) }) : base),
+      );
+      await listen(fixture);
+      await pass(fixture, 4000);
+      expect(host.querySelectorAll('li.need')).toHaveLength(6);
+      expect(host.querySelector('li.need.leaving')).toBeNull();
+    });
+
+    it('stops hearing the phone when it is destroyed', async () => {
+      const { fixture, api } = await render();
+      await listen(fixture);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+      fixture.destroy();
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+    });
   });
 });
