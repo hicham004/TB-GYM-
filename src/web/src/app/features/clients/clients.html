@@ -1,4 +1,33 @@
 <section class="clients" aria-labelledby="clients-heading">
+  <!-- A client's hover card (motion plan W14): the row's own week and plan line, once the mouse has
+       rested on the row. The row already says all of it to a screen reader, so the card is hidden. -->
+  <ng-template #hoverCard let-row>
+    <div class="hover-card" aria-hidden="true" data-hover-card>
+      <p class="hover-name" dir="auto">{{ row.name }}</p>
+      @if (row.week; as week) {
+        <p class="hover-title"><ng-container i18n>Last 7 days</ng-container> · {{ week.value }}</p>
+        @if (week.days.length > 0) {
+          <ol class="hover-days">
+            @for (day of week.days; track day.date) {
+              <li class="hover-day">
+                <span class="hover-weekday">{{ weekday(day.date) }}</span>
+                <app-day-mark [mark]="day.mark" />
+              </li>
+            }
+          </ol>
+        }
+      } @else {
+        <p class="hover-title" i18n>Training not in plan</p>
+      }
+      <p class="hover-plan">
+        @if (row.plan.name) {
+          <bdi>{{ row.plan.name }}</bdi> ·
+        }
+        {{ row.plan.end }}
+      </p>
+    </div>
+  </ng-template>
+
   <header class="top">
     <div class="intro">
       @if (showingFormer) {
@@ -129,7 +158,8 @@
       <p class="tb-visually-hidden" role="status">{{ resultSummary() }}</p>
 
       @if (visible().length > 0) {
-        <div class="panel">
+        <!-- `tb-client-rows`: the panel the chips crossfade (motion plan W14, rows-moment.ts). -->
+        <div class="panel tb-client-rows">
           <!-- The strip's marks, said once above the list; on a wide screen under its column's name. -->
           <ng-template #legend>
             <span class="legend" aria-hidden="true">
@@ -161,7 +191,7 @@
           </div>
           <ul class="rows" role="list">
             @for (row of visible(); track row.id) {
-              <li class="client-row">
+              <li class="client-row" [appClientHoverCard]="row" [hoverCardTemplate]="hoverCard">
                 <app-avatar [initials]="row.initials" presentation="client" />
                 <div class="who">
                   <a class="name" [routerLink]="row.link" dir="auto">{{ row.name }}</a>
@@ -273,7 +303,7 @@
         </div>
       } @else {
         <app-empty-state
-          class="panel"
+          class="panel tb-client-rows"
           [heading]="emptyFilter().heading"
           [description]="emptyFilter().description"
         >

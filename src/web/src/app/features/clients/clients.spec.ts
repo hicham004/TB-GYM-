@@ -13,6 +13,7 @@ import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
 import { COACH_NOW, LEA_ID, OWNER_ID } from '../../../testing/coach-today-fixtures';
 import { clientListView, KARL, overviewRow, TALA } from '../../../testing/client-list-fixtures';
 import { click, fill, menuChoices, press, query, settle, tick } from '../../../testing/dom';
+import { fakeMotion, provideFakeMotion, type FakeMotion } from '../../../testing/motion-fake';
 import { ClientListApi } from './client-list-api';
 import { Clients } from './clients';
 import { FormerClientsApi } from './former-clients-api';
@@ -36,6 +37,7 @@ async function render(
     getFormerClients?: () => unknown;
     timeZone?: string;
     calendar?: unknown;
+    motion?: FakeMotion;
   } = {},
 ) {
   vi.useFakeTimers({ now: new Date(COACH_NOW), toFake: ['Date'] });
@@ -62,6 +64,7 @@ async function render(
           resolveToday: () => Promise.resolve('2026-10-01'),
         },
       },
+      ...(options.motion ? [provideFakeMotion(options.motion)] : []),
     ],
   });
   const harness = await RouterTestingHarness.create();
@@ -618,5 +621,65 @@ describe('Clients', () => {
     expect(query<HTMLAnchorElement>(host, '.load-failed a').getAttribute('href')).toBe('/clients');
     expect(query(host, '.load-failed a').textContent?.trim()).toBe('See your clients');
     expect(host.querySelector('.load-failed button')).toBeNull();
+  });
+
+  describe('W14: the chips crossfade the rows', () => {
+    interface Transition {
+      finished: Promise<void>;
+    }
+    /** A browser with view transitions: the update runs at once and `finished` follows it. */
+    function viewTransitions() {
+      let scoped: boolean | null = null;
+      const start = vi.fn((update: () => Promise<void>): Transition => {
+        scoped = document.documentElement.classList.contains('tb-rows-swap');
+        const done = update();
+        return { finished: done };
+      });
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        writable: true,
+        value: start,
+      });
+      return { start, scoped: () => scoped };
+    }
+
+    afterEach(() => {
+      delete (document as { startViewTransition?: unknown }).startViewTransition;
+      document.documentElement.classList.remove('tb-rows-swap');
+    });
+
+    it('runs a chip inside a view transition scoped by a class on <html>, where motion is allowed', async () => {
+      const browser = viewTransitions();
+      const { host, harness } = await render({ motion: fakeMotion({ allowed: true }) });
+      expect(host.querySelector('.panel.tb-client-rows')).not.toBeNull();
+
+      tick(host, 'Ending soon');
+      await settle(harness.fixture);
+
+      expect(browser.start).toHaveBeenCalledTimes(1);
+      expect(browser.scoped()).toBe(true);
+      expect(names(host)).toEqual(['Rita Daher', 'Sara Mansour']);
+      await vi.waitFor(() =>
+        expect(document.documentElement.classList.contains('tb-rows-swap')).toBe(false),
+      );
+      // The owner's coach chip (B3a) crossfades the rows the same way.
+    });
+
+    it('swaps the rows at once where motion is not allowed, or the browser has no transitions', async () => {
+      const browser = viewTransitions();
+      const still = await render({ motion: fakeMotion({ allowed: false }) });
+      tick(still.host, 'Ending soon');
+      await settle(still.harness.fixture);
+      expect(browser.start).not.toHaveBeenCalled();
+      expect(names(still.host)).toEqual(['Rita Daher', 'Sara Mansour']);
+      expect(document.documentElement.classList.contains('tb-rows-swap')).toBe(false);
+
+      delete (document as { startViewTransition?: unknown }).startViewTransition;
+      TestBed.resetTestingModule();
+      const older = await render({ motion: fakeMotion({ allowed: true }) });
+      tick(older.host, 'Paused');
+      await settle(older.harness.fixture);
+      expect(names(older.host)).toHaveLength(1);
+    });
   });
 });

@@ -1,8 +1,11 @@
-import { signal } from '@angular/core';
+import { ApplicationRef, signal } from '@angular/core';
 import { DeferBlockBehavior, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clientListView } from '../../testing/client-list-fixtures';
 import { AuthStore } from '../core/auth/auth.store';
+import { ClientListApi } from '../features/clients/client-list-api';
 import { MessageUnreadStore } from '../core/messaging/message-unread.store';
 import { NotificationStore } from '../core/notifications/notification.store';
 import { TenantContext } from '../core/tenancy/tenant-context';
@@ -96,6 +99,8 @@ async function render(
         useValue: { unread: signal(0), isAvailable: signal(true) },
       },
       { provide: WorkspaceBrandStore, useValue: brand },
+      // The palette (W14) reads the client list once open.
+      { provide: ClientListApi, useValue: { getOverview: () => of(clientListView()) } },
     ],
   }).compileComponents();
 
@@ -367,5 +372,100 @@ describe('CoachShell', () => {
 
     expect(host.querySelectorAll('app-coach-nav')).toHaveLength(1);
     expect(host.querySelectorAll('nav[aria-label="Primary navigation"]')).toHaveLength(1);
+  });
+
+  describe('W14: the palette on Ctrl+K', () => {
+    /** The shell reads whether the sidebar shows; jsdom has no matchMedia of its own. */
+    function sidebar(shown: boolean): void {
+      Object.defineProperty(document.defaultView, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: vi.fn(() => ({
+          matches: shown,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        })),
+      });
+    }
+
+    const palette = () =>
+      document.querySelector<HTMLElement>('[role="dialog"][aria-label="Go to a page or a client"]');
+
+    function shortcut(init: KeyboardEventInit = {}): KeyboardEvent {
+      const event = new KeyboardEvent('keydown', {
+        key: 'k',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      });
+      document.dispatchEvent(event);
+      return event;
+    }
+
+    /** The palette's code is fetched on the press; a few turns let it land and draw. */
+    async function loaded(): Promise<void> {
+      for (let round = 0; round < 10; round++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        TestBed.inject(ApplicationRef).tick();
+      }
+    }
+
+    afterEach(() => {
+      delete (document.defaultView as { matchMedia?: unknown }).matchMedia;
+      document.querySelector('.cdk-overlay-container')?.remove();
+    });
+
+    it('opens where the sidebar shows, takes the key, focuses its field, and a second press closes it', async () => {
+      sidebar(true);
+      await render();
+
+      const press = shortcut();
+      await loaded();
+
+      expect(press.defaultPrevented).toBe(true);
+      expect(palette()).not.toBeNull();
+      expect(document.activeElement?.getAttribute('role')).toBe('combobox');
+
+      shortcut();
+      await loaded();
+      expect(palette()).toBeNull();
+    });
+
+    it('opens on Cmd+K too, and not on Ctrl+Shift+K or a plain K', async () => {
+      sidebar(true);
+      await render();
+
+      expect(shortcut({ ctrlKey: false, shiftKey: true }).defaultPrevented).toBe(false);
+      expect(shortcut({ ctrlKey: false }).defaultPrevented).toBe(false);
+      await loaded();
+      expect(palette()).toBeNull();
+
+      expect(shortcut({ ctrlKey: false, metaKey: true }).defaultPrevented).toBe(true);
+      await loaded();
+      expect(palette()).not.toBeNull();
+    });
+
+    it('does not exist below the sidebar’s width', async () => {
+      sidebar(false);
+      await render();
+
+      expect(shortcut().defaultPrevented).toBe(false);
+      await loaded();
+      expect(palette()).toBeNull();
+    });
+
+    it('closes when the tenant context changes', async () => {
+      sidebar(true);
+      const { context } = await render({ memberships: [ATLAS, BEIRUT] });
+      shortcut();
+      await loaded();
+      expect(palette()).not.toBeNull();
+
+      context.invalidate();
+      await loaded();
+
+      expect(palette()).toBeNull();
+    });
   });
 });

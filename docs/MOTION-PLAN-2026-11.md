@@ -876,6 +876,30 @@ is removed, and a changed answer becomes a new row.
   progress chunk with the dashboard, the slider and the area in the chart's own chunk; the 520 kB error
   budget holds. Recommendation: accept.
 - **W13 · Nothing else was left out.** Progress photos and a before-and-after slider stay out as the row says.
+- **W14 · The pages.** The row names "Programs"; the palette says Training, the sidebar's word, with "Programs" as
+  its hint (the page it opens), which the search reads too, so "prog" finds it; Nutrition and Check-ins carry
+  "Plans" and "Review" the same way. It lists Products as well, a sidebar page the row's list leaves out ("any
+  page"), and Team for a coach too, opening their read-only roster as their Settings do; a coach's Settings opens
+  their own pages. The other way: the row's nine names exactly. Recommendation: keep as built.
+- **W14 · No button for the palette.** Nothing in the top bar shows Ctrl+K; the row names the key alone, and the
+  owner drives it on the day. The other way: a small "Search · Ctrl K" button in the top bar on a laptop, which
+  would also hand the palette to the mouse and tell a coach it exists. Recommendation: the button, after the demo
+  (a few hundred bytes in the first download).
+- **W14 · The owner's Coach chip crossfades too.** Section 2 names `setFilter`; the owner's Coach menu (B3a)
+  narrows the same rows and runs the same way. The other way: the status chips alone. Recommendation: keep.
+- **W14 · The hover card's arrival.** Nothing settles it: built as the everyday 120 ms rise of 4 px through
+  `core/motion` (`Motion.rise`, the kit's ease), in place at once with reduced motion. The other way: no motion.
+  Recommendation: keep as built.
+- **W14 · What the hover card shows, and for whom.** The row's own week as weekdays with the strip's marks under
+  "Last 7 days · 2 of 4" (or "Training not in plan"), then the plan's name and its end line; hidden from screen
+  readers, since the row says all of it, and taking no pointer events. Built for a mouse or a pen under
+  `(hover: hover) and (pointer: fine)` alone: nothing on a finger, nothing from the keyboard. The other way: a
+  card that also opens on the name's focus. Recommendation: keep; the row shows the same facts.
+- **W14 · The first download: 513.38 kB before and 514.63 kB after** (1.25 kB more raw, 0.27 kB compressed):
+  the shell's listener and its lazy import stub, and the rules component styles cannot hold (the view
+  transition's pseudo-elements, the palette's backdrop) in `_ui.scss`; the palette, the crossfade and the hover
+  card live in lazy chunks. The 520 kB error budget holds.
+- **W14 · Nothing else was left out.** More shortcuts and a `?` sheet stay out as the row says.
   The mocked Progress specs run under reduced motion and see the chart drawn; the live videos show the draw
   and the scrub on the phone and on the coach's laptop. On a phone axe reads the kit's "Chart values"
   disclosure as partly covered when the page's scroll leaves it under the fixed tab bar (the readings line

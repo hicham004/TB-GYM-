@@ -821,6 +821,35 @@
   }
 }
 
+// Clients' chips crossfade the rows (motion plan W14, features/clients/rows-moment.ts): while the
+// class is on <html> the list's panel is captured on its own and fades from one set of rows to the
+// next over the everyday 200 ms; the rest of the page, the pressed chip included, cuts over at once.
+// The class is left off for less motion, so a chip then swaps the rows as before.
+.tb-rows-swap .tb-client-rows {
+  view-transition-name: tb-client-rows;
+}
+
+.tb-rows-swap::view-transition-group(root),
+.tb-rows-swap::view-transition-old(root),
+.tb-rows-swap::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+.tb-rows-swap::view-transition-group(tb-client-rows),
+.tb-rows-swap::view-transition-old(tb-client-rows),
+.tb-rows-swap::view-transition-new(tb-client-rows) {
+  animation-duration: var(--tb-duration);
+  animation-timing-function: var(--tb-ease);
+}
+
+// The coach's palette (motion plan W14, shell/command-palette.ts) opens with no animation at all:
+// the overlay backdrop's own fade is turned off under it.
+.cdk-overlay-backdrop.tb-palette-backdrop {
+  background: rgb(0 0 0 / 0.32);
+  transition: none;
+}
+
 @property --progress {
   syntax: '<number>';
   inherits: false;

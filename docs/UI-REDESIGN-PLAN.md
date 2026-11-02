@@ -1399,6 +1399,13 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     a range tap fades the charts in over 200 ms; the plot is a slider (`ui/trend-chart.ts`) a finger, the
     mouse or the arrow keys scrub to read any day, for the client and for the coach on the client's page;
     with reduced motion the chart appears drawn and the scrub still reads.
+    Coach polish (W14): Ctrl+K (Cmd+K) where the coach sidebar shows opens a palette over the page
+    (`shell/command-palette.ts`, a CDK overlay loaded on the first press, no animation at all) that jumps to
+    any page and, from two letters, to a client by name from the Clients read; Clients’ filter chips swap
+    the rows inside a view transition that crossfades the list’s panel alone over 200 ms
+    (`features/clients/rows-moment.ts`, the `.tb-rows-swap` rules in `_ui.scss`), a plain swap with reduced
+    motion; a client’s row rested on for 700 ms with a mouse opens a hover card of its own week and plan
+    line (`client-hover-card.ts`, 300 ms to close, hidden from readers, no pointer events).
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

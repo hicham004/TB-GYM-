@@ -1,4 +1,4 @@
-import { NgTemplateOutlet } from '@angular/common';
+import { DOCUMENT, formatDate, NgTemplateOutlet } from '@angular/common';
 import {
   afterNextRender,
   Component,
@@ -6,6 +6,7 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   LOCALE_ID,
   signal,
   untracked,
@@ -16,6 +17,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
+import { Motion } from '../../core/motion/motion';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
@@ -28,6 +30,7 @@ import { SectionLink, SectionNav } from '../../ui/section-nav';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusPill } from '../../ui/status-pill';
 import { Tag } from '../../ui/tag';
+import { ClientHoverCard } from './client-hover-card';
 import { ClientListApi } from './client-list-api';
 import {
   CLIENT_FILTERS,
@@ -45,6 +48,7 @@ import {
 } from './clients.models';
 import { DayMarkView } from './day-mark';
 import { FormerClientsApi } from './former-clients-api';
+import { swapRows } from './rows-moment';
 import { StatusesHelp } from './statuses-help';
 
 const FILTER_LABELS: Record<ClientFilter, string> = {
@@ -69,6 +73,7 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
     Avatar,
     Button,
     ButtonLink,
+    ClientHoverCard,
     DayMarkView,
     EmptyState,
     Icon,
@@ -83,13 +88,21 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
   ],
   templateUrl: './clients.html',
   // The status cell's sheet first, so the wide layout's rules in clients.scss come after it.
-  styleUrls: ['./clients-status.scss', './clients.scss', './clients-toolbar.scss'],
+  styleUrls: [
+    './clients-status.scss',
+    './clients.scss',
+    './clients-toolbar.scss',
+    './client-hover-card.scss',
+  ],
 })
 export class Clients {
   private readonly listApi = inject(ClientListApi);
   private readonly formerApi = inject(FormerClientsApi);
   private readonly auth = inject(AuthStore);
   private readonly locale = inject(LOCALE_ID);
+  private readonly document = inject(DOCUMENT);
+  private readonly motion = inject(Motion);
+  private readonly injector = inject(Injector);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly tenants = inject(TenantStore);
@@ -234,8 +247,9 @@ export class Clients {
     });
   }
 
+  /** The rows crossfade from one set to the next (motion plan W14) where the browser and motion allow. */
   protected setFilter(filter: ClientFilter): void {
-    this.filter.set(filter);
+    swapRows(() => this.filter.set(filter), this.document, this.motion, this.injector);
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { show: filter === 'all' ? null : filter },
@@ -245,7 +259,7 @@ export class Clients {
   }
 
   protected setCoach(coachId: string): void {
-    this.coach.set(coachId);
+    swapRows(() => this.coach.set(coachId), this.document, this.motion, this.injector);
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { coach: coachId === '' ? null : coachId },
@@ -256,6 +270,11 @@ export class Clients {
 
   protected onSearch(event: Event): void {
     this.search.set((event.target as HTMLInputElement).value);
+  }
+
+  /** "Mon", for a day of the hover card's week (W14); the row's dates are workspace days. */
+  protected weekday(date: string): string {
+    return formatDate(date, 'EEE', this.locale);
   }
 
   protected clearFilter(): void {

@@ -1,0 +1,70 @@
+// A client's hover card (motion plan W14, client-hover-card.ts): the row's own seven days spelled
+// out and its plan line, beside the name once the mouse has rested on the row. Drawn in the overlay,
+// so it states its own surface; it takes no pointer events (set on its pane) and is a reading only.
+
+.hover-card {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  box-shadow: var(--tb-shadow-overlay);
+  box-sizing: border-box;
+  color: var(--tb-ink);
+  font-size: 0.875rem;
+  inline-size: max-content;
+  max-inline-size: min(20rem, calc(100vw - 2rem));
+  padding: 0.75rem 0.875rem;
+}
+
+.hover-name {
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.hover-title {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin: 0.625rem 0 0.375rem;
+  text-transform: uppercase;
+}
+
+.hover-title:lang(ar) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hover-days {
+  display: grid;
+  gap: 0.375rem;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hover-day {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 1.75rem;
+}
+
+.hover-weekday {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+}
+
+.hover-plan {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  margin: 0.625rem 0 0;
+}
+
+.hover-plan bdi {
+  color: var(--tb-ink);
+  font-weight: 600;
+}

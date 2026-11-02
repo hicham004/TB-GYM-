@@ -7,6 +7,7 @@ import {
   DestroyRef,
   ElementRef,
   inject,
+  Injector,
   LOCALE_ID,
   output,
   signal,
@@ -25,6 +26,8 @@ import { Button, IconButton } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { CoachNav } from './coach-nav';
 import { countDisplay } from './coach-navigation';
+// A type alone: the palette's code is loaded on the first Ctrl+K, never in the first download.
+import type { PaletteHandle } from './command-palette';
 import { initialsOf } from './initials';
 import { ThemeSwitch, ThemeSwitchArt } from './theme-switch';
 
@@ -78,6 +81,7 @@ export const TOPBAR_BLOCK_SIZE = '--tb-topbar-block-size';
 export class CoachShell {
   private readonly document = inject(DOCUMENT);
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
   protected readonly auth = inject(AuthStore);
   protected readonly tenants = inject(TenantStore);
   protected readonly notifications = inject(NotificationStore);
@@ -91,6 +95,12 @@ export class CoachShell {
 
   protected readonly openMenu = signal<ShellMenu | null>(null);
   protected readonly navOpen = signal(false);
+
+  /** Whether the sidebar is shown; the palette (motion plan W14) exists at that width alone. */
+  private readonly desktop: MediaQueryList | undefined;
+  /** The open palette, or null; a request number lets a close cancel an opening still loading. */
+  private palette: PaletteHandle | null = null;
+  private paletteRequest = 0;
 
   // Optional queries: a context change can close everything before the view exists.
   private readonly navDialog = viewChild<ElementRef<HTMLDialogElement>>('navDialog');
@@ -139,6 +149,7 @@ export class CoachShell {
     // The dialog is only the narrow-width navigation. Growing past the breakpoint closes it, since
     // the sidebar is visible again and a modal would leave the page inert behind nothing.
     const desktop = this.document.defaultView?.matchMedia?.(DESKTOP_QUERY);
+    this.desktop = desktop;
     if (desktop) {
       const onChange = (event: MediaQueryListEvent) => {
         if (event.matches) this.closeNav(false);
@@ -146,6 +157,12 @@ export class CoachShell {
       desktop.addEventListener('change', onChange);
       destroyRef.onDestroy(() => desktop.removeEventListener('change', onChange));
     }
+
+    // A plain listener rather than a host one, so a key pressed anywhere in the app does not run
+    // the shell's change detection; the palette's own signals do that once it is open.
+    const onKeydown = (event: KeyboardEvent) => this.togglePaletteOnShortcut(event);
+    this.document.addEventListener('keydown', onKeydown);
+    destroyRef.onDestroy(() => this.document.removeEventListener('keydown', onKeydown));
 
     destroyRef.onDestroy(() => this.closeEverything());
 
@@ -230,9 +247,39 @@ export class CoachShell {
     if (restoreFocus) this.menuButton()?.nativeElement.focus();
   }
 
+  // ---------- the palette (motion plan W14) ----------
+
+  /**
+   * Ctrl+K, or Cmd+K on a Mac, opens the palette where the sidebar shows (on a phone it does not
+   * exist), and closes it again; the browser's own meaning of the key is taken. A modal dialog
+   * already open keeps it (the page behind one is inert, the palette would be too). The palette's
+   * code is fetched on the first press.
+   */
+  protected togglePaletteOnShortcut(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (event.key.toLowerCase() !== 'k') return;
+    if (!this.desktop?.matches) return;
+    event.preventDefault();
+    if (this.palette) {
+      this.palette.close();
+      return;
+    }
+    if (this.document.querySelector('dialog[open]')) return;
+    const request = ++this.paletteRequest;
+    void import('./command-palette').then(({ openCommandPalette }) => {
+      // Closed or moved on meanwhile (a workspace switch, a sign-out): nothing opens late.
+      if (request !== this.paletteRequest || this.palette) return;
+      this.palette = openCommandPalette(this.injector, () => {
+        this.palette = null;
+      });
+    });
+  }
+
   private closeEverything(): void {
     this.openMenu.set(null);
     this.closeNav(false);
+    this.paletteRequest++;
+    this.palette?.close();
   }
 
   private areaOf(menu: ShellMenu): HTMLElement | undefined {
