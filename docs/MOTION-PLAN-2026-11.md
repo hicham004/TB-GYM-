@@ -21,7 +21,7 @@ What a row left out or chose on its own waits for the owner in section 3.
 | Step | What | What it builds, and what is left out | Status |
 | --- | --- | --- | --- |
 | W1 | Foundations | `core/motion`: the reduced-motion read with a `?motion=off` switch, the four moves with the prototype's numbers on the Web Animations API (no GSAP in the app), a fake for tests; the everyday layer (a 120 ms press on the kit's buttons and tappable cards, a 200 ms fade when a page changes inside the client and coach frames); mocked Playwright runs with reduced motion by default; rule 9 loosened in the UI plan. Left out: GSAP (it stays on the homepage), route view transitions, `animate.leave`, any change to the theme switch. | Done · 2026-11-02 · f3f44a7 |
-| W2 | Demo day | `scripts/demo-day.ps1`: one command that rebuilds the demo into `tbgym_demo`, starts the API and the web app over HTTPS on the laptop's own address, opens the firewall once, and prints the address, the sign-ins and a QR code; `crypto.randomUUID` guarded so a plain http address works too; second, `-HeroName`, which gives Maya the friend's first name in the demo database only. Left out: Render, the test copy, email. | Open |
+| W2 | Demo day | `scripts/demo-day.ps1`: one command that rebuilds the demo into `tbgym_demo`, starts the API and the web app over HTTPS on the laptop's own address, opens the firewall once, and prints the address, the sign-ins and a QR code; `crypto.randomUUID` guarded so a plain http address works too; second, `-HeroName`, which gives Maya the friend's first name in the demo database only. Left out: Render, the test copy, email. | Done · 2026-11-02 · 6294bc9 |
 | W3 | The set tick and the record burst | A logged set springs into its done form and its tick draws, the exercise's segment fills; a record pops its chip and bursts 16 dots from it, with the buzz Android gives, and its sentence becomes a pinned pill that never shifts the sets; a second record in the same workout gets the small form. Left out: sound, anything before the server's answer. | Open |
 | W4 | The finish | The finish summary rises and its four numbers count up to the server's own strings, the records list follows and the share card lands with a spring. Left out: a new share card design, a hold-to-finish button. | Open |
 | W5 | The rest timer | The rest card slides in and out, its ring drains in one continuous sweep instead of stepping, it pulses in the last three seconds, and it keeps time while the phone is locked. Left out: a flick to skip, the end tone's words. | Open |
@@ -560,6 +560,16 @@ is removed, and a changed answer becomes a new row.
   press to the kit's buttons, icon buttons and the chips that are a button, a link or a filter's label, and keeps it off
   row links and list rows (iOS sets :active at the start of every scroll). Built section 2's list: cards and rows do not
   dip. The other way: a class a card opts into. Recommendation: keep as built; W7 gives the workout card its own motion.
+- **W2 · The QR code's colours.** The code is drawn with block characters, a light module bright and a dark one as the
+  console's background, which reads right on a dark console (Windows PowerShell's blue, Windows Terminal's black) and
+  inverted on a light one; the address is printed above it either way. The other way: always dark on light, with the
+  quiet zone drawn in white blocks. Recommendation: keep as built; phone cameras read an inverted code.
+- **W2 · `-HeroName` and the messages.** Built as two updates on the demo database (the client profile the coach's
+  screens read, the account's display name her own greeting reads), so Today, Coach Today, Clients and the thread list
+  carry the friend's name; the demo's message bodies ("Hi Maya! Lower A today...", "Welcome to Atlas, Maya!") keep
+  "Maya", since the generator wrote them and messages are append-only. The other way: a `--hero-name` option in the
+  demo generator (server code, the full suite). Recommendation: the generator option after the demo if the name should
+  reach the messages too; on the day, say Lea wrote her note before the rename.
 
 ## 4. The arc on the day
 
