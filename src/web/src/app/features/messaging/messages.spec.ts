@@ -23,8 +23,9 @@ import { MessagesApi } from './messages-api';
 import { SavedRepliesApi } from './saved-replies-api';
 import { messagingRoutes } from './messages.routes';
 import type { ConversationPage as ServerConversationPage } from '../../core/api/generated';
+import { Motion } from '../../core/motion/motion';
 import type { Conversation, ConversationReadState, Message, MessagePage } from './messaging.models';
-import { Messages } from './messages';
+import { changedRows, Messages } from './messages';
 
 const COACH: CurrentUser = {
   id: 'coach-1',
@@ -247,12 +248,13 @@ class RealtimeStub {
   }
 
   /** Delivers one event to the screen and reports whether it merged it. */
-  deliver(event: Parameters<ConversationRealtimeSink['apply']>[0]): boolean {
+  /** A frame the socket delivered (live), or a catch-up page's event (`live` false). */
+  deliver(event: Parameters<ConversationRealtimeSink['apply']>[0], live = true): boolean {
     if (this.sink === null) {
       throw new Error('No conversation is open.');
     }
 
-    return this.sink.apply(event);
+    return this.sink.apply(event, live);
   }
 
   get isOpen(): boolean {
@@ -3373,4 +3375,194 @@ describe('Messages', () => {
       expect(harness.host.textContent).not.toContain('Refresh');
     });
   });
+
+  describe('messages that move (W8)', () => {
+    /** Records which element each move was asked on, the way a browser's `animate` would be. */
+    const moved: Element[] = [];
+    const animate = vi.fn(function (this: Element) {
+      moved.push(this);
+      return { finished: Promise.resolve(), cancel: vi.fn() };
+    });
+
+    function browserThatMoves(): void {
+      vi.spyOn(Motion.prototype, 'allowed').mockReturnValue(true);
+      Object.defineProperty(Element.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: animate,
+      });
+    }
+
+    afterEach(() => {
+      moved.length = 0;
+      animate.mockClear();
+      delete (Element.prototype as { animate?: unknown }).animate;
+    });
+
+    function frame(sequence: number, overrides: Partial<Message> = {}) {
+      return {
+        tenantId: ALPHA.tenantId,
+        conversationId: 'conversation-1',
+        eventId: `event-${sequence}`,
+        eventSequence: sequence,
+        kind: 'MessageSent' as const,
+        occurredAtUtc: '2026-09-01T09:05:00.000Z',
+        message: message(sequence, overrides),
+      };
+    }
+
+    async function openThread(): Promise<Harness> {
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(of(conversationPage([conversation()])));
+        api.listConversationMessages.mockReturnValue(of(messagePage([message(1)])));
+        api.sendConversationMessage.mockReturnValue(
+          of(message(3, { body: 'On my way', isFromCaller: true, senderUserId: 'coach-1' })),
+        );
+      });
+      await open(harness);
+      return harness;
+    }
+
+    it('slides in a message a live frame brings after the thread has rendered, and rises its row once', async () => {
+      browserThatMoves();
+      const harness = await openThread();
+      // The first page moved nothing.
+      expect(animate).not.toHaveBeenCalled();
+
+      harness.realtime.deliver(frame(2, { body: 'Arrived live' }));
+      await settle(harness.fixture);
+
+      expect(bodies(harness.host)).toContain('Arrived live');
+      expect(
+        moved.map(
+          (element) =>
+            element.getAttribute('data-message-id') ??
+            element.querySelector('[data-conversation-id]')?.getAttribute('data-conversation-id'),
+        ),
+      ).toEqual(['message-2', 'conversation-1']);
+      const [frames] = animate.mock.calls[0] as unknown as [Keyframe[]];
+      expect(frames[0]['transform']).toBe('translateX(-12px)');
+
+      // The list's own refresh then carries the same last message: the row does not rise again.
+      harness.listConversations.mockReturnValue(
+        of(
+          conversationPage([
+            conversation({ lastMessage: { ...PREVIEW, messageId: 'message-2', sequence: 2 } }),
+          ]),
+        ),
+      );
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+      expect(moved).toHaveLength(2);
+    });
+
+    it('moves nothing for a catch-up page, which is history and not a landing', async () => {
+      browserThatMoves();
+      const harness = await openThread();
+
+      harness.realtime.deliver(frame(2, { body: 'Caught up' }), false);
+      await settle(harness.fixture);
+
+      expect(bodies(harness.host)).toContain('Caught up');
+      expect(animate).not.toHaveBeenCalled();
+    });
+
+    it('rises a sent message from the composer', async () => {
+      browserThatMoves();
+      const harness = await openThread();
+
+      const composer = field<HTMLTextAreaElement>(harness.host, 'Write a message');
+      composer.value = 'On my way';
+      composer.dispatchEvent(new Event('input'));
+      await settle(harness.fixture);
+      press(harness.host, 'Send message');
+      await settle(harness.fixture);
+
+      // The bubble, then the inbox row the message is now the last line of.
+      expect(
+        moved.map(
+          (element) =>
+            element.getAttribute('data-message-id') ??
+            element.querySelector('[data-conversation-id]')?.getAttribute('data-conversation-id'),
+        ),
+      ).toEqual(['message-3', 'conversation-1']);
+      const [frames] = animate.mock.calls[0] as unknown as [Keyframe[]];
+      expect(frames[0]['transform']).toBe('translateY(12px)');
+    });
+
+    it('leaves the bubbles still where motion is not allowed', async () => {
+      Object.defineProperty(Element.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: animate,
+      });
+      const harness = await openThread();
+
+      harness.realtime.deliver(frame(2, { body: 'Arrived live' }));
+      await settle(harness.fixture);
+
+      expect(bodies(harness.host)).toContain('Arrived live');
+      expect(animate).not.toHaveBeenCalled();
+    });
+
+    it('rises the inbox row whose last message changed on a live refresh, and only that one', async () => {
+      browserThatMoves();
+      const harness = await render((api) => {
+        api.listConversations.mockReturnValue(
+          of(
+            conversationPage([
+              conversation({ lastMessage: { ...PREVIEW, messageId: 'm1' } }),
+              conversation({ ...SECOND, lastMessage: { ...PREVIEW, messageId: 'm2' } }),
+            ]),
+          ),
+        );
+      });
+      expect(animate).not.toHaveBeenCalled();
+
+      harness.listConversations.mockReturnValue(
+        of(
+          conversationPage([
+            conversation({ ...SECOND, lastMessage: { ...PREVIEW, messageId: 'm9', body: 'New' } }),
+            conversation({ lastMessage: { ...PREVIEW, messageId: 'm1' } }),
+          ]),
+        ),
+      );
+      harness.realtime.invalidate();
+      await settle(harness.fixture);
+
+      expect(moved).toHaveLength(1);
+      expect(
+        moved[0].querySelector('[data-conversation-id]')?.getAttribute('data-conversation-id'),
+      ).toBe('conversation-2');
+    });
+
+    it('names the rows whose last message changed, none for a first read', () => {
+      const before = [
+        conversation({ lastMessage: { ...PREVIEW, messageId: 'm1' } }),
+        conversation({ ...SECOND, lastMessage: null }),
+      ];
+      const after = [
+        conversation({ ...SECOND, lastMessage: { ...PREVIEW, messageId: 'm5' } }),
+        conversation({ lastMessage: { ...PREVIEW, messageId: 'm1' } }),
+        conversation({ id: 'conversation-3', lastMessage: { ...PREVIEW, messageId: 'm7' } }),
+      ];
+      expect(changedRows(before, after)).toEqual([
+        { id: 'conversation-2', messageId: 'm5' },
+        { id: 'conversation-3', messageId: 'm7' },
+      ]);
+      expect(changedRows([], after)).toEqual([]);
+      expect(changedRows(after, after)).toEqual([]);
+    });
+  });
 });
+
+const PREVIEW = {
+  messageId: 'm1',
+  sequence: 2,
+  senderUserId: 'client-user-1',
+  isFromCaller: false,
+  sentAtUtc: '2026-09-01T09:00:00.000Z',
+  body: 'Last line',
+  isDeleted: false,
+  deletionKind: null,
+};

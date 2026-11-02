@@ -1,4 +1,4 @@
-import { formatNumber } from '@angular/common';
+import { DOCUMENT, formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,6 +11,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { MessageUnreadStore } from '../core/messaging/message-unread.store';
+import { rowSwitchedOff } from '../core/motion/motion-switch';
 import { TenantStore } from '../core/tenancy/tenant.store';
 import { Icon } from '../ui/icon';
 import {
@@ -77,6 +78,8 @@ export class CoachNav {
   protected readonly unreadCount = computed(() =>
     countDisplay(this.messages.unread(), (value) => formatNumber(value, this.locale, '1.0-0')),
   );
+  /** The pill ticks when its number changes (motion plan W8), unless this row is switched off. */
+  protected readonly pillTicks = !rowSwitchedOff(inject(DOCUMENT).defaultView, 'W8');
 
   protected state(destination: CoachDestination): 'page' | 'section' | null {
     return destinationState(destination, this.url());

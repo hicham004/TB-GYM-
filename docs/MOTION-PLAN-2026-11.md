@@ -680,6 +680,34 @@ is removed, and a changed answer becomes a new row.
   Recommendation: keep the 300 ms cap.
 - **W7 · Nothing else was left out.** The way back (the leave guard) stays out as the row says: × and
   Back to Today are a plain navigation with W1's page fade on Today.
+- **W8 · The pill ticks rather than rolls.** Section 0 says the unread pill ticks and section 2 says its number
+  rolls; built: the shells draw the count afresh for each number and it ticks (320 ms, from 60 % and 0.35 em
+  below, overshooting to 112 %) through one rule in W1's global sheet, since the shells are in the first
+  download and must not pull the moves in; a digit that rolls like an odometer is in the Later list. The other
+  way: the old digit out and the new one in. Recommendation: keep as built.
+- **W8 · The pill's tick and the switches.** The tick is the stylesheet's, so it rests with reduced motion and
+  `?motion=off` like W1's layer; `tb-motion-off = W8` rests it too through a class the shells leave off, read
+  when the shell is made (a change needs a reload there, where the moves read it per call). Recommendation: keep.
+- **W8 · The first download grew by 0.80 kB.** Section 1 lets no row grow it beyond W1's; built: 512.58 kB
+  before, 513.38 kB after (main +0.56 kB for the shells' count drawn afresh and the switch read, styles
+  +0.23 kB for the tick's rule), against the 520 kB error budget. The other way: no tick on the pills.
+  Recommendation: accept.
+- **W8 · The inbox row rises for the sender too, once per message.** Section 2 rises the row "when a message
+  lands"; built: a row rises when its last line changes, whether the open thread's own frame, the coach's send
+  or the list's refresh brought the message first (live, the open thread's frame lands about a second before
+  the list's refresh, which then sees no change), once per message. The other way: only for a message
+  received. Recommendation: keep as built.
+- **W8 · Which messages count as live.** Built: the realtime service tells the thread's sink whether an event
+  came as a socket frame or from a catch-up page (the first after a thread opens, a gap's, a reconnect's), and
+  only a frame after the thread's first page has rendered moves a bubble. The other way: a time window on the
+  message's sent time, which would move a short reconnect's catch-up. Recommendation: keep as built.
+- **W8 · The coach card's dot.** Section 2 pulses "its dot"; built: the Unread label's dot (the status label's
+  marker) scales to 1.6 and back twice (500 ms each) after the card's 320 ms rise; a card showing nothing unread
+  rises without a pulse. The other way: a dot of the card's own. Recommendation: keep as built.
+- **W8 · Nothing else was left out.** Typing indicators and optimistic sends stay out as the row says. Seen on
+  the way: the composer's Send button keeps a 120 ms background transition of its own under reduced motion
+  (`chat-composer.scss`, colour only, before this plan).
+
 
 ## 4. The arc on the day
 

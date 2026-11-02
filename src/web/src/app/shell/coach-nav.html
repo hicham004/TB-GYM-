@@ -22,7 +22,12 @@
               <!-- Message unread only. It is never summed with notification unread: one is a
                    person waiting for a reply, the other a workspace event somebody scheduled. -->
               @if (destination.messaging && unread() > 0) {
-                <span class="count" aria-hidden="true">{{ unreadCount() }}</span>
+                <!-- Drawn afresh for each number, so the tick (W8) runs on every change. -->
+                @for (count of [unreadCount()]; track count) {
+                  <span class="count" [class.tb-pill-tick]="pillTicks" aria-hidden="true">{{
+                    count
+                  }}</span>
+                }
                 <span class="tb-visually-hidden" i18n>{unread(), plural,
                   =1 {1 unread message}
                   other {{{ unreadText() }} unread messages}

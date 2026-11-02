@@ -11,6 +11,7 @@ import { ConversationLaunch } from '../messaging/conversation-launch';
 import type { Conversation, MessagePreview } from '../messaging/messaging.models';
 import { press, settle } from '../../../testing/dom';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
+import { Motion } from '../../core/motion/motion';
 import { TodayCoachMessage } from './today-coach-message';
 
 // 14:20 on the device's calendar day, whatever zone the test runs in.
@@ -239,5 +240,67 @@ describe('TodayCoachMessage', () => {
     press(host, 'Retry latest message');
     await settle(fixture);
     expect(host.querySelector('#coach-preview')).not.toBeNull();
+  });
+
+  describe('the coach’s reply lands (motion plan W8)', () => {
+    const moved: Element[] = [];
+    const animate = vi.fn(function (this: Element) {
+      moved.push(this);
+      return { finished: Promise.resolve(), cancel: vi.fn() };
+    });
+
+    function browserThatMoves(): void {
+      vi.spyOn(Motion.prototype, 'allowed').mockReturnValue(true);
+      Object.defineProperty(Element.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: animate,
+      });
+    }
+
+    afterEach(() => {
+      moved.length = 0;
+      animate.mockClear();
+      delete (Element.prototype as { animate?: unknown }).animate;
+    });
+
+    it('rises the card and pulses its dot when a quiet read brings a newer message from the coach', async () => {
+      browserThatMoves();
+      const { fixture, host, listConversations, refreshes } = await render(page(conversation()));
+      expect(animate).not.toHaveBeenCalled();
+
+      listConversations.mockReturnValue(
+        page(conversation({}, { messageId: 'm3', sequence: 4, body: 'Huge squat PR!' })),
+      );
+      refreshes.set(1);
+      await settle(fixture);
+
+      expect(host.querySelector('#coach-preview')?.textContent?.trim()).toBe('Huge squat PR!');
+      expect(moved.map((element) => element.className)).toEqual(['coach-link', 'marker dot']);
+      const [frames, options] = animate.mock.calls[0] as unknown as [
+        Keyframe[],
+        KeyframeAnimationOptions,
+      ];
+      expect(frames[0]).toEqual({ opacity: 0, transform: 'translateY(8px)' });
+      expect(options.duration).toBe(320);
+    });
+
+    it('moves nothing for the same message, the client’s own, a failed read or the first read', async () => {
+      browserThatMoves();
+      const { fixture, listConversations, refreshes } = await render(page(conversation()));
+
+      refreshes.set(1);
+      await settle(fixture);
+      listConversations.mockReturnValue(
+        page(conversation({}, { messageId: 'm4', isFromCaller: true, body: 'Thanks!' })),
+      );
+      refreshes.set(2);
+      await settle(fixture);
+      listConversations.mockReturnValue(throwError(() => new Error('offline')));
+      refreshes.set(3);
+      await settle(fixture);
+
+      expect(animate).not.toHaveBeenCalled();
+    });
   });
 });

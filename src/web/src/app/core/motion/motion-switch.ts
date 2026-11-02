@@ -28,6 +28,13 @@ export function readMotionSwitch(document: Document): void {
   else root.removeAttribute(SWITCH_ATTRIBUTE);
 }
 
+/** Whether `tb-motion-off` names this row of the motion plan (W3, W7, ...), read now. */
+export function rowSwitchedOff(view: Window | null, row: string): boolean {
+  if (view === null) return false;
+  const off = (readStored(view, ROWS_KEY) ?? '').split(',').map((name) => name.trim());
+  return off.includes(row);
+}
+
 /** A stored value, or null where storage is refused. */
 export function readStored(view: Window, key: string): string | null {
   try {

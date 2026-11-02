@@ -161,3 +161,51 @@ describe('clientTabState', () => {
     expect(clientTabState('/checkins/me', today)).toBeNull();
   });
 });
+
+describe('the unread pill ticks (motion plan W8)', () => {
+  afterEach(() => {
+    localStorage.clear();
+    TestBed.resetTestingModule();
+  });
+
+  it('draws the count afresh for each number, carrying the tick class', async () => {
+    const unread = signal(1);
+    await TestBed.configureTestingModule({
+      imports: [ClientTabs],
+      providers: [
+        provideRouter([{ path: '**', children: [] }]),
+        { provide: ClientAccessStore, useValue: fakeClientAccess() },
+        { provide: MessageUnreadStore, useValue: { unread, isAvailable: signal(true) } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientTabs);
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+    const first = host.querySelector('.count');
+    expect(first?.classList.contains('tb-pill-tick')).toBe(true);
+    expect(first?.textContent?.trim()).toBe('1');
+
+    unread.set(2);
+    await settle(fixture);
+    const second = host.querySelector('.count');
+    expect(second?.textContent?.trim()).toBe('2');
+    expect(second).not.toBe(first);
+  });
+
+  it('leaves the tick off while the row is switched off', async () => {
+    localStorage.setItem('tb-motion-off', 'W3, W8');
+    await TestBed.configureTestingModule({
+      imports: [ClientTabs],
+      providers: [
+        provideRouter([{ path: '**', children: [] }]),
+        { provide: ClientAccessStore, useValue: fakeClientAccess() },
+        { provide: MessageUnreadStore, useValue: { unread: signal(3), isAvailable: signal(true) } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientTabs);
+    await settle(fixture);
+    const count = (fixture.nativeElement as HTMLElement).querySelector('.count');
+    expect(count?.textContent?.trim()).toBe('3');
+    expect(count?.classList.contains('tb-pill-tick')).toBe(false);
+  });
+});

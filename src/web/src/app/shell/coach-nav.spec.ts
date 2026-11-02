@@ -168,6 +168,22 @@ describe('coach navigation', () => {
     expect(labels()).not.toContain('Messages');
   });
 
+  it('draws the unread count with the tick (motion plan W8), unless the row is switched off', async () => {
+    const { host } = await render({ unread: 4 });
+    const count = host.querySelector('.count');
+    expect(count?.textContent?.trim()).toBe('4');
+    expect(count?.classList.contains('tb-pill-tick')).toBe(true);
+
+    TestBed.resetTestingModule();
+    localStorage.setItem('tb-motion-off', 'W8');
+    try {
+      const still = await render({ unread: 4 });
+      expect(still.host.querySelector('.count')?.classList.contains('tb-pill-tick')).toBe(false);
+    } finally {
+      localStorage.removeItem('tb-motion-off');
+    }
+  });
+
   /**
    * The distinction the sidebar has to get right: Training links to Programs, so on the Exercises
    * page it stands for the section that is open, not for the page. Saying `aria-current="page"`

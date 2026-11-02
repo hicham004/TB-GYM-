@@ -761,11 +761,28 @@
     .coach-main > router-outlet + * {
       animation: tb-page-in var(--tb-duration) var(--tb-ease) backwards;
     }
+
+    // The unread pill ticks when its number changes (motion plan W8): the shells draw the count
+    // afresh for each number, so the keyframes run on every change and the pill's first showing.
+    .tb-pill-tick {
+      animation: tb-pill-tick var(--tb-duration-slow) var(--tb-ease);
+    }
   }
 
   @keyframes tb-page-in {
     from {
       opacity: 0;
+    }
+  }
+
+  @keyframes tb-pill-tick {
+    from {
+      opacity: 0;
+      transform: translateY(0.35em) scale(0.6);
+    }
+
+    55% {
+      transform: translateY(-0.1em) scale(1.12);
     }
   }
 }

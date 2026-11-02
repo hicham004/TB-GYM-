@@ -248,6 +248,7 @@ interface Harness {
   acknowledge: ReturnType<typeof vi.fn>;
   csrfRefresh: ReturnType<typeof vi.fn>;
   accepted: RealtimeEvent[];
+  lives: boolean[];
   sink: ConversationRealtimeSink;
   connection: () => FakeHubConnection;
 }
@@ -287,8 +288,10 @@ function build(
   });
 
   const accepted: RealtimeEvent[] = [];
+  /** Whether each accepted event came as a live frame (true) or from a catch-up page (false). */
+  const lives: boolean[] = [];
   const sink: ConversationRealtimeSink = {
-    apply: (incoming) => {
+    apply: (incoming, live) => {
       // Rejects a stale revision, exactly as the screen does.
       const existing = accepted.find((item) => item.message?.id === incoming.message?.id);
       if (
@@ -302,6 +305,7 @@ function build(
       }
 
       accepted.push(incoming);
+      lives.push(live);
       return true;
     },
   };
@@ -314,6 +318,7 @@ function build(
     acknowledge: api.acknowledgeConversationRealtimeEvents,
     csrfRefresh,
     accepted,
+    lives,
     sink,
     connection: () => FakeHubConnection.instances[FakeHubConnection.instances.length - 1],
   };
@@ -678,6 +683,21 @@ describe('MessagingRealtimeService', () => {
     await flush();
 
     expect(harness.accepted.map((item) => item.eventSequence)).toEqual([1, 2]);
+  });
+
+  it('tells the sink which events landed live and which a catch-up page brought (W8)', async () => {
+    const harness = build((api) => {
+      api['listConversationRealtimeEvents'] = vi.fn(() => of(page([event(1)])));
+    });
+    await flush();
+    await harness.service.openConversation('conversation-1', 0, harness.sink);
+    await flush();
+
+    harness.connection().emit('RealtimeEvent', event(2));
+    await flush();
+
+    expect(harness.accepted.map((item) => item.eventSequence)).toEqual([1, 2]);
+    expect(harness.lives).toEqual([false, true]);
   });
 
   it('runs a bounded catch-up when it sees a gap rather than skipping the missing position', async () => {

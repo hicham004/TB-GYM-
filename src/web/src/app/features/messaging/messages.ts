@@ -32,7 +32,9 @@ import {
   MessagingRealtimeService,
   type ConversationRealtimeSink,
 } from '../../core/messaging/messaging-realtime.service';
+import { Motion } from '../../core/motion/motion';
 import { CommandKeys } from './command-keys';
+import { landBubble, riseRow } from './message-moment';
 import { ConversationLaunch } from './conversation-launch';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -156,6 +158,15 @@ export class Messages {
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  private readonly motion = inject(Motion);
+  /**
+   * The messages that just landed live (sent from here, or merged from a frame after the thread's
+   * first render) and move on their next render (motion plan W8): never the first page, an older
+   * page or a catch-up. Dropped with the thread.
+   */
+  private landing: string[] = [];
+  /** The last message each inbox row rose for, so a row rises once per message (W8). */
+  private risen = new Map<string, string>();
 
   /** Bumped whenever the recipient or the workspace changes. */
   private contextGeneration = 0;
@@ -474,10 +485,10 @@ export class Messages {
    * catch-up page overlapping a live frame, an edit whose event arrives after a later message.
    */
   private readonly threadSink: ConversationRealtimeSink = {
-    apply: (event: RealtimeEvent) => this.applyRealtimeEvent(event),
+    apply: (event: RealtimeEvent, live: boolean) => this.applyRealtimeEvent(event, live),
   };
 
-  private applyRealtimeEvent(event: RealtimeEvent): boolean {
+  private applyRealtimeEvent(event: RealtimeEvent, live = false): boolean {
     if (event.conversationId !== this.selectedId() || event.message === null) {
       // A conversation-created event carries no message and needs no thread merge; the list refresh
       // the compact signal triggers is what makes the new thread appear.
@@ -497,6 +508,10 @@ export class Messages {
     this.messages.update((loaded) => mergeNewer(loaded, [incoming]));
     this.latestSequence.set(Math.max(this.latestSequence(), incoming.sequence));
     this.applyToPreview(incoming);
+    if (arrived && live && !this.threadLoading()) {
+      this.land(incoming.id);
+      this.riseRows([{ id: incoming.conversationId, messageId: incoming.id }]);
+    }
     if (following) {
       // Someone reading the newest messages keeps seeing the newest; someone scrolled back through
       // history is left where they are.
@@ -997,6 +1012,8 @@ export class Messages {
         this.messages.update((loaded) => mergeNewer(loaded, [sent]));
         this.latestSequence.set(Math.max(this.latestSequence(), sent.sequence));
         this.applyToPreview(sent);
+        this.land(sent.id);
+        this.riseRows([{ id: conversationId, messageId: sent.id }]);
         this.commandKeys.release('send', conversationId);
         this.draft.set('');
         this.composerAttempt.reset();
@@ -1442,7 +1459,12 @@ export class Messages {
         const settled = page.items.filter(
           (item, index) => item.unreadCount > 0 && reconciled[index].unreadCount === 0,
         ).length;
+        // A live refresh: the rows whose last message changed rise once they are drawn (W8).
+        const moved = quiet ? changedRows(this.conversations(), reconciled) : [];
         this.conversations.set(reconciled);
+        if (moved.length > 0) {
+          this.riseRows(moved);
+        }
         this.counts.set(
           page.counts === null || settled === 0
             ? page.counts
@@ -1811,6 +1833,7 @@ export class Messages {
 
   private resetThread(): void {
     ++this.historyRequest;
+    this.landing = [];
     // The socket subscription belongs to the thread, so it goes with it. A connection left in a
     // conversation group the reader has closed would keep receiving frames for a thread nothing is
     // showing, and the next thread's cursor would start behind them.
@@ -1847,6 +1870,8 @@ export class Messages {
     ++this.threadGeneration;
     ++this.listRequest;
     ++this.historyRequest;
+    this.landing = [];
+    this.risen.clear();
     this.context = null;
     this.conversations.set([]);
     this.listAnswered.set(false);
@@ -1909,6 +1934,47 @@ export class Messages {
     );
   }
 
+  /**
+   * A message that just landed moves on its next render: the caller's own rises from the composer,
+   * the other person's slides in from its side (W8). One render serves every message that landed
+   * before it; a message whose row the thread no longer holds moves nothing.
+   */
+  private land(id: string): void {
+    const first = this.landing.length === 0;
+    this.landing.push(id);
+    if (!first) return;
+    afterNextRender(
+      () => {
+        const ids = this.landing;
+        this.landing = [];
+        for (const landed of ids) {
+          const row = this.host.querySelector(`li[data-message-id="${landed}"]`);
+          landBubble(row ?? undefined, row?.classList.contains('mine') ?? false, this.motion);
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /**
+   * The inbox rows named rise once they are drawn with their new last message (W8): once per
+   * message, whether the thread's own frame, a send or the list's refresh brought it first.
+   */
+  private riseRows(rows: readonly LandedRow[]): void {
+    const due = rows.filter((row) => this.risen.get(row.id) !== row.messageId);
+    if (due.length === 0) return;
+    for (const row of due) this.risen.set(row.id, row.messageId);
+    afterNextRender(
+      () => {
+        for (const { id } of due) {
+          const row = this.host.querySelector(`[data-conversation-id="${id}"]`)?.closest('li');
+          riseRow(row ?? undefined, this.motion);
+        }
+      },
+      { injector: this.injector },
+    );
+  }
+
   /** Whether the page is in front of the reader: a hidden tab reads nothing. */
   private isShown(): boolean {
     return this.document.visibilityState !== 'hidden';
@@ -1941,6 +2007,35 @@ export class Messages {
       { injector: this.injector },
     );
   }
+}
+
+/** An inbox row and the message that just became its last line (W8). */
+export interface LandedRow {
+  readonly id: string;
+  readonly messageId: string;
+}
+
+/**
+ * The conversations in `next` whose last message is not the one `previous` showed for them: a
+ * message landed there (W8). A row seen for the first time counts too; a list that was empty
+ * (the first read of a workspace) names nothing.
+ */
+export function changedRows(
+  previous: readonly Conversation[],
+  next: readonly Conversation[],
+): LandedRow[] {
+  if (previous.length === 0) return [];
+  const shown = new Map(
+    previous.map((conversation) => [conversation.id, conversation.lastMessage?.messageId ?? null]),
+  );
+  const landed: LandedRow[] = [];
+  for (const conversation of next) {
+    const last = conversation.lastMessage?.messageId ?? null;
+    if (last !== null && (!shown.has(conversation.id) || shown.get(conversation.id) !== last)) {
+      landed.push({ id: conversation.id, messageId: last });
+    }
+  }
+  return landed;
 }
 
 /** The server's answer when a message changed since the version a command carried (MSG-007). */

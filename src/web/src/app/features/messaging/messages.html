@@ -239,6 +239,7 @@
                 @for (entry of day.entries; track entry.message.id) {
                   @let message = entry.message;
                   <li
+                    [attr.data-message-id]="message.id"
                     [class.mine]="message.isFromCaller"
                     [class.theirs]="!message.isFromCaller"
                     [class.removed]="message.isDeleted"

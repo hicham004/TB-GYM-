@@ -101,9 +101,13 @@ export const MESSAGING_HUB_CONNECTION = new InjectionToken<MessagingHubConnectio
 export type RealtimeConnectionState =
   'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline';
 
-/** Where a thread's accepted events go. Returns whether the event was actually merged. */
+/**
+ * Where a thread's accepted events go. Returns whether the event was actually merged. `live` is
+ * true for a frame the socket just delivered and false for a catch-up page (the first after a
+ * thread opens, a gap's, a reconnect's), so the screen can move only for what lands live (W8).
+ */
 export interface ConversationRealtimeSink {
-  apply(event: RealtimeEvent): boolean;
+  apply(event: RealtimeEvent, live: boolean): boolean;
 }
 
 /** The most acknowledgements one request may carry, matching the server bound. */
@@ -604,7 +608,7 @@ export class MessagingRealtimeService {
         }
 
         for (const event of result.items) {
-          this.accept(event, conversationId);
+          this.accept(event, conversationId, false);
         }
 
         if (!result.hasMore) {
@@ -654,7 +658,7 @@ export class MessagingRealtimeService {
     }
 
     const conversation = this.conversationGeneration;
-    if (!this.accept(event, conversationId)) {
+    if (!this.accept(event, conversationId, true)) {
       return;
     }
 
@@ -671,7 +675,7 @@ export class MessagingRealtimeService {
    *
    * @returns whether the caller should look for a gap after it.
    */
-  private accept(event: RealtimeEvent, conversationId: string): boolean {
+  private accept(event: RealtimeEvent, conversationId: string, live: boolean): boolean {
     const tenantId = this.tenants.selectedMembership()?.tenantId;
     // Ownership, checked on the event itself rather than trusted from the transport. A frame for
     // another workspace or another conversation is dropped without being merged and without being
@@ -692,7 +696,7 @@ export class MessagingRealtimeService {
       return false;
     }
 
-    const merged = this.sink?.apply(event) ?? false;
+    const merged = this.sink?.apply(event, live) ?? false;
     if (!merged) {
       // The screen rejected it — a stale revision, or a body a removal has already made terminal.
       // The position is still contiguous knowledge: it was received and evaluated, so the cursor may

@@ -1,6 +1,6 @@
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { inject, Injectable, PLATFORM_ID } from '@angular/core';
-import { MOTION_KEY, readMotionSwitch, readStored, ROWS_KEY } from './motion-switch';
+import { MOTION_KEY, readMotionSwitch, readStored, rowSwitchedOff } from './motion-switch';
 
 /**
  * The app's motion (docs/MOTION-PLAN-2026-11.md, W1): the reduced-motion read, the kill switch and
@@ -44,11 +44,7 @@ export class Motion {
       return false;
     }
     if (readStored(view, MOTION_KEY) === 'off') return false;
-    if (moment !== undefined) {
-      const off = (readStored(view, ROWS_KEY) ?? '').split(',').map((row) => row.trim());
-      if (off.includes(moment)) return false;
-    }
-    return true;
+    return moment === undefined || !rowSwitchedOff(view, moment);
   }
 
   /** `readMotionSwitch` for this document; a test calls it again after changing the address. */
@@ -210,7 +206,13 @@ export interface RiseOptions extends MoveOptions {
   readonly from?: number;
 }
 
-export { MOTION_KEY, ROWS_KEY, SWITCH_ATTRIBUTE, readMotionSwitch } from './motion-switch';
+export {
+  MOTION_KEY,
+  ROWS_KEY,
+  SWITCH_ATTRIBUTE,
+  readMotionSwitch,
+  rowSwitchedOff,
+} from './motion-switch';
 
 /** `rise` moves at most this many elements. */
 export const RISE_CAP = 6;

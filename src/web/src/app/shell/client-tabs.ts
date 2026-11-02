@@ -14,6 +14,7 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { ClientAccessStore } from '../core/access/client-access.store';
 import { MessageUnreadStore } from '../core/messaging/message-unread.store';
+import { rowSwitchedOff } from '../core/motion/motion-switch';
 import { Icon } from '../ui/icon';
 import { ClientTab, clientTabState, visibleClientTabs } from './client-navigation';
 import { countDisplay } from './coach-navigation';
@@ -54,6 +55,11 @@ export class ClientTabs {
   protected readonly unreadCount = computed(() =>
     countDisplay(this.unread(), (value) => formatNumber(value, this.locale, '1.0-0')),
   );
+  /**
+   * The pill ticks when its number changes (motion plan W8): the stylesheet's everyday layer runs
+   * the keyframes on each count the template draws afresh, unless this row is switched off.
+   */
+  protected readonly pillTicks = !rowSwitchedOff(inject(DOCUMENT).defaultView, 'W8');
 
   constructor() {
     publishBlockSize(inject(ElementRef).nativeElement, inject(DOCUMENT), inject(DestroyRef));

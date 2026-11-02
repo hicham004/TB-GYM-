@@ -1366,6 +1366,11 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     the new page takes over 300 ms; the player's two chunks preload on idle once Today's reads settle,
     or on a press, and the player's parts rise once its read lands. A modifier click, reduced motion,
     the switch and a browser without the feature keep the plain navigation.
+    Messages that move (W8): a bubble that lands live (sent from here, or a socket frame after the thread's
+    first page) rises or slides in 12 px over 200 ms, the inbox row whose last line changed rises with it,
+    Today's coach card rises 8 px with its Unread dot pulsing when a quiet read brings the coach's newer
+    message, and the shells' unread pills tick through one rule in `_ui.scss`; the realtime sink is told
+    which events are live, and a catch-up page moves nothing.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.
