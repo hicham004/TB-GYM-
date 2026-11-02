@@ -14,6 +14,7 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
+import { newIdempotencyKey } from '../../core/security/idempotency-key';
 import { apiErrorMessage } from '../../core/api/api-error';
 import type { ClientInvitation } from '../../core/api/api.models';
 import { GuardedSheets, type LeaveQuestion } from '../../core/forms/guarded-sheets';
@@ -196,7 +197,7 @@ export class Invitations extends GuardedSheets {
         owner,
         row,
         () =>
-          this.api.resendInvitation(row.invitation.id, crypto.randomUUID(), row.invitation.version),
+          this.api.resendInvitation(row.invitation.id, newIdempotencyKey(), row.invitation.version),
         this.emailOff()
           ? $localize`A new link was made for ${row.email}:email:, but email is off on this server, so it wasn’t sent. The earlier link no longer works.`
           : $localize`A new link was sent to ${row.email}:email:. The earlier link no longer works.`,

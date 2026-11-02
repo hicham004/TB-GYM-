@@ -1,4 +1,5 @@
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
+import { newIdempotencyKey } from '../../core/security/idempotency-key';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -123,7 +124,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
    * again after a lost response is the same command rather than a second decision, and replaced only
    * once the server has settled one.
    */
-  private idempotencyKey = crypto.randomUUID();
+  private idempotencyKey = newIdempotencyKey();
   private submittedFingerprint: string | null = null;
 
   protected readonly loading = signal(false);
@@ -290,7 +291,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
       ) {
         // The previous request may be retried with its key only while it is still the same normalized
         // command. Once the member edits a choice, reusing that key would correctly conflict server-side.
-        this.idempotencyKey = crypto.randomUUID();
+        this.idempotencyKey = newIdempotencyKey();
       }
       this.submittedFingerprint = submittedFingerprint;
 
@@ -324,7 +325,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
         }
 
         // Settled, so the next edit is a new command.
-        this.idempotencyKey = crypto.randomUUID();
+        this.idempotencyKey = newIdempotencyKey();
         this.submittedFingerprint = null;
         this.apply(saved);
         this.notice.set($localize`Your notification settings were saved.`);
@@ -417,7 +418,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
     this.saving.set(false);
     this.error.set(null);
     this.notice.set(null);
-    this.idempotencyKey = crypto.randomUUID();
+    this.idempotencyKey = newIdempotencyKey();
     this.submittedFingerprint = null;
   }
 
@@ -425,7 +426,7 @@ export class NotificationPreferencesPage implements HoldsUnsavedWork {
     ++this.contextGeneration;
     this.attempt.reset();
     this.context = null;
-    this.idempotencyKey = crypto.randomUUID();
+    this.idempotencyKey = newIdempotencyKey();
     this.submittedFingerprint = null;
     this.loading.set(false);
     this.saving.set(false);

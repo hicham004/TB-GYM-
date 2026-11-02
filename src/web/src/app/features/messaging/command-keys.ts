@@ -1,3 +1,4 @@
+import { newIdempotencyKey } from '../../core/security/idempotency-key';
 /**
  * Retained idempotency keys, one per command and target.
  *
@@ -38,7 +39,7 @@ export class CommandKeys {
 
     // A changed payload is a different command, so it gets a different key. Reusing the retained one
     // would make the server refuse the edit as a conflicting reuse rather than perform it.
-    const key = crypto.randomUUID();
+    const key = newIdempotencyKey();
     this.retained.set(slot, { key, payload });
     return key;
   }

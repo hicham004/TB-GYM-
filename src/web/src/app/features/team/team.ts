@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { apiErrorMessage } from '../../core/api/api-error';
+import { newIdempotencyKey } from '../../core/security/idempotency-key';
 import type { ClientInvitation, TeamMember } from '../../core/api/api.models';
 import { AuthStore } from '../../core/auth/auth.store';
 import { FormAttempt } from '../../core/forms/form-attempt';
@@ -325,7 +326,7 @@ export class Team extends GuardedSheets {
   private async resend(invitation: ClientInvitation): Promise<void> {
     await this.invitationWrite(
       invitation,
-      () => this.api.resendCoachInvitation(invitation.id, crypto.randomUUID(), invitation.version),
+      () => this.api.resendCoachInvitation(invitation.id, newIdempotencyKey(), invitation.version),
       this.emailOff()
         ? $localize`A new link was made for ${invitation.email}:email:, but email is off on this server, so it wasn’t sent. The one sent before no longer works.`
         : $localize`A new link went to ${invitation.email}:email:. The one sent before no longer works.`,

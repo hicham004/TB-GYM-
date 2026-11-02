@@ -16,6 +16,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { newIdempotencyKey } from '../../core/security/idempotency-key';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom, map } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
@@ -595,7 +596,7 @@ export class ClientCheckInReview implements HoldsUnsavedWork {
 
   private async openConversation(): Promise<string> {
     if (this.conversationId) return this.conversationId;
-    this.conversationKey ??= crypto.randomUUID();
+    this.conversationKey ??= newIdempotencyKey();
     const detail = await firstValueFrom(
       this.api.createDirectConversation(this.context.clientId(), this.conversationKey),
     );

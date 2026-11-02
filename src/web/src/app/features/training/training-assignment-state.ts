@@ -1,4 +1,5 @@
 import type { TrainingLoadUnit } from '../../core/api/generated';
+import { newIdempotencyKey } from '../../core/security/idempotency-key';
 
 export interface UnitBoundWorkingMax {
   value: number | null;
@@ -10,7 +11,7 @@ export class IntentIdempotencyKey {
   private fingerprint: string | null = null;
   private key: string | null = null;
 
-  constructor(private readonly keyFactory: () => string = () => globalThis.crypto.randomUUID()) {}
+  constructor(private readonly keyFactory: () => string = newIdempotencyKey) {}
 
   forPayload(payload: unknown): string {
     const fingerprint = JSON.stringify(payload);

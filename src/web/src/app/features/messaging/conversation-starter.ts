@@ -2,6 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
+import { newIdempotencyKey } from '../../core/security/idempotency-key';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { ConversationLaunch } from './conversation-launch';
@@ -31,7 +32,7 @@ export class ConversationStarter {
     const tenantId = this.tenants.selectedTenantId();
     if (!tenantId) return false;
     const slot = `${tenantId}:${clientId}`;
-    const key = this.keys.get(slot) ?? crypto.randomUUID();
+    const key = this.keys.get(slot) ?? newIdempotencyKey();
     this.keys.set(slot, key);
     // A write straight after sign-in needs a fresh token, as every other write here takes.
     await this.csrf.refresh();
