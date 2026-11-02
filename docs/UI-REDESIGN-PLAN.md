@@ -1376,6 +1376,11 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     `@starting-style` for the first paint; Today's week through the registered `--progress`), the player's
     exercise bars are clipped to their share and grow the same way (W3 no longer scales them), and Today's
     greeting, week, card and tiles rise in as each lands, once per visit (`features/dashboard/today-moment.ts`).
+    The share card in the hand (W10): on the finish summary the card's face follows the pointer (a mouse
+    presses it down where it is, up to 12°, with a sheen under it; a finger or a held mouse drags it against
+    a rubber band, shifting and turning it) and springs back when let go, on the Web Animations API in
+    `features/share-cards/share-moment.ts`, the card itself listening since it never tilts; with reduced
+    motion the card stays as it is.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

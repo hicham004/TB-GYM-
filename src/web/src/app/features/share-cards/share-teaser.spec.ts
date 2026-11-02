@@ -1,7 +1,8 @@
-import { Component, signal } from '@angular/core';
+import { Component, type Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { press, query, settle } from '../../../testing/dom';
+import { fakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { personalRecord, programSummary } from '../../../testing/share-card-fixtures';
 import { ShareCardMaker } from './share-card-maker';
@@ -16,10 +17,14 @@ class Host {
   readonly facts = signal<readonly ShareFact[]>([{ kind: 'record', record: personalRecord() }]);
 }
 
-async function render(facts?: readonly ShareFact[], maker = fakeShareCardMaker()) {
+async function render(
+  facts?: readonly ShareFact[],
+  maker = fakeShareCardMaker(),
+  providers: Provider[] = [],
+) {
   await TestBed.configureTestingModule({
     imports: [Host],
-    providers: [{ provide: ShareCardMaker, useValue: maker }],
+    providers: [{ provide: ShareCardMaker, useValue: maker }, ...providers],
   }).compileComponents();
   const fixture = TestBed.createComponent(Host);
   if (facts) fixture.componentInstance.facts.set(facts);
@@ -83,5 +88,53 @@ describe('ShareTeaser', () => {
     await settle(fixture);
     expect(host.querySelector('.mark.logo')).toBeNull();
     expect(text(host.querySelector('.mark'))).toBe('AP');
+  });
+
+  it('holds the card’s face in the hand once it is drawn, and lets it go when it leaves (W10)', async () => {
+    const view = document.defaultView as Window;
+    const frames: FrameRequestCallback[] = [];
+    const frame = view.requestAnimationFrame;
+    view.requestAnimationFrame = (callback) => frames.push(callback);
+    try {
+      const motion = fakeMotion({ allowed: true });
+      const { fixture, host } = await render(undefined, fakeShareCardMaker(), [
+        provideFakeMotion(motion),
+      ]);
+      const card = query<HTMLElement>(host, '.card');
+      const face = query<HTMLElement>(card, '.face');
+      // The face carries the card's surface and everything on it, the mark included.
+      expect(face.querySelector('.mark')).not.toBeNull();
+      card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 200 }) as DOMRect;
+      const move = () =>
+        face.dispatchEvent(
+          new PointerEvent('pointermove', {
+            bubbles: true,
+            clientX: 300,
+            clientY: 0,
+            pointerType: 'mouse',
+            pointerId: 1,
+          }),
+        );
+      move();
+      expect(motion.allowed).toHaveBeenCalledWith('W10');
+      expect(face.classList.contains('held')).toBe(true);
+      // Angular's scheduler asks for frames too: run them all.
+      const runFrames = () => {
+        while (frames.length) frames.shift()?.(0);
+      };
+      runFrames();
+      expect(face.style.getPropertyValue('--rx')).toBe('12deg');
+      expect(face.style.getPropertyValue('--ry')).toBe('12deg');
+
+      fixture.destroy();
+      expect(face.classList.contains('held')).toBe(false);
+      expect(face.style.getPropertyValue('--ry')).toBe('');
+      move();
+      runFrames();
+      expect(face.style.getPropertyValue('--ry')).toBe('');
+      expect(face.classList.contains('held')).toBe(false);
+    } finally {
+      view.requestAnimationFrame = frame;
+    }
   });
 });

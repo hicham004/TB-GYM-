@@ -744,6 +744,44 @@ is removed, and a changed answer becomes a new row.
   snapshots are unchanged (they run with reduced motion). An unstarted workout's bars are empty, so the
   player's first paint draws nothing until a set is logged; a workout reopened with sets logged draws its
   bars in.
+- **W10 · Pressed where the pointer is.** Section 2 tilts the face up to 12° under the mouse; built: the
+  edge under the pointer goes away from the viewer, as a card pressed on a table does, and a drag keeps
+  the same reading against where the finger has pulled, so a long pull tilts the card toward it. The other
+  way: the face leaning toward the pointer, its near edge lifting. Recommendation: keep as built.
+- **W10 · The numbers.** The row gives the tilt (±12°) and the band (c = 0.55); built around them: a
+  perspective of 56 rem, the band's limit at 120 px (a 100 px pull moves the card 38 px, 150 px moves it
+  49, 400 px 78), a turn of up to 6° with the pull, the spring back over 650 ms on the teaser's own landing
+  curve (W4's `elastic.out(1, .6)` as a `linear()` easing), and a 150 ms approach when a gesture starts, so
+  the face comes to the pointer from wherever a spring left it rather than snapping. The other way: a stiffer
+  band (c = 0.4) or a shorter spring (450 ms). Recommendation: keep as built; the videos show the feel.
+- **W10 · A mouse can drag too.** Section 2 gives the finger the drag and the mouse the tilt; built: a press
+  with any pointer grabs the card (the laptop's trackpad included) and the hover tilt stays the mouse's, so
+  the same card answers on both devices. The other way: the mouse only hovers. Recommendation: keep as built.
+- **W10 · The sheen shows in the hand only.** Built: the band of light sits under the pointer and fades in
+  over 200 ms when the card is taken, out when it is let go; at rest the card is as it was. The other way:
+  a sheen always on, sliding with the hover alone. Recommendation: keep as built.
+- **W10 · The face carries the card's surface, and the card listens.** Section 2 puts an inner layer in the
+  `.card`; built: the inner `.face` carries the background, the padding and the shadow, so the whole card
+  tilts and its shadow turns with it, while the `.card` keeps W4's landing, the 2° rest and the perspective;
+  the sheen is the face's `::after`, clipped by its corners. The card, which never tilts, is what listens
+  and what the pointer is read against: on the face itself a pressed edge moves inward on the screen, the
+  pointer near it falls off, and the card lets go and takes again in a flicker (seen live at 1440 and
+  fixed). The other way: a transformed layer over a flat surface. Recommendation: keep as built.
+- **W10 · While the card is pulled past the phone's edge the page can scroll sideways for a moment.** A
+  face pulled 49 px right at 390 reaches past the viewport, so the document is briefly scrollable sideways
+  while the finger holds it (nothing moves; the finger is the card's) and rests put once let go; the
+  stills and the settled screen show no sideways scroll. Built: left as is, since a clip on the player
+  would cut W3's burst at 1440 and a clip on the summary would cut the card 16 px from the phone's edge.
+  The other way: `overflow-x: clip` on `.player` if a narrow laptop window ever flashes a scrollbar.
+  Recommendation: keep as built.
+- **W10 · The first download: 513.38 kB before and after.** The moment and its rules live in the
+  share-cards chunk (the teaser's inline styles stay under the 5 kB warning, the spring's `linear()`
+  curve worked out in code at run time rather than written into the stylesheet) and `_ui.scss` is
+  untouched; the 520 kB error budget holds. Recommendation: accept.
+- **W10 · Nothing else was left out.** A new card design and a sticker export stay out as the row says.
+  Share keeps its button and its words; the mocked `share-cards` spec runs under reduced motion and never
+  meets the tilt, so the live videos are the proof. Section 2's line that the player's swipe would change
+  the exercise behind the summary at 70 px: the card stops its touch events at the card either way.
 
 
 ## 4. The arc on the day
