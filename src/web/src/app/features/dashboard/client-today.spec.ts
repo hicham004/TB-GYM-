@@ -1,9 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import type { ClientTrainingDayResult } from '../../core/api/generated';
@@ -16,8 +16,10 @@ import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
 import type { UpcomingTraining } from '../training/training-read.models';
 import type { RenewalStatus } from './renewal.models';
 import { press, settle } from '../../../testing/dom';
+import { fakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
 import { day, fakeClientAccess, TODAY, upcoming, workout } from '../../../testing/today-fixtures';
 import { ClientToday } from './client-today';
+import { PLAYER_PRELOAD, REVEAL_CLASS } from './open-moment';
 
 const running: RenewalStatus = {
   planEnded: false,
@@ -37,6 +39,7 @@ const ended: RenewalStatus = {
   lastRequest: null,
   canAsk: true,
 };
+const preload = vi.fn(() => Promise.resolve());
 const asked: RenewalStatus = {
   ...ended,
   lastRequest: { id: 'request-1', requestedOn: '2026-10-05', askAgainFrom: '2026-10-12' },
@@ -51,6 +54,7 @@ async function render(
     api?: Record<string, unknown>;
     unread?: number;
     logoUrl?: string | null;
+    providers?: unknown[];
   } = {},
 ) {
   const brand = { logoUrl: signal(options.logoUrl ?? null), logoFailed: vi.fn() };
@@ -109,6 +113,9 @@ async function render(
         useValue: { unread: signal(options.unread ?? 0), isAvailable: signal(true) },
       },
       { provide: MessagingRealtimeService, useValue: { listRefreshRequests: signal(0) } },
+      // The player's chunks are not loaded into these tests; the asks for them are counted (W7).
+      { provide: PLAYER_PRELOAD, useValue: preload },
+      ...((options.providers ?? []) as never[]),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(ClientToday);
@@ -722,5 +729,121 @@ describe('ClientToday', () => {
       expect(read()).toContain('Training is not available');
       expect(read()).toContain('Your coaching plan has ended');
     });
+  });
+});
+
+describe('ClientToday, the card opens into the player (W7)', () => {
+  const html = () => document.documentElement;
+
+  /** A `ViewTransition` for jsdom: the update runs on a microtask, the end is settled by hand. */
+  function fakeViewTransition() {
+    let settleReady!: () => void;
+    let failReady!: (reason: unknown) => void;
+    let settleFinished!: () => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      settleReady = resolve;
+      failReady = reject;
+    });
+    const finished = new Promise<void>((resolve) => {
+      settleFinished = resolve;
+    });
+    const updateCallbackDone = Promise.resolve();
+    const transition = {
+      ready,
+      finished,
+      updateCallbackDone,
+      types: new Set<string>(),
+      skipTransition: vi.fn(() => failReady(new DOMException('skipped', 'AbortError'))),
+    };
+    const start = vi.fn((update: () => Promise<void> | void) => {
+      Promise.resolve()
+        .then(update)
+        .then(() => settleReady());
+      return transition as unknown as ViewTransition;
+    });
+    return { transition, start, finish: () => settleFinished() };
+  }
+
+  function withViewTransitions(start: unknown): void {
+    Object.defineProperty(document, 'startViewTransition', { value: start, configurable: true });
+  }
+
+  beforeEach(() => preload.mockClear());
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    html().classList.remove(REVEAL_CLASS);
+    delete (document as { startViewTransition?: unknown }).startViewTransition;
+  });
+
+  it('grows the card into the player: a plain click on Open workout navigates once, inside a view transition', async () => {
+    const { start, finish } = fakeViewTransition();
+    withViewTransitions(start);
+    const { host } = await render({
+      providers: [provideFakeMotion(fakeMotion({ allowed: true }))],
+    });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const card = host.querySelector<HTMLElement>('.today-card')!;
+    card.getBoundingClientRect = () =>
+      ({ top: 300, left: 16, right: 374, bottom: 640, width: 358, height: 340 }) as DOMRect;
+    const link = host.querySelector<HTMLAnchorElement>('.today-card a.today-action')!;
+    expect(link.textContent?.trim()).toBe('Open workout');
+
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(html().classList.contains(REVEAL_CLASS)).toBe(true);
+    expect(html().style.getPropertyValue('--tb-open-top')).toBe('300px');
+    expect(html().style.getPropertyValue('--tb-open-left')).toBe('16px');
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    // Once, inside the transition: RouterLink's own navigation was stopped in the capture phase.
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(link.getAttribute('href'));
+    expect(link.getAttribute('href')).toMatch(/^\/training\/today\?sessionId=/);
+
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(html().classList.contains(REVEAL_CLASS)).toBe(false);
+  });
+
+  it('leaves a modifier click, and a plain click without motion, to RouterLink as before', async () => {
+    const { start } = fakeViewTransition();
+    withViewTransitions(start);
+    const motion = fakeMotion({ allowed: true });
+    const { host } = await render({ providers: [provideFakeMotion(motion)] });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const link = host.querySelector<HTMLAnchorElement>('.today-card a.today-action')!;
+    // jsdom would try to follow the link the browser is left to open; nothing else listens here.
+    host.addEventListener('click', (event) => event.preventDefault());
+
+    link.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey: true }),
+    );
+    expect(start).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+
+    motion.allowed.mockReturnValue(false);
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    expect(start).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(html().classList.contains(REVEAL_CLASS)).toBe(false);
+  });
+
+  it('preloads the player’s chunks when the browser is idle once the reads have settled', async () => {
+    await render();
+
+    expect(preload).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(preload).toHaveBeenCalledTimes(1);
+  });
+
+  it('preloads at once on a press on the card, and not again when idle', async () => {
+    const { host } = await render();
+
+    host
+      .querySelector('.today-card a.today-action')!
+      .dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(preload).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(preload).toHaveBeenCalledTimes(1);
   });
 });

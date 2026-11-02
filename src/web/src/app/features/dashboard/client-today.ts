@@ -1,21 +1,24 @@
-import { DatePipe, formatNumber } from '@angular/common';
+import { DatePipe, DOCUMENT, formatNumber } from '@angular/common';
 import {
   afterNextRender,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
+  EnvironmentInjector,
   inject,
   LOCALE_ID,
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import type { ClientTrainingDayResult } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
+import { Motion } from '../../core/motion/motion';
 import { NotificationStore } from '../../core/notifications/notification.store';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
@@ -33,6 +36,7 @@ import {
   trainingReadAccessLabel,
   type UpcomingTraining,
 } from '../training/training-read.models';
+import { PLAYER_PRELOAD, revealInto, revealTarget, whenIdle } from './open-moment';
 import { mapRenewalStatus, type RenewalStatus } from './renewal.models';
 import { TodayAlso } from './today-also';
 import { TodayCoachMessage } from './today-coach-message';
@@ -74,7 +78,17 @@ export class ClientToday {
   private readonly notifications = inject(NotificationStore);
   private readonly access = inject(ClientAccessStore);
   protected readonly brand = inject(WorkspaceBrandStore);
+  private readonly document = inject(DOCUMENT);
+  private readonly router = inject(Router);
+  private readonly motion = inject(Motion);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly destroyRef = inject(DestroyRef);
+  /** Outlives this page: the player's first render is awaited after Today is gone (W7). */
+  private readonly environment = inject(EnvironmentInjector);
+  private readonly preload = inject(PLAYER_PRELOAD);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
+  private cancelPreload: (() => void) | null = null;
+  private preloadAsked = false;
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly trainingHeading = viewChild<ElementRef<HTMLElement>>('trainingHeading');
   private readonly also = viewChild(TodayAlso);
@@ -208,6 +222,52 @@ export class ClientToday {
     });
     // The page heading takes focus on arrival, so a screen reader starts at "Today".
     afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
+    // The card opens into the player (W7): the click is taken in the capture phase, before the
+    // link's own listener, and a press on the card preloads the player's chunks.
+    afterNextRender(() => {
+      const element = this.host.nativeElement;
+      element.addEventListener('click', this.openPlayer, true);
+      element.addEventListener('pointerdown', this.pressCard, { capture: true, passive: true });
+      this.destroyRef.onDestroy(() => {
+        element.removeEventListener('click', this.openPlayer, true);
+        element.removeEventListener('pointerdown', this.pressCard, true);
+        this.cancelPreload?.();
+      });
+    });
+    effect(() => {
+      if (this.belowDrawn() && !this.preloadAsked) this.preloadSoon();
+    });
+  }
+
+  /** A plain left click on the card's link to the player grows the card into it (W7). */
+  private readonly openPlayer = (event: MouseEvent): void => {
+    const link = revealTarget(event, this.document, this.motion);
+    const card = link?.closest('.today-card');
+    const url = link?.getAttribute('href');
+    if (!link || !card || !url) return;
+    event.preventDefault();
+    event.stopPropagation();
+    revealInto(card, () => this.router.navigateByUrl(url), this.document, this.environment);
+  };
+
+  private readonly pressCard = (event: Event): void => {
+    if (event.target instanceof Element && event.target.closest('.today-card')) {
+      this.cancelPreload?.();
+      this.cancelPreload = null;
+      this.preloadAsked = true;
+      void this.preload();
+    }
+  };
+
+  /** Once Today's own reads have settled, the player's chunks load when the browser is idle. */
+  private preloadSoon(): void {
+    this.preloadAsked = true;
+    const view = this.document.defaultView;
+    if (!view) return;
+    this.cancelPreload = whenIdle(view, () => {
+      this.cancelPreload = null;
+      void this.preload();
+    });
   }
 
   protected async retry(): Promise<void> {

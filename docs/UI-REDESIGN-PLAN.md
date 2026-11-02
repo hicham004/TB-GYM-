@@ -1360,7 +1360,12 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     minute after fifteen idle minutes, 15 s after a failure, nothing while hidden), at once when a
     message lands, and a workout a client just finished arrives as a strip under the greeting and
     slides into the feed; the strip and the row slide on `grid-template-rows` (0fr to 1fr), never a
-    height.
+    height. The card opens into the player (W7): a plain tap on Today's workout link navigates inside
+    a view transition that reveals the player from the card's rectangle (`clip-path`, 500 ms, the
+    `.tb-player-reveal` rules in `_ui.scss`, beside the theme switch's), given up for a plain cut when
+    the new page takes over 300 ms; the player's two chunks preload on idle once Today's reads settle,
+    or on a press, and the player's parts rise once its read lands. A modifier click, reduced motion,
+    the switch and a browser without the feature keep the plain navigation.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

@@ -777,6 +777,33 @@
   pointer-events: none;
 }
 
+// The card opens into the player (motion plan W7, features/dashboard/open-moment.ts): the new page
+// is revealed from the card's rectangle over the old one, which stays whole underneath, instead of
+// the browser's cross-fade. Today sets the rectangle on <html> and leaves the class off for less
+// motion, so the browser's plain navigation runs there.
+.tb-player-reveal::view-transition-old(root),
+.tb-player-reveal::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+.tb-player-reveal::view-transition-new(root) {
+  animation: tb-player-reveal 500ms cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+@keyframes tb-player-reveal {
+  from {
+    clip-path: inset(
+      var(--tb-open-top) var(--tb-open-right) var(--tb-open-bottom) var(--tb-open-left) round
+        var(--tb-open-radius)
+    );
+  }
+
+  to {
+    clip-path: inset(0 0 0 0 round 0);
+  }
+}
+
 @property --progress {
   syntax: '<number>';
   inherits: false;

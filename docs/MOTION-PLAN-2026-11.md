@@ -650,6 +650,37 @@ is removed, and a changed answer becomes a new row.
   before, and the feed row of a workout older than two minutes appears without the strip or the slide. The
   other way: the slide on every read. Recommendation: keep as built.
 
+- **W7 · The top bar's title rises; the × and the clock stay.** Section 2 rises "its top bar"; built: the
+  title block (the eyebrow and the workout's name) rises when the read lands, while the × and the clock
+  stay put, so a tap on × during the reveal lands at once (proven live). The other way: the whole top bar.
+  Recommendation: keep as built.
+- **W7 · The exercise panel rises as one, and the actions row with it.** The prototype rises the panel's
+  children one by one; built, in reading order and six parts at most (W1's cap): the title block, the
+  workout picker, the segment bars, the workout's blocks above the exercise (the intro and Start, or the
+  unit choice and its note), the exercise panel as one block and the actions row under it, so nothing
+  below is left standing while a part above moves. The other way: the panel's children one by one, which
+  the cap would cut after the heading. Recommendation: keep as built.
+- **W7 · The rise plays on every fill from the skeleton.** Built: the parts rise whenever the player's
+  skeleton is replaced by a read (the first open, a reload of the player's address, a change of
+  workspace or of the page of workouts), never on the quiet re-read after a set is saved. The other way:
+  only when the player was opened through the card's reveal. Recommendation: keep as built; the entrance
+  is the player's wherever it comes from, as W1 left it.
+- **W7 · The card's corners and a card under the fold.** Built: the reveal starts from the card's own
+  corner radius (read from its style, 16 px today) and from the visible part of the card when it is partly
+  under the fold or past the side. The other way: the prototype's 26 px. Recommendation: keep as built.
+- **W7 · The first download grew by 0.38 kB.** Section 1 lets no row grow it beyond W1's; section 2 puts the
+  reveal's rules in W1's global sheet, since component styles cannot reach `::view-transition-*` on
+  `<html>`: 512.20 kB before, 512.58 kB after, against the 520 kB error budget. The other way: none, there
+  is no other place for them. Recommendation: accept.
+- **W7 · Under 4x CPU the tap waits on the navigation's own frames.** Measured live with the CPU throttled
+  four times: with W7 on the old page is held for 95 to 160 ms (the navigation and the player's first
+  render, one frame of 184 to 227 ms, inside the 300 ms cap) and the reveal then runs on the compositor;
+  with W7 off the same work shows as two frames of 86 and 110 ms, so the moment adds no work, it only
+  gathers it before the reveal. Unthrottled the hold is 16 to 28 ms. The other way: a longer cap, or none.
+  Recommendation: keep the 300 ms cap.
+- **W7 · Nothing else was left out.** The way back (the leave guard) stays out as the row says: × and
+  Back to Today are a plain navigation with W1's page fade on Today.
+
 ## 4. The arc on the day
 
 Ten minutes, three peaks, the strongest last; between them only quiet speed. Before he arrives: the demo rebuilt

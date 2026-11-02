@@ -49,6 +49,7 @@ import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareTeaser } from '../share-cards/share-teaser';
 import { externalVideo } from './external-video';
 import { type FinishFormats, playFinishMoment } from './finish-moment';
+import { playPlayerMoment } from './player-moment';
 import { RestTimer } from './rest-timer';
 import { buzzSet, planSetMoment, playSetMoment, recordNotice } from './set-moment';
 import { nullableNumeric, numeric } from './training-builder.models';
@@ -1192,6 +1193,12 @@ export class TodayTraining implements HoldsUnsavedWork {
         if (active && this.unitSessionId !== active.sessionId) {
           this.workoutUnit.set(this.unitFor(active));
           this.unitSessionId = active.sessionId;
+        }
+        if (showLoading) {
+          // The skeleton goes in this render; the player's parts rise in after it (W7).
+          afterNextRender(() => playPlayerMoment(this.host.nativeElement, this.motion), {
+            injector: this.injector,
+          });
         }
       } catch (error) {
         if (!owner.current) return;
