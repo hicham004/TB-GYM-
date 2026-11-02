@@ -22,7 +22,7 @@ What a row left out or chose on its own waits for the owner in section 3.
 | --- | --- | --- | --- |
 | W1 | Foundations | `core/motion`: the reduced-motion read with a `?motion=off` switch, the four moves with the prototype's numbers on the Web Animations API (no GSAP in the app), a fake for tests; the everyday layer (a 120 ms press on the kit's buttons and tappable cards, a 200 ms fade when a page changes inside the client and coach frames); mocked Playwright runs with reduced motion by default; rule 9 loosened in the UI plan. Left out: GSAP (it stays on the homepage), route view transitions, `animate.leave`, any change to the theme switch. | Done · 2026-11-02 · f3f44a7 |
 | W2 | Demo day | `scripts/demo-day.ps1`: one command that rebuilds the demo into `tbgym_demo`, starts the API and the web app over HTTPS on the laptop's own address, opens the firewall once, and prints the address, the sign-ins and a QR code; `crypto.randomUUID` guarded so a plain http address works too; second, `-HeroName`, which gives Maya the friend's first name in the demo database only. Left out: Render, the test copy, email. | Done · 2026-11-02 · 6294bc9 |
-| W3 | The set tick and the record burst | A logged set springs into its done form and its tick draws, the exercise's segment fills; a record pops its chip and bursts 16 dots from it, with the buzz Android gives, and its sentence becomes a pinned pill that never shifts the sets; a second record in the same workout gets the small form. Left out: sound, anything before the server's answer. | Open |
+| W3 | The set tick and the record burst | A logged set springs into its done form and its tick draws, the exercise's segment fills; a record pops its chip and bursts 16 dots from it, with the buzz Android gives, and its sentence becomes a pinned pill that never shifts the sets; a second record in the same workout gets the small form. Left out: sound, anything before the server's answer. | Done · 2026-11-02 · c3dc42d |
 | W4 | The finish | The finish summary rises and its four numbers count up to the server's own strings, the records list follows and the share card lands with a spring. Left out: a new share card design, a hold-to-finish button. | Open |
 | W5 | The rest timer | The rest card slides in and out, its ring drains in one continuous sweep instead of stepping, it pulses in the last three seconds, and it keeps time while the phone is locked. Left out: a flick to skip, the end tone's words. | Open |
 | W6 | Coach Today hears the phone | While the tab is in view Coach Today re-reads quietly every 4 seconds, and a workout finished on the phone lands as a strip under the greeting and slides into the feed with its record and a highlight that fades; a message bumps a re-read at once; a resolved row leaves. Left out: a server event (the live finish frame, "Later"), set-by-set progress, count-ups. | Open |
@@ -570,6 +570,25 @@ is removed, and a changed answer becomes a new row.
   "Maya", since the generator wrote them and messages are append-only. The other way: a `--hero-name` option in the
   demo generator (server code, the full suite). Recommendation: the generator option after the demo if the name should
   reach the messages too; on the day, say Lea wrote her note before the rename.
+- **W3 · The pinned pill for every sentence, at the top.** Section 2 pins the record's sentence under the header;
+  built: while a workout is open the status line is a pill pinned at the top of the screen, over the header's band,
+  for every sentence ("Workout started.", "Set saved.", the record's), fading after 4.5 s and staying in the live
+  region for screen readers. Every sentence, because "Workout started." and "Set saved." sat in the flow above the
+  sets, so the record's sentence leaving the flow alone would have shifted the sets by a line at the very moment;
+  at the top, because under the header the pill would cover the segment that fills. The other way: the record's
+  sentence alone, with the line's space always reserved under the header. Recommendation: keep as built.
+- **W3 · A record after a reload.** The page knows a record only from its own saves (`prSetIds` starts empty on a
+  load, as before), so a reload drops the PR chips and the next record on that page gets the full burst again; in
+  one page, as on the day, the second record gets the small form (proven in Vitest; the live films show the full
+  burst on three pages). The other way: the day's read says which logged sets were records (server code, the full
+  suite). Recommendation: later, with the "Later, not rows" list.
+- **W3 · The buzz.** Section 2 names `[30, 50, 80]` as the pattern the app already sends; the app sends
+  `[80, 40, 80]` on a record, which is kept, and a plain tick now buzzes 25 ms. The other way: the prototype's
+  `[30, 50, 80]`. Recommendation: keep the app's; nobody can tell them apart in a video.
+- **W3 · The record, confirmed.** On the fresh demo built at 02:36 on Monday 2 November, Maya's set 1 at the
+  coach's 52.5 kg × 5 answered a record ("New personal record · Back Squat 52.5 kg × 5"), set 2 at the same numbers
+  was a plain "Set saved.", and set 3 at 55 kg × 5 a second record; Sara's set 1 at 40 × 8 and Jad's at 100 × 5
+  were records too, and leg press set 1 at the coach's 85 kg was not.
 
 ## 4. The arc on the day
 
