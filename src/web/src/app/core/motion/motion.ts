@@ -149,7 +149,8 @@ export class Motion {
 
   /**
    * Rises elements into place one after another (14 px up and transparent to rest, 450 ms each,
-   * 50 ms apart), at most six: anything later is already in place when the eye reaches it.
+   * 50 ms apart, `power2.out`), at most six: anything later is already in place when the eye
+   * reaches it.
    */
   rise(elements: Iterable<Element>, options: RiseOptions = {}): Stop {
     const list = Array.from(elements).slice(0, RISE_CAP);
@@ -164,7 +165,12 @@ export class Motion {
           { opacity: 1, transform: 'none' },
         ],
         // Backwards: an element stays hidden through its own delay instead of flashing first.
-        { duration, delay: index * stagger, easing: EASE.out, fill: 'backwards' },
+        {
+          duration,
+          delay: index * stagger,
+          easing: options.easing ?? EASE.out,
+          fill: 'backwards',
+        },
       ),
     );
     return () => animations.forEach((animation) => animation.cancel());
@@ -204,6 +210,8 @@ export interface RiseOptions extends MoveOptions {
   readonly stagger?: number;
   /** How far up each element starts, in px (14). */
   readonly from?: number;
+  /** The curve (`EASE.out`). */
+  readonly easing?: string;
 }
 
 export {

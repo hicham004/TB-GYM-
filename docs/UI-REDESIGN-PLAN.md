@@ -1388,6 +1388,10 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     (`plates-moment.ts`), with steppers to the next loadable weight, one tap to the lighter bar and the
     nearest loadable weights where none fits; a reading that changes nothing in the set, in place at once
     with reduced motion.
+    Coach Today builds itself (W12): on the first successful read per app load its panels rise in reading
+    order (`features/dashboard/build-moment.ts`, 18 px up, 320 ms, 40 ms apart, `power3.out`, six at most),
+    once; a quiet re-read, Clients and back, and a workspace switch replay nothing, the greeting never moves
+    and nothing counts; with reduced motion the page is as it was.
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

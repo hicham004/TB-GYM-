@@ -14,8 +14,10 @@ import { TenantStore } from '../../core/tenancy/tenant.store';
 import { installDialogSupport } from '../../../testing/dialog';
 import { fill, formSummary, press, settle, toggleFold } from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
-import { fakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
+import { fakeMotion, provideFakeMotion, type FakeMotion } from '../../../testing/motion-fake';
+import { EASE } from '../../core/motion/motion';
 import { IDLE_AFTER_MS } from './arrival-moment';
+import { resetBuildMoment } from './build-moment';
 import {
   attentionItem,
   coachMonth,
@@ -50,6 +52,7 @@ async function render(
   const api = { getCoachToday: vi.fn(getCoachToday) };
   /** The chat hub's "a conversation changed" count, which bumps the quiet re-read (W6). */
   const bumps = signal(0);
+  const motion = fakeMotion({ allowed: options.motionAllowed ?? false });
   const releaseClient =
     options.releaseClient ??
     vi.fn(() => of({ id: 'c-elie', firstName: 'Elie' } as CoachClientDetails));
@@ -58,7 +61,7 @@ async function render(
     providers: [
       provideRouter([]),
       provideEmailDelivery(false),
-      provideFakeMotion(fakeMotion({ allowed: options.motionAllowed ?? false })),
+      provideFakeMotion(motion),
       { provide: MessagingRealtimeService, useValue: { listRefreshRequests: bumps } },
       { provide: ApiClient, useValue: api },
       { provide: ConversationStarter, useValue: starter },
@@ -84,6 +87,7 @@ async function render(
     tenant,
     bumps,
     releaseClient,
+    motion,
     read: () => (host.textContent ?? '').replace(/\s+/g, ' '),
   };
 }
@@ -937,6 +941,108 @@ describe('CoachToday', () => {
 
       await vi.advanceTimersByTimeAsync(20_000);
       expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  /**
+   * Coach Today builds itself (motion plan W12): on the first successful read per app load the
+   * panels rise in reading order, once; a re-read, a second view and a workspace switch replay
+   * nothing. The flag lasts the module, so each case starts it over.
+   */
+  describe('builds itself (W12)', () => {
+    beforeEach(() => resetBuildMoment());
+
+    /** What each rise was asked to move, as the tag and its classes in order. */
+    function risen(motion: FakeMotion): string[][] {
+      const calls = motion.rise.mock.calls as unknown as [NodeListOf<Element>, unknown][];
+      return calls.map(([parts]) =>
+        Array.from(
+          parts,
+          (element) =>
+            element.tagName.toLowerCase() + '.' + [...element.classList].sort().join('.'),
+        ),
+      );
+    }
+
+    it('rises the panels in reading order once the first read has drawn them, and never again in the same app load', async () => {
+      const { fixture, api, bumps, motion } = await render(undefined, 'Owner', undefined, {
+        motionAllowed: true,
+      });
+      expect(risen(motion)).toEqual([
+        [
+          'section.panel.queue',
+          'section.month.panel',
+          'section.panel.plan-list',
+          'section.panel.plan-list',
+          'section.feed.panel',
+        ],
+      ]);
+      expect((motion.rise.mock.calls as unknown as [unknown, unknown][])[0][1]).toEqual({
+        moment: 'W12',
+        from: 18,
+        duration: 320,
+        stagger: 40,
+        easing: EASE.outStrong,
+      });
+
+      // A message bumps a quiet re-read: the view is swapped in place and nothing rises.
+      bumps.set(1);
+      fixture.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await settle(fixture);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+      expect(motion.rise).toHaveBeenCalledTimes(1);
+
+      // Clients and back: a second Today in the same app load is in place at once.
+      fixture.destroy();
+      const second = TestBed.createComponent(CoachToday);
+      await settle(second);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(3);
+      expect((second.nativeElement as HTMLElement).querySelectorAll('section.panel')).toHaveLength(
+        5,
+      );
+      expect(motion.rise).toHaveBeenCalledTimes(1);
+      second.destroy();
+    });
+
+    it('draws a switched workspace in place: the build is once per app load, not per workspace', async () => {
+      const { fixture, api, tenant, motion } = await render(undefined, 'Owner', undefined, {
+        motionAllowed: true,
+      });
+      expect(motion.rise).toHaveBeenCalledTimes(1);
+      api.getCoachToday.mockImplementation(() => of(coachTodayView({ attention: [] })));
+
+      tenant.set('tenant-2');
+      await settle(fixture);
+      expect(api.getCoachToday).toHaveBeenCalledTimes(2);
+      expect(motion.rise).toHaveBeenCalledTimes(1);
+    });
+
+    it('builds on Try again when the first read failed, and on a phone rises the feed’s fold in its place', async () => {
+      stubWidth(true);
+      let reads = 0;
+      const { fixture, host, motion } = await render(
+        () =>
+          ++reads === 1
+            ? throwError(() => new HttpErrorResponse({ status: 503 }))
+            : of(coachTodayView()),
+        'Owner',
+        undefined,
+        { motionAllowed: true },
+      );
+      expect(motion.rise).not.toHaveBeenCalled();
+
+      press(host, 'Try again');
+      await settle(fixture);
+      expect(risen(motion)).toEqual([
+        [
+          'section.panel.queue',
+          'app-disclosure.feed-fold.panel',
+          'section.month.panel',
+          'section.panel.plan-list',
+          'section.panel.plan-list',
+        ],
+      ]);
     });
   });
 });

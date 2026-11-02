@@ -815,6 +815,32 @@ is removed, and a changed answer becomes a new row.
   plates for pounds (blue 45, yellow 35, green 25, white 10, grey 5, chrome 2.5), presentation only. The
   mocked `workout-progress` spec opens the sheet under reduced motion and steps it; the live videos show
   the plates move.
+- **W12 · The rows ride in their panel.** The row's words name the panels and the first rows; built: the
+  panels alone, in one stagger in reading order (Needs you, This month, the plans ending soon, the plans
+  ended, the feed; on a phone the feed's fold where it sits under Needs you; the first client's card alone in
+  an empty space), five at most, since the prototype's coach screen rises its blocks and never its rows (its
+  line 952) and a second stagger inside the first panel would double its fades and break the cap of six. The
+  other way: the first three Needs-you rows rising inside the first panel after it. Recommendation: keep as
+  built; the rows arrive with their panel, which is what the eye reads.
+- **W12 · The numbers.** Built: 18 px up (the prototype's y 18), 320 ms, 40 ms apart, `power3.out` (the
+  prototype's coach curve), hidden through each delay, so the last panel is at rest 480 ms after the read;
+  `rise` gains an optional easing and keeps `power2.out` as its default, so W9's and the player's rises are
+  unchanged. The other way: W9's 14 px and `power2.out`. Recommendation: keep.
+- **W12 · The greeting stays.** Built: the greeting, its date line and its count line never move (the
+  greeting is drawn before the read answers, audit UIQ-5) and the greeting keeps its focus; the Find a client
+  and Invite client buttons land with the read without a rise, since they sit in the greeting's row. The
+  other way: the count line and the buttons rising first. Recommendation: keep.
+- **W12 · A reload builds again.** Built: the flag lives in the lazy Dashboard chunk and lasts one app load,
+  so a quiet re-read, Clients and back, and a workspace switch replay nothing, while a reload or a fresh
+  sign-in (a new app load) builds again, as the row says ("per app load"). The other way: once per browser
+  session through session storage. Recommendation: accept; a reload is the one way to see it again.
+- **W12 · The first download: 513.38 kB before and after.** The moment is one file in the lazy Dashboard
+  chunk and a call from Coach Today; `core/motion`'s `rise` gains an optional easing (a few bytes, its default
+  unchanged); no style changed; the 520 kB error budget holds. Recommendation: accept.
+- **W12 · Nothing else was left out.** Count-ups and a chart stay out as the row says: the figures are
+  built strings and a plural, and nothing counts. A failed first read builds on Try again, the first
+  successful read being the first view. The mocked `coach-today` spec runs under reduced motion and sees
+  the page as it was; the live video shows the build.
 
 
 ## 4. The arc on the day

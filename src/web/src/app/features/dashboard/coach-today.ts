@@ -51,6 +51,7 @@ import {
   STRIP_MS,
   type Arrival,
 } from './arrival-moment';
+import { buildCoachToday, claimFirstBuild } from './build-moment';
 import {
   mapCoachToday,
   type ActivityRow,
@@ -76,7 +77,8 @@ const PHONE_QUERY = '(max-width: 47.99rem)';
  *
  * It hears the phone (motion plan W6): while the tab is in view it reads again quietly every few
  * seconds, at once when a message lands, and a workout a client just finished arrives as a strip
- * under the greeting and slides into the feed.
+ * under the greeting and slides into the feed. On the first read per app load it builds itself
+ * (W12): the panels rise in turn, once.
  */
 @Component({
   selector: 'app-coach-today',
@@ -190,6 +192,8 @@ export class CoachToday {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private stripTimer: ReturnType<typeof setTimeout> | null = null;
   private stopStrip: Stop | null = null;
+  /** The panels' rise on the first view per app load (W12), while it runs. */
+  private stopBuild: Stop | null = null;
   private rereading = false;
   private readFailed = false;
   /** The last input or realtime bump; fifteen quiet minutes slow the re-read to one a minute. */
@@ -249,6 +253,7 @@ export class CoachToday {
         this.today.set(model);
         this.readFailed = false;
         this.live.set(this.visible());
+        if (claimFirstBuild()) this.build();
       } catch {
         if (owner.current) this.failed.set(true);
       } finally {
@@ -345,6 +350,16 @@ export class CoachToday {
         }
       }
     });
+  }
+
+  /** The first view per app load builds itself (W12): the panels rise once the render has drawn them. */
+  private build(): void {
+    afterNextRender(
+      () => {
+        this.stopBuild = buildCoachToday(this.host.nativeElement, this.motion);
+      },
+      { injector: this.injector },
+    );
   }
 
   /** The strip under the greeting and the row's slide into the feed; a second arrival takes the strip. */
@@ -458,6 +473,8 @@ export class CoachToday {
     this.clearStripTimer();
     this.stopStrip?.();
     this.stopStrip = null;
+    this.stopBuild?.();
+    this.stopBuild = null;
     for (const stop of this.leaves.splice(0)) stop();
     this.departed.set([]);
     this.rereading = false;

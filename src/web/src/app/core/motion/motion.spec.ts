@@ -124,7 +124,12 @@ describe('Motion', () => {
         KeyframeAnimationOptions,
       ];
       expect(keyframes[0]).toEqual({ opacity: 0, transform: 'translateY(14px)' });
-      expect(options).toMatchObject({ duration: 450, delay: 100, fill: 'backwards' });
+      expect(options).toMatchObject({
+        duration: 450,
+        delay: 100,
+        easing: EASE.out,
+        fill: 'backwards',
+      });
 
       stop();
       expect(
