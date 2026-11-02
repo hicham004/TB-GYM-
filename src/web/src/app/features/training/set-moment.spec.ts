@@ -192,7 +192,7 @@ describe('playSetMoment', () => {
     expect(host.querySelector('.set-burst')).toBeNull();
   });
 
-  it('springs the row, draws the tick and fills the segment with scaleX on a plain tick', () => {
+  it('springs the row and draws the tick on a plain tick, leaving the segment to its own transition (W9)', () => {
     page(false);
     playSetMoment(
       host,
@@ -204,15 +204,10 @@ describe('playSetMoment', () => {
       },
       motion(true),
     );
-    expect(animate).toHaveBeenCalledTimes(3);
-    const [row, tick, bar] = animate.mock.calls as unknown as [
-      Keyframe[],
-      KeyframeAnimationOptions,
-    ][][];
+    expect(animate).toHaveBeenCalledTimes(2);
+    const [row, tick] = animate.mock.calls as unknown as [Keyframe[], KeyframeAnimationOptions][][];
     expect(row[0][0]).toEqual({ transform: 'scale(0.96)' });
     expect(tick[0][0]).toEqual({ transform: 'scale(0.4) rotate(-30deg)' });
-    expect(bar[0][0]).toEqual({ transform: 'scaleX(0.5)' });
-    expect(bar[1]).toMatchObject({ duration: 500 });
     expect(host.querySelector('.set-burst')).toBeNull();
   });
 

@@ -2,7 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 const CIRCUMFERENCE = 2 * Math.PI * 26;
 
-/** A bounded metric with native progress semantics and a visible text value. */
+/**
+ * A bounded metric with native progress semantics and a visible text value. The fill's offset is a
+ * custom property, so the stylesheet can sweep it (W9); the circumference is written there too.
+ */
 @Component({
   selector: 'app-progress-ring',
   template: `
@@ -24,7 +27,7 @@ const CIRCUMFERENCE = 2 * Math.PI * 26;
           cy="32"
           r="26"
           [attr.stroke-dasharray]="circumference"
-          [attr.stroke-dashoffset]="dashOffset()"
+          [style.--offset]="dashOffset()"
         />
       </svg>
       <strong aria-hidden="true">{{ percent() }}%</strong>
@@ -72,7 +75,20 @@ const CIRCUMFERENCE = 2 * Math.PI * 26;
     }
     .fill {
       stroke: var(--tb-accent-ink);
+      stroke-dashoffset: var(--offset);
       stroke-linecap: round;
+    }
+    // The ring sweeps to a new value and draws in on first paint (motion plan W9); with reduced
+    // motion or the switch on (data-tb-motion, core/motion) it rests at its value.
+    @media (prefers-reduced-motion: no-preference) {
+      :host-context(html:not([data-tb-motion='off'])) .fill {
+        transition: stroke-dashoffset 600ms var(--tb-ease);
+      }
+      @starting-style {
+        :host-context(html:not([data-tb-motion='off'])) .fill {
+          stroke-dashoffset: 163.36;
+        }
+      }
     }
     strong {
       font-size: 1rem;

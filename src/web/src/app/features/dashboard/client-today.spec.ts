@@ -847,3 +847,59 @@ describe('ClientToday, the card opens into the player (W7)', () => {
     expect(preload).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ClientToday, the first draw (W9)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Every part asked to rise so far, in order, as tag.class. */
+  function risen(motion: ReturnType<typeof fakeMotion>): string[] {
+    return (motion.rise.mock.calls as unknown as [Iterable<Element>][]).flatMap(([elements]) =>
+      Array.from(elements).map(
+        (element) =>
+          element.tagName.toLowerCase() +
+          (element.className ? '.' + String(element.className).split(' ')[0] : ''),
+      ),
+    );
+  }
+
+  it('rises the greeting at once, then the week, the card and the tiles once drawn, and nothing on a re-read', async () => {
+    const motion = fakeMotion({ allowed: true });
+    const { fixture, api } = await render({ providers: [provideFakeMotion(motion)] });
+
+    expect((motion.rise.mock.calls as unknown as [unknown, unknown][])[0]?.[1]).toEqual({
+      moment: 'W9',
+      from: 14,
+      duration: 450,
+      stagger: 50,
+    });
+    expect(risen(motion)).toEqual([
+      'header.today-header',
+      'section.today-week',
+      'section.today-card',
+      'app-today-also',
+      'app-today-coach-message',
+    ]);
+
+    const calls = motion.rise.mock.calls.length;
+    await (fixture.componentInstance as unknown as { load(): Promise<void> }).load();
+    await settle(fixture);
+    expect(api.getMyTrainingToday).toHaveBeenCalledTimes(2);
+    expect(motion.rise).toHaveBeenCalledTimes(calls);
+  });
+
+  it('rises the week, the card and the tiles again for another workspace, the greeting staying put', async () => {
+    const motion = fakeMotion({ allowed: true });
+    const { fixture, tenant } = await render({ providers: [provideFakeMotion(motion)] });
+    const before = risen(motion);
+
+    tenant.set('tenant-2');
+    await settle(fixture);
+    expect(risen(motion)).toEqual([
+      ...before,
+      'section.today-week',
+      'section.today-card',
+      'app-today-also',
+      'app-today-coach-message',
+    ]);
+  });
+});

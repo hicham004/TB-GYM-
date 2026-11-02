@@ -82,9 +82,7 @@
                   class="today-week-ring"
                   [class.is-done]="item.scheduled > 0 && item.completed === item.scheduled"
                   [class.is-planned]="item.scheduled > 0 && item.completed < item.scheduled"
-                  [style.--progress]="
-                    item.scheduled ? (100 * item.completed) / item.scheduled + '%' : '0%'
-                  "
+                  [style.--done]="item.scheduled ? (100 * item.completed) / item.scheduled : 0"
                   aria-hidden="true"
                 >
                   @if (item.scheduled > 0 && item.completed === item.scheduled) {

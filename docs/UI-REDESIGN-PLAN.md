@@ -1371,6 +1371,11 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
     Today's coach card rises 8 px with its Unread dot pulsing when a quiet read brings the coach's newer
     message, and the shells' unread pills tick through one rule in `_ui.scss`; the realtime sink is told
     which events are live, and a catch-up page moves nothing.
+    Rings that sweep (W9): every progress ring (the kit's `app-progress-ring`, the meal plan's day rings,
+    Today's week) binds its value to a custom property and the stylesheet transitions it (600 ms, `--tb-ease`,
+    `@starting-style` for the first paint; Today's week through the registered `--progress`), the player's
+    exercise bars are clipped to their share and grow the same way (W3 no longer scales them), and Today's
+    greeting, week, card and tiles rise in as each lands, once per visit (`features/dashboard/today-moment.ts`).
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.

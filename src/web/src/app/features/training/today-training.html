@@ -149,7 +149,7 @@
         <article class="workout" [attr.aria-label]="workout.name">
           <div class="segments" role="group" aria-label="Exercise completion" i18n-aria-label>
             @for (exercise of workout.exercises; track exercise.prescriptionId) {
-              <span><b [style.width.%]="exerciseCompletion(exercise)"></b></span>
+              <span><b [style.--done]="exerciseCompletion(exercise)"></b></span>
             }
           </div>
           @for (earlier of upcoming()?.unfinishedWorkouts ?? []; track earlier.workout.sessionId) {

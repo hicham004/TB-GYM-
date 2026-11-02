@@ -69,8 +69,28 @@
 .segments b {
   display: block;
   block-size: 100%;
+  inline-size: 100%;
   border-radius: inherit;
   background: var(--tb-accent, #d9ed94);
+  // Clipped to the exercise's share of sets done (0 to 100), never sized, so it can grow (W9).
+  clip-path: inset(0 calc(100% - var(--done, 0) * 1%) 0 0 round 1rem);
+}
+:host-context(html[dir='rtl']) .segments b {
+  clip-path: inset(0 0 0 calc(100% - var(--done, 0) * 1%) round 1rem);
+}
+// The bar grows as sets are logged and draws in with the player (motion plan W9).
+@media (prefers-reduced-motion: no-preference) {
+  :host-context(html:not([data-tb-motion='off'])) .segments b {
+    transition: clip-path 600ms var(--tb-ease);
+  }
+  @starting-style {
+    :host-context(html:not([data-tb-motion='off'])) .segments b {
+      clip-path: inset(0 100% 0 0 round 1rem);
+    }
+    :host-context(html[dir='rtl']:not([data-tb-motion='off'])) .segments b {
+      clip-path: inset(0 0 0 100% round 1rem);
+    }
+  }
 }
 .started-date,
 .workout-intro,

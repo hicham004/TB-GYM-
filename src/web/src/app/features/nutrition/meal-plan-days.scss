@@ -202,8 +202,21 @@
 
 .ring-fill {
   stroke: var(--tb-accent-ink);
+  stroke-dashoffset: var(--offset);
   stroke-linecap: round;
-  transition: stroke-dashoffset var(--tb-duration) var(--tb-ease);
+}
+
+// A day's ring sweeps to its new total and draws in when the day first has one (motion plan W9).
+@media (prefers-reduced-motion: no-preference) {
+  :host-context(html:not([data-tb-motion='off'])) .ring-fill {
+    transition: stroke-dashoffset 600ms var(--tb-ease);
+  }
+  @starting-style {
+    :host-context(html:not([data-tb-motion='off'])) .ring-fill {
+      // 2 * pi * 16, the whole ring hidden.
+      stroke-dashoffset: 100.53;
+    }
+  }
 }
 
 .day-total[data-standing='over'] .ring-fill {

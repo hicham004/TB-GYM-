@@ -8,6 +8,7 @@ import {
   ElementRef,
   EnvironmentInjector,
   inject,
+  Injector,
   LOCALE_ID,
   signal,
   viewChild,
@@ -40,6 +41,7 @@ import { PLAYER_PRELOAD, revealInto, revealTarget, whenIdle } from './open-momen
 import { mapRenewalStatus, type RenewalStatus } from './renewal.models';
 import { TodayAlso } from './today-also';
 import { TodayCoachMessage } from './today-coach-message';
+import { riseTodaySteps, type TodayStep } from './today-moment';
 import { TodayRenewal } from './today-renewal';
 import { mapTrainingWeek, trainingCard, type TrainingWeek } from './today.models';
 
@@ -85,7 +87,10 @@ export class ClientToday {
   private readonly destroyRef = inject(DestroyRef);
   /** Outlives this page: the player's first render is awaited after Today is gone (W7). */
   private readonly environment = inject(EnvironmentInjector);
+  private readonly injector = inject(Injector);
   private readonly preload = inject(PLAYER_PRELOAD);
+  /** The steps of the first draw that have risen in this visit (W9). */
+  private readonly risen = new Set<TodayStep>();
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private cancelPreload: (() => void) | null = null;
   private preloadAsked = false;
@@ -213,6 +218,7 @@ export class ClientToday {
       this.workspaceDate.set(null);
       this.workspaceZone.set(null);
       this.renewal.set(null);
+      this.risen.clear();
       if (tenant) {
         void this.load();
         void this.loadWeek();
@@ -236,6 +242,19 @@ export class ClientToday {
     });
     effect(() => {
       if (this.belowDrawn() && !this.preloadAsked) this.preloadSoon();
+    });
+    // The first draw (W9): the greeting rises at once, the week and the card once they are drawn,
+    // the tiles once they are, each step once per visit and never on a re-read.
+    afterNextRender(() => riseTodaySteps(this.host.nativeElement, ['greeting'], this.motion));
+    effect(() => {
+      const steps: TodayStep[] = [];
+      if (this.coreDrawn() && !this.risen.has('core')) steps.push('core');
+      if (this.belowDrawn() && !this.risen.has('below')) steps.push('below');
+      if (steps.length === 0) return;
+      for (const step of steps) this.risen.add(step);
+      afterNextRender(() => riseTodaySteps(this.host.nativeElement, steps, this.motion), {
+        injector: this.injector,
+      });
     });
   }
 

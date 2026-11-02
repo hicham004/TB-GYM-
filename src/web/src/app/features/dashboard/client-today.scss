@@ -196,13 +196,26 @@ h1:focus {
   border: 2px dashed var(--color-border-control);
   border-radius: 50%;
 }
+// --done is the day's share of sessions done (0 to 100); --progress is the registered number
+// (_ui.scss) the gradient reads, so a change of --done sweeps the ring (motion plan W9).
 .today-week-ring.is-planned,
 .today-week-ring.is-done {
+  --progress: var(--done, 0);
   border: 0;
   background: conic-gradient(
-    var(--tb-accent-ink) var(--progress),
-    var(--color-border-subtle) var(--progress)
+    var(--tb-accent-ink) calc(var(--progress) * 1%),
+    var(--color-border-subtle) calc(var(--progress) * 1%)
   );
+}
+@media (prefers-reduced-motion: no-preference) {
+  :host-context(html:not([data-tb-motion='off'])) .today-week-ring.is-planned {
+    transition: --progress 600ms var(--tb-ease);
+  }
+  @starting-style {
+    :host-context(html:not([data-tb-motion='off'])) .today-week-ring.is-planned {
+      --progress: 0;
+    }
+  }
 }
 .today-week-ring.is-planned::before {
   content: '';

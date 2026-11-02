@@ -97,10 +97,11 @@ const CHIP_EASE = /* @__PURE__ */ linearEasing(backOut(4));
 
 /**
  * Plays the moment on the rendered rows: the done row springs from scale .96 (450 ms), its tick
- * draws from scale .4 and a turn of -30° (500 ms), the segment's bar grows to its new width with
- * `scaleX` (500 ms; never `width`), and a record pops its chip from scale .5 (550 ms) and bursts dots
+ * draws from scale .4 and a turn of -30° (500 ms), and a record pops its chip from scale .5 (550 ms) and bursts dots
  * from the chip's centre in a fixed, `aria-hidden` layer that leaves when the last dot has gone
- * (under 1.2 s). Nothing here blocks the next tap.
+ * (under 1.2 s). Nothing here blocks the next tap. The exercise's segment grows on its own: its
+ * bar is clipped to its share and the stylesheet transitions the clip (W9, today-training.scss), so
+ * this moment no longer scales it (it did until W9, which would have doubled the growth).
  */
 export function playSetMoment(host: HTMLElement, moment: SetMoment, motion: Motion): void {
   if (!motion.allowed(SET_MOMENT)) return;
@@ -116,14 +117,6 @@ export function playSetMoment(host: HTMLElement, moment: SetMoment, motion: Moti
         duration: 500,
         easing: TICK_EASE,
       });
-  }
-  const segment = moment.segment;
-  if (segment && segment.to > 0) {
-    const bar = host.querySelectorAll('.segments > span')[segment.index]?.firstElementChild;
-    bar?.animate([{ transform: `scaleX(${segment.from / segment.to})` }, { transform: 'none' }], {
-      duration: 500,
-      easing: EASE.out,
-    });
   }
   if (moment.record !== 'none' && row) {
     const chip = row.querySelector('.pr-badge');

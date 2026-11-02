@@ -707,6 +707,43 @@ is removed, and a changed answer becomes a new row.
 - **W8 · Nothing else was left out.** Typing indicators and optimistic sends stay out as the row says. Seen on
   the way: the composer's Send button keeps a 120 ms background transition of its own under reduced motion
   (`chat-composer.scss`, colour only, before this plan).
+- **W9 · The hand-off is left out.** Section 2's second part (the finish's Back to Today navigating with
+  router `info`, Today drawing the day as still planned and sweeping its ring to full, then the check popping
+  and the card settling) was not built: the first part filled the hour. Built: Back to Today rebuilds Today,
+  which rises as on any visit, with the day's ring drawn done at once and "n of 4 sessions done" as the server
+  says. The other way: a row of its own (about an hour: the router info, a two-step render under `coreDrawn`,
+  the sweep, the pop and the settle, a template database to film the finish again). Recommendation: a W9b row
+  after W14 if the runner has time before 14:00, else the Later list.
+- **W9 · The week's ring read a percentage against W1's number.** Seen on the way: Today bound `--progress`
+  as a percentage ("50%") while W1 registered it as a `<number>`, so since W1 a planned day with part of its
+  sessions done drew no progress (the demo's one-session days never showed it). Built: the day's share is
+  bound as a number (`--done`, 0 to 100) and the gradient reads `calc(var(--progress) * 1%)`, which is also
+  what lets the ring sweep. Recommendation: none needed; noted so the fix is known.
+- **W9 · The sweeps are the stylesheet's.** The rings and the bars sweep through CSS transitions (600 ms,
+  `--tb-ease`, `@starting-style` for the first paint), so they rest with reduced motion and `?motion=off`
+  (through `data-tb-motion` on `<html>`), while `tb-motion-off = W9` stops only Today's rise, as W6's dot.
+  The other way: a class each ring reads at construction, as W8's pills. Recommendation: keep as built.
+- **W9 · The bars are clipped, not sized, and W3's scaleX on them is gone.** Section 1 animates no width;
+  built: the bar is full width and `clip-path: inset()` shows its share (mirrored in right-to-left), and
+  W3's own scaleX on the segment (which grew the bar from its old width) is removed, since the two together
+  doubled the growth and would have shrunk the bar first on a second set. The other way: keep W3's scaleX
+  and no transition. Recommendation: keep as built.
+- **W9 · The meal plan's day rings at 600 ms.** They had a 200 ms transition on the attribute; built: the
+  same 600 ms sweep and draw-in as every other ring, so one change sweeps every ring in the app.
+  Recommendation: keep as built.
+- **W9 · The tiles rise beside the week when both land in one frame.** The week and the card rise in one
+  stagger and the tiles in another; live both land within the same frame, so Also today starts with the
+  week and the coach's card with the day's card, 50 ms later, rather than all four in one run. The other
+  way: one rise over both steps when they land together. Recommendation: keep as built; the difference is
+  100 ms.
+- **W9 · The first download: 513.38 kB before and after.** The ring's transition and the bars' clip
+  are component styles, Today's moment is in the dashboard chunk, and `_ui.scss` is untouched; the 520 kB
+  error budget holds; Today's component styles now pass the 5 kB warning by 106 bytes (5.11 kB, under the
+  8 kB limit, as nine other pages' styles already did). Recommendation: accept.
+- **W9 · Nothing else was left out.** A finished week's flare stays out as the row says, and Today's pixel
+  snapshots are unchanged (they run with reduced motion). An unstarted workout's bars are empty, so the
+  player's first paint draws nothing until a set is logged; a workout reopened with sets logged draws its
+  bars in.
 
 
 ## 4. The arc on the day
