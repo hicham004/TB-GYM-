@@ -80,9 +80,11 @@ else
     /app/efbundle
 fi
 
-# The API listens only inside the container; Render reaches it through nginx on port 10000.
+# The API listens only inside the container; Render reaches it through nginx on port 10000. Until launch it
+# also shows each waiting invitation's link to the coach, since this copy sends no email: the API alone,
+# because a link the Worker made would sit in the Worker's memory (docs/GO-LIVE.md, test copy step 5).
 unset ASPNETCORE_HTTP_PORTS
-ASPNETCORE_URLS=http://127.0.0.1:8080 dotnet /app/api/TB.Gym.Api.dll &
+ASPNETCORE_URLS=http://127.0.0.1:8080 TestCopy__ShowInvitationLinks=true dotnet /app/api/TB.Gym.Api.dll &
 api=$!
 trap 'kill -TERM $(jobs -p) 2>/dev/null; wait; exit 0' TERM INT
 

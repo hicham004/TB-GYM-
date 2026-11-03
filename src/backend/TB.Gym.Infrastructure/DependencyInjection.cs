@@ -249,7 +249,8 @@ public static class DependencyInjection
         services.AddActionMail(
             configuration,
             environment.IsProduction(),
-            environment.IsDevelopment());
+            environment.IsDevelopment(),
+            configuration.GetValue<bool>("TestCopy:ShowInvitationLinks"));
         // The public website (UI plan R6.2g): the Talk-to-us form and the settings the homepage reads.
         services.AddWebsite(configuration);
         services.AddOptions<MediaStorageOptions>()

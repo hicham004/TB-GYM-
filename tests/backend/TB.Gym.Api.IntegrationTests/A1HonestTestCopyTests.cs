@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,8 +24,9 @@ namespace TB.Gym.Api.IntegrationTests;
 /// <summary>
 /// Audit batch A1, an honest test copy: a deployment with email off says so wherever an answer would
 /// have promised an email (LOST-1); a Talk-to-us request waits for email instead of being
-/// dead-lettered, and the platform admin reads it meanwhile (BEB-1); and the bill names TB Gym's
-/// contacts while no Whish number is set (BILL-2).
+/// dead-lettered, and the platform admin reads it meanwhile (BEB-1); the bill names TB Gym's
+/// contacts while no Whish number is set (BILL-2); and, until launch, the copy shows a coach each
+/// waiting invitation's link to send themselves (TestCopy:ShowInvitationLinks).
 /// </summary>
 /// <remarks>
 /// "Email off" is a Production deployment with no provider, which composes no action-mail transport
@@ -35,6 +37,9 @@ namespace TB.Gym.Api.IntegrationTests;
 public sealed class A1HonestTestCopyTests
 {
     private const string ContactRequestsPath = "/api/platform-admin/contact-requests";
+
+    /// <summary>The copy's own address, as Render gives it to start.sh.</summary>
+    private const string TestCopyOrigin = "https://app.tbgym.test";
 
     private static readonly string Password = $"Aa1!{Guid.NewGuid():N}";
 
@@ -261,6 +266,56 @@ public sealed class A1HonestTestCopyTests
         Assert.AreEqual(JsonValueKind.Null, configured.GetProperty("whatsAppNumber").ValueKind);
     }
 
+    [TestMethod]
+    public async Task UntilLaunchTheTestCopyShowsACoachEachWaitingLinkAndTheClientJoinsWithIt()
+    {
+        // The copy as it ran before: a Production host with email off, where an invitation reaches nobody.
+        StartTestCopy(invitationLinks: false);
+        using var coach = CreateClient(TestCopyOrigin);
+        await RegisterConfirmedAndSignInAsync(coach, "a1-copy@example.test", "A1 Copy Gym");
+        var unseen = await InviteAsync(coach, "a1-unseen@example.test");
+        Assert.AreEqual(JsonValueKind.Null, unseen.GetProperty("developmentActionUrl").ValueKind);
+
+        // With the setting, the coach's answer and list carry the link.
+        factory!.Dispose();
+        StartTestCopy(invitationLinks: true);
+        using var owner = CreateClient(TestCopyOrigin);
+        await SignInAsync(owner, "a1-copy@example.test");
+        await UseOnlyWorkspaceAsync(owner);
+        var invited = await InviteAsync(owner, "a1-joins@example.test");
+        var link = invited.GetProperty("developmentActionUrl").GetString();
+        Assert.IsNotNull(link);
+        Assert.StartsWith($"{TestCopyOrigin}/invite?token=", link);
+        var listed = await owner.GetFromJsonAsync<JsonElement[]>("/api/invitations", TestContext.CancellationToken);
+        Assert.IsNotNull(listed);
+        Assert.AreEqual(
+            link,
+            listed.Single(item => item.GetProperty("email").GetString() == "a1-joins@example.test")
+                .GetProperty("developmentActionUrl").GetString());
+
+        // Nothing else changes: email still reads as off, and a new coach still gets no confirmation link.
+        using var visitor = CreateClient(TestCopyOrigin);
+        var status = await visitor.GetFromJsonAsync<JsonElement>("/api/system/status", TestContext.CancellationToken);
+        Assert.IsFalse(status.GetProperty("emailAvailable").GetBoolean());
+        var registration = await RegisterAsync(visitor, "a1-new-coach@example.test", "A1 New Gym");
+        Assert.AreEqual(HttpStatusCode.Accepted, registration.StatusCode, await registration.Content.ReadAsStringAsync());
+        var registered = await registration.Content.ReadFromJsonAsync<JsonElement>(TestContext.CancellationToken);
+        Assert.AreEqual(JsonValueKind.Null, registered.GetProperty("developmentConfirmationUrl").ValueKind);
+
+        // The client opens the link, chooses a password and is in; the link reached no log.
+        var token = QueryHelpers.ParseQuery(new Uri(link).Query)["token"].ToString();
+        using var client = CreateClient(TestCopyOrigin);
+        await RefreshCsrfAsync(client);
+        var accepted = await client.PostAsJsonAsync(
+            "/api/invitations/accept",
+            new { token, displayName = "Joins Here", password = Password },
+            TestContext.CancellationToken);
+        Assert.AreEqual(HttpStatusCode.OK, accepted.StatusCode, await accepted.Content.ReadAsStringAsync());
+        var joined = await accepted.Content.ReadFromJsonAsync<JsonElement>(TestContext.CancellationToken);
+        Assert.IsTrue(joined.GetProperty("signedIn").GetBoolean());
+        Assert.DoesNotContain(token, Log.Text);
+    }
+
     // ---------- the host ----------
 
     /// <summary>Starts a host on this test's database; the clock carries over from an earlier host.</summary>
@@ -321,6 +376,51 @@ public sealed class A1HonestTestCopyTests
         });
     }
 
+    /// <summary>
+    /// Starts a Production host set up as docker/test-copy/start.sh sets up the copy's API, on this test's
+    /// database: email, photos and AI off, and no platform invoices.
+    /// </summary>
+    private void StartTestCopy(bool invitationLinks)
+    {
+        var testClock = clock ??= new MutableClock(StartInstant);
+        var capturedLog = log ??= new CapturedLog();
+        var settings = new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:Database"] = databaseConnection,
+            ["Database:ApplyMigrationsOnStartup"] = "false",
+            ["Seed:Enabled"] = "false",
+            ["Application:PublicBaseUrl"] = TestCopyOrigin,
+            ["Application:PublicOriginAllowlist:0"] = TestCopyOrigin,
+            ["Messaging:Realtime:AllowedOrigins:0"] = TestCopyOrigin,
+            ["Messaging:Realtime:ScaleOut"] = "SingleProcess",
+            ["Messaging:Realtime:ApiReplicaCount"] = "1",
+            ["DataProtection:KeyPath"] = Path.Combine(Path.GetTempPath(), databaseName!, "keys"),
+            ["Notifications:Email:Enabled"] = "false",
+            ["Notifications:Email:Adapter"] = "None",
+            ["Media:StorageAdapter"] = "None",
+            ["Media:ScannerAdapter"] = "None",
+            ["Nutrition:Anthropic:Enabled"] = "false",
+            ["PlatformBilling:SweepEnabled"] = "false",
+            ["TestCopy:ShowInvitationLinks"] = invitationLinks ? "true" : "false",
+        };
+        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            foreach (var (key, value) in settings)
+            {
+                builder.UseSetting(key, value);
+            }
+
+            builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(settings));
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IClock>();
+                services.AddSingleton<IClock>(testClock);
+                services.AddSingleton<ILoggerProvider>(capturedLog);
+            });
+        });
+    }
+
     private WebApplicationFactory<Program> RequiredFactory =>
         factory ?? throw new InvalidOperationException("The test application is not initialized.");
 
@@ -328,11 +428,11 @@ public sealed class A1HonestTestCopyTests
 
     private CapturedLog Log => log ?? throw new InvalidOperationException("The log capture is not initialized.");
 
-    private HttpClient CreateClient() => RequiredFactory.CreateClient(new WebApplicationFactoryClientOptions
+    private HttpClient CreateClient(string origin = "http://localhost") => RequiredFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         AllowAutoRedirect = false,
         HandleCookies = true,
-        BaseAddress = new Uri("http://localhost"),
+        BaseAddress = new Uri(origin),
     });
 
     // ---------- accounts ----------
@@ -397,6 +497,17 @@ public sealed class A1HonestTestCopyTests
     {
         await RefreshCsrfAsync(client);
         return await client.PostAsJsonAsync("/api/auth/forgot-password", new { email }, TestContext.CancellationToken);
+    }
+
+    private async Task<JsonElement> InviteAsync(HttpClient coach, string email)
+    {
+        await RefreshCsrfAsync(coach);
+        var response = await coach.PostAsJsonAsync(
+            "/api/invitations",
+            new { email, firstName = "Rana", lastName = "Haddad", phoneNumber = (string?)null, birthDate = (string?)null },
+            TestContext.CancellationToken);
+        Assert.AreEqual(HttpStatusCode.Created, response.StatusCode, await response.Content.ReadAsStringAsync());
+        return await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.CancellationToken);
     }
 
     private static async Task RefreshCsrfAsync(HttpClient client)

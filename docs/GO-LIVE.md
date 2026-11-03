@@ -115,8 +115,8 @@ web container after changing any of the three. Write the privacy note yourself; 
 `render.yaml` puts a copy of the app on Render, so a few people can try it from a link. It is not
 the launch and needs none of the steps above. Email, photo uploads, AI and platform invoices are
 off. The screens say email is off where they would promise one: someone who registers there cannot
-confirm the account, so share the demo sign-ins instead; invitations reach nobody; and a Talk-to-us
-request waits on the platform admin page. The app runs on half a CPU for $7 a month, billed by the second; its database is free, and
+confirm the account, so share the demo sign-ins instead; an invitation goes by a link the coach
+copies (step 5); and a Talk-to-us request waits on the platform admin page. The app runs on half a CPU for $7 a month, billed by the second; its database is free, and
 Render deletes it 30 days after creating it, with 14 days' grace. Render's free plan for the app
 also works, but it sleeps after 15 minutes without visitors, the next visit waits about two minutes,
 and pages take 4-15 seconds instead of about one.
@@ -134,3 +134,9 @@ and pages take 4-15 seconds instead of about one.
 4. Once it runs a build with the command, fill in the older video titles: in Render open tb-gym-test >
    Shell and run `bash /app/start.sh video-titles`. It prints how many links it filled, and a second
    run changes nothing. The script is what holds the copy's settings, so the command goes through it.
+5. **Until launch, Invitations shows each waiting person's link** ("Open local link"), since the copy
+   sends no email: right-click it, Copy link address, and send it on WhatsApp. Opened in the coach's own
+   browser, the page asks to sign out first. A deploy or restart forgets the links: press Send again for a
+   new one. Someone who joins this way never proved the email address is theirs, so this stays on the
+   copy alone: before launch, delete `TestCopy__ShowInvitationLinks` from `docker/test-copy/start.sh` and
+   the branch it turns on in `AddActionMail` (`src/backend/TB.Gym.Infrastructure/WorkerDependencyInjection.cs`).

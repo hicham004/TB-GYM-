@@ -199,7 +199,8 @@ public static class WorkerDependencyInjection
         this IServiceCollection services,
         IConfiguration configuration,
         bool isProduction,
-        bool isDevelopment)
+        bool isDevelopment,
+        bool testCopyInvitationLinks = false)
     {
         var email = new NotificationEmailOptions();
         configuration.GetSection(NotificationEmailOptions.SectionName).Bind(email);
@@ -249,6 +250,17 @@ public static class WorkerDependencyInjection
             services.TryAddSingleton<CapturedActionEmailTransport>();
             services.TryAddSingleton<IActionEmailTransport>(provider =>
                 provider.GetRequiredService<CapturedActionEmailTransport>());
+        }
+        else if (valid && testCopyInvitationLinks)
+        {
+            // The Render test copy until launch (docker/test-copy/start.sh, its API alone): it sends no
+            // email, so a coach copies a waiting invitation's link from Invitations and sends it
+            // themselves. Only invitations capture, so every other answer still says email is off; the
+            // links live in this process's memory, so after a restart a coach presses Send again.
+            services.TryAddSingleton<CapturedActionEmailTransport>();
+            services.TryAddScoped(provider => ActivatorUtilities.CreateInstance<InvitationActionMailService>(
+                provider,
+                provider.GetRequiredService<CapturedActionEmailTransport>()));
         }
 
         services.TryAddScoped<InvitationMailAuthorizationService>();
