@@ -109,13 +109,14 @@ h2 {
   text-decoration: none;
 }
 
-.rows .name::after {
+// Only a link: a plain-text name stretched over its row would swallow presses on the row's links.
+.rows a.name::after {
   content: '';
   inset: 0;
   position: absolute;
 }
 
-.rows .name:hover {
+.rows a.name:hover {
   text-decoration: underline;
 }
 

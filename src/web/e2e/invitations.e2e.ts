@@ -27,13 +27,18 @@ interface Writes {
 async function openInvitations(
   page: Page,
   width: number,
-  options: { dark?: boolean; empty?: boolean; refuse?: boolean } = {},
+  options: {
+    dark?: boolean;
+    empty?: boolean;
+    refuse?: boolean;
+    invitations?: ClientInvitation[];
+  } = {},
 ) {
   await page.clock.setFixedTime(new Date(NOW));
   await page.emulateMedia({ colorScheme: options.dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: 900 });
   const writes: Writes = { created: [], resent: [], revoked: [] };
-  let list: ClientInvitation[] = options.empty ? [] : atlasInvitations();
+  let list: ClientInvitation[] = options.invitations ?? (options.empty ? [] : atlasInvitations());
   await mockSession(page, {
     extra: {
       'GET /api/auth/csrf': (route) => json(route, 200, { token: 'e2e-csrf' }),
@@ -244,6 +249,19 @@ test('a new link and a cancellation each say what they do', async ({ page }) => 
   await expect(page.getByText('The invitation for Karl Bou Saab was cancelled.')).toBeVisible();
   expect(writes.revoked).toEqual([{ version: 3 }]);
   await expect(page.locator('[data-waiting] .name')).toHaveText(['Rana Haddad']);
+});
+
+test('a development server’s local link opens the invitation page', async ({ page, baseURL }) => {
+  // The name is text here, not a link stretched over its row, so nothing may cover the link.
+  const link = new URL('/invite?token=e2e-link', baseURL).href;
+  await openInvitations(page, 1440, { invitations: [invitation({ developmentActionUrl: link })] });
+  await page.route(
+    (url) => url.pathname === '/invite',
+    (route) => route.fulfill({ contentType: 'text/html', body: '<title>Invitation</title>' }),
+  );
+
+  await page.getByRole('link', { name: 'Open local link' }).click();
+  await expect(page).toHaveURL(link);
 });
 
 test('inviting again fills in the person whose link ran out', async ({ page }) => {
