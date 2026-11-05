@@ -182,6 +182,8 @@ test('the app takes the pre-rendered page over in place: same headline, no launc
   page,
 }) => {
   await mockSignedOut(page);
+  // The configs run with reduced motion since the motion plan's W1; this test needs the story moving.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   // Before any script runs: mark the headline the HTML arrived with, and watch for a launch screen.
   await page.addInitScript(() => {
     const seen = { launchScreen: false };
