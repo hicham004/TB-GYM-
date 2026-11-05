@@ -3,7 +3,10 @@
 Runs a plan's status table unattended: one fresh Claude chat per row.
 
 .DESCRIPTION
--Plan motion (the default since 2026-11-02) runs the rows in section 0 of
+-Plan notes (the default since 2026-11-05) runs the Open rows in section 0 of
+docs/NOTES-PLAN-2026-11.md, the builds the two owners decided on 2026-11-05 from the plan for
+the owner's notes of 2026-11-03, each chat with ultracode on (the owner's word that evening);
+-Plan motion runs the rows in section 0 of
 docs/MOTION-PLAN-2026-11.md, the motion and play the owner asked for on 2026-11-01 (its W rows
 run on Fable, the owner's word that night); -Plan critique runs the rows in section 0 of
 docs/CRITIQUE-FIXES-2026-10.md, the fixes from Toufic's critique (2026-10-27); -Plan audit runs
@@ -48,8 +51,8 @@ with its context, instead of refusing to start on the changed tree.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('audit', 'ui', 'critique', 'motion')]
-    [string]$Plan = 'motion',
+    [ValidateSet('audit', 'ui', 'critique', 'motion', 'notes')]
+    [string]$Plan = 'notes',
     # A clock time such as 08:00: no step starts after its next occurrence (empty: no limit).
     [string]$NoNewStepAfter = '',
     # The session id of a chat a limit stopped: the first step resumes it, its changes still in the tree.
@@ -78,7 +81,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$planFiles = @{ audit = 'docs\FULL-AUDIT-2026-10.md'; ui = 'docs\UI-REDESIGN-PLAN.md'; critique = 'docs\CRITIQUE-FIXES-2026-10.md'; motion = 'docs\MOTION-PLAN-2026-11.md' }
+$planFiles = @{ audit = 'docs\FULL-AUDIT-2026-10.md'; ui = 'docs\UI-REDESIGN-PLAN.md'; critique = 'docs\CRITIQUE-FIXES-2026-10.md'; motion = 'docs\MOTION-PLAN-2026-11.md'; notes = 'docs\NOTES-PLAN-2026-11.md' }
 $planPath = Join-Path $repositoryRoot $planFiles[$Plan]
 $logDir = Join-Path $repositoryRoot 'artifacts\plan-runner'
 $stopFile = Join-Path $logDir 'STOP'
@@ -243,6 +246,53 @@ The owner's decisions for this run (2026-11-01, "go"):
 - Where a row changes a rule or a motion layer, update docs/UI-REDESIGN-PLAN.md in a few
   lines, as AGENTS.md asks.
 '@
+    notes = @'
+Read docs/NOTES-PLAN-2026-11.md and do the next step: the first row of its section 0
+status table that is Open, passing over rows marked "Waits" or "Open, not blocking". Build
+it as section 2 describes that row, under the rules of section 1.
+
+This chat runs unattended. scripts/plan-runner.ps1 started it, and nobody will see or
+answer anything until it has finished. The runner expects the next step to be <<ROW>>.
+If section 0 gives a different row, change nothing and say why.
+
+ultracode: the owner asked for every row of this plan to be built with ultracode on
+(2026-11-05). Use the Workflow tool as the workflow-authoring skill's Ultracode section
+says: understand the area with parallel readers, build, then review your own diff
+adversarially before the checks. Solo only for trivial edits.
+
+Traps on this laptop (your memory notes have more):
+- A full backend suite started between 00:00 and 01:00 Beirut time fails R34a and R25b
+  on the day boundary: start it after 01:00 or rerun those two alone. The known flakes
+  (the rate-limit test, the Redis-outage SignalR test, the Step3Renewal double tap) pass
+  when rerun alone.
+- The live pass runs against a fresh demo in a throwaway database of your own
+  (ConnectionStrings__Database pointed at it), never against the owner's own API
+  (port 5134), web (port 4200) or the tbgym and tbgym_demo databases. Never drop a
+  database you did not create; name yours in your report.
+- The owner's bin/Debug may be locked: build and run Release or a scratch output of your
+  own for the API you start.
+- The first download has a 520 kB error budget (510 kB warning): measure it before and
+  after a web change and name both numbers.
+
+The owner's decisions for this run (2026-11-05, "start building what's decided"):
+- The rows follow the decisions the two owners recorded on 5 November; section 2 names
+  each row's decisions. The row's third column is the owner's word; an item it leaves out
+  is not built. A row marked "Waits" is not yours: the owner opens it.
+- Never stop the run for a decision. A technical question is yours (AGENTS.md). A product
+  choice the row and the docs do not settle (words, layout, a default, an edge case):
+  build the default the row names, or the way closest to the owner's earlier choices, and
+  add a line to section 3, "Waiting for the owner" (the row, the question, what you
+  built, the other way, your recommendation). A new money rule, legal wording or work
+  outside the row: leave that item out, add it to section 3 with your recommendation, and
+  build the rest of the row. The row's status says how many lines you added to section 3.
+- The full backend suite runs on this laptop before you commit whenever you changed
+  server code: scripts/TestPostgres.ps1 with a container name of your own, about 1 h 30.
+  A failure an earlier row left is fixed first, in its own commit, and named in your report.
+- A row too big to finish well in one chat: split it into parts (N4a, N4b), each with
+  its scope, build and commit the first, and leave the others Open for the next chat.
+- Where a row changes a rule, update DOMAIN-RULES, the ADR or ARCHITECTURE in a few
+  lines, as AGENTS.md asks.
+'@
 }
 
 $sharedRules = @'
@@ -369,10 +419,11 @@ function Get-PlanRows {
     }
 }
 
-# The first row that is not Done; a gate the owner marked "not blocking" is passed over.
+# The first row that is not Done; a gate the owner marked "not blocking" and a row that "Waits" on a
+# decision (the notes plan, 2026-11-05) are passed over.
 function Get-NextRow {
     foreach ($row in @(Get-PlanRows)) {
-        if ($row.Status -like 'Done*' -or $row.Status -like 'Open, not blocking*') { continue }
+        if ($row.Status -like 'Done*' -or $row.Status -like 'Open, not blocking*' -or $row.Status -like 'Waits*') { continue }
         return $row
     }
 }
