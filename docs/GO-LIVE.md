@@ -97,7 +97,10 @@ request is also kept in the database, so nothing is lost if an email bounces. Gi
 For visitor counts without cookies or a banner, open a Plausible account (plausible.io, paid after a
 trial), add the site under its domain, and copy the file name of the site's script from Site
 settings > Site installation (it looks like `pa-AbC123.js`) into `TB_GYM_ANALYTICS_SCRIPT`; the
-script and its events pass through this domain, so nothing third-party loads. Restart the API and the
+script and its events pass through this domain, so nothing third-party loads. The numbers are people
+on the website's two pages, the homepage and What changed, none of them signed in: no page of the
+app is counted, and the outbound-link, file and form tracking Plausible ticks for a new site stay off
+in the browser. Restart the API and the
 web container after changing any of the three. Write the privacy note yourself; the code holds none.
 
 - **Update**: `cd /opt/tbgym && tb exec backup backup.sh && git pull && tb up -d --build`.

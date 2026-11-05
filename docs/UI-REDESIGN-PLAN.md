@@ -1591,9 +1591,9 @@ Tokens are theme-ready from R1, so this costs little later.
 - Built in R6.2g: `home-talk`, the Talk-to-us form between the audience split and the finale (the
   hero's and finale's quiet links and the gym story's button lead to it), on a new backend module,
   `TB.Gym.Modules.Website` (ADR 0037). `core/website/` holds `WebsiteSettingsStore` (the WhatsApp
-  link and the analytics script, asked for once per visit in the browser by the homepage and the
-  changelog) and `WebsiteAnalytics` (Plausible from this origin, through nginx's `/stats/`, no inline
-  script). The pre-rendered homepage holds the form and never the script; `check-prerender.mjs`
+  link and the analytics script, asked for once per visit in the browser by the homepage and, for a
+  visitor, the changelog) and `WebsiteAnalytics` (Plausible from this origin, through nginx's
+  `/stats/`, no inline script, counting those two pages alone since notes plan N1). The pre-rendered homepage holds the form and never the script; `check-prerender.mjs`
   and the `built` project check both.
 - **Retire:** the pre-foundation palette and globals in `styles.scss`, the `--accent/--surface`
   legacy variables, and every browser-default button. The migration is finished when a lint check

@@ -1121,12 +1121,21 @@ the audience split and the finale; the hero's and finale's quiet links and the g
 lead to it. The form asks `GET /api/website/contact-form` for a server-signed stamp when it scrolls
 into view (or on the first touch), refreshes the antiforgery token and posts
 `POST /api/website/contact-requests`; sent back inside three seconds it waits out the rest and tries
-once more, and with a stamp the server no longer takes it fetches a fresh one, once. Both pre-rendered
-pages ask `GET /api/website/settings` once they are live (`WebsiteSettingsStore`, browser only): a
-WhatsApp number becomes a `wa.me` link beside the form, and a named Plausible site script makes
-`WebsiteAnalytics` write Plausible's queue stub from the bundle (the CSP allows no inline script)
-and add one `<script>` from `/stats/`, which nginx proxies to plausible.io together with the events
-endpoint, so the page connects to nothing but its own origin and sets no cookie. The build-time
+once more, and with a stamp the server no longer takes it fetches a fresh one, once. The homepage, and
+What changed for a visitor once the session has answered, ask `GET /api/website/settings` once they
+are live (`WebsiteSettingsStore`, browser only): a WhatsApp number becomes a `wa.me` link beside
+the form, and a named Plausible site script makes `WebsiteAnalytics` write Plausible's queue stub
+from the bundle (the CSP allows no inline script) and add one `<script>` from `/stats/`, which
+nginx proxies to plausible.io together with the events endpoint, so the page connects to nothing
+but its own origin and sets no cookie. Since notes plan N1 the script counts nothing on its own
+(`autoCapturePageviews` and the three tracks a new Plausible site switches on are off in `init`):
+`Home`, at `/` alone, and `Changelog`, for a visitor, each call `WebsiteAnalytics.pageview()` once
+per opening, which keeps the script's own two rules (a page opened out of sight counts when first
+shown, and a return from the back/forward cache counts again); `transformRequest` drops any event
+but a page view of those two addresses (`COUNTED_PAGES`) and sends its path and campaign tags alone;
+and a counted page that closes tells the script of a page the hook drops, which ends its time on
+page (Plausible sends that without the hook). So the numbers are people on the website's two pages,
+nobody signed in. The build-time
 render asks for nothing, so the finished HTML holds the form and never the script
 (`check-prerender.mjs` checks both). `e2e/support.ts`'s `mockSignedOut` answers the settings
 with neither configured. Since R6.2j the band, the form and the finale are one dark ending, and the

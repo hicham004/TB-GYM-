@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { signal, type DestroyRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { query, settle } from '../../../testing/dom';
 import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
+import { WebsiteAnalytics } from '../../core/website/website-analytics';
 import { WebsiteSettingsStore } from '../../core/website/website-settings';
 import { Home } from './home';
 import { HomeMotion, type HomeMotionState, type HomeMotionTargets } from './home-motion';
@@ -73,6 +74,9 @@ function fakeMotion() {
 
 async function render() {
   const motion = fakeMotion();
+  const closed = vi.fn();
+  // The count's end comes with the page's own DestroyRef: the double notes when that page closes.
+  const analytics = { pageview: vi.fn((page: DestroyRef) => void page.onDestroy(closed)) };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
@@ -83,6 +87,7 @@ async function render() {
         provide: WebsiteSettingsStore,
         useValue: { whatsAppLink: signal(null), load: vi.fn(() => Promise.resolve()) },
       },
+      { provide: WebsiteAnalytics, useValue: analytics },
     ],
   });
   TestBed.overrideComponent(Home, {
@@ -90,8 +95,17 @@ async function render() {
   });
   const fixture = TestBed.createComponent(Home);
   const startedBeforeRender = motion.start.mock.calls.length;
+  const countedBeforeRender = analytics.pageview.mock.calls.length;
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, motion, startedBeforeRender };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    motion,
+    startedBeforeRender,
+    analytics,
+    countedBeforeRender,
+    closed,
+  };
 }
 
 /** What the header shows: the tone it takes and the section its links mark. */
@@ -132,6 +146,26 @@ describe('Home', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    history.replaceState(null, '', '/');
+  });
+
+  it('counts the visit once it is drawn in the browser, at the homepage’s address, until the page closes', async () => {
+    const { fixture, analytics, countedBeforeRender, closed } = await render();
+    expect(countedBeforeRender).toBe(0);
+    expect(analytics.pageview).toHaveBeenCalledTimes(1);
+
+    await settle(fixture);
+    expect(analytics.pageview).toHaveBeenCalledTimes(1);
+    expect(closed).not.toHaveBeenCalled();
+    fixture.destroy();
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts nothing when the same page opens at another address', async () => {
+    history.replaceState(null, '', '/about');
+    const { analytics } = await render();
+
+    expect(analytics.pageview).not.toHaveBeenCalled();
   });
 
   it('puts the header and every section in reading order, after a skip link to the content', async () => {

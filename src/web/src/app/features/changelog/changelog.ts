@@ -3,12 +3,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   LOCALE_ID,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import changelogMarkdown from '../../../content/changelog.md';
 import { AuthStore } from '../../core/auth/auth.store';
+import { WebsiteAnalytics } from '../../core/website/website-analytics';
 import { WebsiteSettingsStore } from '../../core/website/website-settings';
 import { formatChangeDate, parseChangelog } from '../home/changelog-parser';
 import { preloadHomeFaces } from '../home/home-faces';
@@ -18,7 +20,8 @@ import { HomeHeader } from '../home/home-header';
  * What changed (UI plan R6.2f): every change a coach or a client can see, newest first, from
  * `src/content/changelog.md` at build time. The page is rendered ahead of time like the homepage,
  * so it is finished HTML with no request behind it. A signed-in person can open it too: the app's
- * own shell is around the page then, so the website's header and foot stay out of the way.
+ * own shell is around the page then, so the website's header and foot stay out of the way, and
+ * nothing is counted.
  */
 @Component({
   selector: 'app-changelog',
@@ -36,9 +39,18 @@ export class Changelog {
 
   constructor() {
     preloadHomeFaces();
-    // The website's settings (R6.2g): analytics on this page too, once the browser has it.
+    // The website's settings (R6.2g) and the visit's one count (notes plan N1) are a visitor's alone,
+    // decided once the session has answered: after a full load the check may still be on its way.
     const settings = inject(WebsiteSettingsStore);
-    afterNextRender(() => void settings.load());
+    const analytics = inject(WebsiteAnalytics);
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      void this.auth.initialize().then(() => {
+        if (destroyRef.destroyed || this.signedIn()) return;
+        void settings.load();
+        analytics.pageview(destroyRef);
+      });
+    });
   }
 
   protected date(value: string): string {

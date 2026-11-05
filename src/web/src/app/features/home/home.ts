@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -8,6 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { WebsiteAnalytics } from '../../core/website/website-analytics';
 import { preloadHomeFaces } from './home-faces';
 import { HomeFinale } from './home-finale';
 import { HomeHeader, type HeaderTone, type HomeSection } from './home-header';
@@ -22,8 +24,8 @@ import { HomeWho } from './home-who';
  * The public homepage (UI plan R6.2f): the hero, the week in four stages, six feature rows, the
  * strip for clients, the product facts, who it is for, Talk to us (R6.2g), and the finale. It is
  * rendered at build time (R6.2a), so everything here is in the HTML Google and link previews read;
- * only the motion (`HomeMotion`, on a wide screen), the header's tone and section mark, and the
- * website's settings (the WhatsApp link, analytics) wait for the browser.
+ * only the motion (`HomeMotion`, on a wide screen), the header's tone and section mark, the
+ * website's settings (the WhatsApp link, analytics) and the visit's one count wait for the browser.
  */
 @Component({
   selector: 'app-home',
@@ -35,6 +37,8 @@ import { HomeWho } from './home-who';
 })
 export class Home {
   private readonly motion = inject(HomeMotion);
+  private readonly analytics = inject(WebsiteAnalytics);
+  private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly header = viewChild.required(HomeHeader);
@@ -61,6 +65,10 @@ export class Home {
     this.destroyRef.onDestroy(() => this.motion.stop());
     afterNextRender(() => {
       this.live.set(true);
+      // One count per opening (notes plan N1), at the homepage's own address alone, so another
+      // address for this page counts nothing; publicHomeGuard lets only a visitor in. A section link
+      // reuses this page, so a fragment counts nothing more.
+      if (this.document.location.pathname === '/') this.analytics.pageview(this.destroyRef);
       this.watchTone();
       void this.motion.start({
         ...this.week().motionTargets(),

@@ -1,9 +1,15 @@
 import AxeBuilder from '@axe-core/playwright';
+import type { Page, Route } from '@playwright/test';
+import { clientListView } from '../src/testing/client-list-fixtures';
+import { COACH_NOW, emptyCoachTodayView, OWNER_ID } from '../src/testing/coach-today-fixtures';
 import {
   expect,
   expectNoHorizontalOverflow,
   json,
+  mockSession,
   mockSignedOut,
+  OWNER_MEMBERSHIP,
+  SIGNED_IN_USER,
   test,
   waitForFonts,
 } from './support';
@@ -618,26 +624,113 @@ test('with a number configured the WhatsApp link appears beside the form, and no
   expect(await page.locator('script[data-analytics]').count()).toBe(0);
 });
 
-test('analytics loads from this origin only when the deployment names its script, and never before the settings', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+/**
+ * A stand-in for Plausible's site script, doing what its code does in the ways the counting rule
+ * depends on (notes plan N1): it reads the stub's options (`o`), then replays its queue (`q`); unless
+ * told `autoCapturePageviews: false` it counts the page at once and on every address change the app
+ * makes; every event goes through `transformRequest`, and a page view it drops ends the time on page;
+ * that time (`engagement`) skips `transformRequest` and goes out for the last page counted when the
+ * tab is hidden or loses focus and before the next page view. It always sends that time, where the
+ * real script waits for three seconds or a scroll. It notes every call and every event it sends.
+ */
+const PLAUSIBLE_STAND_IN = `(() => {
+  const stub = window.plausible || {};
+  const options = stub.o;
+  if (!options) return;
+  const queued = (stub.q || []).map((args) => Array.from(args));
+  window.__plausibleSeen = {
+    endpoint: options.endpoint,
+    autoCapturePageviews: options.autoCapturePageviews,
+    outboundLinks: options.outboundLinks,
+    fileDownloads: options.fileDownloads,
+    formSubmissions: options.formSubmissions,
+    logging: options.logging,
+    transformRequest: typeof options.transformRequest,
+    queued,
+  };
+  const calls = (window.__plausibleCalls = []);
+  const sent = (window.__plausibleSent = []);
+  let counted = null;
+  let ignored = false;
+  const send = (payload) => {
+    sent.push({ n: payload.n, u: new URL(payload.u).pathname, on: location.pathname });
+    fetch(options.endpoint, { method: 'POST', body: JSON.stringify(payload), keepalive: true });
+  };
+  const engagement = () => {
+    if (counted !== null && !ignored) send({ n: 'engagement', u: counted });
+  };
+  const track = (name, extra) => {
+    calls.push([name, extra || null]);
+    if (name === 'pageview') engagement();
+    let payload = { n: name, u: (extra && (extra.u || extra.url)) || location.href, r: document.referrer || null };
+    if (typeof options.transformRequest === 'function') payload = options.transformRequest(payload);
+    if (!payload) {
+      if (name === 'pageview') ignored = true;
+      return;
+    }
+    if (name === 'pageview') {
+      counted = payload.u;
+      ignored = false;
+    }
+    send(payload);
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') engagement();
+  });
+  window.addEventListener('blur', engagement);
+  if (options.autoCapturePageviews !== false) {
+    const pushState = history.pushState;
+    history.pushState = function () {
+      pushState.apply(this, arguments);
+      track('pageview');
+    };
+    window.addEventListener('popstate', () => track('pageview'));
+    track('pageview');
+  }
+  for (const args of queued) track(...args);
+  window.plausible = track;
+})();`;
+
+const ANALYTICS_ON = { whatsAppNumber: null, analytics: { script: 'pa-e2e.js' } };
+
+interface PlausibleSeen {
+  readonly __plausibleSeen?: Record<string, unknown>;
+  readonly __plausibleCalls?: unknown[][];
+  readonly __plausibleSent?: { n: string; u: string; on: string }[];
+}
+
+/**
+ * Plausible's script and events on this origin, as nginx serves them: the stand-in above at
+ * /stats/pa-e2e.js and an endpoint that takes every event. Notes every /stats/ request, every
+ * request to another origin and every read of the website's settings.
+ */
+async function serveAnalytics(page: Page) {
   const requests: string[] = [];
+  const settingsReads: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.origin !== 'http://127.0.0.1:4300') requests.push(url.href);
     if (url.pathname.startsWith('/stats/')) requests.push(url.pathname);
+    if (url.pathname === '/api/website/settings') settingsReads.push(new URL(page.url()).pathname);
   });
   await page.route('**/stats/pa-e2e.js', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'text/javascript',
-      body: 'window.__plausibleSeen = { endpoint: window.plausible.o.endpoint, queued: window.plausible.q || [] };',
-    }),
+    route.fulfill({ status: 200, contentType: 'text/javascript', body: PLAUSIBLE_STAND_IN }),
   );
+  await page.route('**/stats/event', (route) =>
+    route.fulfill({ status: 202, contentType: 'text/plain', body: 'ok' }),
+  );
+  const seen = <K extends keyof PlausibleSeen>(key: K) =>
+    page.evaluate((name) => (window as unknown as PlausibleSeen)[name], key);
+  return { requests, settingsReads, seen };
+}
+
+test('analytics loads from this origin only when the deployment names its script, and never before the settings', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const analytics = await serveAnalytics(page);
   await mockSignedOut(page, {
-    'GET /api/website/settings': (route) =>
-      json(route, 200, { whatsAppNumber: null, analytics: { script: 'pa-e2e.js' } }),
+    'GET /api/website/settings': (route) => json(route, 200, ANALYTICS_ON),
   });
   await page.goto('/');
   await waitForFonts(page);
@@ -645,13 +738,184 @@ test('analytics loads from this origin only when the deployment names its script
   const script = page.locator('script[data-analytics]');
   await expect(script).toHaveCount(1);
   await expect(script).toHaveAttribute('src', '/stats/pa-e2e.js');
+  // The script counts nothing on its own; the homepage's one count waited for it in the queue.
   await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as unknown as { __plausibleSeen?: { endpoint: string } }).__plausibleSeen,
-      ),
-    )
-    .toEqual({ endpoint: '/stats/event', queued: [] });
-  // Everything the page asked for came from its own origin; the proxied script is the one /stats/ request.
-  expect(requests).toEqual(['/stats/pa-e2e.js']);
+    .poll(() => analytics.seen('__plausibleSeen'))
+    .toEqual({
+      endpoint: '/stats/event',
+      autoCapturePageviews: false,
+      outboundLinks: false,
+      fileDownloads: false,
+      formSubmissions: false,
+      logging: false,
+      transformRequest: 'function',
+      queued: [['pageview', { url: 'http://127.0.0.1:4300/' }]],
+    });
+  expect(await analytics.seen('__plausibleSent')).toEqual([{ n: 'pageview', u: '/', on: '/' }]);
+
+  // A section link stays on the page: no second count.
+  await page.locator('app-home-header nav').getByRole('link', { name: 'The week' }).click();
+  await expect(page).toHaveURL(/\/#week$/);
+  expect(await analytics.seen('__plausibleSent')).toEqual([{ n: 'pageview', u: '/', on: '/' }]);
+  // Everything the page asked for came from its own origin: the proxied script and its one event.
+  await expect.poll(() => analytics.requests).toEqual(['/stats/pa-e2e.js', '/stats/event']);
+});
+
+test.describe('the visitor count (notes plan N1)', () => {
+  const owner = { ...SIGNED_IN_USER, id: OWNER_ID, displayName: 'Karim Haddad' };
+  const workspace = {
+    id: OWNER_MEMBERSHIP.tenantId,
+    name: 'Atlas Performance',
+    slug: 'atlas-performance',
+    timeZoneId: 'Asia/Beirut',
+    defaultCulture: 'en-LB',
+    defaultCurrencyCode: 'USD',
+    weekStartsOn: 'Monday',
+    currentDate: COACH_NOW.slice(0, 10),
+    version: 1,
+    brandColor: null,
+    accentColor: null,
+    logoAssetId: null,
+  };
+
+  test('a visitor who signs in from the homepage is counted once, on the homepage, and nothing is sent from the app', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const analytics = await serveAnalytics(page);
+    let signedIn = false;
+    await mockSession(page, {
+      memberships: [OWNER_MEMBERSHIP],
+      user: owner,
+      extra: {
+        'GET /api/auth/me': (route: Route) => json(route, 200, signedIn ? owner : null),
+        'POST /api/auth/login': (route: Route) => {
+          signedIn = true;
+          return json(route, 200, owner);
+        },
+        'GET /api/website/settings': (route: Route) => json(route, 200, ANALYTICS_ON),
+        'GET /api/website/contact-form': (route: Route) => json(route, 200, { stamp: 'e2e-stamp' }),
+        'GET /api/coach-today': (route: Route) => json(route, 200, emptyCoachTodayView()),
+        'GET /api/clients/overview': (route: Route) => json(route, 200, clientListView()),
+        'GET /api/clients/former': (route: Route) => json(route, 200, []),
+        'GET /api/workspace': (route: Route) => json(route, 200, workspace),
+      },
+    });
+    await page.goto('/');
+    await waitForFonts(page);
+    await expect
+      .poll(() => analytics.seen('__plausibleSent'))
+      .toEqual([{ n: 'pageview', u: '/', on: '/' }]);
+
+    await page.locator('app-home-header nav').getByRole('link', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(/\/auth\/sign-in$/);
+    // The homepage closed, so its time on page went out with it; then the script was told of a
+    // page it must not count, which ends that time.
+    const closed = [
+      { n: 'pageview', u: '/', on: '/' },
+      { n: 'engagement', u: '/', on: '/auth/sign-in' },
+    ];
+    expect(await analytics.seen('__plausibleSent')).toEqual(closed);
+
+    await page.getByLabel('Email').fill('karim@atlas.example');
+    await page.getByLabel('Password', { exact: true }).fill('a-good-password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL('http://127.0.0.1:4300/');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await page.getByRole('link', { name: 'Clients', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/clients$/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    // The coach switches to another app: the tab is hidden and loses focus.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'hidden',
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('blur'));
+    });
+
+    expect(await analytics.seen('__plausibleSent')).toEqual(closed);
+    expect(await analytics.seen('__plausibleCalls')).toEqual([
+      ['pageview', { url: 'http://127.0.0.1:4300/' }],
+      ['pageview', { url: 'about:blank' }],
+    ]);
+    await expect
+      .poll(() => analytics.requests)
+      .toEqual(['/stats/pa-e2e.js', '/stats/event', '/stats/event']);
+    expect(analytics.settingsReads).toEqual(['/']);
+  });
+
+  test('What changed counts a visitor on each opening, the homepage’s time going out as it closes', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const analytics = await serveAnalytics(page);
+    await mockSignedOut(page, {
+      'GET /api/website/settings': (route) => json(route, 200, ANALYTICS_ON),
+    });
+    await page.goto('/');
+    await waitForFonts(page);
+    await expect
+      .poll(() => analytics.seen('__plausibleSent'))
+      .toEqual([{ n: 'pageview', u: '/', on: '/' }]);
+
+    await page
+      .locator('app-home-finale')
+      .getByRole('link', { name: /What changed/ })
+      .click();
+    await expect(page.getByRole('heading', { level: 1, name: 'What changed' })).toBeVisible();
+    await expect
+      .poll(() => analytics.seen('__plausibleSent'))
+      .toEqual([
+        { n: 'pageview', u: '/', on: '/' },
+        { n: 'engagement', u: '/', on: '/changelog' },
+        { n: 'pageview', u: '/changelog', on: '/changelog' },
+      ]);
+  });
+
+  test('someone signed in who opens What changed reads no settings, loads no script and sends nothing', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const analytics = await serveAnalytics(page);
+    await mockSession(page, {
+      memberships: [OWNER_MEMBERSHIP],
+      user: owner,
+      extra: { 'GET /api/website/settings': (route: Route) => json(route, 200, ANALYTICS_ON) },
+    });
+    await page.goto('/changelog');
+    await expect(page.locator('.changelog--embedded')).toBeVisible();
+    await expect(page.locator('.release').first()).toBeVisible();
+    // The app's shell is drawn once the memberships are in, after which the page has decided.
+    await expect(page.getByRole('link', { name: 'Clients', exact: true }).first()).toBeVisible();
+    await page.waitForTimeout(500);
+
+    expect(analytics.settingsReads).toEqual([]);
+    await expect(page.locator('script[data-analytics]')).toHaveCount(0);
+    expect(await page.evaluate(() => typeof (window as { plausible?: unknown }).plausible)).toBe(
+      'undefined',
+    );
+    expect(analytics.requests).toEqual([]);
+  });
+
+  for (const path of ['/auth/register', '/auth/sign-in']) {
+    test(`a visitor on ${path} loads no script and queues nothing`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const analytics = await serveAnalytics(page);
+      await mockSignedOut(page, {
+        'GET /api/website/settings': (route) => json(route, 200, ANALYTICS_ON),
+      });
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await page.waitForTimeout(500);
+
+      await expect(page.locator('script[data-analytics]')).toHaveCount(0);
+      expect(await page.evaluate(() => typeof (window as { plausible?: unknown }).plausible)).toBe(
+        'undefined',
+      );
+      expect(analytics.settingsReads).toEqual([]);
+      expect(analytics.requests).toEqual([]);
+    });
+  }
 });

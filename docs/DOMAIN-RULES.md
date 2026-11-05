@@ -2682,4 +2682,9 @@ out, waiting or dead-lettered, newest first, on the admin page (`GET /api/platfo
 `wa.me` link beside the form, none until the owner gives one) and the name of Plausible's site script
 (none until the owner has an account). Analytics loads from this origin alone, through nginx, writes
 no cookie, needs no banner and leaves the CSP as it is; the privacy wording that accompanies it is the
-owner's, never generated. The build-time render of the homepage asks for neither.
+owner's, never generated. The build-time render of the homepage asks for neither. It counts the
+website's own two pages alone, the homepage and What changed, once each time a visitor who is not
+signed in opens one or the browser brings one back from its cache (a page opened out of sight counts
+when first shown), with the page's path and campaign tags alone (notes plan N1): the script counts
+nothing on its own, the browser drops every other event, and a page's time on page ends as it closes,
+so nothing is ever sent from the app.
