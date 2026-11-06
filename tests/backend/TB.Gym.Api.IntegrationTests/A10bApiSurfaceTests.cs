@@ -78,6 +78,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             ("UpdateOwnClientIntake", RateLimitPolicies.RoutineWrite),
             ("UpdateCurrentWorkspace", RateLimitPolicies.RoutineWrite),
             ("UpdateOwnThemeMode", RateLimitPolicies.RoutineWrite),
+            ("SetFoundingBadgeVisibility", RateLimitPolicies.RoutineWrite),
+            ("MarkWorkspaceFounding", RateLimitPolicies.SensitiveWrite),
             ("CreatePrivateMediaAccessBatch", RateLimitPolicies.RoutineWrite),
             ("RenameCheckInForm", RateLimitPolicies.SensitiveWrite),
             ("PublishCheckInFormVersion", RateLimitPolicies.SensitiveWrite),

@@ -4,7 +4,7 @@ Status: accepted, 2026-09-25 (commercial Step 4)
 
 ## Context
 
-The first 10 founding coaches need a production deployment the owner can run alone, without a
+The founding coaches need a production deployment the owner can run alone, without a
 DevOps role and on a small budget. The owner pays from Lebanon with a Whish-loaded Visa card, so
 hosting must be easy to leave if a provider refuses sign-up or payment.
 

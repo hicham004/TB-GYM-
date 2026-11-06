@@ -59,13 +59,80 @@ internal sealed class WorkspaceBillingService(
                 membership.Status == MembershipStatus.Active,
             cancellationToken);
 
-        // A coach learns only that the workspace is read-only; the bill itself is the owner's.
-        return isOwner
-            ? new WorkspaceBillingAccessView(
-                isReadOnly,
-                unpaid.Any(invoice => today > invoice.DueOn),
-                unpaid.Count == 0 ? null : unpaid.Min(invoice => invoice.ReadOnlyFrom))
-            : new WorkspaceBillingAccessView(isReadOnly, false, null);
+        // A coach learns only that the workspace is read-only; the bill and the founding status are the owner's.
+        if (!isOwner)
+        {
+            return new WorkspaceBillingAccessView(isReadOnly, false, null, null);
+        }
+
+        var open = await dbContext.FoundingStatuses
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(status => status.TenantId == tenantId && status.EndedAtUtc == null)
+            .SingleOrDefaultAsync(cancellationToken);
+        var founding = FoundingBadgePolicy.StateOf(open, today);
+        return new WorkspaceBillingAccessView(
+            isReadOnly,
+            unpaid.Any(invoice => today > invoice.DueOn),
+            unpaid.Count == 0 ? null : unpaid.Min(invoice => invoice.ReadOnlyFrom),
+            founding is FoundingBadgeState.Waiting or FoundingBadgeState.Earned ? founding : null);
+    }
+
+    public async Task<FoundingBadgeView> GetFoundingAsync(CancellationToken cancellationToken) =>
+        FoundingReader.ToView(await ReadFoundingAsync(cancellationToken));
+
+    public async Task<BillingCommandResult<FoundingBadgeView>> SetFoundingBadgeHiddenAsync(
+        SetFoundingBadgeVisibilityRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Hidden is not { } hidden)
+        {
+            return BillingCommand.Invalid<FoundingBadgeView>(nameof(request.Hidden), FoundingText.HiddenRequired);
+        }
+
+        for (var attempt = 1; ; attempt++)
+        {
+            dbContext.ChangeTracker.Clear();
+            var open = await dbContext.FoundingStatuses
+                .Where(status => status.TenantId == tenantContext.TenantId && status.EndedAtUtc == null)
+                .SingleOrDefaultAsync(cancellationToken);
+            if (open is null)
+            {
+                return BillingCommand.NotFound<FoundingBadgeView>();
+            }
+
+            if (open.BadgeHidden == hidden)
+            {
+                break;
+            }
+
+            open.SetBadgeHidden(hidden);
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                break;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 3)
+            {
+                // The check recorded the badge or the admin ended the status meanwhile: read it again.
+            }
+        }
+
+        return BillingCommand.Success(FoundingReader.ToView(await ReadFoundingAsync(cancellationToken)));
+    }
+
+    private async Task<FoundingBadgeReading> ReadFoundingAsync(CancellationToken cancellationToken)
+    {
+        var workspace = (await PlatformBillingReader.WorkspacesAsync(dbContext, tenantContext.TenantId, cancellationToken)).Single();
+        var statuses = await FoundingReader.StatusesAsync(dbContext, workspace.TenantId, cancellationToken);
+        var terms = await FoundingReader.CurrentTermsAsync(dbContext, cancellationToken);
+        return await FoundingReader.ReadAsync(
+            dbContext,
+            workspace,
+            FoundingReader.Latest(statuses),
+            terms,
+            clock.UtcNow,
+            cancellationToken);
     }
 }
 

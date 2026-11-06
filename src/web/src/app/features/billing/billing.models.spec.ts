@@ -176,6 +176,8 @@ const SUMMARY_VIEW: AdminWorkspaceSummary = {
   currentDiscountPercent: '12.5',
   oldestUnpaidDueOn: '2026-10-05',
   readOnlyFrom: '2026-10-12',
+  isFounding: false,
+  badgeEarnedOn: null,
 };
 
 const SUMMARY = {
@@ -193,6 +195,8 @@ const SUMMARY = {
   currentDiscountPercent: 12.5,
   oldestUnpaidDueOn: '2026-10-05',
   readOnlyFrom: '2026-10-12',
+  isFounding: false,
+  badgeEarnedOn: null,
 };
 
 const DISCOUNT_VIEW: WorkspaceDiscountView = {
@@ -293,6 +297,8 @@ describe('platform billing: what the API said, as numbers', () => {
         currentMonth: ESTIMATE_VIEW,
         invoices: [invoiceView()],
         discounts: [DISCOUNT_VIEW],
+        founding: null,
+        foundingHistory: [],
       }),
     ).toEqual({
       summary: SUMMARY,

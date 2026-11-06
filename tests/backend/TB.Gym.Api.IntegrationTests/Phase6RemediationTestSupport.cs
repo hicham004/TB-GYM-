@@ -55,19 +55,23 @@ public sealed partial class Phase3TrainingWorkflowTests
         private readonly Lock sync = new();
         private readonly List<TaskCompletionSource> arrivals = [];
         private string? table;
+        private string statement = "INSERT INTO";
         private int participants;
         private int arrived;
         private TaskCompletionSource? release;
 
         /// <summary>
         /// Starts holding inserts that mention <paramref name="tableFragment"/> until
-        /// <paramref name="participantCount"/> of them have arrived.
+        /// <paramref name="participantCount"/> of them have arrived. <paramref name="statementStart"/>
+        /// holds another kind of write instead, such as an update named in full by the fragment
+        /// ("UPDATE billing.\"FoundingStatuses\""), so a read that names an Updated column is never held.
         /// </summary>
-        public void Arm(string tableFragment, int participantCount)
+        public void Arm(string tableFragment, int participantCount, string statementStart = "INSERT INTO")
         {
             lock (sync)
             {
                 table = tableFragment;
+                statement = statementStart;
                 participants = participantCount;
                 arrived = 0;
                 arrivals.Clear();
@@ -148,7 +152,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             lock (sync)
             {
                 if (table is null ||
-                    !command.CommandText.Contains("INSERT INTO", StringComparison.OrdinalIgnoreCase) ||
+                    !command.CommandText.Contains(statement, StringComparison.OrdinalIgnoreCase) ||
                     !command.CommandText.Contains(table, StringComparison.Ordinal))
                 {
                     return result;

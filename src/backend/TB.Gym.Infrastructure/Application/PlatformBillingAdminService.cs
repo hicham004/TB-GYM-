@@ -25,11 +25,19 @@ internal sealed class PlatformBillingAdminService(
     {
         var now = clock.UtcNow;
         var plans = await PlatformBillingReader.PlansAsync(dbContext, cancellationToken);
+        // Every open founding status at once: a space has at most one.
+        var founding = await dbContext.FoundingStatuses
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(status => status.EndedAtUtc == null)
+            .Select(status => new { status.TenantId, status.EarnedOn })
+            .ToDictionaryAsync(status => status.TenantId, status => status.EarnedOn, cancellationToken);
         var summaries = new List<AdminWorkspaceSummary>();
         foreach (var workspace in await PlatformBillingReader.WorkspacesAsync(dbContext, null, cancellationToken))
         {
             var state = await PlatformBillingReader.StateAsync(dbContext, workspace, plans, now, cancellationToken);
-            summaries.Add(Summary(state, now));
+            var isFounding = founding.TryGetValue(workspace.TenantId, out var earnedOn);
+            summaries.Add(Summary(state, now, isFounding, earnedOn));
         }
 
         return summaries;
@@ -46,12 +54,15 @@ internal sealed class PlatformBillingAdminService(
         var now = clock.UtcNow;
         var plans = await PlatformBillingReader.PlansAsync(dbContext, cancellationToken);
         var state = await PlatformBillingReader.StateAsync(dbContext, workspace, plans, now, cancellationToken);
+        var (founding, foundingHistory) = await FoundingReader.ForAdminAsync(dbContext, workspace, now, cancellationToken);
         var today = PaymentSchedule.Today(now);
         return new AdminWorkspaceDetail(
-            Summary(state, now),
+            Summary(state, now, founding is not null, founding?.Status.EarnedOn),
             state.CurrentMonth,
             state.Invoices.Select(item => PlatformBillingReader.ToView(item, today, forAdmin: true)).ToList(),
-            state.Discounts.OrderByDescending(item => item.StartsOn).Select(PlatformBillingReader.ToView).ToList());
+            state.Discounts.OrderByDescending(item => item.StartsOn).Select(PlatformBillingReader.ToView).ToList(),
+            founding,
+            foundingHistory);
     }
 
     public async Task<IReadOnlyList<PricePlanView>> ListPricePlansAsync(CancellationToken cancellationToken)
@@ -377,7 +388,11 @@ internal sealed class PlatformBillingAdminService(
     private Guid RequiredAdmin() =>
         currentUser.UserId ?? throw new InvalidOperationException("A platform admin operation needs a signed-in admin.");
 
-    private static AdminWorkspaceSummary Summary(WorkspaceBillingState state, DateTimeOffset now) => new(
+    private static AdminWorkspaceSummary Summary(
+        WorkspaceBillingState state,
+        DateTimeOffset now,
+        bool isFounding,
+        DateOnly? badgeEarnedOn) => new(
         state.Workspace.TenantId,
         state.Workspace.Name,
         state.Workspace.OwnerName,
@@ -391,7 +406,9 @@ internal sealed class PlatformBillingAdminService(
         state.CurrentMonth.Amounts.CurrencyCode,
         WorkspaceDiscount.ApplicableTo(state.Discounts, new UsageWindow(now, now.AddTicks(1)))?.Percent ?? 0m,
         state.OldestUnpaidDueOn,
-        state.ReadOnlyFrom);
+        state.ReadOnlyFrom,
+        isFounding,
+        badgeEarnedOn);
 
     private static PricePlanView ToView(PlatformPricePlan plan, bool isCurrent) => new(
         plan.Id,

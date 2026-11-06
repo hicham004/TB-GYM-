@@ -112,8 +112,9 @@ public static class WorkerDependencyInjection
     }
 
     /// <summary>
-    /// Platform billing's settings and its monthly run (ADR 0028). Composed in both roots: the Worker
-    /// runs it on a timer and the admin can run the invoice step by hand through the API.
+    /// Platform billing's settings, its monthly run (ADR 0028) and the Founding coach badge check (notes
+    /// plan N3a). Composed in both roots: the Worker runs them on a timer and the admin can run the
+    /// invoice step and the check by hand through the API.
     /// </summary>
     internal static IServiceCollection AddPlatformBilling(this IServiceCollection services, IConfiguration configuration)
     {
@@ -126,6 +127,7 @@ public static class WorkerDependencyInjection
                 settings.Validate() ?? $"{PlatformBillingOptions.SectionName} is not a valid platform billing configuration.")
             .ValidateOnStart();
         services.TryAddScoped<IPlatformInvoiceRun, PlatformInvoiceRun>();
+        services.TryAddScoped<IFoundingBadgeCheck, FoundingBadgeCheck>();
         return services;
     }
 

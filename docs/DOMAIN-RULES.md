@@ -529,6 +529,19 @@ step). Until one is set, How to pay says so and names TB Gym's support inbox (th
 address) and WhatsApp number when they are configured, or says plainly that neither is; it never
 promises that TB Gym will be in touch (audit BILL-2).
 
+**PBL-009** Founding status (decision 15, 5 Nov 2026; notes plan N3a). Only the platform admin marks a
+workspace as founding, with a UTC day no later than today and a note, and ends it only for cause, with
+a reason; a workspace has at most one open status, every mark and end is kept, and an ended workspace
+may be marked again. Its active owner earns the "Founding coach" badge on the first UTC day the check
+finds both terms of the latest published founding terms met: clients with an active plan right now,
+counted as PBL-002 counts a billable client but at that instant rather than over the month, and whole
+calendar months since the UTC day the workspace was created (10 and 2 in version 1; nothing is a
+constant in code). The check runs on the Worker's billing sweep and on the admin's demand, and records
+the badge once with the terms version, the client count and the rule `founding-badge-v1`; it stays
+earned whatever the counts do later, and only an end takes it away. The owner may hide it from their
+clients; a client sees it only while their assigned coach is that owner. It changes no access, no bill
+and no discount, and no word for it says a coach's qualifications were checked.
+
 ## 4. Program templates and assigned snapshots
 
 **TRN-001** A training template is coach-owned reusable content. Assigning it creates a deep,

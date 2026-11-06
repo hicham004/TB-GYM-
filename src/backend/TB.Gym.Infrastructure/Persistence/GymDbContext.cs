@@ -1078,6 +1078,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<PlatformInvoice>("Issued invoices are immutable; void and reissue instead.");
         RejectAppendOnlyMutations<PlatformInvoiceVoid>("Invoice voids are append-only.");
         RejectAppendOnlyMutations<PlatformPayment>("Platform payments are append-only.");
+        RejectAppendOnlyMutations<FoundingTerms>("Founding badge terms are immutable; publish a new version.");
         if (ChangeTracker.Entries<MembershipStatusChange>().Any(item => item.State != EntityState.Unchanged))
         {
             throw new InvalidOperationException("Membership history is written by the database, never by the application.");
@@ -1106,6 +1107,8 @@ public sealed partial class GymDbContext(
                 throw new InvalidOperationException("A discount is never edited; it can only be revoked, once.");
             }
         }
+
+        RejectFoundingStatusMutations();
 
         if (ChangeTracker.Entries<BodyweightObservation>().Any(item => item.State == EntityState.Deleted))
         {
@@ -1483,6 +1486,51 @@ public sealed partial class GymDbContext(
             if (!tenantContext.HasTenant || entry.Entity.TenantId != tenantContext.TenantId)
             {
                 throw new InvalidOperationException("A tenant-owned record cannot be written outside the active tenant scope.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A founding status (notes plan N3a) is never deleted and its mark never changes; the badge's earned
+    /// facts are written once, the owner's switch changes while it is open, and ending is written once,
+    /// after which nothing changes. The trigger is the guarantee; this names the mistake in the code path
+    /// that made it.
+    /// </summary>
+    private void RejectFoundingStatusMutations()
+    {
+        foreach (var entry in ChangeTracker.Entries<FoundingStatus>())
+        {
+            if (entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException("Founding statuses are never deleted; end one instead.");
+            }
+
+            if (entry.State != EntityState.Modified)
+            {
+                continue;
+            }
+
+            var wasEarned = entry.OriginalValues.GetValue<DateOnly?>(nameof(FoundingStatus.EarnedOn)) is not null;
+            if (entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(FoundingStatus.EndedAtUtc)) is not null ||
+                entry.Properties.Any(property =>
+                    property.IsModified &&
+                    property.Metadata.Name switch
+                    {
+                        nameof(FoundingStatus.EarnedOn)
+                            or nameof(FoundingStatus.EarnedUnderTermsVersion)
+                            or nameof(FoundingStatus.EarnedClientCount)
+                            or nameof(FoundingStatus.EarnedUnderRule) => wasEarned,
+                        nameof(FoundingStatus.BadgeHidden)
+                            or nameof(FoundingStatus.EndedAtUtc)
+                            or nameof(FoundingStatus.EndedByUserId)
+                            or nameof(FoundingStatus.EndReason)
+                            or nameof(FoundingStatus.UpdatedAtUtc)
+                            or nameof(FoundingStatus.UpdatedByUserId) => false,
+                        _ => true,
+                    }))
+            {
+                throw new InvalidOperationException(
+                    "A founding status is never edited: its badge is recorded once, and it can only be ended, once.");
             }
         }
     }

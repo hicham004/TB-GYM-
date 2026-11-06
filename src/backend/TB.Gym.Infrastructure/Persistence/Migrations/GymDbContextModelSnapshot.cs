@@ -7328,6 +7328,141 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("RecipeVersionAllergens", "nutrition");
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.FoundingStatus", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("BadgeHidden")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("EarnedClientCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("EarnedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EarnedUnderRule")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int?>("EarnedUnderTermsVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("EndedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("FoundingSince")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("MarkedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MarkedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("EarnedUnderTermsVersion");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_FoundingStatuses_TenantId_Open")
+                        .HasFilter("\"EndedAtUtc\" IS NULL");
+
+                    b.HasIndex("TenantId", "MarkedAtUtc");
+
+                    b.ToTable("FoundingStatuses", "billing", t =>
+                        {
+                            t.HasCheckConstraint("CK_FoundingStatuses_Earned", "(\"EarnedOn\" IS NULL) = (\"EarnedUnderTermsVersion\" IS NULL) AND (\"EarnedOn\" IS NULL) = (\"EarnedClientCount\" IS NULL) AND (\"EarnedOn\" IS NULL) = (\"EarnedUnderRule\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_FoundingStatuses_EarnedFacts", "\"EarnedOn\" IS NULL OR (\"EarnedOn\" >= \"FoundingSince\" AND \"EarnedClientCount\" >= 0)");
+
+                            t.HasCheckConstraint("CK_FoundingStatuses_End", "(\"EndedAtUtc\" IS NULL) = (\"EndedByUserId\" IS NULL) AND (\"EndedAtUtc\" IS NULL) = (\"EndReason\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_FoundingStatuses_EndReason", "\"EndReason\" IS NULL OR btrim(\"EndReason\") <> ''");
+
+                            t.HasCheckConstraint("CK_FoundingStatuses_Note", "btrim(\"Note\") <> ''");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.FoundingTerms", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ClientsWithActivePlan")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MonthsSinceStart")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FoundingTerms", "billing", t =>
+                        {
+                            t.HasCheckConstraint("CK_FoundingTerms_Clients", "\"ClientsWithActivePlan\" >= 1 AND \"ClientsWithActivePlan\" <= 1000");
+
+                            t.HasCheckConstraint("CK_FoundingTerms_Months", "\"MonthsSinceStart\" >= 0 AND \"MonthsSinceStart\" <= 24");
+
+                            t.HasCheckConstraint("CK_FoundingTerms_Version", "\"VersionNumber\" >= 1");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformInvoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -13388,6 +13523,21 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany("Allergens")
                         .HasForeignKey("TenantId", "RecipeVersionId")
                         .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.FoundingStatus", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.PlatformBilling.FoundingTerms", null)
+                        .WithMany()
+                        .HasForeignKey("EarnedUnderTermsVersion")
+                        .HasPrincipalKey("VersionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -21,6 +21,12 @@ public sealed partial class GymDbContext
 
     public DbSet<WorkspaceDiscount> WorkspaceDiscounts => Set<WorkspaceDiscount>();
 
+    /// <summary>Founding statuses, one open per space, append-only by trigger (notes plan N3a).</summary>
+    public DbSet<FoundingStatus> FoundingStatuses => Set<FoundingStatus>();
+
+    /// <summary>The Founding coach badge's immutable terms versions, global (notes plan N3a).</summary>
+    public DbSet<FoundingTerms> FoundingTermsVersions => Set<FoundingTerms>();
+
     /// <summary>Append-only membership status history, written by a database trigger (ADR 0028).</summary>
     public DbSet<MembershipStatusChange> MembershipStatusChanges => Set<MembershipStatusChange>();
 
@@ -200,6 +206,70 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_WorkspaceDiscounts_Revocation",
                     "(\"RevokedAtUtc\" IS NULL) = (\"RevokedByUserId\" IS NULL)");
+            });
+        });
+
+        builder.Entity<FoundingTerms>(entity =>
+        {
+            entity.ToTable("FoundingTerms", "billing");
+            entity.HasKey(item => item.Id);
+            entity.HasAlternateKey(item => item.VersionNumber);
+            entity.Property(item => item.Note).HasMaxLength(FoundingText.TermsNoteMaxLength);
+            entity.Ignore(item => item.Terms);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_FoundingTerms_Version", "\"VersionNumber\" >= 1");
+                table.HasCheckConstraint(
+                    "CK_FoundingTerms_Clients",
+                    $"\"ClientsWithActivePlan\" >= 1 AND \"ClientsWithActivePlan\" <= {FoundingBadgeTerms.MaximumClients}");
+                table.HasCheckConstraint(
+                    "CK_FoundingTerms_Months",
+                    $"\"MonthsSinceStart\" >= 0 AND \"MonthsSinceStart\" <= {FoundingBadgeTerms.MaximumMonths}");
+            });
+        });
+
+        builder.Entity<FoundingStatus>(entity =>
+        {
+            entity.ToTable("FoundingStatuses", "billing");
+            entity.HasKey(item => item.Id);
+            ConfigureTenantEntity(entity);
+            entity.Property(item => item.FoundingSince).HasColumnType("date");
+            entity.Property(item => item.Note).HasMaxLength(FoundingText.NoteMaxLength).IsRequired();
+            entity.Property(item => item.EarnedOn).HasColumnType("date");
+            entity.Property(item => item.EarnedUnderRule).HasMaxLength(40);
+            entity.Property(item => item.EndReason).HasMaxLength(FoundingText.EndReasonMaxLength);
+            entity.Ignore(item => item.IsEnded);
+            entity.Ignore(item => item.IsEarned);
+            // One open status per space; ended ones are its history.
+            entity.HasIndex(item => item.TenantId)
+                .IsUnique()
+                .HasFilter("\"EndedAtUtc\" IS NULL")
+                .HasDatabaseName("IX_FoundingStatuses_TenantId_Open");
+            entity.HasIndex(item => new { item.TenantId, item.MarkedAtUtc });
+            entity.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(item => item.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<FoundingTerms>()
+                .WithMany()
+                .HasForeignKey(item => item.EarnedUnderTermsVersion)
+                .HasPrincipalKey(item => item.VersionNumber)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_FoundingStatuses_Note", "btrim(\"Note\") <> ''");
+                table.HasCheckConstraint(
+                    "CK_FoundingStatuses_Earned",
+                    "(\"EarnedOn\" IS NULL) = (\"EarnedUnderTermsVersion\" IS NULL) AND (\"EarnedOn\" IS NULL) = (\"EarnedClientCount\" IS NULL) AND (\"EarnedOn\" IS NULL) = (\"EarnedUnderRule\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_FoundingStatuses_EarnedFacts",
+                    "\"EarnedOn\" IS NULL OR (\"EarnedOn\" >= \"FoundingSince\" AND \"EarnedClientCount\" >= 0)");
+                table.HasCheckConstraint(
+                    "CK_FoundingStatuses_End",
+                    "(\"EndedAtUtc\" IS NULL) = (\"EndedByUserId\" IS NULL) AND (\"EndedAtUtc\" IS NULL) = (\"EndReason\" IS NULL)");
+                table.HasCheckConstraint(
+                    "CK_FoundingStatuses_EndReason",
+                    "\"EndReason\" IS NULL OR btrim(\"EndReason\") <> ''");
             });
         });
     }

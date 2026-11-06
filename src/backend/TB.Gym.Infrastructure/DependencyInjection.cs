@@ -159,6 +159,7 @@ public static class DependencyInjection
         services.AddScoped<WorkspaceBillingLock>();
         services.AddScoped<IWorkspaceBillingService, WorkspaceBillingService>();
         services.AddScoped<IPlatformBillingAdminService, PlatformBillingAdminService>();
+        services.AddScoped<IFoundingAdminService, FoundingAdminService>();
         services.AddPlatformBilling(configuration);
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, TenantAuthorizationResultHandler>();
         services.AddExceptionHandler<ClientReleasedExceptionHandler>();

@@ -10,11 +10,11 @@ IDs, test evidence, accepted exceptions, owner, and expiry; do not claim certifi
 because this checklist references ASVS.
 
 The list has two parts (commercial Step 4, 2026-09-25). **Part 1** is what must be true before the
-first 10 founding coaches are invited; `docs/GO-LIVE.md` is the runbook for it. **Part 2, After
+founding coaches are invited; `docs/GO-LIVE.md` is the runbook for it. **Part 2, After
 launch**, keeps every other item from the original list, grouped as before. No item was deleted;
 items only moved, and a few gained a status note in italics.
 
-# Part 1: Before the first 10 coaches
+# Part 1: Before the founding coaches
 
 ## Server, domain, TLS and edge
 

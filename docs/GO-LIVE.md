@@ -117,7 +117,8 @@ web container after changing any of the three. Write the privacy note yourself; 
 
 `render.yaml` puts a copy of the app on Render, so a few people can try it from a link. It is not
 the launch and needs none of the steps above. Email, photo uploads, AI and platform invoices are
-off. The screens say email is off where they would promise one: someone who registers there cannot
+off; with the invoices goes the Worker's own check for the Founding coach badge, so there the
+admin's Check now records one (PBL-009). The screens say email is off where they would promise one: someone who registers there cannot
 confirm the account, so share the demo sign-ins instead; an invitation goes by a link the coach
 copies (step 5); and a Talk-to-us request waits on the platform admin page. The app runs on half a CPU for $7 a month, billed by the second; its database is free, and
 Render deletes it 30 days after creating it, with 14 days' grace. Render's free plan for the app

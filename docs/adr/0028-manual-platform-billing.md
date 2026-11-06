@@ -89,3 +89,12 @@ Chosen by the implementer, to confirm:
 - Amended 2026-10-20 (audit A7): a plan gives at least one grace day, as the rule always applied (BILL-4;
   the check is `NOT VALID` so a version published with 0 stays as it was). The owner's Billing page names
   the read-only day while an invoice is merely open and says its days are UTC (BILL-3, BILL-6).
+- Amended 2026-11-06 (notes plan N3a, decision 15): the module also owns founding status (PBL-009). A
+  tenant-owned `billing."FoundingStatuses"` row per mark (one open per workspace by a partial unique index;
+  a trigger refuses deleting it, changing its mark or a recorded badge, and touching it once ended) and
+  global, immutable `billing."FoundingTerms"` versions (version 1, 10 clients and 2 months, seeded by the
+  migration). Founding status is separate from the founding-coach discount above: marking, ending or
+  earning changes no invoice, and revoking a discount leaves the badge. The Worker's sweep also runs the
+  badge check after the invoices and reminders, in its own try. The owner's switch that hides the badge
+  from their clients (`SetFoundingBadgeVisibility`) is a personal display setting on the owner's own
+  status, so it is on the read-only allow-list and uses `RoutineWrite`.

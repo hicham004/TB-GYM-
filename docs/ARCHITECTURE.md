@@ -77,7 +77,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Media            | Object metadata, provider-neutral locators and ranges, scan evidence, protected access, subordinate renditions, external embeds, retention and leased purge                              |
 | Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
 | Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
-| Platform billing | What TB Gym charges workspaces: versioned price plans, monthly invoices, voids, payments, discounts, the `platform-invoice-v1` calculation (ADR 0028)                                     |
+| Platform billing | What TB Gym charges workspaces: versioned price plans, monthly invoices, voids, payments, discounts, the `platform-invoice-v1` calculation (ADR 0028); founding status and its badge terms (PBL-009) |
 | Website          | The public website: Talk-to-us requests from gyms (no tenant, facts frozen, the owner's email as the fourth action-mail queue, the platform admin's list of requests not yet emailed) and the settings the homepage reads (ADR 0037) |
 
 Theme and gamification currently share one boundary because theme-driven labels and rewards
@@ -347,7 +347,8 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   One bucket per user is strictly tighter than one per user and workspace.
 - Every state-changing API route names a limit (audit INV-10; an integration test fails when one does
   not), each policy its own bucket per user. `SensitiveWrite` (60 a minute): every write of Messaging,
-  Invitations, Notifications, Check-ins, Subscriptions and PlatformBilling, and the writes that change a
+  Invitations, Notifications, Check-ins, Subscriptions and PlatformBilling (but the owner's founding badge
+  switch, a personal setting), and the writes that change a
   relationship, the team or an account (a client's release, block, leave and coach change, a coach's
   removal and resignation, a password change, signing out everywhere, a legal acceptance, a photo
   export). `RoutineWrite` (300 a minute; `RateLimiting:RoutineWriteWindowSeconds` lengthens like the
@@ -390,11 +391,12 @@ client membership may become active again only with a current profile.
 An unpaid platform invoice past its grace days makes the workspace read-only for its owner and
 coaches (ADR 0028). The same tenant authorization handler refuses their state-changing requests with
 403 `workspace_read_only`, except routes marked `AllowedWhileWorkspaceReadOnly` (reads sent as POST,
-personal settings, resigning); clients are never affected. The platform admin's routes use the
-`PlatformAdmin` policy, which needs the role claim and re-reads the account and role from the
-database on every request; no workspace header is involved, and only the `platform-admin` command
-grants the role. The Worker issues last month's invoices and queues billing notices on a timer,
-idempotently; seats come from `tenancy."MembershipStatusChanges"` and client pauses from
+personal settings such as the owner's founding badge switch, resigning); clients are never affected.
+The platform admin's routes use the `PlatformAdmin` policy, which needs the role claim and re-reads
+the account and role from the database on every request; no workspace header is involved, and only
+the `platform-admin` command grants the role. The Worker issues last month's invoices, queues
+billing notices and records earned Founding coach badges (PBL-009) on a timer, idempotently; seats
+come from `tenancy."MembershipStatusChanges"` and client pauses from
 `subscriptions."EnrollmentStatusChanges"`, both written by database triggers.
 
 Legal document versions are global identity records, while a workspace consent acceptance is

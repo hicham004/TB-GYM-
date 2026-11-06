@@ -6,7 +6,8 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Worker;
 
 /// <summary>
-/// Issues last month's platform invoices and queues payment reminders on a fixed interval (ADR 0028).
+/// Issues last month's platform invoices, queues payment reminders and records earned Founding coach
+/// badges on a fixed interval (ADR 0028, notes plan N3a).
 /// </summary>
 /// <remarks>
 /// There is no "run on the 1st" schedule: every tick asks for the previous month's invoices, and the
@@ -45,6 +46,18 @@ public sealed class PlatformBillingWorker(
             LogLevel.Error,
             new EventId(6204, "PlatformBillingSweepFailed"),
             "The platform billing sweep failed and will retry on the next tick.");
+
+    private static readonly Action<ILogger, int, int, Exception?> LogFoundingBadges =
+        LoggerMessage.Define<int, int>(
+            LogLevel.Information,
+            new EventId(6205, "FoundingBadgesRecorded"),
+            "Founding badge check: {Earned} of {Checked} waiting founding spaces earned the badge.");
+
+    private static readonly Action<ILogger, Exception?> LogFoundingCheckFailed =
+        LoggerMessage.Define(
+            LogLevel.Error,
+            new EventId(6206, "FoundingBadgeCheckFailed"),
+            "The founding badge check failed and will retry on the next tick.");
 
     private readonly PlatformBillingOptions settings = options.Value;
 
@@ -98,11 +111,32 @@ public sealed class PlatformBillingWorker(
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             // Shutdown, not a failure.
+            return;
         }
         catch (Exception exception)
         {
             // An unavailable database or a schema not migrated yet are expected states at startup.
             LogSweepFailed(logger, exception);
+        }
+
+        // The Founding coach badge (notes plan N3a), after the invoices and the reminders, on its own so a
+        // failing invoice step never keeps a badge waiting. It records each badge once.
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var outcome = await scope.ServiceProvider.GetRequiredService<IFoundingBadgeCheck>().RunAsync(stoppingToken);
+            if (outcome.Earned > 0)
+            {
+                LogFoundingBadges(logger, outcome.Earned, outcome.Checked, null);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutdown, not a failure.
+        }
+        catch (Exception exception)
+        {
+            LogFoundingCheckFailed(logger, exception);
         }
     }
 }

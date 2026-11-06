@@ -298,6 +298,20 @@ public sealed partial class Phase3TrainingWorkflowTests
     {
         using var anonymous = CreateClient();
         await AssertStatusAsync(await anonymous.GetAsync("/api/platform-admin/workspaces"), HttpStatusCode.Unauthorized);
+        // Founding status (notes plan N3a) too.
+        await AssertStatusAsync(await anonymous.GetAsync("/api/platform-admin/founding-terms"), HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(await anonymous.PostAsync("/api/platform-admin/founding/check", null), HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(
+            await anonymous.PostAsJsonAsync($"/api/platform-admin/workspaces/{Guid.NewGuid()}/founding", new { foundingSince = new DateOnly(2026, 6, 1), note = "x" }),
+            HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(
+            await anonymous.PostAsJsonAsync($"/api/platform-admin/founding/{Guid.NewGuid()}/end", new { reason = "x" }),
+            HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(
+            await anonymous.PostAsJsonAsync(
+                "/api/platform-admin/founding-terms",
+                new { clientsWithActivePlan = 1, monthsSinceStart = 0, note = "x", expectedCurrentVersion = 1 }),
+            HttpStatusCode.Unauthorized);
 
         using var owner = CreateClient();
         var workspaceId = await RegisterCoachAsync(owner, "authz-owner@example.test", "Authz Owner", "Authz Gym");
@@ -319,6 +333,21 @@ public sealed partial class Phase3TrainingWorkflowTests
             await AssertStatusAsync(
                 await caller.PostAsJsonAsync("/api/platform-admin/invoices/issue", new { periodStart = (DateOnly?)null }),
                 HttpStatusCode.Forbidden);
+            await AssertStatusAsync(await caller.GetAsync("/api/platform-admin/founding-terms"), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PostAsJsonAsync(
+                    "/api/platform-admin/founding-terms",
+                    new { clientsWithActivePlan = 1, monthsSinceStart = 0, note = "x", expectedCurrentVersion = 1 }),
+                HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PostAsJsonAsync(
+                    $"/api/platform-admin/workspaces/{workspaceId}/founding",
+                    new { foundingSince = new DateOnly(2026, 6, 1), note = "Self-marked" }),
+                HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PostAsJsonAsync($"/api/platform-admin/founding/{Guid.NewGuid()}/end", new { reason = "x" }),
+                HttpStatusCode.Forbidden);
+            await AssertStatusAsync(await caller.PostAsync("/api/platform-admin/founding/check", null), HttpStatusCode.Forbidden);
         }
 
         // The role cannot be had any other way than the command, which needs a confirmed account.
@@ -515,6 +544,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         "PreviewTrainingProgression",
         "PreviewWeekProgression",
         "ResignFromTeam",
+        // The owner's own switch for showing their Founding coach badge to clients (notes plan N3a).
+        "SetFoundingBadgeVisibility",
         "UpdateOwnNotificationPreferences",
     ];
 

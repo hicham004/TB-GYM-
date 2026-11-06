@@ -26,6 +26,35 @@ public static class PlatformBillingEndpoints
             .WithName("GetWorkspaceBillingAccess")
             .Produces<WorkspaceBillingAccessView>();
 
+        // The owner's own Founding coach badge (decision 15, 5 Nov 2026). Nobody else in the space reads it.
+        endpoints.MapGet("/api/billing/founding", async (IWorkspaceBillingService service, CancellationToken cancellationToken) =>
+                Results.Ok(await service.GetFoundingAsync(cancellationToken)))
+            .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+            .WithTags(PlatformBillingModule.Name)
+            .WithName("GetWorkspaceFounding")
+            .Produces<FoundingBadgeView>();
+
+        // Showing the badge to one's clients is the owner's personal setting, so it stays open while an
+        // unpaid workspace is read-only.
+        endpoints.MapPut("/api/billing/founding/visibility", async (
+                SetFoundingBadgeVisibilityRequest request,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                IWorkspaceBillingService service,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return ToResult(await service.SetFoundingBadgeHiddenAsync(request, cancellationToken));
+            })
+            .RequireAuthorization(AuthorizationPolicies.TenantOwner)
+            .RequireRateLimiting(RateLimitPolicies.RoutineWrite)
+            .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+            .WithTags(PlatformBillingModule.Name)
+            .WithName("SetFoundingBadgeVisibility")
+            .Produces<FoundingBadgeView>()
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem();
+
         // The platform admin's surface. No workspace header is read: the admin is not a member, and the
         // policy re-reads the global role from the database on every request.
         var admin = endpoints
@@ -173,6 +202,79 @@ public static class PlatformBillingEndpoints
             .WithName("RevokeWorkspaceDiscount")
             .Produces<WorkspaceDiscountView>()
             .Produces(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        // Founding status (decision 15, 5 Nov 2026): marked and ended by the admin's hand only, and
+        // separate from any discount.
+        admin.MapPost("/workspaces/{tenantId:guid}/founding", async (
+                Guid tenantId,
+                MarkFoundingRequest request,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                IFoundingAdminService service,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return ToResult(await service.MarkAsync(tenantId, request, cancellationToken));
+            })
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+            .WithName("MarkWorkspaceFounding")
+            .Produces<AdminFoundingView>()
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        admin.MapPost("/founding/{foundingId:guid}/end", async (
+                Guid foundingId,
+                EndFoundingRequest request,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                IFoundingAdminService service,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return ToResult(await service.EndAsync(foundingId, request, cancellationToken));
+            })
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+            .WithName("EndWorkspaceFounding")
+            .Produces<AdminFoundingView>()
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        // The Worker checks on every sweep; this looks at once.
+        admin.MapPost("/founding/check", async (
+                HttpContext context,
+                IAntiforgery antiforgery,
+                IFoundingBadgeCheck check,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return Results.Ok(await check.RunAsync(cancellationToken));
+            })
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+            .WithName("CheckFoundingBadges")
+            .Produces<FoundingCheckOutcome>();
+
+        admin.MapGet("/founding-terms", async (IFoundingAdminService service, CancellationToken cancellationToken) =>
+                Results.Ok(await service.ListTermsAsync(cancellationToken)))
+            .WithName("ListFoundingTerms")
+            .Produces<FoundingTermsView[]>();
+
+        admin.MapPost("/founding-terms", async (
+                PublishFoundingTermsRequest request,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                IFoundingAdminService service,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return ToResult(await service.PublishTermsAsync(request, cancellationToken));
+            })
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+            .WithName("PublishFoundingTerms")
+            .Produces<FoundingTermsView>()
+            .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status409Conflict);
 
         return endpoints;

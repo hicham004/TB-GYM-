@@ -47,7 +47,12 @@ async function render(
   return Object.assign(fixture.nativeElement as HTMLElement, { api, go });
 }
 
-const CLEAR: BillingAccess = { isReadOnly: false, hasOverdueInvoice: false, readOnlyFrom: null };
+const CLEAR: BillingAccess = {
+  isReadOnly: false,
+  hasOverdueInvoice: false,
+  readOnlyFrom: null,
+  foundingCoach: null,
+};
 
 describe('BillingBanner', () => {
   afterEach(() => {
@@ -56,7 +61,12 @@ describe('BillingBanner', () => {
 
   it('tells the owner the workspace is read-only and where to pay', async () => {
     const host = await render(
-      { isReadOnly: true, hasOverdueInvoice: true, readOnlyFrom: '2026-08-15' },
+      {
+        isReadOnly: true,
+        hasOverdueInvoice: true,
+        readOnlyFrom: '2026-08-15',
+        foundingCoach: null,
+      },
       'Owner',
     );
 
@@ -67,7 +77,7 @@ describe('BillingBanner', () => {
 
   it('tells a coach only that it is read-only, without the bill', async () => {
     const host = await render(
-      { isReadOnly: true, hasOverdueInvoice: false, readOnlyFrom: null },
+      { isReadOnly: true, hasOverdueInvoice: false, readOnlyFrom: null, foundingCoach: null },
       'Coach',
     );
 
@@ -78,7 +88,12 @@ describe('BillingBanner', () => {
 
   it('warns the owner before an overdue invoice locks anything', async () => {
     const host = await render(
-      { isReadOnly: false, hasOverdueInvoice: true, readOnlyFrom: '2026-08-15' },
+      {
+        isReadOnly: false,
+        hasOverdueInvoice: true,
+        readOnlyFrom: '2026-08-15',
+        foundingCoach: null,
+      },
       'Owner',
     );
 
@@ -89,7 +104,7 @@ describe('BillingBanner', () => {
 
   it('says nothing while the bill is in order', async () => {
     const host = await render(
-      { isReadOnly: false, hasOverdueInvoice: false, readOnlyFrom: null },
+      { isReadOnly: false, hasOverdueInvoice: false, readOnlyFrom: null, foundingCoach: null },
       'Owner',
     );
 
@@ -98,7 +113,7 @@ describe('BillingBanner', () => {
 
   it('says an overdue invoice without a day when the server names none', async () => {
     const host = await render(
-      { isReadOnly: false, hasOverdueInvoice: true, readOnlyFrom: null },
+      { isReadOnly: false, hasOverdueInvoice: true, readOnlyFrom: null, foundingCoach: null },
       'Owner',
     );
 
@@ -127,6 +142,7 @@ describe('BillingBanner', () => {
         isReadOnly: true,
         hasOverdueInvoice: true,
         readOnlyFrom: '2026-08-15',
+        foundingCoach: null,
       };
       const answer = new Subject<BillingAccess>();
       let calls = 0;
@@ -146,6 +162,7 @@ describe('BillingBanner', () => {
         isReadOnly: true,
         hasOverdueInvoice: true,
         readOnlyFrom: '2026-08-15',
+        foundingCoach: null,
       };
       const host = await render(access, 'Owner', () => of(access));
       expect(host.querySelector('[data-billing-banner="read-only"]')).not.toBeNull();

@@ -468,15 +468,22 @@ internal sealed class ClientProfileApplicationService(
     public async Task<OwnCoachView?> GetOwnCoachAsync(CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId) return null;
-        var coachId = await dbContext.ClientProfiles.AsNoTracking()
+        var profile = await dbContext.ClientProfiles.AsNoTracking()
             .CurrentFor(userId)
-            .Select(item => (Guid?)item.AssignedCoachUserId)
+            .Select(item => new { item.TenantId, item.AssignedCoachUserId })
             .SingleOrDefaultAsync(cancellationToken);
-        if (coachId is null) return null;
-        return await dbContext.Users.AsNoTracking()
-            .Where(item => item.Id == coachId)
-            .Select(item => new OwnCoachView(item.DisplayName))
+        if (profile is null) return null;
+        var name = await dbContext.Users.AsNoTracking()
+            .Where(item => item.Id == profile.AssignedCoachUserId)
+            .Select(item => item.DisplayName)
             .SingleOrDefaultAsync(cancellationToken);
+        if (name is null) return null;
+
+        // The Founding coach badge is the space owner's (notes plan N3a): composed here from platform
+        // billing's records, so the Clients module knows nothing of billing.
+        return new OwnCoachView(
+            name,
+            await FoundingReader.ShowsBadgeToClientsAsync(dbContext, profile.TenantId, profile.AssignedCoachUserId, cancellationToken));
     }
 
     public Task<ClientCommandResult> UpdateForCoachAsync(

@@ -18,7 +18,9 @@ public sealed class PlatformBillingOptions
     /// <summary>How many days before the due date the "due soon" email goes out.</summary>
     public int DueSoonReminderDays { get; set; } = 2;
 
-    /// <summary>Whether the Worker issues invoices and queues reminders on its own.</summary>
+    /// <summary>
+    /// Whether the Worker issues invoices, queues reminders and checks founding badges on its own.
+    /// </summary>
     public bool SweepEnabled { get; set; } = true;
 
     public int SweepIntervalSeconds { get; set; } = 900;

@@ -286,6 +286,23 @@ public sealed class GoLiveReadinessTests
         Assert.DoesNotContain("re_go_live_test_key", output.ToString());
     }
 
+    /// <summary>
+    /// The Worker's billing sweep resolves the Founding coach badge check and what it reads per space
+    /// from the Worker's own composition (notes plan N3a). The integration tests drive the check from the
+    /// API host, so a check that leaned on an API-only service would pass them and fail every tick.
+    /// </summary>
+    [TestMethod]
+    public async Task N3aTheWorkerComposesTheFoundingBadgeCheck()
+    {
+        using var services = Worker([]);
+        await using var scope = services.CreateAsyncScope();
+
+        Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.Modules.PlatformBilling.IFoundingBadgeCheck>());
+        Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.Modules.PlatformBilling.IPlatformInvoiceRun>());
+        Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.SharedKernel.IMutableTenantContext>());
+        Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.Infrastructure.Persistence.GymDbContext>());
+    }
+
     [TestMethod]
     public async Task WithoutAProviderOrAnAddressNothingIsSent()
     {

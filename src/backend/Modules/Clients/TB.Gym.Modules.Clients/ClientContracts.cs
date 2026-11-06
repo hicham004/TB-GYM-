@@ -138,7 +138,11 @@ public sealed record FormerClientSummary(
     string Reason,
     ClientDepartureKind DepartureKind);
 
-public sealed record OwnCoachView(string Name);
+/// <param name="FoundingCoach">
+/// The client's assigned coach is their space's active owner and holds the Founding coach badge, shown
+/// to clients (notes plan N3a, decision 15). Infrastructure reads it from platform billing's records.
+/// </param>
+public sealed record OwnCoachView(string Name, bool FoundingCoach);
 
 public sealed record ClientSelfProfile(
     Guid Id,

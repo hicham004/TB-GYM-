@@ -92,11 +92,18 @@ export type AddWorkoutNoteRequest = {
   text: string;
 };
 
+export type AdminFoundingView = {
+  status: FoundingStatusView;
+  badge: FoundingBadgeView;
+};
+
 export type AdminWorkspaceDetail = {
   summary: AdminWorkspaceSummary;
   currentMonth: CurrentMonthEstimateView;
   invoices: Array<PlatformInvoiceView>;
   discounts: Array<WorkspaceDiscountView>;
+  founding: null | AdminFoundingView;
+  foundingHistory: Array<FoundingStatusView>;
 };
 
 export type AdminWorkspaceSummary = {
@@ -114,6 +121,8 @@ export type AdminWorkspaceSummary = {
   currentDiscountPercent: number | string;
   oldestUnpaidDueOn: null | string;
   readOnlyFrom: null | string;
+  isFounding: boolean;
+  badgeEarnedOn: null | string;
 };
 
 export type AdvanceReadCursorRequest = {
@@ -1966,6 +1975,10 @@ export type EmailActionResponse = {
   emailAvailable: boolean;
 };
 
+export type EndFoundingRequest = {
+  reason: string;
+};
+
 export type EnergyModelView = {
   version: number | string;
   activityModelKey: string;
@@ -2241,6 +2254,49 @@ export type FormerClientSummary = {
 
 export type FormulaSex = 'Female' | 'Male';
 
+export type FoundingBadgeState = 'NotFounding' | 'Waiting' | 'Earned' | 'Ended';
+
+export type FoundingBadgeView = {
+  state: FoundingBadgeState;
+  foundingSince: null | string;
+  clientsWithActivePlan: null | number | string;
+  clientsNeeded: number | string;
+  monthsSinceStart: null | number | string;
+  monthsNeeded: number | string;
+  termsVersion: number | string;
+  earnedOn: null | string;
+  endedOn: null | string;
+  hidden: boolean;
+};
+
+export type FoundingCheckOutcome = {
+  checked: number | string;
+  earned: number | string;
+};
+
+export type FoundingStatusView = {
+  id: string;
+  foundingSince: string;
+  note: string;
+  markedAtUtc: string;
+  earnedOn: null | string;
+  earnedUnderTermsVersion: null | number | string;
+  earnedClientCount: null | number | string;
+  badgeHidden: boolean;
+  endedAtUtc: null | string;
+  endReason: null | string;
+};
+
+export type FoundingTermsView = {
+  id: string;
+  versionNumber: number | string;
+  clientsWithActivePlan: number | string;
+  monthsSinceStart: number | string;
+  note: null | string;
+  publishedAtUtc: string;
+  isCurrent: boolean;
+};
+
 export type GenerateAiMealDraftRequest = {
   prompt: string;
   promptVersion: string;
@@ -2425,6 +2481,11 @@ export type MacroSplitView = {
 };
 
 export type ManualPaymentMethod = 'Cash' | 'BankTransfer' | 'Card' | 'MobileWallet' | 'Other';
+
+export type MarkFoundingRequest = {
+  foundingSince: null | string;
+  note: string;
+};
 
 export type MaxFromSetView = {
   estimate: StrengthMaxView;
@@ -2899,6 +2960,7 @@ export type OneRepMaxEstimateView = {
 
 export type OwnCoachView = {
   name: string;
+  foundingCoach: boolean;
 };
 
 export type OwnPlansView = {
@@ -3363,6 +3425,13 @@ export type PublicInvitationDetails = {
   requiresExistingAccountSignIn: boolean;
   timeZoneId: string;
   kind?: InvitationKind;
+};
+
+export type PublishFoundingTermsRequest = {
+  clientsWithActivePlan: null | number | string;
+  monthsSinceStart: null | number | string;
+  note: null | string;
+  expectedCurrentVersion: null | number | string;
 };
 
 export type PublishLegalDocumentRequest = {
@@ -3910,6 +3979,10 @@ export type SetFinishedProgramsVisibilityRequest = {
 
 export type SetFoodArchivedRequest = {
   isArchived: boolean;
+};
+
+export type SetFoundingBadgeVisibilityRequest = {
+  hidden: null | boolean;
 };
 
 export type SetOfferAvailabilityRequest = {
@@ -4518,6 +4591,7 @@ export type WorkspaceBillingAccessView = {
   isReadOnly: boolean;
   hasOverdueInvoice: boolean;
   readOnlyFrom: null | string;
+  foundingCoach: null | FoundingBadgeState;
 };
 
 export type WorkspaceBillingStatus = 'Trial' | 'Active' | 'Overdue' | 'ReadOnly';
@@ -5086,6 +5160,54 @@ export type GetWorkspaceBillingAccessResponses = {
 
 export type GetWorkspaceBillingAccessResponse =
   GetWorkspaceBillingAccessResponses[keyof GetWorkspaceBillingAccessResponses];
+
+export type GetWorkspaceFoundingData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/billing/founding';
+};
+
+export type GetWorkspaceFoundingResponses = {
+  /**
+   * OK
+   */
+  200: FoundingBadgeView;
+};
+
+export type GetWorkspaceFoundingResponse =
+  GetWorkspaceFoundingResponses[keyof GetWorkspaceFoundingResponses];
+
+export type SetFoundingBadgeVisibilityData = {
+  body: SetFoundingBadgeVisibilityRequest;
+  path?: never;
+  query?: never;
+  url: '/api/billing/founding/visibility';
+};
+
+export type SetFoundingBadgeVisibilityErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type SetFoundingBadgeVisibilityError =
+  SetFoundingBadgeVisibilityErrors[keyof SetFoundingBadgeVisibilityErrors];
+
+export type SetFoundingBadgeVisibilityResponses = {
+  /**
+   * OK
+   */
+  200: FoundingBadgeView;
+};
+
+export type SetFoundingBadgeVisibilityResponse =
+  SetFoundingBadgeVisibilityResponses[keyof SetFoundingBadgeVisibilityResponses];
 
 export type ListUnsentContactRequestsData = {
   body?: never;
@@ -12857,6 +12979,145 @@ export type RevokeWorkspaceDiscountResponses = {
 
 export type RevokeWorkspaceDiscountResponse =
   RevokeWorkspaceDiscountResponses[keyof RevokeWorkspaceDiscountResponses];
+
+export type MarkWorkspaceFoundingData = {
+  body: MarkFoundingRequest;
+  path: {
+    tenantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/workspaces/{tenantId}/founding';
+};
+
+export type MarkWorkspaceFoundingErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type MarkWorkspaceFoundingError =
+  MarkWorkspaceFoundingErrors[keyof MarkWorkspaceFoundingErrors];
+
+export type MarkWorkspaceFoundingResponses = {
+  /**
+   * OK
+   */
+  200: AdminFoundingView;
+};
+
+export type MarkWorkspaceFoundingResponse =
+  MarkWorkspaceFoundingResponses[keyof MarkWorkspaceFoundingResponses];
+
+export type EndWorkspaceFoundingData = {
+  body: EndFoundingRequest;
+  path: {
+    foundingId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/founding/{foundingId}/end';
+};
+
+export type EndWorkspaceFoundingErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type EndWorkspaceFoundingError =
+  EndWorkspaceFoundingErrors[keyof EndWorkspaceFoundingErrors];
+
+export type EndWorkspaceFoundingResponses = {
+  /**
+   * OK
+   */
+  200: AdminFoundingView;
+};
+
+export type EndWorkspaceFoundingResponse =
+  EndWorkspaceFoundingResponses[keyof EndWorkspaceFoundingResponses];
+
+export type CheckFoundingBadgesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/founding/check';
+};
+
+export type CheckFoundingBadgesResponses = {
+  /**
+   * OK
+   */
+  200: FoundingCheckOutcome;
+};
+
+export type CheckFoundingBadgesResponse =
+  CheckFoundingBadgesResponses[keyof CheckFoundingBadgesResponses];
+
+export type ListFoundingTermsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/founding-terms';
+};
+
+export type ListFoundingTermsResponses = {
+  /**
+   * OK
+   */
+  200: Array<FoundingTermsView>;
+};
+
+export type ListFoundingTermsResponse =
+  ListFoundingTermsResponses[keyof ListFoundingTermsResponses];
+
+export type PublishFoundingTermsData = {
+  body: PublishFoundingTermsRequest;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/founding-terms';
+};
+
+export type PublishFoundingTermsErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type PublishFoundingTermsError =
+  PublishFoundingTermsErrors[keyof PublishFoundingTermsErrors];
+
+export type PublishFoundingTermsResponses = {
+  /**
+   * OK
+   */
+  200: FoundingTermsView;
+};
+
+export type PublishFoundingTermsResponse =
+  PublishFoundingTermsResponses[keyof PublishFoundingTermsResponses];
 
 export type GetWebsiteSettingsData = {
   body?: never;
