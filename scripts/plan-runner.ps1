@@ -585,6 +585,9 @@ function Invoke-Chat {
     $startInfo.StandardErrorEncoding = $utf8
     $startInfo.EnvironmentVariables['CLAUDE_CODE_EFFORT_LEVEL'] = $effort
     $startInfo.EnvironmentVariables['CLAUDE_CODE_SUBAGENT_MODEL'] = $ChatModel
+    # Print mode stops background tasks 10 minutes after the chat's last turn and exits; a chat that ends its
+    # turn to wait for its own workflow lost N3b that way (2026-11-06). $StepHours is the limit instead.
+    $startInfo.EnvironmentVariables['CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS'] = '0'
 
     $run = [pscustomobject]@{ SessionId = $ResumeId; Expected = $ChatModel; Fallback = $fallback; Model = $null; Init = $null; Result = $null; RateLimit = $null; ExitCode = $null; Stopped = $null }
     $log = New-Object IO.StreamWriter($LogPath, $true, $utf8)
