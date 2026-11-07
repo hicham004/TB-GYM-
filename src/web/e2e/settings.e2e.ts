@@ -266,6 +266,7 @@ for (const width of [390, 1440]) {
           'Notifications',
           'Appearance',
           'Password and security',
+          'Certificates',
         ]);
         await expect(nav.getByRole('link', { name: target.heading })).toHaveAttribute(
           'aria-current',
@@ -415,11 +416,13 @@ test('a coach’s Settings are their own account’s pages, and Billing stays th
   });
 
   const nav = page.getByRole('navigation', { name: 'Settings' });
-  // The read-only Team a coach opens from here comes after their own pages (critique B3a).
+  // The read-only Team a coach opens from here comes after their own pages (critique B3a), their
+  // certificate lines among them (notes plan N4b).
   await expect(nav.getByRole('link')).toHaveText([
     'Notifications',
     'Appearance',
     'Password and security',
+    'Certificates',
     'Team',
   ]);
   // The sidebar's Settings opens on the coach's own pages and stays selected on each (C13).
@@ -465,6 +468,7 @@ test('a client opens Password and security from Me and goes back there', async (
 
 // ---------- Settings › Founding coach (notes plan N3b) ----------
 
+// Certificates is every owner's and coach's own (notes plan N4b); Founding coach stays last.
 const OWNER_LINKS = [
   'Name and region',
   'Brand',
@@ -474,6 +478,7 @@ const OWNER_LINKS = [
   'Notifications',
   'Appearance',
   'Password and security',
+  'Certificates',
 ];
 
 const EARNED = {
@@ -702,6 +707,7 @@ test('a coach finds no row and nothing at the address, and nobody asks the serve
     'Notifications',
     'Appearance',
     'Password and security',
+    'Certificates',
     'Team',
   ]);
   await expect(page.getByRole('heading', { name: 'Nothing here', level: 2 })).toBeVisible();

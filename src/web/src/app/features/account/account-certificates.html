@@ -1,0 +1,75 @@
+<app-settings-frame>
+  <header settingsHead class="top">
+    <p class="kicker" i18n>Your account</p>
+    <h1 #pageHeading tabindex="-1" i18n>Certificates</h1>
+    <p class="lede">{{ lede }}</p>
+  </header>
+  @switch (state()) {
+    @case ('loading') {
+      <section class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="3" />
+      </section>
+    }
+    @case ('error') {
+      <section class="panel load-failed">
+        <p role="alert" i18n>Your certificate lines couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </section>
+    }
+    @case ('missing') {
+      <section class="panel nothing" data-certificates-nothing>
+        <h2 i18n>Nothing here</h2>
+        <p class="quiet" i18n>This page is for the owner and the coaches of a coaching space.</p>
+        <a appButton variant="outlined" [routerLink]="back().link">{{ back().label }}</a>
+      </section>
+    }
+    @default {
+      @if (items().length === 0) {
+        <section class="panel" data-certificates-empty>
+          <p class="sentence">{{ empty }}</p>
+        </section>
+      } @else {
+        <section class="panel" aria-labelledby="certificates-lines">
+          <h2 id="certificates-lines" class="tb-visually-hidden" i18n>Your lines</h2>
+          <ul class="lines" role="list">
+            @for (item of items(); track item.line.id) {
+              <li class="line" [attr.data-line]="item.line.id">
+                <div class="what">
+                  <p class="sentence" [id]="'certificate-' + item.line.id" data-sentence>
+                    <bdi>{{ item.line.text }}</bdi>
+                  </p>
+                  <app-status-pill [label]="item.pill.label" [tone]="item.pill.tone" />
+                </div>
+                @if (item.switchable) {
+                  <div class="show">
+                    <app-checkbox [label]="showLabel">
+                      <input
+                        type="checkbox"
+                        appControl
+                        [aria-describedby]="describedBy(item.line.id)"
+                        [checked]="item.line.coachShows"
+                        (change)="setShown(item.line, $any($event.target))"
+                      />
+                    </app-checkbox>
+                    @if (sending().has(item.line.id)) {
+                      <p class="quiet" role="status" i18n>Saving your choice…</p>
+                    }
+                  </div>
+                }
+                @if (failed() === item.line.id) {
+                  <p
+                    class="save-error"
+                    role="alert"
+                    [id]="'certificate-' + item.line.id + '-error'"
+                  >
+                    {{ refused }}
+                  </p>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
+    }
+  }
+</app-settings-frame>

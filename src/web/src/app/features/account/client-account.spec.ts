@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
 import type { CurrentUser, TenantMembership } from '../../core/api/api.models';
+import type { OwnCoachLineView } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { SessionActions } from '../../core/auth/session-actions';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -41,6 +42,8 @@ async function render(
     coach?: 'Lea Haddad' | 'unreadable';
     /** The server's word on the coach's Founding coach badge (notes plan N3b); left out when undefined. */
     founding?: boolean;
+    /** The coach's certificate lines the server shows this client (notes plan N4b); left out when undefined. */
+    lines?: readonly OwnCoachLineView[];
     messaging?: 'Granted' | 'NoEntitlement';
     updateWeightUnit?: (unit: CurrentUser['preferredWeightUnit']) => Promise<void>;
     updateThemeMode?: (mode: CurrentUser['preferredThemeMode']) => Promise<void>;
@@ -66,11 +69,11 @@ async function render(
     getOwnCoach: vi.fn(() =>
       options.coach === 'unreadable'
         ? throwError(() => new Error('forbidden'))
-        : of(
-            options.founding === undefined
-              ? { name: 'Lea Haddad' }
-              : { name: 'Lea Haddad', foundingCoach: options.founding },
-          ),
+        : of({
+            name: 'Lea Haddad',
+            ...(options.founding === undefined ? {} : { foundingCoach: options.founding }),
+            ...(options.lines === undefined ? {} : { lines: options.lines }),
+          }),
     ),
   };
   await TestBed.configureTestingModule({
@@ -242,6 +245,206 @@ describe('ClientAccount', () => {
 
       expect(textOf(host.querySelector('.coach strong'))).toBe('Omar Saad');
       expect(host.querySelector('app-status-pill')).toBeNull();
+    });
+  });
+
+  describe('the coach’s certificate lines (notes plan N4b)', () => {
+    const NEVER = /\b(verified|certified|qualified|licensed|approved)\b/i;
+    const textOf = (element: Element | null | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    /** What a screen reader takes from an element: its text, without what is hidden from it. */
+    const heard = (element: Element) => {
+      const copy = element.cloneNode(true) as Element;
+      copy.querySelectorAll('[aria-hidden="true"]').forEach((hidden) => hidden.remove());
+      return textOf(copy);
+    };
+    const childrenOf = (element: Element) =>
+      Array.from(element.children, (child) => `${child.tagName}.${child.className}`);
+    const linesIn = (element: ParentNode) =>
+      Array.from(element.querySelectorAll('[data-coach-line]'), (line) => textOf(line));
+
+    // The server's order, oldest first: neither by their words nor by their days shown.
+    const LINES: OwnCoachLineView[] = [
+      {
+        text: 'Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026',
+        what: 'Owns Iron House gym in Hamra',
+        shownOn: '2026-10-08',
+      },
+      {
+        text: 'BSc Sport Science, AUB, shown to TB Gym on 1 Oct 2026',
+        what: 'BSc Sport Science, AUB',
+        shownOn: '2026-10-01',
+      },
+    ];
+
+    it('shows each line under the coach’s name in the server’s order, in quiet text and nothing else', async () => {
+      const { host } = await render({ lines: LINES });
+
+      const coach = host.querySelector('a.coach')!;
+      const text = coach.querySelector('.coach-text')!;
+      expect(linesIn(coach)).toEqual(LINES.map((line) => line.text));
+      // A card with lines may wrap at large text; a card without them stays as it was (below).
+      expect(coach.classList.contains('coach--lines')).toBe(true);
+      // Each line is a row of its own after the name, with the card's commas between its parts.
+      expect(childrenOf(text)).toEqual([
+        'SPAN.coach-label',
+        'SPAN.tb-visually-hidden',
+        'STRONG.',
+        'SPAN.tb-visually-hidden',
+        'SMALL.coach-line',
+        'SPAN.tb-visually-hidden',
+        'SMALL.coach-line',
+      ]);
+      for (const [index, line] of Array.from(
+        text.querySelectorAll('[data-coach-line]'),
+      ).entries()) {
+        expect(childrenOf(line)).toEqual(['BDI.']);
+        expect(textOf(line.querySelector('bdi'))).toBe(LINES[index].text);
+      }
+      // No pill, no icon and no count: the card's only pill is the badge's, and it is not shown.
+      expect(coach.querySelector('app-status-pill')).toBeNull();
+      expect(text.querySelector('app-icon, app-status-pill, app-tag, img, svg')).toBeNull();
+      expect(heard(text)).toBe(
+        'Your coach, Lea Haddad, Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026, BSc Sport Science, AUB, shown to TB Gym on 1 Oct 2026',
+      );
+      expect(heard(coach)).not.toMatch(NEVER);
+    });
+
+    it('keeps the card a link to Messages, with the lines inside it and in its name', async () => {
+      const { host } = await render({ lines: LINES });
+
+      const coach = host.querySelector<HTMLAnchorElement>('a.coach')!;
+      expect(coach.getAttribute('href')).toBe('/messages');
+      for (const line of Array.from(host.querySelectorAll('[data-coach-line]'))) {
+        expect(coach.contains(line)).toBe(true);
+      }
+      // One link, nothing to press inside it.
+      expect(coach.querySelector('a, button')).toBeNull();
+      expect(heard(coach)).toBe(
+        'Your coach, Lea Haddad, Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026, BSc Sport Science, AUB, shown to TB Gym on 1 Oct 2026, Message',
+      );
+    });
+
+    it('lists every line the read carries, without folding any away', async () => {
+      const many: OwnCoachLineView[] = [
+        ...LINES,
+        {
+          text: 'Six years coaching, shown to TB Gym on 10 Aug 2026',
+          what: 'Six years coaching',
+          shownOn: '2026-08-10',
+        },
+        {
+          text: 'NASM CPT, 2019, shown to TB Gym on 2 Oct 2026',
+          what: 'NASM CPT, 2019',
+          shownOn: '2026-10-02',
+        },
+      ];
+      const { host } = await render({ lines: many });
+
+      expect(linesIn(host)).toEqual(many.map((line) => line.text));
+      expect(host.querySelector('.coach button, .coach details')).toBeNull();
+    });
+
+    it('shows the same lines on the plain card when messaging is not in the plan', async () => {
+      const { host } = await render({ lines: LINES, messaging: 'NoEntitlement' });
+
+      expect(host.querySelector('a.coach')).toBeNull();
+      const coach = host.querySelector('div.coach')!;
+      expect(linesIn(coach)).toEqual(LINES.map((line) => line.text));
+      expect(coach.classList.contains('coach--lines')).toBe(true);
+      expect(heard(coach)).toBe(
+        'Your coach, Lea Haddad, Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026, BSc Sport Science, AUB, shown to TB Gym on 1 Oct 2026',
+      );
+    });
+
+    it('puts the lines after the badge’s line when the coach shows the Founding coach badge too', async () => {
+      const { host } = await render({ founding: true, lines: LINES });
+
+      const text = host.querySelector('a.coach .coach-text')!;
+      expect(childrenOf(text)).toEqual([
+        'SPAN.coach-label',
+        'SPAN.tb-visually-hidden',
+        'SPAN.coach-name',
+        'SPAN.tb-visually-hidden',
+        'SMALL.coach-founding',
+        'SPAN.tb-visually-hidden',
+        'SMALL.coach-line',
+        'SPAN.tb-visually-hidden',
+        'SMALL.coach-line',
+      ]);
+      expect(host.querySelectorAll('app-status-pill')).toHaveLength(1);
+      expect(heard(text)).toBe(
+        'Your coach, Lea Haddad, Founding coach, One of the first coaches on TB Gym. Not a check of qualifications, Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026, BSc Sport Science, AUB, shown to TB Gym on 1 Oct 2026',
+      );
+    });
+
+    it('draws the card exactly as before when the read carries no lines, or no lines field at all', async () => {
+      for (const lines of [[], undefined]) {
+        for (const founding of [false, undefined]) {
+          const { host } = await render({ founding, lines });
+          const text = host.querySelector('a.coach .coach-text')!;
+          expect(childrenOf(text)).toEqual([
+            'SPAN.coach-label',
+            'SPAN.tb-visually-hidden',
+            'STRONG.',
+          ]);
+          expect(heard(text)).toBe('Your coach, Lea Haddad');
+          expect(host.querySelector('[data-coach-line], .coach-line, bdi')).toBeNull();
+          // No class of N4b's either, so no rule of N4b's reaches the card at any text size.
+          expect(Array.from(host.querySelector('a.coach')!.classList)).toEqual(['coach']);
+          TestBed.resetTestingModule();
+        }
+        // The badge's card is N3b's, with nothing after its line.
+        const { host } = await render({ founding: true, lines });
+        expect(childrenOf(host.querySelector('a.coach .coach-text')!)).toEqual([
+          'SPAN.coach-label',
+          'SPAN.tb-visually-hidden',
+          'SPAN.coach-name',
+          'SPAN.tb-visually-hidden',
+          'SMALL.coach-founding',
+        ]);
+        expect(host.querySelector('[data-coach-line]')).toBeNull();
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('never carries one coach’s lines to the next while it is read, nor past a read that fails', async () => {
+      const { fixture, host, api, selectedTenantId } = await render({ lines: LINES });
+      expect(linesIn(host)).toHaveLength(2);
+
+      const omar: OwnCoachLineView = {
+        text: 'Coaches at Beirut Barbell since 2021, shown to TB Gym on 5 Nov 2026',
+        what: 'Coaches at Beirut Barbell since 2021',
+        shownOn: '2026-11-05',
+      };
+      api.getOwnCoach.mockReturnValue(
+        of({ name: 'Omar Saad', foundingCoach: false, lines: [omar] }),
+      );
+      selectedTenantId.set('tenant-alpha');
+      fixture.detectChanges();
+      // Only the card's place is kept while the next coach is read, and it holds no line.
+      expect(host.querySelector('[data-coach-line]')).toBeNull();
+      expect(host.querySelector('.coach--waiting')).not.toBeNull();
+      expect(host.textContent).not.toContain('Iron House');
+      await settle(fixture);
+      expect(textOf(host.querySelector('.coach strong'))).toBe('Omar Saad');
+      expect(linesIn(host)).toEqual([omar.text]);
+
+      // A coach who cannot be read leaves the card out, lines and all, and says nothing.
+      api.getOwnCoach.mockReturnValue(throwError(() => new Error('forbidden')));
+      selectedTenantId.set('tenant-atlas');
+      await settle(fixture);
+      expect(host.querySelector('.coach')).toBeNull();
+      expect(host.querySelector('[data-coach-line]')).toBeNull();
+      expect(host.textContent).not.toContain('Beirut Barbell');
+      expect(alert(host)).toBe('');
+
+      // And the next coach read draws only their own lines, none of the first two's.
+      api.getOwnCoach.mockReturnValue(of({ name: 'Lea Haddad', foundingCoach: false, lines: [] }));
+      selectedTenantId.set('tenant-alpha');
+      await settle(fixture);
+      expect(textOf(host.querySelector('.coach strong'))).toBe('Lea Haddad');
+      expect(host.querySelector('[data-coach-line]')).toBeNull();
     });
   });
 

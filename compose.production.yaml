@@ -39,6 +39,9 @@ x-mail-environment: &mail-environment
   Application__PublicBaseUrl: https://${TB_GYM_DOMAIN:?Set TB_GYM_DOMAIN in .env}
   Application__PublicOriginAllowlist__0: https://${TB_GYM_DOMAIN}
   PlatformBilling__WhishNumber: ${TB_GYM_BILLING_WHISH_NUMBER:-}
+  # How many months a taken-down certificate line's words are kept before the Worker erases them
+  # (CLI-021): the plan's example until the lawyer names the period. Both processes read it.
+  CoachCertificates__KeepMonthsAfterTakenDown: ${TB_GYM_CERTIFICATE_KEEP_MONTHS:-12}
   DataProtection__KeyPath: /home/app/.aspnet/DataProtection-Keys
   # The public website (UI plan R6.2g): where a Talk-to-us request is emailed (the support inbox
   # unless another address is given), the WhatsApp number beside the form, and Plausible's site

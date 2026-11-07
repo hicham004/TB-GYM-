@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
+import { personFacing } from './axe-target-size';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -964,4 +965,214 @@ test('Me shows the badge on the plain card too, inside the card at 200% text', a
   }
   await expectNoAxeViolations(page);
   await page.screenshot({ path: 'test-results/n3b-me-founding-plain-200.png', fullPage: true });
+});
+
+// ---------- what TB Gym shows about the coach (notes plan N4b) ----------
+
+/** The coach's certificate lines the server shows this client, in the order TB Gym recorded them. */
+const COACH_LINES = [
+  {
+    text: 'NASM CPT, 2019, shown to TB Gym on 1 Oct 2026',
+    what: 'NASM CPT, 2019',
+    shownOn: '2026-10-01',
+  },
+  {
+    text: 'Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026',
+    what: 'Owns Iron House gym in Hamra',
+    shownOn: '2026-10-08',
+  },
+];
+
+/** A line long enough to wrap on a phone, more so at 200% text. */
+const LONG_LINE = {
+  text: 'Owns Iron House gym in Hamra since 2015, with a strength floor, two lifting platforms and a turf lane, shown to TB Gym on 8 Oct 2026',
+  what: 'Owns Iron House gym in Hamra since 2015, with a strength floor, two lifting platforms and a turf lane',
+  shownOn: '2026-10-08',
+};
+
+/** The coach as the server answers with lines; the default mock above carries none. */
+const coachWith = (lines: object[], foundingCoach = false) => ({
+  'GET /api/client-profile/me/coach': (route: Route) =>
+    json(route, 200, { name: 'Lea Haddad', foundingCoach, lines }),
+});
+
+/** The coach's card once read, not the place kept for it while it is read. */
+const coachCard = (page: Page) => page.locator('.hero .coach:not(.coach--waiting)');
+
+/**
+ * The words of the lines that the card cuts across two rows: a column too narrow for a word breaks it
+ * anywhere (`overflow-wrap: anywhere`), which keeps it inside the card but no longer reads as words.
+ */
+const cutWords = (lines: Locator) =>
+  lines.evaluateAll((items) =>
+    items.flatMap((item) => {
+      const text = item.querySelector('bdi')?.firstChild;
+      if (!(text instanceof Text)) return ['(no text)'];
+      return Array.from(text.data.matchAll(/\S+/g)).flatMap((word) => {
+        const range = document.createRange();
+        range.setStart(text, word.index);
+        range.setEnd(text, word.index + word[0].length);
+        const rows = new Set(Array.from(range.getClientRects(), (rect) => Math.round(rect.top)));
+        return rows.size > 1 ? [word[0]] : [];
+      });
+    }),
+  );
+
+/**
+ * Axe as a person meets Me: the lines push the rows below down, and a row the client's tab bar covers
+ * at the first scroll is judged where a person reaches it (CLIENT-7). Anything else still fails.
+ */
+async function expectNoAxeViolationsWhereReached(page: Page) {
+  const result = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+    .analyze();
+  expect(
+    (await personFacing(page, result.violations)).map(
+      (violation) =>
+        `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
+    ),
+  ).toEqual([]);
+}
+
+test.describe('what TB Gym shows about the coach (notes plan N4b)', () => {
+  for (const [width, height, mode] of [
+    [390, 844, 'system'],
+    [390, 844, 'dark'],
+    [1440, 900, 'system'],
+    [1440, 900, 'dark'],
+  ] as const) {
+    test(`Me shows the coach’s certificate lines under their name, inside the link, at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      await openMe(page, {
+        width,
+        height,
+        user: { preferredThemeMode: mode },
+        extra: coachWith(COACH_LINES),
+      });
+
+      // The lines join the card's name, and the card is still the way to Messages.
+      const coach = page.getByRole('link', {
+        name: /Your coach.*Lea Haddad.*NASM CPT, 2019, shown to TB Gym on 1 Oct 2026.*Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026.*Message/,
+      });
+      await expect(coach).toHaveAttribute('href', '/messages');
+      const lines = coach.locator('[data-coach-line]');
+      await expect(lines).toHaveText(COACH_LINES.map((line) => line.text));
+      // Each is its sentence in a <bdi> and nothing else: no pill, no icon, no count.
+      await expect(coach.locator('[data-coach-line] > bdi')).toHaveText(
+        COACH_LINES.map((line) => line.text),
+      );
+      expect(await lines.evaluateAll((items) => items.map((item) => item.children.length))).toEqual(
+        [1, 1],
+      );
+      await expect(coach.locator('app-status-pill')).toHaveCount(0);
+      await expect(coach.locator('.coach-text app-icon, .coach-text svg')).toHaveCount(0);
+
+      // Under the name, each on its own row, in quieter text than the name.
+      const name = (await coach.locator('.coach-text strong').boundingBox())!;
+      const first = (await lines.nth(0).boundingBox())!;
+      const second = (await lines.nth(1).boundingBox())!;
+      expect(first.y).toBeGreaterThanOrEqual(name.y + name.height - 0.5);
+      expect(second.y).toBeGreaterThanOrEqual(first.y + first.height - 0.5);
+      expect(Math.abs(first.x - name.x)).toBeLessThan(1);
+      expect(Math.abs(second.x - name.x)).toBeLessThan(1);
+      const [nameSize, lineSize] = await coach.evaluate((card) =>
+        [card.querySelector('.coach-text strong')!, card.querySelector('[data-coach-line]')!].map(
+          (element) => parseFloat(getComputedStyle(element).fontSize),
+        ),
+      );
+      expect(lineSize).toBeLessThan(nameSize);
+
+      if (mode === 'dark') await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolationsWhereReached(page);
+      await page.screenshot({
+        path: `test-results/n4b-me-lines-${width}-${mode}.png`,
+        fullPage: true,
+      });
+    });
+  }
+
+  test('the lines come after the Founding coach badge’s line, at 390px', async ({ page }) => {
+    await openMe(page, { extra: coachWith(COACH_LINES, true) });
+
+    const coach = page.getByRole('link', {
+      name: /Your coach.*Lea Haddad.*Founding coach.*One of the first coaches on TB Gym.*NASM CPT, 2019.*Owns Iron House gym in Hamra/,
+    });
+    await expect(coach).toHaveAttribute('href', '/messages');
+    // The one pill is the badge's own.
+    await expect(coach.locator('app-status-pill')).toHaveText('Founding coach');
+    await expect(coach.locator('[data-coach-line]')).toHaveText(
+      COACH_LINES.map((line) => line.text),
+    );
+    const founding = (await coach.locator('.coach-founding').boundingBox())!;
+    const first = (await coach.locator('[data-coach-line]').first().boundingBox())!;
+    expect(first.y).toBeGreaterThanOrEqual(founding.y + founding.height - 0.5);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolationsWhereReached(page);
+    await page.screenshot({ path: 'test-results/n4b-me-lines-founding-390.png', fullPage: true });
+  });
+
+  for (const messaging of ['Granted', 'NoEntitlement'] as const) {
+    const card = messaging === 'Granted' ? 'link' : 'plain card';
+
+    test(`the lines stay inside the ${card} at 200% text`, async ({ page }) => {
+      await openMe(page, { messaging, extra: coachWith([COACH_LINES[0], LONG_LINE]) });
+      const coach = coachCard(page);
+      const lines = coach.locator('[data-coach-line]');
+      await expect(lines).toHaveText([COACH_LINES[0].text, LONG_LINE.text]);
+      await expect(page.locator('a.coach')).toHaveCount(messaging === 'Granted' ? 1 : 0);
+
+      await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+      await expect(lines.last()).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      // The hero card hides what spills out of it, so the page's own check cannot see a clipped line.
+      const outer = (await coach.boundingBox())!;
+      for (const line of await lines.all()) {
+        const inner = (await line.boundingBox())!;
+        expect(inner.x).toBeGreaterThanOrEqual(outer.x - 0.5);
+        expect(inner.x + inner.width).toBeLessThanOrEqual(outer.x + outer.width + 0.5);
+        expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height + 0.5);
+      }
+      const hero = (await page.locator('.hero').boundingBox())!;
+      expect(outer.x + outer.width).toBeLessThanOrEqual(hero.x + hero.width + 0.5);
+      expect(outer.y + outer.height).toBeLessThanOrEqual(hero.y + hero.height + 0.5);
+      // And they still read as words: the column beside the face (and Message, on the link) keeps
+      // room for a whole word, so none is cut across two rows. Soft, so the still shows a failure.
+      expect.soft(await cutWords(lines)).toEqual([]);
+      await expectNoAxeViolationsWhereReached(page);
+      await page.screenshot({
+        path: `test-results/n4b-me-lines-200-${messaging === 'Granted' ? 'link' : 'plain'}.png`,
+        fullPage: true,
+      });
+    });
+  }
+
+  // With an empty list the server sends today, the card is the one the pixel guards above hold, to
+  // the pixel: no wrapper, no hidden comma, nothing.
+  for (const [width, height, mode] of [
+    [390, 844, 'system'],
+    [1440, 900, 'system'],
+    [390, 844, 'dark'],
+  ] as const) {
+    test(`a coach with no lines to show draws Me's card as before at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      await openMe(page, {
+        width,
+        height,
+        user: { preferredThemeMode: mode },
+        extra: coachWith([]),
+      });
+      await expect(page.getByRole('link', { name: /Your coach.*Lea Haddad/ })).toBeVisible();
+      expect(
+        await page
+          .locator('a.coach .coach-text > *')
+          .evaluateAll((children) =>
+            children.map((child) => `${child.tagName}.${child.className}`),
+          ),
+      ).toEqual(['SPAN.coach-label', 'SPAN.tb-visually-hidden', 'STRONG.']);
+      await expect(page.locator('.hero')).toHaveScreenshot(`me-coach-card-${width}-${mode}.png`);
+    });
+  }
 });

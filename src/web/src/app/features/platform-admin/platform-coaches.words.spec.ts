@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import appShell from '../../app.html' with { loader: 'text' };
 import coachShell from '../../shell/coach-shell.html' with { loader: 'text' };
+import accountCertificates from '../account/account-certificates.html' with { loader: 'text' };
 import clientAccount from '../account/client-account.html' with { loader: 'text' };
 import platformAdmin from './platform-admin.html' with { loader: 'text' };
 import coachAdd from './platform-coach-add.html' with { loader: 'text' };
@@ -8,6 +9,7 @@ import coachConfirm from './platform-coach-confirm.html' with { loader: 'text' }
 import coachErase from './platform-coach-erase.html' with { loader: 'text' };
 import coachLines from './platform-coach-lines.html' with { loader: 'text' };
 import platformCoaches from './platform-coaches.html' with { loader: 'text' };
+import { ownLines, ownTakenDownLine } from '../../../testing/account-certificates-fixtures';
 import {
   certificateCoach,
   certificateLine,
@@ -15,6 +17,13 @@ import {
   erasedLine,
   takenDownLine,
 } from '../../../testing/platform-admin-fixtures';
+import {
+  CERTIFICATES_EMPTY,
+  CERTIFICATES_LEDE,
+  ownPillFor,
+  SHOW_TO_CLIENTS,
+  SWITCH_REFUSED,
+} from '../account/account-certificates.models';
 import {
   addLineErrors,
   byLine,
@@ -49,6 +58,8 @@ const TEMPLATES: Record<string, string> = {
   'coach-shell.html': coachShell,
   'client-account.html': clientAccount,
   'app.html': appShell,
+  // Notes plan N4b: the coach's own lines, under Settings › Your account.
+  'account-certificates.html': accountCertificates,
 };
 
 describe('The certificate record’s words', () => {
@@ -68,6 +79,10 @@ describe('The certificate record’s words', () => {
       certificateLine(),
       confirmedLine(),
       confirmedLine({ confirmedByName: 'Hicham Haddad' }),
+      // Notes plan N4b: a confirmed line the coach hides from their clients, and one a former coach
+      // left switched on, which no client reads.
+      confirmedLine({ coachShows: false }),
+      confirmedLine({ shownToClients: false }),
       takenDownLine(),
       erasedLine(),
       erasedLine({ erasureReason: 'KeepingPeriod', requestedOn: null, erasedByName: null }),
@@ -104,11 +119,35 @@ describe('The certificate record’s words', () => {
       ...Object.values(confirmLineErrors({ confirmedByName: 'x'.repeat(81) })).flat(),
       ...Object.values(eraseErrors({ requestedOn: '' }, '2026-10-09')).flat(),
       certificateRefusal(new Error('offline')).message ?? '',
+      // Notes plan N4b: the coach's own page, its lede, its empty state, its switch and its pills.
+      CERTIFICATES_LEDE,
+      CERTIFICATES_EMPTY,
+      SHOW_TO_CLIENTS,
+      SWITCH_REFUSED,
+      ...[...ownLines(), ownTakenDownLine({ takenDownOn: null })].map(
+        (line) => ownPillFor(line, 'en-LB').label,
+      ),
     ];
-    expect(sentences.length).toBeGreaterThan(30);
+    expect(sentences.length).toBeGreaterThan(40);
     for (const sentence of sentences) {
       expect(sentence.length).toBeGreaterThan(0);
       expect(sentence).not.toMatch(NEVER);
     }
+  });
+
+  it('says what a coach’s clients see of a confirmed line, on the admin’s page and the coach’s own', () => {
+    expect(
+      [
+        confirmedLine(),
+        confirmedLine({ coachShows: false }),
+        confirmedLine({ shownToClients: false }),
+      ].map((line) => pillFor(line, 'en-LB').label),
+    ).toEqual(['Shown to clients', 'Hidden by the coach', 'Not shown: no longer coaching here']);
+    expect(ownLines().map((line) => ownPillFor(line, 'en-LB').label)).toEqual([
+      'Taken down 3 Nov 2026',
+      'Shown to clients',
+      'Hidden',
+      'Waiting for TB Gym',
+    ]);
   });
 });

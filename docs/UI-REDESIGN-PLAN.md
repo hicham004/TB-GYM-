@@ -2197,13 +2197,22 @@ limited to the coach's assigned clients.
 - Built in notes plan N4a (CLI-021): the platform admin's **Coaches** (`/admin/coaches`, from Platform billing,
   the account menu and Me): every owner and coach of every coaching space as faces (name, email, "Owner · Atlas
   Performance", "2 lines · 1 waiting"), searched by coach, email or space; a row opens a sheet named after the
-  coach with each line as its sentence and a pill (Waiting for confirmation, Confirmed, Taken down, Erased, each
-  with its day), who confirmed and who recorded it, and Add a line, Mark confirmed (the confirmer's name
+  coach with each line as its sentence and a pill (Waiting for confirmation; once confirmed, since N4b, Shown to
+  clients, Hidden by the coach, or Not shown: no longer coaching here, as the server says; Taken down and Erased
+  with their day), who confirmed and who recorded it, and
+  Add a line, Mark confirmed (the confirmer's name
   prefilled with the admin's), Drop, Take down and Erase on request (the day the coach asked and the 10 days it
   is met within) on top of it. Text only. The page's own words never say verified, certified, licensed,
   qualified or approved; a line is the coach's own words, from which the server refuses verified, licensed,
   qualified, approved and the physio titles (a certificate's own name may hold "certified", section 3 of the
-  notes plan). Until N4b nothing of a line reaches a coach or a client.
+  notes plan).
+- Built in notes plan N4b (CLI-021): an owner's or a coach's own **Certificates** (`/account/certificates`, in
+  Your account after Password and security), with the kicker "Your account" and the lede "What TB Gym shows your
+  clients about you…": each line TB Gym recorded about them in the open space as its sentence (in a `<bdi>`) with
+  a pill (Shown to clients, Hidden, Waiting for TB Gym, Taken down with its day), and on a confirmed line the
+  kit's checkbox "Show to my clients", described by its sentence, saving as it is flipped; a refusal puts it back
+  with "Couldn’t save your choice. Try again." under the line and reads the lines again. No lines: "No lines yet.
+  Send TB Gym your certificates…". Nothing on the page adds, edits or asks for a file.
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an
@@ -2343,6 +2352,9 @@ limited to the coach's assigned clients.
   the Progress screens only: stored weights stay kilograms (ADR 0009) and the workout player still
   asks for its own unit (TRN-016). With more than one coach, "Your coaches" switches between them.
   Me follows dark mode (marked `REDESIGNED`), and the install card sits above Sign out.
+- Built in notes plan N4b (CLI-021): under Your coach and the coach's name, the certificate lines the server
+  sends, each its sentence on its own row in a `<bdi>`, in quiet text and nothing else (no pill, icon or count),
+  inside the card, which stays the link to Messages; with no lines the card is exactly as before.
 
 **Notifications (coach and client, R5.1c)**
 - Reached from the bell in the coach's top bar and on the client's Today. One screen for both, in

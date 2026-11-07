@@ -183,6 +183,8 @@ public static class DependencyInjection
         services.AddScoped<ILegalConsentApplicationService, LegalConsentApplicationService>();
         services.AddScoped<ILegalDocumentAdminService, LegalDocumentAdminService>();
         services.AddScoped<ICoachCertificateAdminService, CoachCertificateAdminService>();
+        services.AddScoped<ICoachCertificateOwnService, CoachCertificateOwnService>();
+        services.AddCoachCertificates(configuration);
         services.AddScoped<IExerciseLibraryApplicationService, ExerciseLibraryApplicationService>();
         services.AddScoped<IStrengthApplicationService, StrengthApplicationService>();
         services.AddScoped<ITrainingApplicationService, TrainingApplicationService>();

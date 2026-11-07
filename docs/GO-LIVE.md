@@ -112,6 +112,10 @@ web container after changing any of the three. Write the privacy note yourself; 
   lost.
 - **Logs**: `tb logs --tail 200 api` (or `worker`, `backup`). `docs/LAUNCH-CHECKLIST.md` Part 1 is
   the full list to tick.
+- **Certificate record**: the Worker erases a taken-down certificate line's words once a day after
+  `CoachCertificates:KeepMonthsAfterTakenDown` months (12, the plan's example, until the lawyer names the
+  period; 1 to 120, or neither process starts). To change it, put the months in
+  `TB_GYM_CERTIFICATE_KEEP_MONTHS` in `.env`, then `tb up -d api worker` (CLI-021).
 
 ## Before launch: a test copy on Render
 

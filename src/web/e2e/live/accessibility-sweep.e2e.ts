@@ -38,6 +38,8 @@ const COACH_ROUTES = [
   '/products',
   '/account/security',
   '/account/appearance',
+  // A coach's own certificate lines (notes plan N4b); staff only, so never a client's route.
+  '/account/certificates',
 ];
 
 const CLIENT_ROUTES = [

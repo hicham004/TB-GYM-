@@ -98,3 +98,6 @@ Chosen by the implementer, to confirm:
   badge check after the invoices and reminders, in its own try. The owner's switch that hides the badge
   from their clients (`SetFoundingBadgeVisibility`) is a personal display setting on the owner's own
   status, so it is on the read-only allow-list and uses `RoutineWrite`.
+- Amended 2026-11-07 (notes plan N4b, ADR 0039): a coach's switch that shows one of their own certificate
+  lines to their clients or hides it (`SetOwnCoachCertificateLineShown`) is a personal setting about
+  themselves, a consent that can always be withdrawn, so it joins the read-only allow-list with `RoutineWrite`.

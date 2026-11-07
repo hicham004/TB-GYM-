@@ -66,6 +66,11 @@ export interface CertificateLine {
   readonly requestedOn: IsoDate | null;
   readonly erasedByName: string | null;
   readonly coachShows: boolean;
+  /**
+   * The server's word on whether the coach's clients read the line now (notes plan N4b): confirmed, still up,
+   * switched on, while the coach is staff of the space.
+   */
+  readonly shownToClients: boolean;
   /** Sent back unchanged with every change, so a line changed meanwhile is refused (409). */
   readonly version: number;
 }
@@ -202,18 +207,20 @@ function dayOrNull(day: IsoDate | null, locale: string): string | null {
   return day && isIsoDate(day) ? formatCertificateDay(day, locale) : null;
 }
 
-/** Where a line stands, in words and a tone, with the day it got there. */
+/**
+ * Where a line stands, in words and a tone, with the day it got there. A confirmed line says what the
+ * coach's clients see of it, as the server decides it (notes plan N4b): shown, hidden by the coach's
+ * own switch, or not shown because the coach no longer coaches in the space.
+ */
 export function pillFor(line: CertificateLine, locale: string): CertificatePill {
   switch (line.state) {
     case 'Waiting':
       return { label: $localize`Waiting for confirmation`, tone: 'warning' };
-    case 'Confirmed': {
-      const day = dayOrNull(line.confirmedOn, locale);
-      return {
-        label: day ? $localize`Confirmed ${day}:day:` : $localize`Confirmed`,
-        tone: 'success',
-      };
-    }
+    case 'Confirmed':
+      if (line.shownToClients) return { label: $localize`Shown to clients`, tone: 'success' };
+      return line.coachShows
+        ? { label: $localize`Not shown: no longer coaching here`, tone: 'neutral' }
+        : { label: $localize`Hidden by the coach`, tone: 'neutral' };
     case 'TakenDown': {
       const day = dayOrNull(line.takenDownOn, locale);
       return {

@@ -234,16 +234,24 @@ coach showed as proof is one text-only line per proof about a coach in one coach
 alone: what was shown (1 to 120 characters, one line), the day it was shown (no later than the space's today), who
 confirmed it with the coach (a typed name) and the admin who recorded it; never a copy, a photo, a file, an issuer or
 a "valid to" date. A line can be added only for active staff of the space; the same words and day again answer the
-line that exists. It waits until confirmed, the only state a reader may ever see; a waiting line may be dropped and
+line that exists. It waits until confirmed, the only state a client may ever see; a waiting line may be dropped and
 nothing of it is kept; a confirmed line can be taken down, and its words, day and confirmer never change and it is
 never deleted (a trigger). Erasing on the coach's request blanks the words and the confirmer's name and drops the day
 for every line of theirs in that space (waiting ones are dropped), keeping the dates, who acted and the request's
 day; nothing changes afterwards. The words "verified", "licensed", "qualified" and "approved" and the titles
-"physiotherapist", "physical therapist" and "physio" (with their plurals) are refused as whole words, and a refusal
-never repeats them. A reader sees one sentence, `CoachCertificateLineWording` version 1, "<what>, shown to TB Gym on
+"physiotherapist", "physical therapist" and "physio" (with their plurals) are refused as whole words, after the
+invisible format characters a pasted message may hide inside a word are dropped (N4b), and a refusal never repeats
+them. A reader sees one sentence, `CoachCertificateLineWording` version 1, "<what>, shown to TB Gym on
 <date>" with the date in the space's language, a placeholder for the lawyer's words. Nothing of a line reaches a log,
 an exception, a notification or analytics (CLI-008), and no line changes a coach's access, bill, clients or sign-up.
-Until notes plan N4b only the admin reads it.
+Who reads it (notes plan N4b): a coach reads their own lines in the open space (a waiting one too) and switches each
+confirmed line on or off for their clients, on from the start and open while the space is read-only, as a person's
+own setting; a switched-off line is not taken down. A client reads, under their coach's name, only the confirmed
+lines still up that the coach of their current profile shows in the client's own space, while that coach is its
+staff; the server decides every line. Keeping (CLI-008's retention): a taken-down line's words stay
+`CoachCertificates:KeepMonthsAfterTakenDown` whole months after its own take-down (1 to 120; the plan's example, 12,
+until the lawyer sets it), then a daily Worker sweep erases it as an erasure on request does, with the reason
+`KeepingPeriod`, no person and no request day.
 
 ## 3. Products, enrollments, payments, programs, and access
 

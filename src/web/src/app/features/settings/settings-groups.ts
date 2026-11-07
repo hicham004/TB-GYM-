@@ -19,6 +19,9 @@ export interface SettingsGroup {
  * A client's account pages open from Me, so a client gets no Settings section at all. Team is the
  * owner's own sidebar row, and a coach reads it from here (critique B3a).
  *
+ * Every owner and coach has Certificates in their own account (notes plan N4b): what TB Gym shows
+ * their clients about them, with the switch that stops a line.
+ *
  * `foundingCoach` is the server's word on the space's Founding coach badge (`GET /api/billing/access`,
  * notes plan N3b): the owner of a founding space finds their badge's page last in their own account,
  * while it waits or once earned. The server answers it for the owner alone; a coach never gets it.
@@ -33,6 +36,7 @@ export function settingsGroups(
     { label: $localize`Notifications`, link: '/notifications/settings' },
     { label: $localize`Appearance`, link: '/account/appearance' },
     { label: $localize`Password and security`, link: '/account/security' },
+    { label: $localize`Certificates`, link: '/account/certificates' },
   ];
   if (role === 'Owner' && showsFoundingPage(foundingCoach)) {
     accountItems.push({ label: FOUNDING_COACH, link: '/account/founding' });

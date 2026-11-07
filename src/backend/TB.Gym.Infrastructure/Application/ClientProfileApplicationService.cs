@@ -480,10 +480,12 @@ internal sealed class ClientProfileApplicationService(
         if (name is null) return null;
 
         // The Founding coach badge is the space owner's (notes plan N3a): composed here from platform
-        // billing's records, so the Clients module knows nothing of billing.
+        // billing's records, so the Clients module knows nothing of billing. The certificate lines the
+        // coach shows (notes plan N4b) come from the Identity record the same way.
         return new OwnCoachView(
             name,
-            await FoundingReader.ShowsBadgeToClientsAsync(dbContext, profile.TenantId, profile.AssignedCoachUserId, cancellationToken));
+            await FoundingReader.ShowsBadgeToClientsAsync(dbContext, profile.TenantId, profile.AssignedCoachUserId, cancellationToken),
+            await CoachCertificateReader.ShownToClientsAsync(dbContext, profile.TenantId, profile.AssignedCoachUserId, cancellationToken));
     }
 
     public Task<ClientCommandResult> UpdateForCoachAsync(

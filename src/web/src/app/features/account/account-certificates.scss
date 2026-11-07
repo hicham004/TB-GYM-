@@ -1,0 +1,77 @@
+// Settings › Certificates (notes plan N4b): a coach's own certificate lines, read from the server, and
+// whether their clients see each. Brand v2 tokens, from the Settings pages' shared pieces.
+@use '../settings/settings-page';
+
+// The page's place in the person's own account, above its heading, as Me writes it.
+.kicker {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.nothing {
+  align-items: flex-start;
+  max-inline-size: 36rem;
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-block: 1rem;
+
+  &:first-child {
+    padding-block-start: 0;
+  }
+
+  &:last-child {
+    padding-block-end: 0;
+  }
+
+  & + & {
+    border-block-start: 1px solid var(--tb-line);
+  }
+}
+
+.what {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  justify-content: space-between;
+}
+
+.sentence {
+  color: var(--tb-ink);
+  margin: 0;
+  max-inline-size: 40rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+// Beside its pill the sentence takes the row; alone in the panel (no lines yet) it is as tall as its text.
+.what > .sentence {
+  flex: 1 1 18rem;
+}
+
+.show {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+// The shared refusal grows along an actions row; in this column it is one line under the switch.
+.line .save-error {
+  flex: none;
+}

@@ -524,9 +524,13 @@ export function certificateCoaches(): CertificateCoach[] {
   ];
 }
 
-/** A line waiting for confirmation: Karim owns a gym, shown to TB Gym on 8 October. */
+/**
+ * A line waiting for confirmation: Karim owns a gym, shown to TB Gym on 8 October. Whether clients
+ * read it follows the line, as the server's does (confirmed and switched on), unless a test says
+ * otherwise, as for a coach who left the space.
+ */
 export function certificateLine(overrides: Partial<CertificateLine> = {}): CertificateLine {
-  return {
+  const line: CertificateLine = {
     id: 'line-gym',
     state: 'Waiting',
     text: 'Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026',
@@ -548,8 +552,13 @@ export function certificateLine(overrides: Partial<CertificateLine> = {}): Certi
     requestedOn: null,
     erasedByName: null,
     coachShows: true,
+    shownToClients: false,
     version: 1,
     ...overrides,
+  };
+  return {
+    ...line,
+    shownToClients: overrides.shownToClients ?? (line.state === 'Confirmed' && line.coachShows),
   };
 }
 

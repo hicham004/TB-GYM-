@@ -56,6 +56,9 @@ internal static class WorkerProgram
         // Founding coach badges (notes plan N3a). Its emails ride the workspace notice queue the
         // action-mail sweep drains.
         builder.Services.AddHostedService<PlatformBillingWorker>();
+        // The certificate record's keeping period (notes plan N4b): once a day, every taken-down line past it is
+        // erased, its words gone and its dates kept.
+        builder.Services.AddHostedService<CoachCertificateKeepingWorker>();
         return builder;
     }
 }

@@ -7,14 +7,47 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Identity;
 
 /// <summary>
-/// The platform admin's certificate record (CLI-021, notes plan N4a): the <c>PlatformAdmin</c> policy on every route,
-/// no workspace header read, antiforgery and the <c>SensitiveWrite</c> limit on every write. No route answers with
-/// anything but the admin's own views; nothing here reaches a coach or a client.
+/// The certificate record (CLI-021). The platform admin's routes (notes plan N4a): the <c>PlatformAdmin</c> policy
+/// on every route, no workspace header read, antiforgery and the <c>SensitiveWrite</c> limit on every write. The
+/// coach's own routes (notes plan N4b): the <c>TenantCoach</c> policy, so the workspace header is verified, the
+/// caller's own lines in that space alone, and a switch a coach can always flip, even while the space's bill is
+/// unpaid. A client reads the lines with their coach, on <c>GET /api/client-profile/me/coach</c>.
 /// </summary>
 public static class CoachCertificateEndpoints
 {
     public static IEndpointRouteBuilder MapCoachCertificateEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        var own = endpoints
+            .MapGroup("/api/coach-certificates/me")
+            .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithTags("Coach certificates");
+
+        own.MapGet("/", async (ICoachCertificateOwnService service, CancellationToken cancellationToken) =>
+                Results.Ok(await service.ReadOwnAsync(cancellationToken)))
+            .WithName("GetOwnCoachCertificates")
+            .Produces<CoachCertificateOwnView>();
+
+        // Consent can always be withdrawn: a coach stops showing something about themselves even while the
+        // space is read-only for an unpaid bill, as a person's own setting (ADR 0028).
+        own.MapPut("/{lineId:guid}/shown", async (
+                Guid lineId,
+                SetCoachCertificateLineShownRequest request,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                ICoachCertificateOwnService service,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return ToResult(await service.SetShownAsync(lineId, request, cancellationToken));
+            })
+            .RequireRateLimiting(RateLimitPolicies.RoutineWrite)
+            .WithMetadata(AllowedWhileWorkspaceReadOnly.Instance)
+            .WithName("SetOwnCoachCertificateLineShown")
+            .Produces<CoachCertificateOwnLineView>()
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         var admin = endpoints
             .MapGroup("/api/platform-admin/coaches")
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin)

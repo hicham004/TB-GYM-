@@ -281,7 +281,7 @@ describe('Coaches, the certificate record (notes plan N4a)', () => {
         ],
         [
           'NASM CPT, 2019, shown to TB Gym on 1 Oct 2026',
-          'Confirmed 2 Oct 2026',
+          'Shown to clients',
           'Confirmed by Tarek Bou · recorded by Hicham Haddad',
         ],
         [
@@ -319,6 +319,45 @@ describe('Coaches, the certificate record (notes plan N4a)', () => {
       expect(textOf(sheet.querySelector('[data-add-line]'))).toBe('Add a line');
       expect(textOf(sheet.querySelector('[data-erase]'))).toBe('Erase on request');
       expect(sheet.querySelector('[data-former]')).toBeNull();
+    });
+
+    it('says when the coach hides a confirmed line from their clients, which TB Gym can still take down (notes plan N4b)', async () => {
+      const { fixture, host } = await render({
+        getLines: vi.fn(() =>
+          of(
+            certificateLines({
+              lines: [
+                confirmedLine({ coachShows: false }),
+                confirmedLine({
+                  id: 'line-degree',
+                  text: 'BSc Sport Science, AUB, shown to TB Gym on 1 Oct 2026',
+                  what: 'BSc Sport Science, AUB',
+                }),
+                takenDownLine({ coachShows: false }),
+              ],
+            }),
+          ),
+        ),
+      });
+
+      const sheet = await openRow(fixture, host, COACH_IDS.karim);
+
+      const hidden = line(sheet, 'line-nasm');
+      const pill = hidden.querySelector('app-status-pill')!;
+      expect(textOf(pill)).toBe('Hidden by the coach');
+      expect(toneOf(pill)).toBe('neutral');
+      expect(textOf(hidden.querySelector('[data-by]'))).toBe(
+        'Confirmed by Tarek Bou · recorded by Hicham Haddad',
+      );
+      expect(textOf(lineAction(sheet, 'line-nasm', 'take-down'))).toContain('Take down');
+      // A line the coach shows says so; a taken-down one keeps its day whatever the switch said.
+      const shown = line(sheet, 'line-degree').querySelector('app-status-pill')!;
+      expect(textOf(shown)).toBe('Shown to clients');
+      expect(toneOf(shown)).toBe('success');
+      expect(textOf(line(sheet, 'line-years').querySelector('app-status-pill'))).toBe(
+        'Taken down 20 Aug 2026',
+      );
+      expect(textOf(sheet)).not.toMatch(NEVER);
     });
 
     it('shows the lines being read, and a failed read’s Try again', async () => {

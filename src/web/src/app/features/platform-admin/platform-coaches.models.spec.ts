@@ -129,13 +129,13 @@ describe('The certificate record’s words (notes plan N4a)', () => {
       expect(formatCertificateDay('2027-01-01', LOCALE)).toBe('1 Jan 2027');
     });
 
-    it('gives each state its pill, with the day it got there', () => {
+    it('gives each state its pill, with the day a line was taken down or erased', () => {
       expect(pillFor(certificateLine(), LOCALE)).toEqual({
         label: 'Waiting for confirmation',
         tone: 'warning',
       });
       expect(pillFor(confirmedLine(), LOCALE)).toEqual({
-        label: 'Confirmed 2 Oct 2026',
+        label: 'Shown to clients',
         tone: 'success',
       });
       expect(pillFor(takenDownLine(), LOCALE)).toEqual({
@@ -146,7 +146,56 @@ describe('The certificate record’s words (notes plan N4a)', () => {
         label: 'Erased 2 Jul 2026',
         tone: 'neutral',
       });
-      expect(pillFor(confirmedLine({ confirmedOn: null }), LOCALE).label).toBe('Confirmed');
+      expect(pillFor(takenDownLine({ takenDownOn: null }), LOCALE).label).toBe('Taken down');
+      expect(pillFor(erasedLine({ erasedOn: null }), LOCALE).label).toBe('Erased');
+    });
+
+    it('says what the coach’s clients see of a confirmed line, from the coach’s own switch (notes plan N4b)', () => {
+      expect(pillFor(confirmedLine({ coachShows: false }), LOCALE)).toEqual({
+        label: 'Hidden by the coach',
+        tone: 'neutral',
+      });
+      // What a client sees, not when it was confirmed: the day is the who-acted line's to say.
+      expect(pillFor(confirmedLine({ confirmedOn: null }), LOCALE)).toEqual({
+        label: 'Shown to clients',
+        tone: 'success',
+      });
+      expect(pillFor(confirmedLine({ confirmedOn: '2026-11-03' }), LOCALE).label).toBe(
+        'Shown to clients',
+      );
+      // The switch moves nothing but a confirmed line's pill.
+      expect(pillFor(certificateLine({ coachShows: false }), LOCALE)).toEqual(
+        pillFor(certificateLine(), LOCALE),
+      );
+      expect(pillFor(takenDownLine({ coachShows: false }), LOCALE)).toEqual({
+        label: 'Taken down 20 Aug 2026',
+        tone: 'neutral',
+      });
+      expect(pillFor(erasedLine({ coachShows: false }), LOCALE)).toEqual({
+        label: 'Erased 2 Jul 2026',
+        tone: 'neutral',
+      });
+      expect(byLine(confirmedLine({ coachShows: false }), LOCALE)).toBe(
+        byLine(confirmedLine(), LOCALE),
+      );
+    });
+
+    it('takes the server’s word on what a client reads: a line a former coach left switched on is not shown', () => {
+      // The server shows a coach's lines only while they coach in the space (notes plan N4b).
+      expect(pillFor(confirmedLine({ shownToClients: false }), LOCALE)).toEqual({
+        label: 'Not shown: no longer coaching here',
+        tone: 'neutral',
+      });
+      // Switched off as well, it reads as the coach's own choice.
+      expect(pillFor(confirmedLine({ coachShows: false, shownToClients: false }), LOCALE)).toEqual({
+        label: 'Hidden by the coach',
+        tone: 'neutral',
+      });
+      // A fixture's line follows the server's rule unless a test says otherwise.
+      expect(confirmedLine().shownToClients).toBe(true);
+      expect(confirmedLine({ coachShows: false }).shownToClients).toBe(false);
+      expect(certificateLine().shownToClients).toBe(false);
+      expect(takenDownLine().shownToClients).toBe(false);
     });
 
     it('says who confirmed and who recorded, once when it is the same person', () => {

@@ -73,11 +73,21 @@ class CertificateRecord {
 
   constructor() {
     this.lines.set(key(COACH_IDS.karim, SPACE_IDS.atlas), [...certificateLines().lines]);
+    // A former coach (notes plan N4b): a confirmed line they switched off for their clients, and one
+    // still switched on that no client reads, since they no longer coach in the space.
     this.lines.set(key(COACH_IDS.nadine, SPACE_IDS.atlas), [
       confirmedLine({
         id: 'line-degree',
         text: 'BSc Sport Science, AUB, shown to TB Gym on 1 Oct 2026',
         what: 'BSc Sport Science, AUB',
+        coachShows: false,
+      }),
+      confirmedLine({
+        id: 'line-iron',
+        text: 'Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026',
+        what: 'Owns Iron House gym in Hamra',
+        shownOn: '2026-10-08',
+        shownToClients: false,
       }),
     ]);
     this.lines.set(key(COACH_IDS.omar, SPACE_IDS.atlas), [
@@ -199,6 +209,7 @@ class CertificateRecord {
                   erasureReason: 'Request',
                   requestedOn: body.requestedOn,
                   erasedByName: ADMIN.displayName,
+                  shownToClients: false,
                   version: line.version + 1,
                 },
           ),
@@ -236,6 +247,8 @@ class CertificateRecord {
           confirmedAtUtc: NOW,
           confirmedOn: TODAY,
           confirmedByName: body.confirmedByName?.trim() ?? null,
+          // As the server reads it: shown while the coach shows it and is staff of the space.
+          shownToClients: line.coachShows && view.isActiveStaff,
           version: line.version + 1,
         };
         update(next);
@@ -265,6 +278,7 @@ class CertificateRecord {
           takenDownAtUtc: NOW,
           takenDownOn: TODAY,
           takenDownByName: ADMIN.displayName,
+          shownToClients: false,
           version: line.version + 1,
         };
         update(next);
@@ -350,7 +364,7 @@ for (const width of [390, 1440]) {
       await expect(page.locator('li.coach .count')).toHaveText([
         '3 lines · 1 waiting · 1 taken down · 1 erased',
         'No lines yet',
-        '1 line',
+        '2 lines',
         '1 line · 1 waiting',
         'No lines yet',
         'No lines · 2 erased',
@@ -364,12 +378,19 @@ for (const width of [390, 1440]) {
       await rowOf(page, COACH_IDS.karim).getByRole('button', { name: 'Karim Haddad' }).click();
       const sheet = sheetOf(page, 'Karim Haddad');
       await expect(sheet.locator('li.line')).toHaveCount(4);
+      // A confirmed line's pill says what the coach's clients see of it (notes plan N4b).
       await expect(sheet.locator('li.line app-status-pill')).toHaveText([
         'Waiting for confirmation',
-        'Confirmed 2 Oct 2026',
+        'Shown to clients',
         'Taken down 20 Aug 2026',
         'Erased 2 Jul 2026',
       ]);
+      await expect(lineOf(sheet, 'line-nasm').locator('app-status-pill')).toHaveClass(
+        /\bsuccess\b/,
+      );
+      await expect(lineOf(sheet, 'line-nasm').locator('[data-by]')).toHaveText(
+        'Confirmed by Tarek Bou · recorded by Hicham Haddad',
+      );
       await expect(sheet.locator('.about')).toContainText('Owner · Atlas Performance');
       await expect(
         lineOf(sheet, 'line-gym').getByRole('button', {
@@ -422,7 +443,8 @@ for (const width of [390, 1440]) {
       await expect(page.getByRole('dialog')).toHaveCount(1);
       expect(record.writes.confirm).toEqual([{ confirmedByName: 'Hicham Haddad', version: 1 }]);
       await expect(page.getByText('Line confirmed.')).toBeVisible();
-      await expect(added.locator('app-status-pill')).toHaveText('Confirmed 9 Oct 2026');
+      // A confirmed line starts shown: the coach sent it to be shown, and can switch it off.
+      await expect(added.locator('app-status-pill')).toHaveText('Shown to clients');
       await expect(added.locator('[data-by]')).toHaveText(
         'Confirmed and recorded by Hicham Haddad',
       );
@@ -644,8 +666,19 @@ test('search, the row as a target, a former coach and the way back to Platform b
     'They no longer coach in this space, so no line can be added. Their lines can still be taken down or erased.',
   );
   await expect(sheet.getByRole('button', { name: 'Add a line' })).toHaveCount(0);
-  await expect(sheet.getByRole('button', { name: /^Take down/ })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: /^Take down/ })).toHaveCount(2);
   await expect(sheet.getByRole('button', { name: 'Erase on request' })).toBeVisible();
+  // A confirmed line the coach switched off reads so, in a quiet pill; who confirmed it is unchanged.
+  const hidden = lineOf(sheet, 'line-degree');
+  await expect(hidden.locator('app-status-pill')).toHaveText('Hidden by the coach');
+  await expect(hidden.locator('app-status-pill')).not.toHaveClass(/\bsuccess\b/);
+  await expect(hidden.locator('[data-by]')).toHaveText(
+    'Confirmed by Tarek Bou · recorded by Hicham Haddad',
+  );
+  // One still switched on reads as the server says: no client reads it, since they left the space.
+  const unread = lineOf(sheet, 'line-iron');
+  await expect(unread.locator('app-status-pill')).toHaveText('Not shown: no longer coaching here');
+  await expect(unread.locator('app-status-pill')).not.toHaveClass(/\bsuccess\b/);
   await axe(page);
   await page.screenshot({ path: 'test-results/n4a-former-1440.png' });
   await page.keyboard.press('Escape');

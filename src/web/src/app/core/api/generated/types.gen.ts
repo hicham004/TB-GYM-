@@ -1274,7 +1274,25 @@ export type CoachCertificateLineView = {
   requestedOn: null | string;
   erasedByName: null | string;
   coachShows: boolean;
+  shownToClients: boolean;
   version: number | string;
+};
+
+export type CoachCertificateOwnLineView = {
+  id: string;
+  state: CoachCertificateLineState;
+  text: string;
+  what: string;
+  shownOn: string;
+  wordingVersion: number | string;
+  confirmedOn: null | string;
+  takenDownOn: null | string;
+  coachShows: boolean;
+  version: number | string;
+};
+
+export type CoachCertificateOwnView = {
+  lines: Array<CoachCertificateOwnLineView>;
 };
 
 export type CoachCertificateRole = 'Owner' | 'Coach' | 'Client';
@@ -3042,9 +3060,16 @@ export type OneRepMaxEstimateView = {
   trainingMax: null | TrainingMaxShareView;
 };
 
+export type OwnCoachLineView = {
+  text: string;
+  what: string;
+  shownOn: string;
+};
+
 export type OwnCoachView = {
   name: string;
   foundingCoach: boolean;
+  lines: Array<OwnCoachLineView>;
 };
 
 export type OwnPlansView = {
@@ -4049,6 +4074,11 @@ export type SessionReceiptRequest = {
   amount: number | string;
   currencyCode: string;
   method: ManualPaymentMethod;
+};
+
+export type SetCoachCertificateLineShownRequest = {
+  shown: null | boolean;
+  version: null | number | string;
 };
 
 export type SetExerciseArchivedRequest = {
@@ -5745,6 +5775,60 @@ export type WithdrawLegalDocumentVersionResponses = {
 
 export type WithdrawLegalDocumentVersionResponse =
   WithdrawLegalDocumentVersionResponses[keyof WithdrawLegalDocumentVersionResponses];
+
+export type GetOwnCoachCertificatesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/coach-certificates/me';
+};
+
+export type GetOwnCoachCertificatesResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateOwnView;
+};
+
+export type GetOwnCoachCertificatesResponse =
+  GetOwnCoachCertificatesResponses[keyof GetOwnCoachCertificatesResponses];
+
+export type SetOwnCoachCertificateLineShownData = {
+  body: SetCoachCertificateLineShownRequest;
+  path: {
+    lineId: string;
+  };
+  query?: never;
+  url: '/api/coach-certificates/me/{lineId}/shown';
+};
+
+export type SetOwnCoachCertificateLineShownErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SetOwnCoachCertificateLineShownError =
+  SetOwnCoachCertificateLineShownErrors[keyof SetOwnCoachCertificateLineShownErrors];
+
+export type SetOwnCoachCertificateLineShownResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateOwnLineView;
+};
+
+export type SetOwnCoachCertificateLineShownResponse =
+  SetOwnCoachCertificateLineShownResponses[keyof SetOwnCoachCertificateLineShownResponses];
 
 export type ListCertificateCoachesData = {
   body?: never;

@@ -560,6 +560,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         "ResignFromTeam",
         // The owner's own switch for showing their Founding coach badge to clients (notes plan N3a).
         "SetFoundingBadgeVisibility",
+        // A coach's own switch for showing one of their certificate lines to their clients (notes plan N4b).
+        "SetOwnCoachCertificateLineShown",
         "UpdateOwnNotificationPreferences",
     ];
 

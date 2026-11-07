@@ -142,7 +142,18 @@ public sealed record FormerClientSummary(
 /// The client's assigned coach is their space's active owner and holds the Founding coach badge, shown
 /// to clients (notes plan N3a, decision 15). Infrastructure reads it from platform billing's records.
 /// </param>
-public sealed record OwnCoachView(string Name, bool FoundingCoach);
+/// <param name="Lines">
+/// What TB Gym shows the client about their coach (notes plan N4b, CLI-021), in the order it was recorded:
+/// each confirmed certificate line still up that the coach shows, about the coach of the client's current
+/// profile in this space. The server decides every line; Infrastructure reads them from the Identity record.
+/// </param>
+public sealed record OwnCoachView(string Name, bool FoundingCoach, IReadOnlyList<OwnCoachLineView> Lines);
+
+/// <summary>
+/// One line about the client's coach: <paramref name="Text"/> is the finished sentence in the space's
+/// language, with its parts, what was shown and the day.
+/// </summary>
+public sealed record OwnCoachLineView(string Text, string What, DateOnly ShownOn);
 
 public sealed record ClientSelfProfile(
     Guid Id,

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using TB.Gym.SharedKernel;
@@ -9,8 +10,9 @@ namespace TB.Gym.Modules.Identity;
 /// One certificate line (CLI-021, ADR 0039): what a coach showed TB Gym as proof (a certificate, a gym they own,
 /// years of coaching, a degree), about that coach in one coaching space, as the platform admin typed it, with the
 /// day it was shown, who confirmed it with the coach and who recorded it. Text only: never a copy, a photo or a
-/// screenshot of a document. A line is waiting until it is confirmed, the only state a reader may ever see, and is
-/// then taken down or erased; a waiting line may be dropped outright, since a "not confirmed" result is not kept.
+/// screenshot of a document. A line is waiting until it is confirmed, the only state a client may ever see (the coach
+/// reads their own lines in every state but erased, notes plan N4b), and is then taken down or erased; a waiting line
+/// may be dropped outright, since a "not confirmed" result is not kept.
 /// Once confirmed its words, its day and who confirmed it never change (a database trigger) and the row is never
 /// deleted: erasing blanks the words and the confirmer's name and keeps the dates and who acted, so the row itself
 /// is the history of the erasure without the data. A line is a sentence and nothing more: access, money and
@@ -74,6 +76,21 @@ public sealed partial class CoachCertificateLine : TenantEntity
                 : CoachCertificateLineState.Waiting;
 
     /// <summary>
+    /// What a client of the coach may read (notes plan N4b), as one rule for a query and for the line in hand: a
+    /// confirmed line that is still up, neither taken down nor erased, while the coach shows it.
+    /// </summary>
+    public static Expression<Func<CoachCertificateLine, bool>> ShownToClients { get; } = line =>
+        line.ConfirmedAtUtc != null &&
+        line.TakenDownAtUtc == null &&
+        line.ErasedAtUtc == null &&
+        line.CoachShows;
+
+    private static readonly Func<CoachCertificateLine, bool> ShownToClientsNow = ShownToClients.Compile();
+
+    /// <summary>Whether a client of the coach may read this line now (<see cref="ShownToClients"/>).</summary>
+    public bool IsShownToClients => ShownToClientsNow(this);
+
+    /// <summary>
     /// A waiting line about <paramref name="coachUserId"/> in <paramref name="tenantId"/>, shown on
     /// <paramref name="shownOn"/>, a day no later than <paramref name="today"/> in the space's calendar.
     /// Whether the coach is active staff of the space is the caller's to check.
@@ -105,8 +122,9 @@ public sealed partial class CoachCertificateLine : TenantEntity
     }
 
     /// <summary>
-    /// The words as they are stored: trimmed, every run of spaces made one, on one line, 1 to 120 characters, and
-    /// none of the words TB Gym keeps out of a coach's line. The refusal names the field, never the words.
+    /// The words as they are stored: without invisible format characters, trimmed, every run of spaces made one, on
+    /// one line, 1 to 120 characters, and none of the words TB Gym keeps out of a coach's line. The refusal names the
+    /// field, never the words.
     /// </summary>
     public static string NormalizeWhat(string? what)
     {
@@ -197,6 +215,48 @@ public sealed partial class CoachCertificateLine : TenantEntity
         RequestedOn = requestedOn;
     }
 
+    /// <summary>
+    /// The coach's own switch (notes plan N4b): whether their clients see a confirmed line that is still up. Only
+    /// the switch changes; the words, the day and who confirmed it never do. A line the coach switches off is not
+    /// taken down, so it is kept and may be switched on again.
+    /// </summary>
+    public void SetShown(bool shown)
+    {
+        if (State != CoachCertificateLineState.Confirmed)
+        {
+            throw new InvalidOperationException(CoachCertificateText.ShownNotConfirmed);
+        }
+
+        CoachShows = shown;
+    }
+
+    /// <summary>
+    /// Erases a taken-down line whose keeping period has run out (notes plan N4b's daily sweep): the words and the
+    /// confirmer's name are blanked and the day shown goes, as an erasure on request does, and the dates stay; no
+    /// one erased it and no one asked, so neither is recorded. Nothing changes afterwards.
+    /// </summary>
+    public void EraseAfterKeepingPeriod(CoachCertificateKeepingPeriod period, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(period);
+        if (State != CoachCertificateLineState.TakenDown)
+        {
+            throw new InvalidOperationException(CoachCertificateText.KeepingPeriodNotTakenDown);
+        }
+
+        if (!period.IsDue(this, now))
+        {
+            throw new InvalidOperationException(CoachCertificateText.KeepingPeriodNotOver);
+        }
+
+        What = string.Empty;
+        ShownOn = null;
+        ConfirmedByName = string.Empty;
+        ErasedAtUtc = now;
+        ErasedByUserId = null;
+        ErasureReason = CoachCertificateErasureReason.KeepingPeriod;
+        RequestedOn = null;
+    }
+
     private static DateOnly PastOrToday(DateOnly? day, DateOnly today, string missing, string parameterName)
     {
         if (day is not { } value)
@@ -213,7 +273,7 @@ public sealed partial class CoachCertificateLine : TenantEntity
 
     private static string NormalizeLine(string? value, int maxLength, string missing, string parameterName)
     {
-        var raw = value ?? string.Empty;
+        var raw = WithoutFormatCharacters(value ?? string.Empty);
         if (raw.Any(character => char.IsControl(character) && character is not '\t'))
         {
             throw new ArgumentException(CoachCertificateText.OneLine, parameterName);
@@ -244,6 +304,29 @@ public sealed partial class CoachCertificateLine : TenantEntity
             : throw new ArgumentException(
                 string.Create(CultureInfo.InvariantCulture, $"Use {maxLength} characters or fewer."),
                 parameterName);
+    }
+
+    /// <summary>
+    /// The text without invisible format characters (Unicode's Cf: zero-width spaces and joiners, soft hyphens, the
+    /// byte order mark, direction marks, overrides and isolates), which would hide a refused word from the check
+    /// inside a word that reads whole, and could turn a reader's sentence around once it is shown (notes plan N4b).
+    /// A pair of surrogates is read as the one character it is.
+    /// </summary>
+    private static string WithoutFormatCharacters(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        for (var index = 0; index < value.Length;)
+        {
+            var width = char.IsSurrogatePair(value, index) ? 2 : 1;
+            if (CharUnicodeInfo.GetUnicodeCategory(value, index) != UnicodeCategory.Format)
+            {
+                builder.Append(value, index, width);
+            }
+
+            index += width;
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>
@@ -359,4 +442,13 @@ public static class CoachCertificateText
     public const string TakeDownNotConfirmed = "Only a confirmed line that is still up can be taken down.";
 
     public const string EraseNotConfirmed = "Only a confirmed or taken-down line is erased; a waiting one is dropped.";
+
+    public const string ShownRequired = "Choose whether your clients see this line.";
+
+    public const string ShownNotConfirmed =
+        "Only a line TB Gym confirmed that is still up can be shown or hidden. Read your lines again.";
+
+    public const string KeepingPeriodNotTakenDown = "Only a taken-down line is erased after the keeping period.";
+
+    public const string KeepingPeriodNotOver = "This line's keeping period has not run out.";
 }

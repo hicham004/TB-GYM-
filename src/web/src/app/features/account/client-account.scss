@@ -155,6 +155,14 @@ a.coach:focus-visible {
   display: grid;
   flex: 1;
 }
+// A card carrying certificate lines (notes plan N4b): large text gives the face and "Message" rows of
+// their own rather than squeezing the sentences to a sliver. A card without lines is as it was.
+.coach--lines {
+  flex-wrap: wrap;
+}
+.coach--lines .coach-text {
+  flex: 1 1 7rem;
+}
 .coach-label {
   color: var(--tb-on-brand-muted);
   font-size: 0.6875rem;
@@ -173,11 +181,17 @@ a.coach:focus-visible {
   flex-wrap: wrap;
   gap: var(--space-4) var(--space-8);
 }
-.coach-founding {
+// The certificate lines under the name (notes plan N4b) read like the badge's line, each a row of the grid,
+// a little apart so one sentence never runs into the next.
+.coach-founding,
+.coach-line {
   color: var(--tb-on-brand-soft);
   font-size: 0.8125rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+.coach-line {
+  margin-block-start: var(--space-4);
 }
 .coach-action {
   align-items: center;

@@ -1246,6 +1246,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         DateOnly? RequestedOn,
         string? ErasedByName,
         bool CoachShows,
+        bool ShownToClients,
         uint Version);
     private sealed record N4aDrop(Guid LineId);
     private sealed record N4aErasure(int Erased, int Dropped);

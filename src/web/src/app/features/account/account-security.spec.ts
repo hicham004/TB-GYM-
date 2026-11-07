@@ -233,6 +233,7 @@ describe('Settings › Password and security', () => {
       'Notifications',
       'Appearance',
       'Password and security',
+      'Certificates',
       'Team',
     ]);
     expect(host.querySelector('a.back')).toBeNull();

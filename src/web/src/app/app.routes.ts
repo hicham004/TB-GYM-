@@ -325,6 +325,18 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/account/account-founding').then((module) => module.AccountFounding),
   },
+  {
+    // Notes plan N4b: an owner's or a coach's own certificate lines, with the switch that shows each
+    // to their clients. Staff only, as its API is.
+    path: 'account/certificates',
+    canActivate: [authGuard, coachGuard],
+    data: REDESIGNED,
+    title: $localize`Certificates | TB Gym`,
+    loadComponent: () =>
+      import('./features/account/account-certificates').then(
+        (module) => module.AccountCertificates,
+      ),
+  },
   // Empty in production; the development build swaps in the UI lab (see dev/dev-routes.ts).
   ...devRoutes,
   // The homepage's file by name (nginx answers it with the shell) is the homepage.

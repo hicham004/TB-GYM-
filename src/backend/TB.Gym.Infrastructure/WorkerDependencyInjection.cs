@@ -85,6 +85,35 @@ public static class WorkerDependencyInjection
         services.AddActionMail(configuration, isProduction, isDevelopment);
         services.AddWebsite(configuration);
         services.AddPlatformBilling(configuration);
+        services.AddCoachCertificates(configuration);
+        return services;
+    }
+
+    /// <summary>
+    /// The certificate record's settings and its keeping sweep (CLI-021, notes plan N4b). Composed in both roots: the
+    /// Worker runs the sweep once a day, and tests drive it through the API. A keeping period outside 1 to 120 months
+    /// stops either host at start, naming the setting and never quoting it.
+    /// </summary>
+    internal static IServiceCollection AddCoachCertificates(this IServiceCollection services, IConfiguration configuration)
+    {
+        var settings = new CoachCertificateOptions();
+        try
+        {
+            configuration.GetSection(CoachCertificateOptions.SectionName).Bind(settings);
+        }
+        catch (InvalidOperationException)
+        {
+            // The binder's own refusal quotes the value it could not read; this one names the settings alone.
+            throw new InvalidOperationException(
+                $"{CoachCertificateOptions.SectionName}:KeepMonthsAfterTakenDown and {CoachCertificateOptions.SectionName}:SweepIntervalSeconds must be whole numbers, and {CoachCertificateOptions.SectionName}:SweepEnabled true or false.");
+        }
+        services.AddOptions<CoachCertificateOptions>()
+            .Bind(configuration.GetSection(CoachCertificateOptions.SectionName))
+            .Validate(
+                options => options.Validate() is null,
+                settings.Validate() ?? $"{CoachCertificateOptions.SectionName} is not a valid certificate record configuration.")
+            .ValidateOnStart();
+        services.TryAddScoped<ICoachCertificateKeepingSweep, CoachCertificateKeepingSweep>();
         return services;
     }
 

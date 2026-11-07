@@ -579,9 +579,9 @@ public sealed class R62gTalkToUsTests
     /// The Worker's own host (its entry point's composition) on this test's database, started. Its
     /// settings arrive as a deployment's do, as configuration it reads while it composes; the content
     /// root is an empty folder, so no appsettings file in the test output speaks for it. The
-    /// notification and billing sweeps are switched off by their own settings, so only the action-mail
-    /// sweep runs, every second. The one change to its services counts each sweep of the contact queue
-    /// on its way to the real one.
+    /// notification, billing and certificate keeping sweeps are switched off by their own settings, so
+    /// only the action-mail sweep runs, every second. The one change to its services counts each sweep
+    /// of the contact queue on its way to the real one.
     /// </summary>
     private async Task<IHost> StartWorkerAsync(string recipient, CapturedLog workerLog, SweepCounter sweeps)
     {
@@ -597,6 +597,7 @@ public sealed class R62gTalkToUsTests
             "--Notifications:Email:Enabled=false",
             "--Notifications:Email:Adapter=Captured",
             "--PlatformBilling:SweepEnabled=false",
+            "--CoachCertificates:SweepEnabled=false",
             $"--Website:ContactRecipient={recipient}",
         ]);
         builder.Logging.ClearProviders();

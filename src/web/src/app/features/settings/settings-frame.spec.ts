@@ -70,6 +70,7 @@ describe('The Settings frame and the Founding coach page (notes plan N3b)', () =
       ['Notifications', '/notifications/settings'],
       ['Appearance', '/account/appearance'],
       ['Password and security', '/account/security'],
+      ['Certificates', '/account/certificates'],
       ['Founding coach', '/account/founding'],
     ]);
   });
@@ -111,6 +112,7 @@ describe('The Settings frame and the Founding coach page (notes plan N3b)', () =
       'Notifications',
       'Appearance',
       'Password and security',
+      'Certificates',
     ]);
   });
 
@@ -145,5 +147,45 @@ describe('The Settings frame and the Founding coach page (notes plan N3b)', () =
     later.complete();
     await settle(second.fixture);
     expect(accountLinks(second.host).map(([label]) => label)).not.toContain('Founding coach');
+  });
+});
+
+describe('The Settings frame and the Certificates page (notes plan N4b)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('lists a coach’s Certificates in their own account without asking the server anything', async () => {
+    const api = configure('Coach', () => of(access('Earned')));
+    const { host } = await open();
+
+    expect(api.getAccess).not.toHaveBeenCalled();
+    expect(accountLinks(host)).toEqual([
+      ['Notifications', '/notifications/settings'],
+      ['Appearance', '/account/appearance'],
+      ['Password and security', '/account/security'],
+      ['Certificates', '/account/certificates'],
+    ]);
+  });
+
+  it('lists the owner’s Certificates whatever the server says of their founding status', async () => {
+    for (const state of ['Earned', 'Waiting', 'Ended', 'NotFounding', null] as const) {
+      configure('Owner', () => of(access(state)));
+      const labels = accountLinks((await open()).host).map(([label]) => label);
+      expect(labels.slice(0, 4)).toEqual([
+        'Notifications',
+        'Appearance',
+        'Password and security',
+        'Certificates',
+      ]);
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('gives a client no Settings section, so no Certificates either', async () => {
+    configure('Client', () => of(access(null)));
+    const { host } = await open();
+
+    expect(host.querySelector('nav[aria-label="Settings"]')).toBeNull();
+    expect(host.querySelector('a[href="/account/certificates"]')).toBeNull();
+    expect(host.textContent).toContain('Its body');
   });
 });

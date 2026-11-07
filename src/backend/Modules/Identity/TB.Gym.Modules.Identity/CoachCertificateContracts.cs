@@ -3,7 +3,8 @@ namespace TB.Gym.Modules.Identity;
 /// <summary>
 /// The platform admin's certificate record (CLI-021, notes plan N4a): every coach of every coaching space with
 /// their lines, adding a line, marking it confirmed, dropping a waiting one, taking a confirmed one down, and
-/// erasing a coach's lines in a space on their request. Nothing here reaches a coach or a client yet (N4b).
+/// erasing a coach's lines in a space on their request. The coach and their clients read the lines through
+/// <see cref="ICoachCertificateOwnService"/> and their own coach's read (notes plan N4b), never through this.
 /// </summary>
 public interface ICoachCertificateAdminService
 {
@@ -62,6 +63,68 @@ public interface ICoachCertificateAdminService
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A coach's own certificate lines in the coaching space of the request (CLI-021, notes plan N4b): what TB Gym shows
+/// their clients about them, and the switch that stops it at once. Only the signed-in coach's own lines in that one
+/// space: never another coach's, never another space's.
+/// </summary>
+public interface ICoachCertificateOwnService
+{
+    /// <summary>
+    /// The caller's lines in the open space, waiting, confirmed and taken down, in the order TB Gym recorded them;
+    /// an erased line has no words left and is not listed.
+    /// </summary>
+    Task<CoachCertificateOwnView> ReadOwnAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Shows a confirmed line that is still up to the caller's clients, or hides it from them; nothing else about the
+    /// line changes. Not the caller's line in this space: not found.
+    /// </summary>
+    Task<CoachCertificateCommandResult<CoachCertificateOwnLineView>> SetShownAsync(
+        Guid lineId,
+        SetCoachCertificateLineShownRequest? request,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>The coach's own lines in one space.</summary>
+public sealed record CoachCertificateOwnView(IReadOnlyList<CoachCertificateOwnLineView> Lines);
+
+/// <summary>
+/// One of the coach's own lines. <see cref="Text"/> is the sentence their clients read while the line is shown,
+/// <see cref="CoachCertificateLineWording"/> version <see cref="WordingVersion"/> in the space's language; the days
+/// are the space's. <see cref="CoachShows"/> is the coach's switch, which only a confirmed line that is still up
+/// takes.
+/// </summary>
+public sealed record CoachCertificateOwnLineView(
+    Guid Id,
+    CoachCertificateLineState State,
+    string Text,
+    string What,
+    DateOnly ShownOn,
+    int WordingVersion,
+    DateOnly? ConfirmedOn,
+    DateOnly? TakenDownOn,
+    bool CoachShows,
+    uint Version);
+
+/// <summary>The coach's switch: whether their clients see the line, and the version of it the page read.</summary>
+public sealed record SetCoachCertificateLineShownRequest(bool? Shown, uint? Version);
+
+/// <summary>
+/// The daily keeping sweep (CLI-021, notes plan N4b): erases, in every coaching space, each taken-down line whose
+/// keeping period has run out, with no erasing user and no request day, and answers in counts only.
+/// </summary>
+public interface ICoachCertificateKeepingSweep
+{
+    Task<CoachCertificateKeepingSweepResult> RunAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// What one sweep did, in counts only, never words: the lines it erased, the spaces they were in, and the spaces
+/// whose lines kept changing under it, left for the next sweep.
+/// </summary>
+public sealed record CoachCertificateKeepingSweepResult(int Erased, int Spaces, int Skipped);
+
 /// <summary>A coach's role in the space the row is about.</summary>
 public enum CoachCertificateRole
 {
@@ -107,6 +170,8 @@ public sealed record CoachCertificateLinesView(
 /// <see cref="CoachCertificateLineWording"/> version <see cref="WordingVersion"/>, written in the space's language;
 /// it, <see cref="What"/>, <see cref="ShownOn"/> and <see cref="ConfirmedByName"/> are null once erased. Every
 /// <c>…On</c> day is the instant beside it read in the space's time zone. Names are display names, never ids.
+/// <see cref="ShownToClients"/> is the server's own word on whether the coach's clients read the line now (notes plan
+/// N4b): confirmed, still up, switched on by the coach, while the coach is staff of the space.
 /// </summary>
 public sealed record CoachCertificateLineView(
     Guid Id,
@@ -130,6 +195,7 @@ public sealed record CoachCertificateLineView(
     DateOnly? RequestedOn,
     string? ErasedByName,
     bool CoachShows,
+    bool ShownToClients,
     uint Version);
 
 public sealed record AddCoachCertificateLineRequest(string? What, DateOnly? ShownOn);

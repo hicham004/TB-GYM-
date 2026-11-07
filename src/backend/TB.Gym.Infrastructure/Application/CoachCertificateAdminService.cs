@@ -580,6 +580,8 @@ internal sealed class CoachCertificateAdminService(
             line.RequestedOn,
             line.ErasedByUserId is { } erasedBy ? NameOf(names, erasedBy) : null,
             line.CoachShows,
+            // The client's read decides by the same two facts (CoachCertificateReader.ShownToClientsAsync).
+            line.IsShownToClients && member.IsActiveStaff,
             line.Version);
     }
 

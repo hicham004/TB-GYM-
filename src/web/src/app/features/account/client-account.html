@@ -14,7 +14,7 @@
     </div>
     @if (coachName(); as coach) {
       @if (canMessage()) {
-        <a class="coach" routerLink="/messages">
+        <a class="coach" [class.coach--lines]="coachLines().length > 0" routerLink="/messages">
           <ng-container
             [ngTemplateOutlet]="coachBody"
             [ngTemplateOutletContext]="{ $implicit: coach }"
@@ -26,7 +26,7 @@
           </span>
         </a>
       } @else {
-        <div class="coach">
+        <div class="coach" [class.coach--lines]="coachLines().length > 0">
           <ng-container
             [ngTemplateOutlet]="coachBody"
             [ngTemplateOutletContext]="{ $implicit: coach }"
@@ -216,6 +216,13 @@
       <small class="coach-founding">{{ foundingLine }}</small>
     } @else {
       <strong dir="auto">{{ coach }}</strong>
+    }
+    <!-- What TB Gym shows about the coach (notes plan N4b): the server's sentences, one a row, nothing else. -->
+    @for (line of coachLines(); track $index) {
+      <span class="tb-visually-hidden">, </span>
+      <small class="coach-line" data-coach-line
+        ><bdi>{{ line }}</bdi></small
+      >
     }
   </span>
 </ng-template>

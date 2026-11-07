@@ -303,6 +303,130 @@ public sealed class GoLiveReadinessTests
         Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.Infrastructure.Persistence.GymDbContext>());
     }
 
+    /// <summary>
+    /// The certificate record's keeping sweep and its settings come from the Worker's own composition, with the
+    /// plan's example by default, and the Worker's entry point runs the sweep on its timer (notes plan N4b). The
+    /// integration tests drive the sweep from the API host, so a sweep that leaned on an API-only service would pass
+    /// them and fail every day.
+    /// </summary>
+    [TestMethod]
+    public async Task N4bTheWorkerComposesTheCertificateKeepingSweep()
+    {
+        using (var services = Worker([]))
+        {
+            await using var scope = services.CreateAsyncScope();
+            Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.Modules.Identity.ICoachCertificateKeepingSweep>());
+            Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.SharedKernel.IMutableTenantContext>());
+            var settings = scope.ServiceProvider.GetRequiredService<IOptions<TB.Gym.Modules.Identity.CoachCertificateOptions>>().Value;
+            Assert.AreEqual(
+                (12, true, 86_400),
+                (settings.KeepMonthsAfterTakenDown, settings.SweepEnabled, settings.SweepIntervalSeconds));
+            Assert.AreEqual(12, settings.KeepingPeriod.Months);
+        }
+
+        // Its entry point, on an empty content root so no appsettings file in the test output speaks for it.
+        var contentRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"tb-gym-n4b-worker-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            var builder = TB.Gym.Worker.WorkerProgram.CreateBuilder(
+            [
+                "--environment", "Development",
+                "--contentRoot", contentRoot,
+                $"--ConnectionStrings:Database={UnusedDatabase}",
+                "--Application:PublicBaseUrl=http://localhost:4200",
+            ]);
+            Assert.AreEqual(
+                1,
+                builder.Services.Count(service =>
+                    !service.IsKeyedService &&
+                    service.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService) &&
+                    service.ImplementationType == typeof(TB.Gym.Worker.CoachCertificateKeepingWorker)),
+                "The Worker runs the keeping sweep on its timer.");
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The keeping period and the sweep's interval are read when a host starts (notes plan N4b): outside 1 to 120
+    /// months, or outside a minute to a day, the API refuses to start and the Worker's composition refuses its
+    /// settings, each naming the setting and never quoting its value.
+    /// </summary>
+    [TestMethod]
+    public void N4bACertificateSettingOutsideItsRangeRefusesStartup()
+    {
+        foreach (var (key, value) in new[]
+                 {
+                     ("CoachCertificates:KeepMonthsAfterTakenDown", "0"),
+                     ("CoachCertificates:KeepMonthsAfterTakenDown", "121"),
+                     ("CoachCertificates:SweepIntervalSeconds", "59"),
+                     ("CoachCertificates:SweepIntervalSeconds", "86401"),
+                 })
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.UseSetting("ConnectionStrings:Database", UnusedDatabase);
+                builder.UseSetting(key, value);
+            });
+
+            var api = Assert.ThrowsExactly<OptionsValidationException>(
+                () => factory.CreateClient(),
+                $"The API started with {key} at {value}.");
+            Assert.Contains(key, api.Message);
+
+            using var services = Worker(new Dictionary<string, string?> { [key] = value });
+            var worker = Assert.ThrowsExactly<OptionsValidationException>(
+                () => services.GetRequiredService<IOptions<TB.Gym.Modules.Identity.CoachCertificateOptions>>().Value,
+                $"The Worker took {key} at {value}.");
+            Assert.Contains(key, worker.Message);
+
+            // A zero is in the range's own words ("1 to 120"), so only the other values show none was quoted.
+            if (value != "0")
+            {
+                Assert.DoesNotContain(value, api.Message);
+                Assert.DoesNotContain(value, worker.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A certificate setting that is not a number stops both hosts as they compose (notes plan N4b), naming the
+    /// setting and never the value, which the configuration binder's own refusal would have quoted.
+    /// </summary>
+    [TestMethod]
+    public void N4bACertificateSettingThatIsNoNumberRefusesStartupWithoutQuotingIt()
+    {
+        foreach (var (key, value) in new[]
+                 {
+                     ("CoachCertificates:KeepMonthsAfterTakenDown", "twelve-months"),
+                     ("CoachCertificates:SweepIntervalSeconds", "one-day"),
+                 })
+        {
+            using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Development");
+                builder.UseSetting("ConnectionStrings:Database", UnusedDatabase);
+                builder.UseSetting(key, value);
+            });
+
+            var api = Assert.ThrowsExactly<InvalidOperationException>(
+                () => factory.CreateClient(),
+                $"The API started with {key} at {value}.");
+            Assert.Contains(key, api.Message);
+            Assert.DoesNotContain(value, api.Message);
+            Assert.IsNull(api.InnerException, "The binder's refusal, which quotes the value, is not carried along.");
+
+            var worker = Assert.ThrowsExactly<InvalidOperationException>(
+                () => Worker(new Dictionary<string, string?> { [key] = value }).Dispose(),
+                $"The Worker composed with {key} at {value}.");
+            Assert.Contains(key, worker.Message);
+            Assert.DoesNotContain(value, worker.Message);
+        }
+    }
+
     [TestMethod]
     public async Task WithoutAProviderOrAnAddressNothingIsSent()
     {

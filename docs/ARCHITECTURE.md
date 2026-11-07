@@ -391,7 +391,8 @@ client membership may become active again only with a current profile.
 An unpaid platform invoice past its grace days makes the workspace read-only for its owner and
 coaches (ADR 0028). The same tenant authorization handler refuses their state-changing requests with
 403 `workspace_read_only`, except routes marked `AllowedWhileWorkspaceReadOnly` (reads sent as POST,
-personal settings such as the owner's founding badge switch, resigning); clients are never affected.
+personal settings such as the owner's founding badge switch and a coach's certificate line switch,
+resigning); clients are never affected.
 The platform admin's routes use the `PlatformAdmin` policy, which needs the role claim and re-reads
 the account and role from the database on every request; no workspace header is involved, and only
 the `platform-admin` command grants the role. The Worker issues last month's invoices, queues
@@ -416,7 +417,13 @@ write guard. The platform admin keeps them under `/api/platform-admin/coaches` (
 drop, take down, erase on request); the admin service in Infrastructure reads every space with
 `IgnoreQueryFilters`, sets the space as the request's tenant before each write, as the billing admin does,
 and reads Tenancy's memberships so a line is added only for active staff. A trigger keeps a confirmed line's
-words and its row, an erasure blanks the words once, and no log line carries them.
+words and its row, an erasure blanks the words once, and no log line carries them. Inside a workspace (notes
+plan N4b) a coach reads their own lines and flips each confirmed one's switch under `/api/coach-certificates/me`
+(the tenant-coach policy; the filter and the service both name the space and the caller), and a client reads
+their current coach's shown lines with `GET /api/client-profile/me/coach`, composed in Infrastructure so
+Clients references no other module. The Worker's daily keeping sweep (`CoachCertificates:KeepMonthsAfterTakenDown`,
+refused at start outside 1 to 120 months) finds due lines past the filter and erases each space's in a scope of
+its own after `SetTenant`, logging counts only.
 
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.

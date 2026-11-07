@@ -79,6 +79,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             ("UpdateCurrentWorkspace", RateLimitPolicies.RoutineWrite),
             ("UpdateOwnThemeMode", RateLimitPolicies.RoutineWrite),
             ("SetFoundingBadgeVisibility", RateLimitPolicies.RoutineWrite),
+            ("SetOwnCoachCertificateLineShown", RateLimitPolicies.RoutineWrite),
             ("MarkWorkspaceFounding", RateLimitPolicies.SensitiveWrite),
             ("AddCoachCertificateLine", RateLimitPolicies.SensitiveWrite),
             ("CreatePrivateMediaAccessBatch", RateLimitPolicies.RoutineWrite),

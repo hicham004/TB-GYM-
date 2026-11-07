@@ -84,6 +84,7 @@ describe('A coach’s Team (critique B3a)', () => {
       'Notifications',
       'Appearance',
       'Password and security',
+      'Certificates',
       'Team',
     ]);
   });

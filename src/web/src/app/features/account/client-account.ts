@@ -48,7 +48,9 @@ interface Behind<T> {
  *
  * The coach's card carries the Founding coach badge with its one line when the server says so
  * (notes plan N3b): only while the client's coach is a founding space's owner whose badge is earned
- * and shown. Otherwise the card is exactly as it was.
+ * and shown. Under the name come the certificate lines the server sends (notes plan N4b), each as
+ * its sentence in quiet text: the server decides every line, and the page shows what it carries.
+ * Otherwise the card is exactly as it was.
  */
 @Component({
   selector: 'app-client-account',
@@ -82,6 +84,8 @@ export class ClientAccount {
   protected readonly coachFounding = signal(false);
   protected readonly foundingCoach = FOUNDING_COACH;
   protected readonly foundingLine = FOUNDING_COACH_LINE;
+  /** The sentences TB Gym shows the client about their coach, in the server's order (N4b). */
+  protected readonly coachLines = signal<readonly string[]>([]);
   /** The coach's name is on its way: their card's place is kept, so the groups below do not move (audit UIQ-5). */
   protected readonly coachLoading = signal(false);
   protected readonly preferenceError = signal<string | null>(null);
@@ -128,6 +132,7 @@ export class ClientAccount {
       this.loadedTenantId = null;
       this.coachName.set(null);
       this.coachFounding.set(false);
+      this.coachLines.set([]);
       this.coachLoading.set(false);
     });
     effect(() => {
@@ -138,6 +143,7 @@ export class ClientAccount {
       untracked(() => {
         this.coachName.set(null);
         this.coachFounding.set(false);
+        this.coachLines.set([]);
         this.coachLoading.set(tenantId !== null);
         if (tenantId !== null) void this.loadCoach();
       });
@@ -198,11 +204,13 @@ export class ClientAccount {
         if (owner.current) {
           this.coachName.set(coach.name);
           this.coachFounding.set(coach.foundingCoach === true);
+          this.coachLines.set((coach.lines ?? []).map((line) => line.text));
         }
       } catch {
         if (owner.current) {
           this.coachName.set(null);
           this.coachFounding.set(false);
+          this.coachLines.set([]);
         }
       } finally {
         if (owner.current) this.coachLoading.set(false);

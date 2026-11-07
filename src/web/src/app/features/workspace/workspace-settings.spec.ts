@@ -347,6 +347,7 @@ describe('Settings › Name and region', () => {
       'Notifications',
       'Appearance',
       'Password and security',
+      'Certificates',
     ]);
   });
 });

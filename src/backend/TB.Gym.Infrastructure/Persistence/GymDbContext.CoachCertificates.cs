@@ -17,6 +17,7 @@ public sealed partial class GymDbContext
             entity.HasKey(item => item.Id);
             ConfigureTenantEntity(entity);
             entity.Ignore(item => item.State);
+            entity.Ignore(item => item.IsShownToClients);
             entity.Property(item => item.What).HasMaxLength(CoachCertificateLine.MaximumWhatLength).IsRequired();
             entity.Property(item => item.ShownOn).HasColumnType("date");
             entity.Property(item => item.ConfirmedByName).HasMaxLength(CoachCertificateLine.MaximumConfirmedByNameLength);
