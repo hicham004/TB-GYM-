@@ -1,0 +1,42 @@
+// The space page's Founding space panel (notes plan N3b). The page's own sheet draws the panel, its
+// head, the pill row and the quiet lines; this one adds the actions and the ended statuses. Brand v2
+// tokens only, in a sheet of its own so the page's stylesheet stays inside its budget.
+
+// A landing place when the button that had focus goes with the reading it served.
+.founding h2:focus {
+  outline: none;
+}
+
+// The admin's note is free text: a pasted link must wrap rather than push the page sideways.
+.founding .sentence {
+  overflow-wrap: anywhere;
+}
+
+.founding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.history-title {
+  color: var(--tb-ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.history > li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding-block: 0.625rem;
+}
+
+.history p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-end {
+  color: var(--tb-ink);
+}

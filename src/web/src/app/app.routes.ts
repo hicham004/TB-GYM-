@@ -304,6 +304,17 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/account/account-appearance').then((module) => module.AccountAppearance),
   },
+  {
+    // Notes plan N3b: the owner's Founding coach badge, listed under Settings while their space is
+    // founding. The same guard as the other account pages; the page itself shows anyone else that
+    // nothing is here, and the API answers its owner alone.
+    path: 'account/founding',
+    canActivate: [authGuard],
+    data: REDESIGNED,
+    title: $localize`Founding coach | TB Gym`,
+    loadComponent: () =>
+      import('./features/account/account-founding').then((module) => module.AccountFounding),
+  },
   // Empty in production; the development build swaps in the UI lab (see dev/dev-routes.ts).
   ...devRoutes,
   // The homepage's file by name (nginx answers it with the shell) is the homepage.

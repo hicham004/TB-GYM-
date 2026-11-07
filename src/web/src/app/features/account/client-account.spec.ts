@@ -39,6 +39,8 @@ async function render(
     memberships?: TenantMembership[];
     roles?: string[];
     coach?: 'Lea Haddad' | 'unreadable';
+    /** The server's word on the coach's Founding coach badge (notes plan N3b); left out when undefined. */
+    founding?: boolean;
     messaging?: 'Granted' | 'NoEntitlement';
     updateWeightUnit?: (unit: CurrentUser['preferredWeightUnit']) => Promise<void>;
     updateThemeMode?: (mode: CurrentUser['preferredThemeMode']) => Promise<void>;
@@ -64,7 +66,11 @@ async function render(
     getOwnCoach: vi.fn(() =>
       options.coach === 'unreadable'
         ? throwError(() => new Error('forbidden'))
-        : of({ name: 'Lea Haddad' }),
+        : of(
+            options.founding === undefined
+              ? { name: 'Lea Haddad' }
+              : { name: 'Lea Haddad', foundingCoach: options.founding },
+          ),
     ),
   };
   await TestBed.configureTestingModule({
@@ -167,6 +173,76 @@ describe('ClientAccount', () => {
     expect(api.getOwnCoach).toHaveBeenCalledTimes(2);
     expect(host.querySelector('.coach:not(.coach--waiting)')).not.toBeNull();
     expect(host.querySelector('.coach--waiting')).toBeNull();
+  });
+
+  describe('the coach’s Founding coach badge (notes plan N3b)', () => {
+    const NEVER = /\b(verified|certified|qualified|licensed|approved)\b/i;
+    const textOf = (element: Element | null | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+    it('shows the badge after the name and its line under it, inside the Message link', async () => {
+      const { host } = await render({ founding: true });
+
+      const coach = host.querySelector('a.coach')!;
+      expect(coach.getAttribute('href')).toBe('/messages');
+      const name = coach.querySelector('[data-founding-coach]')!;
+      expect(textOf(name.querySelector('strong'))).toBe('Lea Haddad');
+      const pill = name.querySelector('app-status-pill')!;
+      expect(textOf(pill)).toBe('Founding coach');
+      expect(pill.classList).toContain('success');
+      expect(
+        name.querySelector('strong')!.compareDocumentPosition(pill) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(textOf(coach.querySelector('.coach-founding'))).toBe(
+        'One of the first coaches on TB Gym. Not a check of qualifications',
+      );
+      // What a screen reader hears, with the commas the card already puts between its parts.
+      expect(textOf(coach.querySelector('.coach-text'))).toBe(
+        'Your coach, Lea Haddad, Founding coach, One of the first coaches on TB Gym. Not a check of qualifications',
+      );
+      expect(coach.querySelector('app-avatar')?.textContent?.trim()).toBe('LH');
+      expect(textOf(coach)).not.toMatch(NEVER);
+    });
+
+    it('shows the same on the plain card when messaging is not in the plan', async () => {
+      const { host } = await render({ founding: true, messaging: 'NoEntitlement' });
+
+      expect(host.querySelector('a.coach')).toBeNull();
+      const coach = host.querySelector('.coach')!;
+      expect(textOf(coach.querySelector('app-status-pill'))).toBe('Founding coach');
+      expect(textOf(coach.querySelector('.coach-founding'))).toBe(
+        'One of the first coaches on TB Gym. Not a check of qualifications',
+      );
+    });
+
+    it('draws the card exactly as before when the server says no, or says nothing', async () => {
+      for (const founding of [false, undefined]) {
+        const { host } = await render({ founding });
+        const text = host.querySelector('a.coach .coach-text')!;
+        expect(Array.from(text.children, (child) => `${child.tagName}.${child.className}`)).toEqual(
+          ['SPAN.coach-label', 'SPAN.tb-visually-hidden', 'STRONG.'],
+        );
+        expect(host.querySelector('app-status-pill')).toBeNull();
+        expect(host.querySelector('.coach-founding')).toBeNull();
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('never carries one coach’s badge to the next while it is read', async () => {
+      const { fixture, host, api, selectedTenantId } = await render({ founding: true });
+      expect(host.querySelector('app-status-pill')).not.toBeNull();
+
+      api.getOwnCoach.mockReturnValue(of({ name: 'Omar Saad', foundingCoach: false }));
+      selectedTenantId.set('tenant-alpha');
+      fixture.detectChanges();
+      expect(host.querySelector('app-status-pill')).toBeNull();
+      expect(host.querySelector('.coach--waiting app-status-pill')).toBeNull();
+      await settle(fixture);
+
+      expect(textOf(host.querySelector('.coach strong'))).toBe('Omar Saad');
+      expect(host.querySelector('app-status-pill')).toBeNull();
+    });
   });
 
   it('offers no coach list to a client with one coach', async () => {

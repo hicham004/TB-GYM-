@@ -13,6 +13,12 @@ import type {
   WorkspaceBillingView,
   WorkspaceDiscountView,
 } from '../../core/api/generated';
+import {
+  toAdminFounding,
+  toFoundingRecord,
+  type AdminFounding,
+  type FoundingRecord,
+} from './founding.models';
 
 /**
  * Owned view models for platform billing (ADR 0028). Every amount and total is calculated by the API;
@@ -111,6 +117,9 @@ export interface AdminWorkspace {
   /** The earliest due day among its unpaid invoices, and the day it goes read-only; null when nothing is owed. */
   oldestUnpaidDueOn: string | null;
   readOnlyFrom: string | null;
+  /** Whether the space has an open founding status (PBL-009), and the day its badge was earned. */
+  isFounding: boolean;
+  badgeEarnedOn: string | null;
 }
 
 export interface BillingDiscount {
@@ -128,6 +137,10 @@ export interface AdminWorkspaceDetail {
   currentMonth: BillingEstimate;
   invoices: BillingInvoice[];
   discounts: BillingDiscount[];
+  /** The open founding status with the server's reading of its badge; null when there is none. */
+  founding: AdminFounding | null;
+  /** The ended founding statuses, kept as history. */
+  foundingHistory: FoundingRecord[];
 }
 
 export interface PricePlan {
@@ -249,6 +262,8 @@ export function toAdminWorkspaceDetail(value: ContractAdminWorkspaceDetail): Adm
     currentMonth: toEstimate(value.currentMonth),
     invoices: value.invoices.map(toInvoice),
     discounts: value.discounts.map(toDiscount),
+    founding: value.founding ? toAdminFounding(value.founding) : null,
+    foundingHistory: value.foundingHistory.map(toFoundingRecord),
   };
 }
 

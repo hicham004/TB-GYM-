@@ -1,0 +1,58 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="about">
+    <span class="who"
+      ><span dir="auto">{{ spaceName() }}</span></span
+    >&ngsp;
+    <span class="muted" i18n
+      >The space’s owner holds the badge once it is earned. Marking changes no access and no
+      invoice.</span
+    >
+  </p>
+
+  <app-date-field
+    [label]="sinceLabel"
+    [help]="sinceHelp"
+    [errors]="shows('foundingSince') ? errors()['foundingSince'] : null"
+    [(value)]="foundingSince"
+    [min]="earliest"
+    [max]="today()"
+    [today]="today()"
+    (touched)="attempt.touch('foundingSince')"
+  />
+
+  <app-field
+    [label]="noteLabel"
+    [help]="noteHelp"
+    [errors]="shows('note') ? errors()['note'] : null"
+  >
+    <input
+      appControl
+      name="note"
+      autocomplete="off"
+      maxlength="200"
+      dir="auto"
+      [value]="note()"
+      (input)="note.set($any($event.target).value)"
+      (blur)="attempt.touch('note')"
+    />
+  </app-field>
+
+  <p class="notice" data-founding-terms-sentence>{{ notice() }}</p>
+
+  @if (attempt.wasTried() && problemCount() > 0) {
+    <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+  }
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>Not now</button>
+  <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+    @if (busy()) {
+      <ng-container i18n>Marking…</ng-container>
+    } @else {
+      <ng-container i18n>Mark as founding</ng-container>
+    }
+  </button>
+</ng-template>

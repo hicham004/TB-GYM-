@@ -71,7 +71,8 @@ async function mockClient(
                 : 'Granted',
           })),
         ),
-      'GET /api/client-profile/me/coach': (route) => json(route, 200, { name: 'Lea Haddad' }),
+      'GET /api/client-profile/me/coach': (route) =>
+        json(route, 200, { name: 'Lea Haddad', foundingCoach: false }),
       ...(options.extra ?? {}),
     },
   });
@@ -158,6 +159,23 @@ for (const [width, height] of [
     await expectNoHorizontalOverflow(page);
     await expectNoAxeViolations(page);
     await page.screenshot({ path: `test-results/r25c-me-${width}.png`, fullPage: true });
+  });
+}
+
+// Notes plan N3b: a coach without the Founding coach badge draws Me's card exactly as before the
+// badge existed. These baselines were taken on the tree before N3b changed the card; look before
+// accepting a new one.
+for (const [width, height, mode] of [
+  [390, 844, 'system'],
+  [1440, 900, 'system'],
+  [390, 844, 'dark'],
+] as const) {
+  test(`a coach without the badge draws Me's card as before at ${width}px, ${mode}`, async ({
+    page,
+  }) => {
+    await openMe(page, { width, height, user: { preferredThemeMode: mode } });
+    await expect(page.getByRole('link', { name: /Your coach.*Lea Haddad/ })).toBeVisible();
+    await expect(page.locator('.hero')).toHaveScreenshot(`me-coach-card-${width}-${mode}.png`);
   });
 }
 
@@ -892,4 +910,58 @@ test('the app draws the same screen while it waits for the first answer, then To
   answer();
   await expect(page.getByRole('heading', { name: 'Me', level: 1 })).toBeVisible();
   await expect(launch).toHaveCount(0);
+});
+
+// ---------- the coach's Founding coach badge (notes plan N3b) ----------
+
+const FOUNDING = {
+  'GET /api/client-profile/me/coach': (route: Route) =>
+    json(route, 200, { name: 'Lea Haddad', foundingCoach: true }),
+};
+
+for (const [width, height, mode] of [
+  [390, 844, 'system'],
+  [1440, 900, 'system'],
+  [390, 844, 'dark'],
+  [1440, 900, 'dark'],
+] as const) {
+  test(`Me shows the coach’s Founding coach badge and its line at ${width}px, ${mode}`, async ({
+    page,
+  }) => {
+    await openMe(page, { width, height, user: { preferredThemeMode: mode }, extra: FOUNDING });
+
+    const coach = page.getByRole('link', { name: /Your coach.*Lea Haddad.*Founding coach/ });
+    await expect(coach).toHaveAttribute('href', '/messages');
+    await expect(coach.locator('app-status-pill')).toHaveText('Founding coach');
+    await expect(coach.locator('.coach-founding')).toHaveText(
+      'One of the first coaches on TB Gym. Not a check of qualifications',
+    );
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: `test-results/n3b-me-founding-${width}-${mode}.png`,
+      fullPage: true,
+    });
+  });
+}
+
+test('Me shows the badge on the plain card too, inside the card at 200% text', async ({ page }) => {
+  await openMe(page, { messaging: 'NoEntitlement', extra: FOUNDING });
+  const card = page.locator('.coach');
+  await expect(card.locator('app-status-pill')).toHaveText('Founding coach');
+  await expect(page.locator('a.coach')).toHaveCount(0);
+
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expect(card.locator('.coach-founding')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  // The hero card hides what spills out of it, so the page's own check cannot see a clipped part.
+  const outer = (await card.boundingBox())!;
+  for (const part of [card.locator('app-status-pill'), card.locator('.coach-founding')]) {
+    const inner = (await part.boundingBox())!;
+    expect(inner.x).toBeGreaterThanOrEqual(outer.x - 0.5);
+    expect(inner.x + inner.width).toBeLessThanOrEqual(outer.x + outer.width + 0.5);
+    expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height + 0.5);
+  }
+  await expectNoAxeViolations(page);
+  await page.screenshot({ path: 'test-results/n3b-me-founding-plain-200.png', fullPage: true });
 });

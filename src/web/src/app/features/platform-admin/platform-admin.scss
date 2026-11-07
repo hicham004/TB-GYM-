@@ -164,3 +164,10 @@
 .versions .quiet {
   font-size: inherit;
 }
+
+// The Founding coach badge's terms in a sentence (notes plan N3b).
+.badge-terms {
+  color: var(--tb-ink);
+  margin: 0;
+  max-inline-size: 40rem;
+}

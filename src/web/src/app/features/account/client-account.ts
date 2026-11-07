@@ -27,6 +27,8 @@ import { Avatar } from '../../ui/avatar';
 import { Button } from '../../ui/button';
 import { Icon } from '../../ui/icon';
 import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control';
+import { StatusPill } from '../../ui/status-pill';
+import { FOUNDING_COACH, FOUNDING_COACH_LINE } from '../billing/founding.models';
 import { InstallCard } from '../install/install-card';
 
 /** What a control follows: the account's value, and whether a save is still on its way. */
@@ -43,10 +45,23 @@ interface Behind<T> {
  * Both preferences belong to the person, not to a coach: they live on the account, so they follow
  * the client to a new phone, an installed app and another coach. They save as they are chosen, one
  * at a time, and a refusal puts the control back where the account still has it.
+ *
+ * The coach's card carries the Founding coach badge with its one line when the server says so
+ * (notes plan N3b): only while the client's coach is a founding space's owner whose badge is earned
+ * and shown. Otherwise the card is exactly as it was.
  */
 @Component({
   selector: 'app-client-account',
-  imports: [Avatar, Button, Icon, InstallCard, NgTemplateOutlet, RouterLink, SegmentedControl],
+  imports: [
+    Avatar,
+    Button,
+    Icon,
+    InstallCard,
+    NgTemplateOutlet,
+    RouterLink,
+    SegmentedControl,
+    StatusPill,
+  ],
   templateUrl: './client-account.html',
   styleUrls: ['./client-account.scss', './client-account-rows.scss'],
 })
@@ -63,6 +78,10 @@ export class ClientAccount {
   protected readonly initialsOf = initialsOf;
   protected readonly signingOut = signal(false);
   protected readonly coachName = signal<string | null>(null);
+  /** Whether the server shows the coach's Founding coach badge to this client (N3b). */
+  protected readonly coachFounding = signal(false);
+  protected readonly foundingCoach = FOUNDING_COACH;
+  protected readonly foundingLine = FOUNDING_COACH_LINE;
   /** The coach's name is on its way: their card's place is kept, so the groups below do not move (audit UIQ-5). */
   protected readonly coachLoading = signal(false);
   protected readonly preferenceError = signal<string | null>(null);
@@ -108,6 +127,7 @@ export class ClientAccount {
     this.scope.onReset(() => {
       this.loadedTenantId = null;
       this.coachName.set(null);
+      this.coachFounding.set(false);
       this.coachLoading.set(false);
     });
     effect(() => {
@@ -117,6 +137,7 @@ export class ClientAccount {
       this.loadedTenantId = tenantId;
       untracked(() => {
         this.coachName.set(null);
+        this.coachFounding.set(false);
         this.coachLoading.set(tenantId !== null);
         if (tenantId !== null) void this.loadCoach();
       });
@@ -174,9 +195,15 @@ export class ClientAccount {
     return this.scope.run('coach', async (owner) => {
       try {
         const coach = await owner.wait(firstValueFrom(this.api.getOwnCoach()));
-        if (owner.current) this.coachName.set(coach.name);
+        if (owner.current) {
+          this.coachName.set(coach.name);
+          this.coachFounding.set(coach.foundingCoach === true);
+        }
       } catch {
-        if (owner.current) this.coachName.set(null);
+        if (owner.current) {
+          this.coachName.set(null);
+          this.coachFounding.set(false);
+        }
       } finally {
         if (owner.current) this.coachLoading.set(false);
       }

@@ -54,7 +54,7 @@ import {
  * asks first. The server decides every amount and date; nothing is added up here.
  */
 
-const SHEET_STYLES = `
+export const SHEET_STYLES = `
   :host {
     display: block;
   }
@@ -145,8 +145,83 @@ const SHEET_STYLES = `
   }
 `;
 
+/**
+ * A form of numbers followed by what would change, as publishing a version shows it (the price plan,
+ * and the founding badge's terms since notes plan N3b).
+ */
+export const CHANGES_STYLES = `
+  .grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  }
+
+  .changes {
+    background: var(--tb-surface-2);
+    border-radius: var(--tb-radius-control);
+    padding: 0.75rem 1rem;
+  }
+
+  .changes h3 {
+    color: var(--tb-ink);
+    font-size: 0.9375rem;
+    margin: 0 0 0.5rem;
+  }
+
+  .changes ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .changes li {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+  }
+
+  .what {
+    color: var(--tb-muted);
+    flex: 1 1 12rem;
+  }
+
+  .from {
+    color: var(--tb-muted);
+    font-variant-numeric: tabular-nums;
+    text-decoration: line-through;
+  }
+
+  .to {
+    color: var(--tb-ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .arrow {
+    color: var(--tb-muted);
+  }
+
+  :host-context([dir='rtl']) .arrow {
+    transform: scaleX(-1);
+  }
+`;
+
+/** A row of buttons that fill a field with a common answer, as "Run it for" does. */
+export const PRESET_STYLES = `
+  .presets {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-block-start: -0.5rem;
+  }
+`;
+
 /** After a refused submit, the first field marked wrong takes focus. */
-function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): void {
+export function focusFirstProblem(host: ElementRef<HTMLElement>, injector: Injector): void {
   afterNextRender(
     () => host.nativeElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
     { injector },
@@ -572,17 +647,7 @@ export class PlatformVoid {
       </button>
     </ng-template>
   `,
-  styles:
-    SHEET_STYLES +
-    `
-    .presets {
-      align-items: center;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-block-start: -0.5rem;
-    }
-  `,
+  styles: SHEET_STYLES + PRESET_STYLES,
 })
 export class PlatformDiscount {
   private readonly api = inject(PlatformAdminApi);
@@ -793,67 +858,7 @@ export class PlatformDiscount {
       </button>
     </ng-template>
   `,
-  styles:
-    SHEET_STYLES +
-    `
-    .grid {
-      display: grid;
-      gap: 1rem;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-    }
-
-    .changes {
-      background: var(--tb-surface-2);
-      border-radius: var(--tb-radius-control);
-      padding: 0.75rem 1rem;
-    }
-
-    .changes h3 {
-      color: var(--tb-ink);
-      font-size: 0.9375rem;
-      margin: 0 0 0.5rem;
-    }
-
-    .changes ul {
-      display: flex;
-      flex-direction: column;
-      gap: 0.375rem;
-      list-style: none;
-      margin: 0;
-      padding: 0;
-    }
-
-    .changes li {
-      align-items: center;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem 0.5rem;
-    }
-
-    .what {
-      color: var(--tb-muted);
-      flex: 1 1 12rem;
-    }
-
-    .from {
-      color: var(--tb-muted);
-      font-variant-numeric: tabular-nums;
-      text-decoration: line-through;
-    }
-
-    .to {
-      color: var(--tb-ink);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .arrow {
-      color: var(--tb-muted);
-    }
-
-    :host-context([dir='rtl']) .arrow {
-      transform: scaleX(-1);
-    }
-  `,
+  styles: SHEET_STYLES + CHANGES_STYLES,
 })
 export class PlatformPlan {
   private readonly api = inject(PlatformAdminApi);

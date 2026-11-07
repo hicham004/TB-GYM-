@@ -6,6 +6,12 @@ import type {
   BillingInvoice,
   PricePlan,
 } from '../app/features/billing/billing.models';
+import type {
+  AdminFounding,
+  FoundingBadge,
+  FoundingRecord,
+  FoundingTerms,
+} from '../app/features/billing/founding.models';
 import type { GymRequest } from '../app/features/platform-admin/platform-admin-api';
 
 /**
@@ -61,6 +67,8 @@ export function space(overrides: Partial<AdminWorkspace> = {}): AdminWorkspace {
     currentDiscountPercent: 0,
     oldestUnpaidDueOn: null,
     readOnlyFrom: null,
+    isFounding: false,
+    badgeEarnedOn: null,
     ...overrides,
   };
 }
@@ -77,6 +85,8 @@ export function platformSpaces(): AdminWorkspace[] {
       name: 'Nour Fitness',
       ownerName: 'Nour Khoury',
       ownerEmail: 'nour@nourfitness.example',
+      isFounding: true,
+      badgeEarnedOn: '2026-10-01',
       seatsThisMonth: 1,
       billableClientsThisMonth: 6,
       currentDiscountPercent: 30,
@@ -268,6 +278,97 @@ export function atlasDetail(overrides: Partial<AdminWorkspaceDetail> = {}): Admi
         revokedAtUtc: '2026-06-20T09:00:00Z',
       }),
     ],
+    founding: null,
+    foundingHistory: [],
+    ...overrides,
+  };
+}
+
+/**
+ * The Founding coach badge (notes plan N3b): Atlas's open founding status, read as waiting with 7 of
+ * 10 clients and 1 of 2 months, under version 1 of the terms. Every number is the server's.
+ */
+export function foundingBadge(overrides: Partial<FoundingBadge> = {}): FoundingBadge {
+  return {
+    state: 'Waiting',
+    foundingSince: '2026-09-15',
+    clientsWithActivePlan: 7,
+    clientsNeeded: 10,
+    monthsSinceStart: 1,
+    monthsNeeded: 2,
+    termsVersion: 1,
+    earnedOn: null,
+    endedOn: null,
+    hidden: false,
+    ...overrides,
+  };
+}
+
+export function foundingRecord(overrides: Partial<FoundingRecord> = {}): FoundingRecord {
+  return {
+    id: 'founding-1',
+    foundingSince: '2026-09-15',
+    note: 'One of the first ten coaches',
+    markedAtUtc: '2026-09-15T10:00:00Z',
+    earnedOn: null,
+    earnedUnderTermsVersion: null,
+    earnedClientCount: null,
+    badgeHidden: false,
+    endedAtUtc: null,
+    endReason: null,
+    ...overrides,
+  };
+}
+
+/** Atlas's open founding status as waiting, or as earned on 3 October with 11 clients. */
+export function adminFounding(
+  state: 'Waiting' | 'Earned' = 'Waiting',
+  hidden = false,
+): AdminFounding {
+  return state === 'Waiting'
+    ? {
+        status: foundingRecord({ badgeHidden: hidden }),
+        badge: foundingBadge({ hidden }),
+      }
+    : {
+        status: foundingRecord({
+          earnedOn: '2026-10-03',
+          earnedUnderTermsVersion: 1,
+          earnedClientCount: 11,
+          badgeHidden: hidden,
+        }),
+        badge: foundingBadge({
+          state: 'Earned',
+          clientsWithActivePlan: null,
+          monthsSinceStart: null,
+          earnedOn: '2026-10-03',
+          hidden,
+        }),
+      };
+}
+
+/** An earlier founding status, ended for cause on 20 August. */
+export function endedFounding(overrides: Partial<FoundingRecord> = {}): FoundingRecord {
+  return foundingRecord({
+    id: 'founding-0',
+    foundingSince: '2026-06-01',
+    note: 'Marked by mistake',
+    markedAtUtc: '2026-06-01T09:00:00Z',
+    endedAtUtc: '2026-08-20T09:00:00Z',
+    endReason: 'The coach asked to leave the founding group',
+    ...overrides,
+  });
+}
+
+export function foundingTerms(overrides: Partial<FoundingTerms> = {}): FoundingTerms {
+  return {
+    id: 'terms-1',
+    versionNumber: 1,
+    clientsWithActivePlan: 10,
+    monthsSinceStart: 2,
+    note: null,
+    publishedAtUtc: '2026-09-01T00:00:00Z',
+    isCurrent: true,
     ...overrides,
   };
 }

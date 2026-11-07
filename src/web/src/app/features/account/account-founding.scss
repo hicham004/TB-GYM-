@@ -1,0 +1,34 @@
+// Settings › Founding coach (notes plan N3b): the owner's badge, read from the server, and whether
+// their clients see it. Brand v2 tokens, from the Settings pages' shared pieces.
+@use '../settings/settings-page';
+
+.founding,
+.nothing {
+  align-items: flex-start;
+  max-inline-size: 36rem;
+}
+
+.line {
+  color: var(--tb-ink);
+  margin: 0;
+  max-inline-size: 34rem;
+  overflow-wrap: anywhere;
+}
+
+.show {
+  align-self: stretch;
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-block-start: 1rem;
+}
+
+.help {
+  overflow-wrap: anywhere;
+}
+
+// A landing place when the badge goes from under the switch, not a control.
+.nothing h2:focus {
+  outline: none;
+}

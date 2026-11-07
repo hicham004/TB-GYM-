@@ -196,6 +196,17 @@
   <app-avatar class="coach-face" [initials]="initialsOf(coach)" presentation="message-sender" />
   <span class="coach-text">
     <span class="coach-label" i18n>Your coach</span><span class="tb-visually-hidden">, </span>
-    <strong dir="auto">{{ coach }}</strong>
+    @if (coachFounding()) {
+      <!-- The Founding coach badge and its line, only when the server shows it (notes plan N3b). -->
+      <span class="coach-name" data-founding-coach>
+        <strong dir="auto">{{ coach }}</strong
+        ><span class="tb-visually-hidden">, </span>
+        <app-status-pill [label]="foundingCoach" tone="success" />
+      </span>
+      <span class="tb-visually-hidden">, </span>
+      <small class="coach-founding">{{ foundingLine }}</small>
+    } @else {
+      <strong dir="auto">{{ coach }}</strong>
+    }
   </span>
 </ng-template>

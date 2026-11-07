@@ -46,7 +46,17 @@ import {
   type BillingDiscount,
   type BillingInvoice,
 } from '../billing/billing.models';
+import {
+  adminProgressLine,
+  currentFoundingTerms,
+  FOUNDING_COACH,
+  type AdminFounding,
+  type FoundingRecord,
+  type FoundingTerms,
+} from '../billing/founding.models';
 import { PlatformAdminApi } from './platform-admin-api';
+import { PlatformFoundingApi } from './platform-founding-api';
+import { PlatformFoundingEnd, PlatformFoundingMark } from './platform-founding-sheets';
 import {
   discountLastDay,
   discountState,
@@ -60,13 +70,14 @@ import {
 } from './platform-admin.models';
 import { PlatformDiscount, PlatformPayment, PlatformVoid } from './platform-sheets';
 
-type SheetKind = 'payment' | 'void' | 'discount';
+type SheetKind = 'payment' | 'void' | 'discount' | 'mark' | 'end';
 
 /**
- * One coaching space in platform billing (R5.2b, ADR 0028): where it stands, this month so far, its
- * invoices with the two things an admin does to an unpaid one, and its discounts. Everything the
- * admin changes is a sheet; the API works out every amount and refuses what is not allowed, and a
- * paid or voided invoice is never altered.
+ * One coaching space in platform billing (R5.2b, ADR 0028): where it stands, whether it is a founding
+ * space (notes plan N3b), this month so far, its invoices with the two things an admin does to an
+ * unpaid one, and its discounts. Everything the admin changes is a sheet; the API works out every
+ * amount, reads the Founding coach badge and refuses what is not allowed, and a paid or voided
+ * invoice is never altered, nor an ended founding status.
  */
 @Component({
   selector: 'app-platform-space',
@@ -76,6 +87,8 @@ type SheetKind = 'payment' | 'void' | 'discount';
     EmptyState,
     Icon,
     PlatformDiscount,
+    PlatformFoundingEnd,
+    PlatformFoundingMark,
     PlatformPayment,
     PlatformVoid,
     RouterLink,
@@ -85,10 +98,11 @@ type SheetKind = 'payment' | 'void' | 'discount';
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './platform-space.html',
-  styleUrl: './platform-space.scss',
+  styleUrls: ['./platform-space.scss', './platform-space-founding.scss'],
 })
 export class PlatformSpace {
   private readonly api = inject(PlatformAdminApi);
+  private readonly foundingApi = inject(PlatformFoundingApi);
   private readonly csrf = inject(CsrfService);
   private readonly locale = inject(LOCALE_ID);
   private readonly sheets = inject(UiSheet);
@@ -96,11 +110,16 @@ export class PlatformSpace {
   private readonly toast = inject(UiToast);
   private readonly injector = inject(Injector);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly foundingHeading = viewChild<ElementRef<HTMLElement>>('foundingHeading');
   private readonly paymentSheet = viewChild.required<TemplateRef<unknown>>('paymentSheet');
   private readonly voidSheet = viewChild.required<TemplateRef<unknown>>('voidSheet');
   private readonly discountSheet = viewChild.required<TemplateRef<unknown>>('discountSheet');
+  private readonly markSheet = viewChild.required<TemplateRef<unknown>>('markSheet');
+  private readonly endSheet = viewChild.required<TemplateRef<unknown>>('endSheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private openSheet: { close: () => void } | null = null;
+  /** Set when the page goes, so an answer that lands after it opens nothing. */
+  private destroyed = false;
   private sheetDirty = false;
   /** Bumped by every load, so an answer for a space the admin has since left is dropped. */
   private loads = 0;
@@ -122,8 +141,18 @@ export class PlatformSpace {
     null,
   );
   protected readonly busy = signal<string | null>(null);
+  /** The terms in force when the mark sheet opened, for its sentence; null when unreadable. */
+  protected readonly markTerms = signal<FoundingTerms | null>(null);
+  /** The open founding status the end sheet is about. */
+  protected readonly ending = signal<FoundingRecord | null>(null);
 
   protected readonly summary = computed(() => this.detail()?.summary ?? null);
+  /** The open founding status with the server's reading of its badge, or null. */
+  protected readonly founding = computed(() => this.detail()?.founding ?? null);
+  /** Ended founding statuses, as the server orders them: the latest ended first. */
+  protected readonly foundingHistory = computed(() => this.detail()?.foundingHistory ?? []);
+  protected readonly foundingCoach = FOUNDING_COACH;
+  protected readonly progress = adminProgressLine;
   protected readonly invoices = computed(() => sortInvoices(this.detail()?.invoices ?? []));
   protected readonly owes = computed(() => (this.summary()?.unpaidTotal ?? 0) > 0);
   protected readonly initials = computed(() => {
@@ -171,15 +200,19 @@ export class PlatformSpace {
     billLines(invoice.amounts, this.locale, invoicePrices(invoice));
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.openSheet?.close());
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      this.openSheet?.close();
+    });
     effect(() => {
       const id = this.tenantId();
       if (id) untracked(() => void this.load(id));
     });
   }
 
-  protected async load(id: string | null = this.tenantId()): Promise<void> {
-    if (!id) return;
+  /** Reads the space again; true when this read's answer is the one on screen now. */
+  protected async load(id: string | null = this.tenantId()): Promise<boolean> {
+    if (!id) return false;
     const mine = ++this.loads;
     const arriving = this.detail()?.summary.tenantId !== id;
     if (arriving) {
@@ -188,7 +221,7 @@ export class PlatformSpace {
     }
     try {
       const detail = await firstValueFrom(this.api.getWorkspace(id));
-      if (mine !== this.loads) return;
+      if (mine !== this.loads) return false;
       this.detail.set(detail);
       this.state.set('ready');
       // The heading appears with the data, so a screen reader starts at it once it is there (§9).
@@ -197,11 +230,13 @@ export class PlatformSpace {
           injector: this.injector,
         });
       }
+      return true;
     } catch (error) {
-      if (mine !== this.loads) return;
+      if (mine !== this.loads) return false;
       this.state.set(
         error instanceof HttpErrorResponse && error.status === 404 ? 'missing' : 'error',
       );
+      return false;
     }
   }
 
@@ -232,6 +267,14 @@ export class PlatformSpace {
 
   protected discountTone(state: DiscountState): 'success' | 'info' | 'neutral' {
     return state === 'running' ? 'success' : state === 'upcoming' ? 'info' : 'neutral';
+  }
+
+  /** "Badge earned <day>", and that the coach hides it when they do. */
+  protected earnedLine(open: AdminFounding): string {
+    const day = this.day(open.badge.earnedOn ?? open.status.earnedOn ?? open.status.markedAtUtc);
+    return open.badge.hidden
+      ? $localize`Badge earned ${day}:day: · Hidden by the coach`
+      : $localize`Badge earned ${day}:day:`;
   }
 
   protected referenceOf(id: string | null): string | null {
@@ -291,6 +334,75 @@ export class PlatformSpace {
     }
   }
 
+  // ---------- the founding status (notes plan N3b, PBL-009) ----------
+
+  /** Reads the terms in force for the sheet's sentence, then opens it; it opens without them too. */
+  protected async markFounding(): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set('founding-mark');
+    let terms: FoundingTerms | null = null;
+    try {
+      terms = currentFoundingTerms(await firstValueFrom(this.foundingApi.getFoundingTerms()));
+    } catch {
+      // The sheet then names the terms in force without their numbers; the server still decides.
+    } finally {
+      this.busy.set(null);
+    }
+    // The read took a moment: the admin may have left the page, or opened another sheet that holds
+    // what they typed, which this one must not close without asking.
+    if (this.destroyed || this.openSheet) return;
+    this.markTerms.set(terms);
+    this.open('mark', $localize`Mark as founding`, (done) => {
+      if (done) this.toast.show($localize`Marked as founding.`, { tone: 'success' });
+    });
+  }
+
+  /**
+   * Asks the server to look at every waiting badge now, as its billing sweep does on its own, then
+   * says what it found for this space from the page read again, never from the platform's counts.
+   */
+  protected async checkFounding(): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set('founding-check');
+    try {
+      await this.csrf.refresh();
+      await firstValueFrom(this.foundingApi.checkFounding());
+    } catch (error) {
+      this.toast.show(
+        apiErrorMessage(error, $localize`The badge could not be checked. Try again.`),
+        {
+          tone: 'error',
+        },
+      );
+      this.busy.set(null);
+      await this.load();
+      return;
+    }
+    const fresh = await this.load();
+    this.busy.set(null);
+    if (!fresh) {
+      // The page did not read this space again, so it says nothing about its badge.
+      this.toast.show(
+        $localize`The check ran, but this space couldn’t be read again. Read it again to see its badge.`,
+      );
+    } else if (this.founding()?.badge.state === 'Earned') {
+      this.toast.show($localize`Checked: the Founding coach badge is earned.`, { tone: 'success' });
+      // Check now goes with the waiting badge it checked.
+      this.keepFocus();
+    } else {
+      this.toast.show($localize`Checked: not earned yet.`);
+    }
+  }
+
+  protected endFounding(): void {
+    const open = this.founding();
+    if (!open || this.busy()) return;
+    this.ending.set(open.status);
+    this.open('end', $localize`End founding status`, (done) => {
+      if (done) this.toast.show($localize`Founding status ended.`, { tone: 'success' });
+    });
+  }
+
   protected setDirty(dirty: boolean): void {
     this.sheetDirty = dirty;
   }
@@ -298,12 +410,14 @@ export class PlatformSpace {
   private open(kind: SheetKind, title: string, finished: (done: boolean) => void): void {
     this.sheetDirty = false;
     this.openSheet?.close();
-    const template =
-      kind === 'payment'
-        ? this.paymentSheet()
-        : kind === 'void'
-          ? this.voidSheet()
-          : this.discountSheet();
+    const templates: Record<SheetKind, TemplateRef<unknown>> = {
+      payment: this.paymentSheet(),
+      void: this.voidSheet(),
+      discount: this.discountSheet(),
+      mark: this.markSheet(),
+      end: this.endSheet(),
+    };
+    const template = templates[kind];
     const sheet = this.sheets.open<boolean>(template, {
       title,
       closeLabel: this.closeLabel,
@@ -321,8 +435,25 @@ export class PlatformSpace {
       if (this.openSheet === sheet) this.openSheet = null;
       finished(done === true);
       // Whatever happened, show the space as it is now: a refused payment may mean it changed.
-      void this.load();
+      void this.load().then(() => {
+        // Marking or ending takes away the button the sheet gave focus back to.
+        if (kind === 'mark' || kind === 'end') this.keepFocus();
+      });
     });
+  }
+
+  /** When the button that had focus went with the reading it served, the panel's heading takes it. */
+  private keepFocus(): void {
+    // A page left before its read answered has nothing to focus, and no injector to ask.
+    if (this.destroyed) return;
+    afterNextRender(
+      () => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        this.foundingHeading()?.nativeElement.focus({ preventScroll: true });
+      },
+      { injector: this.injector },
+    );
   }
 
   private async ask(

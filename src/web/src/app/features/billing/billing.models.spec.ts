@@ -305,7 +305,75 @@ describe('platform billing: what the API said, as numbers', () => {
       currentMonth: ESTIMATE,
       invoices: [INVOICE],
       discounts: [{ ...DISCOUNT_VIEW, percent: 12.5 }],
+      founding: null,
+      foundingHistory: [],
     });
+  });
+
+  it('reads a founding space for the platform admin: the open status, its badge and the ended ones', () => {
+    const status = {
+      id: 'founding-1',
+      foundingSince: '2026-09-15',
+      note: 'One of the first ten coaches',
+      markedAtUtc: '2026-09-15T10:00:00Z',
+      earnedOn: '2026-10-03',
+      earnedUnderTermsVersion: '1',
+      earnedClientCount: '11',
+      badgeHidden: true,
+      endedAtUtc: null,
+      endReason: null,
+    };
+    const ended = {
+      ...status,
+      id: 'founding-0',
+      earnedOn: null,
+      earnedUnderTermsVersion: null,
+      earnedClientCount: null,
+      badgeHidden: false,
+      endedAtUtc: '2026-08-20T09:00:00Z',
+      endReason: 'The coach asked to end it',
+    };
+    const detail = toAdminWorkspaceDetail({
+      summary: { ...SUMMARY_VIEW, isFounding: true, badgeEarnedOn: '2026-10-03' },
+      currentMonth: ESTIMATE_VIEW,
+      invoices: [],
+      discounts: [],
+      founding: {
+        status,
+        badge: {
+          state: 'Earned',
+          foundingSince: '2026-09-15',
+          clientsWithActivePlan: null,
+          clientsNeeded: '10',
+          monthsSinceStart: null,
+          monthsNeeded: '2',
+          termsVersion: '1',
+          earnedOn: '2026-10-03',
+          endedOn: null,
+          hidden: true,
+        },
+      },
+      foundingHistory: [ended],
+    });
+
+    expect(detail.summary.isFounding).toBe(true);
+    expect(detail.summary.badgeEarnedOn).toBe('2026-10-03');
+    expect(detail.founding).toEqual({
+      status: { ...status, earnedUnderTermsVersion: 1, earnedClientCount: 11 },
+      badge: {
+        state: 'Earned',
+        foundingSince: '2026-09-15',
+        clientsWithActivePlan: null,
+        clientsNeeded: 10,
+        monthsSinceStart: null,
+        monthsNeeded: 2,
+        termsVersion: 1,
+        earnedOn: '2026-10-03',
+        endedOn: null,
+        hidden: true,
+      },
+    });
+    expect(detail.foundingHistory).toEqual([ended]);
   });
 
   it('reads a price plan version with every term as a number', () => {

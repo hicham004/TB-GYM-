@@ -3,14 +3,47 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
+  Injectable,
   Injector,
+  signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { IsActiveMatchOptions, RouterLink, RouterLinkActive } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+import type { FoundingBadgeState } from '../../core/api/generated';
+import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
+import { BillingAccessApi } from '../billing/billing-access';
 import { settingsGroups } from './settings-groups';
+
+/**
+ * The last word on the open space's Founding coach badge, per workspace and session (notes plan
+ * N3b): the Settings frame's own read of the billing access, or the Founding coach page's read when
+ * that is newer. Each Settings page has a frame of its own, so a page that opens draws the owner's
+ * row at once from here while it asks the server again, and the founding page's newer word (a status
+ * TB Gym ended meanwhile) takes the row away at once. It lives in memory only.
+ */
+@Injectable({ providedIn: 'root' })
+export class SettingsFoundingMemo {
+  private readonly last = signal<{
+    readonly key: string;
+    readonly state: FoundingBadgeState | null;
+  } | null>(null);
+
+  /** The word for this space in this session, or null when there is none yet. */
+  read(tenantId: string, epoch: number): FoundingBadgeState | null {
+    const last = this.last();
+    return last?.key === `${tenantId}#${epoch}` ? last.state : null;
+  }
+
+  write(tenantId: string, epoch: number, state: FoundingBadgeState | null): void {
+    this.last.set({ key: `${tenantId}#${epoch}`, state });
+  }
+}
 
 /**
  * The one Settings layout (C9, R5.2a): the page's own heading, then the Settings pages beside it in
@@ -20,6 +53,10 @@ import { settingsGroups } from './settings-groups';
  *
  * A client has no Settings section: their account pages open from Me and keep their own way back,
  * so the frame shows only the page.
+ *
+ * For the owner the frame reads the billing access once per page (`GET /api/billing/access`), whose
+ * `foundingCoach` says whether their space is founding, so their Founding coach page is listed while
+ * the badge waits or once earned (notes plan N3b). A coach and a client never ask.
  *
  * Presentation only. Each page keeps its own route, guard and API checks.
  */
@@ -260,7 +297,18 @@ import { settingsGroups } from './settings-groups';
 export class SettingsFrame {
   private readonly tenants = inject(TenantStore);
   private readonly injector = inject(Injector);
+  private readonly access = inject(BillingAccessApi);
+  private readonly memo = inject(SettingsFoundingMemo);
+  private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly nav = viewChild<ElementRef<HTMLElement>>('nav');
+  // The role from the membership itself: the owner pages' specs fake only these two reads.
+  private readonly role = computed(() => this.tenants.selectedMembership()?.role ?? null);
+  /** The server's last word on the open space's founding badge, for its owner; null before one. */
+  private readonly founding = computed(() => {
+    const tenantId = this.tenants.selectedTenantId();
+    if (tenantId === null || this.role() !== 'Owner') return null;
+    return this.memo.read(tenantId, this.scope.epoch());
+  });
 
   protected readonly matchOptions: IsActiveMatchOptions = {
     paths: 'exact',
@@ -269,9 +317,17 @@ export class SettingsFrame {
     fragment: 'ignored',
   };
 
-  protected readonly groups = computed(() =>
-    settingsGroups(this.tenants.selectedMembership()?.role ?? null),
-  );
+  protected readonly groups = computed(() => settingsGroups(this.role(), this.founding()));
+
+  constructor() {
+    effect(() => {
+      const epoch = this.scope.epoch();
+      const tenantId = this.tenants.selectedTenantId();
+      if (tenantId !== null && this.role() === 'Owner') {
+        untracked(() => void this.readFounding(tenantId, epoch));
+      }
+    });
+  }
 
   /**
    * On a phone the open page may sit past the row's edge: once its link is marked current, bring it
@@ -288,5 +344,17 @@ export class SettingsFrame {
       },
       { injector: this.injector },
     );
+  }
+
+  private async readFounding(tenantId: string, epoch: number): Promise<void> {
+    await this.scope.run('founding', async (operation) => {
+      try {
+        const access = await operation.wait(firstValueFrom(this.access.getAccess()));
+        this.memo.write(tenantId, epoch, access.foundingCoach ?? null);
+      } catch {
+        // A read that fails leaves the row out; the founding page asks the server itself.
+        if (operation.current) this.memo.write(tenantId, epoch, null);
+      }
+    });
   }
 }

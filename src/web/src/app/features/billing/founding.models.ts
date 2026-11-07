@@ -1,0 +1,185 @@
+import { toNumber } from '../../core/api/api-client';
+import type {
+  AdminFoundingView,
+  FoundingBadgeState,
+  FoundingBadgeView,
+  FoundingStatusView,
+  FoundingTermsView,
+} from '../../core/api/generated';
+
+/**
+ * The Founding coach badge (notes plan N3b, PBL-009) as the screens show it. The server marks a
+ * space as founding, reads its badge with the named rule `founding-badge-v1`, counts the clients and
+ * the months, and records the day it was earned; these models only carry what it said, as numbers.
+ * Nothing about the badge is decided here.
+ */
+export type FoundingState = FoundingBadgeState;
+
+/** A space's badge as the server reads it today (PBL-009). */
+export interface FoundingBadge {
+  state: FoundingState;
+  foundingSince: string | null;
+  /** Clients with an active plan right now; null when the badge is not waiting. */
+  clientsWithActivePlan: number | null;
+  clientsNeeded: number;
+  /** Whole months since the space started; null when the badge is not waiting. */
+  monthsSinceStart: number | null;
+  monthsNeeded: number;
+  termsVersion: number;
+  earnedOn: string | null;
+  endedOn: string | null;
+  hidden: boolean;
+}
+
+/** One founding mark, open or ended, as the platform admin's history keeps it. */
+export interface FoundingRecord {
+  id: string;
+  foundingSince: string;
+  note: string;
+  markedAtUtc: string;
+  earnedOn: string | null;
+  earnedUnderTermsVersion: number | null;
+  earnedClientCount: number | null;
+  badgeHidden: boolean;
+  endedAtUtc: string | null;
+  endReason: string | null;
+}
+
+/** A space's open founding status with its live reading (the admin's space page). */
+export interface AdminFounding {
+  status: FoundingRecord;
+  badge: FoundingBadge;
+}
+
+/** One published version of the badge's two thresholds; the newest is in force. */
+export interface FoundingTerms {
+  id: string;
+  versionNumber: number;
+  clientsWithActivePlan: number;
+  monthsSinceStart: number;
+  note: string | null;
+  publishedAtUtc: string;
+  isCurrent: boolean;
+}
+
+/** The badge's name, the same everywhere it shows (the plan's Point 8). */
+export const FOUNDING_COACH = $localize`Founding coach`;
+
+/** The one line that always goes with the badge, so nobody reads it as a check of a coach. */
+export const FOUNDING_COACH_LINE = $localize`One of the first coaches on TB Gym. Not a check of qualifications`;
+
+function toNullableNumber(value: number | string | null): number | null {
+  return value === null ? null : toNumber(value);
+}
+
+export function toFoundingBadge(value: FoundingBadgeView): FoundingBadge {
+  return {
+    ...value,
+    clientsWithActivePlan: toNullableNumber(value.clientsWithActivePlan),
+    clientsNeeded: toNumber(value.clientsNeeded),
+    monthsSinceStart: toNullableNumber(value.monthsSinceStart),
+    monthsNeeded: toNumber(value.monthsNeeded),
+    termsVersion: toNumber(value.termsVersion),
+  };
+}
+
+export function toFoundingRecord(value: FoundingStatusView): FoundingRecord {
+  return {
+    ...value,
+    earnedUnderTermsVersion: toNullableNumber(value.earnedUnderTermsVersion),
+    earnedClientCount: toNullableNumber(value.earnedClientCount),
+  };
+}
+
+export function toAdminFounding(value: AdminFoundingView): AdminFounding {
+  return { status: toFoundingRecord(value.status), badge: toFoundingBadge(value.badge) };
+}
+
+export function toFoundingTerms(value: FoundingTermsView): FoundingTerms {
+  return {
+    ...value,
+    versionNumber: toNumber(value.versionNumber),
+    clientsWithActivePlan: toNumber(value.clientsWithActivePlan),
+    monthsSinceStart: toNumber(value.monthsSinceStart),
+  };
+}
+
+/** The version in force: the one the server marks current, else the newest. */
+export function currentFoundingTerms(versions: readonly FoundingTerms[]): FoundingTerms | null {
+  return (
+    versions.find((terms) => terms.isCurrent) ??
+    [...versions].sort((a, b) => b.versionNumber - a.versionNumber)[0] ??
+    null
+  );
+}
+
+/** Whether the space's owner should find the Founding coach page under Settings › Your account. */
+export function showsFoundingPage(state: FoundingState | null | undefined): boolean {
+  return state === 'Waiting' || state === 'Earned';
+}
+
+// ---------- the badge's terms in words ----------
+// Every number below is the server's: the terms in force, or its live count. The sentences only
+// choose between one and many, and leave out a wait of no months, which the terms allow (0 to 24).
+
+/** "1 client" or "10 clients". */
+export function clientCount(count: number): string {
+  return count === 1 ? $localize`1 client` : $localize`${count}:count: clients`;
+}
+
+/** "1 month" or "2 months". */
+export function monthCount(count: number): string {
+  return count === 1 ? $localize`1 month` : $localize`${count}:count: months`;
+}
+
+/** The mark sheet's account of the terms in force, about the space being marked. */
+export function markTermsSentence(clients: number, months: number): string {
+  if (months === 0) {
+    return clients === 1
+      ? $localize`The badge is earned once 1 of the space’s clients has an active plan (the terms in force).`
+      : $localize`The badge is earned once ${clients}:clients: of the space’s clients have an active plan (the terms in force).`;
+  }
+  return clients === 1
+    ? $localize`The badge is earned once 1 of the space’s clients has an active plan and the space is ${monthCount(months)}:months: old (the terms in force).`
+    : $localize`The badge is earned once ${clients}:clients: of the space’s clients have an active plan and the space is ${monthCount(months)}:months: old (the terms in force).`;
+}
+
+/** The list's account of the terms in force, about any founding space. */
+export function termsSentence(clients: number, months: number): string {
+  if (months === 0) {
+    return clients === 1
+      ? $localize`Earned once 1 of a founding space’s clients has an active plan.`
+      : $localize`Earned once ${clients}:clients: of a founding space’s clients have an active plan.`;
+  }
+  return clients === 1
+    ? $localize`Earned once 1 of a founding space’s clients has an active plan and the space is ${monthCount(months)}:months: old.`
+    : $localize`Earned once ${clients}:clients: of a founding space’s clients have an active plan and the space is ${monthCount(months)}:months: old.`;
+}
+
+/** The owner's account of the terms their waiting badge is read against. */
+export function ownerTermsSentence(clients: number, months: number): string {
+  if (months === 0) {
+    return clients === 1
+      ? $localize`The badge is earned once 1 of your clients has an active plan.`
+      : $localize`The badge is earned once ${clients}:clients: of your clients have an active plan.`;
+  }
+  return clients === 1
+    ? $localize`The badge is earned once 1 of your clients has an active plan and your space is ${monthCount(months)}:months: old.`
+    : $localize`The badge is earned once ${clients}:clients: of your clients have an active plan and your space is ${monthCount(months)}:months: old.`;
+}
+
+/** Where a waiting badge stands, for its owner: "So far: 7 of 10 clients, 1 of 2 months." */
+export function ownerProgressLine(badge: FoundingBadge): string {
+  const clients = $localize`${badge.clientsWithActivePlan ?? 0}:have: of ${clientCount(badge.clientsNeeded)}:needed:`;
+  return badge.monthsNeeded === 0
+    ? $localize`So far: ${clients}:clients:.`
+    : $localize`So far: ${clients}:clients:, ${badge.monthsSinceStart ?? 0}:have: of ${monthCount(badge.monthsNeeded)}:needed:.`;
+}
+
+/** Where a waiting badge stands, for the platform admin, counted right now. */
+export function adminProgressLine(badge: FoundingBadge): string {
+  const clients = $localize`${badge.clientsWithActivePlan ?? 0}:have: of ${clientCount(badge.clientsNeeded)}:needed: with an active plan right now`;
+  return badge.monthsNeeded === 0
+    ? $localize`Badge: ${clients}:clients:.`
+    : $localize`Badge: ${clients}:clients: · ${badge.monthsSinceStart ?? 0}:have: of ${monthCount(badge.monthsNeeded)}:needed: since the space started.`;
+}

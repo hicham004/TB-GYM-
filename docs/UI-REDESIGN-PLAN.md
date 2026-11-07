@@ -1409,6 +1409,13 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
 - **Jitter** is a design tool, not app code. Use it for marketing motion: the homepage hero loop,
   Instagram reels coaches can post, and App Store preview videos. Export MP4/WebM. Pay for a month
   while making assets, then cancel.
+- **The Founding coach badge** (notes plan N3b, PBL-009) is the kit's `app-status-pill` in the
+  success tone reading "Founding coach", always with its line "One of the first coaches on TB Gym. Not
+  a check of qualifications": no badge graphic, no motion, and never "verified", "certified" or
+  "qualified" (`founding.words.spec.ts` reads the templates that draw it). It shows on the founding
+  owner's Settings › Founding coach page, on their clients' Me card under Your coach while the server
+  says it is earned and shown, and on the platform admin's billing pages (the Founding pill on the
+  list, the Founding space panel, the badge's terms); never on Today, the sidebar, Clients or Team.
 
 ### 3.1 Theme customization (coach brand + personal mode)
 

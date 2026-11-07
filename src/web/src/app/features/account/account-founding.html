@@ -1,0 +1,60 @@
+<app-settings-frame>
+  <header settingsHead class="top">
+    <h1 #pageHeading tabindex="-1" i18n>Founding coach</h1>
+  </header>
+  @switch (view()) {
+    @case ('loading') {
+      <section class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="3" />
+      </section>
+    }
+    @case ('error') {
+      <section class="panel load-failed">
+        <p role="alert" i18n>Your founding status couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </section>
+    }
+    @case ('earned') {
+      <section class="panel founding" data-founding-earned>
+        <app-status-pill class="badge" [label]="foundingCoach" tone="success" />
+        <p class="line">{{ line }}</p>
+        <p class="quiet" i18n>Earned {{ earnedOn() }}</p>
+        <div class="show">
+          <app-checkbox label="Show the badge to your clients" i18n-label>
+            <input
+              type="checkbox"
+              appControl
+              aria-describedby="founding-show-help"
+              [checked]="!badge()?.hidden"
+              (change)="setShown($any($event.target))"
+            />
+          </app-checkbox>
+          <p id="founding-show-help" class="quiet help" i18n>
+            They see it under Your coach on their Me page. You can hide it any time.
+          </p>
+          @if (saving()) {
+            <p class="quiet" role="status" i18n>Saving your choice…</p>
+          }
+          @if (saveFailed()) {
+            <p class="save-error" role="alert" i18n>Couldn’t save your choice. Try again.</p>
+          }
+        </div>
+      </section>
+    }
+    @case ('waiting') {
+      <section class="panel founding" data-founding-waiting>
+        <p class="line" i18n>
+          Your coaching space is one of the first on TB Gym, founding since {{ foundingSince() }}.
+        </p>
+        <p class="line" data-founding-progress>{{ terms() }} {{ progress() }}</p>
+      </section>
+    }
+    @default {
+      <section class="panel nothing" data-founding-nothing>
+        <h2 #nothingHeading tabindex="-1" i18n>Nothing here</h2>
+        <p class="quiet" i18n>This page is for the owner of a founding coaching space.</p>
+        <a appButton variant="outlined" [routerLink]="back().link">{{ back().label }}</a>
+      </section>
+    }
+  }
+</app-settings-frame>

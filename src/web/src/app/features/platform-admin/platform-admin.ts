@@ -6,6 +6,7 @@ import {
   DestroyRef,
   ElementRef,
   inject,
+  Injector,
   LOCALE_ID,
   signal,
   TemplateRef,
@@ -37,7 +38,14 @@ import {
   type AdminWorkspace,
   type PricePlan,
 } from '../billing/billing.models';
+import {
+  currentFoundingTerms,
+  termsSentence,
+  type FoundingTerms,
+} from '../billing/founding.models';
 import { PlatformAdminApi } from './platform-admin-api';
+import { PlatformFoundingApi } from './platform-founding-api';
+import { PlatformFoundingTerms } from './platform-founding-sheets';
 import {
   filterCounts,
   matchesFilter,
@@ -69,6 +77,8 @@ interface SpaceRow {
   readonly next: string;
   /** What it owes, or null when nothing. */
   readonly owed: string | null;
+  /** Whether it has an open founding status (notes plan N3b). */
+  readonly founding: boolean;
   readonly link: string[];
 }
 
@@ -76,7 +86,8 @@ interface SpaceRow {
  * Platform billing for the TB Gym platform admin (R5.2b, ADR 0028): every coaching space in the
  * order that needs the admin first, with what is owed, when it falls due and when it locks, and the
  * versioned price plan below. A space opens on its own page; the price plan is published here, in a
- * sheet. Last, the Talk-to-us requests whose email has not reached the admin (audit BEB-1).
+ * sheet, and so are the Founding coach badge's terms (notes plan N3b), with a Founding pill on each
+ * founding space. Last, the Talk-to-us requests whose email has not reached the admin (audit BEB-1).
  *
  * Presentation only. The API authorizes the global role on every request, works out every amount
  * and date, and keeps every record it replaces; nothing here is ever deleted.
@@ -89,6 +100,7 @@ interface SpaceRow {
     ButtonLink,
     EmptyState,
     Icon,
+    PlatformFoundingTerms,
     PlatformPlan,
     PlatformRequests,
     RouterLink,
@@ -105,6 +117,7 @@ interface SpaceRow {
 })
 export class PlatformAdmin {
   private readonly api = inject(PlatformAdminApi);
+  private readonly foundingApi = inject(PlatformFoundingApi);
   private readonly csrf = inject(CsrfService);
   private readonly locale = inject(LOCALE_ID);
   private readonly route = inject(ActivatedRoute);
@@ -114,11 +127,18 @@ export class PlatformAdmin {
   private readonly toast = inject(UiToast);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly planSheet = viewChild.required<TemplateRef<unknown>>('planSheet');
+  private readonly termsSheet = viewChild.required<TemplateRef<unknown>>('termsSheet');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
   private openSheet: { close: () => void } | null = null;
+  /** Set when the page goes, so a read that answers later moves no focus. */
+  private destroyed = false;
   private planDirty = false;
+  private termsDirty = false;
 
   protected readonly closeLabel = $localize`Close`;
+  protected readonly foundingLabel = $localize`Founding`;
   protected readonly loadingLabel = $localize`Loading platform billing…`;
   /** Today in UTC, the days billing runs on. */
   protected readonly today = utcToday();
@@ -133,7 +153,22 @@ export class PlatformAdmin {
     null,
   );
 
+  /**
+   * The Founding coach badge's published terms (PBL-009), read apart from billing so a failure here
+   * never hides what is owed; null until they are read.
+   */
+  protected readonly foundingTerms = signal<FoundingTerms[] | null>(null);
+  protected readonly termsFailed = signal(false);
+  /**
+   * The version the Change sheet edits against, kept from the moment it opened: a read of the terms
+   * that lands meanwhile (after invoices are issued, say) must not wipe what the admin typed.
+   */
+  protected readonly termsOpenedWith = signal<FoundingTerms | null>(null);
+
   protected readonly current = computed(() => this.plans().find((plan) => plan.isCurrent) ?? null);
+  protected readonly currentTerms = computed(() =>
+    currentFoundingTerms(this.foundingTerms() ?? []),
+  );
   protected readonly earlier = computed(() => this.plans().filter((plan) => !plan.isCurrent));
   protected readonly summary = computed(() => summarize(this.spaces(), this.today));
   protected readonly owed = computed(() => owedText(this.summary(), this.locale));
@@ -208,13 +243,17 @@ export class PlatformAdmin {
   );
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.openSheet?.close());
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      this.openSheet?.close();
+    });
     afterNextRender(() => this.heading()?.nativeElement.focus({ preventScroll: true }));
     void this.load();
   }
 
   protected async load(): Promise<void> {
     this.state.set('loading');
+    void this.loadTerms();
     try {
       const [spaces, plans] = await Promise.all([
         firstValueFrom(this.api.getWorkspaces()),
@@ -321,6 +360,71 @@ export class PlatformAdmin {
     this.planDirty = dirty;
   }
 
+  // ---------- the Founding coach badge's terms (notes plan N3b, PBL-009) ----------
+
+  protected async loadTerms(): Promise<void> {
+    try {
+      this.foundingTerms.set(await firstValueFrom(this.foundingApi.getFoundingTerms()));
+      this.termsFailed.set(false);
+    } catch {
+      this.termsFailed.set(true);
+    }
+  }
+
+  protected termsLine(terms: FoundingTerms): string {
+    return termsSentence(terms.clientsWithActivePlan, terms.monthsSinceStart);
+  }
+
+  /** Read them again: once the terms are there, Change takes the focus the button had. */
+  protected async retryTerms(): Promise<void> {
+    await this.loadTerms();
+    if (this.destroyed) return;
+    afterNextRender(
+      () => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        this.host.nativeElement.querySelector<HTMLElement>('[data-change-terms]')?.focus();
+      },
+      { injector: this.injector },
+    );
+  }
+
+  protected openTerms(): void {
+    const terms = this.currentTerms();
+    if (!terms) return;
+    this.termsOpenedWith.set(terms);
+    this.termsDirty = false;
+    this.openSheet?.close();
+    const sheet = this.sheets.open<FoundingTerms | false>(this.termsSheet(), {
+      title: $localize`Change the badge’s terms`,
+      closeLabel: this.closeLabel,
+      canClose: () =>
+        !this.termsDirty ||
+        this.ask(
+          $localize`Close without publishing? What you changed will be lost.`,
+          $localize`Discard`,
+          $localize`Keep editing`,
+          $localize`Discard changes?`,
+        ),
+    });
+    this.openSheet = sheet;
+    sheet.closed.subscribe((published) => {
+      if (this.openSheet === sheet) this.openSheet = null;
+      if (published) {
+        this.toast.show(
+          $localize`Badge terms version ${published.versionNumber}:version: is published. Every founding space still waiting is read against it.`,
+          { tone: 'success' },
+        );
+      }
+      // Whatever happened, show the terms as they are now: a refusal may mean newer ones exist.
+      void this.loadTerms();
+    });
+  }
+
+  protected setTermsDirty(dirty: boolean): void {
+    this.termsDirty = dirty;
+  }
+
   protected planLine(plan: PricePlan): string {
     return planSummaryLine(plan, this.locale);
   }
@@ -342,6 +446,7 @@ export class PlatformAdmin {
       tone: billingStatusTone(space.status),
       next: nextLine(space, this.today, this.locale),
       owed: space.unpaidTotal > 0 ? this.money(space.unpaidTotal, space.currencyCode) : null,
+      founding: space.isFounding,
       link: ['/admin/billing', space.tenantId],
     };
   }

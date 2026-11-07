@@ -166,6 +166,19 @@ a.coach:focus-visible {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+// The Founding coach badge after the name, and its line under it (notes plan N3b).
+.coach-name {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+}
+.coach-founding {
+  color: var(--tb-on-brand-soft);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 .coach-action {
   align-items: center;
   color: var(--tb-accent);

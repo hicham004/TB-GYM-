@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { fill, press, settle, toggleFold } from '../../../testing/dom';
 import {
+  foundingTerms,
   gymRequests,
   NOW,
   plan,
@@ -17,12 +18,22 @@ import type { AdminWorkspace, PricePlan } from '../billing/billing.models';
 import { PlatformAdmin } from './platform-admin';
 import { PlatformAdminApi } from './platform-admin-api';
 import { isPlatformAdmin } from './platform-admin.guard';
+import { PlatformFoundingApi } from './platform-founding-api';
 
 type Api = { [K in keyof PlatformAdminApi]: ReturnType<typeof vi.fn> };
+type FoundingApi = { [K in keyof PlatformFoundingApi]: ReturnType<typeof vi.fn> };
+
+const NEXT_TERMS = foundingTerms({
+  id: 'terms-2',
+  versionNumber: 2,
+  clientsWithActivePlan: 8,
+  publishedAtUtc: '2026-10-09T12:00:00Z',
+});
 
 async function render(
   spaces: () => AdminWorkspace[] = platformSpaces,
   overrides: Partial<Api> = {},
+  foundingOverrides: Partial<FoundingApi> = {},
 ) {
   const api: Api = {
     getWorkspaces: vi.fn(() => of(spaces())),
@@ -44,17 +55,27 @@ async function render(
     withdrawLegalDocument: vi.fn(),
     ...overrides,
   };
+  const founding: FoundingApi = {
+    markFounding: vi.fn(),
+    endFounding: vi.fn(),
+    checkFounding: vi.fn(),
+    getFoundingTerms: vi.fn(() => of([foundingTerms()])),
+    publishFoundingTerms: vi.fn(() => of(NEXT_TERMS)),
+    ...foundingOverrides,
+  };
+  const csrf = { refresh: vi.fn(() => Promise.resolve()) };
   TestBed.configureTestingModule({
     imports: [PlatformAdmin],
     providers: [
       provideRouter([]),
       { provide: PlatformAdminApi, useValue: api },
-      { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: PlatformFoundingApi, useValue: founding },
+      { provide: CsrfService, useValue: csrf },
     ],
   });
   const fixture = TestBed.createComponent(PlatformAdmin);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api };
+  return { fixture, host: fixture.nativeElement as HTMLElement, api, founding, csrf };
 }
 
 const textOf = (element: Element | null | undefined) =>
@@ -357,6 +378,197 @@ describe('Platform billing', () => {
 
     expect(textOf(host.querySelector('app-empty-state h2'))).toBe('No coaching spaces yet');
     expect(host.querySelector('.toolbar')).toBeNull();
+  });
+
+  it('marks a founding space with a Founding pill after its status, and no other', async () => {
+    const { host } = await render();
+
+    const row = (id: string) => host.querySelector(`[data-space="${id}"]`)!;
+    const pills = (id: string) =>
+      Array.from(row(id).querySelectorAll('app-status-pill')).map((pill) => textOf(pill));
+    expect(pills(SPACE_IDS.nour)).toEqual(['Active', 'Founding']);
+    expect(row(SPACE_IDS.nour).querySelector('[data-founding]')!.classList).toContain('success');
+    expect(pills(SPACE_IDS.atlas)).toEqual(['Overdue']);
+    expect(host.querySelectorAll('[data-founding]')).toHaveLength(1);
+  });
+
+  it('shows the badge’s terms in force under the price plan', async () => {
+    const { host, founding } = await render();
+
+    const panel = host.querySelector('[data-founding-terms]')!;
+    expect(textOf(panel.querySelector('h2'))).toBe('Founding coach badge');
+    expect(textOf(panel.querySelector('.panel-head .quiet'))).toBe('Version 1 · since Sep 1, 2026');
+    expect(textOf(panel.querySelector('[data-terms-sentence]'))).toBe(
+      'Earned once 10 of a founding space’s clients have an active plan and the space is 2 months old.',
+    );
+    expect(founding.getFoundingTerms).toHaveBeenCalledTimes(1);
+    // Its own panel after the price plan's, so the plan's version line stays the only one there.
+    const panels = Array.from(host.querySelectorAll('section.panel'));
+    expect(panels.indexOf(panel)).toBe(
+      panels.indexOf(host.querySelector('[data-price-plan]')!) + 1,
+    );
+  });
+
+  it('publishes the badge’s next terms against the version it saw', async () => {
+    const { fixture, host, founding, csrf } = await render();
+
+    press(host, 'Change');
+    await settle(fixture);
+    const sheet = dialog()!;
+    expect(textOf(sheet.querySelector('h2'))).toBe('Change the badge’s terms');
+    expect(textOf(sheet)).toContain('Version 1 is in force.');
+    expect(textOf(sheet)).toContain('Nothing has changed yet.');
+    expect(
+      Array.from(sheet.querySelectorAll('button')).find((b) => textOf(b) === 'Publish version 2')!
+        .disabled,
+    ).toBe(true);
+
+    fill(sheet, 'Clients with an active plan', '8');
+    await settle(fixture);
+    expect(
+      Array.from(sheet.querySelectorAll('.changes li')).map((row) =>
+        ['.what', '.from', '.to'].map((part) => textOf(row.querySelector(part))),
+      ),
+    ).toEqual([['Clients with an active plan', '10', '8']]);
+
+    press(sheet, 'Publish version 2');
+    await settle(fixture);
+
+    expect(founding.publishFoundingTerms).toHaveBeenCalledWith({
+      clientsWithActivePlan: 8,
+      monthsSinceStart: 2,
+      note: null,
+      expectedCurrentVersion: 1,
+    });
+    expect(csrf.refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      founding.publishFoundingTerms.mock.invocationCallOrder[0],
+    );
+    expect(dialog()).toBeNull();
+    expect(toast()).toContain('Badge terms version 2 is published.');
+    expect(founding.getFoundingTerms).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps refused terms on screen in the server’s words', async () => {
+    const conflict = new HttpErrorResponse({
+      status: 409,
+      error: {
+        code: 'founding_terms_changed',
+        message:
+          'Newer founding badge terms were published since this page loaded. Refresh and try again.',
+      },
+    });
+    const { fixture, host } = await render(
+      platformSpaces,
+      {},
+      { publishFoundingTerms: vi.fn(() => throwError(() => conflict)) },
+    );
+
+    press(host, 'Change');
+    await settle(fixture);
+    fill(dialog()!, 'Months since the space started', '3');
+    await settle(fixture);
+    press(dialog()!, 'Publish version 2');
+    await settle(fixture);
+
+    expect(textOf(dialog()!.querySelector('[role="alert"]'))).toBe(
+      'Newer founding badge terms were published since this page loaded. Refresh and try again.',
+    );
+  });
+
+  it('still shows billing when the badge’s terms cannot be read, and reads them again', async () => {
+    let failing = true;
+    const { fixture, host, founding } = await render(
+      platformSpaces,
+      {},
+      {
+        getFoundingTerms: vi.fn(() =>
+          failing
+            ? throwError(() => new HttpErrorResponse({ status: 500 }))
+            : of([foundingTerms()]),
+        ),
+      },
+    );
+
+    expect(rowNames(host)).toHaveLength(7);
+    const panel = host.querySelector('[data-founding-terms]')!;
+    expect(textOf(panel.querySelector('[role="alert"]'))).toBe(
+      'The badge’s terms couldn’t be loaded.',
+    );
+    failing = false;
+    press(host, 'Read them again');
+    await settle(fixture);
+
+    expect(founding.getFoundingTerms).toHaveBeenCalledTimes(2);
+    expect(textOf(panel.querySelector('[data-terms-sentence]'))).toContain('Earned once 10');
+  });
+
+  it('keeps what was typed in the terms sheet when the terms are read again meanwhile', async () => {
+    const { fixture, host, founding } = await render();
+
+    press(host, 'Change');
+    await settle(fixture);
+    const sheet = dialog()!;
+    fill(sheet, 'Clients with an active plan', '8');
+    fill(sheet, 'Note (optional)', 'After the first talks');
+    await settle(fixture);
+
+    // Issued invoices, say, read the page again while the sheet is open.
+    await (fixture.componentInstance as unknown as { loadTerms(): Promise<void> }).loadTerms();
+    await settle(fixture);
+
+    expect(founding.getFoundingTerms).toHaveBeenCalledTimes(2);
+    expect(
+      sheet.querySelector<HTMLInputElement>('input[name="clientsWithActivePlan"]')!.value,
+    ).toBe('8');
+    expect(sheet.querySelector<HTMLInputElement>('input[name="note"]')!.value).toBe(
+      'After the first talks',
+    );
+    expect(sheet.querySelectorAll('.changes li')).toHaveLength(1);
+  });
+
+  it('asks before closing the terms sheet with a change typed', async () => {
+    const { fixture, host, founding } = await render();
+
+    press(host, 'Change');
+    await settle(fixture);
+    const sheet = dialog()!;
+    fill(sheet, 'Clients with an active plan', '8');
+    await settle(fixture);
+    sheet.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+    await settle(fixture);
+
+    expect(textOf(dialog()!)).toContain('Discard changes?');
+    press(dialog()!, 'Keep editing');
+    await settle(fixture);
+    expect(dialog()).toBe(sheet);
+    expect(
+      sheet.querySelector<HTMLInputElement>('input[name="clientsWithActivePlan"]')!.value,
+    ).toBe('8');
+    expect(founding.publishFoundingTerms).not.toHaveBeenCalled();
+  });
+
+  it('gives focus to Change once the terms are read again', async () => {
+    let failing = true;
+    const { fixture, host } = await render(
+      platformSpaces,
+      {},
+      {
+        getFoundingTerms: vi.fn(() =>
+          failing
+            ? throwError(() => new HttpErrorResponse({ status: 500 }))
+            : of([foundingTerms()]),
+        ),
+      },
+    );
+    failing = false;
+    const again = Array.from(host.querySelectorAll('button')).find(
+      (candidate) => textOf(candidate) === 'Read them again',
+    )!;
+    again.focus();
+    again.click();
+    await settle(fixture);
+
+    expect(document.activeElement).toBe(host.querySelector('[data-change-terms]'));
   });
 
   it('knows the platform admin role', () => {

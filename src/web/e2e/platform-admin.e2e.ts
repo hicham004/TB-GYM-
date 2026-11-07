@@ -1,19 +1,27 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import {
+  adminFounding,
   atlasDetail,
+  endedFounding,
+  foundingBadge,
+  foundingRecord,
+  foundingTerms,
   gymRequests,
   NOW,
   plan,
   platformSpaces,
   pricePlans,
   SPACE_IDS,
+  TODAY,
 } from '../src/testing/platform-admin-fixtures';
 import type {
   AdminWorkspace,
   AdminWorkspaceDetail,
   PricePlan,
 } from '../src/app/features/billing/billing.models';
+import type { FoundingTerms } from '../src/app/features/billing/founding.models';
+import { chooseDay } from './kit-controls';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -40,16 +48,50 @@ interface Writes {
   revoke: unknown[];
   plan: unknown[];
   issue: unknown[];
+  mark: unknown[];
+  check: unknown[];
+  end: unknown[];
+  terms: unknown[];
 }
 
-async function openAdmin(page: Page, path: string, width: number, dark = false) {
+async function openAdmin(
+  page: Page,
+  path: string,
+  width: number,
+  dark = false,
+  start: AdminWorkspaceDetail = atlasDetail(),
+) {
   await page.clock.setFixedTime(new Date(NOW));
   await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: 900 });
-  const writes: Writes = { payment: [], void: [], discount: [], revoke: [], plan: [], issue: [] };
+  const writes: Writes = {
+    payment: [],
+    void: [],
+    discount: [],
+    revoke: [],
+    plan: [],
+    issue: [],
+    mark: [],
+    check: [],
+    end: [],
+    terms: [],
+  };
   let spaces: AdminWorkspace[] = platformSpaces();
-  let detail: AdminWorkspaceDetail = atlasDetail();
+  let detail: AdminWorkspaceDetail = start;
   let plans: PricePlan[] = pricePlans();
+  let terms: FoundingTerms[] = [foundingTerms()];
+  // The list follows the space's page as the server would (notes plan N3b).
+  const sync = () => {
+    detail = {
+      ...detail,
+      summary: {
+        ...detail.summary,
+        isFounding: detail.founding !== null,
+        badgeEarnedOn: detail.founding?.status.earnedOn ?? null,
+      },
+    };
+    spaces = spaces.map((item) => (item.tenantId === SPACE_IDS.atlas ? detail.summary : item));
+  };
   await mockSession(page, {
     user: ADMIN,
     extra: {
@@ -120,6 +162,88 @@ async function openAdmin(page: Page, path: string, width: number, dark = false) 
           issued: 1,
           alreadyIssued: 0,
           inTrial: 2,
+        });
+      },
+      // The Founding coach badge (notes plan N3b), answered as N3a's API does.
+      'GET /api/platform-admin/founding-terms': (route) => json(route, 200, terms),
+      'POST /api/platform-admin/founding-terms': (route) => {
+        const body = route.request().postDataJSON() as {
+          clientsWithActivePlan: number;
+          monthsSinceStart: number;
+          note: string | null;
+          expectedCurrentVersion: number;
+        };
+        writes.terms.push(body);
+        const next = foundingTerms({
+          id: `terms-${terms.length + 1}`,
+          versionNumber: terms.length + 1,
+          clientsWithActivePlan: body.clientsWithActivePlan,
+          monthsSinceStart: body.monthsSinceStart,
+          note: body.note,
+          publishedAtUtc: NOW,
+        });
+        terms = [next, ...terms.map((item) => ({ ...item, isCurrent: false }))];
+        return json(route, 200, next);
+      },
+      [`POST /api/platform-admin/workspaces/${SPACE_IDS.atlas}/founding`]: (route) => {
+        const body = route.request().postDataJSON() as { foundingSince: string; note: string };
+        writes.mark.push(body);
+        detail = {
+          ...detail,
+          founding: {
+            status: foundingRecord({
+              foundingSince: body.foundingSince,
+              note: body.note,
+              markedAtUtc: NOW,
+            }),
+            badge: foundingBadge({ foundingSince: body.foundingSince }),
+          },
+        };
+        sync();
+        return json(route, 200, detail.founding);
+      },
+      'POST /api/platform-admin/founding/check': (route) => {
+        writes.check.push(route.request().postDataJSON());
+        const open = detail.founding;
+        if (open && open.badge.state === 'Waiting') {
+          detail = {
+            ...detail,
+            founding: {
+              status: {
+                ...open.status,
+                earnedOn: TODAY,
+                earnedUnderTermsVersion: 1,
+                earnedClientCount: 11,
+              },
+              badge: {
+                ...open.badge,
+                state: 'Earned',
+                clientsWithActivePlan: null,
+                monthsSinceStart: null,
+                earnedOn: TODAY,
+              },
+            },
+          };
+          sync();
+        }
+        return json(route, 200, { checked: 1, earned: open ? 1 : 0 });
+      },
+      'POST /api/platform-admin/founding/founding-1/end': (route) => {
+        const body = route.request().postDataJSON() as { reason: string };
+        writes.end.push(body);
+        const open = detail.founding!;
+        detail = {
+          ...detail,
+          founding: null,
+          foundingHistory: [
+            { ...open.status, endedAtUtc: NOW, endReason: body.reason },
+            ...detail.foundingHistory,
+          ],
+        };
+        sync();
+        return json(route, 200, {
+          status: detail.foundingHistory[0],
+          badge: { ...open.badge, state: 'Ended', endedOn: TODAY },
         });
       },
     },
@@ -468,6 +592,7 @@ test('an admin without a coaching space of their own gets the plain top bar', as
       'GET /api/platform-admin/workspaces': (route) => json(route, 200, platformSpaces()),
       'GET /api/platform-admin/price-plans': (route) => json(route, 200, pricePlans()),
       'GET /api/platform-admin/contact-requests': (route) => json(route, 200, []),
+      'GET /api/platform-admin/founding-terms': (route) => json(route, 200, [foundingTerms()]),
     },
   });
   await page.goto('/admin/billing');
@@ -478,4 +603,211 @@ test('an admin without a coaching space of their own gets the plain top bar', as
   );
   await axe(page);
   await page.screenshot({ path: 'test-results/r52b-overview-no-workspace-1440.png' });
+});
+
+// ---------- the Founding coach badge (notes plan N3b) ----------
+
+for (const width of [390, 1440]) {
+  test(`marking a space as founding, checking it now and ending it for cause at ${width}px`, async ({
+    page,
+  }) => {
+    const writes = await openAdmin(page, `/admin/billing/${SPACE_IDS.atlas}`, width);
+    const founding = page.locator('[data-founding]');
+    await expect(founding.getByRole('heading', { name: 'Founding space' })).toBeVisible();
+    await expect(founding.locator('[data-not-founding]')).toHaveText('Not a founding space.');
+
+    await founding.getByRole('button', { name: 'Mark as founding' }).click();
+    const mark = page.getByRole('dialog');
+    await expect(mark.getByRole('heading', { name: 'Mark as founding' })).toBeVisible();
+    await expect(mark.locator('[data-founding-terms-sentence]')).toHaveText(
+      'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too.',
+    );
+    await expect(mark.getByRole('button', { name: /Founding since/ })).toContainText('Oct 9, 2026');
+    // An earlier day, through the calendar; a pasted link as the note must wrap, not widen the page.
+    await chooseDay(mark, 'Founding since', '2026-09-15');
+    await mark
+      .getByLabel('What it is for')
+      .fill('https://www.instagram.com/p/C9xYzAbCdEfGhIjKlMn/?igsh=MWQ1ZGUxMzBkMA==');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n3b-mark-${width}.png` });
+    await mark.getByRole('button', { name: 'Mark as founding' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(writes.mark).toEqual([
+      {
+        foundingSince: '2026-09-15',
+        note: 'https://www.instagram.com/p/C9xYzAbCdEfGhIjKlMn/?igsh=MWQ1ZGUxMzBkMA==',
+      },
+    ]);
+    await expect(founding.locator('[data-founding-since]')).toHaveText(
+      'Founding since Sep 15, 2026 · https://www.instagram.com/p/C9xYzAbCdEfGhIjKlMn/?igsh=MWQ1ZGUxMzBkMA==',
+    );
+    await expect(founding.locator('[data-founding-progress]')).toHaveText(
+      'Badge: 7 of 10 clients with an active plan right now · 1 of 2 months since the space started.',
+    );
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n3b-space-waiting-${width}.png`, fullPage: true });
+
+    await founding.getByRole('button', { name: 'Check now' }).click();
+    await expect(page.getByText('Checked: the Founding coach badge is earned.')).toBeVisible();
+    expect(writes.check).toHaveLength(1);
+    await expect(founding.locator('[data-founding-earned] app-status-pill')).toHaveText(
+      'Founding coach',
+    );
+    await expect(founding.locator('[data-founding-earned] .next')).toHaveText(
+      'Badge earned Oct 9, 2026',
+    );
+    await expect(founding.getByRole('button', { name: 'Check now' })).toHaveCount(0);
+    // Where it stands keeps its one pill.
+    await expect(page.locator('[data-space-status] app-status-pill')).toHaveText('Overdue');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n3b-space-earned-${width}.png`, fullPage: true });
+
+    await founding.getByRole('button', { name: 'End founding status' }).click();
+    const end = page.getByRole('dialog');
+    await expect(end).toContainText(
+      'The badge leaves the coach’s account and their clients’ Me page at once.',
+    );
+    await end.getByRole('button', { name: 'Misrepresented qualifications' }).click();
+    await expect(end.getByLabel('Why?')).toHaveValue('Misrepresented qualifications');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n3b-end-${width}.png` });
+    await end.getByRole('button', { name: 'End founding status' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(writes.end).toEqual([{ reason: 'Misrepresented qualifications' }]);
+    await expect(founding.locator('[data-not-founding]')).toHaveText('Not a founding space.');
+    await expect(founding.locator('[data-founding-history] .history-end')).toHaveText(
+      'Ended Oct 9, 2026: Misrepresented qualifications',
+    );
+    await expect(founding.getByRole('button', { name: 'Mark as founding' })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n3b-space-ended-${width}.png`, fullPage: true });
+  });
+
+  test(`a founding space shows its pill on the list, and the badge’s terms change at ${width}px`, async ({
+    page,
+  }) => {
+    const writes = await openAdmin(page, '/admin/billing', width);
+    await expect(page.locator(`[data-space="${SPACE_IDS.nour}"] app-status-pill`)).toHaveText([
+      'Active',
+      'Founding',
+    ]);
+    await expect(page.locator('.space [data-founding]')).toHaveCount(1);
+    const panel = page.locator('[data-founding-terms]');
+    await expect(panel.getByRole('heading', { name: 'Founding coach badge' })).toBeVisible();
+    await expect(panel.locator('.panel-head .quiet')).toHaveText('Version 1 · since Sep 1, 2026');
+    await expect(panel.locator('[data-terms-sentence]')).toHaveText(
+      'Earned once 10 of a founding space’s clients have an active plan and the space is 2 months old.',
+    );
+
+    await panel.getByRole('button', { name: 'Change', exact: true }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByRole('heading', { name: 'Change the badge’s terms' })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Publish version 2' })).toBeDisabled();
+    await sheet.getByLabel('Clients with an active plan').fill('12');
+    await sheet.getByLabel('Months since the space started').fill('3');
+    await expect(sheet.locator('.changes li')).toHaveCount(2);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n3b-terms-${width}.png` });
+
+    await sheet.getByRole('button', { name: 'Publish version 2' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(writes.terms).toEqual([
+      { clientsWithActivePlan: 12, monthsSinceStart: 3, note: null, expectedCurrentVersion: 1 },
+    ]);
+    await expect(panel.locator('.panel-head .quiet')).toHaveText('Version 2 · since Oct 9, 2026');
+    await expect(panel.locator('[data-terms-sentence]')).toHaveText(
+      'Earned once 12 of a founding space’s clients have an active plan and the space is 3 months old.',
+    );
+    await page.screenshot({ path: `test-results/n3b-overview-${width}.png`, fullPage: true });
+  });
+
+  test(`an earned, hidden badge with its history follows dark mode at ${width}px`, async ({
+    page,
+  }) => {
+    await openAdmin(
+      page,
+      `/admin/billing/${SPACE_IDS.atlas}`,
+      width,
+      true,
+      atlasDetail({ founding: adminFounding('Earned', true), foundingHistory: [endedFounding()] }),
+    );
+    await expect(page.locator('[data-founding-earned] .next')).toHaveText(
+      'Badge earned Oct 3, 2026 · Hidden by the coach',
+    );
+    await expect(page.locator('[data-founding-history] .history-end')).toHaveText(
+      'Ended Aug 20, 2026: The coach asked to leave the founding group',
+    );
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: `test-results/n3b-space-earned-dark-${width}.png`,
+      fullPage: true,
+    });
+
+    await page.goto('/admin/billing');
+    await expect(page.locator('[data-founding-terms] [data-terms-sentence]')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n3b-overview-dark-${width}.png`, fullPage: true });
+  });
+}
+
+test('the founding panel and the badge’s terms reflow at 200% text', async ({ page }) => {
+  await openAdmin(
+    page,
+    `/admin/billing/${SPACE_IDS.atlas}`,
+    390,
+    false,
+    atlasDetail({ founding: adminFounding('Waiting'), foundingHistory: [endedFounding()] }),
+  );
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expect(page.locator('[data-founding-progress]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Check now' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/n3b-space-200.png', fullPage: true });
+
+  await page.goto('/admin/billing');
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expect(page.locator('[data-founding-terms] [data-terms-sentence]')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/n3b-overview-200.png', fullPage: true });
+});
+
+test.describe('a stale version of the badge’s terms', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409/] } });
+
+  test('keeps the server’s refusal in the sheet with what was typed', async ({ page }) => {
+    const writes = await openAdmin(page, '/admin/billing', 1440);
+    // Another admin published version 2 since this page loaded: the server refuses version 1's.
+    await page.route('**/api/platform-admin/founding-terms', (route) =>
+      route.request().method() === 'POST'
+        ? json(route, 409, {
+            code: 'founding_terms_changed',
+            message:
+              'Newer founding badge terms were published since this page loaded. Refresh and try again.',
+          })
+        : route.fallback(),
+    );
+
+    await page
+      .locator('[data-founding-terms]')
+      .getByRole('button', { name: 'Change', exact: true })
+      .click();
+    const sheet = page.getByRole('dialog');
+    await sheet.getByLabel('Clients with an active plan').fill('8');
+    await sheet.getByRole('button', { name: 'Publish version 2' }).click();
+
+    await expect(sheet.getByRole('alert')).toHaveText(
+      'Newer founding badge terms were published since this page loaded. Refresh and try again.',
+    );
+    await expect(sheet.getByLabel('Clients with an active plan')).toHaveValue('8');
+    expect(writes.terms).toEqual([]);
+    await axe(page);
+  });
 });

@@ -78,6 +78,87 @@
           </p>
         </section>
 
+        <!-- The Founding coach badge (notes plan N3b): every state and number is the server's reading. -->
+        <section class="panel founding" aria-labelledby="founding-heading" data-founding>
+          <div class="panel-head">
+            <h2 id="founding-heading" #foundingHeading tabindex="-1" i18n>Founding space</h2>
+            @if (!founding()) {
+              <button
+                appButton
+                type="button"
+                variant="outlined"
+                [loading]="busy() === 'founding-mark'"
+                (click)="markFounding()"
+                data-mark-founding
+                i18n
+              >
+                Mark as founding
+              </button>
+            }
+          </div>
+          @if (founding(); as open) {
+            @if (open.badge.state === 'Earned') {
+              <div class="hero-head" data-founding-earned>
+                <app-status-pill [label]="foundingCoach" tone="success" />
+                <span class="next">{{ earnedLine(open) }}</span>
+              </div>
+            }
+            <p class="sentence" data-founding-since>
+              <ng-container i18n>Founding since {{ day(open.status.foundingSince) }}</ng-container>
+              · <span dir="auto">{{ open.status.note }}</span>
+            </p>
+            @if (open.badge.state === 'Waiting') {
+              <p class="quiet" data-founding-progress>{{ progress(open.badge) }}</p>
+              <p class="quiet" i18n>TB Gym checks this on its own; Check now looks at once.</p>
+            }
+            <div class="founding-actions">
+              @if (open.badge.state === 'Waiting') {
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  [loading]="busy() === 'founding-check'"
+                  (click)="checkFounding()"
+                  data-check-founding
+                  i18n
+                >
+                  Check now
+                </button>
+              }
+              <button
+                appButton
+                type="button"
+                variant="text"
+                (click)="endFounding()"
+                data-end-founding
+                i18n
+              >
+                End founding status
+              </button>
+            </div>
+          } @else {
+            <p class="quiet" data-not-founding i18n>Not a founding space.</p>
+          }
+          @if (foundingHistory().length > 0) {
+            <h3 class="history-title" i18n>Ended founding statuses</h3>
+            <ul class="rows history" role="list" data-founding-history>
+              @for (record of foundingHistory(); track record.id) {
+                <li [attr.data-founding-record]="record.id">
+                  <p class="history-end">
+                    <ng-container i18n
+                      >Ended {{ day(record.endedAtUtc ?? record.markedAtUtc) }}:</ng-container
+                    >&ngsp;<span dir="auto">{{ record.endReason }}</span>
+                  </p>
+                  <p class="quiet">
+                    <ng-container i18n>Founding since {{ day(record.foundingSince) }}</ng-container>
+                    · <span dir="auto">{{ record.note }}</span>
+                  </p>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
         <section class="panel" aria-labelledby="invoices-heading">
           <h2 id="invoices-heading" i18n>Invoices</h2>
           @if (invoices().length === 0) {
@@ -284,6 +365,31 @@
       [spaceName]="space.name"
       [today]="today"
       [existing]="detail()?.discounts ?? []"
+      (dirtyChange)="setDirty($event)"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #markSheet let-sheet>
+  @if (summary(); as space) {
+    <app-platform-founding-mark
+      [tenantId]="space.tenantId"
+      [spaceName]="space.name"
+      [today]="today"
+      [terms]="markTerms()"
+      (dirtyChange)="setDirty($event)"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #endSheet let-sheet>
+  @if (ending(); as record) {
+    <app-platform-founding-end
+      [foundingId]="record.id"
+      [spaceName]="summary()?.name ?? ''"
+      [foundingSince]="record.foundingSince"
       (dirtyChange)="setDirty($event)"
       (closed)="sheet.close($event)"
     />

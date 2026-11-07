@@ -1,0 +1,56 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="about">
+    <span class="who"
+      ><span dir="auto">{{ spaceName() }}</span></span
+    >&ngsp;
+    <span class="muted" i18n>Founding since {{ since() }}</span>
+  </p>
+
+  <app-field
+    [label]="reasonLabel"
+    [help]="reasonHelp"
+    [errors]="shows('reason') ? errors()['reason'] : null"
+  >
+    <textarea
+      appControl
+      autocomplete="off"
+      name="reason"
+      rows="3"
+      maxlength="500"
+      dir="auto"
+      [value]="reason()"
+      (input)="reason.set($any($event.target).value)"
+      (blur)="attempt.touch('reason')"
+    ></textarea>
+  </app-field>
+  <div class="presets" role="group" [attr.aria-label]="presetsLabel">
+    <span class="caption" i18n>Common causes</span>
+    @for (preset of presets; track preset) {
+      <button appButton type="button" variant="outlined" (click)="usePreset(preset)">
+        {{ preset }}
+      </button>
+    }
+  </div>
+
+  <p class="notice" i18n>
+    The badge leaves the coach’s account and their clients’ Me page at once. The discount is not
+    changed: revoke it separately if it should end.
+  </p>
+
+  @if (attempt.wasTried() && problemCount() > 0) {
+    <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+  }
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>Not now</button>
+  <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+    @if (busy()) {
+      <ng-container i18n>Ending…</ng-container>
+    } @else {
+      <ng-container i18n>End founding status</ng-container>
+    }
+  </button>
+</ng-template>

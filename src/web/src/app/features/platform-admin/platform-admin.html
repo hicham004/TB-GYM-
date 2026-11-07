@@ -152,6 +152,9 @@
                     <p class="usage">{{ row.usage }}</p>
                     <div class="state">
                       <app-status-pill [label]="row.status" [tone]="row.tone" />
+                      @if (row.founding) {
+                        <app-status-pill [label]="foundingLabel" tone="success" data-founding />
+                      }
                       <span class="next">{{ row.next }}</span>
                     </div>
                     <p class="owes">
@@ -238,6 +241,43 @@
           </app-disclosure>
         }
       </section>
+
+      <!-- The Founding coach badge's terms (notes plan N3b): published versions, the newest in force. -->
+      <section class="panel" aria-labelledby="badge-terms-heading" data-founding-terms>
+        <div class="panel-head">
+          <div>
+            <h2 id="badge-terms-heading" i18n>Founding coach badge</h2>
+            @if (currentTerms(); as terms) {
+              <p class="quiet" i18n>
+                Version {{ terms.versionNumber }} · since {{ day(terms.publishedAtUtc) }}
+              </p>
+            }
+          </div>
+          @if (currentTerms()) {
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              (click)="openTerms()"
+              data-change-terms
+              i18n
+            >
+              Change
+            </button>
+          } @else if (termsFailed()) {
+            <button appButton type="button" variant="outlined" (click)="retryTerms()" i18n>
+              Read them again
+            </button>
+          }
+        </div>
+        @if (currentTerms(); as terms) {
+          <p class="badge-terms" data-terms-sentence>{{ termsLine(terms) }}</p>
+        } @else if (termsFailed()) {
+          <p class="quiet" role="alert" i18n>The badge’s terms couldn’t be loaded.</p>
+        } @else if (foundingTerms()) {
+          <p class="quiet" i18n>No badge terms have been published yet.</p>
+        }
+      </section>
     }
   }
 
@@ -249,6 +289,16 @@
     <app-platform-plan
       [current]="plan"
       (dirtyChange)="setPlanDirty($event)"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
+<ng-template #termsSheet let-sheet>
+  @if (termsOpenedWith(); as terms) {
+    <app-platform-founding-terms
+      [current]="terms"
+      (dirtyChange)="setTermsDirty($event)"
       (closed)="sheet.close($event)"
     />
   }

@@ -1,0 +1,86 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="muted" i18n>
+    Version {{ current().versionNumber }} is in force. A new version applies at once to every
+    founding space still waiting; a badge already earned stays earned.
+  </p>
+
+  <div class="grid">
+    @for (field of fields; track field.key) {
+      <app-field
+        [label]="field.label"
+        [help]="field.help"
+        [errors]="shows(field.key) ? errors()[field.key] : null"
+      >
+        <input
+          appControl
+          type="number"
+          autocomplete="off"
+          inputmode="numeric"
+          step="1"
+          [name]="field.key"
+          [attr.min]="field.min"
+          [attr.max]="field.max"
+          [value]="entry()[field.key] ?? ''"
+          (input)="setNumber(field.key, $any($event.target).valueAsNumber)"
+          (blur)="attempt.touch(field.key)"
+        />
+      </app-field>
+    }
+  </div>
+
+  <app-field label="Note (optional)" i18n-label [errors]="shows('note') ? errors()['note'] : null">
+    <input
+      appControl
+      name="note"
+      autocomplete="off"
+      maxlength="500"
+      dir="auto"
+      [value]="entry().note"
+      (input)="setNote($any($event.target).value)"
+      (blur)="attempt.touch('note')"
+    />
+  </app-field>
+
+  <section class="changes" aria-live="polite">
+    @if (changes().length === 0) {
+      @if (problemCount() === 0) {
+        <p class="muted" i18n>Nothing has changed yet. Change a number to publish a new version.</p>
+      }
+    } @else {
+      <h3 i18n>What changes</h3>
+      <ul>
+        @for (change of changes(); track change.key) {
+          <li>
+            <span class="what">{{ change.label }}</span>
+            <span class="from">{{ change.from }}</span>
+            <app-icon name="chevron-right" class="arrow" />
+            <strong class="to">{{ change.to }}</strong>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  @if (attempt.wasTried() && problemCount() > 0) {
+    <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+  }
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>Not now</button>
+  <button
+    appButton
+    type="submit"
+    [attr.form]="formId"
+    [loading]="busy()"
+    [disabled]="changes().length === 0 && problemCount() === 0"
+  >
+    @if (busy()) {
+      <ng-container i18n>Publishing…</ng-container>
+    } @else {
+      <ng-container i18n>Publish version {{ current().versionNumber + 1 }}</ng-container>
+    }
+  </button>
+</ng-template>

@@ -462,3 +462,253 @@ test('a client opens Password and security from Me and goes back there', async (
   await axe(page);
   await page.screenshot({ path: 'test-results/r52a-security-client-390.png', fullPage: true });
 });
+
+// ---------- Settings › Founding coach (notes plan N3b) ----------
+
+const OWNER_LINKS = [
+  'Name and region',
+  'Brand',
+  'Nutrition',
+  'Billing',
+  'Undelivered notices',
+  'Notifications',
+  'Appearance',
+  'Password and security',
+];
+
+const EARNED = {
+  state: 'Earned',
+  foundingSince: '2026-09-15',
+  clientsWithActivePlan: null,
+  clientsNeeded: 10,
+  monthsSinceStart: null,
+  monthsNeeded: 2,
+  termsVersion: 1,
+  earnedOn: '2026-10-03',
+  endedOn: null,
+  hidden: false,
+};
+
+// Under version 2's terms, so the page can only show numbers the server sent.
+const WAITING = {
+  ...EARNED,
+  state: 'Waiting',
+  clientsWithActivePlan: 5,
+  clientsNeeded: 12,
+  monthsSinceStart: 1,
+  monthsNeeded: 3,
+  termsVersion: 2,
+  earnedOn: null,
+};
+
+/** The owner's founding reads, answered as N3a's API does, with the switch saved in place. */
+function foundingApi(badge: typeof EARNED, saves: unknown[] = [], order: string[] = []) {
+  let current = badge;
+  return {
+    'GET /api/billing/access': (route: Route) =>
+      json(route, 200, {
+        isReadOnly: false,
+        hasOverdueInvoice: false,
+        readOnlyFrom: null,
+        foundingCoach:
+          current.state === 'Waiting' || current.state === 'Earned' ? current.state : null,
+      }),
+    'GET /api/billing/founding': (route: Route) => json(route, 200, current),
+    'PUT /api/billing/founding/visibility': (route: Route) => {
+      const body = route.request().postDataJSON() as { hidden: boolean };
+      saves.push(body);
+      order.push('save');
+      current = { ...current, hidden: body.hidden };
+      return json(route, 200, current);
+    },
+  } satisfies Record<string, Handler>;
+}
+
+const showBadge = (page: Page) =>
+  page.getByRole('checkbox', { name: 'Show the badge to your clients' });
+
+for (const width of [390, 1440]) {
+  for (const dark of [false, true]) {
+    const mode = dark ? 'dark' : 'light';
+
+    test(`the Founding coach page shows an earned badge at ${width}px, ${mode}, and passes axe`, async ({
+      page,
+    }) => {
+      await open(page, '/account/founding', 'Founding coach', {
+        width,
+        dark,
+        extra: foundingApi(EARNED),
+      });
+
+      const nav = page.getByRole('navigation', { name: 'Settings' });
+      await expect(nav.getByRole('link')).toHaveText([...OWNER_LINKS, 'Founding coach']);
+      await expect(nav.getByRole('link', { name: 'Founding coach' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      const earned = page.locator('[data-founding-earned]');
+      await expect(earned.locator('app-status-pill')).toHaveText('Founding coach');
+      await expect(earned.locator('.line')).toHaveText(
+        'One of the first coaches on TB Gym. Not a check of qualifications',
+      );
+      await expect(earned).toContainText('Earned Oct 3, 2026');
+      await expect(showBadge(page)).toBeChecked();
+      await expect(page.locator('main')).not.toHaveAttribute('data-mode', 'light');
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: `test-results/n3b-founding-earned-${width}-${mode}.png`,
+        fullPage: true,
+      });
+    });
+
+    test(`the Founding coach page says where a waiting badge stands at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      await open(page, '/account/founding', 'Founding coach', {
+        width,
+        dark,
+        extra: foundingApi(WAITING),
+      });
+
+      await expect(page.locator('[data-founding-waiting] p')).toHaveText([
+        'Your coaching space is one of the first on TB Gym, founding since Sep 15, 2026.',
+        'The badge is earned once 12 of your clients have an active plan and your space is 3 months old. So far: 5 of 12 clients, 1 of 3 months.',
+      ]);
+      await expect(showBadge(page)).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: `test-results/n3b-founding-waiting-${width}-${mode}.png`,
+        fullPage: true,
+      });
+    });
+  }
+
+  test(`the Founding coach page reflows with 200% text at ${width}px`, async ({ page }) => {
+    await open(page, '/account/founding', 'Founding coach', {
+      width,
+      extra: foundingApi(EARNED),
+    });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    await expect(showBadge(page)).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: `test-results/n3b-founding-200-${width}.png`, fullPage: true });
+  });
+}
+
+test('the Founding coach row opens the page from Settings, and hiding saves after a fresh token', async ({
+  page,
+}) => {
+  const saves: unknown[] = [];
+  const order: string[] = [];
+  await open(page, '/account/appearance', 'Appearance', {
+    extra: {
+      ...foundingApi(EARNED, saves, order),
+      'GET /api/auth/csrf': (route) => {
+        order.push('token');
+        return json(route, 200, { token: 'e2e-csrf' });
+      },
+    },
+  });
+  await page
+    .getByRole('navigation', { name: 'Settings' })
+    .getByRole('link', { name: 'Founding coach' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Founding coach', level: 1 })).toBeVisible();
+  order.length = 0;
+
+  await showBadge(page).uncheck();
+
+  await expect.poll(() => order).toEqual(['token', 'save']);
+  expect(saves).toEqual([{ hidden: true }]);
+  await expect(showBadge(page)).not.toBeChecked();
+  await page.reload();
+  await expect(showBadge(page)).not.toBeChecked();
+});
+
+test.describe('when the badge’s switch is refused', () => {
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [/status of 500 .*\/api\/billing\/founding\/visibility/],
+    },
+  });
+
+  test('puts the box back and says so', async ({ page }) => {
+    await open(page, '/account/founding', 'Founding coach', {
+      width: 390,
+      extra: {
+        ...foundingApi(EARNED),
+        'PUT /api/billing/founding/visibility': (route) => json(route, 500, { title: 'Failed' }),
+      },
+    });
+
+    await showBadge(page).uncheck();
+
+    await expect(page.getByRole('alert')).toHaveText('Couldn’t save your choice. Try again.');
+    await expect(showBadge(page)).toBeChecked();
+    await axe(page);
+  });
+});
+
+test('an owner whose space is not founding finds no row, and nothing at the address', async ({
+  page,
+}) => {
+  await open(page, '/account/founding', 'Founding coach', {
+    width: 390,
+    extra: {
+      'GET /api/billing/founding': (route) =>
+        json(route, 200, { ...EARNED, state: 'NotFounding', foundingSince: null, earnedOn: null }),
+    },
+  });
+
+  await expect(page.getByRole('navigation', { name: 'Settings' }).getByRole('link')).toHaveText(
+    OWNER_LINKS,
+  );
+  await expect(page.getByRole('heading', { name: 'Nothing here', level: 2 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to Settings' })).toHaveAttribute(
+    'href',
+    '/workspace',
+  );
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/n3b-founding-nothing-390.png', fullPage: true });
+});
+
+test('a coach finds no row and nothing at the address, and nobody asks the server', async ({
+  page,
+}) => {
+  let asked = 0;
+  await open(page, '/account/founding', 'Founding coach', {
+    memberships: [COACH_MEMBERSHIP],
+    extra: {
+      // Told Earned, which the server never tells a coach: the row is still the owner's alone.
+      'GET /api/billing/access': (route) =>
+        json(route, 200, {
+          isReadOnly: false,
+          hasOverdueInvoice: false,
+          readOnlyFrom: null,
+          foundingCoach: 'Earned',
+        }),
+      'GET /api/billing/founding': (route) => {
+        asked += 1;
+        return json(route, 200, EARNED);
+      },
+    },
+  });
+
+  await expect(page.getByRole('navigation', { name: 'Settings' }).getByRole('link')).toHaveText([
+    'Notifications',
+    'Appearance',
+    'Password and security',
+    'Team',
+  ]);
+  await expect(page.getByRole('heading', { name: 'Nothing here', level: 2 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to Settings' })).toHaveAttribute(
+    'href',
+    '/notifications/settings',
+  );
+  expect(asked).toBe(0);
+  await axe(page);
+});

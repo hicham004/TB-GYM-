@@ -1,20 +1,32 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
-import { fill, press, settle } from '../../../testing/dom';
-import { atlasDetail, NOW, SPACE_IDS, TODAY } from '../../../testing/platform-admin-fixtures';
+import { UiSheet } from '../../ui/sheet';
+import { chosenDay, fill, press, settle } from '../../../testing/dom';
+import {
+  adminFounding,
+  atlasDetail,
+  endedFounding,
+  foundingTerms,
+  NOW,
+  SPACE_IDS,
+  TODAY,
+} from '../../../testing/platform-admin-fixtures';
 import type { AdminWorkspaceDetail } from '../billing/billing.models';
 import { PlatformAdminApi } from './platform-admin-api';
+import { PlatformFoundingApi } from './platform-founding-api';
 import { PlatformSpace } from './platform-space';
 
 type Api = { [K in keyof PlatformAdminApi]: ReturnType<typeof vi.fn> };
+type FoundingApi = { [K in keyof PlatformFoundingApi]: ReturnType<typeof vi.fn> };
 
 async function render(
   detail: () => AdminWorkspaceDetail = atlasDetail,
   overrides: Partial<Api> = {},
+  foundingOverrides: Partial<FoundingApi> = {},
 ) {
   const api: Api = {
     getWorkspaces: vi.fn(),
@@ -32,6 +44,15 @@ async function render(
     withdrawLegalDocument: vi.fn(),
     ...overrides,
   };
+  const founding: FoundingApi = {
+    markFounding: vi.fn(() => of(adminFounding())),
+    endFounding: vi.fn(() => of(adminFounding())),
+    checkFounding: vi.fn(() => of({ checked: 1, earned: 0 })),
+    getFoundingTerms: vi.fn(() => of([foundingTerms()])),
+    publishFoundingTerms: vi.fn(),
+    ...foundingOverrides,
+  };
+  const csrf = { refresh: vi.fn(() => Promise.resolve()) };
   TestBed.configureTestingModule({
     imports: [PlatformSpace],
     providers: [
@@ -41,12 +62,13 @@ async function render(
         useValue: { paramMap: of(convertToParamMap({ tenantId: SPACE_IDS.atlas })) },
       },
       { provide: PlatformAdminApi, useValue: api },
-      { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: PlatformFoundingApi, useValue: founding },
+      { provide: CsrfService, useValue: csrf },
     ],
   });
   const fixture = TestBed.createComponent(PlatformSpace);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api };
+  return { fixture, host: fixture.nativeElement as HTMLElement, api, founding, csrf };
 }
 
 const textOf = (element: Element | null | undefined) =>
@@ -485,6 +507,434 @@ describe('Platform billing: one coaching space', () => {
 
       expect(textOf(sheet.querySelector('[role="alert"]'))).toBe(
         'This workspace already has a discount on some of those dates. Revoke it first.',
+      );
+    });
+  });
+
+  describe('founding status (notes plan N3b)', () => {
+    const NEVER = /\b(verified|certified|qualified|licensed|approved)\b/i;
+    const panel = (host: HTMLElement) => host.querySelector('[data-founding]')!;
+
+    it('says a space is not founding, right after where it stands, and marks it', async () => {
+      let detail = atlasDetail();
+      const view = await render(
+        () => detail,
+        {},
+        {
+          markFounding: vi.fn(() => {
+            detail = atlasDetail({ founding: adminFounding() });
+            return of(adminFounding());
+          }),
+        },
+      );
+      expect(textOf(panel(view.host).querySelector('h2'))).toBe('Founding space');
+      expect(textOf(panel(view.host).querySelector('[data-not-founding]'))).toBe(
+        'Not a founding space.',
+      );
+      const sections = Array.from(view.host.querySelectorAll('section.panel'));
+      expect(sections.indexOf(panel(view.host))).toBe(
+        sections.indexOf(view.host.querySelector('[data-space-status]')!) + 1,
+      );
+      expect(textOf(panel(view.host))).not.toMatch(NEVER);
+
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+      expect(view.founding.getFoundingTerms).toHaveBeenCalledTimes(1);
+      const sheet = dialog()!;
+      expect(textOf(sheet.querySelector('h2'))).toBe('Mark as founding');
+      expect(textOf(sheet.querySelector('[data-founding-terms-sentence]'))).toBe(
+        'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too.',
+      );
+      expect(await chosenDay(view.fixture, sheet, 'Founding since')).toBe(TODAY);
+      expect(textOf(sheet)).not.toMatch(NEVER);
+
+      // What it is for is asked first, in the server's own words.
+      press(sheet, 'Mark as founding');
+      await settle(view.fixture);
+      expect(view.founding.markFounding).not.toHaveBeenCalled();
+      expect(textOf(sheet)).toContain(
+        'Say what the founding status is for, in up to 200 characters.',
+      );
+
+      fill(sheet, 'What it is for', '  One of the first ten coaches ');
+      press(sheet, 'Mark as founding');
+      await settle(view.fixture);
+
+      expect(view.founding.markFounding).toHaveBeenCalledWith(
+        SPACE_IDS.atlas,
+        TODAY,
+        'One of the first ten coaches',
+      );
+      expect(view.csrf.refresh.mock.invocationCallOrder.at(-1)).toBeLessThan(
+        view.founding.markFounding.mock.invocationCallOrder[0],
+      );
+      expect(dialog()).toBeNull();
+      expect(toast()).toContain('Marked as founding.');
+      expect(textOf(panel(view.host).querySelector('[data-founding-since]'))).toBe(
+        'Founding since Sep 15, 2026 · One of the first ten coaches',
+      );
+    });
+
+    it('still marks a space when the terms in force cannot be read, without their numbers', async () => {
+      const view = await render(
+        atlasDetail,
+        {},
+        { getFoundingTerms: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))) },
+      );
+
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+
+      expect(textOf(dialog()!.querySelector('[data-founding-terms-sentence]'))).toBe(
+        'The badge is earned under the terms in force. The discount is separate: grant it on this page too.',
+      );
+    });
+
+    it('keeps a refused mark on screen in the server’s words', async () => {
+      const exists = new HttpErrorResponse({
+        status: 409,
+        error: {
+          code: 'founding_exists',
+          message:
+            'This coaching space is already founding. End that status first to mark it again.',
+        },
+      });
+      const view = await render(
+        atlasDetail,
+        {},
+        { markFounding: vi.fn(() => throwError(() => exists)) },
+      );
+
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+      const sheet = dialog()!;
+      fill(sheet, 'What it is for', 'One of the first ten coaches');
+      press(sheet, 'Mark as founding');
+      await settle(view.fixture);
+
+      expect(textOf(sheet.querySelector('[role="alert"]'))).toBe(
+        'This coaching space is already founding. End that status first to mark it again.',
+      );
+      expect(dialog()).toBe(sheet);
+    });
+
+    it('shows a waiting badge as the server counts it, and checks it now', async () => {
+      let detail = atlasDetail({ founding: adminFounding('Waiting') });
+      const view = await render(
+        () => detail,
+        {},
+        {
+          checkFounding: vi.fn(() => {
+            detail = atlasDetail({ founding: adminFounding('Earned') });
+            return of({ checked: 3, earned: 1 });
+          }),
+        },
+      );
+      const founding = panel(view.host);
+      expect(textOf(founding.querySelector('[data-founding-since]'))).toBe(
+        'Founding since Sep 15, 2026 · One of the first ten coaches',
+      );
+      expect(textOf(founding.querySelector('[data-founding-progress]'))).toBe(
+        'Badge: 7 of 10 clients with an active plan right now · 1 of 2 months since the space started.',
+      );
+      expect(textOf(founding)).toContain('TB Gym checks this on its own; Check now looks at once.');
+      expect(founding.querySelector('[data-mark-founding]')).toBeNull();
+      expect(founding.querySelector('[data-founding-earned]')).toBeNull();
+      expect(textOf(founding)).not.toMatch(NEVER);
+
+      press(view.host, 'Check now');
+      await settle(view.fixture);
+
+      expect(view.founding.checkFounding).toHaveBeenCalledTimes(1);
+      expect(view.csrf.refresh.mock.invocationCallOrder[0]).toBeLessThan(
+        view.founding.checkFounding.mock.invocationCallOrder[0],
+      );
+      expect(view.api.getWorkspace).toHaveBeenCalledTimes(2);
+      // The toast reads this space from the page read again, never the platform's counts.
+      expect(toast()).toContain('Checked: the Founding coach badge is earned.');
+      const earned = panel(view.host).querySelector('[data-founding-earned]')!;
+      expect(textOf(earned.querySelector('app-status-pill'))).toBe('Founding coach');
+      expect(textOf(earned.querySelector('.next'))).toBe('Badge earned Oct 3, 2026');
+    });
+
+    it('says when a check finds the badge not earned yet, or cannot run', async () => {
+      const view = await render(() => atlasDetail({ founding: adminFounding('Waiting') }));
+      press(view.host, 'Check now');
+      await settle(view.fixture);
+      expect(toast()).toContain('Checked: not earned yet.');
+
+      view.founding.checkFounding.mockReturnValue(
+        throwError(() => new HttpErrorResponse({ status: 500 })),
+      );
+      press(view.host, 'Check now');
+      await settle(view.fixture);
+      expect(toast()).toContain('The badge could not be checked. Try again.');
+    });
+
+    it('shows an earned badge with its day, and when the coach hides it', async () => {
+      const view = await render(() => atlasDetail({ founding: adminFounding('Earned', true) }));
+
+      const earned = view.host.querySelector('[data-founding-earned]')!;
+      const pill = earned.querySelector('app-status-pill')!;
+      expect(textOf(pill)).toBe('Founding coach');
+      expect(pill.classList).toContain('success');
+      expect(textOf(earned.querySelector('.next'))).toBe(
+        'Badge earned Oct 3, 2026 · Hidden by the coach',
+      );
+      expect(view.host.querySelector('[data-check-founding]')).toBeNull();
+      expect(view.host.querySelector('[data-end-founding]')).not.toBeNull();
+      // Where it stands keeps its one pill: the badge's lives in its own panel.
+      expect(view.host.querySelectorAll('[data-space-status] app-status-pill')).toHaveLength(1);
+      expect(textOf(panel(view.host))).not.toMatch(NEVER);
+    });
+
+    it('ends a founding status for cause, a common cause filling the reason, and keeps it', async () => {
+      let detail = atlasDetail({ founding: adminFounding('Earned') });
+      const view = await render(
+        () => detail,
+        {},
+        {
+          endFounding: vi.fn(() => {
+            detail = atlasDetail({
+              foundingHistory: [
+                endedFounding({
+                  id: 'founding-1',
+                  foundingSince: '2026-09-15',
+                  note: 'One of the first ten coaches',
+                  endedAtUtc: NOW,
+                  endReason: 'Harm to clients',
+                }),
+              ],
+            });
+            return of(adminFounding());
+          }),
+        },
+      );
+
+      press(view.host, 'End founding status');
+      await settle(view.fixture);
+      const sheet = dialog()!;
+      expect(textOf(sheet.querySelector('h2'))).toBe('End founding status');
+      expect(textOf(sheet)).toContain('Founding since Sep 15, 2026');
+      expect(textOf(sheet)).toContain(
+        'The badge leaves the coach’s account and their clients’ Me page at once. The discount is not changed: revoke it separately if it should end.',
+      );
+      expect(textOf(sheet)).not.toMatch(NEVER);
+      press(sheet, 'Harm to clients');
+      await settle(view.fixture);
+      press(sheet, 'End founding status');
+      await settle(view.fixture);
+
+      expect(view.founding.endFounding).toHaveBeenCalledWith('founding-1', 'Harm to clients');
+      expect(toast()).toContain('Founding status ended.');
+      const founding = panel(view.host);
+      expect(textOf(founding.querySelector('[data-not-founding]'))).toBe('Not a founding space.');
+      expect(founding.querySelector('[data-mark-founding]')).not.toBeNull();
+      const history = founding.querySelectorAll('[data-founding-history] li');
+      expect(history).toHaveLength(1);
+      expect(textOf(history[0].querySelector('.history-end'))).toBe(
+        'Ended Oct 9, 2026: Harm to clients',
+      );
+      expect(textOf(history[0].querySelector('.quiet'))).toBe(
+        'Founding since Sep 15, 2026 · One of the first ten coaches',
+      );
+    });
+
+    it('says nothing about the badge when the page cannot read the space again after a check', async () => {
+      let reads = 0;
+      const view = await render(atlasDetail, {
+        getWorkspace: vi.fn(() =>
+          ++reads === 1
+            ? of(atlasDetail({ founding: adminFounding('Waiting') }))
+            : throwError(() => new HttpErrorResponse({ status: 500 })),
+        ),
+      });
+
+      press(view.host, 'Check now');
+      await settle(view.fixture);
+
+      expect(toast()).not.toContain('not earned yet');
+      expect(toast()).toContain(
+        'The check ran, but this space couldn’t be read again. Read it again to see its badge.',
+      );
+      expect(textOf(view.host.querySelector('[role="alert"]'))).toBe(
+        'This coaching space couldn’t be loaded.',
+      );
+    });
+
+    it('words the check from this space as read again, never from the platform’s counts', async () => {
+      // Another space earned its badge in the same check; this one still waits.
+      const waiting = await render(
+        () => atlasDetail({ founding: adminFounding('Waiting') }),
+        {},
+        {
+          checkFounding: vi.fn(() => of({ checked: 2, earned: 1 })),
+        },
+      );
+      press(waiting.host, 'Check now');
+      await settle(waiting.fixture);
+      expect(toast()).toContain('Checked: not earned yet.');
+      expect(toast()).not.toContain('is earned');
+      TestBed.resetTestingModule();
+      document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+
+      // The billing sweep earned it just before the press, so this check found nothing new.
+      let detail = atlasDetail({ founding: adminFounding('Waiting') });
+      const earned = await render(
+        () => detail,
+        {},
+        {
+          checkFounding: vi.fn(() => {
+            detail = atlasDetail({ founding: adminFounding('Earned') });
+            return of({ checked: 1, earned: 0 });
+          }),
+        },
+      );
+      press(earned.host, 'Check now');
+      await settle(earned.fixture);
+      expect(toast()).toContain('Checked: the Founding coach badge is earned.');
+    });
+
+    it('shows a waiting badge under terms other than the first, every number the server’s', async () => {
+      // A waiting badge read against version 2's terms: 12 clients and 3 months.
+      const waiting = adminFounding('Waiting');
+      const view = await render(() =>
+        atlasDetail({
+          founding: {
+            ...waiting,
+            badge: {
+              ...waiting.badge,
+              clientsWithActivePlan: 5,
+              clientsNeeded: 12,
+              monthsSinceStart: 1,
+              monthsNeeded: 3,
+              termsVersion: 2,
+            },
+          },
+        }),
+      );
+
+      expect(textOf(view.host.querySelector('[data-founding-progress]'))).toBe(
+        'Badge: 5 of 12 clients with an active plan right now · 1 of 3 months since the space started.',
+      );
+    });
+
+    it('opens no mark sheet over another sheet opened while the terms were read', async () => {
+      const terms = new Subject<ReturnType<typeof foundingTerms>[]>();
+      const view = await render(atlasDetail, {}, { getFoundingTerms: vi.fn(() => terms) });
+
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+      press(view.host, 'Grant a discount');
+      await settle(view.fixture);
+      const discount = dialog()!;
+      fill(discount, 'What it is for', 'Loyalty');
+      terms.next([foundingTerms()]);
+      terms.complete();
+      await settle(view.fixture);
+
+      expect(dialog()).toBe(discount);
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Grant a discount');
+      expect(discount.querySelector<HTMLInputElement>('input[name="note"]')!.value).toBe('Loyalty');
+    });
+
+    it('opens no mark sheet once the admin has left the page', async () => {
+      const terms = new Subject<ReturnType<typeof foundingTerms>[]>();
+      const view = await render(atlasDetail, {}, { getFoundingTerms: vi.fn(() => terms) });
+
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+      // A sheet's role attribute waits for a render; the sheet's own call and its surface do not.
+      const opened = vi.spyOn(TestBed.inject(UiSheet), 'open');
+      view.fixture.destroy();
+      terms.next([foundingTerms()]);
+      terms.complete();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(opened).not.toHaveBeenCalled();
+      expect(document.querySelector('app-modal-surface')).toBeNull();
+    });
+
+    it('gives focus to the panel’s heading when the pressed button goes with the reading', async () => {
+      let detail = atlasDetail();
+      const view = await render(
+        () => detail,
+        {},
+        {
+          markFounding: vi.fn(() => {
+            detail = atlasDetail({ founding: adminFounding('Waiting') });
+            return of(adminFounding());
+          }),
+          checkFounding: vi.fn(() => {
+            detail = atlasDetail({ founding: adminFounding('Earned') });
+            return of({ checked: 1, earned: 1 });
+          }),
+          endFounding: vi.fn(() => {
+            detail = atlasDetail({ foundingHistory: [endedFounding()] });
+            return of(adminFounding());
+          }),
+        },
+      );
+      const heading = () => view.host.querySelector('#founding-heading');
+
+      // Each button has focus as a keyboard leaves it, and goes with the reading it served.
+      view.host.querySelector<HTMLButtonElement>('[data-mark-founding]')!.focus();
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+      const mark = dialog()!;
+      fill(mark, 'What it is for', 'One of the first ten coaches');
+      press(mark, 'Mark as founding');
+      await settle(view.fixture);
+      expect(view.host.querySelector('[data-mark-founding]')).toBeNull();
+      expect(document.activeElement).toBe(heading());
+
+      view.host.querySelector<HTMLButtonElement>('[data-check-founding]')!.focus();
+      press(view.host, 'Check now');
+      await settle(view.fixture);
+      expect(document.activeElement).toBe(heading());
+
+      view.host.querySelector<HTMLButtonElement>('[data-end-founding]')!.focus();
+      press(view.host, 'End founding status');
+      await settle(view.fixture);
+      const end = dialog()!;
+      press(end, 'Harm to clients');
+      press(end, 'End founding status');
+      await settle(view.fixture);
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement).toBe(heading());
+    });
+
+    it('asks before closing the end sheet with a reason typed', async () => {
+      const view = await render(() => atlasDetail({ founding: adminFounding('Earned') }));
+
+      press(view.host, 'End founding status');
+      await settle(view.fixture);
+      const sheet = dialog()!;
+      fill(sheet, 'Why?', 'Harm to clients, reported by two of them');
+      await settle(view.fixture);
+      sheet.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+      await settle(view.fixture);
+
+      expect(textOf(dialog()!)).toContain('Discard what you typed?');
+      press(dialog()!, 'Keep editing');
+      await settle(view.fixture);
+      expect(dialog()).toBe(sheet);
+      expect(sheet.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe(
+        'Harm to clients, reported by two of them',
+      );
+      expect(view.founding.endFounding).not.toHaveBeenCalled();
+    });
+
+    it('lists the ended statuses beside a space marked again', async () => {
+      const view = await render(() =>
+        atlasDetail({ founding: adminFounding('Waiting'), foundingHistory: [endedFounding()] }),
+      );
+
+      const founding = panel(view.host);
+      expect(founding.querySelector('[data-founding-progress]')).not.toBeNull();
+      expect(textOf(founding.querySelector('[data-founding-history] .history-end'))).toBe(
+        'Ended Aug 20, 2026: The coach asked to leave the founding group',
       );
     });
   });
