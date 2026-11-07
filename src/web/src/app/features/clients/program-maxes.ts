@@ -1,12 +1,9 @@
 import {
-  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
-  ElementRef,
   inject,
-  Injector,
   input,
   LOCALE_ID,
   output,
@@ -15,17 +12,14 @@ import {
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type { TrainingMaxesView } from '../../core/api/generated';
-import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Skeleton } from '../../ui/skeleton';
-import { UiToast } from '../../ui/toast';
 import { ClientProgramApi } from './client-program-api';
-import { programWriteError, serverCode } from './client-program-forms.models';
 import type { BlockCard } from './client-program.models';
-import { maxCards, type MaxCard } from './program-maxes.models';
+import { maxCards } from './program-maxes.models';
 
 /** A program's maxes read with the page's first drawing, for the version of the program they were read for. */
 export interface FirstMaxes {
@@ -43,9 +37,6 @@ export function maxesKey(id: string, version: number): string {
  * it came from and when, and the way to change them for the coming weeks. A program keeps its own
  * maxes; changing one adds a new max beside the old, so the history stays (STR-002). The server says
  * which max is in use; this draws it. A program that works no weight out from a max shows nothing.
- * When the client's logged sets suggest another max (P4b, STR-007), the lift says so and offers the
- * same update, worked out first; nothing changes until the coach applies it. The coach can also keep the
- * max in use (P4c, STR-013): the suggestion goes quiet until the client logs something newer.
  */
 @Component({
   selector: 'app-program-maxes',
@@ -74,14 +65,11 @@ export function maxesKey(id: string, version: number): string {
         @if (cards().length > 0) {
           <section class="panel" aria-labelledby="maxes-title">
             <header class="head">
-              <h2 id="maxes-title" tabindex="-1" i18n>Training maxes</h2>
+              <h2 id="maxes-title" i18n>Training maxes</h2>
               <p class="span" dir="auto" i18n>
                 What {{ block().name }} works its weights out from.
               </p>
             </header>
-            @if (problem(); as message) {
-              <p class="problem" role="alert" dir="auto">{{ message }}</p>
-            }
             <ul class="lifts">
               @for (card of cards(); track card.exerciseId) {
                 <li class="lift">
@@ -98,60 +86,6 @@ export function maxesKey(id: string, version: number): string {
                   }
                   @if (card.appliesFrom; as applies) {
                     <p class="detail" dir="auto">{{ applies }}</p>
-                  }
-                  @if (card.suggestion; as suggestion) {
-                    @if (!block().terminal) {
-                      <div class="suggestion">
-                        <p
-                          class="suggestion-head"
-                          [id]="'suggestion-' + card.exerciseId"
-                          tabindex="-1"
-                          dir="auto"
-                        >
-                          {{ suggestion.headline }}
-                        </p>
-                        <p class="detail" dir="auto">{{ suggestion.from }}</p>
-                        <app-disclosure class="how" label="How it is worked out" i18n-label>
-                          <ng-template appDisclosureContent>
-                            <p class="how-text" dir="auto">{{ suggestion.explanation }}</p>
-                          </ng-template>
-                        </app-disclosure>
-                        <div class="suggestion-actions">
-                          <button
-                            appButton
-                            type="button"
-                            variant="outlined"
-                            [disabled]="keeping() !== null"
-                            [attr.aria-describedby]="'suggestion-' + card.exerciseId"
-                            (click)="update.emit(card.exerciseId)"
-                            i18n
-                          >
-                            Review the new weights
-                          </button>
-                          <button
-                            appButton
-                            type="button"
-                            variant="text"
-                            [loading]="keeping() === card.exerciseId"
-                            [disabled]="keeping() !== null && keeping() !== card.exerciseId"
-                            [attr.aria-describedby]="'suggestion-' + card.exerciseId"
-                            (click)="keep(card)"
-                          >
-                            {{ suggestion.keepLabel }}
-                          </button>
-                        </div>
-                      </div>
-                    }
-                  }
-                  @if (card.kept; as kept) {
-                    <p
-                      class="detail kept"
-                      [id]="'kept-' + card.exerciseId"
-                      tabindex="-1"
-                      dir="auto"
-                    >
-                      {{ kept }}
-                    </p>
                   }
                   @if (card.earlier.length > 0) {
                     <app-disclosure
@@ -180,7 +114,7 @@ export function maxesKey(id: string, version: number): string {
               @if (block().terminal) {
                 <p class="note" i18n>This program is over, so its maxes stay as they were.</p>
               } @else {
-                <button appButton type="button" (click)="update.emit(null)" i18n>
+                <button appButton type="button" (click)="update.emit()" i18n>
                   Update maxes for the coming weeks
                 </button>
               }
@@ -274,58 +208,9 @@ export function maxesKey(id: string, version: number): string {
     }
 
     .source,
-    .detail,
-    .how-text {
+    .detail {
       color: var(--tb-muted);
       font-size: 0.8125rem;
-    }
-
-    // What the client's logged sets suggest (P4b): set apart, never applied until the coach reviews it.
-    .suggestion {
-      align-items: flex-start;
-      background: var(--tb-accent-soft);
-      border-radius: var(--tb-radius-control);
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      margin-block-start: 0.5rem;
-      padding: 0.75rem;
-    }
-
-    .suggestion-head {
-      font-weight: 600;
-    }
-
-    // The exact estimate behind the rounded sentence (R5.4c), closed until the coach asks.
-    .how {
-      align-self: stretch;
-    }
-
-    .suggestion-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-block-start: 0.375rem;
-    }
-
-    .kept {
-      margin-block-start: 0.25rem;
-    }
-
-    .kept:focus-visible,
-    .suggestion-head:focus-visible,
-    h2:focus-visible {
-      outline: 3px solid var(--tb-focus);
-      outline-offset: 2px;
-    }
-
-    .problem {
-      background: var(--tb-danger-soft);
-      border-radius: var(--tb-radius-control);
-      color: var(--tb-danger);
-      font-size: 0.875rem;
-      margin-block-end: 0.5rem;
-      padding: 0.5rem 0.75rem;
     }
 
     .history {
@@ -374,40 +259,24 @@ export function maxesKey(id: string, version: number): string {
 })
 export class ProgramMaxes {
   private readonly programApi = inject(ClientProgramApi);
-  private readonly csrf = inject(CsrfService);
-  private readonly toast = inject(UiToast);
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
-  private readonly injector = inject(Injector);
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
 
   /** The program in front of the coach; its id and version say when to read the maxes again. */
   readonly block = input.required<BlockCard>();
   readonly firstName = input.required<string>();
   /**
-   * The coach came here to review maxes (Coach Today's "Review maxes"): once the panel shows, the first
-   * suggestion comes into view with the focus on its sentence, or the panel's heading when there is none.
-   */
-  readonly reveal = input(false);
-  /**
    * The maxes the page read before drawing itself, so it is laid out once, beside them or without them,
    * rather than moving when they arrive (audit UIQ-5). Used for the program version they were read for.
    */
   readonly firstRead = input<FirstMaxes | null>(null);
-  /**
-   * The coach asked to change the maxes: the page opens the sheet, which shares its data. The exercise id
-   * says the coach came from that lift's suggestion, which the sheet then shows worked out; null otherwise.
-   */
-  readonly update = output<string | null>();
+  /** The coach asked to change the maxes: the page opens the sheet, which shares its data. */
+  readonly update = output<void>();
 
   protected readonly loadingLabel = $localize`Loading the training maxes…`;
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
-  /** The lift being kept, while the server answers. */
-  protected readonly keeping = signal<string | null>(null);
-  protected readonly problem = signal<string | null>(null);
   private readonly view = signal<TrainingMaxesView | null>(null);
-  private revealedFor: string | null = null;
 
   protected readonly cards = computed(() => {
     const view = this.view();
@@ -424,10 +293,7 @@ export class ProgramMaxes {
       // Untracked: reading and setting the view here must not make this effect run again.
       untracked(() => {
         // Another program's maxes are not shown while this one's load.
-        if (this.view()?.mesocycleId !== id) {
-          this.view.set(null);
-          this.problem.set(null);
-        }
+        if (this.view()?.mesocycleId !== id) this.view.set(null);
         const first = this.firstRead();
         if (first !== null && first.key === key && this.view() === null) {
           this.view.set(first.view);
@@ -437,66 +303,6 @@ export class ProgramMaxes {
         void this.load();
       });
     });
-
-    effect(() => {
-      const id = this.block().id;
-      if (!this.reveal() || this.cards().length === 0 || this.revealedFor === id) return;
-      this.revealedFor = id;
-      afterNextRender(
-        () => {
-          const host = this.host.nativeElement;
-          const target =
-            host.querySelector<HTMLElement>('.suggestion-head') ??
-            host.querySelector<HTMLElement>('#maxes-title');
-          target?.scrollIntoView({ block: 'center' });
-          target?.focus({ preventScroll: true });
-        },
-        { injector: this.injector },
-      );
-    });
-  }
-
-  /**
-   * Keep the max in use over the suggestion (STR-013). Nothing in the program changes; the server records it
-   * and answers with the maxes as they now read. A newer set logged since is refused, and the panel reads again.
-   */
-  protected async keep(card: MaxCard): Promise<void> {
-    const suggestion = card.suggestion;
-    if (!suggestion || this.keeping() !== null) return;
-    const id = this.block().id;
-    this.keeping.set(card.exerciseId);
-    this.problem.set(null);
-    try {
-      await this.csrf.refresh();
-      const view = await firstValueFrom(
-        this.programApi.keepTrainingMax(id, {
-          exerciseId: card.exerciseId,
-          loggedSetId: suggestion.setId,
-        }),
-      );
-      if (this.block().id !== id) return;
-      this.view.set(view);
-      this.toast.show($localize`Kept ${card.name}:lift: at ${card.value}:value:.`, {
-        tone: 'success',
-      });
-      // The suggestion and its buttons are gone; the line that replaced them takes the focus.
-      afterNextRender(
-        () =>
-          this.host.nativeElement.querySelector<HTMLElement>(`#kept-${card.exerciseId}`)?.focus(),
-        { injector: this.injector },
-      );
-    } catch (error) {
-      this.problem.set(
-        programWriteError(
-          error,
-          $localize`The max could not be kept. Try again.`,
-          this.firstName(),
-        ),
-      );
-      if (serverCode(error) === 'training_max_suggestion_changed') void this.load();
-    } finally {
-      this.keeping.set(null);
-    }
   }
 
   protected load(): Promise<void> {

@@ -738,7 +738,13 @@ of the implemented R1.3 screens before production rollout.
   fact stored once (STR-015, ADR 0036); copying them into the recorded maxes would have stored them twice and
   offered them to Assign program as saved maxes. Recorded rows say "Recorded by a coach", "Tested" or
   "Estimated (Epley)" instead of a method code, and the column is "Where from". (9) is the no-break space.
-  The history itself became the Strength history card in R5.3d2.
+  The history itself became the Strength history card in R5.3d2. **The suggestions went on the owner's word of
+  7 Nov 2026** (decision 19's note; notes plan N10a and N10b, ADR 0036's last section): no screen of the app says
+  that logged sets suggest a max (the homepage's Sunday stage goes in N10c). Coach Today, a client's page,
+  Messages and Clients lost maxes to review, with Review maxes and the chip; the Training maxes panel lost the
+  suggestion, Review the new weights, Keep and the kept line; the update sheet lost its estimate from logged
+  sets and Assign program its "Use …". The max history (8) and the next program starting where the last one
+  ended (5) stay.
 
 - **Plans you sell, R5.1a (built 2026-10-08; screenshots `docs/design/r51a-*.png`). Decided by Claude for
   the owner on 2026-10-08**, after looking at Everfit (a teammate manages only the clients they are added

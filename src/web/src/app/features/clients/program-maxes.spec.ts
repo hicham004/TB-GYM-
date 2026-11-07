@@ -3,11 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { UiToast } from '../../ui/toast';
 import { cancelledBlock, runningBlock } from '../../../testing/client-program-fixtures';
-import { fold, press, query, settle, toggleFold } from '../../../testing/dom';
+import { press, query, settle, toggleFold } from '../../../testing/dom';
 import { ClientProgramApi } from './client-program-api';
 import { blockCard, type ProgramContext } from './client-program.models';
 import { ProgramMaxes } from './program-maxes';
@@ -49,7 +47,6 @@ const squat = {
   }),
   weekOneSet: { repetitions: 5, rpe: 8, load: 80 },
   earlier: [entry({})],
-  suggestion: null,
 };
 const bench = {
   exerciseId: 'bench',
@@ -57,11 +54,14 @@ const bench = {
   current: entry({ id: 'max-3', value: 80, exerciseId: 'bench' }),
   weekOneSet: null,
   earlier: [],
-  suggestion: null,
 };
 
-/** Maya's week 2 top set, 130 kg for 3 at RPE 8 (86.3%), suggests 150.637 kg for the squat. */
-const suggestingSquat = {
+/**
+ * The squat as a server before N10b read it: Maya's week 2 top set, 130 kg for 3 at RPE 8, suggesting
+ * 150.637 kg, and a keep of the 120 kg over an earlier suggestion. Removed on the owner's word (decision
+ * 19's note, 7 Nov 2026): the panel says neither, even when a stale answer still carries them.
+ */
+const squatBeforeN10b = {
   ...squat,
   suggestion: {
     value: 150.637,
@@ -81,28 +81,33 @@ const suggestingSquat = {
     },
     explanation: 'Best logged set v1: …',
   },
+  kept: { suggestedValue: 150.637, unit: 'Kilogram', keptOn: '2026-10-01' },
+};
+
+/**
+ * The bench as a server before N10b read it after a keep with nothing logged since, open or over, where
+ * the panel said "You kept 80 kg on Thu 1 Oct, when logged sets suggested about 85 kg."
+ */
+const benchKeptBeforeN10b = {
+  ...bench,
+  suggestion: null,
+  kept: { suggestedValue: 85, unit: 'Kilogram', keptOn: '2026-10-01' },
 };
 
 async function render(
   options: {
     block?: ReturnType<typeof runningBlock>;
     read?: () => unknown;
-    keep?: () => unknown;
   } = {},
 ) {
   const api = {
     getTrainingMaxes: vi.fn(options.read ?? (() => of(maxes([squat, bench])))),
-    keepTrainingMax: vi.fn(options.keep ?? (() => of(maxes([squat, bench])))),
   };
-  const toast = { show: vi.fn() };
-  const csrf = { refresh: vi.fn(async () => undefined) };
   TestBed.configureTestingModule({
     imports: [ProgramMaxes],
     providers: [
       { provide: ClientProgramApi, useValue: api },
       { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
-      { provide: UiToast, useValue: toast },
-      { provide: CsrfService, useValue: csrf },
     ],
   });
   const fixture = TestBed.createComponent(ProgramMaxes);
@@ -112,7 +117,7 @@ async function render(
   fixture.componentInstance.update.subscribe(update);
   document.body.append(fixture.nativeElement);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api, update, toast, csrf };
+  return { fixture, host: fixture.nativeElement as HTMLElement, api, update };
 }
 
 const textOf = (element: Element | null | undefined) =>
@@ -159,124 +164,32 @@ describe('the training maxes panel', () => {
     await settle(fixture);
 
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith(null);
   });
 
-  it('says what the logged sets suggest for a lift, and opens the update on it', async () => {
-    const { fixture, host, update } = await render({
-      read: () => of(maxes([suggestingSquat, bench])),
+  const programs = [
+    { state: 'open', block: runningBlock, buttons: ['Update maxes for the coming weeks'] },
+    { state: 'over', block: cancelledBlock, buttons: [] },
+  ];
+  for (const program of programs) {
+    it(`says nothing of logged sets or a kept max on a program ${program.state}, even from an old read (N10b)`, async () => {
+      const { host } = await render({
+        block: program.block(),
+        read: () => of(maxes([squatBeforeN10b, benchKeptBeforeN10b])),
+      });
+
+      const lifts = Array.from(host.querySelectorAll('.lift'));
+      expect(lifts).toHaveLength(2);
+      // Each lift reads as it always did: its number, where it came from and how it moved.
+      expect(textOf(lifts[0].querySelector('.value'))).toBe('120 kg');
+      expect(textOf(lifts[0].querySelector('.source'))).toBe('Typed by you · Mon 28 Sep');
+      expect(textOf(lifts[1].querySelector('.value'))).toBe('80 kg');
+      // No suggestion, no Keep, no kept line, and no button but the foot's.
+      expect(host.querySelector('.suggestion, .suggestion-head, .kept')).toBeNull();
+      expect(host.querySelector('[id^="suggestion-"], [id^="kept-"]')).toBeNull();
+      expect(textOf(host)).not.toMatch(/suggest|kept|Review the new weights|Keep \d/);
+      expect(Array.from(host.querySelectorAll('button')).map(textOf)).toEqual(program.buttons);
     });
-
-    const lifts = Array.from(host.querySelectorAll('.lift'));
-    const suggestion = lifts[0].querySelector('.suggestion');
-    // In the program's 2.5 kg steps; the exact 150.637 kg is in How it is worked out (R5.4c).
-    expect(textOf(suggestion?.querySelector('.suggestion-head'))).toBe(
-      'Logged sets suggest about 150 kg, up from 120 kg.',
-    );
-    expect(textOf(suggestion?.querySelector('.detail'))).toBe(
-      'From 130 kg for 3 reps at RPE 8 on Wed 30 Sep, week 2.',
-    );
-    const how = fold(suggestion!, 'How it is worked out');
-    expect(how.open).toBe(false);
-    await toggleFold(fixture, suggestion!, 'How it is worked out');
-    expect(textOf(how.querySelector('p'))).toBe('Best logged set v1: …');
-    expect(lifts[1].querySelector('.suggestion')).toBeNull();
-    // Nothing changed on its own: the max in use is still the one shown.
-    expect(textOf(lifts[0].querySelector('.value'))).toBe('120 kg');
-
-    const [review, keep] = Array.from(suggestion?.querySelectorAll('button') ?? []);
-    expect(textOf(review)).toBe('Review the new weights');
-    expect(textOf(keep)).toBe('Keep 120 kg');
-    expect(review.getAttribute('aria-describedby')).toBe('suggestion-squat');
-    review.click();
-    await settle(fixture);
-
-    expect(update).toHaveBeenCalledWith('squat');
-  });
-
-  it('keeps the max in use over a suggestion, and says so where the suggestion was', async () => {
-    const keptSquat = {
-      ...squat,
-      kept: { suggestedValue: 150.637, unit: 'Kilogram', keptOn: '2026-10-01' },
-    };
-    const { fixture, host, api, toast, csrf } = await render({
-      read: () => of(maxes([suggestingSquat, bench])),
-      keep: () => of(maxes([keptSquat, bench])),
-    });
-
-    press(host, 'Keep 120 kg');
-    await settle(fixture);
-
-    expect(csrf.refresh).toHaveBeenCalled();
-    expect(api.keepTrainingMax).toHaveBeenCalledWith('block-lean', {
-      exerciseId: 'squat',
-      loggedSetId: 'set-9',
-    });
-    expect(host.querySelector('.suggestion')).toBeNull();
-    const kept = query(host, '#kept-squat');
-    expect(textOf(kept)).toBe(
-      'You kept 120 kg on Thu 1 Oct, when logged sets suggested about 150 kg.',
-    );
-    // The buttons the coach pressed are gone; the line that replaced them has the focus.
-    expect(document.activeElement).toBe(kept);
-    expect(toast.show).toHaveBeenCalledWith('Kept Back squat at 120 kg.', { tone: 'success' });
-    // Nothing else is read: the answer already carries the maxes.
-    expect(api.getTrainingMaxes).toHaveBeenCalledTimes(1);
-  });
-
-  it('says when a newer set moved the suggestion on, and reads the maxes again', async () => {
-    const { fixture, host, api } = await render({
-      read: () => of(maxes([suggestingSquat, bench])),
-      keep: () =>
-        throwError(
-          () =>
-            new HttpErrorResponse({
-              status: 409,
-              error: {
-                code: 'training_max_suggestion_changed',
-                message: 'Back squat has a newer logged set than the one you looked at.',
-              },
-            }),
-        ),
-    });
-
-    press(host, 'Keep 120 kg');
-    await settle(fixture);
-
-    expect(textOf(query(host, '.problem[role="alert"]'))).toBe(
-      'Maya logged a newer set since you looked, so the suggested max changed. Look at the new suggestion, then try again.',
-    );
-    expect(api.getTrainingMaxes).toHaveBeenCalledTimes(2);
-  });
-
-  it('brings the suggestion into view when the coach arrived to review maxes', async () => {
-    const scrollIntoView = vi.fn();
-    const original = HTMLElement.prototype.scrollIntoView;
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
-    try {
-      const { fixture, host } = await render({ read: () => of(maxes([suggestingSquat])) });
-      expect(scrollIntoView).not.toHaveBeenCalled();
-
-      fixture.componentRef.setInput('reveal', true);
-      await settle(fixture);
-
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(document.activeElement).toBe(query(host, '#suggestion-squat'));
-    } finally {
-      // jsdom has none: putting `undefined` back would hide every later spec's stub on Element.
-      if (original) HTMLElement.prototype.scrollIntoView = original;
-      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
-    }
-  });
-
-  it('suggests nothing on a program that is over', async () => {
-    const { host } = await render({
-      block: cancelledBlock(),
-      read: () => of(maxes([suggestingSquat])),
-    });
-
-    expect(host.querySelector('.suggestion')).toBeNull();
-  });
+  }
 
   it('shows nothing for a program that works no weight out from a max', async () => {
     const { host } = await render({ read: () => of(maxes([])) });

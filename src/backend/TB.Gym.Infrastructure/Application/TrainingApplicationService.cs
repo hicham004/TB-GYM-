@@ -360,11 +360,6 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         {
             return Invalid("assignment", exception.PersonMessage());
         }
-        catch (TrainingMaxSuggestionChangedException exception)
-        {
-            // A newer best set was logged in the latest program after the coach opened Assign program (STR-014).
-            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.PersonMessage());
-        }
         catch (InvalidOperationException exception)
         {
             return Invalid("assignment", exception.PersonMessage());

@@ -406,9 +406,7 @@ public static class TrainingEndpoints
             {
                 return Results.Conflict(new
                 {
-                    code = exception is TrainingMaxSuggestionChangedException
-                        ? TrainingMaxSuggestionChangedException.Code
-                        : "training_maxes_conflict",
+                    code = "training_maxes_conflict",
                     message = exception.PersonMessage(),
                 });
             }
@@ -435,23 +433,6 @@ public static class TrainingEndpoints
         .Produces<TrainingMesocycleView>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
-
-        coach.MapPost("/mesocycles/{mesocycleId:guid}/training-maxes/keep", async (
-            Guid mesocycleId,
-            KeepTrainingMaxRequest request,
-            HttpContext context,
-            IAntiforgery antiforgery,
-            ITrainingApplicationService service,
-            CancellationToken cancellationToken) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return ToResult(await service.KeepTrainingMaxAsync(mesocycleId, request, cancellationToken));
-        })
-        .WithName("KeepTrainingMax")
-        .Produces<TrainingMaxesView>()
-        .ProducesValidationProblem()
-        .ProducesProblem(StatusCodes.Status409Conflict)
-        .Produces(StatusCodes.Status404NotFound);
 
         coach.MapPut("/mesocycles/{mesocycleId:guid}/name", async (
             Guid mesocycleId,
@@ -805,7 +786,6 @@ public static class TrainingEndpoints
                 (object?)result.SavedSession ??
                 (object?)result.SetSave ??
                 (object?)result.Draft ??
-                (object?)result.TrainingMaxes ??
                 (object?)result.FinishedPrograms ??
                 result.WorkoutExecution),
             TrainingCommandStatus.NotFound => Results.NotFound(),

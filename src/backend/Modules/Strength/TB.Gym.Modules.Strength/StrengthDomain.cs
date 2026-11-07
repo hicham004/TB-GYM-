@@ -244,7 +244,10 @@ public enum WorkingMaxSource
     /// <summary>Worked out from the weight of week 1's working set on the RTS chart (STR-011).</summary>
     WeekOneWeight = 3,
 
-    /// <summary>Estimated from a set the client logged, on the coach's review (BestLoggedSet v1, STR-007).</summary>
+    /// <summary>
+    /// Estimated from a set the client logged, on the coach's review of a suggested max (STR-012). None is written
+    /// since the suggestion was removed (notes plan N10b, 7 Nov 2026); a max stored that way keeps its set.
+    /// </summary>
     LoggedSet = 4,
 
     /// <summary>The max in use at the end of the client's previous program, carried into the next (STR-014).</summary>
@@ -304,6 +307,8 @@ public sealed class MesocycleWorkingMaxSnapshot : TenantEntity
             throw new ArgumentException("A max worked out from a set has no saved max behind it.");
         }
 
+        // Since N10b no factory names a logged set (CaptureFromLoggedSet went); this check says what a stored row may
+        // hold, as CK_WorkingMaxSnapshots_LoggedSetBasis does in the database.
         if (sourceSetPerformanceId is not null && (basis is null || sourceSetPerformanceId == Guid.Empty))
         {
             throw new ArgumentException("A max estimated from a logged set keeps that set and its numbers.");
@@ -440,42 +445,6 @@ public sealed class MesocycleWorkingMaxSnapshot : TenantEntity
             supersedesSnapshotId,
             reason,
             new MaxEstimateBasis(load, repetitions, rpe, estimate.StrategyKey, estimate.Version));
-    }
-
-    /// <summary>
-    /// Captures the max a logged set implies (BestLoggedSet v1), keeping the set and its numbers. The rule
-    /// decides whether the set counts; this keeps what it decided from.
-    /// </summary>
-    public static MesocycleWorkingMaxSnapshot CaptureFromLoggedSet(
-        Guid tenantId,
-        Guid mesocycleId,
-        Guid clientProfileId,
-        Guid exerciseId,
-        LoggedSetMaxEstimate estimate,
-        int effectiveFromWeek,
-        Guid? supersedesSnapshotId,
-        string reason)
-    {
-        ArgumentNullException.ThrowIfNull(estimate);
-        var set = estimate.Set;
-        return new(
-            tenantId,
-            mesocycleId,
-            clientProfileId,
-            exerciseId,
-            null,
-            estimate.Estimate.Value,
-            estimate.Estimate.Unit,
-            effectiveFromWeek,
-            supersedesSnapshotId,
-            reason,
-            new MaxEstimateBasis(
-                set.Load ?? throw new ArgumentException("A logged set without a weight implies no max.", nameof(estimate)),
-                set.Repetitions ?? throw new ArgumentException("A logged set without reps implies no max.", nameof(estimate)),
-                set.Rpe ?? throw new ArgumentException("A logged set without an RPE implies no max.", nameof(estimate)),
-                estimate.Estimate.StrategyKey,
-                estimate.Estimate.Version),
-            set.SetId);
     }
 
     /// <summary>

@@ -377,8 +377,8 @@ export interface Performance {
   readonly effort: string | null;
   readonly estimate: number | null;
   /**
-   * What read the estimate (TRAIN-4): the RTS chart for a set with an RPE it covers, the number the
-   * Training maxes panel gives the same set, else Epley.
+   * What read the estimate (TRAIN-4): the RTS chart for a set with an RPE it covers, the same
+   * reading STR-011 makes of week 1's weight, else Epley.
    */
   readonly formula: 'RpeChart' | 'Epley' | null;
   readonly unit: TrainingLoadUnit | null;

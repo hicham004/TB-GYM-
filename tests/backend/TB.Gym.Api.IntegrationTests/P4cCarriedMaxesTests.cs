@@ -7,9 +7,9 @@ namespace TB.Gym.Api.IntegrationTests;
 
 /// <summary>
 /// P4c, between programs (STR-014): a new program starts where the client's latest one ended. Assign program
-/// reads that program's maxes and what its logged sets suggest, an assignment may carry a max over or take the
-/// suggestion, and both keep their source. Coach Today's No program item names the program that ended, with no
-/// suggestion beside it since the notes plan's N10a.
+/// reads the maxes that program uses now and an assignment may carry one over, keeping its source. The suggestion
+/// from that program's logged sets went with the notes plan's N10b; Coach Today's No program item names the program
+/// that ended, with nothing beside it since N10a.
 /// </summary>
 public sealed partial class Phase3TrainingWorkflowTests
 {
@@ -47,6 +47,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         carriedFromMaxId = (Guid?)maxId,
     };
 
+    /// <summary>A new program's max naming a logged set and no number, as Assign program sent one until N10b.</summary>
     private static object P4cFromLoggedSet(Guid exerciseId, Guid loggedSetId) => new
     {
         exerciseId,
@@ -58,7 +59,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     };
 
     [TestMethod]
-    public async Task P4cANewProgramCanStartFromWhatTheLastProgramsLoggedSetsSuggest()
+    public async Task P4cANewProgramStartsFromTheMaxTheLastProgramUsesNow()
     {
         using var coach = CreateClient();
         using var client = CreateClient();
@@ -66,14 +67,15 @@ public sealed partial class Phase3TrainingWorkflowTests
         var squat = scenario.Exercise.Id;
         var first = await P2AssignAsync(coach, scenario, [P2SavedMax(scenario)]);
 
-        // Before anything is logged the latest program offers its max, and nothing else.
+        // The latest program offers the max it uses, and nothing else.
         var before = await ReadSliceAsync<PreviousProgramMaxesView>(coach, P4cPreviousMaxesUrl(scenario.ClientId));
         Assert.AreEqual((first.Id, first.Name, TrainingLoadUnit.Kilogram), (before.MesocycleId, before.ProgramName, before.LoadUnit));
-        Assert.AreEqual((squat, "Competition squat", 100m, (TrainingMaxSuggestionView?)null),
-            (before.Maxes.Single().ExerciseId, before.Maxes.Single().ExerciseName, before.Maxes.Single().Value, before.Maxes.Single().Suggestion));
+        Assert.AreEqual((squat, "Competition squat", 100m),
+            (before.Maxes.Single().ExerciseId, before.Maxes.Single().ExerciseName, before.Maxes.Single().Value));
 
+        // The client lifts more than the max says, 90 kg for 5 at RPE 8 over 100 kg; the carry reads no logged set.
         RequiredTestClock.Advance(TimeSpan.FromMinutes(1));
-        var logged = await P4bLogTodayAsync(client, finish: true, new P4bLog(5, 60m, "Kilogram", null), new P4bLog(5, 90m, "Kilogram", 8m));
+        await P4bLogTodayAsync(client, finish: true, new P4bLog(5, 60m, "Kilogram", null), new P4bLog(5, 90m, "Kilogram", 8m));
 
         // The week ends: the client is between programs, and No program names the program that ended.
         RequiredTestClock.Advance(TimeSpan.FromDays(8));
@@ -83,35 +85,36 @@ public sealed partial class Phase3TrainingWorkflowTests
         var none = today.Single(entry => entry.Kind == CoachAttentionKind.NoProgram);
         Assert.AreEqual(first.Id, none.SubjectId);
 
-        // Every session done and its last day past, the program closed itself; its suggestion waits for the next one.
+        // Every session done and its last day past, the program closed itself. It offers the max it uses, 100 kg,
+        // and no suggestion from its logged sets (the API writes nulls, so only the text proves the key gone).
         var ended = await ReadSliceAsync<TrainingMesocycleView>(coach, P2MesocycleUrl(first.Id));
         Assert.AreEqual(MesocycleStatus.Completed, ended.Status);
         var read = await ReadSliceAsync<PreviousProgramMaxesView>(coach, P4cPreviousMaxesUrl(scenario.ClientId));
-        var suggestion = read.Maxes.Single().Suggestion;
-        Assert.AreEqual((110.974m, logged[1]), (suggestion?.Value, suggestion?.Basis.LoggedSet?.SetPerformanceId));
+        var inUse = read.Maxes.Single();
+        Assert.AreEqual((first.Id, 100m), (read.MesocycleId, inUse.Value));
+        Assert.DoesNotContain(
+            "\"suggestion\"",
+            await coach.GetStringAsync(P4cPreviousMaxesUrl(scenario.ClientId)),
+            StringComparison.OrdinalIgnoreCase);
 
-        // Only the set the rule picks can start the next program: never the warm-up.
-        await P2RefusedAsync(
-            await P4cAssignNextAsync(coach, scenario, P4cFromLoggedSet(squat, logged[0]), Guid.NewGuid()),
-            HttpStatusCode.BadRequest,
-            "cannot suggest");
-
-        // The next program starts from 110.974 kg, keeps the set behind it, and weighs week 1 from it.
+        // The next program starts from 100 kg, carried over, and weighs week 1 from it: 81.1% of 100 kg is 81.1 kg,
+        // 80 kg to the nearest 2.5 kg.
         var key = Guid.NewGuid();
-        var assigned = await P4cAssignNextAsync(coach, scenario, P4cFromLoggedSet(squat, logged[1]), key);
+        var assigned = await P4cAssignNextAsync(coach, scenario, P4cCarried(squat, inUse.MaxId, 100m), key);
         await AssertStatusAsync(assigned, HttpStatusCode.OK);
         var next = await ReadSlicePayloadAsync<TrainingMesocycleView>(assigned);
         var max = (await ReadSliceAsync<TrainingMaxesView>(coach, P2MaxesUrl(next.Id))).Maxes.Single().Current;
-        Assert.AreEqual((110.974m, TrainingMaxSource.LoggedSet, 90m, 5, 8m), (max.Value, max.Source, max.Basis?.Load, max.Basis?.Repetitions, max.Basis?.Rpe));
-        StringAssert.StartsWith(max.Reason, $"From the previous program \"{first.Name}\".");
-        Assert.AreEqual((decimal?)90m, P2Sets(next)[1].PrescribedLoad);
+        Assert.AreEqual((100m, TrainingMaxSource.PreviousProgram), (max.Value, max.Source));
+        Assert.IsNull(max.Basis);
+        StringAssert.StartsWith(max.Reason, $"Carried over from the previous program \"{first.Name}\"");
+        Assert.AreEqual((decimal?)80m, P2Sets(next)[1].PrescribedLoad);
 
         // A retry returns the same program; the same key for another max conflicts.
-        var retried = await P4cAssignNextAsync(coach, scenario, P4cFromLoggedSet(squat, logged[1]), key);
+        var retried = await P4cAssignNextAsync(coach, scenario, P4cCarried(squat, inUse.MaxId, 100m), key);
         await AssertStatusAsync(retried, HttpStatusCode.OK);
         Assert.AreEqual(next.Id, (await ReadSlicePayloadAsync<TrainingMesocycleView>(retried)).Id);
         await P2RefusedAsync(
-            await P4cAssignNextAsync(coach, scenario, P4cCarried(squat, read.Maxes.Single().MaxId, 100m), key),
+            await P4cAssignNextAsync(coach, scenario, P2SavedMax(scenario), key),
             HttpStatusCode.Conflict,
             "idempotency_conflict");
 
@@ -154,7 +157,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var first = await P2AssignAsync(coach, scenario, [P2SavedMax(scenario)]);
         RequiredTestClock.Advance(TimeSpan.FromDays(8));
         var previous = (await ReadSliceAsync<PreviousProgramMaxesView>(coach, P4cPreviousMaxesUrl(clientId))).Maxes.Single();
-        Assert.AreEqual((100m, (TrainingMaxSuggestionView?)null), (previous.Value, previous.Suggestion));
+        Assert.AreEqual(100m, previous.Value);
 
         // Another coach of the team, and a coach of another workspace, cannot read it (ADR 0026).
         await AssertStatusAsync(await otherCoach.GetAsync(P4cPreviousMaxesUrl(clientId)), HttpStatusCode.NotFound);
@@ -176,10 +179,15 @@ public sealed partial class Phase3TrainingWorkflowTests
             await P4cAssignNextAsync(coach, scenario, P4cCarried(exercise.Id, previous.MaxId, 100m, saved.Id), Guid.NewGuid()),
             HttpStatusCode.BadRequest,
             "no other source");
+
+        // A max that names only a logged set, as Assign program sent one until the notes plan's N10b, has no number
+        // and no week 1's weight now that the server reads no set: refused, and nothing is written.
         await P2RefusedAsync(
             await P4cAssignNextAsync(coach, scenario, P4cFromLoggedSet(exercise.Id, Guid.NewGuid()), Guid.NewGuid()),
             HttpStatusCode.BadRequest,
-            "cannot suggest");
+            "either a number or week 1");
+        Assert.AreEqual(1L, await P2CountAsync("""SELECT count(*) FROM training."Mesocycles" WHERE "ClientProfileId" = @id""", clientId));
+        Assert.AreEqual(1L, await P2CountAsync("""SELECT count(*) FROM strength."WorkingMaxSnapshots" WHERE "ClientProfileId" = @id""", clientId));
 
         var assigned = await P4cAssignNextAsync(coach, scenario, P4cCarried(exercise.Id, previous.MaxId, 100m), Guid.NewGuid());
         await AssertStatusAsync(assigned, HttpStatusCode.OK);

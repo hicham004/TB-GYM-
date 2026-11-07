@@ -1008,7 +1008,6 @@ describe('a client’s Training', () => {
           },
           weekOneSet: { repetitions: 5, rpe: 8, load: 80 },
           earlier: [],
-          suggestion: null,
         },
       ],
     };
@@ -1104,6 +1103,33 @@ describe('a client’s Training', () => {
       expect(host.querySelector('app-program-maxes button')).toBeNull();
     });
 
+    it('opens Training as usual from an old address that asked to review maxes (N10b)', async () => {
+      const scrollIntoView = vi.fn();
+      const original = HTMLElement.prototype.scrollIntoView;
+      HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      try {
+        const { harness, host, router } = await render({
+          maxes,
+          url: '/clients/client-1/training?action=maxes',
+        });
+        await settle(harness.fixture);
+
+        const panel = host.querySelector('app-program-maxes')!;
+        expect(panel.hasAttribute('data-filled')).toBe(true);
+        expect(textOf(panel.querySelector('.value'))).toBe('100 kg');
+        // Nothing opens, comes into view or takes the focus, and the word stays where it was.
+        expect(dialog()).toBeNull();
+        expect(scrollIntoView).not.toHaveBeenCalled();
+        expect(panel.contains(document.activeElement)).toBe(false);
+        expect(document.activeElement).toBe(document.body);
+        expect(router.url).toBe('/clients/client-1/training?action=maxes');
+      } finally {
+        // One jsdom for every spec file: never leave an own `undefined` behind.
+        if (original) HTMLElement.prototype.scrollIntoView = original;
+        else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+      }
+    });
+
     it('renames the program from the Manage menu, and reads it again', async () => {
       const { harness, host, getProgram, programApi, context } = await render();
       press(host, 'Manage program');
@@ -1154,17 +1180,6 @@ describe('a client’s Training', () => {
 
       expect(textOf(dialog()!.querySelector('h2'))).toBe('Assign program');
       // The word is taken out of the address, so Back and a reload do not open it again.
-      expect(router.url).toBe('/clients/client-1/training');
-    });
-
-    it('brings the training maxes into view when the coach came to review them, once', async () => {
-      const { harness, router } = await render({ url: '/clients/client-1/training?action=maxes' });
-      await settle(harness.fixture);
-
-      const panel = harness.fixture.debugElement.query(
-        (element) => element.name === 'app-program-maxes',
-      );
-      expect(panel.componentInstance.reveal()).toBe(true);
       expect(router.url).toBe('/clients/client-1/training');
     });
 

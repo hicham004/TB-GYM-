@@ -520,10 +520,12 @@ duplicates alone (BILL-7).
 Phase 3 extends database defense in depth to immutable template-version content, append-only
 strength max and working-max history (one first max per lift and one successor per max, plus an
 append-only record of each update; a max estimated from a logged set references that completed set
-and keeps its numbers, STR-012, each keep of a max over a suggestion is append-only too, STR-013, a
-max carried into a new program names the earlier max through a key that includes the client, STR-014,
-and a recorded estimate from a set they did keeps its set while the training max set from it names it
-through a key holding the client, lift, unit and value, with its share checked, STR-017),
+and keeps its numbers, STR-012, and each keep of a max over a suggestion is append-only too, STR-013,
+though neither kind has been written since notes plan N10b removed suggested maxes (7 Nov 2026), the
+rows stored before keeping their guards; a max carried into a new program names the earlier max
+through a key that includes the client, STR-014, and a recorded estimate from a set they did keeps its
+set while the training max set from it names it through a key holding the client, lift, unit and
+value, with its share checked, STR-017),
 append-only workout notes/progression applications,
 started/completed prescription snapshots, and completed actual performance. A second GiST
 exclusion constraint rejects overlapping primary mesocycles per tenant/client/date range,

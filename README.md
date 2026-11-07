@@ -100,7 +100,7 @@ Each coach or gym gets a private workspace. Inside it, one product serves four k
 - Load settings per client: kg or lb, the rounding step and direction.
 - Share weeks one at a time, or open every shared week at once. The server hides the rest.
 - Edit coming weeks and review every changed weight before applying, build the next block, reschedule, swap one coming workout, close or cancel, and read the program's history.
-- **Training maxes** with their source and history. Logged sets can suggest a new max, but the coach reviews the new weights and applies it. Nothing changes on its own.
+- **Training maxes** with their source and history. The coach types a new max or works it out from week 1's weight, and reviews every weight it changes before applying it. Nothing changes on its own.
 - Every calculated weight keeps its numbers on the server, and when a training max changes the coach can open "How it is worked out" on each new weight before applying it.
 - Strength history per lift, estimated one-rep maxes, and prescribed against actual for any workout, including approved swaps.
 

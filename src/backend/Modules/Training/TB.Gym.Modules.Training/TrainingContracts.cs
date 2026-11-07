@@ -162,17 +162,8 @@ public interface ITrainingApplicationService
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// The coach keeps a lift's max over what the client's logged sets suggest (STR-013): recorded, and only sets
-    /// logged afterwards can suggest a new max. Answers with the program's maxes as they now read.
-    /// </summary>
-    Task<TrainingCommandResult> KeepTrainingMaxAsync(
-        Guid mesocycleId,
-        KeepTrainingMaxRequest request,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    /// The maxes the client's latest program uses now and what its logged sets suggest, for the next program to
-    /// start from (STR-014). Null for a client who is missing or another coach's (ADR 0026).
+    /// The maxes the client's latest program uses now, for the next program to start from (STR-014). Null for a
+    /// client who is missing or another coach's (ADR 0026).
     /// </summary>
     Task<PreviousProgramMaxesView?> GetPreviousProgramMaxesAsync(
         Guid clientProfileId,
@@ -435,11 +426,10 @@ public sealed record AssignMesocycleRequest(
 
 /// <summary>
 /// The training max for one exercise: a number the coach typed or picked from the client's saved maxes
-/// (<paramref name="Value"/>), the weight of week 1's working set, from which the server works the max out on
-/// the RTS chart (<paramref name="WeekOneWeight"/>, STR-011), or a set logged in the client's latest program,
-/// whose max the server works out again (<paramref name="LoggedSetId"/>, STR-012, STR-014). Exactly one of the
-/// three is given. A <paramref name="Value"/> may name the latest program's max it carries over
-/// (<paramref name="CarriedFromMaxId"/>), and must then equal it.
+/// (<paramref name="Value"/>), or the weight of week 1's working set, from which the server works the max out on
+/// the RTS chart (<paramref name="WeekOneWeight"/>, STR-011). Exactly one of the two is given. A
+/// <paramref name="Value"/> may name the latest program's max it carries over (<paramref name="CarriedFromMaxId"/>,
+/// STR-014), and must then equal it.
 /// </summary>
 public sealed record WorkingMaxSelectionRequest(
     Guid ExerciseId,
@@ -447,8 +437,7 @@ public sealed record WorkingMaxSelectionRequest(
     decimal? Value,
     TrainingLoadUnit Unit,
     decimal? WeekOneWeight = null,
-    Guid? CarriedFromMaxId = null,
-    Guid? LoggedSetId = null);
+    Guid? CarriedFromMaxId = null);
 
 public sealed record MesocycleSummary(
     Guid Id,
@@ -532,16 +521,6 @@ public sealed record TrainingMaxLoggedSetView(
     DateOnly PerformedOn,
     string SessionName);
 
-/// <summary>
-/// The max the client's logged sets suggest for a lift (BestLoggedSet v1, STR-007): shown only while it moves
-/// the max in use by more than one rounding step. The coach applies it through the preview, never the server.
-/// </summary>
-public sealed record TrainingMaxSuggestionView(
-    decimal Value,
-    TrainingLoadUnit Unit,
-    TrainingMaxBasisView Basis,
-    string Explanation);
-
 /// <summary>One training max as it was set: its value, source, the week it applies from and why.</summary>
 public sealed record TrainingMaxEntryView(
     Guid Id,
@@ -556,29 +535,18 @@ public sealed record TrainingMaxEntryView(
 /// <summary>The set of week 1 that "from week 1's weight" would read for a lift, and the weight it has now.</summary>
 public sealed record TrainingMaxWeekOneSetView(int Repetitions, decimal Rpe, decimal? Load);
 
-/// <summary>
-/// One lift's training max in use, the week 1 set it could be worked out from, its earlier values, and the
-/// max its logged sets suggest, if any.
-/// </summary>
+/// <summary>One lift's training max in use, the week 1 set it could be worked out from, and its earlier values.</summary>
 public sealed record TrainingMaxView(
     Guid ExerciseId,
     string ExerciseName,
     TrainingMaxEntryView Current,
     TrainingMaxWeekOneSetView? WeekOneSet,
-    IReadOnlyList<TrainingMaxEntryView> Earlier,
-    TrainingMaxSuggestionView? Suggestion,
-    TrainingMaxKeptView? Kept);
-
-/// <summary>The last time the coach kept the max in use over a suggestion (STR-013), and what was suggested.</summary>
-public sealed record TrainingMaxKeptView(decimal SuggestedValue, TrainingLoadUnit Unit, DateOnly KeptOn);
-
-/// <summary>Keep this lift's max over the suggestion from <paramref name="LoggedSetId"/>, the set the panel named.</summary>
-public sealed record KeepTrainingMaxRequest(Guid ExerciseId, Guid LoggedSetId);
+    IReadOnlyList<TrainingMaxEntryView> Earlier);
 
 /// <summary>
-/// The client's latest program (not cancelled) and the max each of its lifts uses now, with what its logged sets
-/// suggest, so a new program can start where it ended (STR-014). Empty, with no program, when the client has none.
-/// Values stay in that program's unit; a new program in the other unit starts without them.
+/// The client's latest program (not cancelled) and the max each of its lifts uses now, so a new program can start
+/// where it ended (STR-014). Empty, with no program, when the client has none. Values stay in that program's unit;
+/// a new program in the other unit starts without them.
 /// </summary>
 public sealed record PreviousProgramMaxesView(
     Guid? MesocycleId,
@@ -589,29 +557,15 @@ public sealed record PreviousProgramMaxesView(
 
 /// <param name="MaxId">The max in use, which an assignment names to carry it over.</param>
 /// <param name="SetOn">The workspace day that max was set.</param>
-/// <param name="Suggestion">What the program's logged sets suggest now (STR-012, after any keep), or null.</param>
 public sealed record PreviousProgramMaxView(
     Guid ExerciseId,
     string ExerciseName,
     Guid MaxId,
     decimal Value,
     TrainingLoadUnit Unit,
-    DateOnly SetOn,
-    TrainingMaxSuggestionView? Suggestion);
+    DateOnly SetOn);
 
-/// <summary>
-/// The client logged a set after the coach looked, so the suggestion the coach acted on is no longer the one the
-/// rule picks (STR-012). The coach looks at the new one; nothing was saved.
-/// </summary>
-public sealed class TrainingMaxSuggestionChangedException(string message) : InvalidOperationException(message)
-{
-    public const string Code = "training_max_suggestion_changed";
-}
-
-/// <param name="LoadIncrement">
-/// The program's rounding step (STR-008), so a screen can say a suggested max in the steps the program loads
-/// in; the suggestion itself stays exact.
-/// </param>
+/// <param name="LoadIncrement">The program's rounding step (STR-008), the step its calculated weights are rounded to.</param>
 /// <param name="IsClosed">True once the program is finished or cancelled; its maxes are then history.</param>
 public sealed record TrainingMaxesView(
     Guid MesocycleId,
@@ -622,10 +576,10 @@ public sealed record TrainingMaxesView(
     IReadOnlyList<TrainingMaxView> Maxes);
 
 /// <summary>
-/// One lift's new max: a typed number, the weight of week 1's set to work it out from (STR-011), or a set the
-/// client logged, whose max the server works out again itself (STR-007). Exactly one of the three is given.
+/// One lift's new max: a typed number, or the weight of week 1's set to work it out from (STR-011). Exactly one
+/// of the two is given.
 /// </summary>
-public sealed record TrainingMaxChangeRequest(Guid ExerciseId, decimal? Value, decimal? WeekOneWeight, Guid? LoggedSetId);
+public sealed record TrainingMaxChangeRequest(Guid ExerciseId, decimal? Value, decimal? WeekOneWeight);
 
 public sealed record PreviewTrainingMaxesRequest(
     uint MesocycleVersion,
@@ -1321,7 +1275,6 @@ public sealed record TrainingCommandResult(
     string? Code = null,
     string? Message = null,
     ProgramDraftSaveView? Draft = null,
-    TrainingMaxesView? TrainingMaxes = null,
     FinishedProgramsVisibilityView? FinishedPrograms = null);
 
 public enum TrainingCommandStatus

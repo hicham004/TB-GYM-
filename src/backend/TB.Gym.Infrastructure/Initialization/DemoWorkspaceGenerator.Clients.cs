@@ -406,7 +406,8 @@ internal sealed partial class DemoWorkspaceGenerator
                 if (plan.IsMainLift)
                 {
                     // The client hits their numbers: the RPE they log is what the weight was for their strength
-                    // that day on the RTS chart, so the suggested maxes (STR-012) only move when they got stronger.
+                    // that day on the RTS chart, so the max a set implies (How they have done, STR-016) only rises
+                    // when they got stronger.
                     load = set.PrescribedLoad;
                     repetitions = set.PrescribedRepetitionsMaximum ?? scheme.MainReps;
                     var strength = Strength(client, definition.Key, blockIndex, weeksIntoBlock);
@@ -863,14 +864,15 @@ internal sealed partial class DemoWorkspaceGenerator
     /// <summary>
     /// A client's one-rep max on a lift that day. Most clients are exactly as strong as their program's max says;
     /// those who set personal bests get about 2% stronger each week of a block, as early progress goes, so a few
-    /// weeks in their pushed sets suggest a higher max.
+    /// weeks in they push their last sets: their records and share cards show those sets, and How they have done
+    /// reads a higher max from them.
     /// </summary>
     private static decimal Strength(DemoClient client, string exerciseKey, int blockIndex, decimal weeksIntoBlock) =>
         TrainingMax(client, exerciseKey, blockIndex) * (1m + (client.SetsPersonalBests ? 0.02m * weeksIntoBlock : 0m));
 
     /// <summary>
     /// The RPE on the RTS chart that this weight and these reps were for a lifter this strong: the half step whose
-    /// weight is nearest. Lighter than RPE 6.5 (a deload) is logged as 6, which never suggests a max.
+    /// weight is nearest. Lighter than RPE 6.5 (a deload) is logged as 6, below the chart.
     /// </summary>
     private static decimal HonestRpe(decimal load, int repetitions, decimal strength)
     {

@@ -40,7 +40,6 @@ import {
   runSummary,
   stepReach,
   withMaxMode,
-  withSuggestedMax,
   withTypedMax,
   type AssignmentValues,
   type ProgressionValues,
@@ -287,7 +286,6 @@ describe('training maxes', () => {
       weekOneWeight: null,
       anchor: null,
       carriedFromMaxId: null,
-      loggedSetId: null,
       previous: null,
     });
     const tested = recorded({ id: 'max-2', kind: 'TestedOneRepMax', value: 120 });
@@ -311,7 +309,6 @@ describe('training maxes', () => {
       weekOneWeight: null,
       anchor: null,
       carriedFromMaxId: null,
-      loggedSetId: null,
       previous: null,
     });
     // With a max in each unit, each unit finds its own and 100 kg is never read as 100 lb.
@@ -333,24 +330,6 @@ describe('training maxes', () => {
           value: 105,
           unit: 'Kilogram',
           setOn: '2026-09-20',
-          suggestion: {
-            value: 110.974,
-            unit: 'Kilogram',
-            basis: {
-              load: 90,
-              repetitions: 5,
-              rpe: 8,
-              methodKey: 'BestLoggedSet',
-              methodVersion: '1.0',
-              loggedSet: {
-                setPerformanceId: 'set-9',
-                weekNumber: 4,
-                performedOn: '2026-09-28',
-                sessionName: 'Lower A',
-              },
-            },
-            explanation: 'Best logged set v1.',
-          },
         },
       ],
     };
@@ -363,8 +342,13 @@ describe('training maxes', () => {
         value: 105,
         sourceRecordId: null,
         carriedFromMaxId: 'snap-1',
-        loggedSetId: null,
-        previous: { maxId: 'snap-1', programName: 'Phase 1', suggestion: { value: 110.974 } },
+      });
+      // Where and when that program set it; nothing about what its logged sets did (N10b).
+      expect(maxRow(need, [older], 'Kilogram', previous).previous).toEqual({
+        maxId: 'snap-1',
+        value: 105,
+        setOn: '2026-09-20',
+        programName: 'Phase 1',
       });
       expect(maxRow(need, [], 'Kilogram', previous)).toMatchObject({ value: 105 });
       expect(maxRow(need, [newer], 'Kilogram', previous)).toMatchObject({
@@ -377,33 +361,27 @@ describe('training maxes', () => {
       expect(maxRow(need, [], 'Pound', previous)).toMatchObject({ value: null, previous: null });
     });
 
-    it('takes the suggestion as the set alone, and a typed number as the coach’s own', () => {
+    it('takes a typed number as the coach’s own, and week 1’s weight as another way', () => {
       const carried = maxRow(need, [], 'Kilogram', previous);
-      const suggested = withSuggestedMax(carried);
 
-      expect(suggested).toMatchObject({
-        value: 110.974,
-        carriedFromMaxId: null,
-        sourceRecordId: null,
-        loggedSetId: 'set-9',
-      });
-      expect(withTypedMax(suggested, 112.5)).toMatchObject({
+      expect(withTypedMax(carried, 112.5)).toMatchObject({
         value: 112.5,
         carriedFromMaxId: null,
-        loggedSetId: null,
+        sourceRecordId: null,
       });
-      // Week 1's weight is another source: choosing it drops the suggestion.
+      // Week 1's weight is another source: choosing it starts that box empty.
       expect(
-        withMaxMode({ ...suggested, anchor: { repetitions: 5, rpe: 8 } }, 'weekOne'),
+        withMaxMode({ ...carried, anchor: { repetitions: 5, rpe: 8 } }, 'weekOne'),
       ).toMatchObject({
         mode: 'weekOne',
-        loggedSetId: null,
+        weekOneWeight: null,
       });
-      // A lift with nothing suggested stays as it was.
-      expect(withSuggestedMax(maxRow(need, [], 'Kilogram'))).toMatchObject({ loggedSetId: null });
+      // A max is carried, recorded, typed or worked out from week 1: none names a logged set (N10b).
+      expect(carried).not.toHaveProperty('loggedSetId');
+      expect(withTypedMax(carried, 112.5)).not.toHaveProperty('loggedSetId');
     });
 
-    it('sends a carried max with its number and a suggestion with its set only', () => {
+    it('sends a carried max with its number and the max it carries', () => {
       const values = (row: ReturnType<typeof maxRow>): AssignmentValues => ({
         enrollmentId: 'enrollment-1',
         templateVersionId: 'version-1',
@@ -424,16 +402,11 @@ describe('training maxes', () => {
           carriedFromMaxId: 'snap-1',
         },
       ]);
-      expect(assignmentRequest(values(withSuggestedMax(carried))).workingMaxes).toEqual([
-        {
-          exerciseId: 'squat',
-          strengthMaxRecordId: null,
-          value: null,
-          unit: 'Kilogram',
-          loggedSetId: 'set-9',
-        },
+      expect(assignmentErrors(values(carried))).toEqual({});
+      // A typed number carries nothing over.
+      expect(assignmentRequest(values(withTypedMax(carried, 112.5))).workingMaxes).toEqual([
+        { exerciseId: 'squat', strengthMaxRecordId: null, value: 112.5, unit: 'Kilogram' },
       ]);
-      expect(assignmentErrors(values(withSuggestedMax(carried)))).toEqual({});
     });
   });
 });

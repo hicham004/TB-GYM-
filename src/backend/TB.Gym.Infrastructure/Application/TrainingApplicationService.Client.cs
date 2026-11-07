@@ -683,9 +683,9 @@ internal sealed partial class TrainingApplicationService
     }
 
     /// <summary>
-    /// The max one logged set suggests, and the formula that read it (TRAIN-4): a set with an RPE the RTS chart
-    /// covers is read on the chart, the number the Training maxes panel gives the same set (STR-012); any other
-    /// set of 1 to 12 reps with a weight by Epley. A set that neither covers has no estimate.
+    /// The max one logged set implies, and the formula that read it (TRAIN-4): a set with an RPE the RTS chart
+    /// covers is read on the chart, as STR-011 works a max out from week 1's weight; any other set of 1 to 12 reps
+    /// with a weight by Epley. A set that neither covers has no estimate.
     /// </summary>
     private static (decimal? Value, string? Method) EstimateLoggedMax(
         WorkoutSetPerformance set,

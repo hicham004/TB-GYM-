@@ -445,7 +445,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var byLoad = history.Items.ToDictionary(item => item.Load!.Value);
         Assert.HasCount(4, byLoad);
 
-        // 62.5 kg x 7 at RPE 8.5 is 77.4% of the max on the chart: the number the maxes panel gives it.
+        // 62.5 kg x 7 at RPE 8.5 is 77.4% of the max on the chart, as STR-011 reads week 1's weight.
         Assert.AreEqual((80.749m, "RpeChart"), (byLoad[62.5m].EstimatedOneRepMax, byLoad[62.5m].EstimateMethodKey));
         Assert.AreEqual((70m, "Epley"), (byLoad[60m].EstimatedOneRepMax, byLoad[60m].EstimateMethodKey));
         Assert.AreEqual((58.333m, "Epley"), (byLoad[50m].EstimatedOneRepMax, byLoad[50m].EstimateMethodKey));

@@ -62,22 +62,14 @@ internal sealed partial class TrainingApplicationService
         var weekOne = weekOneEntity is null ? null : ToBlueprint(weekOneEntity);
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(header.TimeZoneId);
         var isClosed = header.Status is MesocycleStatus.Completed or MesocycleStatus.Cancelled;
-
-        // Suggestions only where the coach could act on them: an open program of a client still coached
-        // here, while the coach's training reads are open (TRN-023, STR-007).
-        var suggests = !isClosed &&
-                       !await coachClientScope.IsReleasedAsync(header.ClientProfileId, cancellationToken) &&
-                       await CoachMayReadLoggedSetsAsync(header.ClientProfileId, cancellationToken);
-        var loggedSets = await LoadLoggedSetsAsync(
+        var setsById = await LoadMaxSourceSetsAsync(
             mesocycleId,
-            suggests ? exerciseIds : [],
             snapshots.Where(item => item.SourceSetPerformanceId is not null)
                 .Select(item => item.SourceSetPerformanceId!.Value)
+                .Distinct()
                 .ToArray(),
             timeZone,
             cancellationToken);
-        var setsById = loggedSets.Values.SelectMany(sets => sets).ToDictionary(set => set.SetId);
-        var lastKeeps = await LoggedSetMaxSuggestions.LoadLastKeepsAsync(dbContext, [mesocycleId], cancellationToken);
 
         var current = CurrentWorkingMaxes(snapshots);
         var maxes = current.Values
@@ -98,16 +90,7 @@ internal sealed partial class TrainingApplicationService
                     names.GetValueOrDefault(item.ExerciseId, string.Empty),
                     ToEntryView(item, timeZone, setsById),
                     anchor is null ? null : new TrainingMaxWeekOneSetView(anchor.Repetitions, anchor.Rpe, anchor.Load),
-                    earlier,
-                    suggests && loggedSets.TryGetValue(item.ExerciseId, out var sets)
-                        ? SuggestionFor(item, lastKeeps.GetValueOrDefault(item.Id)?.CreatedAtUtc, sets, header.LoadUnit, header.LoadIncrement)
-                        : null,
-                    lastKeeps.TryGetValue(item.Id, out var kept)
-                        ? new TrainingMaxKeptView(
-                            kept.SuggestedValue,
-                            header.LoadUnit,
-                            DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(kept.CreatedAtUtc, timeZone).DateTime))
-                        : null);
+                    earlier);
             })
             .ToArray();
         return new TrainingMaxesView(
@@ -157,7 +140,7 @@ internal sealed partial class TrainingApplicationService
                         lift.Basis.Rpe,
                         lift.Basis.MethodKey,
                         lift.Basis.MethodVersion,
-                        lift.Logged is null ? null : LoggedSetView(lift.Logged.Set)),
+                        null),
                 lift.Explanation)).ToArray(),
             changed.Select(item => new TrainingMaxSetChangeView(
                 item.Set.Id,
@@ -264,10 +247,6 @@ internal sealed partial class TrainingApplicationService
         catch (ArgumentException exception)
         {
             return Invalid("maxes", exception.PersonMessage());
-        }
-        catch (TrainingMaxSuggestionChangedException exception)
-        {
-            return Conflict(TrainingMaxSuggestionChangedException.Code, exception.PersonMessage());
         }
         catch (InvalidOperationException exception)
         {
@@ -383,28 +362,6 @@ internal sealed partial class TrainingApplicationService
         var unit = ToStrengthUnit(mesocycle.LoadUnit);
         var weekOne = ToBlueprint(mesocycle.Weeks.OrderBy(item => item.WeekNumber).First());
 
-        // A max from a logged set is worked out again here from the client's finished workouts, never taken
-        // from the request, and only while the coach may read those workouts (STR-007, TRN-023).
-        var loggedLifts = changes.Where(item => item.LoggedSetId is not null).Select(item => item.ExerciseId).Distinct().ToArray();
-        var loggedSets = new Dictionary<Guid, LoggedSetEvidence[]>();
-        var lastKeeps = new Dictionary<Guid, WorkingMaxKeep>();
-        if (loggedLifts.Length > 0)
-        {
-            if (!await CoachMayReadLoggedSetsAsync(mesocycle.ClientProfileId, cancellationToken))
-            {
-                throw new ArgumentException(
-                    "This client's logged sets are not open to you now, so no max can be estimated from them. Type the max instead.");
-            }
-
-            loggedSets = await LoadLoggedSetsAsync(
-                mesocycle.Id,
-                loggedLifts,
-                [],
-                TimeZoneInfo.FindSystemTimeZoneById(mesocycle.TimeZoneId),
-                cancellationToken);
-            lastKeeps = await LoggedSetMaxSuggestions.LoadLastKeepsAsync(dbContext, [mesocycle.Id], cancellationToken);
-        }
-
         var lifts = new List<PlannedLift>();
         foreach (var change in changes.OrderBy(item => item.ExerciseId))
         {
@@ -414,42 +371,13 @@ internal sealed partial class TrainingApplicationService
                 throw new ArgumentException($"{name} does not use a training max in this program.");
             }
 
-            var given = (change.Value is null ? 0 : 1) + (change.WeekOneWeight is null ? 0 : 1) + (change.LoggedSetId is null ? 0 : 1);
-            if (given != 1)
+            if ((change.Value is null) == (change.WeekOneWeight is null))
             {
-                throw new ArgumentException(
-                    $"Give {name} either a training max or week 1's weight, or the logged set to estimate it from: one of the three.");
+                throw new ArgumentException($"Give {name} either a training max or week 1's weight.");
             }
 
             PlannedLift lift;
-            if (change.LoggedSetId is { } loggedSetId)
-            {
-                var logged = ResolveLoggedSet(
-                    loggedSetId,
-                    name,
-                    existing,
-                    lastKeeps.GetValueOrDefault(existing.Id)?.CreatedAtUtc,
-                    loggedSets.GetValueOrDefault(change.ExerciseId, []),
-                    mesocycle.LoadUnit);
-                lift = new PlannedLift(
-                    change.ExerciseId,
-                    name,
-                    existing,
-                    logged.Estimate.Value,
-                    TrainingMaxSource.LoggedSet,
-                    new MaxEstimateBasis(
-                        logged.Set.Load!.Value,
-                        logged.Set.Repetitions!.Value,
-                        logged.Set.Rpe!.Value,
-                        logged.Estimate.StrategyKey,
-                        logged.Estimate.Version),
-                    logged.Estimate,
-                    LoggedExplanation(logged, mesocycle.LoadUnit))
-                {
-                    Logged = logged,
-                };
-            }
-            else if (change.WeekOneWeight is { } weekOneWeight)
+            if (change.WeekOneWeight is { } weekOneWeight)
             {
                 var estimate = EstimateFromWeekOne(
                     weekOne,
@@ -535,50 +463,38 @@ internal sealed partial class TrainingApplicationService
             fromWeek = Math.Clamp(fromWeek, 1, 52);
             var reason = !string.IsNullOrEmpty(coachReason)
                 ? coachReason
-                : lift.Logged is { } fromLog
-                    ? LoggedReason(fromLog, mesocycle.LoadUnit)
-                    : lift.Basis is null
-                        ? DefaultMaxReason
-                        : string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"Worked out from week 1's weight: {lift.Basis.Load:0.###} {UnitName(mesocycle.LoadUnit)} for {lift.Basis.Repetitions} reps at RPE {lift.Basis.Rpe:0.#}.");
+                : lift.Basis is null
+                    ? DefaultMaxReason
+                    : string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Worked out from week 1's weight: {lift.Basis.Load:0.###} {UnitName(mesocycle.LoadUnit)} for {lift.Basis.Repetitions} reps at RPE {lift.Basis.Rpe:0.#}.");
             planned.Add(lift with
             {
                 FromWeek = fromWeek,
-                Snapshot = lift.Logged is { } logged
-                    ? MesocycleWorkingMaxSnapshot.CaptureFromLoggedSet(
+                Snapshot = lift.Basis is { } basis && lift.Estimate is { } estimate
+                    ? MesocycleWorkingMaxSnapshot.CaptureFromWeekOneWeight(
                         tenantContext.TenantId,
                         mesocycle.Id,
                         mesocycle.ClientProfileId,
                         lift.ExerciseId,
-                        logged,
+                        estimate,
+                        basis.Load,
+                        basis.Repetitions,
+                        basis.Rpe,
                         fromWeek,
                         lift.Current.Id,
                         reason)
-                    : lift.Basis is { } basis && lift.Estimate is { } estimate
-                        ? MesocycleWorkingMaxSnapshot.CaptureFromWeekOneWeight(
-                            tenantContext.TenantId,
-                            mesocycle.Id,
-                            mesocycle.ClientProfileId,
-                            lift.ExerciseId,
-                            estimate,
-                            basis.Load,
-                            basis.Repetitions,
-                            basis.Rpe,
-                            fromWeek,
-                            lift.Current.Id,
-                            reason)
-                        : MesocycleWorkingMaxSnapshot.Capture(
-                            tenantContext.TenantId,
-                            mesocycle.Id,
-                            mesocycle.ClientProfileId,
-                            lift.ExerciseId,
-                            null,
-                            lift.NewValue,
-                            unit,
-                            fromWeek,
-                            lift.Current.Id,
-                            reason),
+                    : MesocycleWorkingMaxSnapshot.Capture(
+                        tenantContext.TenantId,
+                        mesocycle.Id,
+                        mesocycle.ClientProfileId,
+                        lift.ExerciseId,
+                        null,
+                        lift.NewValue,
+                        unit,
+                        fromWeek,
+                        lift.Current.Id,
+                        reason),
             });
         }
 
@@ -641,7 +557,7 @@ internal sealed partial class TrainingApplicationService
                 item.Basis is null ? null : Canonical(item.Basis.Load),
                 item.Basis?.Repetitions,
                 item.Basis is null ? null : Canonical(item.Basis.Rpe),
-                item.Logged?.Set.SetId,
+                null,
                 item.FromWeek)).ToArray(),
             sets.OrderBy(item => item.Set.Id).Select(item => new MaxesHashSet(
                 item.Set.Id,
@@ -706,7 +622,7 @@ internal sealed partial class TrainingApplicationService
     private static TrainingMaxEntryView ToEntryView(
         MesocycleWorkingMaxSnapshot snapshot,
         TimeZoneInfo timeZone,
-        Dictionary<Guid, LoggedSetEvidence> loggedSets) =>
+        Dictionary<Guid, TrainingMaxLoggedSetView> loggedSets) =>
         new(
             snapshot.Id,
             snapshot.Value,
@@ -720,12 +636,60 @@ internal sealed partial class TrainingApplicationService
                     snapshot.EstimateMethodKey!,
                     snapshot.EstimateMethodVersion!,
                     snapshot.SourceSetPerformanceId is { } setId && loggedSets.TryGetValue(setId, out var set)
-                        ? LoggedSetView(set)
+                        ? set
                         : null)
                 : null,
             snapshot.EffectiveFromWeek,
             DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(snapshot.CreatedAtUtc, timeZone).DateTime),
             snapshot.Reason);
+
+    /// <summary>
+    /// Where the logged sets behind this program's stored maxes sit (STR-012's maxes, stored before N10b removed the
+    /// suggestion): each set's week, the day its workout was finished in the program's zone, and the session. Only a
+    /// finished workout of this same program counts, so a max a next program started from the last program's set
+    /// finds none here and reads as logged in the last program.
+    /// </summary>
+    private async Task<Dictionary<Guid, TrainingMaxLoggedSetView>> LoadMaxSourceSetsAsync(
+        Guid mesocycleId,
+        Guid[] setIds,
+        TimeZoneInfo timeZone,
+        CancellationToken cancellationToken)
+    {
+        if (setIds.Length == 0)
+        {
+            return [];
+        }
+
+        var rows = await (
+            from set in dbContext.WorkoutSetPerformances.AsNoTracking()
+            join exercise in dbContext.WorkoutExercisePerformances.AsNoTracking()
+                on new { set.TenantId, Id = set.WorkoutExercisePerformanceId } equals new { exercise.TenantId, exercise.Id }
+            join workout in dbContext.WorkoutExecutions.AsNoTracking()
+                on new { exercise.TenantId, Id = exercise.WorkoutExecutionId } equals new { workout.TenantId, workout.Id }
+            join session in dbContext.TrainingSessions.AsNoTracking()
+                on new { workout.TenantId, Id = workout.TrainingSessionId } equals new { session.TenantId, session.Id }
+            join week in dbContext.MesocycleWeeks.AsNoTracking()
+                on new { session.TenantId, Id = session.MesocycleWeekId } equals new { week.TenantId, week.Id }
+            where setIds.Contains(set.Id) &&
+                  workout.MesocycleId == mesocycleId &&
+                  workout.Status == WorkoutExecutionStatus.Completed &&
+                  workout.CompletedAtUtc != null
+            select new
+            {
+                set.Id,
+                week.WeekNumber,
+                CompletedAtUtc = workout.CompletedAtUtc!.Value,
+                workout.SessionNameSnapshot,
+            })
+            .ToListAsync(cancellationToken);
+        return rows.ToDictionary(
+            row => row.Id,
+            row => new TrainingMaxLoggedSetView(
+                row.Id,
+                row.WeekNumber,
+                DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(row.CompletedAtUtc, timeZone).DateTime),
+                row.SessionNameSnapshot));
+    }
 
     private static TrainingMaxSource ToTrainingSource(WorkingMaxSource source) => source switch
     {
@@ -752,7 +716,10 @@ internal sealed partial class TrainingApplicationService
 
     /// <summary>
     /// Binds an idempotency key to the exact request: a retry of it answers with the first result, and any
-    /// change to the lifts, the numbers, the reason or the reviewed preview is another request.
+    /// change to the lifts, the numbers, the reason or the reviewed preview is another request. The shape is
+    /// the one P4b stored: <c>loggedSetId</c> stays, always null since N10b, so a key recorded before for a
+    /// typed max or week 1's weight still matches its retry. A key recorded for an applied suggestion bound
+    /// its set, which the API no longer reads, so its retry is another request (409 idempotency_conflict).
     /// </summary>
     private static string MaxRequestFingerprint(Guid mesocycleId, ApplyTrainingMaxesRequest request, string reason)
     {
@@ -767,7 +734,7 @@ internal sealed partial class TrainingApplicationService
                     item.ExerciseId,
                     value = item.Value is { } value ? Canonical(value) : null,
                     weekOneWeight = item.WeekOneWeight is { } weight ? Canonical(weight) : null,
-                    item.LoggedSetId,
+                    LoggedSetId = (Guid?)null,
                 })
                 .ToArray(),
             reason,
@@ -831,9 +798,6 @@ internal sealed partial class TrainingApplicationService
         public int FromWeek { get; init; } = 1;
 
         public MesocycleWorkingMaxSnapshot? Snapshot { get; init; }
-
-        /// <summary>The logged set a max is estimated from (STR-007); null for the other sources.</summary>
-        public LoggedSetMaxEstimate? Logged { get; init; }
     }
 
     private sealed record PlannedSet(
@@ -857,6 +821,11 @@ internal sealed partial class TrainingApplicationService
         int SessionCount,
         int KeptSessionCount);
 
+    /// <summary>
+    /// One lift in the preview hash. <c>LoggedSetId</c> is always null since N10b and stays so that a preview of
+    /// a typed max or week 1's weight taken before the change still applies after it. A suggestion's preview
+    /// has no number now, so its apply is refused (400) before the hash is compared.
+    /// </summary>
     private sealed record MaxesHashLift(
         Guid ExerciseId,
         string NewValue,

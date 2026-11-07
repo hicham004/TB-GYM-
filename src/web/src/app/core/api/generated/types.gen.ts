@@ -2464,11 +2464,6 @@ export type IssueInvoicesRequest = {
   periodStart: null | string;
 };
 
-export type KeepTrainingMaxRequest = {
-  exerciseId: string;
-  loggedSetId: string;
-};
-
 export type LeaveWorkspaceRequest = {
   reason: null | string;
   version: number | string;
@@ -3224,7 +3219,6 @@ export type PreviousProgramMaxView = {
   value: number | string;
   unit: TrainingLoadUnit;
   setOn: string;
-  suggestion: null | TrainingMaxSuggestionView;
 };
 
 export type PreviousSetPerformanceView = {
@@ -4290,7 +4284,6 @@ export type TrainingMaxChangeRequest = {
   exerciseId: string;
   value: null | number | string;
   weekOneWeight: null | number | string;
-  loggedSetId: null | string;
 };
 
 export type TrainingMaxEntryView = {
@@ -4323,12 +4316,6 @@ export type TrainingMaxesView = {
   loadIncrement: number | string;
   isClosed: boolean;
   maxes: Array<TrainingMaxView>;
-};
-
-export type TrainingMaxKeptView = {
-  suggestedValue: number | string;
-  unit: TrainingLoadUnit;
-  keptOn: string;
 };
 
 export type TrainingMaxLiftChangeView = {
@@ -4377,21 +4364,12 @@ export type TrainingMaxShareView = {
 export type TrainingMaxSource =
   'Typed' | 'SavedMax' | 'WeekOneWeight' | 'LoggedSet' | 'PreviousProgram';
 
-export type TrainingMaxSuggestionView = {
-  value: number | string;
-  unit: TrainingLoadUnit;
-  basis: TrainingMaxBasisView;
-  explanation: string;
-};
-
 export type TrainingMaxView = {
   exerciseId: string;
   exerciseName: string;
   current: TrainingMaxEntryView;
   weekOneSet: null | TrainingMaxWeekOneSetView;
   earlier: Array<TrainingMaxEntryView>;
-  suggestion: null | TrainingMaxSuggestionView;
-  kept: null | TrainingMaxKeptView;
 };
 
 export type TrainingMaxWeekOneSetView = {
@@ -4609,7 +4587,6 @@ export type WorkingMaxSelectionRequest = {
   unit: TrainingLoadUnit;
   weekOneWeight?: null | number | string;
   carriedFromMaxId?: null | string;
-  loggedSetId?: null | string;
 };
 
 export type WorkingMaxSnapshotView = {
@@ -8527,41 +8504,6 @@ export type ApplyTrainingMaxesResponses = {
 
 export type ApplyTrainingMaxesResponse =
   ApplyTrainingMaxesResponses[keyof ApplyTrainingMaxesResponses];
-
-export type KeepTrainingMaxData = {
-  body: KeepTrainingMaxRequest;
-  path: {
-    mesocycleId: string;
-  };
-  query?: never;
-  url: '/api/training/mesocycles/{mesocycleId}/training-maxes/keep';
-};
-
-export type KeepTrainingMaxErrors = {
-  /**
-   * Bad Request
-   */
-  400: HttpValidationProblemDetails;
-  /**
-   * Not Found
-   */
-  404: unknown;
-  /**
-   * Conflict
-   */
-  409: ProblemDetails;
-};
-
-export type KeepTrainingMaxError = KeepTrainingMaxErrors[keyof KeepTrainingMaxErrors];
-
-export type KeepTrainingMaxResponses = {
-  /**
-   * OK
-   */
-  200: TrainingMaxesView;
-};
-
-export type KeepTrainingMaxResponse = KeepTrainingMaxResponses[keyof KeepTrainingMaxResponses];
 
 export type RenameMesocycleData = {
   body: RenameMesocycleRequest;

@@ -129,10 +129,6 @@ export class ClientProgram {
   private readonly pickedWeek = signal<number | null>(null);
   protected readonly sharing = signal(false);
   protected readonly active = signal<{ week: WeekColumn; session: SessionCard } | null>(null);
-  /** The lift whose suggested max the maxes sheet opens on; null for a plain update. */
-  protected readonly maxesSuggested = signal<string | null>(null);
-  /** Arrived from "Review maxes" (Coach Today, the client's overview): the maxes panel comes into view. */
-  protected readonly revealMaxes = signal(false);
   /**
    * How many changes this page has made. Each may add or rename a program's training max, which the
    * strength history below lists (STR-015), so the card reads its list again after each one.
@@ -310,18 +306,6 @@ export class ClientProgram {
         replaceUrl: true,
       });
       if (this.canAssign()) this.openAssign();
-    });
-
-    // "Review maxes" arrives as `?action=maxes`: the panel brings itself into view once it has loaded.
-    effect(() => {
-      if (this.query().get('action') !== 'maxes' || this.state() !== 'ready') return;
-      void this.router.navigate([], {
-        relativeTo: this.route,
-        queryParams: { action: null },
-        queryParamsHandling: 'merge',
-        replaceUrl: true,
-      });
-      this.revealMaxes.set(true);
     });
 
     // A client's note on a workout links here as `?session=<id>` (R5.1c): that session's sheet opens
@@ -505,12 +489,8 @@ export class ClientProgram {
     });
   }
 
-  /**
-   * Change the program's training maxes for the coming weeks (P2). From a lift's suggestion (P4b) the
-   * sheet opens on that lift's estimate, already worked out.
-   */
-  protected openMaxesUpdate(suggested: string | null): void {
-    this.maxesSuggested.set(suggested);
+  /** Change the program's training maxes for the coming weeks (P2). */
+  protected openMaxesUpdate(): void {
     this.open(
       this.sheets,
       this.maxesSheet(),

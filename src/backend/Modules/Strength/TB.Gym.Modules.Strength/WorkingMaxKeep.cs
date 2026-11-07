@@ -4,9 +4,9 @@ namespace TB.Gym.Modules.Strength;
 
 /// <summary>
 /// The coach kept a program's max when the client's logged sets suggested another (STR-013, P4c). Append-only:
-/// it names the max that was kept, the logged set behind the suggestion and the max that set suggested. From
-/// then on only sets logged after it can suggest a new value for that max (BestLoggedSet v1); a later update of
-/// the max leaves it behind as history.
+/// it names the max that was kept, the logged set behind the suggestion and the max that set suggested. Since
+/// the suggestion was removed (notes plan N10b, 7 Nov 2026) nothing writes or reads a keep; the rows recorded
+/// before stay, with their guards, as history.
 /// </summary>
 public sealed class WorkingMaxKeep : TenantEntity
 {

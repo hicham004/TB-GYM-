@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using TB.Gym.Infrastructure.Application;
 using TB.Gym.Modules.Tenancy;
+using TB.Gym.Modules.Training;
 
 namespace TB.Gym.Api.IntegrationTests;
 
@@ -71,7 +72,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The record is readable and nothing about it changes, however the write reaches it.
         await AssertStatusAsync(await owner.GetAsync($"/api/clients/{clientId}"), HttpStatusCode.OK);
         await AssertStatusAsync(await owner.GetAsync($"/api/training/mesocycles/{block.Id}"), HttpStatusCode.OK);
-        await AssertStatusAsync(await owner.GetAsync(P2MaxesUrl(block.Id)), HttpStatusCode.OK);
+        Assert.IsTrue((await ReadSliceAsync<TrainingMaxesView>(owner, P2MaxesUrl(block.Id))).IsClosed, "A released client's program reads as closed.");
         await RefreshCsrfAsync(owner);
         HttpResponseMessage[] refusals =
         [

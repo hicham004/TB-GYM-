@@ -4,9 +4,8 @@ import { ACCOUNTS, expect, requireLive, signIn, test } from './support';
 /**
  * Training maxes on a running program against the real API (P2, STR-002, STR-009, STR-011): Lea types a new
  * Back Squat max for Maya Fakhoury, 2.5 kg above the one in use, reads every changed weight with its working-out
- * before anything is saved, applies it, and the panel shows the new max with the old one in its history. Typing
- * the max, rather than taking the logged-set suggestion, keeps the spec runnable on any copy of the demo and
- * again on the same one (each run adds 2.5 kg).
+ * before anything is saved, applies it, and the panel shows the new max with the old one in its history. A typed
+ * max keeps the spec runnable on any copy of the demo and again on the same one (each run adds 2.5 kg).
  */
 requireLive();
 

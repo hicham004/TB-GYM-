@@ -147,7 +147,7 @@ const recorded = {
   ],
 };
 
-/** The client's latest program left the squat at 105 kg, set on 20 Sep, and its sets suggest 110.97 kg. */
+/** The client's latest program left the squat at 105 kg, set on 20 Sep. */
 const previousMaxes = {
   mesocycleId: 'block-old',
   programName: 'Phase 1',
@@ -161,6 +161,20 @@ const previousMaxes = {
       value: 105,
       unit: 'Kilogram',
       setOn: '2026-09-20',
+    },
+  ],
+};
+
+/**
+ * The same read from a server before N10b, which still sent what that program's logged sets suggested
+ * (90 kg for 5 at RPE 8, about 110.97 kg). Removed on the owner's word: Assign program offers nothing
+ * from it and carries the 105 kg as before.
+ */
+const previousMaxesBeforeN10b = {
+  ...previousMaxes,
+  maxes: [
+    {
+      ...previousMaxes.maxes[0],
       suggestion: {
         value: 110.974,
         unit: 'Kilogram',
@@ -379,10 +393,13 @@ describe('Assign program', () => {
     expect(textOf(fieldset.querySelector('.muted'))).toBe(
       'This program works its weights out from these and keeps them as its own; you update them from its Training maxes. Each starts where Maya’s last program left the lift, or from a max you recorded since.',
     );
-    // The row stays open while its last program's logged sets suggest a new max.
-    expect(fold(host, 'Back squat · 105 kg').open).toBe(true);
+    // A filled row folds to the lift and the number it carries (critique B7a); nothing suggests another (N10b).
+    expect(fold(host, 'Back squat · 105 kg').open).toBe(false);
+    await toggleFold(fixture, host, 'Back squat · 105 kg');
     expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('105');
     expect(textOf(fieldset)).toContain('Where Phase 1 left it, set Sun 20 Sep');
+    expect(Array.from(fieldset.querySelectorAll('button')).map(textOf)).toEqual([]);
+    expect(textOf(fieldset)).not.toMatch(/logged sets|suggest/);
 
     press(host, 'Assign program');
     await settle(fixture);
@@ -410,29 +427,32 @@ describe('Assign program', () => {
     await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    // The recorded max is filled in, so its row folds too.
+    expect(fold(host, 'Back squat · 100 kg').open).toBe(false);
+    await toggleFold(fixture, host, 'Back squat · 100 kg');
     expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('100');
     expect(textOf(fieldset)).toContain('Your recorded training max');
-    // The suggestion is still one tap away.
-    expect(textOf(fieldset.querySelector('.suggested'))).toContain('Use 110.97 kg');
   });
 
-  it('offers what the latest program’s logged sets suggest and sends only the set (STR-014)', async () => {
+  it('carries the latest program’s max with no suggestion line and no Use, even from an old read (N10b)', async () => {
     const { fixture, host, api } = await render({
-      programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxes)) },
+      api: {
+        listStrengthMaxes: vi.fn(() =>
+          of({ ...recorded, items: [{ ...recorded.items[0], effectiveDate: '2026-09-01' }] }),
+        ),
+      },
+      programApi: { getPreviousMaxes: vi.fn(() => of(previousMaxesBeforeN10b)) },
     });
     await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
 
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
-    expect(textOf(fieldset.querySelector('.suggested p'))).toBe(
-      'Phase 1’s logged sets suggest 110.97 kg (90 kg for 5 reps at RPE 8).',
-    );
-    press(host, 'Use 110.97 kg');
-    await settle(fixture);
-    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('110.974');
-    expect(textOf(fieldset)).toContain(
-      'Estimated from Phase 1’s logged sets: 90 kg for 5 reps at RPE 8',
-    );
+    expect(fold(host, 'Back squat · 105 kg').open).toBe(false);
+    await toggleFold(fixture, host, 'Back squat · 105 kg');
+    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('105');
+    expect(textOf(fieldset)).toContain('Where Phase 1 left it, set Sun 20 Sep');
     expect(fieldset.querySelector('.suggested')).toBeNull();
+    expect(Array.from(fieldset.querySelectorAll('button')).map(textOf)).toEqual([]);
+    expect(textOf(fieldset)).not.toMatch(/logged sets|suggest|Use \d/);
 
     press(host, 'Assign program');
     await settle(fixture);
@@ -441,11 +461,12 @@ describe('Assign program', () => {
       {
         exerciseId: 'squat',
         strengthMaxRecordId: null,
-        value: null,
+        value: 105,
         unit: 'Kilogram',
-        loggedSetId: 'set-9',
+        carriedFromMaxId: 'snap-1',
       },
     ]);
+    expect(JSON.stringify(request)).not.toContain('loggedSetId');
   });
 
   it('never carries the latest program’s max across kilograms and pounds', async () => {
@@ -458,44 +479,10 @@ describe('Assign program', () => {
     await settle(fixture);
 
     const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
+    // In pounds the row is empty, so it is open and says there is nothing to start from.
     expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('');
-    expect(fieldset.querySelector('.suggested')).toBeNull();
-  });
-
-  it('reads the suggestion again when a newer set was logged while assigning', async () => {
-    const changed = new HttpErrorResponse({
-      status: 409,
-      error: {
-        code: 'training_max_suggestion_changed',
-        message: 'Back squat has a newer logged set.',
-      },
-    });
-    const newer = structuredClone(previousMaxes);
-    newer.maxes[0].suggestion.value = 115;
-    newer.maxes[0].suggestion.basis.loggedSet.setPerformanceId = 'set-10';
-    const getPreviousMaxes = vi
-      .fn()
-      .mockReturnValueOnce(of(previousMaxes))
-      .mockReturnValue(of(newer));
-    const { fixture, host } = await render({
-      api: { assignClientMesocycle: vi.fn(() => throwError(() => changed)) },
-      programApi: { getPreviousMaxes },
-    });
-    await chooseOption(fixture, host, 'Program', 'Full Body Reset · 6 weeks');
-    press(host, 'Use 110.97 kg');
-    await settle(fixture);
-
-    press(host, 'Assign program');
-    await settle(fixture);
-
-    expect(textOf(formSummary(host))).toBe(
-      'Maya logged a newer set since you looked, so the suggested max changed. Look at the new suggestion, then try again.',
-    );
-    expect(document.activeElement).toBe(formSummary(host));
-    const fieldset = query<HTMLElement>(host, 'fieldset.maxes');
-    // The row is back where the sheet started, with the new suggestion one tap away.
-    expect(query<HTMLInputElement>(fieldset, 'input').value).toBe('100');
-    expect(textOf(fieldset.querySelector('.suggested'))).toContain('Use 115 kg');
+    expect(textOf(fieldset)).toContain('Nothing recorded yet');
+    expect(textOf(fieldset)).not.toContain('Where Phase 1 left it');
   });
 
   it('names the program the coach assigns, or keeps its own name when left empty (P2)', async () => {

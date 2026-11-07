@@ -24,7 +24,6 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { Button } from '../../ui/button';
-import { Checkbox } from '../../ui/checkbox';
 import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
@@ -33,7 +32,7 @@ import { Skeleton } from '../../ui/skeleton';
 import { IntentIdempotencyKey } from '../training/training-assignment-state';
 import { unitLabel } from '../training/training-program.models';
 import { ClientProgramApi } from './client-program-api';
-import { programWriteError, serverCode } from './client-program-forms.models';
+import { programWriteError } from './client-program-forms.models';
 import {
   changesRequest,
   editErrors,
@@ -41,7 +40,6 @@ import {
   previewSummary,
   REASON_LIMIT,
   reasonErrors,
-  withLogged,
   withValue,
   withWeekOneWeight,
   type MaxEditRow,
@@ -50,19 +48,15 @@ import {
 
 /**
  * "Update maxes for the coming weeks" (P2, STR-002, STR-009). The coach changes a lift's training max,
- * by typing it, from the weight of week 1's first set, or from the estimate the client's logged sets
- * suggest (P4b, STR-007), and sees every weight that would change before anything is saved. Opened from
- * a suggestion, it starts on that estimate already worked out. Updating sends back the preview's hash,
- * the version the preview was worked out against and one idempotency key, so the server refuses
- * anything that changed in between and a retry saves once. Sessions that have started, or are in the
- * past, keep what they had. A set the client logs while the coach reviews moves the estimate: the sheet
- * reads it again and says so (P4c), and nothing is saved until the coach looks.
+ * by typing it or from the weight of week 1's first set, and sees every weight that would change before
+ * anything is saved. Updating sends back the preview's hash, the version the preview was worked out
+ * against and one idempotency key, so the server refuses anything that changed in between and a retry
+ * saves once. Sessions that have started, or are in the past, keep what they had.
  */
 @Component({
   selector: 'app-program-maxes-update',
   imports: [
     Button,
-    Checkbox,
     Control,
     Field,
     FormSummary,
@@ -158,22 +152,6 @@ import {
                   {{ row.name }}
                   <span class="now">{{ nowText(row) }}</span>
                 </legend>
-                @if (row.logged; as logged) {
-                  <div class="logged">
-                    <app-checkbox [label]="loggedLabel(logged.valueText)">
-                      <input
-                        type="checkbox"
-                        appControl
-                        [checked]="row.useLogged"
-                        [attr.aria-describedby]="'logged-from-' + row.exerciseId"
-                        (change)="setLogged(row, $any($event.target).checked)"
-                      />
-                    </app-checkbox>
-                    <p class="muted small" [id]="'logged-from-' + row.exerciseId" dir="auto">
-                      {{ logged.from }}
-                    </p>
-                  </div>
-                }
                 <app-field
                   [label]="newLabel"
                   [errors]="
@@ -330,16 +308,6 @@ import {
       margin-inline-start: 0.5rem;
     }
 
-    .logged {
-      display: flex;
-      flex-direction: column;
-      gap: 0.125rem;
-    }
-
-    .logged p {
-      padding-inline-start: 2.5rem;
-    }
-
     .value-unit {
       align-items: center;
       display: grid;
@@ -494,8 +462,6 @@ export class ProgramMaxesUpdate {
   readonly blockId = input.required<string>();
   readonly blockName = input.required<string>();
   readonly firstName = input.required<string>();
-  /** The lift whose logged-sets estimate the sheet opens on, worked out; null opens it blank. */
-  readonly suggested = input<string | null>(null);
   /** True when the maxes were updated, so the page reads the program again. */
   readonly closed = output<boolean>();
 
@@ -517,8 +483,6 @@ export class ProgramMaxesUpdate {
   /** What the preview was worked out from: the version of the program and the lifts it changes. */
   private previewed: { version: number; changes: TrainingMaxChangeRequest[] } | null = null;
   private version = 0;
-  /** The suggestion the sheet was opened on is worked out once; a reload keeps what the coach chose. */
-  private suggestionShown = false;
 
   protected readonly errors = computed(() => editErrors(this.rows()));
   protected readonly reasonProblems = computed(() => reasonErrors(this.reason()));
@@ -548,10 +512,6 @@ export class ProgramMaxesUpdate {
     return $localize`now ${row.current}:value: ${unitLabel(row.unit)}:unit:`;
   }
 
-  protected loggedLabel(value: string): string {
-    return $localize`Use the estimate from logged sets: ${value}:value:`;
-  }
-
   protected weekOneHelp(set: WeekOneSet, row: MaxEditRow): string {
     const reps = set.repetitions;
     const rpe = set.rpe;
@@ -568,16 +528,8 @@ export class ProgramMaxesUpdate {
           firstValueFrom(this.programApi.getTrainingMaxes(this.blockId())),
         );
         this.version = Number(view.version);
-        const suggested = this.suggestionShown ? null : this.suggested();
-        const rows = editRows(view, this.locale).map((row) =>
-          row.exerciseId === suggested ? withLogged(row, true) : row,
-        );
-        this.rows.set(rows);
+        this.rows.set(editRows(view));
         this.load.set('ready');
-        if (rows.some((row) => row.useLogged)) {
-          this.suggestionShown = true;
-          void this.previewIt();
-        }
       } catch {
         if (owner.current) this.load.set('error');
       }
@@ -597,10 +549,6 @@ export class ProgramMaxesUpdate {
     this.edit(row.exerciseId, (item) =>
       withWeekOneWeight(item, Number.isNaN(value) ? null : value),
     );
-  }
-
-  protected setLogged(row: MaxEditRow, checked: boolean): void {
-    this.edit(row.exerciseId, (item) => withLogged(item, checked));
   }
 
   protected setReason(value: string): void {
@@ -650,7 +598,7 @@ export class ProgramMaxesUpdate {
       this.previewed = { version, changes };
       this.preview.set(result);
     } catch (error) {
-      await this.refused(error, $localize`The new weights could not be worked out.`);
+      this.refused(error, $localize`The new weights could not be worked out.`);
     } finally {
       this.busy.set(false);
     }
@@ -680,42 +628,15 @@ export class ProgramMaxesUpdate {
       this.intent.complete();
       this.closed.emit(true);
     } catch (error) {
-      await this.refused(error, $localize`The training maxes could not be updated.`);
+      this.refused(error, $localize`The training maxes could not be updated.`);
     } finally {
       this.busy.set(false);
     }
   }
 
-  /** Says why the server refused; a newer logged set first brings its estimate into the sheet. */
-  private async refused(error: unknown, fallback: string): Promise<void> {
-    if (serverCode(error) === 'training_max_suggestion_changed') {
-      this.preview.set(null);
-      this.previewed = null;
-      await this.readSuggestionsAgain();
-    }
+  /** Says why the server refused. */
+  private refused(error: unknown, fallback: string): void {
     this.error.set(programWriteError(error, fallback, this.firstName()));
     this.refusalSummary()?.focus();
-  }
-
-  /**
-   * The lifts as the server reads them now, keeping what the coach chose: a typed max or week 1's weight
-   * stays, and a lift that was on its logged-sets estimate moves to the new one while it still has one.
-   */
-  private async readSuggestionsAgain(): Promise<void> {
-    try {
-      const view = await firstValueFrom(this.programApi.getTrainingMaxes(this.blockId()));
-      this.version = Number(view.version);
-      const fresh = editRows(view, this.locale);
-      this.rows.update((rows) =>
-        fresh.map((row) => {
-          const before = rows.find((item) => item.exerciseId === row.exerciseId);
-          if (!before) return row;
-          const kept = { ...row, value: before.value, weekOneWeight: before.weekOneWeight };
-          return before.useLogged ? withLogged(kept, true) : kept;
-        }),
-      );
-    } catch {
-      // The message already asks the coach to look again; the rows stay as they were.
-    }
   }
 }

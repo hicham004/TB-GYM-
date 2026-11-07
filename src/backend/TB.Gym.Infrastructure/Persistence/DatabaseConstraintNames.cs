@@ -43,7 +43,10 @@ internal static class DatabaseConstraintNames
     public const string OneTrainingMaxUpdatePerKey =
         "IX_WorkingMaxUpdates_TenantId_IdempotencyKey";
 
-    /// <summary>A coach keeps a max over one logged set's suggestion once; a retried keep finds the first (STR-013).</summary>
+    /// <summary>
+    /// One keep per max and logged set (STR-013). Nothing writes a keep since N10b; the model still names the
+    /// index with it.
+    /// </summary>
     public const string OneKeepPerTrainingMaxAndSet =
         "IX_WorkingMaxKeeps_OneKeepPerMaxAndSet";
 

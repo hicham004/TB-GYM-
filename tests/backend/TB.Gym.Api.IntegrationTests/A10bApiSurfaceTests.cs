@@ -41,6 +41,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         "CreateProgramTemplate",
         "GetClientCheckInAssignment",
         "GetOwnCheckInAssignment",
+        // The keep of a max over a logged set's suggestion went with maxes to review (notes plan N10b).
+        "KeepTrainingMax",
         "PublishMealPlanTemplateVersion",
     ];
 
@@ -157,7 +159,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     /// <summary>
     /// A program or a meal plan is made only by publishing a draft (TRN-024, NUT-013), and one check-in
     /// assignment is read with its response: the direct routes no screen called answer as routes that do
-    /// not exist, 405 where the path still has a read (audit INV-12).
+    /// not exist, 405 where the path still has a read (audit INV-12). The keep of a max over a logged set's
+    /// suggestion, removed with maxes to review (notes plan N10b), answers the same way.
     /// </summary>
     [TestMethod]
     public async Task A10bTheRoutesNoScreenCalledAreGone()
@@ -174,6 +177,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             (HttpMethod.Post, $"/api/nutrition/meal-plan-versions/{id}/publish", HttpStatusCode.NotFound),
             (HttpMethod.Get, $"/api/checkins/clients/{id}/assignments/{Guid.NewGuid()}", HttpStatusCode.NotFound),
             (HttpMethod.Get, $"/api/checkins/me/assignments/{id}", HttpStatusCode.NotFound),
+            (HttpMethod.Post, $"/api/training/mesocycles/{id}/training-maxes/keep", HttpStatusCode.NotFound),
         })
         {
             await RefreshCsrfAsync(owner);

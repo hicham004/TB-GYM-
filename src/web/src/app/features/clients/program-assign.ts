@@ -58,9 +58,7 @@ import {
   programChoices,
   programWriteError,
   runSummary,
-  serverCode,
   withMaxMode,
-  withSuggestedMax,
   withTypedMax,
   type AssignmentValues,
   type ClientSees,
@@ -70,10 +68,10 @@ import {
 /**
  * Assign program: a plan, one of the coach's published programs, a start date and, when the program
  * works its loads out from training maxes, those maxes. Each max starts where the client's latest
- * program left it, and that program's logged-set suggestion is one tap away (STR-014). Assigning
- * copies the program to the client (TRN-001); later edits to the original never reach it. The load settings that most coaches never
- * touch sit behind one line that says what they are. Everything is checked again by the server:
- * the plan must cover every week, and the dates must not overlap another program (TRN-011).
+ * program left it (STR-014). Assigning copies the program to the client (TRN-001); later edits to the
+ * original never reach it. The load settings that most coaches never touch sit behind one line that
+ * says what they are. Everything is checked again by the server: the plan must cover every week, and
+ * the dates must not overlap another program (TRN-011).
  */
 @Component({
   selector: 'app-program-assign',
@@ -281,19 +279,6 @@ import {
                               <span class="unit">{{ unitName(row.unit) }}</span>
                             </div>
                           </app-field>
-                          @if (suggestionFor(row); as suggested) {
-                            <div class="suggested">
-                              <p dir="auto">{{ suggested.text }}</p>
-                              <button
-                                appButton
-                                type="button"
-                                variant="outlined"
-                                (click)="useSuggestion(index)"
-                              >
-                                {{ suggested.action }}
-                              </button>
-                            </div>
-                          }
                         }
                       </div>
                     </ng-template>
@@ -422,24 +407,6 @@ import {
     .run {
       font-weight: 600;
       margin-block-start: -0.5rem;
-    }
-
-    .suggested {
-      align-items: center;
-      background: var(--tb-surface-2);
-      border-radius: var(--tb-radius-control);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem 0.75rem;
-      justify-content: space-between;
-      margin-block-start: 0.5rem;
-      padding: 0.625rem 0.75rem;
-    }
-
-    .suggested p {
-      flex: 1 1 14rem;
-      font-size: 0.875rem;
-      text-wrap: pretty;
     }
 
     .warn,
@@ -611,8 +578,8 @@ export class ProgramAssign {
   protected readonly loadsOpen = signal(false);
   protected readonly maxes = signal<MaxRow[]>([]);
   /**
-   * The max rows unfolded, by lift: a row with no number, or one whose last program suggests a new
-   * one, starts open; a filled row folds to its name and number (critique B7a).
+   * The max rows unfolded, by lift: a row with no number starts open; a filled row folds to its name
+   * and number (critique B7a).
    */
   protected readonly openRows = signal<ReadonlySet<string>>(new Set());
   /** What the program's own name is replaced by in the client's copy; empty keeps it (TRN-002). */
@@ -736,25 +703,17 @@ export class ProgramAssign {
     });
   }
 
-  /** New rows: the ones still to fill, and those with a suggestion to take or leave, start open. */
+  /** New rows: the ones still to fill start open. */
   private setRows(rows: MaxRow[]): void {
     this.maxes.set(rows);
     this.openRows.set(
-      new Set(
-        rows
-          .filter((row) => row.value === null || this.suggestionFor(row) !== null)
-          .map((row) => row.exerciseId),
-      ),
+      new Set(rows.filter((row) => row.value === null).map((row) => row.exerciseId)),
     );
   }
 
-  /** Where a training max came from: the last program, its logged sets, the one recorded, typed here, or none yet. */
+  /** Where a training max came from: the last program, the one recorded, typed here, or none yet. */
   protected maxHelp(row: MaxRow): string {
     const last = row.previous;
-    const suggestion = last?.suggestion;
-    if (row.loggedSetId && last && suggestion) {
-      return $localize`Estimated from ${last.programName}:program:’s logged sets: ${this.weight(suggestion.load, row.unit)}:weight: for ${suggestion.repetitions}:reps: reps at RPE ${suggestion.rpe}:rpe:`;
-    }
     if (row.carriedFromMaxId && last) {
       return $localize`Where ${last.programName}:program: left it, set ${formatDate(last.setOn, 'EEE d MMM', this.locale)}:date:`;
     }
@@ -763,24 +722,6 @@ export class ProgramAssign {
       : row.value !== null
         ? this.maxTyped
         : this.maxNone;
-  }
-
-  /** What the latest program's logged sets suggest for this lift, while the row does not use it yet. */
-  protected suggestionFor(row: MaxRow): { text: string; action: string } | null {
-    const last = row.previous;
-    const suggestion = last?.suggestion;
-    if (!last || !suggestion || row.loggedSetId) return null;
-    const value = this.weight(suggestion.value, row.unit);
-    return {
-      text: $localize`${last.programName}:program:’s logged sets suggest ${value}:value: (${this.weight(suggestion.load, row.unit)}:weight: for ${suggestion.repetitions}:reps: reps at RPE ${suggestion.rpe}:rpe:).`,
-      action: $localize`Use ${value}:value:`,
-    };
-  }
-
-  protected useSuggestion(index: number): void {
-    this.maxes.update((rows) =>
-      rows.map((row, position) => (position === index ? withSuggestedMax(row) : row)),
-    );
   }
 
   /** A no-break space keeps "70 kg" on one line in the narrow sheet. */
@@ -1003,35 +944,8 @@ export class ProgramAssign {
         programWriteError(error, $localize`The program could not be assigned.`, this.firstName()),
       );
       this.summary()?.focus();
-      // A newer best set was logged since the sheet opened: read the suggestion again (STR-014).
-      if (serverCode(error) === 'training_max_suggestion_changed') await this.readPreviousAgain();
     } finally {
       this.busy.set(false);
-    }
-  }
-
-  private async readPreviousAgain(): Promise<void> {
-    try {
-      const previous = await firstValueFrom(this.programApi.getPreviousMaxes(this.clientId()));
-      this.previous.set(previous);
-      const needs = new Map(this.needs.map((need) => [need.exerciseId, need]));
-      this.maxes.update((rows) =>
-        rows.map((row) => {
-          const need = needs.get(row.exerciseId);
-          return row.loggedSetId && need
-            ? maxRow(need, this.history(), row.unit, previous)
-            : {
-                ...row,
-                previous: maxRow(need ?? row, this.history(), row.unit, previous).previous,
-              };
-        }),
-      );
-      // The newer estimate is said in its row, so a folded row with one opens.
-      for (const row of this.maxes()) {
-        if (this.suggestionFor(row)) this.toggleRow(row.exerciseId, true);
-      }
-    } catch {
-      // The message already says to look again; the sheet keeps what it had.
     }
   }
 }

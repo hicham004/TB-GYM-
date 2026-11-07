@@ -9,7 +9,7 @@ namespace TB.Gym.Api.IntegrationTests;
 
 /// <summary>
 /// The notes plan's N10a (decision 19's note, 7 Nov 2026): maxes to review are gone from Coach Today, the client list
-/// and a client's page, on the server (coach attention v7, CLI-018). Logged sets that P4b's rule reads as a heavier
+/// and a client's page, on the server (coach attention v7, CLI-018). Logged sets that P4b's rule read as a heavier
 /// max (90 kg for 5 at RPE 8 over a 100 kg max suggested 110.974 kg) raise no item, change no status and leave nothing
 /// of maxes in what the three reads send. Between programs No program still names the client's latest program not
 /// cancelled, with nothing beside it, read for every client in scope at once. The test starts at midday in the

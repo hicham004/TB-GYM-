@@ -180,28 +180,19 @@ export interface MaxRow {
   readonly anchor: WeekOneAnchor | null;
   /** The latest program's max this value carries over (STR-014); null once the coach typed their own. */
   readonly carriedFromMaxId?: string | null;
-  /** The logged set whose suggestion this value is (STR-014); the server works the number out again. */
-  readonly loggedSetId?: string | null;
   /** Where the client's latest program left this lift, in this unit; null when it has none. */
   readonly previous?: PreviousMax | null;
   /** Why the lift is listed: "3 sets use % of training max in weeks 1 to 4" (critique B7a). */
   readonly reason?: string;
 }
 
-/** A lift of the client's latest program: the max it uses now and what its logged sets suggest. */
+/** A lift of the client's latest program: the max it uses now, and when and where it was set. */
 export interface PreviousMax {
   readonly maxId: string;
   readonly value: number;
   /** The workspace day that max was set. */
   readonly setOn: string;
   readonly programName: string;
-  readonly suggestion: {
-    readonly value: number;
-    readonly loggedSetId: string;
-    readonly load: number;
-    readonly repetitions: number;
-    readonly rpe: number;
-  } | null;
 }
 
 /** The latest program's lift, when that program weighs in this unit: kilograms and pounds are never converted. */
@@ -213,22 +204,11 @@ export function previousMax(
   if (!previous || previous.loadUnit !== unit || !previous.programName) return null;
   const lift = previous.maxes.find((item) => item.exerciseId === exerciseId);
   if (!lift) return null;
-  const set = lift.suggestion?.basis.loggedSet;
   return {
     maxId: lift.maxId,
     value: Number(lift.value),
     setOn: lift.setOn,
     programName: previous.programName,
-    suggestion:
-      lift.suggestion && set
-        ? {
-            value: Number(lift.suggestion.value),
-            loggedSetId: set.setPerformanceId,
-            load: Number(lift.suggestion.basis.load),
-            repetitions: Number(lift.suggestion.basis.repetitions),
-            rpe: Number(lift.suggestion.basis.rpe),
-          }
-        : null,
   };
 }
 
@@ -281,38 +261,21 @@ export function maxRow(
     weekOneWeight: null,
     anchor: need.anchor ?? null,
     carriedFromMaxId: carries ? last.maxId : null,
-    loggedSetId: null,
     previous: last,
     reason: need.reason,
   };
 }
 
-/** Takes what the latest program's logged sets suggest; the server works the number out again from the set. */
-export function withSuggestedMax(row: MaxRow): MaxRow {
-  const suggestion = row.previous?.suggestion;
-  return suggestion
-    ? {
-        ...row,
-        mode: 'number',
-        value: suggestion.value,
-        weekOneWeight: null,
-        sourceRecordId: null,
-        carriedFromMaxId: null,
-        loggedSetId: suggestion.loggedSetId,
-      }
-    : row;
-}
-
-/** A number the coach types is their own: it no longer names a recorded, carried or suggested max. */
+/** A number the coach types is their own: it no longer names a recorded or carried max. */
 export function withTypedMax(row: MaxRow, value: number | null): MaxRow {
-  return { ...row, value, sourceRecordId: null, carriedFromMaxId: null, loggedSetId: null };
+  return { ...row, value, sourceRecordId: null, carriedFromMaxId: null };
 }
 
 /** Choosing how a max is set clears what the other way held, so only one is ever sent. */
 export function withMaxMode(row: MaxRow, mode: MaxRow['mode']): MaxRow {
   return mode === row.mode || (mode === 'weekOne' && row.anchor === null)
     ? row
-    : { ...row, mode, weekOneWeight: null, loggedSetId: null };
+    : { ...row, mode, weekOneWeight: null };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -397,21 +360,13 @@ export function assignmentRequest(values: AssignmentValues): AssignmentRequest {
             unit: row.unit,
             weekOneWeight: row.weekOneWeight!,
           }
-        : row.loggedSetId
-          ? {
-              exerciseId: row.exerciseId,
-              strengthMaxRecordId: null,
-              value: null,
-              unit: row.unit,
-              loggedSetId: row.loggedSetId,
-            }
-          : {
-              exerciseId: row.exerciseId,
-              strengthMaxRecordId: row.sourceRecordId,
-              value: row.value!,
-              unit: row.unit,
-              ...(row.carriedFromMaxId ? { carriedFromMaxId: row.carriedFromMaxId } : {}),
-            },
+        : {
+            exerciseId: row.exerciseId,
+            strengthMaxRecordId: row.sourceRecordId,
+            value: row.value!,
+            unit: row.unit,
+            ...(row.carriedFromMaxId ? { carriedFromMaxId: row.carriedFromMaxId } : {}),
+          },
     ),
     ...(name ? { name } : {}),
     revealAllWeeks: values.clientSees === 'now',
@@ -657,11 +612,6 @@ export function previewWeeks(
 
 const SYSTEM_WORDS = /mesocycle|enrollment|entitlement|template|snapshot|idempotency|primary/i;
 
-/** The code a refusal carries, such as `training_max_suggestion_changed`; null for anything else. */
-export function serverCode(error: unknown): string | null {
-  return serverText(error).code;
-}
-
 function serverText(error: unknown): { code: string | null; text: string | null } {
   if (!(error instanceof HttpErrorResponse)) return { code: null, text: null };
   const body = error.error as
@@ -689,9 +639,6 @@ export function programWriteError(error: unknown, fallback: string, name: string
   }
   if (code === 'training_maxes_preview_changed') {
     return $localize`The new weights changed since you looked at them. Show them again, then update.`;
-  }
-  if (code === 'training_max_suggestion_changed') {
-    return $localize`${name}:name: logged a newer set since you looked, so the suggested max changed. Look at the new suggestion, then try again.`;
   }
   if (code === 'training_maxes_conflict' || code === 'progression_conflict') {
     return $localize`This program changed since you opened this. Close it and open it again to see the latest, then try again.`;

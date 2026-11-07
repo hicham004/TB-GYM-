@@ -912,9 +912,10 @@ longer moves a warm-up set.
 **STR-007** Phase 3 calculated loads use only the captured mesocycle working max. Calculation
 from week-1 performed load is a different future strategy and is never mixed implicitly.
 Estimating a max from week 1's prescribed fixed weight (P2, ADR 0036) uses the prescription alone;
-adjusting from logged performance stays a separate strategy. Built in P4b as STR-012 (ADR 0036): it
-only suggests a max, from the week's best logged working set of 1 to 8 reps at RPE 7 to 10, and a coach
-applies it through the max update's preview (STR-011); it never changes a max on its own.
+adjusting from logged performance stays a separate strategy. Built in P4b as STR-012 (ADR 0036), it only
+ever suggested a max, from the week's best logged working set of 1 to 8 reps at RPE 7 to 10, which a coach
+applied through the max update's preview (STR-011). It was removed on the owner's word on 7 Nov 2026
+(decision 19's note; notes plan N10b): nothing suggests a max from logged sets now.
 
 **STR-008** A recommendation and its rounding are separate. Rounding is configured per
 mesocycle with unit, positive increment, and Nearest/Down/Up mode. Phase 3 does not silently
@@ -971,42 +972,50 @@ for the same max cannot both win (one first max per lift, one successor per max)
 an append-only record of its counts, hashes and reason. A finished or cancelled program keeps its
 maxes, and a released client's program is read-only (ADR 0027).
 
-**STR-012** BestLoggedSet v1 (P4b, built 2026-10-08, ADR 0036): the max a client's logged sets suggest
-for a lift of a program. A set counts when it is a finished working set (not a warm-up, in a finished
-workout) of the exercise actually performed, with 1 to 8 reps at RPE 7 to 10, a weight in the program's
-unit (never converted) and an implied max of at most 2,000, logged after the max in use was set. Of the
-latest program week holding such a set, the one implying the highest max (weight / RTS chart %, to
-three decimals) is the suggestion; a tie goes to the later set. The Training maxes panel shows it only
-while it moves the max in use by more than one rounding step, either way, on an open program of a
-client still coached here, while the coach's training reads are open (TRN-023). The coach applies it
-through the STR-011 preview by naming the set; the server works the max out again and accepts only the
-set the rule picks now. The new max keeps the set (`SourceSetPerformanceId`) and its numbers. Nothing
-changes a max on its own. A set the coach looked at that the rule no longer picks (a newer best set, or
-a keep since) is refused with its own code, `training_max_suggestion_changed`, so the screen can say a
-newer set was logged. A screen names a suggestion in the program's own steps, the nearest multiple of its
-rounding step with halves up ("about 80 kg", R5.4c), and shows the exact estimate where the coach applies
-it and under "How it is worked out"; the program's Training maxes read carries the program's `LoadIncrement`
-for this.
+**STR-012** BestLoggedSet v1 (P4b, built 2026-10-08, removed 7 Nov 2026, ADR 0036): the max a client's
+logged sets suggest for a lift of a program. A set counts when it is a finished working set (not a
+warm-up, in a finished workout) of the exercise actually performed, with 1 to 8 reps at RPE 7 to 10, a
+weight in the program's unit (never converted) and an implied max of at most 2,000, logged after the max
+in use was set. Of the latest program week holding such a set, the one implying the highest max (weight /
+RTS chart %, to three decimals) is the suggestion; a tie goes to the later set. The Training maxes panel
+shows it only while it moves the max in use by more than one rounding step, either way, on an open
+program of a client still coached here, while the coach's training reads are open (TRN-023). The coach
+applies it through the STR-011 preview by naming the set; the server works the max out again and accepts
+only the set the rule picks now. The new max keeps the set (`SourceSetPerformanceId`) and its numbers.
+Nothing changes a max on its own. A set the coach looked at that the rule no longer picks (a newer best
+set, or a keep since) is refused with its own code, `training_max_suggestion_changed`, so the screen can
+say a newer set was logged. A screen names a suggestion in the program's own steps, the nearest multiple
+of its rounding step with halves up ("about 80 kg", R5.4c), and shows the exact estimate where the coach
+applies it and under "How it is worked out"; the program's Training maxes read carries the program's
+`LoadIncrement` for this. Removed on the owner's word (decision 19's note, 7 Nov 2026; notes plan N10a
+and N10b, ADR 0036): no screen or read suggests a max, an update or an assignment takes no logged set
+(one naming only a set is refused, 400), and `training_max_suggestion_changed` is gone. Maxes stored from
+a logged set before stay, append-only, and still name their set: the Training maxes panel reads
+"Estimated from <name>'s logged sets" with the set's weight, reps and RPE and its day and week ("logged
+in the last program" for a set of the program before), and the max history "from logged sets" (STR-015).
 
-**STR-013** Keeping a max (P4c, built 2026-10-08, ADR 0036): instead of applying a suggestion the coach
-can keep the max in use. The server accepts only the set the rule picks now, changes nothing in the
-program, and records an append-only keep (`WorkingMaxKeeps`: the max kept, the set and the max it
-suggested, one per max and set, so a retry finds the first). From then on only sets logged after the
-latest keep of that max count for STR-012; a new max leaves its keeps behind. The panel says when and
-over what the max was kept. A released client's program, a closed program or closed training reads
-refuse it, as they refuse an update.
+**STR-013** Keeping a max (P4c, built 2026-10-08, removed 7 Nov 2026, ADR 0036): instead of applying a
+suggestion the coach can keep the max in use. The server accepts only the set the rule picks now, changes
+nothing in the program, and records an append-only keep (`WorkingMaxKeeps`: the max kept, the set and the
+max it suggested, one per max and set, so a retry finds the first). From then on only sets logged after
+the latest keep of that max count for STR-012; a new max leaves its keeps behind. The panel says when and
+over what the max was kept. A released client's program, a closed program or closed training reads refuse
+it, as they refuse an update. Removed with STR-012 on the owner's word (decision 19's note, 7 Nov 2026;
+notes plan N10b): the keep route and the panel's kept line are gone. Keeps recorded before stay in
+`WorkingMaxKeeps`, append-only, with their unique index, check, keys and trigger; nothing reads or writes
+them.
 
 **STR-014** A new program starts where the last one ended (P4c, built 2026-10-08, ADR 0036). The client's
 latest program is their newest by start date that was not cancelled, whatever its dates or status.
-`GET /api/training/clients/{clientProfileId}/previous-maxes` gives the max each of its lifts uses now and,
-while the coach's training reads are open (TRN-023) and the client is still coached here, what its logged
-sets suggest (STR-012, after any keep, STR-013), also once that program is finished. Assign program starts
-each lift from that max, in that program's unit only, unless a max recorded since is newer. An assignment
-may carry it over (`CarriedFromMaxId`, with the same value; source `PreviousProgram`) or start from the
-suggested set (`LoggedSetId`; the server works the max out again and accepts only the set the rule picks
-now, else `training_max_suggestion_changed`); both are checked against the latest program at the time of
-the assignment, and a max that program has replaced is refused. The new max names what it came from, and a
-composite key keeps a carried max to the same client's own.
+`GET /api/training/clients/{clientProfileId}/previous-maxes` gives the max each of its lifts uses now,
+also once that program is finished. Assign program starts each lift from that max, in that program's unit
+only, unless a max recorded since is newer. An assignment may carry it over (`CarriedFromMaxId`, with the
+same value; source `PreviousProgram`), checked against the latest program at the time of the assignment:
+a max that program has replaced is refused. The new max names the max it carried, and a composite key
+keeps a carried max to the same client's own. Until 7 Nov 2026 the read also gave what that program's
+logged sets suggested (STR-012) and an assignment could start from that set (`LoggedSetId`); both were
+removed on the owner's word (decision 19's note; notes plan N10b), and a max stored that way keeps its
+set and its numbers.
 
 **STR-015** One max history per lift (P4d, built 2026-10-08, ADR 0036). Asked for
 (`includeProgramMaxes=true` on `GET /api/strength/clients/{clientProfileId}/maxes`), the client's max
@@ -1021,9 +1030,9 @@ did whose estimate the server works out (STR-017), and a typed estimate is refus
 **STR-016** How they have done (`GET /api/training/clients/{clientProfileId}/exercises/{exerciseId}/history`,
 audit A3, TRAIN-4) estimates each finished set's max by a named formula and says which
 (`estimateMethodKey`). A set with an RPE the RTS chart covers (STR-010) is read on the chart, load /
-chart %, to three decimals: the number the Training maxes panel gives the same set (STR-012). Any other
-set of 1 to 12 reps with a weight is read by Epley v1. A set with no weight or more than 12 reps has
-no estimate; nothing is extrapolated. The sheet names the formula on each row.
+chart %, to three decimals, the same reading STR-011 makes of week 1's weight. Any other set of 1 to 12
+reps with a weight is read by Epley v1. A set with no weight or more than 12 reps has no estimate;
+nothing is extrapolated. The sheet names the formula on each row.
 
 **STR-017** A max from a set they did (critique B7b, built 2026-10-30; the owner's choice of 2026-10-27,
 ADR 0036). Record a max takes a set's weight × reps, 1 to 10 reps (Epley v1 reads 12, STR-005, but an

@@ -304,7 +304,6 @@ function maxesView(overrides: Record<string, unknown> = {}) {
         },
         weekOneSet: { repetitions: 5, rpe: 8, load: 55 },
         earlier: [],
-        suggestion: null,
       },
       {
         exerciseId: 'ex-bench',
@@ -332,46 +331,9 @@ function maxesView(overrides: Record<string, unknown> = {}) {
             reason: 'Assignment training max.',
           },
         ],
-        suggestion: null,
       },
     ],
     ...overrides,
-  };
-}
-
-/**
- * The squat's max with what Maya's logged sets suggest (P4b): her week 2 top set, 62.5 kg for 5 at RPE 8,
- * is 81.1% of 77.065 kg on the RTS chart.
- */
-function suggestingMaxes() {
-  const view = maxesView();
-  return {
-    ...view,
-    maxes: [
-      {
-        ...view.maxes[0],
-        suggestion: {
-          value: 77.065,
-          unit: 'Kilogram',
-          basis: {
-            load: 62.5,
-            repetitions: 5,
-            rpe: 8,
-            methodKey: 'RpeChart',
-            methodVersion: '1.0',
-            loggedSet: {
-              setPerformanceId: 'set-logged-9',
-              weekNumber: 2,
-              performedOn: '2026-09-23',
-              sessionName: 'Lower B',
-            },
-          },
-          explanation:
-            'Best logged set v1: the best set of week 2 was 62.5 kg for 5 reps at RPE 8 on Wed 23 Sep 2026. RTS RPE chart v1: 5 reps at RPE 8 is 81.1% of the max, so 62.5 kg / 81.1% = 77.065 kg.',
-        },
-      },
-      view.maxes[1],
-    ],
   };
 }
 
@@ -415,20 +377,6 @@ const maxesPreview = {
   unchangedSetCount: 0,
   sessionCount: 2,
   keptSessionCount: 3,
-};
-
-/** The preview of that suggestion: the same four sets, worked out from 77.065 kg. */
-const suggestionPreview = {
-  ...maxesPreview,
-  lifts: [
-    {
-      ...maxesPreview.lifts[0],
-      newValue: 77.065,
-      source: 'LoggedSet',
-      basis: suggestingMaxes().maxes[0].suggestion!.basis,
-      explanation: suggestingMaxes().maxes[0].suggestion!.explanation,
-    },
-  ],
 };
 
 type Handlers = Record<string, (route: Route) => unknown>;
@@ -875,7 +823,7 @@ test('a finished program asks for the next one, and earlier ones can be opened',
   await axe(page);
 });
 
-/** Where Maya's finished program left the squat (80 kg, set 2 Oct) and what its logged sets suggest. */
+/** Where Maya's finished program left the squat: 80 kg, set 2 Oct. */
 const previousMaxes = {
   mesocycleId: 'block-done',
   programName: 'Strength Base',
@@ -889,24 +837,6 @@ const previousMaxes = {
       value: 80,
       unit: 'Kilogram',
       setOn: '2026-10-02',
-      suggestion: {
-        value: 86.25,
-        unit: 'Kilogram',
-        basis: {
-          load: 70,
-          repetitions: 5,
-          rpe: 8,
-          methodKey: 'RpeChart',
-          methodVersion: '1.0',
-          loggedSet: {
-            setPerformanceId: 'set-done',
-            weekNumber: 6,
-            performedOn: '2026-10-03',
-            sessionName: 'Lower A',
-          },
-        },
-        explanation: 'Best logged set v1.',
-      },
     },
   ],
 };
@@ -916,7 +846,7 @@ for (const [width, height, mode] of [
   [390, 844, 'light'],
   [390, 844, 'dark'],
 ] as const) {
-  test(`the next program starts where the last one ended, its suggestion one tap away, at ${width} px ${mode} (P4c)`, async ({
+  test(`the next program starts where the last one ended, at ${width} px ${mode} (P4c)`, async ({
     page,
   }) => {
     if (mode === 'dark') await page.emulateMedia({ colorScheme: 'dark' });
@@ -940,25 +870,23 @@ for (const [width, height, mode] of [
 
     const sheet = page.getByRole('dialog', { name: 'Assign program' });
     await chooseOption(sheet, 'Program', 'Lean & Strong · Phase 3 · 6 weeks');
-    // The 70 kg recorded on 14 Sep is older than where Strength Base left the squat.
+    // The 70 kg recorded on 14 Sep is older than where Strength Base left the squat. The filled row
+    // folds to that number (critique B7a), and nothing suggests another (N10b).
+    await expect(sheet.locator('app-disclosure.max summary')).toContainText('Back Squat · 80 kg');
+    await openMax(sheet, 'Back Squat');
     const squat = sheet.getByLabel('Back Squat', { exact: true });
     await expect(squat).toHaveValue('80');
     await expect(sheet.getByText('Where Strength Base left it, set Fri 2 Oct')).toBeVisible();
-    await expect(sheet.locator('.suggested p')).toHaveText(
-      'Strength Base’s logged sets suggest 86.25 kg (70 kg for 5 reps at RPE 8).',
-    );
+    await expect(sheet.getByRole('button', { name: /^Use / })).toHaveCount(0);
+    await expect(sheet.getByText(/logged sets/)).toHaveCount(0);
     // In the middle of the sheet's body, as a coach scrolling to it would see it.
-    await sheet.locator('.suggested').evaluate((box) => box.scrollIntoView({ block: 'center' }));
+    await sheet
+      .locator('app-disclosure.max')
+      .evaluate((row) => row.scrollIntoView({ block: 'center' }));
     await expectNoHorizontalOverflow(page);
     await axe(page);
     await page.screenshot({ path: `test-results/p4c-next-assign-${width}-${mode}.png` });
 
-    await sheet.getByRole('button', { name: 'Use 86.25 kg' }).click();
-    await expect(squat).toHaveValue('86.25');
-    await expect(
-      sheet.getByText('Estimated from Strength Base’s logged sets: 70 kg for 5 reps at RPE 8'),
-    ).toBeVisible();
-    await expect(sheet.locator('.suggested')).toHaveCount(0);
     await chooseDay(sheet, 'Start date', '2026-10-26');
     await sheet.getByRole('button', { name: 'Assign program' }).click();
     await expect(sheet).toHaveCount(0);
@@ -969,13 +897,14 @@ for (const [width, height, mode] of [
           {
             exerciseId: 'ex-squat',
             strengthMaxRecordId: null,
-            value: null,
+            value: 80,
             unit: 'Kilogram',
-            loggedSetId: 'set-done',
+            carriedFromMaxId: 'snap-done',
           },
         ],
       },
     });
+    expect(JSON.stringify(requests[0].body)).not.toContain('loggedSetId');
   });
 }
 
@@ -1288,15 +1217,17 @@ test('updating a max shows every new weight first, then sends what was reviewed'
   await expect(sheet).toHaveCount(0);
   expect(requests[0].body).toEqual({
     mesocycleVersion: 4,
-    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null, loggedSetId: null }],
+    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null }],
   });
   expect(requests[1].body).toMatchObject({
     mesocycleVersion: 4,
-    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null, loggedSetId: null }],
+    changes: [{ exerciseId: 'ex-squat', value: 75, weekOneWeight: null }],
     reason: 'Retested on Wednesday',
     previewHash: 'hash-1',
     idempotencyKey: expect.any(String),
   });
+  // A max is typed or worked out from week 1's weight; no update names a logged set (N10b).
+  expect(JSON.stringify(requests.map((request) => request.body))).not.toContain('loggedSetId');
   // The page says what happened, and reads the program and its maxes again.
   await expect(
     page
@@ -1305,160 +1236,20 @@ test('updating a max shows every new weight first, then sends what was reviewed'
   ).toBeVisible();
 });
 
-test('a lift’s logged sets suggest a max, and Review opens its new weights already worked out (P4b)', async ({
+test('an old address that asked to review maxes opens Training as usual (N10b)', async ({
   page,
 }) => {
-  const requests: { method: string; path: string; body: unknown }[] = [];
-  await openTraining(page, 1440, 900, {
-    requests,
-    programs: [coachProgram(), coachProgram()],
-    maxes: suggestingMaxes(),
-    extra: {
-      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
-        json(route, 200, suggestionPreview),
-      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/apply`]: (route) =>
-        json(route, 200, { id: BLOCK }),
-    },
-  });
+  await openTraining(page, 1440, 900, { path: `/clients/${ID}/training?action=maxes` });
 
   const panel = page.locator('app-program-maxes');
-  const suggestion = panel.locator('.lift').first().locator('.suggestion');
-  // Said in the program's 2.5 kg steps (R5.4c); the exact 77.065 kg is the sheet's and How it is worked out's.
-  await expect(suggestion.locator('.suggestion-head')).toHaveText(
-    'Logged sets suggest about 77.5 kg, up from 70 kg.',
-  );
-  await suggestion.getByText('How it is worked out').click();
-  await expect(suggestion.locator('.how-text')).toContainText('= 77.065 kg');
-  await expect(suggestion.locator('.detail')).toHaveText(
-    'From 62.5 kg for 5 reps at RPE 8 on Wed 23 Sep, week 2.',
-  );
-  // Nothing changed on its own, and the bench, with nothing to suggest, says nothing.
+  await expect(panel.locator('.lift').first()).toBeVisible();
   await expect(panel.locator('.lift').first().locator('.value')).toHaveText('70 kg');
-  await expect(panel.locator('.lift').nth(1).locator('.suggestion')).toHaveCount(0);
-  expect(requests).toEqual([]);
-  await axe(page);
-  await page.screenshot({ path: 'test-results/p4b-suggestion-1440.png', fullPage: true });
-
-  await suggestion.getByRole('button', { name: 'Review the new weights' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
-  await expect(sheet.locator('.lift-move')).toHaveText('70 kg to 77.07 kg');
-  await expect(sheet.locator('.lift-changes .why')).toContainText('the best set of week 2');
-  await expect(sheet.locator('.strong')).toHaveText('4 weights change in 2 workouts.');
-  expect(requests[0].body).toEqual({
-    mesocycleVersion: 4,
-    changes: [
-      { exerciseId: 'ex-squat', value: null, weekOneWeight: null, loggedSetId: 'set-logged-9' },
-    ],
-  });
-  await axe(page);
-  await page.screenshot({ path: 'test-results/p4b-review-1440.png' });
-
-  // Back to the numbers: the estimate is the lift's choice, ticked, with the set it came from.
-  await sheet.getByRole('button', { name: 'Change the numbers' }).click();
-  const estimate = sheet.getByRole('checkbox', {
-    name: 'Use the estimate from logged sets: 77.07 kg',
-  });
-  await expect(estimate).toBeChecked();
-  await sheet.getByRole('button', { name: 'Show the new weights' }).click();
-  await sheet.getByRole('button', { name: 'Update maxes', exact: true }).click();
-  await expect(sheet).toHaveCount(0);
-  expect(requests.at(-1)!.body).toMatchObject({
-    mesocycleVersion: 4,
-    changes: [
-      { exerciseId: 'ex-squat', value: null, weekOneWeight: null, loggedSetId: 'set-logged-9' },
-    ],
-    previewHash: 'hash-1',
-    idempotencyKey: expect.any(String),
-  });
-  await expect(
-    page
-      .getByRole('status')
-      .filter({ hasText: 'Training maxes updated. The weeks still to come follow them.' }),
-  ).toBeVisible();
-});
-
-test('a suggested max reads at phone width and in dark mode, and passes axe', async ({ page }) => {
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await openTraining(page, 390, 844, {
-    maxes: suggestingMaxes(),
-    extra: {
-      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
-        json(route, 200, suggestionPreview),
-    },
-  });
-  const suggestion = page.locator('app-program-maxes .suggestion');
-  await suggestion.scrollIntoViewIfNeeded();
-  await expect(suggestion).toBeVisible();
-  await expectNoHorizontalOverflow(page);
-  await axe(page);
-  await page.screenshot({ path: 'test-results/p4b-suggestion-dark-390.png', fullPage: true });
-
-  await page.emulateMedia({ colorScheme: 'light' });
-  await expectNoHorizontalOverflow(page);
-  await axe(page);
-  await page.screenshot({ path: 'test-results/p4b-suggestion-390.png', fullPage: true });
-
-  await suggestion.getByRole('button', { name: 'Review the new weights' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Update training maxes' });
-  await expect(sheet.locator('.preview')).toBeVisible();
-  await expectNoHorizontalOverflow(page);
-  await axe(page);
-  await page.screenshot({ path: 'test-results/p4b-review-390.png' });
-});
-
-test('keeping a max quiets its suggestion and says so, at phone width and in dark mode (P4c)', async ({
-  page,
-}) => {
-  const requests: { method: string; path: string; body: unknown }[] = [];
-  const view = maxesView();
-  const kept = {
-    ...view,
-    maxes: [
-      {
-        ...view.maxes[0],
-        kept: { suggestedValue: 77.065, unit: 'Kilogram', keptOn: '2026-10-01' },
-      },
-      view.maxes[1],
-    ],
-  };
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await openTraining(page, 390, 844, {
-    maxes: suggestingMaxes(),
-    requests,
-    extra: {
-      [`POST /api/training/mesocycles/${BLOCK}/training-maxes/keep`]: (route) =>
-        json(route, 200, kept),
-    },
-  });
-  const panel = page.locator('app-program-maxes');
-  const keep = panel.getByRole('button', { name: 'Keep 70 kg' });
-  await keep.scrollIntoViewIfNeeded();
-  await keep.click();
-
-  // The suggestion is gone; the line that replaced it says what was kept, and has the focus.
-  const line = panel.locator('#kept-ex-squat');
-  await expect(line).toHaveText(
-    'You kept 70 kg on Thu 1 Oct, when logged sets suggested about 77.5 kg.',
-  );
-  await expect(line).toBeFocused();
+  // Nothing opens or takes the focus, nothing suggests a max, and the word stays in the address.
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Training maxes' })).not.toBeFocused();
   await expect(panel.locator('.suggestion')).toHaveCount(0);
-  await expect(
-    page.getByRole('status').filter({ hasText: 'Kept Back Squat at 70 kg.' }),
-  ).toBeVisible();
-  expect(requests).toEqual([
-    {
-      method: 'POST',
-      path: `/api/training/mesocycles/${BLOCK}/training-maxes/keep`,
-      body: { exerciseId: 'ex-squat', loggedSetId: 'set-logged-9' },
-    },
-  ]);
-  await expectNoHorizontalOverflow(page);
-  await axe(page);
-  await page.screenshot({ path: 'test-results/p4c-kept-dark-390.png' });
-
-  await page.emulateMedia({ colorScheme: 'light' });
-  await axe(page);
-  await page.screenshot({ path: 'test-results/p4c-kept-390.png' });
+  await expect(panel.locator('button')).toHaveText(['Update maxes for the coming weeks']);
+  await expect(page).toHaveURL(`/clients/${ID}/training?action=maxes`);
 });
 
 test.describe('a stale update', () => {
@@ -1640,7 +1431,6 @@ for (const width of [390, 1440]) {
     page,
   }) => {
     await openTraining(page, width, 900, {
-      maxes: suggestingMaxes(),
       extra: {
         [`POST /api/training/mesocycles/${BLOCK}/training-maxes/preview`]: (route) =>
           json(route, 200, maxesPreview),
@@ -1649,11 +1439,11 @@ for (const width of [390, 1440]) {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     await expect(page.locator('app-program-maxes .lift').first()).toBeVisible();
-    // The logged sets' suggestion and its two buttons wrap with the text (P4b, P4c).
-    const buttons = page.locator('app-program-maxes .suggestion button');
-    await expect(buttons).toHaveCount(2);
-    await expect(buttons.first()).toBeVisible();
-    await expect(buttons.last()).toBeVisible();
+    // Each lift and the foot's one button wrap with the text; nothing suggests a max (N10b).
+    await expect(page.locator('app-program-maxes .suggestion')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Update maxes for the coming weeks' }),
+    ).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.getByRole('button', { name: 'Update maxes for the coming weeks' }).click();

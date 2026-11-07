@@ -52,7 +52,7 @@ follow, and the client's program can always be adjusted.
    already had both. P4b, adjusting next week from logged performance, is decided below and built
    (STR-012, 2026-10-08).
 
-## Adjusting next week from logged performance (P4b, decided 2026-10-07, built 2026-10-08)
+## Adjusting next week from logged performance (P4b, decided 2026-10-07, built 2026-10-08, removed 7 Nov 2026)
 
 The owner asked for it to be planned, then left its three questions to Claude after research
 (2026-10-07). A separate strategy, as STR-007 says:
@@ -227,5 +227,16 @@ panel and Clients, with Review maxes, No program's line about the last program's
 review** chip with its line in "How these statuses work". Coach attention is v7, and the kind's number, 8,
 stays unused. On Coach Today a client between programs reads "<name> has no program running" with "Joined
 <day>" and Assign program, as when nothing was suggested. Nothing stored changed: no migration, and every max,
-keep and logged set stays. Until N10b, the Training maxes panel and Assign program still suggest a max
-(STR-012 to STR-014).
+keep and logged set stays.
+
+N10b took the suggestion out of the client's Training and removed the rule, BestLoggedSet v1 (STR-012), with
+its reference tests. The Training maxes panel lost the suggestion with **Review the new weights**, **Keep** and
+the kept line (STR-013), the update sheet its estimate from logged sets and Assign program its "Use …"
+(STR-014), and an old `?action=maxes` brings nothing into view. On the server the keep route, the suggestion
+and keep fields, a logged set named by an update or an assignment, and `training_max_suggestion_changed` went:
+a request that names only a logged set is refused. What stays: P2's own maxes, typed or worked out from week
+1's weight, with their preview, hash and apply (STR-011); the carry into the next program (STR-014); one max
+history per lift (STR-015); and a max from a set they did (STR-017). Nothing stored changed here either: every
+keep stays in its append-only table, read by nothing, and a max applied from a suggestion keeps its set. The
+progression from logged sets that follows is +X kg (the notes plan's N6a to N6d), a step the coach reviews
+and applies each week, never a suggested max.

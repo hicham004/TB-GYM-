@@ -7,7 +7,6 @@ import type {
   CoachClientProgramView,
   EstimateRpeChartMaxRequest,
   FinishedProgramsVisibilityView,
-  KeepTrainingMaxRequest,
   PreviewProgramEditRequest,
   PreviousProgramMaxesView,
   PreviewTrainingMaxesRequest,
@@ -46,8 +45,8 @@ export class ClientProgramApi {
   }
 
   /**
-   * Where the client's latest program left each lift, and what its logged sets suggest, so Assign
-   * program can start the next one there (STR-014).
+   * Where the client's latest program left each lift, so Assign program can start the next one there
+   * (STR-014).
    */
   getPreviousMaxes(clientId: string): Observable<PreviousProgramMaxesView> {
     return this.http.get<PreviousProgramMaxesView>(
@@ -80,17 +79,6 @@ export class ClientProgramApi {
   ): Observable<TrainingMesocycleView> {
     return this.http.post<TrainingMesocycleView>(
       `/api/training/mesocycles/${mesocycleId}/training-maxes/apply`,
-      request,
-    );
-  }
-
-  /** Keep a lift's max over what its logged sets suggest (STR-013); answers with the maxes as they now read. */
-  keepTrainingMax(
-    mesocycleId: string,
-    request: KeepTrainingMaxRequest,
-  ): Observable<TrainingMaxesView> {
-    return this.http.post<TrainingMaxesView>(
-      `/api/training/mesocycles/${mesocycleId}/training-maxes/keep`,
       request,
     );
   }

@@ -112,9 +112,8 @@
             <app-program-maxes
               [block]="block"
               [firstName]="firstName()"
-              [reveal]="revealMaxes()"
               [firstRead]="maxesFirst()"
-              (update)="openMaxesUpdate($event)"
+              (update)="openMaxesUpdate()"
             />
 
             <!-- In the same grid as the header, so beside a tall maxes panel it starts under the header (UIQ-14). -->
@@ -327,7 +326,6 @@
       [blockId]="block.id"
       [blockName]="block.name"
       [firstName]="firstName()"
-      [suggested]="maxesSuggested()"
       (closed)="sheet.close($event)"
     />
   }

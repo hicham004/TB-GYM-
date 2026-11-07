@@ -215,8 +215,8 @@ public sealed partial class GymDbContext
             ConfigureTenantEntity(entity);
         });
 
-        // A coach keeping a max over a logged set's suggestion (STR-013, P4c). Append-only, and one record per
-        // max and set, so a retried keep finds the first one.
+        // A coach kept a max over a logged set's suggestion (STR-013, P4c). Append-only, one record per max and
+        // set. Nothing writes a keep since N10b (7 Nov 2026); the rows stay as history with their guards.
         builder.Entity<WorkingMaxKeep>(entity =>
         {
             entity.ToTable("WorkingMaxKeeps", "strength");
