@@ -6,8 +6,9 @@ using TB.Gym.Modules.Training;
 namespace TB.Gym.Api.IntegrationTests;
 
 /// <summary>
-/// P4c, P4b's follow-ups: the coach keeps a max over a suggestion (STR-013), a newer set during review answers
-/// with its own code, and Coach Today names the lifts whose logged sets suggest a new max (CLI-018 v2).
+/// P4c, P4b's follow-ups: the coach keeps a max over a suggestion (STR-013), and a newer set during review answers
+/// with its own code. Coach Today named the lifts whose logged sets suggest a new max (CLI-018 v2) until the notes
+/// plan's N10a took maxes to review off it (v7).
 /// </summary>
 public sealed partial class Phase3TrainingWorkflowTests
 {
@@ -149,26 +150,6 @@ public sealed partial class Phase3TrainingWorkflowTests
         RequiredTestClock.Advance(TimeSpan.FromMinutes(1));
         var logged = await P4bLogTodayAsync(client, finish: true, new P4bLog(5, 60m, "Kilogram", null), new P4bLog(5, 90m, "Kilogram", 8m));
 
-        // The client's coach sees the lift on Coach Today, named with both numbers; another coach does not.
-        var item = (await ReadSliceAsync<CoachTodayView>(coach, CoachTodayUrl)).Attention
-            .Single(entry => entry.Kind == CoachAttentionKind.MaxesToReview);
-        Assert.AreEqual((clientId, 1, block.Id), (item.Client.ClientProfileId, item.Count, item.SubjectId));
-        Assert.AreEqual(
-            new CoachMaxSuggestionView(exercise.Id, "Competition squat", 100m, 110.974m, CoachActivityLoadUnit.Kilogram, 2.5m),
-            item.Maxes?.Single());
-        Assert.IsFalse((await ReadSliceAsync<CoachTodayView>(otherCoach, CoachTodayUrl)).Attention
-            .Any(entry => entry.Kind == CoachAttentionKind.MaxesToReview));
-
-        // Stronger is good news: on its own it never makes the client Needs attention.
-        var row = (await ReadSliceAsync<ClientOverviewView>(coach, ClientOverviewUrl)).Clients
-            .Single(entry => entry.Client.ClientProfileId == clientId);
-        CollectionAssert.Contains(row.Attention.ToArray(), CoachAttentionKind.MaxesToReview);
-        Assert.AreEqual(
-            row.Attention.Any(kind => kind is not (CoachAttentionKind.MaxesToReview or CoachAttentionKind.PlanEndingSoon))
-                ? ClientOverviewStatus.NeedsAttention
-                : ClientOverviewStatus.OnTrack,
-            row.Status);
-
         // Another coach of the team, and a coach of another workspace, cannot keep it (ADR 0026).
         await AssertStatusAsync(await P4cKeepAsync(otherCoach, block.Id, exercise.Id, logged[1]), HttpStatusCode.NotFound);
         using var stranger = CreateClient();
@@ -177,16 +158,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertStatusAsync(await P4cKeepAsync(stranger, block.Id, exercise.Id, logged[1]), HttpStatusCode.Forbidden);
         Assert.AreEqual(0L, await P2CountAsync("""SELECT count(*) FROM strength."WorkingMaxKeeps" WHERE "MesocycleId" = @id""", block.Id));
 
-        // Keeping it clears Coach Today; the max in use is unchanged.
+        // The client's own coach keeps it.
         await AssertStatusAsync(await P4cKeepAsync(coach, block.Id, exercise.Id, logged[1]), HttpStatusCode.OK);
-        Assert.IsFalse((await ReadSliceAsync<CoachTodayView>(coach, CoachTodayUrl)).Attention
-            .Any(entry => entry.Kind == CoachAttentionKind.MaxesToReview));
 
-        // A set logged later speaks again, and once the client is released nothing can be kept (ADR 0027).
+        // Once the client is released nothing can be kept, not even over a set logged later (ADR 0027).
         RequiredTestClock.Advance(TimeSpan.FromDays(7));
         var later = await P4bLogTodayAsync(client, finish: true, new P4bLog(5, 60m, "Kilogram", null), new P4bLog(5, 95m, "Kilogram", 8m));
-        Assert.IsTrue((await ReadSliceAsync<CoachTodayView>(owner, CoachTodayUrl)).Attention
-            .Any(entry => entry.Kind == CoachAttentionKind.MaxesToReview && entry.Client.ClientProfileId == clientId));
         await ReleaseAsync(owner, clientId, "Moved away");
         var released = await P4cKeepAsync(owner, block.Id, exercise.Id, later[1]);
         await AssertStatusAsync(released, HttpStatusCode.Conflict);

@@ -8,8 +8,8 @@ namespace TB.Gym.Api.IntegrationTests;
 /// <summary>
 /// P4c, between programs (STR-014): a new program starts where the client's latest one ended. Assign program
 /// reads that program's maxes and what its logged sets suggest, an assignment may carry a max over or take the
-/// suggestion, and both keep their source. Coach Today's No program item names the suggestion for a client
-/// whose program ended.
+/// suggestion, and both keep their source. Coach Today's No program item names the program that ended, with no
+/// suggestion beside it since the notes plan's N10a.
 /// </summary>
 public sealed partial class Phase3TrainingWorkflowTests
 {
@@ -75,20 +75,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         RequiredTestClock.Advance(TimeSpan.FromMinutes(1));
         var logged = await P4bLogTodayAsync(client, finish: true, new P4bLog(5, 60m, "Kilogram", null), new P4bLog(5, 90m, "Kilogram", 8m));
 
-        // The week ends: the client is between programs. No program carries the suggestion; Maxes to review does not.
+        // The week ends: the client is between programs, and No program names the program that ended.
         RequiredTestClock.Advance(TimeSpan.FromDays(8));
         var today = (await ReadSliceAsync<CoachTodayView>(coach, CoachTodayUrl)).Attention
             .Where(entry => entry.Client.ClientProfileId == scenario.ClientId)
             .ToArray();
         var none = today.Single(entry => entry.Kind == CoachAttentionKind.NoProgram);
         Assert.AreEqual(first.Id, none.SubjectId);
-        Assert.AreEqual(
-            new CoachMaxSuggestionView(squat, "Competition squat", 100m, 110.974m, CoachActivityLoadUnit.Kilogram, 2.5m),
-            none.Maxes?.Single());
-        Assert.IsFalse(today.Any(entry => entry.Kind == CoachAttentionKind.MaxesToReview));
-        var row = (await ReadSliceAsync<ClientOverviewView>(coach, ClientOverviewUrl)).Clients
-            .Single(entry => entry.Client.ClientProfileId == scenario.ClientId);
-        CollectionAssert.DoesNotContain(row.Attention.ToArray(), CoachAttentionKind.MaxesToReview);
 
         // Every session done and its last day past, the program closed itself; its suggestion waits for the next one.
         var ended = await ReadSliceAsync<TrainingMesocycleView>(coach, P2MesocycleUrl(first.Id));

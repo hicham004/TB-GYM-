@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { CoachAttentionKind } from '../../core/api/generated';
 import {
   attentionItem,
   COACH_NOW,
@@ -514,109 +515,48 @@ describe('Coach Today view model', () => {
     expect(joined('2026-09-24').detail).toBe('Thu 24 Sep · no plan yet');
   });
 
-  it('names the lifts whose logged sets suggest a new max, with both numbers', () => {
-    const lift = (
-      exerciseName: string,
-      current: number,
-      suggested: number,
-      unit = 'Kilogram',
-      loadIncrement = unit === 'Pound' ? 5 : 2.5,
-    ) => ({
-      exerciseId: exerciseName.toLowerCase(),
-      exerciseName,
-      current,
-      suggested,
-      unit: unit as 'Kilogram' | 'Pound',
-      loadIncrement,
-    });
-    const one = attentionRow(
-      attentionItem('MaxesToReview', SARA, {
-        count: 1,
-        subjectId: 'block-1',
-        maxes: [lift('Deadlift', 77.5, 80.749)],
-      }),
-      COACH_TODAY,
-      context,
-    );
-    expect(one).toMatchObject({
-      heading: "Sara Mansour's logged sets suggest a new Deadlift max",
-      // Said in the program's 2.5 kg steps; the exact 80.749 kg stays on the client's Training (R5.4c).
-      detail: 'About 80\u00a0kg, up from 77.5\u00a0kg',
-      tag: 'Maxes',
-      tone: 'share',
-      action: {
-        label: 'Review maxes',
-        link: `/clients/${SARA.clientProfileId}/training`,
-        queryParams: { action: 'maxes' },
-      },
-    });
-
-    const several = attentionRow(
-      attentionItem('MaxesToReview', SARA, {
-        count: 2,
-        maxes: [lift('Back squat', 385, 400, 'Pound'), lift('Bench press', 100, 96.2)],
-      }),
-      COACH_TODAY,
-      context,
-    );
-    expect(several.heading).toBe("Sara Mansour's logged sets suggest new maxes for 2 lifts");
-    // Pounds stay pounds, each lift in its own program's steps; a lower suggestion is shown as it is.
-    expect(several.detail).toBe('Back squat about 400\u00a0lb, Bench press about 95\u00a0kg');
-    const lower = attentionRow(
-      attentionItem('MaxesToReview', SARA, { count: 1, maxes: [lift('Bench press', 100, 96.2)] }),
-      COACH_TODAY,
-      context,
-    );
-    expect(lower.detail).toBe('About 95\u00a0kg, down from 100\u00a0kg');
-    const finer = attentionRow(
-      attentionItem('MaxesToReview', SARA, {
-        count: 1,
-        maxes: [lift('Deadlift', 77.5, 80.749, 'Kilogram', 0.5)],
-      }),
-      COACH_TODAY,
-      context,
-    );
-    expect(finer.detail).toBe('About 80.5\u00a0kg, up from 77.5\u00a0kg');
-  });
-
-  it('says a client between programs has none running, with what the last one suggests', () => {
-    const deadlift = {
-      exerciseId: 'deadlift',
-      exerciseName: 'Deadlift',
-      current: 77.5,
-      suggested: 80.749,
-      unit: 'Kilogram' as const,
-      loadIncrement: 2.5,
-    };
+  it('says a client between programs has none running, and when they joined (N10a)', () => {
     const between = attentionRow(
-      attentionItem('NoProgram', SARA, {
-        date: '2026-03-01',
-        subjectId: 'block-ended',
-        maxes: [deadlift],
-      }),
+      attentionItem('NoProgram', SARA, { date: '2026-03-01', subjectId: 'block-ended' }),
       COACH_TODAY,
       context,
     );
     expect(between).toMatchObject({
       heading: 'Sara Mansour has no program running',
-      detail: 'Last program’s sets suggest Deadlift about 80\u00a0kg, up from 77.5\u00a0kg',
+      detail: 'Joined Sun 1 Mar',
+      tag: 'Program',
+      tone: 'new',
       action: {
         label: 'Assign program',
         link: `/clients/${SARA.clientProfileId}/training`,
         queryParams: { action: 'assign' },
       },
     });
+  });
 
-    // An ended program with nothing to suggest still says the client had one.
-    const quiet = attentionRow(
-      attentionItem('NoProgram', SARA, { date: '2026-03-01', subjectId: 'block-ended' }),
-      COACH_TODAY,
-      context,
+  it('lets no row of any kind say that logged sets suggest a max, or offer Review maxes (N10a)', () => {
+    // One item of every kind the server sends, keyed by kind: leaving one out, or naming one the
+    // server no longer sends, does not compile.
+    const every = {
+      CheckInToReview: { count: 1, since: COACH_NOW, subjectId: 'a-1' },
+      UnreadMessages: { count: 2, since: COACH_NOW, subjectId: 'conv-1' },
+      RenewalRequested: { date: '2026-09-27', subjectId: 'e-1' },
+      NoPlan: { date: COACH_TODAY },
+      PlanEndingSoon: { date: '2026-10-09', subjectId: 'e-1' },
+      SessionsRunningOut: { sessionsLeft: 1, date: '2026-10-29', subjectId: 'pack-1' },
+      WeekNotShared: { date: '2026-10-02', weekNumber: 3 },
+      MissedSessions: { count: 2, date: '2026-09-24' },
+      CheckInOverdue: { count: 1, date: '2026-09-28', canMessage: true },
+      NoProgram: { date: '2026-03-01', subjectId: 'block-ended' },
+    } satisfies Record<CoachAttentionKind, Parameters<typeof attentionItem>[2]>;
+    const rows = (Object.keys(every) as CoachAttentionKind[]).map((kind) =>
+      attentionRow(attentionItem(kind, SARA, every[kind]), COACH_TODAY, context),
     );
-    expect([quiet.heading, quiet.detail]).toEqual([
-      'Sara Mansour has no program running',
-      'Joined Sun 1 Mar',
-    ]);
+    const words = rows.flatMap((row) => [row.heading, row.detail, row.tag, row.action.label]);
+
+    expect(rows).toHaveLength(10);
+    expect(words.filter((text) => /suggest|review maxes|\bmax(es)?\b/i.test(text))).toEqual([]);
+    expect(rows.filter((row) => row.action.queryParams?.['action'] === 'maxes')).toEqual([]);
   });
 
   describe('an overdue check-in (CHK-015, critique B4a)', () => {
@@ -699,7 +639,6 @@ describe('Coach Today view model', () => {
       target('MissedSessions', { count: 2 }),
       target('CheckInOverdue', { count: 2, subjectId: 'conv-1' }),
       target('NoProgram'),
-      target('MaxesToReview'),
       target('NoPlan'),
     ]).toEqual([
       { link: `${page}/checkins/a-1`, queryParams: null },
@@ -713,7 +652,6 @@ describe('Coach Today view model', () => {
       // What it names: the client's check-ins, whoever may message them.
       { link: `${page}/checkins`, queryParams: null },
       { link: `${page}/training`, queryParams: { action: 'assign' } },
-      { link: `${page}/training`, queryParams: { action: 'maxes' } },
       { link: `${page}/service`, queryParams: { action: 'start' } },
     ]);
   });

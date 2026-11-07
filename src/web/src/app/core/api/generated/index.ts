@@ -284,7 +284,6 @@ export type {
   CoachClientRef,
   CoachingFeature,
   CoachingProductView,
-  CoachMaxSuggestionView,
   CoachMoneyReceivedView,
   CoachMonthNumbersView,
   CoachMonthReportView,

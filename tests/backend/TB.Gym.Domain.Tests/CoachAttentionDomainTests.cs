@@ -70,7 +70,7 @@ public sealed class CoachAttentionDomainTests
     [TestMethod]
     public void EachSignalRaisesItsKindInRankOrder()
     {
-        var everything = new ClientAttentionSignals(1, 3, null, Today, true, 2, true, 2);
+        var everything = new ClientAttentionSignals(1, 3, null, Today, true, 2, true);
 
         CollectionAssert.AreEqual(
             new[]
@@ -81,7 +81,6 @@ public sealed class CoachAttentionDomainTests
                 CoachAttentionKind.WeekNotShared,
                 CoachAttentionKind.MissedSessions,
                 CoachAttentionKind.NoProgram,
-                CoachAttentionKind.MaxesToReview,
             },
             CoachAttentionPolicy.Flags(everything, ClientPlanState.Running, Today).ToArray());
         Assert.IsEmpty(CoachAttentionPolicy.Flags(Quiet(), ClientPlanState.Running, Today));
@@ -114,19 +113,41 @@ public sealed class CoachAttentionDomainTests
     }
 
     [TestMethod]
-    public void LiftsWhoseLoggedSetsSuggestANewMaxAreRaisedLastAndNeverMakeAClientNeedAttention()
+    public void MaxesToReviewIsGoneAndEveryOtherKindKeepsItsNumber()
     {
-        CollectionAssert.AreEqual(
-            new[] { CoachAttentionKind.MaxesToReview },
-            CoachAttentionPolicy.Flags(Quiet() with { MaxesToReview = 1 }, ClientPlanState.Running, Today).ToArray());
+        // Coach attention v7 removed maxes to review on the owner's word (the notes plan's N10a, decision 19's note,
+        // 7 Nov 2026). Kinds travel by name, so its number, 8, is never given to another kind.
+        Assert.DoesNotContain("MaxesToReview", Enum.GetNames<CoachAttentionKind>());
+        Assert.IsFalse(Enum.IsDefined((CoachAttentionKind)8), "8 stays unused.");
+        Assert.AreEqual(
+            "CheckInToReview 1, UnreadMessages 2, RenewalRequested 3, PlanEndingSoon 4, WeekNotShared 5, MissedSessions 6, " +
+            "NoProgram 7, NoPlan 9, CheckInOverdue 10, SessionsRunningOut 11",
+            string.Join(", ", Enum.GetValues<CoachAttentionKind>().Select(kind => $"{kind} {(int)kind}")));
+    }
 
-        // A client getting stronger is good news: on track stays on track, ending soon stays ending soon.
-        Assert.AreEqual(ClientOverviewStatus.OnTrack, CoachAttentionPolicy.Status(
-            [CoachAttentionKind.MaxesToReview], ClientPlanState.Running));
-        Assert.AreEqual(ClientOverviewStatus.EndingSoon, CoachAttentionPolicy.Status(
-            [CoachAttentionKind.PlanEndingSoon, CoachAttentionKind.MaxesToReview], ClientPlanState.Running));
-        Assert.AreEqual(ClientOverviewStatus.NeedsAttention, CoachAttentionPolicy.Status(
-            [CoachAttentionKind.MissedSessions, CoachAttentionKind.MaxesToReview], ClientPlanState.Running));
+    [TestMethod]
+    public void AClientWhoseOnlyItemWasMaxesToReviewKeepsThePlansOwnStatus()
+    {
+        // Maxes to review never made a client Needs attention, so with it gone a client who had nothing else to act on
+        // reads as before: no kind at all, and the plan's own status.
+        Assert.IsEmpty(CoachAttentionPolicy.Flags(Quiet(), ClientPlanState.Running, Today));
+        Assert.AreEqual(ClientOverviewStatus.OnTrack, CoachAttentionPolicy.Status([], ClientPlanState.Running));
+        Assert.AreEqual(ClientOverviewStatus.Paused, CoachAttentionPolicy.Status([], ClientPlanState.Paused));
+
+        // Every other kind keeps its effect: anything to act on but a plan's end or sessions running out is Needs
+        // attention.
+        foreach (var kind in Enum.GetValues<CoachAttentionKind>())
+        {
+            Assert.AreEqual(
+                kind switch
+                {
+                    CoachAttentionKind.PlanEndingSoon => ClientOverviewStatus.EndingSoon,
+                    CoachAttentionKind.SessionsRunningOut => ClientOverviewStatus.OnTrack,
+                    _ => ClientOverviewStatus.NeedsAttention,
+                },
+                CoachAttentionPolicy.Status([kind], ClientPlanState.Running),
+                kind.ToString());
+        }
     }
 
     [TestMethod]

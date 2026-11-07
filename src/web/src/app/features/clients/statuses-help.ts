@@ -17,7 +17,7 @@ import { DayMarkView } from './day-mark';
 /**
  * "How these statuses work" (critique B4a), beside the Clients chips and under Today's Needs you: what
  * each reason means and when it starts and clears, the plan's pills and the strip's marks, in the words
- * of the rules behind them. Coach attention v5 (CLI-018) with overdue check-ins v1 (CHK-015) and
+ * of the rules behind them. Coach attention v7 (CLI-018) with overdue check-ins v1 (CHK-015) and
  * training signals v1 (TRN-021); its numbers are theirs, so a change to a rule changes this text too.
  */
 @Component({

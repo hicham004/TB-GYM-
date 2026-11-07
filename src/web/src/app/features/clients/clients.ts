@@ -34,7 +34,6 @@ import { ClientHoverCard } from './client-hover-card';
 import { ClientListApi } from './client-list-api';
 import {
   CLIENT_FILTERS,
-  CLIENT_FILTERS_WHEN_USED,
   coachChip,
   emptyList,
   filterCounts,
@@ -57,7 +56,6 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
   ending: $localize`Ending soon`,
   paused: $localize`Paused`,
   new: $localize`New`,
-  maxes: $localize`Maxes to review`,
 };
 
 /**
@@ -125,7 +123,10 @@ export class Clients {
   /** A coach who opened Former clients by its address: no Try again, a way back instead. */
   protected readonly formerRefused = signal(false);
   protected readonly loadingLabel = $localize`Loading clients…`;
-  /** The chip is kept in the address (`?show=attention`), so Back returns to the same list. */
+  /**
+   * The chip is kept in the address (`?show=attention`), so Back returns to the same list. An old
+   * `?show=maxes` opens on All: Maxes to review went on the owner's word (notes plan N10a).
+   */
   protected readonly filter = signal<ClientFilter>(initialFilter(this.route));
   protected readonly search = signal('');
   /** The owner's Coach filter (critique B3a), kept in the address too (`?coach=<user id>`). */
@@ -149,15 +150,11 @@ export class Clients {
 
   protected readonly chips = computed(() => {
     const counts = this.counts();
-    const chosen = this.filter();
     return CLIENT_FILTERS.map((value) => ({
       value,
       label: FILTER_LABELS[value],
       count: counts?.[value] ?? 0,
-    })).filter(
-      (chip) =>
-        !CLIENT_FILTERS_WHEN_USED.has(chip.value) || chip.count > 0 || chip.value === chosen,
-    );
+    }));
   });
 
   protected readonly visible = computed(() => {

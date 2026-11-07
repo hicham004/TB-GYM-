@@ -6,14 +6,12 @@ import type {
   CoachAttentionKind,
   CoachClientCountView,
   CoachClientRef,
-  CoachMaxSuggestionView,
   CoachMoneyReceivedView,
   CoachMonthView,
   CoachPlanEndedView,
   CoachPlanEndingView,
   CoachTodayView,
 } from '../../core/api/generated';
-import { nearestLoadStep } from '../../core/units/load-steps';
 import { initialsOf } from '../../shell/initials';
 import { money, sessionsLeft } from '../clients/client-service.models';
 
@@ -510,22 +508,6 @@ export function attentionRow(
             }
           : go($localize`See check-ins`),
       };
-    case 'MaxesToReview': {
-      // Named with both numbers, so the coach knows what happened before opening anything.
-      const lifts = item.maxes ?? [];
-      const only = lifts.length === 1 ? lifts[0] : null;
-      return {
-        ...base,
-        heading: only
-          ? $localize`${name}:name:'s logged sets suggest a new ${only.exerciseName}:lift: max`
-          : $localize`${name}:name:'s logged sets suggest new maxes for ${count}:count: lifts`,
-        detail: suggestedMaxDetail(lifts, context.locale),
-        tag: $localize`Maxes`,
-        tone: 'share',
-        // Opens the client's Training with the Training maxes panel in view.
-        action: go($localize`Review maxes`),
-      };
-    }
     case 'NoPlan':
       // A new client with no plan at all (COACH-9, the owner's decision of 2026-10-19).
       return {
@@ -539,17 +521,12 @@ export function attentionRow(
       };
     case 'NoProgram': {
       const isNew = item.date !== null && -daysBetween(today, item.date) < NEW_CLIENT_DAYS;
-      // A client whose program ended carries what its logged sets suggest into the next one (STR-014).
-      const lifts = item.maxes ?? [];
       return {
         ...base,
         heading: item.subjectId
           ? $localize`${name}:name: has no program running`
           : $localize`${name}:name: has no program yet`,
-        detail:
-          lifts.length > 0
-            ? carriedMaxDetail(lifts, context.locale)
-            : $localize`Joined ${date(item.date)}:date:`,
+        detail: $localize`Joined ${date(item.date)}:date:`,
         tag: isNew ? $localize`New` : $localize`Program`,
         tone: 'new',
         // Opens the client's Training with the Assign program sheet already open (R3.4a).
@@ -597,9 +574,6 @@ export function attentionTarget(item: CoachAttentionItemView): {
     case 'NoProgram':
       // Opens the client's Training with the Assign program sheet already open (R3.4a).
       return { link: `${page}/training`, queryParams: { action: 'assign' } };
-    case 'MaxesToReview':
-      // Opens the client's Training with the Training maxes panel in view.
-      return { link: `${page}/training`, queryParams: { action: 'maxes' } };
     case 'NoPlan':
       // Opens the client's Service & access with Start a plan already open.
       return { link: `${page}/service`, queryParams: { action: 'start' } };
@@ -611,64 +585,6 @@ export function overdueDetail(count: number, dueDay: string): string {
   return count > 1
     ? $localize`The oldest was due ${dueDay}:date:`
     : $localize`It was due ${dueDay}:date:`;
-}
-
-/**
- * What the logged sets of a client's last program suggest for the next one (STR-014): "Last program's
- * sets suggest Deadlift about 80 kg, up from 77.5 kg".
- */
-export function carriedMaxDetail(lifts: readonly CoachMaxSuggestionView[], locale: string): string {
-  if (lifts.length === 1) {
-    const [lift] = lifts;
-    const { suggested, current } = maxWeights(lift, locale);
-    return Number(lift.suggested) > Number(lift.current)
-      ? $localize`Last program’s sets suggest ${lift.exerciseName}:lift: about ${suggested}:suggested:, up from ${current}:current:`
-      : $localize`Last program’s sets suggest ${lift.exerciseName}:lift: about ${suggested}:suggested:, down from ${current}:current:`;
-  }
-  return $localize`Last program’s sets suggest ${suggestedMaxDetail(lifts, locale)}:maxes:`;
-}
-
-/**
- * What a client's logged sets suggest (STR-012), in numbers: "About 80 kg, up from 77.5 kg" for one lift,
- * "Back Squat about 177.5 kg, Deadlift about 207.5 kg" for several. A suggestion is said in its program's
- * steps (R5.4c), as the program's own page says it, where the exact estimate is kept. Units are the
- * program's, never converted.
- */
-export function suggestedMaxDetail(
-  lifts: readonly CoachMaxSuggestionView[],
-  locale: string,
-): string {
-  if (lifts.length === 1) {
-    const [lift] = lifts;
-    const { suggested, current } = maxWeights(lift, locale);
-    return Number(lift.suggested) > Number(lift.current)
-      ? $localize`About ${suggested}:suggested:, up from ${current}:current:`
-      : $localize`About ${suggested}:suggested:, down from ${current}:current:`;
-  }
-  return lifts
-    .map(
-      (lift) =>
-        $localize`${lift.exerciseName}:lift: about ${maxWeights(lift, locale).suggested}:suggested:`,
-    )
-    .join(', ');
-}
-
-/** The suggestion in its program's steps and the max in use as it is, each kept on one line. */
-function maxWeights(
-  lift: CoachMaxSuggestionView,
-  locale: string,
-): { suggested: string; current: string } {
-  // A no-break space keeps "67.5 kg" on one line in a narrow Today row.
-  const weight = (value: number) => {
-    const amount = formatNumber(value, locale, '1.0-2');
-    return lift.unit === 'Pound'
-      ? $localize`${amount}:weight:\u00a0lb`
-      : $localize`${amount}:weight:\u00a0kg`;
-  };
-  return {
-    suggested: weight(nearestLoadStep(Number(lift.suggested), lift.unit, lift.loadIncrement)),
-    current: weight(Number(lift.current)),
-  };
 }
 
 export function activityRow(item: CoachActivityItemView, context: CoachTodayContext): ActivityRow {

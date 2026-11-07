@@ -26,7 +26,7 @@ import { featureLabels, money, sessionsLeft } from './client-service.models';
  * the device clock.
  */
 
-export type ClientFilter = 'all' | 'attention' | 'ending' | 'paused' | 'new' | 'maxes';
+export type ClientFilter = 'all' | 'attention' | 'ending' | 'paused' | 'new';
 
 export const CLIENT_FILTERS: readonly ClientFilter[] = [
   'all',
@@ -34,14 +34,7 @@ export const CLIENT_FILTERS: readonly ClientFilter[] = [
   'ending',
   'paused',
   'new',
-  'maxes',
 ];
-
-/**
- * Chips the list offers only while a client answers them (or the address asks for one): a coach who
- * never programs from training maxes never sees an empty "Maxes to review".
- */
-export const CLIENT_FILTERS_WHEN_USED: ReadonlySet<ClientFilter> = new Set(['maxes']);
 
 /** A day of the last seven, as the client's page draws it. */
 export type DayMark = 'done' | 'partial' | 'missed' | 'due' | 'rest';
@@ -104,8 +97,8 @@ export interface ClientRow {
   /** Who coaches the client, the caller included: what the owner's Coach filter keeps (B3a). */
   coachId: string;
   /**
-   * What waits for the coach, in Today's order, each a link to where it is handled. A plan's end has
-   * its own pill and maxes to review are good news, so neither is a tag.
+   * What waits for the coach, in Today's order, each a link to where it is handled. A plan's end
+   * and sessions running out have pills of their own, so neither is a tag.
    */
   tags: ReasonTag[];
   /** The plan's own status, shown beside the tags whatever they are (CLI-018 v4). */
@@ -154,12 +147,8 @@ export interface ClientListContext {
   userId: string | null;
 }
 
-/** Kinds that have a pill or a chip of their own instead of a warning tag on the row. */
-const NOT_TAGS: ReadonlySet<CoachAttentionKind> = new Set([
-  'PlanEndingSoon',
-  'SessionsRunningOut',
-  'MaxesToReview',
-]);
+/** Kinds that have a pill of their own instead of a warning tag on the row. */
+const NOT_TAGS: ReadonlySet<CoachAttentionKind> = new Set(['PlanEndingSoon', 'SessionsRunningOut']);
 
 export function mapClientList(view: ClientOverviewView, context: ClientListContext): ClientList {
   const rows = view.clients.map((row) => clientRow(row, view.today, context));
@@ -189,8 +178,6 @@ export function clientRow(
   }
   if (row.planState === 'Paused') filters.add('paused');
   if (row.isNew) filters.add('new');
-  // Good news, so never part of Needs attention, but a coach can still find everyone to review (P4c).
-  if (row.attention.includes('MaxesToReview')) filters.add('maxes');
 
   return {
     id: client.clientProfileId,
@@ -299,7 +286,6 @@ export function emptyList(
       ending: $localize`No plan ends in the next 14 days`,
       paused: $localize`No plan is paused`,
       new: $localize`No new clients in the last 14 days`,
-      maxes: $localize`No logged sets suggest a new max right now`,
     };
     return { heading: headings[filter], description, action: $localize`Show all clients` };
   }
@@ -310,7 +296,6 @@ export function emptyList(
       ending: $localize`None of your clients has a plan ending in the next 14 days`,
       paused: $localize`None of your clients has a paused plan`,
       new: $localize`None of your clients joined in the last 14 days`,
-      maxes: $localize`No logged sets of your clients suggest a new max right now`,
     };
     return { heading: headings[filter], description, action: $localize`Show all your clients` };
   }
@@ -321,7 +306,6 @@ export function emptyList(
     ending: $localize`None of ${name}:coach:’s clients has a plan ending in the next 14 days`,
     paused: $localize`None of ${name}:coach:’s clients has a paused plan`,
     new: $localize`None of ${name}:coach:’s clients joined in the last 14 days`,
-    maxes: $localize`No logged sets of ${name}:coach:’s clients suggest a new max right now`,
   };
   return {
     heading: headings[filter],
@@ -471,8 +455,6 @@ export function attentionReason(item: CoachAttentionItemView): string {
         : $localize`1 check-in overdue`;
     case 'NoProgram':
       return item.subjectId ? $localize`No program running` : $localize`No program yet`;
-    case 'MaxesToReview':
-      return $localize`Maxes to review`;
     case 'NoPlan':
       return $localize`Joined, no plan yet`;
   }

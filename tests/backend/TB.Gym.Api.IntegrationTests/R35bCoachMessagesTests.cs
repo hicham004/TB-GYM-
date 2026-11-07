@@ -236,7 +236,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         page = await ReadSliceAsync<ClientProfileOverviewView>(coach, R33bOverviewUrl(mayaId));
         var queries = RequiredTodayQueryCounter.Count;
         Console.WriteLine($"R3.5b client page: {queries} SQL commands with a last workout.");
-        Assert.IsLessThanOrEqualTo(24, queries, "One client's page must stay a fixed number of queries.");
+        // 23, as R33b's page: N10a's one read of each client's latest program took the place of P4c's two (24 before).
+        Assert.IsLessThanOrEqualTo(23, queries, "One client's page must stay a fixed number of queries.");
         var last = page.LastWorkout ?? throw new AssertFailedException("Maya finished a workout.");
         Assert.AreEqual((CoachActivityKind.WorkoutCompleted, newest, mayaId),
             (last.Kind, last.SubjectId, last.Client.ClientProfileId));

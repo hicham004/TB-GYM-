@@ -801,10 +801,10 @@ run or are booked, the pause's start, the features granted today, Today's attent
 links need, the last workout's name and the last check-in's sent time. Reads only the list needs run in
 `ListAsync`. The overdue check-in (CHK-015, `CheckInAttentionPolicy` in CheckIns, counted and ranked by
 Coach attention v4) rides on the waiting-check-ins read and its chat on the unread read, so Coach Today and
-the client page read no more commands than before; in their tests' scenarios both sit at their pinned limits
+the client page read no more commands than before; in their tests' scenarios both sat at their pinned limits
 (25 and 24), so a new shared read must merge into one of these or move the limit with a reason. The list
-costs 24 commands whatever the client count, one more while some client's plan has ended (the renewal
-requests' read).
+costs 23 commands whatever the client count (24 until notes plan N10a), one more while some client's plan has
+ended (the renewal requests' read).
 
 Critique B4b gives the same Today read This month and two plan lists (CLI-020), with no schema change and no
 new endpoint, and takes the workspace week off it (`CoachTodayView` loses `Week` and gains `Month`,
@@ -817,11 +817,16 @@ history as a collection (a coach's read narrowed to clients they ever coached), 
 receipt's day and coach and totals per currency. The owner's team is one more query, the owner's alone
 (`CoachClientScope.IsOwnerAsync` answers from the role it already reads). The lapsed plans' names ride on the
 plan-ends read, widened for Today alone to plans that ran out in the last 30 days, and the client's version on
-the clients read. Today's busiest case costs 30 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 25, the
-renewal requests' read, which runs only while some client's whole plan has run out, This month's three (critique
-B10c added the sessions held), and critique B13's read of which clients with a pack had a coaching plan run out
-(`CoachingPlanRunOut` in Subscriptions, SES-010), which runs only while a client in scope has a pack. The
-client list and a client's page read nothing else new, and `ClientRenewalService` asks the same rule for the one client.
+the clients read. Today's busiest case costs 29 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 24 (25 before
+notes plan N10a), the renewal requests' read, which runs only while some client's whole plan has run out, This
+month's three (critique B10c added the sessions held), and critique B13's read of which clients with a pack had a
+coaching plan run out (`CoachingPlanRunOut` in Subscriptions, SES-010), which runs only while a client in scope has a
+pack. The client list and a client's page read nothing else new, and `ClientRenewalService` asks the same rule for the
+one client.
+Notes plan N10a (Coach attention v7) took maxes to review off these reads: one read of each client's latest program
+not cancelled, which No program names, replaced P4c's two (the maxes in use, then the logged sets), so each costs one
+command fewer than before it: Today's busiest case 29 rather than 30, the list 23 rather than 24, and a client's page
+23 in its tests' scenarios, now its limit (24 before).
 
 Critique B10d adds the This month page's one read, `GET /api/coach-month` (`ICoachMonthService` in Clients,
 `CoachMonthReader` in Infrastructure), again with no schema change. Month numbers v2 (`MonthNumbersPolicy` in

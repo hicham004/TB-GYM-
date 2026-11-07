@@ -145,43 +145,37 @@ for (const [width, height] of [
   });
 }
 
-test('lifts whose logged sets suggest a new max are named, last, with a way to review them (P4c)', async ({
-  page,
-}) => {
+test('Coach Today at 390px names no maxes to review, dark and light (N10a)', async ({ page }) => {
+  // Lynn's last program is over, so No program says she has none running and when she joined. No
+  // row says that logged sets suggest a max or offers to review one (decision 19's note, 7 Nov 2026).
   const view = coachTodayView();
-  const maxes = attentionItem('MaxesToReview', MAYA, {
-    count: 1,
-    subjectId: 'block-lean',
-    maxes: [
-      {
-        exerciseId: 'deadlift',
-        exerciseName: 'Deadlift',
-        current: 77.5,
-        suggested: 80.749,
-        unit: 'Kilogram',
-        loadIncrement: 2.5,
-      },
-    ],
-  });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await openToday(page, 390, 844, { ...view, attention: [...view.attention, maxes] });
-
-  const row = page.locator('li.need').last();
-  await expect(row).toContainText("Maya Fakhoury's logged sets suggest a new Deadlift max");
-  // In the program's 2.5 kg steps (R5.4c); the exact estimate stays on the client's Training.
-  await expect(row).toContainText('About 80 kg, up from 77.5 kg');
-  await expect(row.getByRole('link', { name: 'Review maxes for Maya Fakhoury' })).toHaveAttribute(
-    'href',
-    '/clients/c-maya/training?action=maxes',
+  const attention = view.attention.map((item) =>
+    item.kind === 'NoProgram' ? { ...item, date: '2026-03-01', subjectId: 'block-ended' } : item,
   );
-  await row.scrollIntoViewIfNeeded();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openToday(page, 390, 844, { ...view, attention });
+
+  const rows = page.locator('li.need');
+  await expect(rows).toHaveCount(7);
+  const between = rows.last();
+  await expect(between).toContainText('Lynn Bou Khalil has no program running');
+  await expect(between).toContainText('Joined Sun 1 Mar');
+  await expect(between.locator('.tag')).toHaveText('Program');
+  await expect(
+    between.getByRole('link', { name: 'Assign program for Lynn Bou Khalil' }),
+  ).toHaveAttribute('href', '/clients/c-lynn/training?action=assign');
+  await expect(rows.locator('.tag').filter({ hasText: 'Maxes' })).toHaveCount(0);
+  await expect(page.locator('a[href*="action=maxes"]')).toHaveCount(0);
+  await expect(page.getByText(/suggest|review maxes/i)).toHaveCount(0);
+  await between.scrollIntoViewIfNeeded();
   await expectNoHorizontalOverflow(page);
   await axe(page);
-  await page.screenshot({ path: 'test-results/p4c-coach-today-dark-390.png' });
+  await page.screenshot({ path: 'test-results/n10a-coach-today-dark-390.png' });
 
   await page.emulateMedia({ colorScheme: 'light' });
+  await expectNoHorizontalOverflow(page);
   await axe(page);
-  await page.screenshot({ path: 'test-results/p4c-coach-today-390.png' });
+  await page.screenshot({ path: 'test-results/n10a-coach-today-390.png' });
 });
 
 test('the sidebar calls the page Today and marks it current', async ({ page }) => {

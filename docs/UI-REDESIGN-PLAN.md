@@ -1686,6 +1686,10 @@ limited to the coach's assigned clients.
   the owner has By coach: a table with a Total, one month at a time by the switch above it, each coach a small card
   under 54rem of its own width, and anyone who left the team marked, their numbers kept. "How these are counted"
   folds what each number means, and nothing is called profit.
+- Notes plan N10a (CLI-018 v7; the owner's word of 7 Nov 2026, decision 19's note): maxes to review are gone from
+  Needs you, a client's page, the Messages client panel and Clients, with Review maxes, the Maxes to review chip and
+  its line in "How these statuses work"; for a client between programs Needs you reads "Sara Mansour has no program
+  running", "Joined Sun 1 Mar" and Assign program.
 
 **C2. Clients**
 - Job: "How is everyone doing, and who is slipping?"

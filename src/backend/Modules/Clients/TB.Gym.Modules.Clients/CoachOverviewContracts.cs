@@ -43,8 +43,8 @@ public enum CoachAttentionKind
     MissedSessions = 6,
     NoProgram = 7,
 
-    /// <summary>The client's logged sets suggest new training maxes (STR-012); good news, so last.</summary>
-    MaxesToReview = 8,
+    // 8 was MaxesToReview (P4c), removed in Coach attention v7 on the owner's word (7 Nov 2026): kinds travel by name,
+    // and 8 is never given to another kind.
 
     /// <summary>
     /// A client who joined within the last 14 days has no plan at all: start one (audit COACH-9). Ranked after a
@@ -139,10 +139,8 @@ public sealed record CoachClientRef(
 /// standing as the client's plan (ADR 0038), which says its end once, here, rather than as SessionsRunningOut too.</item>
 /// <item><c>WeekNotShared</c>: Date the week starts, WeekNumber, SubjectId the program block.</item>
 /// <item><c>MissedSessions</c>: Count missed since the last workout, Date that workout's day (null if none).</item>
-/// <item><c>NoProgram</c>: Date the client joined, SubjectId their latest program (null if they never had
-/// one), and Maxes what its logged sets suggest, for the next program to start from (STR-014).</item>
-/// <item><c>MaxesToReview</c>: Count of lifts, Since the newest set behind them was logged, SubjectId the
-/// program, and Maxes each lift with its max and the suggestion.</item>
+/// <item><c>NoProgram</c>: Date the client joined, SubjectId their latest program not cancelled (null if they never
+/// had one).</item>
 /// <item><c>NoPlan</c>: Date the client joined.</item>
 /// <item><c>CheckInOverdue</c>: Count overdue, Date the oldest one's due day, SubjectId the caller's chat with the
 /// client for Remind, set only when <see cref="CanMessage"/> holds and that chat exists. With CanMessage and no
@@ -163,24 +161,9 @@ public sealed record CoachAttentionItemView(
     int? Count,
     int? WeekNumber,
     Guid? SubjectId,
-    IReadOnlyList<CoachMaxSuggestionView>? Maxes = null,
     DateTimeOffset? NewestAt = null,
     bool CanMessage = false,
     int? SessionsLeft = null);
-
-/// <summary>
-/// A lift whose max the client's logged sets suggest changing (STR-012), named with both numbers so the coach
-/// knows what happened before opening anything. Values are in the program's unit and never converted.
-/// <c>LoadIncrement</c> is the program's rounding step (STR-008), so a screen can say the suggestion in the
-/// steps the program loads in, as the program's Training maxes panel does; the values here stay exact.
-/// </summary>
-public sealed record CoachMaxSuggestionView(
-    Guid ExerciseId,
-    string ExerciseName,
-    decimal Current,
-    decimal Suggested,
-    CoachActivityLoadUnit Unit,
-    decimal LoadIncrement);
 
 /// <summary>Sessions programmed and completed on one workspace day.</summary>
 public sealed record SessionDayCountView(DateOnly Date, int Scheduled, int Completed);

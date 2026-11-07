@@ -4,7 +4,6 @@ using TB.Gym.Modules.CheckIns;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Messaging;
 using TB.Gym.Modules.Progress;
-using TB.Gym.Modules.Strength;
 using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Training;
@@ -50,6 +49,9 @@ internal sealed class CoachOverviewReader(
 
     /// <summary>Names the read of which clients with a pack had a coaching plan run out (critique B13).</summary>
     internal const string CoachingPlansRunOutTag = "Coach overview: coaching plans that ran out, for clients with a pack";
+
+    /// <summary>Names the read of each client's latest program, which No program names (N10a), for the test that counts it.</summary>
+    internal const string LatestProgramsTag = "Coach overview: each client's latest program";
 
     public async Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken)
     {
@@ -290,7 +292,7 @@ internal sealed class CoachOverviewReader(
         var blocks = await ReadOpenBlocksAsync(training, today, cancellationToken);
         var sessions = await ReadSessionsAsync(training, sessionsFrom, sessionsTo, cancellationToken);
         var lastStarts = await ReadLastWorkoutStartsAsync(training, cancellationToken);
-        var maxes = await ReadMaxSuggestionsAsync(training, today, cancellationToken);
+        var latestPrograms = await ReadLatestProgramsAsync(training, cancellationToken);
 
         return scope.Clients.Select(client =>
         {
@@ -377,16 +379,10 @@ internal sealed class CoachOverviewReader(
                     .ThenBy(item => item.EnrollmentId)
                     .ToArray()
                 : [];
-            var programs = maxes[client.Id].ToArray();
-            var clientMaxes = Suggestions(programs.Where(item => item.IsOpen));
-
-            // Between programs, the latest one's suggestions go with No program, for Assign program (STR-014).
-            var lastProgram = clientBlocks.Length == 0
-                ? programs.Where(item => !item.IsOpen).MaxBy(item => (item.StartDate, item.MesocycleId))
+            // Between programs, No program names the latest one not cancelled (CLI-018).
+            Guid? lastProgramId = clientBlocks.Length == 0 && latestPrograms.TryGetValue(client.Id, out var latest)
+                ? latest
                 : null;
-            var carried = lastProgram is null
-                ? []
-                : Suggestions(programs.Where(item => item.MesocycleId == lastProgram.MesocycleId));
             var joinedOn = scope.LocalDate(client.CreatedAtUtc);
 
             // Ended, not renewed (critique B4b, CLI-020): the whole plan has lapsed and its plan that ran out last did
@@ -430,7 +426,6 @@ internal sealed class CoachOverviewReader(
                 weekToShare is not null,
                 missed,
                 trainingIncluded && clientBlocks.Length == 0,
-                clientMaxes.Length,
                 joinedOn,
                 late.Length,
                 lastPack is null ? null : paidPacks.Sum(item => item.SessionsLeft),
@@ -455,9 +450,7 @@ internal sealed class CoachOverviewReader(
                 lastWorkoutOn,
                 trainingIncluded,
                 clientSessions,
-                clientMaxes,
-                lastProgram?.MesocycleId,
-                carried,
+                lastProgramId,
                 late.FirstOrDefault(),
                 canMessage,
                 canMessage
@@ -471,14 +464,6 @@ internal sealed class CoachOverviewReader(
                 unpaidPacks.FirstOrDefault()?.EnrollmentId ?? lastPack?.EnrollmentId);
         }).ToArray();
     }
-
-    /// <summary>The lifts of these program rows that suggest a new max, by name.</summary>
-    private static MaxSuggestionRow[] Suggestions(IEnumerable<ProgramMaxRow> rows) =>
-        [.. rows
-            .Where(item => item.Suggestion is not null)
-            .Select(item => item.Suggestion!)
-            .OrderBy(item => item.ExerciseName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(item => item.ExerciseId)];
 
     /// <summary>One queue item for each kind the client raised, with what its one-tap action needs.</summary>
     private static IEnumerable<CoachAttentionItemView> Items(ClientState state) =>
@@ -505,14 +490,7 @@ internal sealed class CoachOverviewReader(
                 weekNumber: state.WeekToShare?.WeekNumber, subjectId: state.WeekToShare?.MesocycleId),
             CoachAttentionKind.MissedSessions => Item(kind, state, date: state.LastWorkoutOn,
                 count: state.Signals.MissedSinceLastWorkout),
-            CoachAttentionKind.NoProgram => Item(kind, state, date: state.JoinedOn,
-                subjectId: state.LastProgramId,
-                maxes: state.CarriedSuggestions.Count == 0 ? null : MaxViews(state.CarriedSuggestions)),
-            CoachAttentionKind.MaxesToReview => Item(kind, state,
-                since: state.MaxSuggestions.Max(item => item.LoggedAtUtc),
-                count: state.MaxSuggestions.Count,
-                subjectId: state.MaxSuggestions.MaxBy(item => item.LoggedAtUtc)!.MesocycleId,
-                maxes: MaxViews(state.MaxSuggestions)),
+            CoachAttentionKind.NoProgram => Item(kind, state, date: state.JoinedOn, subjectId: state.LastProgramId),
             CoachAttentionKind.NoPlan => Item(kind, state, date: state.JoinedOn),
             // The oldest overdue sets the day; Remind opens the caller's own chat, which only their own coach has
             // while messaging is in the plan (decided once, as CanMessage).
@@ -529,19 +507,9 @@ internal sealed class CoachOverviewReader(
         int? count = null,
         int? weekNumber = null,
         Guid? subjectId = null,
-        IReadOnlyList<CoachMaxSuggestionView>? maxes = null,
         DateTimeOffset? newestAt = null,
         int? sessionsLeft = null) =>
-        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, maxes, newestAt, state.CanMessage, sessionsLeft);
-
-    private static CoachMaxSuggestionView[] MaxViews(IEnumerable<MaxSuggestionRow> rows) =>
-        [.. rows.Select(item => new CoachMaxSuggestionView(
-            item.ExerciseId,
-            item.ExerciseName,
-            item.Current,
-            item.Suggested,
-            Unit(item.Unit),
-            item.LoadIncrement))];
+        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, newestAt, state.CanMessage, sessionsLeft);
 
     private static SessionDayCountView[] Days(IEnumerable<SessionRow> sessions, DateOnly from, int dayCount)
     {
@@ -955,99 +923,35 @@ internal sealed class CoachOverviewReader(
             .ToLookup(item => item.ClientProfileId);
 
     /// <summary>
-    /// Each client's programs running or still to come, and their latest program (not cancelled) whatever its
-    /// dates, with the lifts whose logged sets suggest a new max, as a program's Training maxes panel shows them
-    /// (BestLoggedSet v1, STR-012, after any keep, STR-013). A program with no max still has a row, so a client
-    /// between programs is known to have had one. A finished program's suggestions are for the next program
-    /// (STR-014), so they go with No program rather than Maxes to review.
+    /// Each client's latest program not cancelled, whatever its dates: the one No program names for a client between
+    /// programs (CLI-018), one read for every client at once. Every program is primary (CK_Mesocycles_Phase3Kind) and
+    /// two primary programs not cancelled never overlap (EX_Mesocycles_NoPrimaryOverlap), so they never share a start
+    /// date and the latest is the one no other starts after; the id only keeps the pick stable.
     /// </summary>
-    private async Task<ILookup<Guid, ProgramMaxRow>> ReadMaxSuggestionsAsync(
+    private async Task<Dictionary<Guid, Guid>> ReadLatestProgramsAsync(
         Guid[] clientIds,
-        DateOnly today,
         CancellationToken cancellationToken)
     {
         if (clientIds.Length == 0)
         {
-            return Empty<ProgramMaxRow>();
+            return [];
         }
 
-        // Two reads for every client at once: each program's maxes in use, with the lift's name and the coach's
-        // last keep, then the logged sets that could speak for them. Two primary programs never share a start
-        // date (they would overlap), so the latest is the one no other starts after.
-        var maxes = await (
+        var latest = await (
             from block in dbContext.TrainingMesocycles.AsNoTracking()
             where clientIds.Contains(block.ClientProfileId) &&
                   block.Status != MesocycleStatus.Cancelled &&
-                  ((block.EndDateExclusive > today && block.Status != MesocycleStatus.Completed) ||
-                   !dbContext.TrainingMesocycles.Any(later =>
-                       later.TenantId == block.TenantId &&
-                       later.ClientProfileId == block.ClientProfileId &&
-                       later.Status != MesocycleStatus.Cancelled &&
-                       later.StartDate > block.StartDate))
-            from max in dbContext.MesocycleWorkingMaxSnapshots.AsNoTracking()
-                .Where(max => max.TenantId == block.TenantId &&
-                              max.MesocycleId == block.Id &&
-                              !dbContext.MesocycleWorkingMaxSnapshots.Any(next =>
-                                  next.TenantId == max.TenantId && next.SupersedesSnapshotId == max.Id))
-                .DefaultIfEmpty()
-            join exercise in dbContext.Exercises.AsNoTracking()
-                on new { max!.TenantId, Id = max.ExerciseId } equals new { exercise.TenantId, exercise.Id }
-                into exercises
-            from exercise in exercises.DefaultIfEmpty()
-            select new
-            {
-                MesocycleId = block.Id,
-                block.ClientProfileId,
-                block.StartDate,
-                IsOpen = block.EndDateExclusive > today && block.Status != MesocycleStatus.Completed,
-                block.LoadUnit,
-                block.LoadIncrement,
-                block.TimeZoneId,
-                Max = max,
-                ExerciseName = exercise == null ? string.Empty : exercise.Name,
-                LastKeptAtUtc = dbContext.WorkingMaxKeeps
-                    .Where(keep => keep.TenantId == block.TenantId && keep.WorkingMaxSnapshotId == max!.Id)
-                    .Max(keep => (DateTimeOffset?)keep.CreatedAtUtc),
-            })
+                  !dbContext.TrainingMesocycles.Any(later =>
+                      later.TenantId == block.TenantId &&
+                      later.ClientProfileId == block.ClientProfileId &&
+                      later.Status != MesocycleStatus.Cancelled &&
+                      later.StartDate > block.StartDate)
+            select new { block.ClientProfileId, block.Id, block.StartDate })
+            .TagWith(LatestProgramsTag)
             .ToListAsync(cancellationToken);
-        if (maxes.Count == 0)
-        {
-            return Empty<ProgramMaxRow>();
-        }
-
-        var withMaxes = maxes.Where(item => item.Max is not null).ToArray();
-        var sets = await LoggedSetMaxSuggestions.LoadSetsAsync(
-            dbContext,
-            withMaxes
-                .GroupBy(item => item.MesocycleId)
-                .ToDictionary(group => group.Key, group => TimeZoneInfo.FindSystemTimeZoneById(group.First().TimeZoneId)),
-            [.. withMaxes.Select(item => item.Max!.ExerciseId).Distinct()],
-            [],
-            cancellationToken);
-
-        return maxes
-            .Select(item =>
-            {
-                MaxSuggestionRow? row = null;
-                if (item.Max is { } max &&
-                    sets.TryGetValue((item.MesocycleId, max.ExerciseId), out var logged) &&
-                    LoggedSetMaxSuggestions.Suggest(max, item.LastKeptAtUtc, logged, item.LoadUnit, item.LoadIncrement)
-                        is { } suggestion)
-                {
-                    row = new MaxSuggestionRow(
-                        item.MesocycleId,
-                        max.ExerciseId,
-                        item.ExerciseName,
-                        max.Value,
-                        suggestion.Estimate.Value,
-                        item.LoadUnit,
-                        item.LoadIncrement,
-                        suggestion.Set.LoggedAtUtc);
-                }
-
-                return new ProgramMaxRow(item.ClientProfileId, item.MesocycleId, item.StartDate, item.IsOpen, row);
-            })
-            .ToLookup(row => row.ClientProfileId);
+        return latest
+            .GroupBy(item => item.ClientProfileId)
+            .ToDictionary(group => group.Key, group => group.MaxBy(item => (item.StartDate, item.Id))!.Id);
     }
 
     private async Task<Dictionary<Guid, DateTimeOffset>> ReadLastWorkoutStartsAsync(
@@ -1512,9 +1416,7 @@ internal sealed class CoachOverviewReader(
         DateOnly? LastWorkoutOn,
         bool TrainingIncluded,
         IReadOnlyList<SessionRow> Sessions,
-        IReadOnlyList<MaxSuggestionRow> MaxSuggestions,
         Guid? LastProgramId,
-        IReadOnlyList<MaxSuggestionRow> CarriedSuggestions,
         CheckInRow? OldestOverdue,
         bool CanMessage,
         Guid? ChatId,
@@ -1581,24 +1483,6 @@ internal sealed class CoachOverviewReader(
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);
 
     private sealed record SessionRow(Guid ClientProfileId, DateOnly ScheduledDate, WorkoutExecutionStatus? Workout);
-
-    /// <summary>One program of a client and, for one of its lifts, the suggestion its logged sets make (or none).</summary>
-    private sealed record ProgramMaxRow(
-        Guid ClientProfileId,
-        Guid MesocycleId,
-        DateOnly StartDate,
-        bool IsOpen,
-        MaxSuggestionRow? Suggestion);
-
-    private sealed record MaxSuggestionRow(
-        Guid MesocycleId,
-        Guid ExerciseId,
-        string ExerciseName,
-        decimal Current,
-        decimal Suggested,
-        TrainingLoadUnit Unit,
-        decimal LoadIncrement,
-        DateTimeOffset LoggedAtUtc);
 
     private sealed record FinishedWorkout(
         Guid Id,

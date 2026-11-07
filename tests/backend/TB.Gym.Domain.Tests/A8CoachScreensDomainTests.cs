@@ -66,7 +66,6 @@ public sealed class A8CoachScreensDomainTests
                 CoachAttentionKind.MissedSessions,
                 CoachAttentionKind.CheckInOverdue,
                 CoachAttentionKind.NoProgram,
-                CoachAttentionKind.MaxesToReview,
             },
             Enum.GetValues<CoachAttentionKind>().OrderBy(CoachAttentionPolicy.RankOf).ToArray());
 
@@ -77,23 +76,23 @@ public sealed class A8CoachScreensDomainTests
         [
             Item(CoachAttentionKind.PlanEndingSoon, sara, date: Today.AddDays(3)),
             Item(CoachAttentionKind.NoPlan, rita, date: Today.AddDays(-2)),
-            Item(CoachAttentionKind.MaxesToReview, omar),
             Item(CoachAttentionKind.RenewalRequested, omar, date: Today.AddDays(-1)),
             Item(CoachAttentionKind.NoPlan, sara, date: Today),
         ]);
 
         Assert.AreEqual(
-            "RenewalRequested Omar, NoPlan Rita, NoPlan Sara, PlanEndingSoon Sara, MaxesToReview Omar",
+            "RenewalRequested Omar, NoPlan Rita, NoPlan Sara, PlanEndingSoon Sara",
             string.Join(", ", ranked.Select(item => $"{item.Kind} {item.Client.FirstName}")),
             "Within the kind, the client who joined first waits longest.");
     }
 
     [TestMethod]
-    public void TheAttentionRuleIsVersionSix()
+    public void TheAttentionRuleIsVersionSeven()
     {
         // Version 3 came with audit A8's new client with no plan, version 4 with critique B4a's overdue check-in,
-        // version 5 with critique B10c's sessions running out, and version 6 with critique B13's plan beside a pack.
-        Assert.AreEqual(("CoachAttention", 6), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
+        // version 5 with critique B10c's sessions running out, version 6 with critique B13's plan beside a pack, and
+        // version 7 with the notes plan's N10a, which removed maxes to review on the owner's word.
+        Assert.AreEqual(("CoachAttention", 7), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
     }
 
     private static ClientAttentionSignals Quiet() => new(0, 0, null, null, false, 0, false);

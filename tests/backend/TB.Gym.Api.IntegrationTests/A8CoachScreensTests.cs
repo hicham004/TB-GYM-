@@ -27,7 +27,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var asked = today.Attention.Single();
         Assert.AreEqual((CoachAttentionKind.NoPlan, ritaId, (DateOnly?)today.Today, (Guid?)null),
             (asked.Kind, asked.Client.ClientProfileId, asked.Date, asked.SubjectId));
-        Assert.AreEqual((CoachAttentionPolicy.Key, 6), (today.AttentionRuleKey, today.AttentionRuleVersion));
+        Assert.AreEqual((CoachAttentionPolicy.Key, 7), (today.AttentionRuleKey, today.AttentionRuleVersion));
         var row = await A8RowAsync(coach, ritaId);
         Assert.AreEqual(
             (ClientOverviewStatus.NeedsAttention, ClientPlanState.None, ClientOnboardingStatus.NotStarted, true),

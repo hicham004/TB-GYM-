@@ -154,7 +154,7 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v6 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13) is what Coach Today asks a
+**CLI-018** Coach attention v7 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13, v7 in notes plan N10a) is what Coach Today asks a
 coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
 their own, the Owner all) and never a former client. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
@@ -173,12 +173,9 @@ a week not shared (TRN-021); two or more missed sessions
 (TRN-021); a check-in overdue by CHK-015 (critique B4a: not sent, due 2 to 13 days ago, while check-ins are in
 today's plan), worked out from the missing submission alone: an absence is not an answer, so nothing is read into
 it (CHK-012), and its Remind opens the chat, started if need be, only when the caller is the client's own coach
-and messaging is in the plan, else the client's check-ins (CLI-013); training in the plan but no block running or
-coming, which names the client's latest
-program and what its logged sets suggest for the next one (STR-014); and, last, the lifts of a running or
-coming block whose logged sets suggest a new max (STR-012, after any keep, STR-013), named with the max
-in use and the suggestion. The status is Needs attention for any of those but the plan's end, sessions running out
-and maxes to review (a client getting stronger is good news), else the plan's own status: Paused, Ending soon, On track for
+and messaging is in the plan, else the client's check-ins (CLI-013); and, last, training in the plan but no block
+running or coming, which names the client's latest program, if they had one (STR-014). The status is Needs
+attention for any of those but the plan's end and sessions running out, else the plan's own status: Paused, Ending soon, On track for
 a running plan, or No active plan; a pack beside a coaching plan that ran out is no running plan (SES-010). That plan status is also shown on its own beside the reasons, whatever they are
 (critique B4a: a plan's end keeps its own status, outside Needs attention); there a blocked client reads Access
 blocked (critique B11), since a block changes no plan (SUB-010) and the row still sums theirs up. A client is new for
@@ -198,7 +195,9 @@ A client's own page (R3.3b, `GET /api/clients/{clientId}/overview`) reads the sa
 client: the same status, the same ranked items with what each one's action needs, the last activity,
 and the workspace calendar week's sessions, scheduled and done (null when training is not in the plan;
 critique B4b took the week off Today). It answers 404 for a former client, another coach's client or an unknown one, so the page
-can never say "nothing needs you" about a client the list flags.
+can never say "nothing needs you" about a client the list flags. Maxes to review (v2 to v6: the lifts whose logged
+sets suggest a new max by STR-012, also named on No program) were removed in v7 on the owner's word (decision 19's
+note, 7 Nov 2026; ADR 0036).
 
 **CLI-019** A sign-in lasts 8 hours as a browser session, or 30 days when "Keep me signed in" is ticked
 (audit A2, the owner's decision of 2026-10-19); either is renewed while it is used and ends after that
@@ -986,8 +985,8 @@ changes a max on its own. A set the coach looked at that the rule no longer pick
 a keep since) is refused with its own code, `training_max_suggestion_changed`, so the screen can say a
 newer set was logged. A screen names a suggestion in the program's own steps, the nearest multiple of its
 rounding step with halves up ("about 80 kg", R5.4c), and shows the exact estimate where the coach applies
-it and under "How it is worked out"; Coach Today's suggestions and the program's Training maxes read carry
-the program's `LoadIncrement` for this.
+it and under "How it is worked out"; the program's Training maxes read carries the program's `LoadIncrement`
+for this.
 
 **STR-013** Keeping a max (P4c, built 2026-10-08, ADR 0036): instead of applying a suggestion the coach
 can keep the max in use. The server accepts only the set the rule picks now, changes nothing in the

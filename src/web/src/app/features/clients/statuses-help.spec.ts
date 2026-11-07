@@ -85,4 +85,20 @@ describe('How these statuses work (critique B4a)', () => {
     );
     expect(text).toContain('Missed workouts counts back up to 14 days and never a started workout');
   });
+
+  it('lists New alone under On the chips too: maxes to review went on the owner’s word (notes plan N10a)', async () => {
+    const { sheet } = await open();
+
+    const heading = Array.from(sheet.querySelectorAll('h3')).find(
+      (title) => squash(title.textContent) === 'On the chips too',
+    );
+    const chips = heading?.nextElementSibling;
+    expect(chips?.matches('dl.defs')).toBe(true);
+    const terms = Array.from(chips?.querySelectorAll('dt') ?? []);
+    expect(terms.map((term) => squash(term.textContent))).toEqual(['New']);
+    expect(squash(chips?.querySelector('dd')?.textContent)).toBe('Joined in the last 14 days.');
+    const text = squash(sheet.textContent);
+    expect(text).not.toContain('Maxes to review');
+    expect(text).not.toMatch(/logged sets|suggest/i);
+  });
 });

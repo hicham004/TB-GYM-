@@ -3,9 +3,10 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// Coach attention v6 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
+/// Coach attention v7 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
 /// plan, v4 in critique B4a an overdue check-in and the plan's own status, v5 in critique B10c packs running out, v6
-/// in critique B13 a coaching plan that ran out reads as ended beside a running pack, SES-010):
+/// in critique B13 a coaching plan that ran out reads as ended beside a running pack, SES-010, v7 in the notes plan's
+/// N10a removed maxes to review on the owner's word, 7 Nov 2026):
 /// which of a client's signals ask the coach to act, how the queue is ranked, the one status the client list shows
 /// and the plan's status beside it.
 /// The signals arrive already gated by the client's plan, so this rule only weighs them; what makes a check-in
@@ -14,7 +15,7 @@ namespace TB.Gym.Modules.Clients;
 public static class CoachAttentionPolicy
 {
     public const string Key = "CoachAttention";
-    public const int Version = 6;
+    public const int Version = 7;
 
     /// <summary>
     /// A running plan whose last covered day falls within this many days, today counted, is ending soon: a last
@@ -66,7 +67,6 @@ public static class CoachAttentionPolicy
         CoachAttentionKind.MissedSessions,
         CoachAttentionKind.CheckInOverdue,
         CoachAttentionKind.NoProgram,
-        CoachAttentionKind.MaxesToReview,
     ];
 
     /// <summary>The kinds this client raises, in rank order.</summary>
@@ -136,23 +136,17 @@ public static class CoachAttentionPolicy
             flags.Add(CoachAttentionKind.NoProgram);
         }
 
-        if (signals.MaxesToReview > 0)
-        {
-            flags.Add(CoachAttentionKind.MaxesToReview);
-        }
-
         return flags;
     }
 
     /// <summary>
-    /// Anything to act on besides a plan ending, sessions running out or maxes to review makes a client Needs
-    /// attention; otherwise the plan's own status (<see cref="PlanStatus"/>). A client whose sets suggest heavier maxes
-    /// is doing well, so that alone never turns them to Needs attention.
+    /// Anything to act on besides a plan ending or sessions running out makes a client Needs attention; otherwise the
+    /// plan's own status (<see cref="PlanStatus"/>).
     /// </summary>
     public static ClientOverviewStatus Status(
         IReadOnlyCollection<CoachAttentionKind> flags,
         ClientPlanState planState) =>
-        flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.SessionsRunningOut or CoachAttentionKind.MaxesToReview))
+        flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.SessionsRunningOut))
             ? ClientOverviewStatus.NeedsAttention
             : PlanStatus(flags, planState) switch
             {
@@ -265,7 +259,6 @@ public static class CoachAttentionPolicy
 /// <param name="PlanLastDay">The last day the current and following plans cover.</param>
 /// <param name="MissedSinceLastWorkout">Training rule TRN-021.</param>
 /// <param name="HasNoProgram">Training is in the plan but no block is running or coming.</param>
-/// <param name="MaxesToReview">Lifts of a running block whose logged sets suggest a new max (STR-012).</param>
 /// <param name="JoinedOn">The workspace day the client joined, for a new client with no plan (audit COACH-9).</param>
 /// <param name="CheckInsOverdue">
 /// Check-ins the client has not sent that are overdue by the CheckIns module's rule (CHK-015): due 2 to 13 days ago,
@@ -283,7 +276,6 @@ public sealed record ClientAttentionSignals(
     bool HasWeekToShare,
     int MissedSinceLastWorkout,
     bool HasNoProgram,
-    int MaxesToReview = 0,
     DateOnly? JoinedOn = null,
     int CheckInsOverdue = 0,
     int? SessionsLeft = null,

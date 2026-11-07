@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { CoachAttentionKind } from '../../core/api/generated';
 import { attentionItem, COACH_NOW, COACH_TODAY, MAYA } from '../../../testing/coach-today-fixtures';
 import {
   checkInItem,
@@ -286,71 +287,53 @@ describe('what needs the coach on a client’s page', () => {
     expect(never.detail).toBe('No workout logged yet');
   });
 
-  it('names the lift whose logged sets suggest a new max, and opens the maxes to review it', () => {
-    const [maxes] = needRows(
-      [
-        attentionItem('MaxesToReview', MAYA, {
-          count: 1,
-          maxes: [
-            {
-              exerciseId: 'deadlift',
-              exerciseName: 'Deadlift',
-              current: 77.5,
-              suggested: 80.749,
-              unit: 'Kilogram',
-              loadIncrement: 2.5,
-            },
-          ],
-        }),
-      ],
-      COACH_TODAY,
-      context,
-    );
-
-    expect(maxes).toMatchObject({
-      tone: 'share',
-      tag: 'Maxes',
-      heading: 'Logged sets suggest a new Deadlift max',
-      detail: 'About 80\u00a0kg, up from 77.5\u00a0kg',
-      action: { label: 'Review maxes', link: `${page}/training`, queryParams: { action: 'maxes' } },
-    });
-  });
-
-  it('carries what the last program suggests onto No program, for Assign program', () => {
+  it('says a client between programs has none running, and when they joined (N10a)', () => {
     const [between] = needRows(
-      [
-        attentionItem('NoProgram', MAYA, {
-          date: '2026-03-01',
-          subjectId: 'block-ended',
-          maxes: [
-            {
-              exerciseId: 'squat',
-              exerciseName: 'Back squat',
-              current: 385,
-              suggested: 400,
-              unit: 'Pound',
-              loadIncrement: 5,
-            },
-            {
-              exerciseId: 'deadlift',
-              exerciseName: 'Deadlift',
-              current: 77.5,
-              suggested: 80.749,
-              unit: 'Kilogram',
-              loadIncrement: 2.5,
-            },
-          ],
-        }),
-      ],
+      [attentionItem('NoProgram', MAYA, { date: '2026-03-01', subjectId: 'block-ended' })],
       COACH_TODAY,
       context,
     );
 
     expect(between).toMatchObject({
+      tone: 'new',
+      tag: 'Program',
       heading: 'No program running',
-      detail: 'Last program’s sets suggest Back squat about 400\u00a0lb, Deadlift about 80\u00a0kg',
-      action: { label: 'Assign program', queryParams: { action: 'assign' } },
+      detail: 'Joined Sun 1 Mar',
+      action: {
+        label: 'Assign program',
+        link: `${page}/training`,
+        queryParams: { action: 'assign' },
+      },
     });
+  });
+
+  it('lets no row of any kind say that logged sets suggest a max, or offer Review maxes (N10a)', () => {
+    // One item of every kind the server sends, keyed by kind: leaving one out, or naming one the
+    // server no longer sends, does not compile. The chat's client panel draws these rows too.
+    const every = {
+      CheckInToReview: { count: 1, since: COACH_NOW, subjectId: 'assignment-1' },
+      UnreadMessages: { count: 2, since: COACH_NOW, subjectId: 'conversation-1' },
+      RenewalRequested: { date: '2026-09-27', subjectId: 'enrollment-2' },
+      NoPlan: { date: '2026-09-29' },
+      PlanEndingSoon: { date: '2026-10-06', subjectId: 'enrollment-3' },
+      SessionsRunningOut: { sessionsLeft: 2, date: '2026-10-20', subjectId: 'pack-1' },
+      WeekNotShared: { weekNumber: 3, date: '2026-10-03' },
+      MissedSessions: { count: 3, date: '2026-09-24' },
+      CheckInOverdue: { count: 1, date: '2026-09-28', canMessage: true },
+      NoProgram: { date: '2026-03-01', subjectId: 'block-ended' },
+    } satisfies Record<CoachAttentionKind, Parameters<typeof attentionItem>[2]>;
+    const list = needRows(
+      (Object.keys(every) as CoachAttentionKind[]).map((kind) =>
+        attentionItem(kind, MAYA, every[kind]),
+      ),
+      COACH_TODAY,
+      context,
+    );
+    const words = list.flatMap((row) => [row.heading, row.detail, row.tag, row.action.label]);
+
+    expect(list).toHaveLength(10);
+    expect(words.filter((text) => /suggest|review maxes|\bmax(es)?\b/i.test(text))).toEqual([]);
+    expect(list.filter((row) => row.action.queryParams?.['action'] === 'maxes')).toEqual([]);
   });
 
   it('asks for an overdue check-in in the coach’s own chat, else sends to the check-ins (critique B4a)', () => {

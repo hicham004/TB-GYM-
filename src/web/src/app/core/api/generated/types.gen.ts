@@ -1190,7 +1190,6 @@ export type CoachAttentionItemView = {
   count: null | number | string;
   weekNumber: null | number | string;
   subjectId: null | string;
-  maxes?: null | Array<CoachMaxSuggestionView>;
   newestAt?: null | string;
   canMessage?: boolean;
   sessionsLeft?: null | number | string;
@@ -1204,7 +1203,6 @@ export type CoachAttentionKind =
   | 'WeekNotShared'
   | 'MissedSessions'
   | 'NoProgram'
-  | 'MaxesToReview'
   | 'NoPlan'
   | 'CheckInOverdue'
   | 'SessionsRunningOut';
@@ -1373,15 +1371,6 @@ export type CoachingProductView = {
   version: number | string;
   clients: PlanClientCount;
   kind: ProductKind;
-};
-
-export type CoachMaxSuggestionView = {
-  exerciseId: string;
-  exerciseName: string;
-  current: number | string;
-  suggested: number | string;
-  unit: CoachActivityLoadUnit;
-  loadIncrement: number | string;
 };
 
 export type CoachMoneyReceivedView = {

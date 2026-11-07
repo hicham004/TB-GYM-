@@ -235,22 +235,12 @@ public sealed class DemoWorkspaceTests
             mayaLatest.Activity?.Words);
         Assert.AreEqual("Their 7,000 steps are inside that, worth about 180 calories a day at 68 kg.", mayaLatest.Walking?.Words);
 
-        // Demo clients hit their numbers (P4c): logged sets suggest only heavier maxes, for clients getting stronger.
-        var ownerToday = await requests.AsAsync<ICoachOverviewService, CoachTodayView>(
-            new DemoActor(people.OwnerId, people.TenantId), service => service.GetTodayAsync(CancellationToken.None));
-        var suggested = ownerToday.Attention
-            .Where(item => item.Kind == CoachAttentionKind.MaxesToReview)
-            .SelectMany(item => (item.Maxes ?? []).Select(max => (item.Client.FirstName, max)))
-            .ToArray();
-        Console.WriteLine(string.Join(Environment.NewLine, suggested.Select(item =>
-            $"{item.FirstName} {item.max.ExerciseName}: {item.max.Current} -> {item.max.Suggested}")));
-        Assert.IsNotEmpty(suggested, "Clients who set personal bests show a heavier max to review.");
-        Assert.IsTrue(suggested.All(item => item.max.Suggested > item.max.Current), "No demo client is weaker than their program.");
-
         // Jad's check-in from last week is overdue (CHK-015): Omar, his coach, reminds him in their chat; the owner,
         // who may not message another coach's client, is not offered it (critique B4a).
         var omarToday = await requests.AsAsync<ICoachOverviewService, CoachTodayView>(
             new DemoActor(people.OmarId, people.TenantId), service => service.GetTodayAsync(CancellationToken.None));
+        var ownerToday = await requests.AsAsync<ICoachOverviewService, CoachTodayView>(
+            new DemoActor(people.OwnerId, people.TenantId), service => service.GetTodayAsync(CancellationToken.None));
         var overdue = omarToday.Attention.Single(item => item.Kind == CoachAttentionKind.CheckInOverdue);
         Assert.AreEqual(("Jad", true, 1), (overdue.Client.FirstName, overdue.CanMessage, overdue.Count));
         Assert.IsNotNull(overdue.SubjectId, "Remind opens Omar's chat with Jad.");

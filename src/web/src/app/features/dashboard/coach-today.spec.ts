@@ -139,8 +139,8 @@ describe('CoachToday', () => {
     expect(host.querySelector('h1')?.textContent).toMatch(
       /Good (morning|afternoon|evening), Karim\./,
     );
-    // It counts the queue, plans ending and maxes included, so it says so (COACH-4): the client list's
-    // "need attention" leaves those out, and never claims everyone else is on track.
+    // It counts the queue, with plans ending and sessions running out, so it says so (COACH-4): the
+    // client list's "need attention" leaves those out, and never claims everyone else is on track.
     expect(host.querySelector('.needs')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
       '7 clients have something for you today, listed under Needs you.',
     );

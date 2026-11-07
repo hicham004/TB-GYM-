@@ -70,7 +70,7 @@ Each coach or gym gets a private workspace. Inside it, one product serves four k
 <details>
 <summary><strong>Coach Today and client management</strong></summary>
 
-- **Today** ranks who needs attention: check-ins to review, messages, plans ending, weeks not yet shared, missed workouts and training maxes to review.
+- **Today** ranks who needs attention: check-ins to review, messages, plans ending, weeks not yet shared and missed workouts.
 - Money received this month per currency, active clients, plans ending in the next 14 days, plans that ended unrenewed, and a feed of finished workouts with their records.
 - For an owner, This month also lists each coach with how many of their clients are active, and counts money across the whole workspace.
 - **Clients list** with search and filters, and one page per client: status, what is waiting, plan, last workout and the week's sessions.

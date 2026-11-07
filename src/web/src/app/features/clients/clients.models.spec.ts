@@ -16,6 +16,7 @@ import {
 import {
   activityLabel,
   attentionReason,
+  CLIENT_FILTERS,
   clientRow,
   clientWeek,
   coachChip,
@@ -115,7 +116,7 @@ describe('client list (C2, critique B4a)', () => {
       'Tala Rizk',
       'Ziad Chahine',
     ]);
-    expect(list.counts).toEqual({ all: 12, attention: 6, ending: 2, paused: 1, new: 2, maxes: 0 });
+    expect(list.counts).toEqual({ all: 12, attention: 6, ending: 2, paused: 1, new: 2 });
   });
 
   it('says the age for the workspace’s today, and nothing without a birth date (CLI-005)', () => {
@@ -193,7 +194,7 @@ describe('client list (C2, critique B4a)', () => {
     expect(read(Rami)).toEqual([]);
   });
 
-  it('words each kind of reason in the singular and plural, and leaves good news out of the tags', () => {
+  it('words each kind of reason in the singular and plural', () => {
     const tags = (...items: ReturnType<typeof attentionItem>[]) =>
       clientRow(
         overviewRow(coachClient('c-x', 'Ali', 'Fares'), {
@@ -221,18 +222,11 @@ describe('client list (C2, critique B4a)', () => {
       '1 check-in overdue',
       'No program running',
     ]);
-    // Maxes to review is good news, so it has its chip and no warning tag (P4c).
-    const stronger = clientRow(
-      overviewRow(ali, {
-        attention: ['MaxesToReview'],
-        attentionItems: [attentionItem('MaxesToReview', ali, { count: 1 })],
-      }),
-      COACH_TODAY,
-      context,
-    );
-    expect(stronger.tags).toEqual([]);
-    expect(stronger.planPill.label).toBe('On track');
-    expect([...stronger.filters]).toEqual(['all', 'maxes']);
+  });
+
+  it('has no filter for maxes to review, which went on the owner’s word (notes plan N10a)', () => {
+    expect(CLIENT_FILTERS).toEqual(['all', 'attention', 'ending', 'paused', 'new']);
+    expect(Object.keys(filterCounts([]))).toEqual(CLIENT_FILTERS);
   });
 
   it('sums up the plan whose end it shows: its name, what it includes, its length, its price and its end', () => {
@@ -576,7 +570,7 @@ describe('the lede over the list (critique B4a)', () => {
       '1 client · 1 needs attention',
     );
     const count = (all: number, attention: number, ending: number) =>
-      listSummary({ all, attention, ending, paused: 0, new: 0, maxes: 0 });
+      listSummary({ all, attention, ending, paused: 0, new: 0 });
     expect(count(3, 0, 1)).toBe('3 clients · nobody needs attention · 1 plan ends soon');
     expect(count(0, 0, 0)).toBe('');
   });

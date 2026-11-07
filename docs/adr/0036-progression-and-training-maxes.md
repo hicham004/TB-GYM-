@@ -215,3 +215,17 @@ history never rewritten.
   [TrainHeroic](https://support.trainheroic.com/hc/en-us/articles/18156690075917-Programming-with-Linear-Weight-Progression-or-Percentages),
   [Hevy Coach](https://hevycoach.com/features/workout-program-builder/),
   [Trainerize ideas](https://ideas.trainerize.com/forums/167887-trainerize/suggestions/12510144-adding-an-auto-percentage-max-rep-calculator-based).
+
+## Removed on the owner's word (7 Nov 2026)
+
+The owner asked for maxes to review to go from every place in the app (decision 19's note in
+`docs/NOTES-PLAN-2026-11.md`): every place where the app tells a coach that a client's logged sets suggest a
+new training max and invites a review of it. It goes in three parts, the notes plan's rows N10a to N10c: Coach
+Today and the screens that share its items, then the client's Training and the rule itself, then the homepage.
+N10a took P4c's item (`MaxesToReview`, CLI-018 v2 to v6) off Coach Today, a client's page, the Messages client
+panel and Clients, with Review maxes, No program's line about the last program's sets, and the **Maxes to
+review** chip with its line in "How these statuses work". Coach attention is v7, and the kind's number, 8,
+stays unused. On Coach Today a client between programs reads "<name> has no program running" with "Joined
+<day>" and Assign program, as when nothing was suggested. Nothing stored changed: no migration, and every max,
+keep and logged set stays. Until N10b, the Training maxes panel and Assign program still suggest a max
+(STR-012 to STR-014).

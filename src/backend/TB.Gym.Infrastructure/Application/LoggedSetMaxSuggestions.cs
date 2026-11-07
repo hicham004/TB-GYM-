@@ -8,7 +8,7 @@ namespace TB.Gym.Infrastructure.Application;
 /// <summary>
 /// The reads behind a suggested max (BestLoggedSet v1, STR-012) for one program or many: the logged sets that
 /// could speak for a lift, the coach's last keep of each max (STR-013), and the suggestion they add up to. The
-/// Training maxes panel and Coach Today both come here, so a lift suggests the same max on both. It only reads;
+/// Training maxes panel and Assign program's previous maxes come here (Coach Today did until N10a). It only reads;
 /// whether the caller may see a client's logged sets is the caller's to decide first (TRN-023).
 /// </summary>
 internal static class LoggedSetMaxSuggestions

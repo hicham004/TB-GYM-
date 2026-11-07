@@ -402,42 +402,24 @@ describe('Clients', () => {
     expect(squash(query(unknown.host, 'app-menu.coach-filter button').textContent)).toBe('Coach');
   });
 
-  it('offers Maxes to review only while a client has maxes to review', async () => {
-    const view = clientListView();
-    const stronger = view.clients.find((item) => item.client.firstName === 'Hiba');
-    if (!stronger) throw new Error('No Hiba in the fixture.');
-    const withMaxes: ClientOverviewView = {
-      ...view,
-      clients: view.clients.map((item) =>
-        item === stronger ? { ...item, attention: ['MaxesToReview'] } : item,
-      ),
-    };
-    const { host, harness } = await render({ getOverview: () => of(withMaxes) });
+  it('offers no Maxes to review chip: maxes to review went on the owner’s word (notes plan N10a)', async () => {
+    const { host } = await render();
 
-    const chips = Array.from(host.querySelectorAll('.chip')).map((chip) =>
-      squash(chip.textContent),
+    const values = Array.from(host.querySelectorAll<HTMLInputElement>('.chips input')).map(
+      (input) => input.value,
     );
-    expect(chips).toEqual([
-      'All 12',
-      'Needs attention 6',
-      'Ending soon 2',
-      'Paused 1',
-      'New 2',
-      'Maxes to review 1',
-    ]);
-
-    tick(host, 'Maxes to review');
-    await settle(harness.fixture);
-    expect(names(host)).toEqual(['Hiba Nasser']);
-    expect(TestBed.inject(Router).url).toBe('/clients?show=maxes');
+    expect(values).toEqual(['all', 'attention', 'ending', 'paused', 'new']);
+    expect(squash(query(host, '.chips').textContent)).not.toContain('Maxes to review');
   });
 
-  it('keeps Maxes to review when the address asks for it, and says nobody has any', async () => {
+  it('opens All for an old address that asks for maxes to review, and says nothing of it (notes plan N10a)', async () => {
     const { host } = await render({ url: '/clients?show=maxes' });
 
-    expect(query<HTMLInputElement>(host, 'input[value="maxes"]').checked).toBe(true);
-    expect(names(host)).toEqual([]);
-    expect(host.textContent).toContain('No logged sets suggest a new max right now');
+    expect(query<HTMLInputElement>(host, 'input[value="all"]').checked).toBe(true);
+    expect(names(host)).toHaveLength(12);
+    expect(host.querySelector('app-empty-state')).toBeNull();
+    expect(squash(query(host, '[role="status"]').textContent)).toBe('');
+    expect(host.textContent).not.toMatch(/maxes to review|logged sets/i);
   });
 
   it('opens on the chip named in the address, so Back returns to the same list', async () => {

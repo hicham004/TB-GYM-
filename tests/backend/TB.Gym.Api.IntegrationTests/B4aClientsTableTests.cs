@@ -74,7 +74,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             (nourItem.Count, nourItem.Date, nourItem.SubjectId, nourItem.CanMessage));
         var nourPage = await ReadSliceAsync<ClientProfileOverviewView>(owner, R33bOverviewUrl(nourId));
         CollectionAssert.AreEqual(nourRow.Attention.ToArray(), nourPage.Attention.Select(item => item.Kind).ToArray());
-        Assert.AreEqual((CoachAttentionPolicy.Key, 6), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
+        Assert.AreEqual((CoachAttentionPolicy.Key, 7), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
 
         // Once the owner and Maya have a chat, Remind opens it. A draft is not sent; sending takes the item away
         // and puts the check-in to review in its place.
@@ -267,11 +267,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         var (more, list) = await B4aMeasureAsync<ClientOverviewView>(owner, ClientOverviewUrl, "client list, 5 clients");
         Assert.HasCount(5, list.Clients);
         Assert.AreEqual(fewer, more, "Two more clients cost the list no query.");
-        // 24, sign-in and tenant checks included: Today's reads without its feed, plus the last activity (three) and
-        // the plan summaries (one). Every read the list makes is in use here but the renewal requests, read only when
-        // some client's whole plan has run out. Pinned exactly, so one more read fails here, as a query per client
-        // fails the equality above.
-        Assert.AreEqual(24, more, "The client list costs a fixed 24 queries (docs/ARCHITECTURE.md).");
+        // 23, sign-in and tenant checks included: Today's reads without its feed, plus the last activity (three) and
+        // the plan summaries (one); N10a reads each client's latest program in one query where P4c's suggested maxes
+        // took two. Every read the list makes is in use here but the renewal requests, read only when some client's
+        // whole plan has run out. Pinned exactly, so one more read fails here, as a query per client fails the
+        // equality above.
+        Assert.AreEqual(23, more, "The client list costs a fixed 23 queries (docs/ARCHITECTURE.md).");
         var (todayBefore, _) = await B4aMeasureAsync<CoachTodayView>(owner, CoachTodayUrl, "Coach Today");
         var (pageBefore, _) = await B4aMeasureAsync<ClientProfileOverviewView>(owner, R33bOverviewUrl(mayaId), "client page");
 
