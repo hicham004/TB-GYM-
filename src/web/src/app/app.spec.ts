@@ -40,11 +40,14 @@ async function render(
     memberships?: (typeof MEMBERSHIP)[];
     selectedTenantId?: string;
     routes?: Routes;
+    roles?: string[];
   } = {},
 ) {
   const clear = vi.fn();
   const clearMessages = vi.fn();
-  const user = signal<typeof OWNER | null>(options.signedIn ? OWNER : null);
+  const user = signal<(Omit<typeof OWNER, 'roles'> & { roles: string[] }) | null>(
+    options.signedIn ? { ...OWNER, roles: options.roles ?? [] } : null,
+  );
   const loading = signal(Boolean(options.loading));
   const select = vi.fn();
   const canCoach = Boolean(options.owner || options.coach);
@@ -251,6 +254,27 @@ describe('App', () => {
     expect(host.querySelector('app-client-tabs')).toBeNull();
     expect(host.querySelector('.authenticated-nav')).not.toBeNull();
     expect(host.querySelector('.workspace-picker')).toBeNull();
+  });
+
+  /** A platform admin with no workspace reaches the admin's pages from that bar (notes plan N4a). */
+  it('links the platform admin’s pages from the member top bar, Coaches last', async () => {
+    const admin = await render({ signedIn: true, memberships: [], roles: ['PlatformAdmin'] });
+
+    const links = Array.from(
+      admin.host.querySelectorAll<HTMLAnchorElement>('.session-controls a.account-link'),
+    )
+      .map((link) => [link.textContent?.trim(), link.getAttribute('href')])
+      .filter(([, href]) => href?.startsWith('/admin/'));
+    expect(links).toEqual([
+      ['Platform billing', '/admin/billing'],
+      ['Legal documents', '/admin/legal'],
+      ['Coaches', '/admin/coaches'],
+    ]);
+    TestBed.resetTestingModule();
+
+    const member = await render({ signedIn: true, memberships: [] });
+    expect(member.host.querySelector('.authenticated-nav')).not.toBeNull();
+    expect(member.host.querySelector('a[href^="/admin/"]')).toBeNull();
   });
 
   /** A known session that is being re-read keeps its shell rather than flashing another one. */

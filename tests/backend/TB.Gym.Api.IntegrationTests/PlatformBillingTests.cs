@@ -312,6 +312,13 @@ public sealed partial class Phase3TrainingWorkflowTests
                 "/api/platform-admin/founding-terms",
                 new { clientsWithActivePlan = 1, monthsSinceStart = 0, note = "x", expectedCurrentVersion = 1 }),
             HttpStatusCode.Unauthorized);
+        // The certificate record (notes plan N4a) too.
+        await AssertStatusAsync(await anonymous.GetAsync("/api/platform-admin/coaches"), HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(
+            await anonymous.PostAsJsonAsync(
+                $"/api/platform-admin/coaches/{Guid.NewGuid()}/spaces/{Guid.NewGuid()}/lines",
+                new { what = "x", shownOn = new DateOnly(2026, 6, 1) }),
+            HttpStatusCode.Unauthorized);
 
         using var owner = CreateClient();
         var workspaceId = await RegisterCoachAsync(owner, "authz-owner@example.test", "Authz Owner", "Authz Gym");
@@ -348,6 +355,12 @@ public sealed partial class Phase3TrainingWorkflowTests
                 await caller.PostAsJsonAsync($"/api/platform-admin/founding/{Guid.NewGuid()}/end", new { reason = "x" }),
                 HttpStatusCode.Forbidden);
             await AssertStatusAsync(await caller.PostAsync("/api/platform-admin/founding/check", null), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(await caller.GetAsync("/api/platform-admin/coaches"), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PostAsJsonAsync(
+                    $"/api/platform-admin/coaches/{Guid.NewGuid()}/spaces/{workspaceId}/lines",
+                    new { what = "Self-recorded", shownOn = new DateOnly(2026, 6, 1) }),
+                HttpStatusCode.Forbidden);
         }
 
         // The role cannot be had any other way than the command, which needs a confirmed account.
@@ -361,6 +374,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         RequiredTestClock.Advance(TimeSpan.FromMinutes(1));
         var list = await RequiredJsonAsync<BillingAdminWorkspace[]>(await owner.GetAsync("/api/platform-admin/workspaces"));
         Assert.IsTrue(list.Any(item => item.TenantId == workspaceId && item.Status == "Trial" && item.SeatsThisMonth == 2));
+        await AssertStatusAsync(await owner.GetAsync("/api/platform-admin/coaches"), HttpStatusCode.OK);
         await AssertStatusAsync(await coach.GetAsync("/api/platform-admin/workspaces"), HttpStatusCode.Forbidden);
         output = new StringWriter();
         Assert.AreEqual(0, await RunPlatformAdminCommandAsync(output, "list"));

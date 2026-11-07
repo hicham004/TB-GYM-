@@ -1,0 +1,177 @@
+<div class="page">
+  <a class="back" routerLink="/admin/billing" data-back>
+    <app-icon name="chevron-left" />
+    <span i18n>Platform billing</span>
+  </a>
+  <header class="top">
+    <div class="intro">
+      <h1 #heading tabindex="-1" i18n>Coaches</h1>
+      <p class="lede" i18n>
+        What TB Gym shows a coach’s clients about them: one line per proof, confirmed over WhatsApp.
+        Text only, never a copy of a document, and a coach can have it erased on request.
+      </p>
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>The coaches couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (coaches().length === 0) {
+        <app-empty-state
+          class="panel"
+          heading="No coaches yet"
+          description="A coaching space’s owner and coaches appear here."
+          i18n-heading
+          i18n-description
+        />
+      } @else {
+        <div class="toolbar">
+          <div class="search">
+            <app-icon name="search" />
+            <label class="tb-visually-hidden" for="coach-search" i18n>Search coaches</label>
+            <input
+              #searchBox
+              id="coach-search"
+              name="coach-search"
+              type="search"
+              autocomplete="off"
+              enterkeyhint="search"
+              placeholder="Search by coach, email or space…"
+              i18n-placeholder
+              [value]="search()"
+              (input)="search.set($any($event.target).value)"
+            />
+            @if (search() !== '') {
+              <button
+                type="button"
+                class="clear"
+                aria-label="Clear search"
+                i18n-aria-label
+                (click)="clearSearch()"
+              >
+                <app-icon name="close" />
+              </button>
+            }
+          </div>
+        </div>
+        <p class="tb-visually-hidden" role="status">{{ resultSummary() }}</p>
+
+        @if (rows().length === 0) {
+          <div class="panel load-failed" data-no-match>
+            <p i18n>No coach matches “{{ query() }}”.</p>
+            <button appButton type="button" variant="outlined" (click)="clearSearch()" i18n>
+              Clear search
+            </button>
+          </div>
+        } @else {
+          <div class="panel list">
+            <ul class="rows" role="list">
+              @for (row of rows(); track row.key) {
+                <li
+                  class="coach"
+                  [attr.data-coach]="row.coach.userId"
+                  [attr.data-space]="row.coach.tenantId"
+                >
+                  <app-avatar [initials]="row.initials" />
+                  <div class="who">
+                    <!-- The whole row opens the coach's sheet (a stretched button), named by the coach. -->
+                    <button
+                      type="button"
+                      class="stretched name"
+                      dir="auto"
+                      [attr.aria-describedby]="'role-' + row.key + ' count-' + row.key"
+                      (click)="openCoach(row.coach)"
+                    >
+                      {{ row.coach.name }}
+                    </button>
+                    <p class="email">
+                      <span dir="auto">{{ row.coach.email }}</span>
+                    </p>
+                  </div>
+                  <p class="role" [id]="'role-' + row.key">
+                    {{ row.role }} · <bdi>{{ row.coach.spaceName }}</bdi>
+                  </p>
+                  <p class="count" [id]="'count-' + row.key">{{ row.count }}</p>
+                  <app-icon name="chevron-right" class="open" />
+                </li>
+              }
+            </ul>
+          </div>
+        }
+      }
+    }
+  }
+</div>
+
+<ng-template #coachSheet>
+  @if (sheetCoach(); as coach) {
+    <app-platform-coach-lines
+      [coach]="coach"
+      [state]="linesState()"
+      [lines]="lines()"
+      [working]="working()"
+      (retry)="loadLines()"
+      (add)="openAdd()"
+      (confirmLine)="openConfirm($event)"
+      (dropLine)="drop($event)"
+      (takeDownLine)="takeDown($event)"
+      (erase)="openErase()"
+    />
+  }
+</ng-template>
+
+<ng-template #addSheet let-sheet>
+  @if (addWith(); as coach) {
+    <app-platform-coach-add
+      [coach]="coach"
+      (dirtyChange)="setTopDirty($event)"
+      (busyChange)="setTopBusy($event)"
+      (closed)="finish(sheet, $event)"
+    />
+  }
+</ng-template>
+
+<ng-template #confirmSheet let-sheet>
+  @if (confirmWith(); as opened) {
+    <app-platform-coach-confirm
+      [coach]="opened.coach"
+      [line]="opened.line"
+      [prefill]="opened.prefill"
+      (dirtyChange)="setTopDirty($event)"
+      (busyChange)="setTopBusy($event)"
+      (closed)="finish(sheet, $event)"
+    />
+  }
+</ng-template>
+
+<ng-template #eraseSheet let-sheet>
+  @if (eraseWith(); as coach) {
+    <app-platform-coach-erase
+      [coach]="coach"
+      (dirtyChange)="setTopDirty($event)"
+      (busyChange)="setTopBusy($event)"
+      (closed)="finish(sheet, $event)"
+    />
+  }
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

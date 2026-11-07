@@ -1,0 +1,37 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="about">
+    <span class="who" data-line-sentence
+      ><bdi>{{ line().text }}</bdi></span
+    >
+  </p>
+
+  <app-field [label]="nameLabel" [errors]="errorsFor('confirmedByName')">
+    <input
+      appControl
+      name="confirmedByName"
+      autocomplete="off"
+      maxlength="80"
+      dir="auto"
+      [value]="confirmedByName()"
+      (input)="setName($any($event.target).value)"
+      (blur)="attempt.touch('confirmedByName')"
+    />
+  </app-field>
+
+  @if (attempt.wasTried() && problemCount() > 0) {
+    <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+  }
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>Not now</button>
+  <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+    @if (busy()) {
+      <ng-container i18n>Confirming…</ng-container>
+    } @else {
+      <ng-container i18n>Confirm</ng-container>
+    }
+  </button>
+</ng-template>

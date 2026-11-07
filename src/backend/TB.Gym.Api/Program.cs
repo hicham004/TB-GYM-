@@ -142,6 +142,7 @@ app.MapGet("/api/system/status", (
 
 app.MapIdentityModule();
 app.MapLegalConsentEndpoints();
+app.MapCoachCertificateEndpoints();
 app.MapTenancyModule();
 app.MapInvitationsModule();
 app.MapClientsModule();

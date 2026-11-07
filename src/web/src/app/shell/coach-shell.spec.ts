@@ -48,7 +48,12 @@ const BEIRUT: Membership = {
 let uninstallDialog: () => void;
 
 async function render(
-  options: { memberships?: Membership[]; unread?: number; logoUrl?: string | null } = {},
+  options: {
+    memberships?: Membership[];
+    unread?: number;
+    logoUrl?: string | null;
+    roles?: string[];
+  } = {},
 ) {
   const memberships = options.memberships ?? [ATLAS];
   const brand = {
@@ -77,7 +82,7 @@ async function render(
       ]),
       {
         provide: AuthStore,
-        useValue: { user: signal(USER), loading: signal(false) },
+        useValue: { user: signal({ ...USER, roles: options.roles ?? [] }), loading: signal(false) },
       },
       {
         provide: TenantStore,
@@ -194,6 +199,28 @@ describe('CoachShell', () => {
     expect(signOut).toHaveBeenCalledTimes(1);
     // Nothing is left open behind the sign-out request.
     expect(host.querySelector('#account-menu')).toBeNull();
+  });
+
+  it('lists the platform admin’s pages in the account menu, Coaches last, only for the admin', async () => {
+    const admin = await render({ roles: ['PlatformAdmin'] });
+    admin.host.querySelector<HTMLButtonElement>('.account-button')!.click();
+    await settle(admin.fixture);
+
+    const links = Array.from(admin.host.querySelectorAll<HTMLAnchorElement>('#account-menu a'))
+      .map((link) => [link.textContent?.trim(), link.getAttribute('href')])
+      .filter(([, href]) => href?.startsWith('/admin/'));
+    expect(links).toEqual([
+      ['Platform billing', '/admin/billing'],
+      ['Legal documents', '/admin/legal'],
+      ['Coaches', '/admin/coaches'],
+    ]);
+    TestBed.resetTestingModule();
+
+    const owner = await render();
+    owner.host.querySelector<HTMLButtonElement>('.account-button')!.click();
+    await settle(owner.fixture);
+    expect(owner.host.querySelector('#account-menu')).not.toBeNull();
+    expect(owner.host.querySelector('#account-menu a[href^="/admin/"]')).toBeNull();
   });
 
   it('opens the account menu as a disclosure and closes it on Escape, back to its button', async () => {

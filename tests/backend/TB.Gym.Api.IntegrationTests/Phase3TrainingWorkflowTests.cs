@@ -37,6 +37,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     private WebApplicationFactory<Program>? factory;
     private MutableTestClock? testClock;
     private SensitiveLogCapture? sensitiveLogCapture;
+    private CapturedLog? everyLogLine;
     private StorageFaultSwitch? storageFaults;
     private InsertBarrier? insertBarrier;
     private ScannerSwitch? scannerSwitch;
@@ -65,6 +66,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         testClock = clock;
         var logCapture = new SensitiveLogCapture();
         sensitiveLogCapture = logCapture;
+        // Every line with the exception it carries, for the assertions an exception's text must not escape.
+        var everyLog = new CapturedLog();
+        everyLogLine = everyLog;
         var storageFaults = new StorageFaultSwitch();
         this.storageFaults = storageFaults;
         var barrier = new InsertBarrier();
@@ -212,6 +216,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 services.Configure<HttpClientFactoryOptions>(nameof(IExternalVideoTitles), options =>
                     options.HttpMessageHandlerBuilderActions.Add(handler => handler.PrimaryHandler = videoTitles));
                 services.AddSingleton<ILoggerProvider>(logCapture);
+                services.AddSingleton<ILoggerProvider>(everyLog);
                 services.AddTransient<IStartupFilter, TestRemoteAddressStartupFilter>();
                 services.AddSingleton<TodayQueryCounter>();
                 services.AddSingleton(barrier);

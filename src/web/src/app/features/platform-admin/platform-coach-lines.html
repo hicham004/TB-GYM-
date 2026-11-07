@@ -1,0 +1,117 @@
+<div class="body">
+  <p class="about">
+    <span class="who"
+      >{{ role() }} · <bdi>{{ who().spaceName }}</bdi></span
+    >&ngsp;
+    <span class="muted" dir="auto">{{ who().email }}</span>
+  </p>
+
+  @switch (state()) {
+    @case ('loading') {
+      <app-skeleton [label]="loadingLabel" [lines]="4" />
+    }
+    @case ('error') {
+      <div class="failed">
+        <p role="alert" i18n>These lines couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="retry.emit()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+    @default {
+      @if (lines(); as view) {
+        @if (view.isActiveStaff) {
+          <div class="add">
+            <button appButton type="button" (click)="add.emit()" data-add-line i18n>
+              Add a line
+            </button>
+          </div>
+        } @else {
+          <p class="notice" data-former i18n>
+            They no longer coach in this space, so no line can be added. Their lines can still be
+            taken down or erased.
+          </p>
+        }
+
+        @if (rows().length === 0) {
+          <div class="none" data-no-lines>
+            <p i18n>No lines yet.</p>
+            @if (view.isActiveStaff) {
+              <p class="muted" i18n>
+                Add one once the coach has shown TB Gym a certificate, a gym they own, years of
+                coaching or a degree.
+              </p>
+            }
+          </div>
+        } @else {
+          <ul class="lines" role="list">
+            @for (row of rows(); track row.id) {
+              <li class="line" [attr.data-line]="row.id" [attr.data-state]="row.state">
+                <div class="head">
+                  @if (row.text !== null) {
+                    <p class="sentence" data-sentence>
+                      <bdi>{{ row.text }}</bdi>
+                    </p>
+                  } @else {
+                    <p class="sentence muted" data-erased>{{ row.erased }}</p>
+                  }
+                  <app-status-pill [label]="row.pill.label" [tone]="row.pill.tone" />
+                </div>
+                @if (row.by) {
+                  <p class="muted" data-by>{{ row.by }}</p>
+                }
+                @if (row.state === 'Waiting') {
+                  <div class="actions">
+                    <button
+                      appButton
+                      type="button"
+                      variant="outlined"
+                      [loading]="working() === row.id"
+                      (click)="confirmLine.emit(row.line)"
+                      data-confirm
+                    >
+                      <span i18n>Mark confirmed</span
+                      ><span class="tb-visually-hidden"> {{ row.text }}</span>
+                    </button>
+                    <button
+                      appButton
+                      type="button"
+                      variant="text"
+                      [loading]="working() === row.id"
+                      (click)="dropLine.emit(row.line)"
+                      data-drop
+                    >
+                      <span i18n>Drop</span><span class="tb-visually-hidden"> {{ row.text }}</span>
+                    </button>
+                  </div>
+                } @else if (row.state === 'Confirmed') {
+                  <div class="actions">
+                    <button
+                      appButton
+                      type="button"
+                      variant="text"
+                      [loading]="working() === row.id"
+                      (click)="takeDownLine.emit(row.line)"
+                      data-take-down
+                    >
+                      <span i18n>Take down</span
+                      ><span class="tb-visually-hidden"> {{ row.text }}</span>
+                    </button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+
+        @if (canErase()) {
+          <div class="foot">
+            <button appButton type="button" variant="text" (click)="erase.emit()" data-erase i18n>
+              Erase on request
+            </button>
+          </div>
+        }
+      }
+    }
+  }
+</div>

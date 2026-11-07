@@ -1,0 +1,45 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="about">
+    <span class="who"
+      ><span dir="auto">{{ coach().name }}</span> · <bdi>{{ coach().spaceName }}</bdi></span
+    >
+  </p>
+
+  <app-date-field
+    [label]="askedLabel"
+    [errors]="errorsFor('requestedOn')"
+    [value]="requestedOn()"
+    (valueChange)="setRequestedOn($event)"
+    [min]="earliest"
+    [max]="coach().spaceToday"
+    [today]="coach().spaceToday"
+    (touched)="attempt.touch('requestedOn')"
+  />
+  <p class="notice" data-deadline aria-live="polite">{{ deadline() }}</p>
+
+  @if (attempt.wasTried() && problemCount() > 0) {
+    <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+  }
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>Not now</button>
+  <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+    @if (busy()) {
+      <ng-container i18n>Erasing…</ng-container>
+    } @else {
+      <ng-container i18n>Erase</ng-container>
+    }
+  </button>
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  <app-confirm
+    [message]="confirmMessage"
+    [confirmLabel]="confirmLabel"
+    [cancelLabel]="keepLabel"
+    (answer)="dialog.close($event)"
+  />
+</ng-template>

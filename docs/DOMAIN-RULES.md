@@ -229,6 +229,22 @@ to run, once that coaching plan is too old to list. Ending a client's coaching
 (CLI-015) stays the owner's, so only the owner's rows carry the client's version it asks for. The workspace week's
 sessions left Today; a client's page keeps its week.
 
+**CLI-021** Coach certificate lines (decision 7, 5 Nov 2026; notes plan N4a, ADR 0039). TB Gym's record of what a
+coach showed as proof is one text-only line per proof about a coach in one coaching space, kept by the platform admin
+alone: what was shown (1 to 120 characters, one line), the day it was shown (no later than the space's today), who
+confirmed it with the coach (a typed name) and the admin who recorded it; never a copy, a photo, a file, an issuer or
+a "valid to" date. A line can be added only for active staff of the space; the same words and day again answer the
+line that exists. It waits until confirmed, the only state a reader may ever see; a waiting line may be dropped and
+nothing of it is kept; a confirmed line can be taken down, and its words, day and confirmer never change and it is
+never deleted (a trigger). Erasing on the coach's request blanks the words and the confirmer's name and drops the day
+for every line of theirs in that space (waiting ones are dropped), keeping the dates, who acted and the request's
+day; nothing changes afterwards. The words "verified", "licensed", "qualified" and "approved" and the titles
+"physiotherapist", "physical therapist" and "physio" (with their plurals) are refused as whole words, and a refusal
+never repeats them. A reader sees one sentence, `CoachCertificateLineWording` version 1, "<what>, shown to TB Gym on
+<date>" with the date in the space's language, a placeholder for the lawyer's words. Nothing of a line reaches a log,
+an exception, a notification or analytics (CLI-008), and no line changes a coach's access, bill, clients or sign-up.
+Until notes plan N4b only the admin reads it.
+
 ## 3. Products, enrollments, payments, programs, and access
 
 **SUB-001** Product/catalog identity, offer/price, client enrollment, payment operation,

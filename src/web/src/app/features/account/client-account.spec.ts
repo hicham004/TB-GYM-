@@ -290,6 +290,21 @@ describe('ClientAccount', () => {
     expect(client.host.querySelector('a[href="/admin/billing"]')).toBeNull();
     expect(client.host.querySelector('a[href="/admin/legal"]')).toBeNull();
   });
+
+  it('links the coaches’ certificate record, after the legal documents, only for a platform admin', async () => {
+    const admin = await render({ roles: ['PlatformAdmin'] });
+    const coaches = admin.host.querySelector<HTMLAnchorElement>('a[href="/admin/coaches"]');
+    expect(coaches?.querySelector('.row-text')?.textContent?.trim()).toBe('Coaches');
+    expect(coaches?.querySelector('.row-icon app-icon')?.getAttribute('name')).toBe('team');
+    const adminRows = Array.from(admin.host.querySelectorAll('a.row'))
+      .map((row) => row.getAttribute('href'))
+      .filter((href) => href?.startsWith('/admin/'));
+    expect(adminRows).toEqual(['/admin/billing', '/admin/legal', '/admin/coaches']);
+    TestBed.resetTestingModule();
+
+    const client = await render();
+    expect(client.host.querySelector('a[href="/admin/coaches"]')).toBeNull();
+  });
 });
 
 describe('ClientAccount preferences', () => {

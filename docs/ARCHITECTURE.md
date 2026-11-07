@@ -61,7 +61,7 @@ into additional projects only when that produces a measurable boundary benefit.
 
 | Module           | Owns                                                                                                                                                                                     |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity         | Global account, credential, lockout, platform roles, sessions, legal consent                                                                                                             |
+| Identity         | Global account, credential, lockout, platform roles, sessions, legal consent; coach certificate lines, its one tenant-owned record (CLI-021, ADR 0039) |
 | Tenancy          | Coach workspace, membership, tenant role, tenant lifecycle                                                                                                                               |
 | Clients          | Tenant-specific profile, onboarding/intake, relationship block state/history                                                                                                             |
 | Invitations      | Invite lifecycle, prefilled fields, acceptance and account linking                                                                                                                       |
@@ -409,6 +409,14 @@ carry the ticked version ids and check them through `LegalAcceptanceGate` in Inf
 own transaction, so neither module references Identity. The gate holds a transaction advisory lock shared
 from the check to the join's commit, and publishing and withdrawing hold it alone, so a join never checks
 documents a publish is about to replace.
+
+Coach certificate lines (CLI-021, ADR 0039, notes plan N4a) are the one tenant-owned record in Identity:
+one text-only line per proof about a coach in one coaching space, under the global query filter and the
+write guard. The platform admin keeps them under `/api/platform-admin/coaches` (list, lines, add, confirm,
+drop, take down, erase on request); the admin service in Infrastructure reads every space with
+`IgnoreQueryFilters`, sets the space as the request's tenant before each write, as the billing admin does,
+and reads Tenancy's memberships so a line is added only for active staff. A trigger keeps a confirmed line's
+words and its row, an erasure blanks the words once, and no log line carries them.
 
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.

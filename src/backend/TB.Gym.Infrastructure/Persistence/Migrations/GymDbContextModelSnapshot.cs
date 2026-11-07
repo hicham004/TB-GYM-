@@ -1809,6 +1809,109 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Identity.CoachCertificateLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CoachShows")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("CoachUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConfirmedByName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ErasedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ErasedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErasureReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("RequestedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ShownOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("TakenDownAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TakenDownByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("What")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("ErasedByUserId");
+
+                    b.HasIndex("RecordedByUserId");
+
+                    b.HasIndex("TakenDownByUserId");
+
+                    b.HasIndex("TenantId", "CoachUserId", "CreatedAtUtc");
+
+                    b.HasIndex("TenantId", "CoachUserId", "What", "ShownOn")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CoachCertificateLines_OneLine")
+                        .HasFilter("\"ErasedAtUtc\" IS NULL");
+
+                    b.ToTable("CoachCertificateLines", "identity", t =>
+                        {
+                            t.HasCheckConstraint("CK_CoachCertificateLines_Confirmed", "(\"ConfirmedAtUtc\" IS NULL) = (\"ConfirmedByName\" IS NULL) AND (\"ConfirmedByName\" IS NULL OR (\"ErasedAtUtc\" IS NULL AND char_length(\"ConfirmedByName\") BETWEEN 1 AND 80 AND \"ConfirmedByName\" = btrim(\"ConfirmedByName\")) OR (\"ErasedAtUtc\" IS NOT NULL AND \"ConfirmedByName\" = '')) AND (\"ConfirmedAtUtc\" IS NULL OR \"ConfirmedAtUtc\" >= \"CreatedAtUtc\")");
+
+                            t.HasCheckConstraint("CK_CoachCertificateLines_Erased", "(\"ErasedAtUtc\" IS NULL) = (\"ErasureReason\" IS NULL) AND (\"ErasedAtUtc\" IS NULL OR (\"ConfirmedAtUtc\" IS NOT NULL AND \"ErasedAtUtc\" >= \"ConfirmedAtUtc\")) AND (\"ErasureReason\" IS NULL OR \"ErasureReason\" IN ('Request', 'KeepingPeriod')) AND (\"ErasureReason\" IS NOT DISTINCT FROM 'Request') = (\"ErasedByUserId\" IS NOT NULL) AND (\"ErasureReason\" IS NOT DISTINCT FROM 'Request') = (\"RequestedOn\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_CoachCertificateLines_TakenDown", "(\"TakenDownAtUtc\" IS NULL) = (\"TakenDownByUserId\" IS NULL) AND (\"TakenDownAtUtc\" IS NULL OR (\"ConfirmedAtUtc\" IS NOT NULL AND \"TakenDownAtUtc\" >= \"ConfirmedAtUtc\"))");
+
+                            t.HasCheckConstraint("CK_CoachCertificateLines_Words", "(\"ErasedAtUtc\" IS NULL AND char_length(\"What\") BETWEEN 1 AND 120 AND \"What\" = btrim(\"What\") AND \"ShownOn\" IS NOT NULL) OR (\"ErasedAtUtc\" IS NOT NULL AND \"What\" = '' AND \"ShownOn\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Identity.LegalConsentAcceptance", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12587,6 +12690,38 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("SubjectUserId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Identity.CoachCertificateLine", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ErasedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RecordedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("TakenDownByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CoachUserId")
+                        .HasPrincipalKey("TenantId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Identity.LegalConsentAcceptance", b =>

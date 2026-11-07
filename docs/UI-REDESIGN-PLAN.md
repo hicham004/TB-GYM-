@@ -2194,6 +2194,16 @@ limited to the coach's assigned clients.
   breaks and indents as published. Registration and an invitation show a Legal documents block, one box per
   document in force with the version's own sentence and a link that opens its text in a new tab, only once
   one is published.
+- Built in notes plan N4a (CLI-021): the platform admin's **Coaches** (`/admin/coaches`, from Platform billing,
+  the account menu and Me): every owner and coach of every coaching space as faces (name, email, "Owner · Atlas
+  Performance", "2 lines · 1 waiting"), searched by coach, email or space; a row opens a sheet named after the
+  coach with each line as its sentence and a pill (Waiting for confirmation, Confirmed, Taken down, Erased, each
+  with its day), who confirmed and who recorded it, and Add a line, Mark confirmed (the confirmer's name
+  prefilled with the admin's), Drop, Take down and Erase on request (the day the coach asked and the 10 days it
+  is met within) on top of it. Text only. The page's own words never say verified, certified, licensed,
+  qualified or approved; a line is the coach's own words, from which the server refuses verified, licensed,
+  qualified, approved and the physio titles (a certificate's own name may hold "certified", section 3 of the
+  notes plan). Until N4b nothing of a line reaches a coach or a client.
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an

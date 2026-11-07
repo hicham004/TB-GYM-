@@ -20,6 +20,13 @@ internal static class DatabaseConstraintNames
         "UX_LegalDocumentVersions_Current";
 
     /// <summary>
+    /// One line per coach, space, words and day while it is not erased (CLI-021); a second add of the same
+    /// line answers the first.
+    /// </summary>
+    public const string OneCoachCertificateLinePerWordsAndDay =
+        "UX_CoachCertificateLines_OneLine";
+
+    /// <summary>
     /// The name the <c>TR_CoachingProducts_ActiveName</c> trigger reports when a new, renamed or restored plan
     /// would share its name with another plan for sale (BILL-7). Plans that shared one before keep it.
     /// </summary>

@@ -2,9 +2,11 @@ import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
 import { serverRoutes } from './app.routes.server';
-import { memberGuard, ownerGuard, sessionKnownGuard } from './core/auth/auth.guards';
+import { authGuard, memberGuard, ownerGuard, sessionKnownGuard } from './core/auth/auth.guards';
 import { confirmBeforeLeaving, confirmSheetLeave } from './core/forms/leave-guard';
 import { NotFound } from './features/not-found/not-found';
+import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
+import { PlatformCoaches } from './features/platform-admin/platform-coaches';
 import { UndeliveredNotices } from './features/workspace/undelivered-notices';
 
 const route = (path: string) => {
@@ -39,6 +41,19 @@ describe('the app routes', () => {
     expect(notices.canActivate).toContain(ownerGuard);
     expect(notices.title).toBe('Undelivered notices | TB Gym');
     expect(await (notices.loadComponent as () => Promise<unknown>)()).toBe(UndeliveredNotices);
+  });
+
+  // Notes plan N4a: the certificate record, a platform admin's page like Platform billing, whose Back
+  // closes its sheets rather than asking.
+  it('opens Coaches to the platform admin alone, as a page of its own', async () => {
+    const coaches = route('admin/coaches');
+    expect(coaches.canActivate).toEqual([authGuard, platformAdminGuard]);
+    expect(coaches.canDeactivate).toBeUndefined();
+    expect(coaches.title).toBe('Coaches | TB Gym');
+    // In TB Gym's colours outside any workspace, as Platform billing is.
+    expect(coaches.data).toEqual({ houseBrand: true, redesigned: true });
+    expect(coaches.data).toEqual(route('admin/billing').data);
+    expect(await (coaches.loadComponent as () => Promise<unknown>)()).toBe(PlatformCoaches);
   });
 
   it('names neither kind of invitation in the title of its link', () => {

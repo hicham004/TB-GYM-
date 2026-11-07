@@ -279,6 +279,16 @@ export const routes: Routes = [
       import('./features/platform-admin/legal-documents').then((module) => module.LegalDocuments),
   },
   {
+    // The certificate record (notes plan N4a, CLI-021): what TB Gym shows a coach's clients about
+    // them, one line per proof. Like Platform billing it has no leave guard: Back closes its sheets.
+    path: 'admin/coaches',
+    canActivate: [authGuard, platformAdminGuard],
+    data: { ...HOUSE_BRAND, ...REDESIGNED },
+    title: $localize`Coaches | TB Gym`,
+    loadComponent: () =>
+      import('./features/platform-admin/platform-coaches').then((module) => module.PlatformCoaches),
+  },
+  {
     path: 'admin/billing/:tenantId',
     canActivate: [authGuard, platformAdminGuard],
     data: { ...HOUSE_BRAND, ...REDESIGNED },

@@ -13,6 +13,11 @@ import type {
   FoundingTerms,
 } from '../app/features/billing/founding.models';
 import type { GymRequest } from '../app/features/platform-admin/platform-admin-api';
+import type {
+  CertificateCoach,
+  CertificateLine,
+  CertificateLines,
+} from '../app/features/platform-admin/platform-coaches.models';
 
 /**
  * Platform billing (R5.2b): the coaching spaces the platform admin sees, in every state the screen
@@ -442,3 +447,190 @@ export function gymRequests(): GymRequest[] {
     },
   ];
 }
+
+// ---------- the certificate record (notes plan N4a) ----------
+
+export const COACH_IDS = {
+  karim: '20000000-0000-4000-8000-000000000001',
+  lea: '20000000-0000-4000-8000-000000000002',
+  nadine: '20000000-0000-4000-8000-000000000003',
+  omar: '20000000-0000-4000-8000-000000000004',
+  sami: '20000000-0000-4000-8000-000000000005',
+} as const;
+
+/** One membership on the Coaches list: Karim Haddad, the owner of Atlas Performance, with no lines. */
+export function certificateCoach(overrides: Partial<CertificateCoach> = {}): CertificateCoach {
+  return {
+    userId: COACH_IDS.karim,
+    name: 'Karim Haddad',
+    email: 'karim@atlas.example',
+    tenantId: SPACE_IDS.atlas,
+    spaceName: 'Atlas Performance',
+    role: 'Owner',
+    isActiveStaff: true,
+    waitingLines: 0,
+    confirmedLines: 0,
+    takenDownLines: 0,
+    erasedLines: 0,
+    ...overrides,
+  };
+}
+
+/**
+ * The list as the server orders it, by name then space, one row per membership: an owner with a line
+ * in every state, a coach with none, a former coach who still holds a line, a coach of two spaces,
+ * and an owner whose lines were all erased, with an Arabic name.
+ */
+export function certificateCoaches(): CertificateCoach[] {
+  return [
+    certificateCoach({ waitingLines: 1, confirmedLines: 1, takenDownLines: 1, erasedLines: 1 }),
+    certificateCoach({
+      userId: COACH_IDS.lea,
+      name: 'Lea Khoury',
+      email: 'lea@atlas.example',
+      role: 'Coach',
+    }),
+    certificateCoach({
+      userId: COACH_IDS.nadine,
+      name: 'Nadine Saliba',
+      email: 'nadine@atlas.example',
+      role: 'Coach',
+      isActiveStaff: false,
+      confirmedLines: 1,
+    }),
+    certificateCoach({
+      userId: COACH_IDS.omar,
+      name: 'Omar Nassar',
+      email: 'omar@atlas.example',
+      role: 'Coach',
+      waitingLines: 1,
+    }),
+    certificateCoach({
+      userId: COACH_IDS.omar,
+      name: 'Omar Nassar',
+      email: 'omar@atlas.example',
+      tenantId: SPACE_IDS.beirut,
+      spaceName: 'Beirut Barbell',
+      role: 'Coach',
+    }),
+    certificateCoach({
+      userId: COACH_IDS.sami,
+      name: 'سامي الخوري',
+      email: 'sami@arz.example',
+      tenantId: SPACE_IDS.arz,
+      spaceName: 'نادي الأرز',
+      erasedLines: 2,
+    }),
+  ];
+}
+
+/** A line waiting for confirmation: Karim owns a gym, shown to TB Gym on 8 October. */
+export function certificateLine(overrides: Partial<CertificateLine> = {}): CertificateLine {
+  return {
+    id: 'line-gym',
+    state: 'Waiting',
+    text: 'Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026',
+    what: 'Owns Iron House gym in Hamra',
+    shownOn: '2026-10-08',
+    wordingVersion: 1,
+    recordedByName: 'Hicham Haddad',
+    recordedAtUtc: '2026-10-08T09:00:00Z',
+    recordedOn: '2026-10-08',
+    confirmedAtUtc: null,
+    confirmedOn: null,
+    confirmedByName: null,
+    takenDownAtUtc: null,
+    takenDownOn: null,
+    takenDownByName: null,
+    erasedAtUtc: null,
+    erasedOn: null,
+    erasureReason: null,
+    requestedOn: null,
+    erasedByName: null,
+    coachShows: true,
+    version: 1,
+    ...overrides,
+  };
+}
+
+/** Confirmed on 2 October by the trainer partner, recorded by the admin. */
+export function confirmedLine(overrides: Partial<CertificateLine> = {}): CertificateLine {
+  return certificateLine({
+    id: 'line-nasm',
+    state: 'Confirmed',
+    text: 'NASM CPT, 2019, shown to TB Gym on 1 Oct 2026',
+    what: 'NASM CPT, 2019',
+    shownOn: '2026-10-01',
+    recordedAtUtc: '2026-10-01T10:00:00Z',
+    recordedOn: '2026-10-01',
+    confirmedAtUtc: '2026-10-02T08:30:00Z',
+    confirmedOn: '2026-10-02',
+    confirmedByName: 'Tarek Bou',
+    version: 2,
+    ...overrides,
+  });
+}
+
+/** Confirmed and recorded by the admin in August, then taken down on 20 August. */
+export function takenDownLine(overrides: Partial<CertificateLine> = {}): CertificateLine {
+  return certificateLine({
+    id: 'line-years',
+    state: 'TakenDown',
+    text: 'Six years coaching, shown to TB Gym on 10 Aug 2026',
+    what: 'Six years coaching',
+    shownOn: '2026-08-10',
+    recordedAtUtc: '2026-08-10T10:00:00Z',
+    recordedOn: '2026-08-10',
+    confirmedAtUtc: '2026-08-11T10:00:00Z',
+    confirmedOn: '2026-08-11',
+    confirmedByName: 'Hicham Haddad',
+    takenDownAtUtc: '2026-08-20T10:00:00Z',
+    takenDownOn: '2026-08-20',
+    takenDownByName: 'Hicham Haddad',
+    version: 3,
+    ...overrides,
+  });
+}
+
+/** Erased on 2 July at the coach's request of 1 July: the words are gone, the dates stay. */
+export function erasedLine(overrides: Partial<CertificateLine> = {}): CertificateLine {
+  return certificateLine({
+    id: 'line-erased',
+    state: 'Erased',
+    text: null,
+    what: null,
+    shownOn: null,
+    recordedAtUtc: '2026-06-10T10:00:00Z',
+    recordedOn: '2026-06-10',
+    confirmedAtUtc: '2026-06-11T10:00:00Z',
+    confirmedOn: '2026-06-11',
+    confirmedByName: null,
+    erasedAtUtc: '2026-07-02T10:00:00Z',
+    erasedOn: '2026-07-02',
+    erasureReason: 'Request',
+    requestedOn: '2026-07-01',
+    erasedByName: 'Hicham Haddad',
+    version: 3,
+    ...overrides,
+  });
+}
+
+/** Karim's lines in Atlas Performance, newest first, on the space's day TODAY. */
+export function certificateLines(overrides: Partial<CertificateLines> = {}): CertificateLines {
+  return {
+    userId: COACH_IDS.karim,
+    name: 'Karim Haddad',
+    email: 'karim@atlas.example',
+    tenantId: SPACE_IDS.atlas,
+    spaceName: 'Atlas Performance',
+    role: 'Owner',
+    isActiveStaff: true,
+    spaceToday: TODAY,
+    lines: [certificateLine(), confirmedLine(), takenDownLine(), erasedLine()],
+    ...overrides,
+  };
+}
+
+/** The server's refusal of a line holding a word TB Gym keeps out (a 400 on the field). */
+export const CERTIFICATE_WORD_REFUSAL =
+  "This line holds a word TB Gym keeps out of a coach's line. Write what the proof is: the certificate, the gym, the years.";

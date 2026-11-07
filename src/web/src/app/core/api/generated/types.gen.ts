@@ -44,6 +44,11 @@ export type ActivityWords = {
   reason: null | string;
 };
 
+export type AddCoachCertificateLineRequest = {
+  what: null | string;
+  shownOn: null | string;
+};
+
 export type AddFoodVersionRequest = {
   basisQuantity: number | string;
   basisUnit: FoodQuantityUnit;
@@ -1204,6 +1209,76 @@ export type CoachAttentionKind =
   | 'CheckInOverdue'
   | 'SessionsRunningOut';
 
+export type CoachCertificateCoachView = {
+  userId: string;
+  name: string;
+  email: string;
+  tenantId: string;
+  spaceName: string;
+  role: CoachCertificateRole;
+  isActiveStaff: boolean;
+  waitingLines: number | string;
+  confirmedLines: number | string;
+  takenDownLines: number | string;
+  erasedLines: number | string;
+};
+
+export type CoachCertificateDropView = {
+  lineId: string;
+};
+
+export type CoachCertificateErasureReason = 'Request' | 'KeepingPeriod';
+
+export type CoachCertificateErasureView = {
+  erased: number | string;
+  dropped: number | string;
+};
+
+export type CoachCertificateLineChangeRequest = {
+  version: null | number | string;
+};
+
+export type CoachCertificateLineState = 'Waiting' | 'Confirmed' | 'TakenDown' | 'Erased';
+
+export type CoachCertificateLinesView = {
+  userId: string;
+  name: string;
+  email: string;
+  tenantId: string;
+  spaceName: string;
+  role: CoachCertificateRole;
+  isActiveStaff: boolean;
+  spaceToday: string;
+  lines: Array<CoachCertificateLineView>;
+};
+
+export type CoachCertificateLineView = {
+  id: string;
+  state: CoachCertificateLineState;
+  text: null | string;
+  what: null | string;
+  shownOn: null | string;
+  wordingVersion: number | string;
+  recordedByName: string;
+  recordedAtUtc: string;
+  recordedOn: string;
+  confirmedAtUtc: null | string;
+  confirmedOn: null | string;
+  confirmedByName: null | string;
+  takenDownAtUtc: null | string;
+  takenDownOn: null | string;
+  takenDownByName: null | string;
+  erasedAtUtc: null | string;
+  erasedOn: null | string;
+  erasureReason: null | CoachCertificateErasureReason;
+  requestedOn: null | string;
+  erasedByName: null | string;
+  coachShows: boolean;
+  version: number | string;
+};
+
+export type CoachCertificateRole = 'Owner' | 'Coach' | 'Client';
+
 export type CoachChosenPalView = {
   methodKey: string;
   methodVersion: string;
@@ -1483,6 +1558,11 @@ export type CompleteNutritionLogRequest = {
 
 export type CompleteWorkoutRequest = {
   version: number | string;
+};
+
+export type ConfirmCoachCertificateLineRequest = {
+  confirmedByName: null | string;
+  version: null | number | string;
 };
 
 export type ConfirmEmailRequest = {
@@ -1997,6 +2077,10 @@ export type EnergyPreviewView = {
 };
 
 export type EnrollmentStatus = 'PendingPayment' | 'Active' | 'Paused' | 'Cancelled' | 'Expired';
+
+export type EraseCoachCertificateLinesRequest = {
+  requestedOn: null | string;
+};
 
 export type EstimateOneRepMaxRequest = {
   load: number | string;
@@ -5661,6 +5745,243 @@ export type WithdrawLegalDocumentVersionResponses = {
 
 export type WithdrawLegalDocumentVersionResponse =
   WithdrawLegalDocumentVersionResponses[keyof WithdrawLegalDocumentVersionResponses];
+
+export type ListCertificateCoachesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/coaches';
+};
+
+export type ListCertificateCoachesResponses = {
+  /**
+   * OK
+   */
+  200: Array<CoachCertificateCoachView>;
+};
+
+export type ListCertificateCoachesResponse =
+  ListCertificateCoachesResponses[keyof ListCertificateCoachesResponses];
+
+export type ListCoachCertificateLinesData = {
+  body?: never;
+  path: {
+    userId: string;
+    tenantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/coaches/{userId}/spaces/{tenantId}/lines';
+};
+
+export type ListCoachCertificateLinesErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type ListCoachCertificateLinesResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateLinesView;
+};
+
+export type ListCoachCertificateLinesResponse =
+  ListCoachCertificateLinesResponses[keyof ListCoachCertificateLinesResponses];
+
+export type AddCoachCertificateLineData = {
+  body: AddCoachCertificateLineRequest;
+  path: {
+    userId: string;
+    tenantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/coaches/{userId}/spaces/{tenantId}/lines';
+};
+
+export type AddCoachCertificateLineErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type AddCoachCertificateLineError =
+  AddCoachCertificateLineErrors[keyof AddCoachCertificateLineErrors];
+
+export type AddCoachCertificateLineResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateLineView;
+  /**
+   * Created
+   */
+  201: CoachCertificateLineView;
+};
+
+export type AddCoachCertificateLineResponse =
+  AddCoachCertificateLineResponses[keyof AddCoachCertificateLineResponses];
+
+export type ConfirmCoachCertificateLineData = {
+  body: ConfirmCoachCertificateLineRequest;
+  path: {
+    userId: string;
+    tenantId: string;
+    lineId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/coaches/{userId}/spaces/{tenantId}/lines/{lineId}/confirm';
+};
+
+export type ConfirmCoachCertificateLineErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ConfirmCoachCertificateLineError =
+  ConfirmCoachCertificateLineErrors[keyof ConfirmCoachCertificateLineErrors];
+
+export type ConfirmCoachCertificateLineResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateLineView;
+};
+
+export type ConfirmCoachCertificateLineResponse =
+  ConfirmCoachCertificateLineResponses[keyof ConfirmCoachCertificateLineResponses];
+
+export type DropCoachCertificateLineData = {
+  body: CoachCertificateLineChangeRequest;
+  path: {
+    userId: string;
+    tenantId: string;
+    lineId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/coaches/{userId}/spaces/{tenantId}/lines/{lineId}/drop';
+};
+
+export type DropCoachCertificateLineErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type DropCoachCertificateLineError =
+  DropCoachCertificateLineErrors[keyof DropCoachCertificateLineErrors];
+
+export type DropCoachCertificateLineResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateDropView;
+};
+
+export type DropCoachCertificateLineResponse =
+  DropCoachCertificateLineResponses[keyof DropCoachCertificateLineResponses];
+
+export type TakeDownCoachCertificateLineData = {
+  body: CoachCertificateLineChangeRequest;
+  path: {
+    userId: string;
+    tenantId: string;
+    lineId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/coaches/{userId}/spaces/{tenantId}/lines/{lineId}/take-down';
+};
+
+export type TakeDownCoachCertificateLineErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type TakeDownCoachCertificateLineError =
+  TakeDownCoachCertificateLineErrors[keyof TakeDownCoachCertificateLineErrors];
+
+export type TakeDownCoachCertificateLineResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateLineView;
+};
+
+export type TakeDownCoachCertificateLineResponse =
+  TakeDownCoachCertificateLineResponses[keyof TakeDownCoachCertificateLineResponses];
+
+export type EraseCoachCertificateLinesData = {
+  body: EraseCoachCertificateLinesRequest;
+  path: {
+    userId: string;
+    tenantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/coaches/{userId}/spaces/{tenantId}/erase';
+};
+
+export type EraseCoachCertificateLinesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type EraseCoachCertificateLinesError =
+  EraseCoachCertificateLinesErrors[keyof EraseCoachCertificateLinesErrors];
+
+export type EraseCoachCertificateLinesResponses = {
+  /**
+   * OK
+   */
+  200: CoachCertificateErasureView;
+};
+
+export type EraseCoachCertificateLinesResponse =
+  EraseCoachCertificateLinesResponses[keyof EraseCoachCertificateLinesResponses];
 
 export type ListTeamMembersData = {
   body?: never;

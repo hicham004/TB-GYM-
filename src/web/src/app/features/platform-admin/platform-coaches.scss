@@ -1,0 +1,126 @@
+// The platform admin's coaches (notes plan N4a, CLI-021). Brand v2 tokens only, so it follows light and
+// dark. The search box comes from the Clients list's toolbar, which this component loads beside this file.
+@use '../../ui/page';
+
+.back {
+  align-items: center;
+  align-self: flex-start;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-accent-ink);
+  display: inline-flex;
+  font-weight: 600;
+  gap: 0.25rem;
+  min-block-size: 2.5rem;
+  padding-inline: 0.25rem 0.5rem;
+  text-decoration: none;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
+
+.back:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+.list {
+  padding: 0.25rem 1.25rem;
+}
+
+// A coach as a face: who, their role in the space, their lines; the name opens their sheet.
+.coach {
+  align-items: center;
+  display: grid;
+  gap: 0.25rem 0.875rem;
+  grid-template-areas:
+    'face who'
+    'face role'
+    'face count';
+  grid-template-columns: auto minmax(0, 1fr);
+  padding-block: 0.875rem;
+  position: relative;
+}
+
+.coach app-avatar {
+  align-self: start;
+  grid-area: face;
+}
+
+.who {
+  grid-area: who;
+  min-inline-size: 0;
+}
+
+.email,
+.role,
+.count {
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.email,
+.count {
+  color: var(--tb-muted);
+}
+
+.role {
+  color: var(--tb-ink);
+  grid-area: role;
+  min-inline-size: 0;
+}
+
+.count {
+  grid-area: count;
+  min-inline-size: 0;
+}
+
+.open {
+  color: var(--tb-muted);
+  display: none;
+}
+
+@container (min-width: 48rem) {
+  .coach {
+    grid-template-areas: 'face who role count open';
+    grid-template-columns: auto minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1fr) 1.25rem;
+  }
+
+  .coach app-avatar {
+    align-self: center;
+  }
+
+  .open {
+    display: inline-flex;
+    grid-area: open;
+  }
+}
+
+:host-context([dir='rtl']) .open,
+:host-context([dir='rtl']) .back app-icon {
+  transform: scaleX(-1);
+}
+
+// The name is a button stretched over its row (as Foods does), so the whole row opens the sheet; the
+// row takes the focus ring (ui/_page.scss).
+button.stretched {
+  background: none;
+  border: 0;
+  color: var(--tb-ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  text-align: start;
+
+  &::after {
+    content: '';
+    inset: 0;
+    position: absolute;
+  }
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

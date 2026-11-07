@@ -1,0 +1,48 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="about">
+    <span class="who"
+      ><span dir="auto">{{ coach().name }}</span> · <bdi>{{ coach().spaceName }}</bdi></span
+    >
+  </p>
+
+  <app-field [label]="whatLabel" [help]="whatHelp" [errors]="errorsFor('what')">
+    <input
+      appControl
+      name="what"
+      autocomplete="off"
+      maxlength="120"
+      dir="auto"
+      [value]="what()"
+      (input)="setWhat($any($event.target).value)"
+      (blur)="attempt.touch('what')"
+    />
+  </app-field>
+
+  <app-date-field
+    [label]="shownOnLabel"
+    [errors]="errorsFor('shownOn')"
+    [value]="shownOn()"
+    (valueChange)="setShownOn($event)"
+    [min]="earliest"
+    [max]="coach().spaceToday"
+    [today]="coach().spaceToday"
+    (touched)="attempt.touch('shownOn')"
+  />
+
+  @if (attempt.wasTried() && problemCount() > 0) {
+    <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+  }
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>Not now</button>
+  <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+    @if (busy()) {
+      <ng-container i18n>Adding…</ng-container>
+    } @else {
+      <ng-container i18n>Add</ng-container>
+    }
+  </button>
+</ng-template>
