@@ -30,6 +30,10 @@ resets (the owner, 2026-10-12: Fable first, then Opus 5.5). When no other model 
 -OnWeeklyLimit wait (the owner, 2026-10-29: "use it all, then carry on") waits for the reset
 and resumes the chat; -OnWeeklyLimit stop ends the run instead. Claude Code's --fallback-model
 does the same for a model that is overloaded or unavailable. A STOP file ends any wait.
+A chat whose usage window is rejected until after its deadline is stopped at its limit result,
+or once it is quiet for 10 minutes or past the deadline, so that wait takes over: N10c's chat
+waited on its own servers past the weekly limit, the laptop slept, and StepHours ended the run
+(2026-11-07). A window that resets sooner is left to the chat, which carries on by itself.
 
 A step starts only when no tracked file is changed, no chat in this folder has written
 for -IdleMinutes, and the next row is Open (not a gate, Optional, Built or Blocked).
@@ -93,6 +97,8 @@ $effort = 'max'
 $script:exhaustedUntil = @{}
 # Set when a push needs the owner (commits on origin that the branch lacks, or an origin not on GitHub).
 $script:pushStop = $false
+# A chat whose usage window is rejected past its deadline and that writes nothing this long is stopped for the limit wait.
+$script:limitQuietMinutes = 10
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $gateSign = [char]::ConvertFromUtf32(0x1F6A6)
 [IO.Directory]::CreateDirectory($logDir) | Out-Null
@@ -324,11 +330,17 @@ $pushNote = 'the runner pushes the branch once your step ends Done, and CI runs 
 if ($NoPush) { $pushNote = 'the owner pushes' }
 $stepPrompt = ($planPrompts[$Plan] + "`n" + $sharedRules).Replace('<<PUSH>>', $pushNote)
 
-$resumePrompt = 'The run stopped ({0}). Carry on with step {1} from where you stopped. The unattended-run rules in the first message still apply.'
+$resumePrompt = 'The run stopped ({0}). Servers you started may still be running, and test runs you started have ended. Carry on with step {1} from where you stopped. The unattended-run rules in the first message still apply.'
 # For -ResumeSession: hours may have passed since the chat stopped, and its runner has exited.
-$stoppedResumePrompt = 'A usage limit or the owner stopped this chat and ended that run of the runner. A new run resumes you now, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, test runs you started have ended, and other commits may have reached main. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
+$stoppedResumePrompt = 'A usage limit or the owner stopped this chat and ended that run of the runner. A new run resumes you now, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, test runs you started have ended, and other commits may have reached main. Uncommitted changes another session made in files outside your step may have been set aside since: commit only your own files. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
 # After -OnWeeklyLimit wait: the same run waited, possibly for days, while the chat was stopped.
 $weeklyResumePrompt = 'A weekly usage limit stopped this chat, and the runner waited for it to reset, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
+# A resumed chat runs in a new process: name ultracode again, as the notes plan's first message does.
+if ($Plan -eq 'notes') {
+    $resumePrompt += ' ultracode stays on.'
+    $stoppedResumePrompt += ' ultracode stays on.'
+    $weeklyResumePrompt += ' ultracode stays on.'
+}
 
 function Write-Note([string]$Message) {
     $line = '{0:yyyy-MM-dd HH:mm}  {1}' -f (Get-Date), $Message
@@ -609,9 +621,22 @@ function Invoke-Chat {
                 if ($null -eq $line) { $finished = $true; break }
                 $lastOutput = Get-Date
                 $log.WriteLine($line)
+                $resultBefore = $run.Result
                 Read-ChatEvent $line $run
                 if ($run.Stopped) { break }
+                # A limit result while background work keeps the process alive: N10c's chat waited on its
+                # own servers past the weekly limit until StepHours ended the run (2026-11-07). When the
+                # window outlasts this chat, the caller's limit wait takes over.
+                if ($run.Result -and -not [object]::ReferenceEquals($run.Result, $resultBefore) -and (Get-Field $run.Result 'is_error') -and (Test-LimitOutlastsChat $run $deadline)) {
+                    Write-Note ('Stopping the chat at its limit: {0}' -f (Get-ShortText (Get-ResultText $run) 160))
+                    break
+                }
                 $pending = $process.StandardOutput.ReadLineAsync()
+            }
+            elseif ((Test-LimitOutlastsChat $run $deadline) -and ((Get-Date) -gt $deadline -or ((Get-Date) - $lastOutput).TotalMinutes -gt $script:limitQuietMinutes)) {
+                # The same without a limit result: quiet, or past the deadline (a laptop that slept).
+                Write-Note 'Stopping the chat: its usage limit outlasts it, and it went quiet or ran out of time.'
+                break
             }
             elseif ((Get-Date) -gt $deadline) {
                 $run.Stopped = 'it ran past {0} hours' -f $StepHours
@@ -645,8 +670,12 @@ function Get-ResultText($Run) {
 
 # A usage limit or a passing API failure is worth a resume; anything else stops the runner.
 function Test-Retryable($Run) {
-    if ($Run.Stopped -or $null -eq $Run.Result) { return $false }
+    if ($Run.Stopped) { return $false }
+    # A step the chat finished is not waited out, whatever the last rate-limit event said.
+    if ($Run.Result -and -not (Get-Field $Run.Result 'is_error') -and (Get-ResultText $Run) -match '(?m)^\s*RUNNER-RESULT:\s*done\b') { return $false }
+    # Even without a result: Invoke-Chat stops a rejected chat that went quiet.
     if ((Get-Field $Run.RateLimit 'status') -eq 'rejected') { return $true }
+    if ($null -eq $Run.Result) { return $false }
     if (-not (Get-Field $Run.Result 'is_error')) { return $false }
     return (Get-ResultText $Run) -match '(?i)usage limit|limit reached|hit your limit|resets|overloaded|rate.?limit|\b(429|500|502|503|504|529)\b|timed? ?out|ECONN'
 }
@@ -659,6 +688,16 @@ function Get-ResetEpoch($Run) {
     }
     # Some limit messages carry the reset time themselves, as "...limit reached|<epoch seconds>".
     if ((Get-ResultText $Run) -match '\|(\d{10})\b') { return [long]$Matches[1] }
+}
+
+# True when the chat's usage window is rejected until after its deadline, or names no reset. A window
+# that resets sooner is left to the chat itself: A14b's five-hour limit passed while its backend suite
+# ran, and the same process carried on to Done (2026-10-22).
+function Test-LimitOutlastsChat($Run, [datetime]$Deadline) {
+    if ((Get-Field $Run.RateLimit 'status') -ne 'rejected') { return $false }
+    $resetsAt = Get-ResetEpoch $Run
+    if (-not $resetsAt) { return $true }
+    return [DateTimeOffset]::FromUnixTimeSeconds($resetsAt).LocalDateTime -gt $Deadline
 }
 
 # Seconds until the usage window named in the chat's last rate-limit event resets, or 30
@@ -759,6 +798,7 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
     while ((Test-Retryable $run) -and $waits -lt $MaxLimitWaits -and -not (Test-Path $stopFile)) {
         $waits++
         $reason = Get-ShortText (Get-ResultText $run) 200
+        if (-not $reason) { $reason = 'a usage limit, with no result' }
         $delay = Get-ResumeDelay $run
         # A chat that never got a session id starts again with the whole step prompt.
         $prompt = $stepPrompt.Replace('<<ROW>>', $Row.Id)
