@@ -805,8 +805,8 @@ links need, the last workout's name and the last check-in's sent time. Reads onl
 Coach attention v4) rides on the waiting-check-ins read and its chat on the unread read, so Coach Today and
 the client page read no more commands than before; in their tests' scenarios both sat at their pinned limits
 (25 and 24), so a new shared read must merge into one of these or move the limit with a reason. The list
-costs 23 commands whatever the client count (24 until notes plan N10a), one more while some client's plan has
-ended (the renewal requests' read).
+cost 23 commands whatever the client count (24 until notes plan N10a; 26 since notes plan N6d, below), one more
+while some client's plan has ended (the renewal requests' read).
 
 Critique B4b gives the same Today read This month and two plan lists (CLI-020), with no schema change and no
 new endpoint, and takes the workspace week off it (`CoachTodayView` loses `Week` and gains `Month`,
@@ -819,7 +819,8 @@ history as a collection (a coach's read narrowed to clients they ever coached), 
 receipt's day and coach and totals per currency. The owner's team is one more query, the owner's alone
 (`CoachClientScope.IsOwnerAsync` answers from the role it already reads). The lapsed plans' names ride on the
 plan-ends read, widened for Today alone to plans that ran out in the last 30 days, and the client's version on
-the clients read. Today's busiest case costs 29 commands, pinned exactly (`B4bTodayQueryPin`): B4a's 24 (25 before
+the clients read. Today's busiest case cost 29 commands (32 since notes plan N6d, below), pinned exactly
+(`B4bTodayQueryPin`): B4a's 24 (25 before
 notes plan N10a), the renewal requests' read, which runs only while some client's whole plan has run out, This
 month's three (critique B10c added the sessions held), and critique B13's read of which clients with a pack had a
 coaching plan run out (`CoachingPlanRunOut` in Subscriptions, SES-010), which runs only while a client in scope has a
@@ -829,6 +830,15 @@ Notes plan N10a (Coach attention v7) took maxes to review off these reads: one r
 not cancelled, which No program names, replaced P4c's two (the maxes in use, then the logged sets), so each costs one
 command fewer than before it: Today's busiest case 29 rather than 30, the list 23 rather than 24, and a client's page
 23 in its tests' scenarios, now its limit (24 before).
+Notes plan N6d (Coach attention v8) adds where lifts stand to these reads, through `LiftStandingsReader`, which the
+Training tab's reads share so a weight Today counts is one the tab offers: the coming step sets, one command whenever
+a client in scope has training, which keeps each lift's first open session on or after the UTC day after and the few
+before it; those lifts' workouts of the last 15 days, while a step is coming; and the workouts before them of a lift
+those days cannot settle (`LastTimeStepRule.RecentSettles`), each read for exactly the clients coming to its lift. So
+the rows grow with a client's history only for a lift whose step sets were given no weight its client logged near in
+those days (BEB-2; notes plan section 3). Today's busiest case costs 32 (`B4bTodayQueryPin`, 29 before), the list 26
+(23 before), and a client's page 24 in R33b's and R35b's scenarios (training, no step lift) and 26 with a step lift
+coming.
 
 Critique B10d adds the This month page's one read, `GET /api/coach-month` (`ICoachMonthService` in Clients,
 `CoachMonthReader` in Infrastructure), again with no schema change. Month numbers v2 (`MonthNumbersPolicy` in
@@ -1687,6 +1697,12 @@ each lift in `training."LiftWeightApplications"`: append-only, its sets and sess
 foreign key, one row per idempotency key and lift. The client's reads (`/me/today`, `/me/upcoming`, and the
 coach's workout read, which shares the view) build `ClientExerciseView.WeightNote` from a writing's latest
 record in one query, made only when a set of the read carries the rule's key.
+
+Notes plan N6d moves the standings read into `LiftStandingsReader` (Infrastructure), batched over clients: the
+Training tab's reads call it for one client with the whole history, as before, and Coach Today's attention (CLI-018
+v8) for every client in scope, with each lift's last 15 days and the workouts before them only where
+`LastTimeStepRule.RecentSettles` says those cannot settle the typo guard. Clients' `CoachAttentionPolicy` sees only a
+count, since a module never references another.
 
 Critique B19 adds `training."ClientProgramVisibilities"`: one row per client once a coach has chosen
 "Can see finished programs" (TRN-031), no row meaning the default, so the migration moves no data. It is

@@ -66,6 +66,7 @@ public sealed class A8CoachScreensDomainTests
                 CoachAttentionKind.MissedSessions,
                 CoachAttentionKind.CheckInOverdue,
                 CoachAttentionKind.NoProgram,
+                CoachAttentionKind.WeightsToApply,
             },
             Enum.GetValues<CoachAttentionKind>().OrderBy(CoachAttentionPolicy.RankOf).ToArray());
 
@@ -87,12 +88,13 @@ public sealed class A8CoachScreensDomainTests
     }
 
     [TestMethod]
-    public void TheAttentionRuleIsVersionSeven()
+    public void TheAttentionRuleIsVersionEight()
     {
         // Version 3 came with audit A8's new client with no plan, version 4 with critique B4a's overdue check-in,
-        // version 5 with critique B10c's sessions running out, version 6 with critique B13's plan beside a pack, and
-        // version 7 with the notes plan's N10a, which removed maxes to review on the owner's word.
-        Assert.AreEqual(("CoachAttention", 7), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
+        // version 5 with critique B10c's sessions running out, version 6 with critique B13's plan beside a pack,
+        // version 7 with the notes plan's N10a, which removed maxes to review on the owner's word, and version 8 with
+        // the notes plan's N6d, which added weights to apply.
+        Assert.AreEqual(("CoachAttention", 8), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
     }
 
     private static ClientAttentionSignals Quiet() => new(0, 0, null, null, false, 0, false);

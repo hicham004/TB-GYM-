@@ -4,7 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, Subject, throwError, type Observable } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
   ClientCommercialOverview,
@@ -1726,6 +1726,62 @@ describe('a client’s Training', () => {
       // Nothing is left to apply, so the panel goes and the coach is put back on the program.
       expect(host.querySelector('app-program-weights')).toBeNull();
       expect(document.activeElement?.id).toBe('program-title');
+    });
+
+    describe('arriving from Review weights (N6d)', () => {
+      const scrollIntoView = vi.fn();
+      let original: typeof HTMLElement.prototype.scrollIntoView | undefined;
+      beforeEach(() => {
+        scrollIntoView.mockClear();
+        original = HTMLElement.prototype.scrollIntoView;
+        HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      });
+      afterEach(() => {
+        // One jsdom for every spec file: never leave an own `undefined` behind.
+        if (original) HTMLElement.prototype.scrollIntoView = original;
+        else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+      });
+
+      it('brings Weights to apply into view with the focus on its heading, and takes the word out', async () => {
+        const { harness, host, router, context } = await render({
+          program: coachProgram(undefined, { liftStandings: [curl, held] }),
+          url: '/clients/client-1/training?action=weights',
+        });
+        await settle(harness.fixture);
+
+        const heading = host.querySelector<HTMLElement>('#weights-title');
+        expect(heading).not.toBeNull();
+        expect(document.activeElement).toBe(heading);
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+        expect(scrollIntoView.mock.contexts).toEqual([heading]);
+        expect(context.notice()).toBeNull();
+        expect(router.url).toBe('/clients/client-1/training');
+        expect(dialog()).toBeNull();
+      });
+
+      it('says nothing is left to apply when the weights went meanwhile, on the program’s title', async () => {
+        const { harness, host, router, context } = await render({
+          program: coachProgram(undefined, { liftStandings: [appliedCurl, held] }),
+          url: '/clients/client-1/training?action=weights',
+        });
+        await settle(harness.fixture);
+
+        expect(host.querySelector('app-program-weights')).toBeNull();
+        expect(context.notice()).toBe('Nothing is left to apply for Maya now.');
+        expect(document.activeElement?.id).toBe('program-title');
+        expect(router.url).toBe('/clients/client-1/training');
+      });
+
+      it('does nothing from an address without the word', async () => {
+        const { harness, context } = await render({
+          program: coachProgram(undefined, { liftStandings: [curl] }),
+        });
+        await settle(harness.fixture);
+
+        expect(scrollIntoView).not.toHaveBeenCalled();
+        expect(context.notice()).toBeNull();
+        expect(document.activeElement?.id).not.toBe('weights-title');
+      });
     });
 
     it('lists nothing when no lift moves a weight, or for a former client', async () => {

@@ -19,7 +19,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     /// Coach Today's SQL commands in its busiest case, sign-in and tenant checks included: every read in use, measured
     /// by <see cref="B4bTodayIsAFixedNumberOfQueriesInItsBusiestCase"/> and pinned exactly.
     /// </summary>
-    private const int B4bTodayQueryPin = 29;
+    private const int B4bTodayQueryPin = 32;
 
     [TestMethod]
     public async Task B4bMoneyReceivedCountsPerCurrencyForTheCoachTheClientHadWhenItArrived()
@@ -335,7 +335,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         var (_, training) = await B4aBusyClientAsync(owner, maya, tenant, "maya", version, null, today);
         using var omar = CreateClient();
         await B4aBusyClientAsync(owner, omar, tenant, "omar", version, training, today);
-        var (fewer, view) = await B4aMeasureAsync<CoachTodayView>(owner, CoachTodayUrl, "B4b Coach Today, 4 clients");
+        // Rana's lift has "Last time + step" sets with no starting weight, done today: where it stands reads the coming
+        // step sets, the lift's last weeks and, since no weight was asked, the workouts before them (notes plan N6d).
+        using var rana = CreateClient();
+        var ranaId = await R31InviteAsync(owner, rana, tenant, "b4b-queries-rana@example.test", "Rana", "Step");
+        await N6dStepProgramAsync(owner, ranaId, "b4b queries", null);
+        await N6bTrainTodayAsync(rana, true, new N6bLog(10, 12m), new N6bLog(10, 12m));
+        var (fewer, view) = await B4aMeasureAsync<CoachTodayView>(owner, CoachTodayUrl, "B4b Coach Today, 5 clients");
         Assert.AreEqual(jadId, view.PlansEndedNotRenewed.Single().Client.ClientProfileId, "The renewal requests' read runs.");
         Assert.HasCount(2, view.Month.MoneyReceived);
         Assert.AreEqual((1, 1), (
@@ -346,13 +352,15 @@ public sealed partial class Phase3TrainingWorkflowTests
         await B4aBusyClientAsync(owner, nour, tenant, "nour", version, training, today);
         using var rami = CreateClient();
         await B4aBusyClientAsync(owner, rami, tenant, "rami", version, training, today);
-        var (more, _) = await B4aMeasureAsync<CoachTodayView>(owner, CoachTodayUrl, "B4b Coach Today, 6 clients");
+        var (more, _) = await B4aMeasureAsync<CoachTodayView>(owner, CoachTodayUrl, "B4b Coach Today, 7 clients");
         Assert.AreEqual(fewer, more, "Two more clients cost Today no query.");
         // 29: B4a's 25 (every read Today made then, in use in its busy scenario) less one, since N10a reads each
         // client's latest program in one query where P4c's suggested maxes took two, plus the renewal requests' read,
         // which runs only while some client's whole plan has run out (Jad's, here), This month's three: money received,
         // one query with each receipt's coach history (SUB-016), the 1-on-1 sessions held (SES-008), and the owner's
-        // team, the owner's alone, and which clients with a pack had a coaching plan run out (SES-010, Sara has a pack).
+        // team, the owner's alone, and which clients with a pack had a coaching plan run out (SES-010, Sara has a pack);
+        // 32 since N6d, which reads where every training client's step lifts stand: the coming step sets, those lifts'
+        // last weeks while a step is coming, and the workouts before them of a lift those weeks cannot settle (Rana's).
         // Ended plans' names, the client's version and each pack's balance ride on reads Today already made. Pinned
         // exactly, so one more read fails here, as a query per client fails the equality above.
         Assert.AreEqual(B4bTodayQueryPin, more, "Coach Today costs a fixed number of queries (docs/ARCHITECTURE.md).");
@@ -360,6 +368,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             RequiredTodayQueryCounter.ReadsTagged(CoachOverviewReader.SessionsHeldTag).Commands,
             RequiredTodayQueryCounter.ReadsTagged(CoachOverviewReader.CoachingPlansRunOutTag).Commands,
             RequiredTodayQueryCounter.ReadsTagged(CoachOverviewReader.LatestProgramsTag).Commands));
+        Assert.AreEqual((1, 1, 1, 0), N6dCommands());
 
         // A coach's Today reads no team.
         var (coach, _) = await B4aMeasureAsync<CoachTodayView>(lea, CoachTodayUrl, "B4b Coach Today, a coach");

@@ -534,6 +534,49 @@ describe('Coach Today view model', () => {
     });
   });
 
+  it('names lifts ready to step up, or weights to apply when one keeps its weight, and the next workout (N6d)', () => {
+    const row = (fields: Parameters<typeof attentionItem>[2]) =>
+      attentionRow(attentionItem('WeightsToApply', SARA, fields), COACH_TODAY, context);
+
+    expect(row({ count: 3, stepUps: 3, date: COACH_TODAY })).toMatchObject({
+      key: `WeightsToApply:${SARA.clientProfileId}`,
+      heading: 'Sara Mansour has 3 lifts ready to step up',
+      detail: 'Next workout today',
+      tag: 'Weights',
+      tone: 'share',
+      action: {
+        label: 'Review weights',
+        forWhom: 'for Sara Mansour',
+        link: `/clients/${SARA.clientProfileId}/training`,
+        queryParams: { action: 'weights' },
+        startsChatWith: null,
+      },
+    });
+    const one = row({ count: 1, stepUps: 1, date: '2026-10-02' });
+    expect([one.heading, one.detail]).toEqual([
+      'Sara Mansour has a lift ready to step up',
+      'Next workout tomorrow',
+    ]);
+    // A weight kept from last time is applied as well (STR-020), so the words promise no step.
+    const kept = row({ count: 2, stepUps: 1, date: '2026-10-06' });
+    expect([kept.heading, kept.detail]).toEqual([
+      'Sara Mansour has 2 weights to apply',
+      'Next workout Tue 6 Oct',
+    ]);
+    expect(row({ count: 1, stepUps: 0, date: '2026-10-06' }).heading).toBe(
+      'Sara Mansour has a weight to apply',
+    );
+    // A program's day behind the workspace's (after it moved its zone) is still that program's today.
+    expect(row({ count: 1, stepUps: 1, date: '2026-09-30' }).detail).toBe('Next workout today');
+    // A team coach's client names its coach to the owner, as every row does.
+    const theirs = attentionRow(
+      attentionItem('WeightsToApply', MAYA, { count: 1, stepUps: 1, date: '2026-10-02' }),
+      COACH_TODAY,
+      context,
+    );
+    expect(theirs.coach).toBe('Lea Khoury');
+  });
+
   it('lets no row of any kind say that logged sets suggest a max, or offer Review maxes (N10a)', () => {
     // One item of every kind the server sends, keyed by kind: leaving one out, or naming one the
     // server no longer sends, does not compile.
@@ -548,13 +591,14 @@ describe('Coach Today view model', () => {
       MissedSessions: { count: 2, date: '2026-09-24' },
       CheckInOverdue: { count: 1, date: '2026-09-28', canMessage: true },
       NoProgram: { date: '2026-03-01', subjectId: 'block-ended' },
+      WeightsToApply: { count: 3, stepUps: 3, date: '2026-10-02' },
     } satisfies Record<CoachAttentionKind, Parameters<typeof attentionItem>[2]>;
     const rows = (Object.keys(every) as CoachAttentionKind[]).map((kind) =>
       attentionRow(attentionItem(kind, SARA, every[kind]), COACH_TODAY, context),
     );
     const words = rows.flatMap((row) => [row.heading, row.detail, row.tag, row.action.label]);
 
-    expect(rows).toHaveLength(10);
+    expect(rows).toHaveLength(11);
     expect(words.filter((text) => /suggest|review maxes|\bmax(es)?\b/i.test(text))).toEqual([]);
     expect(rows.filter((row) => row.action.queryParams?.['action'] === 'maxes')).toEqual([]);
   });
@@ -640,6 +684,7 @@ describe('Coach Today view model', () => {
       target('CheckInOverdue', { count: 2, subjectId: 'conv-1' }),
       target('NoProgram'),
       target('NoPlan'),
+      target('WeightsToApply', { count: 2, stepUps: 2 }),
     ]).toEqual([
       { link: `${page}/checkins/a-1`, queryParams: null },
       { link: `${page}/checkins`, queryParams: null },
@@ -653,6 +698,7 @@ describe('Coach Today view model', () => {
       { link: `${page}/checkins`, queryParams: null },
       { link: `${page}/training`, queryParams: { action: 'assign' } },
       { link: `${page}/service`, queryParams: { action: 'start' } },
+      { link: `${page}/training`, queryParams: { action: 'weights' } },
     ]);
   });
 

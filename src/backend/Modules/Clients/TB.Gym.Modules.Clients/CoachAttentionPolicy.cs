@@ -3,19 +3,20 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// Coach attention v7 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
+/// Coach attention v8 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
 /// plan, v4 in critique B4a an overdue check-in and the plan's own status, v5 in critique B10c packs running out, v6
 /// in critique B13 a coaching plan that ran out reads as ended beside a running pack, SES-010, v7 in the notes plan's
-/// N10a removed maxes to review on the owner's word, 7 Nov 2026):
+/// N10a removed maxes to review on the owner's word, 7 Nov 2026, v8 in the notes plan's N6d weights to apply):
 /// which of a client's signals ask the coach to act, how the queue is ranked, the one status the client list shows
 /// and the plan's status beside it.
 /// The signals arrive already gated by the client's plan, so this rule only weighs them; what makes a check-in
-/// overdue is the CheckIns module's rule (CHK-015, overdue check-ins v1), counted here.
+/// overdue is the CheckIns module's rule (CHK-015, overdue check-ins v1), counted here, and what a lift's coming
+/// workout applies is the Training module's (STR-019 and STR-020, LastTimeStep v1).
 /// </summary>
 public static class CoachAttentionPolicy
 {
     public const string Key = "CoachAttention";
-    public const int Version = 7;
+    public const int Version = 8;
 
     /// <summary>
     /// A running plan whose last covered day falls within this many days, today counted, is ending soon: a last
@@ -53,7 +54,8 @@ public static class CoachAttentionPolicy
 
     /// <summary>
     /// The queue's order, most urgent first. A new client with no plan comes after a renewal request: both wait
-    /// for the coach to sell a plan, and nothing else can reach the coach from that client until one runs.
+    /// for the coach to sell a plan, and nothing else can reach the coach from that client until one runs. Weights to
+    /// apply come last: every client on a step lift raises them most weeks, as the coach's homework (notes plan N6d).
     /// </summary>
     private static readonly CoachAttentionKind[] RankOrder =
     [
@@ -67,6 +69,7 @@ public static class CoachAttentionPolicy
         CoachAttentionKind.MissedSessions,
         CoachAttentionKind.CheckInOverdue,
         CoachAttentionKind.NoProgram,
+        CoachAttentionKind.WeightsToApply,
     ];
 
     /// <summary>The kinds this client raises, in rank order.</summary>
@@ -136,17 +139,24 @@ public static class CoachAttentionPolicy
             flags.Add(CoachAttentionKind.NoProgram);
         }
 
+        if (signals.WeightsToApply > 0)
+        {
+            flags.Add(CoachAttentionKind.WeightsToApply);
+        }
+
         return flags;
     }
 
     /// <summary>
-    /// Anything to act on besides a plan ending or sessions running out makes a client Needs attention; otherwise the
-    /// plan's own status (<see cref="PlanStatus"/>).
+    /// Anything to act on besides a plan ending, sessions running out or weights to apply makes a client Needs
+    /// attention; otherwise the plan's own status (<see cref="PlanStatus"/>). Weights to apply are the coach's weekly
+    /// homework for a client doing the work, not a sign of one slipping (notes plan N6d).
     /// </summary>
     public static ClientOverviewStatus Status(
         IReadOnlyCollection<CoachAttentionKind> flags,
         ClientPlanState planState) =>
-        flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.SessionsRunningOut))
+        flags.Any(flag => flag is not (CoachAttentionKind.PlanEndingSoon or CoachAttentionKind.SessionsRunningOut
+            or CoachAttentionKind.WeightsToApply))
             ? ClientOverviewStatus.NeedsAttention
             : PlanStatus(flags, planState) switch
             {
@@ -268,6 +278,10 @@ public static class CoachAttentionPolicy
 /// What is left on the packs paid for and not over (SES-008), read only while sessions are in today's plan.
 /// </param>
 /// <param name="SessionsLastDay">The last of those packs' last days, a day still to run.</param>
+/// <param name="WeightsToApply">
+/// Lifts whose coming workout has a weight for the coach to apply (STR-020: what LastTimeStep v1's answer writes),
+/// one per writing, read only while training is in the plan (notes plan N6d).
+/// </param>
 public sealed record ClientAttentionSignals(
     int CheckInsToReview,
     long UnreadMessages,
@@ -279,4 +293,5 @@ public sealed record ClientAttentionSignals(
     DateOnly? JoinedOn = null,
     int CheckInsOverdue = 0,
     int? SessionsLeft = null,
-    DateOnly? SessionsLastDay = null);
+    DateOnly? SessionsLastDay = null,
+    int WeightsToApply = 0);

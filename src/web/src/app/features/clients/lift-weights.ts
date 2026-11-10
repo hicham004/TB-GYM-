@@ -122,6 +122,14 @@ export function appliedNotice(
 }
 
 /**
+ * What the Training tab says when Review weights (notes plan N6d) brings the coach to a panel that has gone:
+ * everything was applied, started or held meanwhile.
+ */
+export function nothingToApplyNotice(firstName: string): string {
+  return $localize`Nothing is left to apply for ${firstName}:name: now.`;
+}
+
+/**
  * An apply's refusal in a coach's words. The page reads the lifts again on a conflict, so the words say so; a
  * closed training read (TRN-023) answers 403 without a code.
  */

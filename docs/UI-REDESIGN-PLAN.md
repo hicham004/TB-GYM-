@@ -1704,6 +1704,11 @@ limited to the coach's assigned clients.
   Needs you, a client's page, the Messages client panel and Clients, with Review maxes, the Maxes to review chip and
   its line in "How these statuses work"; for a client between programs Needs you reads "Sara Mansour has no program
   running", "Joined Sun 1 Mar" and Assign program.
+- Notes plan N6d (CLI-018 v8; decision 21, the coach's weekly homework): weights to apply come last in Needs you,
+  "Maya Fakhoury has 3 lifts ready to step up" ("has 2 weights to apply" when one keeps last time's weight),
+  "Next workout tomorrow", the Weights tag in the share tone and Review weights, which opens the client's Training at
+  Weights to apply; never Needs attention. The Clients row carries it as a tag, a client's page and the chat's panel
+  as a row, and "How these statuses work" gives its line.
 
 **C2. Clients**
 - Job: "How is everyone doing, and who is slipping?"
@@ -1825,6 +1830,9 @@ limited to the coach's assigned clients.
   - Weights to apply (notes plan N6c): first on the tab while any lift's answer moves a weight, one row per
     lift with its name, its workout and day, the line above and its Apply, and "Apply all" for two or more,
     outlined like every Apply. It goes once nothing is left to apply, and focus moves to the program's title.
+    Review weights on Today, Clients, the Overview and the chat's panel open it (`?action=weights`, notes plan N6d):
+    it comes into view with the focus on its heading, or, when nothing is left, the program's title with "Nothing is
+    left to apply for Maya now."
   - Manage program: Assign program, Build next block, Edit weeks (P3b), Reschedule, Open every shared week now (or
     Open weeks as they start), Close program and Cancel program. What cannot be done stays in the list
     with its reason: a started program cannot move, Close program waits for every session to be done

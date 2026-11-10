@@ -307,6 +307,36 @@ describe('what needs the coach on a client’s page', () => {
     });
   });
 
+  it('says how many lifts are ready to step up, or weights wait, and opens Weights to apply (N6d)', () => {
+    const need = (fields: Parameters<typeof attentionItem>[2]) =>
+      needRows([attentionItem('WeightsToApply', MAYA, fields)], COACH_TODAY, context)[0];
+
+    expect(need({ count: 3, stepUps: 3, date: '2026-10-02' })).toEqual({
+      key: 'WeightsToApply',
+      kind: 'WeightsToApply',
+      tone: 'share',
+      tag: 'Weights',
+      heading: '3 lifts ready to step up',
+      detail: 'Next workout tomorrow',
+      action: {
+        label: 'Review weights',
+        link: `${page}/training`,
+        queryParams: { action: 'weights' },
+      },
+    });
+    expect(
+      [
+        need({ count: 1, stepUps: 1, date: COACH_TODAY }),
+        need({ count: 2, stepUps: 1, date: '2026-10-06' }),
+        need({ count: 1, stepUps: 0, date: '2026-10-06' }),
+      ].map((row) => `${row.heading} · ${row.detail}`),
+    ).toEqual([
+      '1 lift ready to step up · Next workout today',
+      '2 weights to apply · Next workout Tue 6 Oct',
+      '1 weight to apply · Next workout Tue 6 Oct',
+    ]);
+  });
+
   it('lets no row of any kind say that logged sets suggest a max, or offer Review maxes (N10a)', () => {
     // One item of every kind the server sends, keyed by kind: leaving one out, or naming one the
     // server no longer sends, does not compile. The chat's client panel draws these rows too.
@@ -321,6 +351,7 @@ describe('what needs the coach on a client’s page', () => {
       MissedSessions: { count: 3, date: '2026-09-24' },
       CheckInOverdue: { count: 1, date: '2026-09-28', canMessage: true },
       NoProgram: { date: '2026-03-01', subjectId: 'block-ended' },
+      WeightsToApply: { count: 2, stepUps: 2, date: '2026-10-02' },
     } satisfies Record<CoachAttentionKind, Parameters<typeof attentionItem>[2]>;
     const list = needRows(
       (Object.keys(every) as CoachAttentionKind[]).map((kind) =>
@@ -331,7 +362,7 @@ describe('what needs the coach on a client’s page', () => {
     );
     const words = list.flatMap((row) => [row.heading, row.detail, row.tag, row.action.label]);
 
-    expect(list).toHaveLength(10);
+    expect(list).toHaveLength(11);
     expect(words.filter((text) => /suggest|review maxes|\bmax(es)?\b/i.test(text))).toEqual([]);
     expect(list.filter((row) => row.action.queryParams?.['action'] === 'maxes')).toEqual([]);
   });

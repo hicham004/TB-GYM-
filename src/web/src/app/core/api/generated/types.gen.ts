@@ -1235,6 +1235,7 @@ export type CoachAttentionItemView = {
   newestAt?: null | string;
   canMessage?: boolean;
   sessionsLeft?: null | number | string;
+  stepUps?: null | number | string;
 };
 
 export type CoachAttentionKind =
@@ -1247,7 +1248,8 @@ export type CoachAttentionKind =
   | 'NoProgram'
   | 'NoPlan'
   | 'CheckInOverdue'
-  | 'SessionsRunningOut';
+  | 'SessionsRunningOut'
+  | 'WeightsToApply';
 
 export type CoachCertificateCoachView = {
   userId: string;

@@ -1010,6 +1010,59 @@ test('the weights to apply follow dark mode and read right to left (N6c)', async
   await expectNoHorizontalOverflow(page);
 });
 
+test('Review weights from Today brings Weights to apply into view, with the focus on it (N6d)', async ({
+  page,
+}) => {
+  // A short phone window puts the panel below the fold, so it is brought up; at 1440 it is in the first screen.
+  for (const [width, height] of [
+    [390, 560],
+    [1440, 900],
+  ]) {
+    await openTraining(page, width, height, {
+      path: `/clients/${ID}/training?action=weights`,
+      programs: [coachProgram(undefined, { liftStandings: toApply() })],
+    });
+
+    const heading = page.locator('#weights-title');
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport();
+    // The word leaves the address, so Back and a reload do not do it again, and the router's own scroll to the top
+    // on that change does not undo the panel's.
+    await expect(page).toHaveURL(new RegExp(`/clients/${ID}/training$`));
+    const box = await heading.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, middle: rect.top + rect.height / 2, scrolled: window.scrollY };
+    });
+    // Below the sticky top bar, not under it.
+    expect(box.top).toBeGreaterThan(64);
+    if (width === 390) {
+      expect(box.scrolled).toBeGreaterThan(0);
+      expect(Math.abs(box.middle - height / 2)).toBeLessThan(80);
+    }
+    await expect(page.getByRole('status').filter({ hasText: 'Nothing is left' })).toHaveCount(0);
+    await axe(page);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: `test-results/n6d-training-arrival-${width}.png` });
+  }
+});
+
+test('Review weights says when nothing is left to apply, on the program’s title (N6d)', async ({
+  page,
+}) => {
+  await openTraining(page, 390, 844, {
+    path: `/clients/${ID}/training?action=weights`,
+    programs: [coachProgram(undefined, { liftStandings: [] })],
+  });
+
+  await expect(page.locator('app-program-weights')).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'Nothing is left' })).toHaveText(
+    'Nothing is left to apply for Maya now.',
+  );
+  await expect(page.locator('#program-title')).toBeFocused();
+  await expect(page).toHaveURL(new RegExp(`/clients/${ID}/training$`));
+  await axe(page);
+});
+
 test.describe('an apply the server refused (N6c)', () => {
   // The browser logs the 409 the page was deliberately given; nothing else may be logged.
   test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/training\//] } });

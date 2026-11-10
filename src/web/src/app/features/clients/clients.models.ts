@@ -15,7 +15,12 @@ import { ageOn } from '../../ui/calendar';
 import type { UiMenuItem } from '../../ui/menu';
 import type { StatusPillTone } from '../../ui/status-pill';
 import { duration } from '../commercial/products.models';
-import { ago, attentionTarget, daysBetween } from '../dashboard/coach-today.models';
+import {
+  ago,
+  attentionTarget,
+  daysBetween,
+  weightsToApplyLine,
+} from '../dashboard/coach-today.models';
 import { featureLabels, money, sessionsLeft } from './client-service.models';
 
 /**
@@ -457,6 +462,8 @@ export function attentionReason(item: CoachAttentionItemView): string {
       return item.subjectId ? $localize`No program running` : $localize`No program yet`;
     case 'NoPlan':
       return $localize`Joined, no plan yet`;
+    case 'WeightsToApply':
+      return weightsToApplyLine(item);
   }
 }
 

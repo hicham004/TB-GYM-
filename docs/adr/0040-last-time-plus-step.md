@@ -1,7 +1,7 @@
 # ADR 0040: Last time + step
 
 Status: accepted, 2026-11-10 (notes plan N6a; decisions 21 and 22 of 5 Nov 2026, with 20 and the rest of 22
-decided on 7 Nov); amended 2026-11-10 (notes plan N6b, then N6c)
+decided on 7 Nov); amended 2026-11-10 (notes plan N6b, then N6c, then N6d)
 
 ## Context
 
@@ -96,6 +96,22 @@ weekly reading of the logged sets.
 - The client's line ("Up 2 kg · all 3 × 10 done on Tue") is built from that row on the client's reads of a
   workout still to do or running, while each set it wrote still holds that weight, and names nothing of the
   coach's.
+
+## Coach Today (notes plan N6d)
+
+The weekly apply is the coach's homework (decision 21), so Coach Today's Needs you, the client list and a client's
+page name each client with weights to apply (CLI-018 v8): one per writing of a lift whose answer writes a weight, as
+the Training tab lists them, ranked last and never Needs attention, each opening the tab at Weights to apply. They
+read the same rule through one reader, `LiftStandingsReader`, batched over every client in scope, and from each
+lift's last 15 days: Today is read every few seconds while a coach is around, and audit BEB-2 keeps its rows from
+growing with a client's history. Only the typo guard (line e) reads further back, and a log within 25% of the
+weight its own workout asked stands whatever came before it, so `LastTimeStepRule.RecentSettles` says when the last
+weeks give the whole history's answer; the reader reads the workouts before them only when they do not (step sets
+given no weight their client logged near in those weeks: no starting weight before the first apply, or two weeks
+unapplied), so only such a lift's read grows with its history. Its coming read keeps each lift's first open session
+on or after the UTC day after, and the few before it, rather than every week written ahead. The Training tab still
+reads the whole history. Keeping the guard's standing on each finished set, or a guard that forgets after some weeks
+(a version 2), would end the remaining growth (notes plan section 3).
 
 ## Consequences
 

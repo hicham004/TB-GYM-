@@ -293,6 +293,9 @@ internal sealed class CoachOverviewReader(
         var sessions = await ReadSessionsAsync(training, sessionsFrom, sessionsTo, cancellationToken);
         var lastStarts = await ReadLastWorkoutStartsAsync(training, cancellationToken);
         var latestPrograms = await ReadLatestProgramsAsync(training, cancellationToken);
+        // Weights to apply (notes plan N6d): the answers the client's Training tab lists, for every client at once, from
+        // the lifts' last weeks (the workouts before them too only where those cannot settle the typo guard).
+        var standings = await LiftStandingsReader.ReadRecentAsync(dbContext, clock.UtcNow, training, cancellationToken);
 
         return scope.Clients.Select(client =>
         {
@@ -384,6 +387,12 @@ internal sealed class CoachOverviewReader(
                 ? latest
                 : null;
             var joinedOn = scope.LocalDate(client.CreatedAtUtc);
+            // A lift counts while its answer still writes a weight (STR-020), as the Training tab's Weights to apply
+            // lists it: once applied, or held at each set's own weight (a running workout, a likely typo, last done more
+            // than 14 days ago), it writes nothing and goes; a session that starts hands the lift to its next one.
+            var toApply = trainingIncluded
+                ? standings[client.Id].Where(view => LastTimeStepRule.SetsToApply(view.Standing).Count > 0).ToArray()
+                : [];
 
             // Ended, not renewed (critique B4b, CLI-020): the whole plan has lapsed and its plan that ran out last did
             // so lately; SUB-014's ended plan when there is one, as the client's Ask to renew and Needs you name it.
@@ -429,7 +438,8 @@ internal sealed class CoachOverviewReader(
                 joinedOn,
                 late.Length,
                 lastPack is null ? null : paidPacks.Sum(item => item.SessionsLeft),
-                lastPack?.EndDateExclusive.AddDays(-1));
+                lastPack?.EndDateExclusive.AddDays(-1),
+                toApply.Length);
             return new ClientState(
                 client,
                 joinedOn,
@@ -461,7 +471,9 @@ internal sealed class CoachOverviewReader(
                 notRenewed,
                 runningPlan is { IsSessionPack: true },
                 unpaidPacks.Length,
-                unpaidPacks.FirstOrDefault()?.EnrollmentId ?? lastPack?.EnrollmentId);
+                unpaidPacks.FirstOrDefault()?.EnrollmentId ?? lastPack?.EnrollmentId,
+                toApply.Count(view => view.Standing.Outcome == LiftStandingOutcome.StepUp),
+                toApply.Length == 0 ? null : toApply.Min(view => view.SessionDate));
         }).ToArray();
     }
 
@@ -496,6 +508,9 @@ internal sealed class CoachOverviewReader(
             // while messaging is in the plan (decided once, as CanMessage).
             CoachAttentionKind.CheckInOverdue => Item(kind, state, date: state.OldestOverdue?.DueDate,
                 count: state.Signals.CheckInsOverdue, subjectId: state.CanMessage ? state.ChatId : null),
+            // The soonest workout a weight waits for sets the order among clients (CoachAttentionPolicy.Rank).
+            CoachAttentionKind.WeightsToApply => Item(kind, state, date: state.WeightsNextOn,
+                count: state.Signals.WeightsToApply, stepUps: state.WeightsStepUp),
             _ => throw new InvalidOperationException($"Unknown attention kind {kind}."),
         });
 
@@ -508,8 +523,10 @@ internal sealed class CoachOverviewReader(
         int? weekNumber = null,
         Guid? subjectId = null,
         DateTimeOffset? newestAt = null,
-        int? sessionsLeft = null) =>
-        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, newestAt, state.CanMessage, sessionsLeft);
+        int? sessionsLeft = null,
+        int? stepUps = null) =>
+        new(kind, state.Client.Ref, since, date, count, weekNumber, subjectId, newestAt, state.CanMessage, sessionsLeft,
+            stepUps);
 
     private static SessionDayCountView[] Days(IEnumerable<SessionRow> sessions, DateOnly from, int dayCount)
     {
@@ -1425,7 +1442,9 @@ internal sealed class CoachOverviewReader(
         EndedNotRenewed? NotRenewed,
         bool PlanIsSessionPack,
         int UnpaidPacks,
-        Guid? PackToActOn)
+        Guid? PackToActOn,
+        int WeightsStepUp,
+        DateOnly? WeightsNextOn)
     {
         /// <summary>The plan the client's page names (R3.5b), whose last day is <see cref="PlanEndsOn"/>.</summary>
         public Guid? PlanEnrollmentId => RunningEnrollmentId ?? EndedPlan?.EnrollmentId;

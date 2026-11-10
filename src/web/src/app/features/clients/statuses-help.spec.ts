@@ -60,8 +60,20 @@ describe('How these statuses work (critique B4a)', () => {
       'Missed workouts',
       'Check-ins overdue',
       'No program yet',
+      'Lifts ready to step up',
     ]);
     const text = squash(sheet.textContent);
+    // Notes plan N6d: Coach attention v8's last reason, in LastTimeStep v1's terms (STR-019, STR-020), which leaves
+    // the client's status alone.
+    expect(text).toContain(
+      'A lift set to Last time + step can go up by its step: in their last workout of it, within 14 days, every working set reached its reps and none felt harder than planned.',
+    );
+    expect(text).toContain(
+      'A lift that held for its reps or its effort shows as a weight to apply when its next workout is set at another weight than the one it keeps; a likely typo, another unit or a workout still running shows nothing.',
+    );
+    expect(text).toContain(
+      'It clears once you apply it on their Training, once that workout starts, or once the lift holds at its own weight. It doesn’t count as needing attention.',
+    );
     // CHK-015: 2 to 13 days after the due day, a draft counting as not sent.
     expect(text).toContain(
       'A check-in was due 2 to 13 days ago and they haven’t sent it; one they started but didn’t send still counts.',

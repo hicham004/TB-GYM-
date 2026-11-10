@@ -74,7 +74,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             (nourItem.Count, nourItem.Date, nourItem.SubjectId, nourItem.CanMessage));
         var nourPage = await ReadSliceAsync<ClientProfileOverviewView>(owner, R33bOverviewUrl(nourId));
         CollectionAssert.AreEqual(nourRow.Attention.ToArray(), nourPage.Attention.Select(item => item.Kind).ToArray());
-        Assert.AreEqual((CoachAttentionPolicy.Key, 7), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
+        Assert.AreEqual((CoachAttentionPolicy.Key, 8), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
 
         // Once the owner and Maya have a chat, Remind opens it. A draft is not sent; sending takes the item away
         // and puts the check-in to review in its place.
@@ -258,21 +258,29 @@ public sealed partial class Phase3TrainingWorkflowTests
         var (mayaId, training) = await B4aBusyClientAsync(owner, maya, tenant, "maya", version, null, today);
         using var omar = CreateClient();
         await B4aBusyClientAsync(owner, omar, tenant, "omar", version, training, today);
-        var (fewer, _) = await B4aMeasureAsync<ClientOverviewView>(owner, ClientOverviewUrl, "client list, 3 clients");
+        // Rana's lift has "Last time + step" sets with no starting weight, done today: all three of where her lifts
+        // stand are read (notes plan N6d).
+        using var rana = CreateClient();
+        var ranaId = await R31InviteAsync(owner, rana, tenant, "b4a-queries-rana@example.test", "Rana", "Step");
+        await N6dStepProgramAsync(owner, ranaId, "b4a queries", null);
+        await N6bTrainTodayAsync(rana, true, new N6bLog(10, 12m), new N6bLog(10, 12m));
+        var (fewer, _) = await B4aMeasureAsync<ClientOverviewView>(owner, ClientOverviewUrl, "client list, 4 clients");
 
         using var nour = CreateClient();
         await B4aBusyClientAsync(owner, nour, tenant, "nour", version, training, today);
         using var rami = CreateClient();
         await B4aBusyClientAsync(owner, rami, tenant, "rami", version, training, today);
-        var (more, list) = await B4aMeasureAsync<ClientOverviewView>(owner, ClientOverviewUrl, "client list, 5 clients");
-        Assert.HasCount(5, list.Clients);
+        var (more, list) = await B4aMeasureAsync<ClientOverviewView>(owner, ClientOverviewUrl, "client list, 6 clients");
+        Assert.HasCount(6, list.Clients);
         Assert.AreEqual(fewer, more, "Two more clients cost the list no query.");
         // 23, sign-in and tenant checks included: Today's reads without its feed, plus the last activity (three) and
         // the plan summaries (one); N10a reads each client's latest program in one query where P4c's suggested maxes
-        // took two. Every read the list makes is in use here but the renewal requests, read only when some client's
-        // whole plan has run out. Pinned exactly, so one more read fails here, as a query per client fails the
-        // equality above.
-        Assert.AreEqual(23, more, "The client list costs a fixed 23 queries (docs/ARCHITECTURE.md).");
+        // took two; 26 since N6d, which reads where the step lifts stand: the coming step sets, those lifts' last weeks
+        // and the workouts before them of a lift those cannot settle (Rana's). Every read the list makes is in use
+        // here but the renewal requests, read only when some client's whole plan has run out. Pinned exactly, so one
+        // more read fails here, as a query per client fails the equality above.
+        Assert.AreEqual(26, more, "The client list costs a fixed 26 queries (docs/ARCHITECTURE.md).");
+        Assert.AreEqual((1, 1, 1, 0), N6dCommands());
         var (todayBefore, _) = await B4aMeasureAsync<CoachTodayView>(owner, CoachTodayUrl, "Coach Today");
         var (pageBefore, _) = await B4aMeasureAsync<ClientProfileOverviewView>(owner, R33bOverviewUrl(mayaId), "client page");
 

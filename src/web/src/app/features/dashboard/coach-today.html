@@ -18,8 +18,9 @@
         <span class="serif"> {{ firstName() }}.</span>
       </h1>
       @if (today(); as view) {
-        <!-- Counts the clients in Needs you, plans ending and sessions running out included, which
-             the client list's Needs attention leaves out, so it says what it counts (COACH-4). -->
+        <!-- Counts the clients in Needs you, plans ending, sessions running out and weights to apply
+             included, which the client list's Needs attention leaves out, so it says what it counts
+             (COACH-4). -->
         @if (view.needsCount > 0) {
           <p class="needs" i18n>
             <strong>{view.needsCount, plural,

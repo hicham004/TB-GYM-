@@ -69,7 +69,13 @@ import { ProgramMaxesUpdate } from './program-maxes-update';
 import { ProgramNextBlock } from './program-next-block';
 import { ProgramSession } from './program-session';
 import { ProgramWeights } from './program-weights';
-import { applyError, appliedNotice, canApply, LiftWeightApplier } from './lift-weights';
+import {
+  applyError,
+  appliedNotice,
+  canApply,
+  LiftWeightApplier,
+  nothingToApplyNotice,
+} from './lift-weights';
 
 /**
  * A client's Training (C3): the program as a timeline, weeks side by side with their sessions, the
@@ -320,6 +326,37 @@ export class ClientProgram {
         replaceUrl: true,
       });
       if (this.canAssign()) this.openAssign();
+    });
+
+    // Review weights from Today, Clients, the Overview or the chat's panel arrives as `?action=weights` (notes plan
+    // N6d): once the program has loaded, Weights to apply comes into view with the coach's focus on its heading, or,
+    // when nothing is left to apply, the program's title with a line saying so. The word leaves the address, without
+    // the router scrolling back up, so Back and a reload do not do it again.
+    effect(() => {
+      if (this.query().get('action') !== 'weights' || this.state() !== 'ready') return;
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { action: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+        scroll: 'manual',
+      });
+      untracked(() => {
+        if (this.weightsToApply().length === 0 && this.read()?.isAllowed) {
+          this.context.notice.set(nothingToApplyNotice(this.firstName()));
+        }
+        afterNextRender(
+          () => {
+            const root = this.host.nativeElement;
+            const target =
+              root.querySelector<HTMLElement>('#weights-title') ??
+              root.querySelector<HTMLElement>('#program-title');
+            target?.scrollIntoView?.({ block: 'center' });
+            target?.focus({ preventScroll: true });
+          },
+          { injector: this.injector },
+        );
+      });
     });
 
     // A client's note on a workout links here as `?session=<id>` (R5.1c): that session's sheet opens

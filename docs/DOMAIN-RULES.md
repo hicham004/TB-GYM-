@@ -154,7 +154,7 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v7 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13, v7 in notes plan N10a) is what Coach Today asks a
+**CLI-018** Coach attention v8 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13, v7 in notes plan N10a, v8 in notes plan N6d) is what Coach Today asks a
 coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
 their own, the Owner all) and never a former client. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
@@ -173,9 +173,14 @@ a week not shared (TRN-021); two or more missed sessions
 (TRN-021); a check-in overdue by CHK-015 (critique B4a: not sent, due 2 to 13 days ago, while check-ins are in
 today's plan), worked out from the missing submission alone: an absence is not an answer, so nothing is read into
 it (CHK-012), and its Remind opens the chat, started if need be, only when the caller is the client's own coach
-and messaging is in the plan, else the client's check-ins (CLI-013); and, last, training in the plan but no block
-running or coming, which names the client's latest program, if they had one (STR-014). The status is Needs
-attention for any of those but the plan's end and sessions running out, else the plan's own status: Paused, Ending soon, On track for
+and messaging is in the plan, else the client's check-ins (CLI-013); training in the plan but no block
+running or coming, which names the client's latest program, if they had one (STR-014); and, last, lifts whose
+coming workout has a weight for the coach to apply (v8, notes plan N6d, decision 21: what applying STR-019's answer
+writes by STR-020, a step up or last time's weight kept on a set at another weight), counted one per writing of a
+lift as the client's Training tab lists them, with how many step up and the soonest of those workouts' days; it goes
+once they are applied, or once the answer writes nothing (held at each set's own weight, the workout started, last
+done more than 14 days ago). The status is Needs
+attention for any of those but the plan's end, sessions running out and weights to apply, else the plan's own status: Paused, Ending soon, On track for
 a running plan, or No active plan; a pack beside a coaching plan that ran out is no running plan (SES-010). That plan status is also shown on its own beside the reasons, whatever they are
 (critique B4a: a plan's end keeps its own status, outside Needs attention); there a blocked client reads Access
 blocked (critique B11), since a block changes no plan (SUB-010) and the row still sums theirs up. A client is new for
@@ -197,7 +202,11 @@ and the workspace calendar week's sessions, scheduled and done (null when traini
 critique B4b took the week off Today). It answers 404 for a former client, another coach's client or an unknown one, so the page
 can never say "nothing needs you" about a client the list flags. Maxes to review (v2 to v6: the lifts whose logged
 sets suggest a new max by STR-012, also named on No program) were removed in v7 on the owner's word (decision 19's
-note, 7 Nov 2026; ADR 0036).
+note, 7 Nov 2026; ADR 0036). Weights to apply (v8) are read from each lift's workouts of the last 15 days, and from
+the workouts before them only where those cannot settle STR-019's typo guard (`LastTimeStepRule.RecentSettles`: a log
+within 25% of the weight its own workout asked stands whatever came before it), so Today, the list and a client's page
+count the weights the Training tab offers, and their rows grow with a client's history only for a lift whose step
+sets were given no weight its client logged near in those 15 days (audit BEB-2).
 
 **CLI-019** A sign-in lasts 8 hours as a browser session, or 30 days when "Keep me signed in" is ticked
 (audit A2, the owner's decision of 2026-10-19); either is renewed while it is used and ends after that
@@ -1137,7 +1146,9 @@ holds that weight and the lift is done as written: "Up 2 kg · all 3 × 10 done 
 last time · set 1 reached 11 of 12 on Tue 3 Nov"; never who applied it, and typing another weight still
 wins (TRN-029). Applying is a coach's training write: their own clients only (ADR 0026), a released client
 refused (ADR 0027), closed with the coach's training read (TRN-023, 403), and refused while the workspace is
-read-only for an unpaid bill (PBL-005).
+read-only for an unpaid bill (PBL-005). What waits to be applied is the coach's weekly homework on Coach Today, the
+client list and a client's page (CLI-018 v8, notes plan N6d), which open the Training tab at it (`?action=weights`);
+nothing is applied from there.
 
 ## 6. Nutrition, recipes, and calorie targets
 

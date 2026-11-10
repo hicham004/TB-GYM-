@@ -63,6 +63,13 @@ public enum CoachAttentionKind
     /// B10c, SES-008). A commercial matter like a plan's end, ranked right after it and outside Needs attention.
     /// </summary>
     SessionsRunningOut = 11,
+
+    /// <summary>
+    /// Lifts with a "Last time + step" set whose coming workout has a weight for the coach to apply (notes plan N6d,
+    /// STR-019, STR-020): a step up, or last time's weight kept where the workout is set at another. The coach's
+    /// weekly homework (decision 21), so it ranks last and never makes a client Needs attention.
+    /// </summary>
+    WeightsToApply = 12,
 }
 
 /// <summary>The one status a client shows in the coach's list (CLI-018).</summary>
@@ -149,6 +156,9 @@ public sealed record CoachClientRef(
 /// <item><c>SessionsRunningOut</c>: SessionsLeft on the packs paid for and not over, Date the last of their last days.
 /// Count the packs still waiting for payment (null when none), and then SubjectId the first of them, the pack to
 /// record a payment on; otherwise SubjectId the paid pack ending last, the pack to renew.</item>
+/// <item><c>WeightsToApply</c>: Count the lifts with a weight to apply (one per writing, as the client's Training tab
+/// lists them), StepUps how many of those step up (the rest keep last time's weight), Date the soonest of their coming
+/// workouts' days, in its program's calendar.</item>
 /// </list>
 /// <see cref="CanMessage"/> is set on every item: the caller may message this client now, being the client's own
 /// coach with messaging in today's plan (CLI-013, ADR 0026).
@@ -163,7 +173,8 @@ public sealed record CoachAttentionItemView(
     Guid? SubjectId,
     DateTimeOffset? NewestAt = null,
     bool CanMessage = false,
-    int? SessionsLeft = null);
+    int? SessionsLeft = null,
+    int? StepUps = null);
 
 /// <summary>Sessions programmed and completed on one workspace day.</summary>
 public sealed record SessionDayCountView(DateOnly Date, int Scheduled, int Completed);

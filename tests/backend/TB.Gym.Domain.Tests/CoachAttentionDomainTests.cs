@@ -121,7 +121,7 @@ public sealed class CoachAttentionDomainTests
         Assert.IsFalse(Enum.IsDefined((CoachAttentionKind)8), "8 stays unused.");
         Assert.AreEqual(
             "CheckInToReview 1, UnreadMessages 2, RenewalRequested 3, PlanEndingSoon 4, WeekNotShared 5, MissedSessions 6, " +
-            "NoProgram 7, NoPlan 9, CheckInOverdue 10, SessionsRunningOut 11",
+            "NoProgram 7, NoPlan 9, CheckInOverdue 10, SessionsRunningOut 11, WeightsToApply 12",
             string.Join(", ", Enum.GetValues<CoachAttentionKind>().Select(kind => $"{kind} {(int)kind}")));
     }
 
@@ -134,15 +134,15 @@ public sealed class CoachAttentionDomainTests
         Assert.AreEqual(ClientOverviewStatus.OnTrack, CoachAttentionPolicy.Status([], ClientPlanState.Running));
         Assert.AreEqual(ClientOverviewStatus.Paused, CoachAttentionPolicy.Status([], ClientPlanState.Paused));
 
-        // Every other kind keeps its effect: anything to act on but a plan's end or sessions running out is Needs
-        // attention.
+        // Every other kind keeps its effect: anything to act on but a plan's end, sessions running out or weights to
+        // apply (v8, the notes plan's N6d) is Needs attention.
         foreach (var kind in Enum.GetValues<CoachAttentionKind>())
         {
             Assert.AreEqual(
                 kind switch
                 {
                     CoachAttentionKind.PlanEndingSoon => ClientOverviewStatus.EndingSoon,
-                    CoachAttentionKind.SessionsRunningOut => ClientOverviewStatus.OnTrack,
+                    CoachAttentionKind.SessionsRunningOut or CoachAttentionKind.WeightsToApply => ClientOverviewStatus.OnTrack,
                     _ => ClientOverviewStatus.NeedsAttention,
                 },
                 CoachAttentionPolicy.Status([kind], ClientPlanState.Running),

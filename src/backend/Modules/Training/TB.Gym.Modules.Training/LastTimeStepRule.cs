@@ -201,6 +201,85 @@ public static class LastTimeStepRule
     }
 
     /// <summary>
+    /// Whether a lift's recent writings give the same answer as its whole history (notes plan N6d), so Coach Today
+    /// can read the last weeks of each lift rather than every workout, which would grow with each one (audit BEB-2).
+    /// <paramref name="recent"/> holds every writing of the lift on or after <paramref name="from"/>, finished or
+    /// running, and <paramref name="from"/> is at least <see cref="LookbackDays"/> before <paramref name="today"/>, so
+    /// last time (line b) and any weight carried on (line d) are among them whenever either can count. Only the typo
+    /// guard (line e) reads further back, since each set's logs fold from the oldest; but a log within
+    /// <see cref="TypoShare"/> of the weight its workout asked stands whatever came before it. So the answer is the
+    /// same when <see cref="Read"/> ends before the guard (nothing recent, last done long ago, a workout running,
+    /// nothing to match, another unit), or when every set the guard or a carried weight reads (last time's logged sets
+    /// and the coming ones) has such a log among its recent logs, or no recent log at all; otherwise the caller reads
+    /// the workouts before the window too. Outside its terms it answers false, never a guess.
+    /// </summary>
+    public static bool RecentSettles(
+        ComingLift coming,
+        IReadOnlyCollection<LoggedLift> recent,
+        DateOnly from,
+        DateOnly today)
+    {
+        ArgumentNullException.ThrowIfNull(coming);
+        ArgumentNullException.ThrowIfNull(recent);
+        if (from > today.AddDays(-LookbackDays) || recent.Any(item => item.Day < from))
+        {
+            return false;
+        }
+
+        // Read's way to the guard, on the window: while the window holds any writing of the lift, its latest is the
+        // whole history's (every older one is before it), and each of these ends the answer without a set's logs.
+        var writings = recent
+            .Where(item => item.Day <= coming.SessionDate)
+            .OrderBy(item => item.Day)
+            .ThenBy(item => item.StartedAtUtc)
+            .ThenBy(item => item.WorkoutExecutionId)
+            .ThenBy(item => item.Occurrence)
+            .ToArray();
+        if (writings.Length == 0)
+        {
+            return true;
+        }
+
+        var latest = writings[^1];
+        if (latest.Day < today.AddDays(-LookbackDays) || latest.Status != WorkoutExecutionStatus.Completed)
+        {
+            return true;
+        }
+
+        var writing = writings.LastOrDefault(item =>
+            item.WorkoutExecutionId == latest.WorkoutExecutionId && item.Occurrence == coming.Occurrence);
+        if (writing is null)
+        {
+            return true;
+        }
+
+        var logged = writing.Sets.Where(item => item.IsCompleted && item.Weight is not null).ToArray();
+        if (logged.Any(item => item.Unit != UnitFor(coming, item.SetNumber)))
+        {
+            return true;
+        }
+
+        // The writings the guard folds (Read's "earlier"), and the sets it folds them for: last time's logged sets
+        // (line e) and the coming sets a weight can carry on to (line d).
+        var earlier = writings
+            .Where(item => item.Status == WorkoutExecutionStatus.Completed && item.Occurrence == coming.Occurrence)
+            .ToArray();
+        return logged.Select(set => set.SetNumber)
+            .Concat(coming.Sets.Select(set => set.SetNumber))
+            .Distinct()
+            .All(number =>
+            {
+                var unit = UnitFor(coming, number);
+                var logs = earlier
+                    .SelectMany(item => item.Sets.Where(set => set.SetNumber == number))
+                    .Where(set => set is { IsCompleted: true, Weight: not null } && set.Unit == unit)
+                    .ToArray();
+                return logs.Length == 0 || logs.Any(set =>
+                    set.PrescribedUnit == unit && set.PrescribedWeight is { } asked && Near(set.Weight!.Value, asked));
+            });
+    }
+
+    /// <summary>
     /// Why an applied set holds its weight, kept on the set beside the rule's key and version (STR-020): the weight
     /// the answer started from and what it did with it. Plain words for the record; screens say it their own way.
     /// </summary>

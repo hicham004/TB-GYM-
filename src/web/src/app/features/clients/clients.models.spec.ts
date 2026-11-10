@@ -224,6 +224,32 @@ describe('client list (C2, critique B4a)', () => {
     ]);
   });
 
+  it('tags lifts ready to step up, or weights to apply, opening Weights to apply (N6d)', () => {
+    const ali = coachClient('c-x', 'Ali', 'Fares');
+    const row = (...items: ReturnType<typeof attentionItem>[]) =>
+      clientRow(
+        overviewRow(ali, {
+          status: 'OnTrack',
+          attention: items.map((item) => item.kind),
+          attentionItems: items,
+        }),
+        COACH_TODAY,
+        context,
+      );
+    const tags = (count: number, stepUps: number) =>
+      row(attentionItem('WeightsToApply', ali, { count, stepUps, date: '2026-10-02' })).tags.map(
+        (tag) => [tag.label, tag.link, tag.queryParams],
+      );
+
+    // Weights to apply never make a client Needs attention, but the row still says why it waits (CLI-018).
+    expect(tags(3, 3)).toEqual([
+      ['3 lifts ready to step up', '/clients/c-x/training', { action: 'weights' }],
+    ]);
+    expect(tags(1, 1).map(([label]) => label)).toEqual(['1 lift ready to step up']);
+    expect(tags(2, 1).map(([label]) => label)).toEqual(['2 weights to apply']);
+    expect(tags(1, 0).map(([label]) => label)).toEqual(['1 weight to apply']);
+  });
+
   it('has no filter for maxes to review, which went on the owner’s word (notes plan N10a)', () => {
     expect(CLIENT_FILTERS).toEqual(['all', 'attention', 'ending', 'paused', 'new']);
     expect(Object.keys(filterCounts([]))).toEqual(CLIENT_FILTERS);

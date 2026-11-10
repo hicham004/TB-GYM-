@@ -7,6 +7,7 @@ import {
   coachMonth,
   coachTodayView,
   emptyCoachTodayView,
+  LYNN,
   MAYA,
   OWNER_ID,
 } from '../src/testing/coach-today-fixtures';
@@ -142,6 +143,51 @@ for (const [width, height] of [
     await expectNoHorizontalOverflow(page);
     await axe(page);
     await page.screenshot({ path: `test-results/b10c-coach-today-${width}.png`, fullPage: true });
+  });
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`Coach Today at ${width}px puts weights to apply last, dark and light (N6d)`, async ({
+    page,
+  }) => {
+    // Maya did every set of three step lifts, and one of Lynn's two weights keeps last time's: the
+    // coach's weekly homework, after everything else, each opening the client's Weights to apply.
+    const view = coachTodayView();
+    const attention = [
+      ...view.attention,
+      attentionItem('WeightsToApply', MAYA, { count: 3, stepUps: 3, date: '2026-10-02' }),
+      attentionItem('WeightsToApply', LYNN, { count: 2, stepUps: 1, date: '2026-10-06' }),
+    ];
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await openToday(page, width, height, { ...view, attention });
+
+    const rows = page.locator('li.need');
+    await expect(rows).toHaveCount(9);
+    const maya = rows.nth(7);
+    await expect(maya).toContainText('Maya Fakhoury has 3 lifts ready to step up');
+    await expect(maya).toContainText('Next workout tomorrow');
+    await expect(maya.locator('.tag')).toHaveText('Weights');
+    await expect(
+      maya.getByRole('link', { name: 'Review weights for Maya Fakhoury' }),
+    ).toHaveAttribute('href', '/clients/c-maya/training?action=weights');
+    const lynn = rows.nth(8);
+    await expect(lynn).toContainText('Lynn Bou Khalil has 2 weights to apply');
+    await expect(lynn).toContainText('Next workout Tue 6 Oct');
+    await expect(
+      lynn.getByRole('link', { name: 'Review weights for Lynn Bou Khalil' }),
+    ).toHaveAttribute('href', '/clients/c-lynn/training?action=weights');
+    await lynn.scrollIntoViewIfNeeded();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n6d-coach-today-dark-${width}.png` });
+
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n6d-coach-today-${width}.png` });
   });
 }
 

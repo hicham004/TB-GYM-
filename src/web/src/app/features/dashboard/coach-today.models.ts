@@ -533,7 +533,59 @@ export function attentionRow(
         action: go($localize`Assign program`),
       };
     }
+    case 'WeightsToApply':
+      // The coach's weekly homework (notes plan N6d, decision 21): the weights the client's Training tab lists
+      // under Weights to apply, which the action opens; nothing is applied from here.
+      return {
+        ...base,
+        heading: allStepUp(item)
+          ? count > 1
+            ? $localize`${name}:name: has ${count}:count: lifts ready to step up`
+            : $localize`${name}:name: has a lift ready to step up`
+          : count > 1
+            ? $localize`${name}:name: has ${count}:count: weights to apply`
+            : $localize`${name}:name: has a weight to apply`,
+        detail: weightsDetail(today, item.date, context.locale),
+        tag: $localize`Weights`,
+        tone: 'share',
+        action: go($localize`Review weights`),
+      };
   }
+}
+
+/**
+ * Whether every lift on a weights-to-apply item steps up (notes plan N6d): then the words are the owner's, "ready to
+ * step up"; a weight kept from last time where the next workout has another is applied too (STR-020), so an item
+ * holding one says "weights to apply".
+ */
+function allStepUp(item: CoachAttentionItemView): boolean {
+  return Number(item.stepUps ?? 0) === Number(item.count ?? 0);
+}
+
+/** Weights to apply with their count, as the Clients tag and a client's page say it: "3 lifts ready to step up". */
+export function weightsToApplyLine(item: CoachAttentionItemView): string {
+  const count = Number(item.count ?? 0);
+  if (allStepUp(item)) {
+    return count > 1
+      ? $localize`${count}:count: lifts ready to step up`
+      : $localize`1 lift ready to step up`;
+  }
+  return count > 1 ? $localize`${count}:count: weights to apply` : $localize`1 weight to apply`;
+}
+
+/**
+ * The soonest workout a weight waits for, against the workspace's today: "Next workout tomorrow". The day is the
+ * program's own, which runs behind the workspace's only after the workspace moved its zone: a workout still to come
+ * on a day the workspace has passed is today's in its program, as a plan's end does (`endsHeading`).
+ */
+export function weightsDetail(today: string, date: string | null, locale: string): string {
+  if (!date) return '';
+  const inDays = daysBetween(today, date);
+  return inDays <= 0
+    ? $localize`Next workout today`
+    : inDays === 1
+      ? $localize`Next workout tomorrow`
+      : $localize`Next workout ${formatDate(date, 'EEE d MMM', locale)}:date:`;
 }
 
 /**
@@ -577,6 +629,9 @@ export function attentionTarget(item: CoachAttentionItemView): {
     case 'NoPlan':
       // Opens the client's Service & access with Start a plan already open.
       return { link: `${page}/service`, queryParams: { action: 'start' } };
+    case 'WeightsToApply':
+      // Opens the client's Training at Weights to apply (notes plan N6d), where each weight is applied.
+      return { link: `${page}/training`, queryParams: { action: 'weights' } };
   }
 }
 

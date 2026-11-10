@@ -10,7 +10,13 @@ import type {
   MesocycleSummary,
 } from '../../core/api/generated';
 import type { StatusPillTone } from '../../ui/status-pill';
-import { ago, overdueDetail, withSessionsLeft } from '../dashboard/coach-today.models';
+import {
+  ago,
+  overdueDetail,
+  weightsDetail,
+  weightsToApplyLine,
+  withSessionsLeft,
+} from '../dashboard/coach-today.models';
 import type {
   DashboardNutrition,
   DashboardSection,
@@ -258,6 +264,20 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
           label: $localize`Start a plan`,
           link: `${page}/service`,
           queryParams: { action: 'start' },
+        },
+      };
+    case 'WeightsToApply':
+      // The coach's weekly homework (notes plan N6d): opens the Training section at Weights to apply.
+      return {
+        ...base,
+        tone: 'share',
+        tag: $localize`Weights`,
+        heading: weightsToApplyLine(item),
+        detail: weightsDetail(today, item.date, context.locale),
+        action: {
+          label: $localize`Review weights`,
+          link: `${page}/training`,
+          queryParams: { action: 'weights' },
         },
       };
   }
