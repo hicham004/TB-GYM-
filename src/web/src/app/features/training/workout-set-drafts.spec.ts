@@ -12,8 +12,10 @@ import {
   hasLoadUnitForActualLoad,
   previousSetFor,
   reconcileWorkoutSetDrafts,
+  repsMissing,
   snapshotWorkoutSetDraft,
   startingWorkoutUnit,
+  startsWithoutReps,
   toRecordSetRequest,
   updateWorkoutSetDraft,
   withWorkoutUnit,
@@ -322,6 +324,152 @@ describe('workout set drafts', () => {
     });
   });
 
+  /**
+   * TRN-029 v2 (notes plan N6a, decision 22): a last time + step set counts only with the reps the
+   * client did, so its reps box starts empty and ✓ asks for them; its load starts as any set's.
+   */
+  describe('a last time + step set', () => {
+    /** Every set of the day's exercise as 10 reps, 7 kg to start and 2 kg a step. */
+    function stepSets(day: ClientTrainingDayResult, changes: Partial<ClientSetView> = {}) {
+      const exercise = day.workouts[0].exercises[0];
+      exercise.sets = exercise.sets.map((set) => ({
+        ...set,
+        prescribedRepetitionsMinimum: 10,
+        prescribedRepetitionsMaximum: 10,
+        prescribedLoad: 7,
+        loadStrategy: 'LastTimeStep' as const,
+        loadStep: 2,
+        prescribedTargetRpe: null,
+        ...changes,
+      }));
+      return exercise;
+    }
+
+    it('starts its reps empty, neither the prescribed ones nor last time’s, and its load at the coach’s', () => {
+      const day = trainingDay();
+      stepSets(day).previousPerformance = lastTime([
+        { position: 1, repetitions: 12, load: 5, loadUnit: 'Kilogram', rpe: 8 },
+      ]);
+
+      const drafts = reconcileWorkoutSetDrafts(day, {});
+
+      for (const id of ['set-1', 'set-2', 'set-3', 'set-4']) {
+        expect(drafts[id]).toMatchObject({
+          actualRepetitions: null,
+          actualLoad: 7,
+          actualLoadUnit: 'Kilogram',
+          dirty: false,
+        });
+      }
+    });
+
+    it('with no starting weight starts at last time’s load in its unit, else empty, and no reps', () => {
+      const day = trainingDay();
+      stepSets(day, { prescribedLoad: null }).previousPerformance = lastTime([
+        { position: 1, repetitions: 10, load: 5, loadUnit: 'Kilogram', rpe: 8 },
+        { position: 2, repetitions: 12, load: 15, loadUnit: 'Pound', rpe: 8 },
+      ]);
+
+      const drafts = reconcileWorkoutSetDrafts(day, {});
+
+      expect(drafts['set-1']).toMatchObject({
+        actualRepetitions: null,
+        actualLoad: 5,
+        actualLoadUnit: 'Kilogram',
+      });
+      // Last time's 15 lb is not a kilogram number, and set 3 has no last time: the client picks.
+      for (const id of ['set-2', 'set-3']) {
+        expect(drafts[id]).toMatchObject({
+          actualRepetitions: null,
+          actualLoad: null,
+          actualLoadUnit: 'Kilogram',
+        });
+      }
+    });
+
+    it('keeps what was saved earlier, what was logged, and what is typed over a reload', () => {
+      const day = trainingDay();
+      const exercise = stepSets(day);
+      exercise.sets[0] = { ...exercise.sets[0], actualRepetitions: 9, actualLoad: 7.5 };
+      exercise.sets[1] = {
+        ...exercise.sets[1],
+        isCompleted: true,
+        actualRepetitions: 10,
+        actualLoad: 7,
+      };
+
+      let drafts = reconcileWorkoutSetDrafts(day, {});
+      expect(drafts['set-1']).toMatchObject({ actualRepetitions: 9, actualLoad: 7.5 });
+      expect(drafts['set-2']).toMatchObject({
+        actualRepetitions: 10,
+        actualLoad: 7,
+        isCompleted: true,
+      });
+
+      drafts = updateWorkoutSetDraft(drafts, 'set-3', { actualLoad: 8 });
+      drafts = updateWorkoutSetDraft(drafts, 'set-4', { actualRepetitions: 11 });
+      drafts = reconcileWorkoutSetDrafts(day, drafts);
+      expect(drafts['set-3']).toMatchObject({
+        actualLoad: 8,
+        actualRepetitions: null,
+        dirty: true,
+      });
+      expect(drafts['set-4']).toMatchObject({ actualLoad: 7, actualRepetitions: 11, dirty: true });
+    });
+
+    it('keeps its reps empty through the kg or lb choice', () => {
+      const day = trainingDay();
+      stepSets(day);
+      const workout = day.workouts[0];
+
+      const pounds = withWorkoutUnit(reconcileWorkoutSetDrafts(day, {}), workout, 'Pound');
+      expect(pounds['set-1']).toMatchObject({
+        actualRepetitions: null,
+        actualLoad: null,
+        actualLoadUnit: 'Pound',
+        dirty: false,
+      });
+
+      const kilograms = withWorkoutUnit(pounds, workout, 'Kilogram');
+      expect(kilograms['set-1']).toMatchObject({
+        actualRepetitions: null,
+        actualLoad: 7,
+        actualLoadUnit: 'Kilogram',
+        dirty: false,
+      });
+    });
+
+    it('asks for the reps on a step set alone, and takes 0 as typed', () => {
+      const step = { loadStrategy: 'LastTimeStep' } as const;
+      const missing = (actualRepetitions: unknown) =>
+        repsMissing(step, {
+          actualRepetitions: actualRepetitions as ClientSetView['actualRepetitions'],
+        });
+
+      expect(
+        [null, undefined, '', '  ', Number.NaN, Number.POSITIVE_INFINITY].map(missing),
+      ).toEqual([true, true, true, true, true, true]);
+      // The − stepper on an empty box writes 0, which counts as reps done (decision 22).
+      expect([0, '0', 10, '10', 7.5].map(missing)).toEqual([false, false, false, false, false]);
+      expect(repsMissing(step, null)).toBe(true);
+      // Every other set logs with its reps or without them, as before; a workout started before
+      // N6a has no weight choice, and a mocked set may lack the field.
+      for (const loadStrategy of [
+        'None',
+        'Direct',
+        'PercentageWorkingMax',
+        'RpeBasedEpley',
+        'RpeChart',
+        null,
+      ] as const) {
+        expect(repsMissing({ loadStrategy }, { actualRepetitions: null })).toBe(false);
+        expect(startsWithoutReps({ loadStrategy })).toBe(false);
+      }
+      expect(startsWithoutReps({} as Pick<ClientSetView, 'loadStrategy'>)).toBe(false);
+      expect(startsWithoutReps(step)).toBe(true);
+    });
+  });
+
   describe('effort', () => {
     it('sends RPE or reps left, never both, RPE first (STR-003)', () => {
       const snapshot = snapshotWorkoutSetDraft(
@@ -409,6 +557,8 @@ function setView(index: number): ClientSetView {
     prescribedRepetitionsMaximum: 10,
     prescribedLoad: 100,
     prescribedLoadUnit: 'Kilogram',
+    loadStrategy: 'Direct',
+    loadStep: null,
     prescribedTargetRpe: 8,
     prescribedTargetRir: null,
     restSeconds: 120,

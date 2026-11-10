@@ -502,13 +502,19 @@ export interface StepReach {
   readonly load: number;
   /** The unit of the fixed weights the weight step moves: "kg", "lb", or "kg / lb". */
   readonly unit: string | null;
+  /** The last time + step sets, whose starting weight alone the weight step moves (N6a). */
+  readonly stepSets: number;
 }
 
 export function stepReach(view: TrainingMesocycleView, weekIds: readonly string[]): StepReach {
   // A warm-up stays as it is (TRN-025).
   const sets = chosenSets(view, weekIds).filter((set) => set.setType !== 'WarmUp');
+  // A typed weight, a fixed load instead, or a last time + step set's starting weight (TRN-027).
   const fixed = sets.filter(
-    (set) => set.isManualLoadOverride || (set.loadStrategy === 'Direct' && set.directLoad !== null),
+    (set) =>
+      set.isManualLoadOverride ||
+      ((set.loadStrategy === 'Direct' || set.loadStrategy === 'LastTimeStep') &&
+        set.directLoad !== null),
   );
   const units = new Set(fixed.map((set) => unitLabel(set.loadUnit ?? view.loadUnit)));
   return {
@@ -520,6 +526,7 @@ export function stepReach(view: TrainingMesocycleView, weekIds: readonly string[
     ).length,
     load: fixed.length,
     unit: units.size === 0 ? null : [...units].sort().join(' / '),
+    stepSets: sets.filter((set) => set.loadStrategy === 'LastTimeStep').length,
   };
 }
 

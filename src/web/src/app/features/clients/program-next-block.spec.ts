@@ -119,6 +119,13 @@ function chooseWeeks(host: HTMLElement, weeks: number[]): void {
   }
 }
 
+/** Unticks one week by its number. */
+function tickOff(host: HTMLElement, week: number): void {
+  const box = host.querySelectorAll<HTMLInputElement>('fieldset input[type="checkbox"]')[week - 1];
+  box.checked = false;
+  box.dispatchEvent(new Event('change'));
+}
+
 describe('Build next block', () => {
   afterEach(() => {
     document.body.innerHTML = '';
@@ -176,6 +183,57 @@ describe('Build next block', () => {
     );
     expect(support(host, 'Weight a week (kg)')).toBe('No set in these weeks has a fixed weight.');
     expect(host.querySelector('.body > p.small')).toBeNull();
+  });
+
+  it('says the weight step moves a last time + step set’s starting weight only, and shows its step (N6a)', async () => {
+    const step = {
+      loadStrategy: 'LastTimeStep' as const,
+      loadUnit: 'Kilogram' as const,
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      loadStep: 2,
+    };
+    const stepped = leanProgram();
+    stepped.weeks[5].sessions[0].exercises.push(
+      exerciseView('goblet-6', 'Goblet squat', [
+        setView({ ...step, directLoad: 7, prescribedLoad: 7 }),
+      ]),
+    );
+    const next = preview();
+    for (const [index, week] of next.generatedWeeks.entries()) {
+      week.sessions[0].exercises.push(
+        exerciseView(`new-goblet-${index}`, 'Goblet squat', [
+          setView({ ...step, directLoad: 9 + 2 * index, prescribedLoad: 9 + 2 * index }),
+        ]),
+      );
+    }
+    const { fixture, host } = await render({
+      getTrainingMesocycle: vi.fn(() => of(stepped)),
+      previewTrainingProgression: vi.fn(() => of(next)),
+    });
+
+    expect(support(host, 'Weight a week (kg)')).toBe(
+      'Sets moved: 2, fixed or typed weights. On a last time + step set it moves the starting weight only.',
+    );
+    // A week with no step set keeps its words.
+    chooseWeeks(host, [5]);
+    tickOff(host, 6);
+    await settle(fixture);
+    expect(support(host, 'Weight a week (kg)')).toBe('Sets moved: 1, fixed or typed weights.');
+    chooseWeeks(host, [6]);
+    tickOff(host, 5);
+    await settle(fixture);
+
+    fill(host, 'Weight a week (kg)', '2');
+    await settle(fixture);
+    press(host, 'Preview the new weeks');
+    await settle(fixture);
+    const goblet = Array.from(
+      host.querySelectorAll<HTMLElement>('.preview-week')[0].querySelectorAll('li'),
+    ).find((item) => textOf(item.querySelector('strong')) === 'Goblet squat');
+    expect(Array.from(goblet?.querySelectorAll('.set') ?? []).map(textOf)).toEqual([
+      '10 reps · 9 kg · last time + 2 kg , changed',
+    ]);
   });
 
   it('names the weight unit of a program in pounds', async () => {

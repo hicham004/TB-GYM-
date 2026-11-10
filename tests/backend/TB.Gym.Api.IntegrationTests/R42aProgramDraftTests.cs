@@ -367,6 +367,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                                             null,
                                             TrainingLoadUnit.Kilogram,
                                             null,
+                                            LoadStep: null,
                                             targetRpe,
                                             null,
                                             ExertionDisplayPreference.Rpe,

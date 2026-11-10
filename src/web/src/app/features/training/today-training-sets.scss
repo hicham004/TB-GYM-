@@ -125,6 +125,11 @@
   appearance: none;
   margin: 0;
 }
+// The reps box ✓ asked for (TRN-029 v2) rings in the warning colour until a number is in it: the
+// light card's own red, as its note box uses, since the player's danger token is drawn for the night.
+.set-step:has(input[aria-invalid='true']) {
+  box-shadow: inset 0 0 0 2px #a3261b;
+}
 .log-set {
   grid-column: 5;
   justify-self: end;

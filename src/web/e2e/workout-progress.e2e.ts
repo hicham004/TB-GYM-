@@ -290,6 +290,51 @@ const workout = {
   exercises: [workoutExercise('Back squat', 'squat'), workoutExercise('Row', 'row')],
   notes: [],
 };
+// Notes plan N6a: a last time + step set (TRN-032), 10 reps at 7 kg to start and 2 kg a step, done
+// at 5 kg × 12 last time. A workout of its own, so the r22 test keeps its fixture and its pictures.
+const stepWorkout = {
+  ...workout,
+  sessionId: 'session-2',
+  workoutExecutionId: 'workout-2',
+  name: 'Upper Accessories',
+  exercises: [
+    {
+      ...workoutExercise('Lateral raise', 'raise'),
+      previousPerformance: {
+        date: '2026-09-23',
+        bestLoad: 5,
+        unit: 'Kilogram',
+        repetitions: 12,
+        rpe: null,
+        sets: [{ position: 1, repetitions: 12, load: 5, loadUnit: 'Kilogram', rpe: null }],
+      },
+      sets: [
+        {
+          ...workoutSet(1, 'raise'),
+          prescribedRepetitionsMinimum: 10,
+          prescribedRepetitionsMaximum: 10,
+          prescribedLoad: 7,
+          loadStrategy: 'LastTimeStep',
+          loadStep: 2,
+          prescribedTargetRpe: null,
+        },
+      ],
+    },
+  ],
+};
+const nothingUnfinished = {
+  isAllowed: true,
+  accessReason: 'Granted',
+  localDate: '2026-09-30',
+  timeZoneId: 'Asia/Beirut',
+  hasAssignedProgram: true,
+  hasVisibleSessions: true,
+  searchThrough: '2026-12-29',
+  nextSession: null,
+  unfinishedWorkouts: [],
+  nextSkip: null,
+  todayCoverage: null,
+};
 
 test.describe('Workout player', () => {
   // Fast-forwarding the page clock through a rest skips a minute in which the realtime hub sends
@@ -431,4 +476,90 @@ test.describe('Workout player', () => {
       await accessible(page);
     });
   }
+
+  // Notes plan N6a, TRN-029 v2: a last time + step set counts only with the reps the client did, so
+  // its reps box starts empty and ✓ asks for them before anything is sent (decision 22).
+  test('A last time + step set at 390px asks for the reps before it logs', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const puts: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'PUT') puts.push(new URL(request.url()).pathname);
+    });
+    await session(page, {
+      'GET /api/training/me/today': (route) =>
+        json(route, 200, {
+          isAllowed: true,
+          accessReason: 'Granted',
+          localDate: '2026-09-30',
+          workouts: [stepWorkout],
+        }),
+      'GET /api/training/me/upcoming': (route) => json(route, 200, nothingUnfinished),
+      'PUT /api/training/me/workouts/workout-2/sets/set-raise': (route) =>
+        json(route, 200, {
+          workoutExecutionId: 'workout-2',
+          executionVersion: 2,
+          setPerformanceId: 'set-raise',
+          actualRepetitions: 10,
+          actualLoad: 7,
+          actualLoadUnit: 'Kilogram',
+          actualRpe: null,
+          actualRir: null,
+          isCompleted: true,
+          clientNote: null,
+          isPersonalRecord: false,
+          personalRecordRuleKey: null,
+          personalRecordRuleVersion: null,
+        }),
+    });
+    await page.clock.install({ time: new Date('2026-09-30T08:20:00Z') });
+    await page.goto('/training/today');
+    await expect(page.getByRole('heading', { name: 'Lateral raise' })).toBeVisible();
+    const reps = page.getByRole('spinbutton', { name: 'Actual repetitions', exact: true });
+    // Neither the coach's 10 nor last time's 12; the weight starts at the coach's 7 kg.
+    await expect(reps).toHaveValue('');
+    await expect(page.getByRole('spinbutton', { name: 'Actual load', exact: true })).toHaveValue(
+      '7',
+    );
+    await expect(page.locator('.set-previous')).toHaveText('Last time 5 kg × 12');
+    // The Target line stays the client's; the step is the coach's (decision 21).
+    const target = page.locator('.prescription');
+    await expect(target).toContainText('Target: 10 reps · 7 kg');
+    await expect(target).not.toContainText(/last time|\+/i);
+
+    await page.getByRole('button', { name: 'Log set' }).click();
+    const summary = page.locator('#training-error-summary');
+    await expect(summary).toHaveText('Type your reps first.');
+    await expect(summary).toBeFocused();
+    await expect(page.locator('.set-card .player-error')).toHaveText('Type your reps first.');
+    await expect(reps).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByRole('timer')).toHaveCount(0);
+    expect(puts).toEqual([]);
+    await waitForFonts(page);
+    await accessible(page);
+    await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+    await accessible(page);
+    await page.evaluate(() => (document.documentElement.style.fontSize = ''));
+
+    await reps.fill('10');
+    await expect(reps).not.toHaveAttribute('aria-invalid');
+    const sent = page.waitForRequest(
+      (request) => request.method() === 'PUT' && request.url().endsWith('/sets/set-raise'),
+    );
+    await page.getByRole('button', { name: 'Log set' }).click();
+    expect((await sent).postDataJSON()).toMatchObject({
+      repetitions: 10,
+      load: 7,
+      loadUnit: 'Kilogram',
+      isCompleted: true,
+      version: 1,
+    });
+    await expect(page.getByText('Set saved.')).toBeVisible();
+    await expect(summary).toHaveText('');
+    await expect(page.locator('.logged-set')).toHaveText('7 kg × 10');
+    await expect(page.getByRole('timer')).toBeVisible();
+    expect(puts).toEqual(['/api/training/me/workouts/workout-2/sets/set-raise']);
+    await accessible(page);
+    await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+    await accessible(page);
+  });
 });

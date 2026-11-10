@@ -54,6 +54,16 @@ interface PreviewWeek {
 const RPE_STEPS = Array.from({ length: 9 }, (_, index) => -2 + index * 0.5);
 
 /**
+ * Said after the weight step's help when the week holds a last time + step set (N6a): the copies move
+ * its starting weight and copy its own step as it is (TRN-025). Build next block says it too.
+ */
+function withStepLine(line: string, stepSets: number): string {
+  return stepSets > 0
+    ? `${line} ${$localize`On a last time + step set it moves the starting weight only.`}`
+    : line;
+}
+
+/**
  * "Duplicate with progression" (TRN-025): the coach chooses how many copies of a week and how each
  * moves, reads the weeks the server calculates, and only then adds them to the draft. The arithmetic
  * and every limit are the server's; this form only asks, warns early and shows.
@@ -123,9 +133,12 @@ export class ProgramWeekProgression {
       percentage: reach?.percentage
         ? $localize`Sets moved: ${reach.percentage}:count:.`
         : $localize`No set in this week uses a % of training max.`,
-      load: reach?.load
-        ? $localize`Sets moved: ${reach.load}:count:, fixed or typed weights.`
-        : $localize`No set in this week has a fixed weight.`,
+      load: withStepLine(
+        reach?.load
+          ? $localize`Sets moved: ${reach.load}:count:, fixed or typed weights.`
+          : $localize`No set in this week has a fixed weight.`,
+        reach?.stepSets ?? 0,
+      ),
     };
   });
 

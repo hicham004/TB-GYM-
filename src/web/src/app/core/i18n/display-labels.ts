@@ -141,6 +141,7 @@ export function trainingLoadStrategyLabel(value: TrainingLoadStrategy): string {
     PercentageWorkingMax: $localize`% of training max`,
     RpeBasedEpley: $localize`RPE · Epley curve`,
     RpeChart: $localize`RPE · RTS chart`,
+    LastTimeStep: $localize`Last time + step`,
   };
   return labels[value];
 }

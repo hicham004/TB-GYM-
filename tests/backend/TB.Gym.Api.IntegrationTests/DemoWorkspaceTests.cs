@@ -216,6 +216,15 @@ public sealed class DemoWorkspaceTests
         Assert.AreEqual("Lower A", workout.Name, "The hero client has a workout waiting today.");
         Assert.IsNull(workout.Status);
 
+        // The demo's one last time + step lift (notes plan N6a): the leg curl steps by 2.5 kg from no starting
+        // weight, so Maya picks hers, and nothing else in the workout steps.
+        var curl = workout.Exercises.Single(item => item.PrescribedExerciseName == "Seated Leg Curl");
+        Assert.IsNotEmpty(curl.Sets);
+        Assert.IsTrue(curl.Sets.All(set =>
+            set.LoadStrategy == TrainingLoadStrategy.LastTimeStep && set.LoadStep == 2.5m && set.PrescribedLoad is null));
+        Assert.IsTrue(workout.Exercises.Where(item => item != curl).SelectMany(item => item.Sets)
+            .All(set => set.LoadStrategy != TrainingLoadStrategy.LastTimeStep && set.LoadStep is null));
+
         var mayaMeals = await requests.AsAsync<INutritionApplicationService, ClientNutritionDayView?>(
             new DemoActor(people.MayaId, people.TenantId),
             service => service.GetOwnDayAsync(today, CancellationToken.None));

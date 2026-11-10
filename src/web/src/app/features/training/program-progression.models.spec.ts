@@ -308,8 +308,31 @@ describe('duplicate with progression', () => {
       percentage: 1,
       load: 2,
       unit: 'kg / lb',
+      stepSets: 0,
     });
     expect(progressionReach(emptyWeek(1)).unit).toBeNull();
+  });
+
+  it('counts a last time + step set’s starting weight among the weights the weight step moves (N6a)', () => {
+    const step = { loadStrategy: 'LastTimeStep' as const, loadStep: 2, repetitionsMaximum: 10 };
+    const draft = draftWith(
+      set({ ...step, loadValue: 5, loadUnit: 'Pound' }),
+      // No starting weight: nothing for the weight step to move, as on the server.
+      set({ ...step, loadValue: null }),
+      // A leftover fixed load is never sent on a step set, so it moves nothing either.
+      set({ ...step, loadValue: null, manualLoadOverride: 80 }),
+      set({ ...step, setType: 'WarmUp', loadValue: 20 }),
+      set({ loadStrategy: 'Direct', loadValue: 100 }),
+    );
+
+    expect(progressionReach(draft.weeks[0])).toEqual({
+      rpe: 0,
+      reps: 4,
+      percentage: 0,
+      load: 2,
+      unit: 'kg / lb',
+      stepSets: 3,
+    });
   });
 
   it('keeps the copies to what the program can hold', () => {
@@ -361,6 +384,45 @@ describe('duplicate with progression', () => {
       expect(next.weeks[2].sessions[0].exercises[0].sets[0].exertionTarget).toBe(8);
       expect(next.weeks[1].key).not.toBe(draft.weeks[0].key);
       expect(draft).toEqual(before);
+    });
+
+    it('keeps a last time + step set’s step and takes its moved starting weight (N6a)', () => {
+      const draft = draftWith(
+        set({ loadStrategy: 'LastTimeStep', loadStep: 2, loadValue: 5, repetitionsMaximum: 10 }),
+      );
+      const source = toWeekRequest(draft.weeks[0]);
+      // The server moves the start by the weight step and copies the set's own step as it is.
+      const preview: WeekProgressionPreviewView = {
+        transformKey: 'WeekStep',
+        transformVersion: '1.0',
+        weeks: [1, 2].map((copy) => ({
+          ...source,
+          sessions: source.sessions.map((session) => ({
+            ...session,
+            exercises: session.exercises.map((exercise) => ({
+              ...exercise,
+              sets: exercise.sets.map((requested) => ({
+                ...requested,
+                directLoad: 5 + 2.5 * copy,
+              })),
+            })),
+          })),
+        })),
+      };
+      expect(source.sessions[0].exercises[0].sets[0]).toMatchObject({ directLoad: 5, loadStep: 2 });
+
+      const next = insertProgression(draft, draft.weeks[0].key, preview);
+
+      expect(
+        next.weeks.map((week) => {
+          const { loadStrategy, loadStep, loadValue } = week.sessions[0].exercises[0].sets[0];
+          return [loadStrategy, loadStep, loadValue];
+        }),
+      ).toEqual([
+        ['LastTimeStep', 2, 5],
+        ['LastTimeStep', 2, 7.5],
+        ['LastTimeStep', 2, 10],
+      ]);
     });
 
     it('numbers a label the coach wrote, so copies are told apart', () => {

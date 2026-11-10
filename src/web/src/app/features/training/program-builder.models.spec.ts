@@ -291,6 +291,46 @@ describe('program builder grid', () => {
     expect(gridLines(exercise)).toEqual(['2 × 5 warm-up · 81% of training max · RPE 8']);
   });
 
+  it('names a last time + step set’s step and any starting weight, then its effort (N6a)', () => {
+    const exercise = emptyExercise('goblet', false, 'Goblet squat');
+    const step = {
+      ...emptySet(),
+      loadStrategy: 'LastTimeStep' as const,
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      loadStep: 2,
+      loadValue: 5,
+    };
+    exercise.sets = [step, { ...step }, { ...step }];
+    expect(gridLines(exercise)).toEqual(['3 × 10 · last time + 2 kg · start 5 kg']);
+    expect(setSummary(step)).toBe('10 · last time + 2 kg · start 5 kg');
+
+    // No starting weight: the client picks it, and only the step is named.
+    exercise.sets = [
+      { ...step, loadValue: null },
+      { ...step, loadValue: null },
+      { ...step, loadValue: null },
+    ];
+    expect(gridLines(exercise)).toEqual(['3 × 10 · last time + 2 kg']);
+
+    // Pounds stay pounds, the effort follows as on any set, and a step still to type says what it is.
+    const pounds = {
+      ...step,
+      loadUnit: 'Pound' as const,
+      loadStep: 5,
+      loadValue: 45,
+      exertionTarget: 8,
+    };
+    expect(setSummary(pounds)).toBe('10 · last time + 5 lb · start 45 lb · RPE 8');
+    expect(setSummary({ ...step, loadStep: null })).toBe('10 · Last time + step · start 5 kg');
+    exercise.sets = [{ ...step, loadStep: null, loadValue: null }];
+    expect(gridLines(exercise)).toEqual(['1 × 10']);
+
+    // No max works it out: a saved weight or a leftover fixed load never stands for its words.
+    exercise.sets = [{ ...step, manualLoadOverride: 80 }];
+    expect(gridLines(exercise, () => '81 kg')).toEqual(['1 × 10 · last time + 2 kg · start 5 kg']);
+  });
+
   it('gives each run of sets that differ a line of its own, never one set’s effort for all', () => {
     const exercise = emptyExercise('squat');
     const set = (reps: number, rpe: number | null) => ({
@@ -528,6 +568,62 @@ describe('program builder save checks', () => {
     second.name = '';
     expect(draftProblem(draft)?.message).toBe('Week 2, Day 1: give the workout a name.');
   });
+
+  it('checks a last time + step set by the server’s limits: its step, its start, its reps (N6a)', () => {
+    const step = {
+      ...emptySet(),
+      loadStrategy: 'LastTimeStep' as const,
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      loadStep: 2,
+      loadValue: null,
+    };
+    expect(setIssue(step)).toBeNull();
+    for (const fine of [0.01, 2.25, 50]) expect(setIssue({ ...step, loadStep: fine })).toBeNull();
+    expect(setIssue({ ...step, loadValue: 2000 })).toBeNull();
+
+    const refusal = {
+      field: 'loadStep',
+      message: 'a step must be more than 0 and at most 50 kg, with at most two decimals.',
+    };
+    for (const wrong of [null, 0, -2, 50.5, 2.555]) {
+      expect(setIssue({ ...step, loadStep: wrong })).toEqual(refusal);
+    }
+    expect(setIssue({ ...step, loadStep: 0, loadUnit: 'Pound' })?.message).toBe(
+      'a step must be more than 0 and at most 50 lb, with at most two decimals.',
+    );
+    // 0.0004 is kept as 0 by the server's three decimals, so it is no start above 0 either.
+    expect(setIssue({ ...step, loadValue: 0.0005 })).toBeNull();
+    for (const wrong of [0, -5, 2000.5, 0.0004]) {
+      expect(setIssue({ ...step, loadValue: wrong })).toEqual({
+        field: 'loadValue',
+        message: 'a starting weight must be more than 0 and at most 2000, or left empty.',
+      });
+    }
+    const noReps = { field: 'repetitionsMaximum' };
+    expect(setIssue({ ...step, repetitionsMinimum: null, repetitionsMaximum: null })).toMatchObject(
+      noReps,
+    );
+    expect(setIssue({ ...step, repetitionsMaximum: null })).toMatchObject({
+      ...noReps,
+      message:
+        'a last time + step set needs its reps: type one number, like 10, or a range, like 8-12.',
+    });
+    // The reps' own limits still come first, and a leftover fixed load never hides the step's.
+    expect(setIssue({ ...step, repetitionsMinimum: 0 })?.field).toBe('repetitionsMinimum');
+    expect(setIssue({ ...step, loadStep: null, manualLoadOverride: 80 })?.field).toBe('loadStep');
+    expect(setIssue({ ...step, manualLoadOverride: -1 })).toBeNull();
+
+    // Publish names where it is.
+    const draft = program();
+    const set = draft.weeks[0].sessions[0].exercises[1].sets[0];
+    Object.assign(set, { ...step, key: set.key, loadStep: 0 });
+    expect(draftProblem(draft)).toMatchObject({
+      setKey: set.key,
+      message:
+        'Week 1, Lower A: a step must be more than 0 and at most 50 kg, with at most two decimals.',
+    });
+  });
 });
 
 describe('program builder library', () => {
@@ -736,6 +832,37 @@ describe('program drafts', () => {
       repetitionsMinimum: 0,
       loadValue: 80,
     });
+  });
+
+  it('keeps a last time + step set’s step, start and unit whole through a save and a read (N6a)', () => {
+    const draft = draftFromContent(draftView());
+    const set = draft.weeks[0].sessions[0].exercises[0].sets[0];
+    Object.assign(set, {
+      loadStrategy: 'LastTimeStep',
+      loadStep: 2.5,
+      loadValue: 45,
+      loadUnit: 'Pound',
+      manualLoadOverride: null,
+    });
+
+    const content = toDraftContent(draft);
+    expect(content.weeks[0].sessions[0].exercises[0].sets[0]).toMatchObject({
+      loadStrategy: 'LastTimeStep',
+      directLoad: 45,
+      loadUnit: 'Pound',
+      percentageWorkingMax: null,
+      loadStep: 2.5,
+      manualLoadOverride: null,
+    });
+    const again = draftFromContent(draftView({ content }));
+    expect(again.weeks[0].sessions[0].exercises[0].sets[0]).toMatchObject({
+      loadStrategy: 'LastTimeStep',
+      loadStep: 2.5,
+      loadValue: 45,
+      loadUnit: 'Pound',
+    });
+    // Read again, it saves the same as it was read.
+    expect(toDraftContent(again)).toEqual(content);
   });
 
   it('reads an RIR target back as RIR, and an exercise the library no longer has without a name', () => {

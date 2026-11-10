@@ -817,21 +817,24 @@ changed or removed session as it was before. An edit is reviewed and applied in 
 kept until it is applied (owner's question, decided 2026-10-06, ADR 0036). The grid reads each set's
 saved weight, and a set changed in the edit its share until then (critique B15, STR-018).
 
-**TRN-029** Where a set starts in the workout player (`PrescriptionThenLastTime` v1, R5.4a, UI review of
-2026-10-11). A set not yet logged starts at what the coach prescribed, the load with its unit and the
-reps (the lowest of a range), so one tap logs it as prescribed. Last time's numbers on the same set (the
-same position, on the exercise done now) fill only what the prescription leaves open, a load only in the
-set's own unit; otherwise the field stays empty. A swapped exercise keeps the prescribed reps but not the
-load, which the coach wrote for another lift, and its Target line leaves that load out. A logged set keeps
-what was logged, typing wins over all of it, and the row shows exactly what ✓ sends; last time's numbers
-stay on screen as a reference. The workout's kg or lb choice starts on the prescribed unit, else on the
-unit last time's loads brought into the sets, else on neither (TRN-016). Choosing a unit is not an edit
-(audit A4, CLIENT-1): a load the client typed keeps its number and takes the unit chosen, and a set not
-touched starts again where this rule starts it in that unit, the coach's load only when written in it,
-else last time's on the set in it, else empty. Kilograms and pounds are never converted, so choosing back
-brings the coach's number back; the player says when the coach's loads are in the other unit, every load
-names its unit, and the choice holds for that workout through every reload. Last time's set stays beside
-each set on a phone too. Web only: the server records what it is sent.
+**TRN-029** Where a set starts in the workout player (`PrescriptionThenLastTime` v2, R5.4a, UI review of
+2026-10-11; v2 notes plan N6a). A set not yet logged starts at what the coach prescribed, the load with
+its unit and the reps (the lowest of a range), so one tap logs it as prescribed. Last time's numbers on
+the same set (the same position, on the exercise done now) fill only what the prescription leaves open, a
+load only in the set's own unit; otherwise the field stays empty. A swapped exercise keeps the prescribed
+reps but not the load, which the coach wrote for another lift, and its Target line leaves that load out. A
+logged set keeps what was logged, typing wins over all of it, and the row shows exactly what ✓ sends; last
+time's numbers stay on screen as a reference. A last time + step set (TRN-032) is the one exception for
+reps: its reps box starts empty, taking neither the prescribed reps nor last time's, and ✓ with it empty
+says "Type your reps first." and sends nothing; its load starts as any set's. The workout's kg or lb
+choice starts on the prescribed unit, else on the unit last time's loads brought into the sets, else on
+neither (TRN-016). Choosing a unit is not an edit (audit A4, CLIENT-1): a load the client typed keeps its
+number and takes the unit chosen, and a set not touched starts again where this rule starts it in that
+unit, the coach's load only when written in it, else last time's on the set in it, else empty. Kilograms
+and pounds are never converted, so choosing back brings the coach's number back; the player says when the
+coach's loads are in the other unit, every load names its unit, and the choice holds for that workout
+through every reload. Last time's set stays beside each set on a phone too. Web only: the server records
+what it is sent.
 
 **TRN-030** Share cards of records and programs (R6.1a, M9; the owner's decision of 2026-10-11). A client
 may turn a personal record from a workout's finish summary (TRN-019) or a finished program into a picture
@@ -861,6 +864,26 @@ with the coach's read (TRN-023): closed, the read leaves it out and a change ans
 the version that read gave, 0 before the first choice, and an older one answers 409
 `finished_programs_changed`. It belongs to the client's profile, so a returning client starts from the
 default, and nothing from before their return reaches them anyway (ADR 0027).
+
+**TRN-032** "Last time + step" (the weight choice `LastTimeStep`, notes plan N6a; decisions 21 and 22 of 5
+and 7 Nov 2026, ADR 0040) is the sixth way a set takes its weight, beside no prescribed load, a typed
+weight, % of training max and RPE on the Epley curve or the RTS chart: a weight the coach raises by a
+fixed step after reading the logged sets. The set carries the step (`LoadStep`, more than 0 and at most 50
+in the set's unit, two decimals at most) and an optional starting weight (more than 0 and at most 2,000),
+and needs its unit, kg or lb (once assigned, the program's unit, as for any loaded set), and its reps;
+with no starting weight the client picks the weight, as on a set with no prescribed load. Its weight is
+the coach's own, never worked out from a max (STR-007) or rounded by the program's rule (STR-008): such a
+set needs no training max at assignment (STR-002), a max update leaves it alone (STR-011), a manual
+override ("Fixed load instead") is refused on it, and it never anchors "From week 1's weight" (TRN-026). A
+draft keeps it unchecked (TRN-024), Publish checks it, assignment copies it, and starting a workout
+snapshots the choice and the step (TRN-012), so a started workout keeps the step it began with. The
+builder's copies (TRN-025) and Build next block (TRN-027) move its starting weight by the weight step, as
+they move a typed weight, and copy the set's own step as it is; Edit weeks (TRN-028) keeps a session sent
+as stored, and a changed step set is neither worked out from a max nor rounded. Nothing adds the step yet,
+and nothing will on its own: the notes plan's N6b is to say where each lift stands and N6c to let the
+coach apply the step; until then the coach changes the weight with Edit weeks. The player starts the set's
+reps box empty and asks for the reps before ✓ (TRN-029), while the server still records a set logged
+without reps. Database checks hold the shape, on the sets and on the workout's snapshot.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 

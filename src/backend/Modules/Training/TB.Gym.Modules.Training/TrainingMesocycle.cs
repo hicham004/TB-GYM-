@@ -826,6 +826,7 @@ public sealed class SetPrescription : TenantEntity
         DirectLoad = blueprint.DirectLoad;
         LoadUnit = blueprint.LoadUnit;
         PercentageWorkingMax = blueprint.PercentageWorkingMax;
+        LoadStep = blueprint.LoadStep;
         TargetRpe = blueprint.TargetRpe;
         ExertionDisplayPreference = blueprint.ExertionDisplayPreference;
         RestSeconds = blueprint.RestSeconds;
@@ -857,6 +858,9 @@ public sealed class SetPrescription : TenantEntity
     public TrainingLoadUnit? LoadUnit { get; private set; }
 
     public decimal? PercentageWorkingMax { get; private set; }
+
+    /// <summary>A last time + step set's step, in the set's unit (N6a); null on every other set.</summary>
+    public decimal? LoadStep { get; private set; }
 
     public decimal? TargetRpe { get; private set; }
 

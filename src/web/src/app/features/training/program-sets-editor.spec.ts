@@ -1,6 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { field, fill, leave, press, query, settle } from '../../../testing/dom';
+import {
+  button,
+  field,
+  fill,
+  leave,
+  menuChoices,
+  press,
+  query,
+  settle,
+  toggleFold,
+} from '../../../testing/dom';
 import { setIssue } from './program-builder.models';
 import { ProgramSetsEditor } from './program-sets-editor';
 import {
@@ -197,6 +207,192 @@ describe('the shared program set editor', () => {
     expect(document.activeElement).toBe(field(more, 'Rest (seconds)'));
     expect(document.activeElement?.getAttribute('aria-invalid')).toBe('true');
     expect(more.textContent).toContain('rest must be between 0 and 3600 seconds.');
+  });
+});
+
+describe('a last time + step set in the set editor (N6a)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const errorText = (host: ParentNode) =>
+    host.querySelector('.tb-field__support--error')?.textContent?.trim();
+
+  it('offers it as the sixth load, with a step and an optional starting weight in the set’s unit', async () => {
+    const { fixture, host, exercise, edited } = await render(1);
+    const set = exercise.sets[0];
+    // A % set with a fixed load instead, which the step choice must not keep.
+    await toggleFold(fixture, host, 'Rest, tempo & notes');
+    expect(field(host, 'Fixed load instead').value).toBe('80');
+    // In a browser the set is checked by then: opening the menu moved the cursor out of a box.
+    host.querySelector('.set-fields')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+
+    const menu = button(host, '% of training max');
+    menu.click();
+    await settle(fixture);
+    expect(
+      menuChoices(menu).map((item) => item.querySelector('.item-title')?.textContent?.trim()),
+    ).toEqual([
+      'No prescribed load',
+      'Direct load',
+      '% of training max',
+      'RPE · RTS chart',
+      'RPE · Epley curve',
+      'Last time + step',
+    ]);
+    press(query(document, '.tb-menu-pane'), 'Last time + step');
+    await settle(fixture);
+
+    // The 75 was a share of the max: it never becomes a 75 kg start.
+    expect(set).toMatchObject({
+      loadStrategy: 'LastTimeStep',
+      manualLoadOverride: null,
+      loadValue: null,
+    });
+    expect(edited).toHaveBeenCalled();
+    expect(() => field(host, 'Fixed load instead')).toThrow('No field is labelled');
+    expect(() => field(host, 'Load (kg)')).toThrow('No field is labelled');
+    // The cursor is in the step, the box to fill next, which says its sentence rather than a refusal.
+    expect(document.activeElement).toBe(field(host, 'Step (kg)'));
+    expect(field(host, 'Step (kg)').getAttribute('aria-invalid')).toBeNull();
+    expect(errorText(host)).toBeUndefined();
+    expect(field(host, 'Starting weight (kg)').value).toBe('');
+    const attributes = (box: HTMLInputElement) =>
+      ['data-field', 'type', 'min', 'max', 'step', 'inputmode'].map((name) =>
+        box.getAttribute(name),
+      );
+    expect(attributes(field(host, 'Step (kg)'))).toEqual([
+      'step',
+      'number',
+      '0',
+      '50',
+      '0.25',
+      'decimal',
+    ]);
+    expect(attributes(field(host, 'Starting weight (kg)'))).toEqual([
+      'start',
+      'number',
+      '0',
+      '2000',
+      '0.25',
+      'decimal',
+    ]);
+    expect(host.textContent).toContain(
+      'You add the step each week, after reading the logged sets.',
+    );
+    expect(host.textContent).toContain('Optional. Without one, the client picks the weight.');
+
+    fill(host, 'Step (kg)', '2');
+    fill(host, 'Starting weight (kg)', '5');
+    await settle(fixture);
+    expect(set).toMatchObject({ loadStep: 2, loadValue: 5 });
+    expect(host.querySelector('.set-summary')?.textContent?.trim()).toBe(
+      'Working · 5 · last time + 2 kg · start 5 kg · RPE 7',
+    );
+    const session = emptySession(0);
+    session.exercises = [exercise];
+    expect(toTrainingSessionRequest(session).exercises[0].sets[0]).toMatchObject({
+      loadStrategy: 'LastTimeStep',
+      directLoad: 5,
+      loadUnit: 'Kilogram',
+      percentageWorkingMax: null,
+      loadStep: 2,
+      manualLoadOverride: null,
+    });
+
+    // Pounds relabel both boxes and convert nothing.
+    press(host, 'Unit: kg');
+    await settle(fixture);
+    press(query(document, '.tb-menu-pane'), 'lb');
+    await settle(fixture);
+    expect([field(host, 'Step (lb)').value, field(host, 'Starting weight (lb)').value]).toEqual([
+      '2',
+      '5',
+    ]);
+    expect(set).toMatchObject({ loadUnit: 'Pound', loadStep: 2, loadValue: 5 });
+    expect(host.querySelector('.set-summary')?.textContent?.trim()).toBe(
+      'Working · 5 · last time + 2 lb · start 5 lb · RPE 7',
+    );
+  });
+
+  it('keeps a typed weight as the start, and refuses an empty step once the coach leaves it', async () => {
+    const { fixture, host, exercise } = await render(1);
+    const set = exercise.sets[0];
+    Object.assign(set, { loadStrategy: 'Direct', loadValue: 60, manualLoadOverride: null });
+    fixture.componentRef.setInput('revision', 1);
+    await settle(fixture);
+
+    press(host, 'Direct load');
+    await settle(fixture);
+    press(query(document, '.tb-menu-pane'), 'Last time + step');
+    await settle(fixture);
+
+    expect(set).toMatchObject({ loadStrategy: 'LastTimeStep', loadValue: 60, loadStep: null });
+    expect(field(host, 'Starting weight (kg)').value).toBe('60');
+    const step = field(host, 'Step (kg)');
+    expect(document.activeElement).toBe(step);
+    expect(host.textContent).toContain(
+      'You add the step each week, after reading the logged sets.',
+    );
+
+    // Leaving it empty says what it needs, in place of the sentence.
+    host.querySelector('.set-fields')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    await settle(fixture);
+    expect(step.getAttribute('aria-invalid')).toBe('true');
+    expect(errorText(host)).toBe(
+      'a step must be more than 0 and at most 50 kg, with at most two decimals.',
+    );
+    expect(host.textContent).not.toContain(
+      'You add the step each week, after reading the logged sets.',
+    );
+  });
+
+  it('refuses a step or a start outside the server’s limits under its box, and takes the cursor there', async () => {
+    const { fixture, host, exercise } = await render(2);
+    const set = exercise.sets[1];
+    Object.assign(set, {
+      loadStrategy: 'LastTimeStep',
+      loadStep: null,
+      loadValue: null,
+      manualLoadOverride: null,
+    });
+
+    // Publish's check opens the set and focuses the refused box.
+    fixture.componentInstance.focus(set.key);
+    await settle(fixture);
+    const step = field(host, 'Step (kg)');
+    expect(document.activeElement).toBe(step);
+    expect(step.getAttribute('aria-invalid')).toBe('true');
+    const refusal = 'a step must be more than 0 and at most 50 kg, with at most two decimals.';
+    expect(errorText(host)).toBe(refusal);
+
+    for (const wrong of ['0', '51', '2.555', '']) {
+      fill(host, 'Step (kg)', wrong);
+      await settle(fixture);
+      expect(errorText(host)).toBe(refusal);
+    }
+    fill(host, 'Step (kg)', '2.5');
+    await settle(fixture);
+    expect(errorText(host)).toBeUndefined();
+    expect(step.getAttribute('aria-invalid')).toBeNull();
+    expect(set.loadStep).toBe(2.5);
+
+    fill(host, 'Starting weight (kg)', '2001');
+    await settle(fixture);
+    expect(field(host, 'Starting weight (kg)').getAttribute('aria-invalid')).toBe('true');
+    expect(errorText(host)).toBe(
+      'a starting weight must be more than 0 and at most 2000, or left empty.',
+    );
+    fill(host, 'Starting weight (kg)', '');
+    await settle(fixture);
+    expect(set.loadValue).toBeNull();
+    expect(errorText(host)).toBeUndefined();
+
+    // A step set needs its reps: the Reps box says so.
+    fill(host, 'Reps', '');
+    await settle(fixture);
+    expect(field(host, 'Reps').getAttribute('aria-invalid')).toBe('true');
+    expect(errorText(host)).toBe(
+      'a last time + step set needs its reps: type one number, like 10, or a range, like 8-12.',
+    );
   });
 });
 

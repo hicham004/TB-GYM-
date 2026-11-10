@@ -34,7 +34,7 @@ public sealed class WeekProgressionDomainTests
         new(
             position, type, repsMin, repsMax, strategy, direct,
             strategy == TrainingLoadStrategy.None ? null : TrainingLoadUnit.Kilogram,
-            percentage, rpe, rir,
+            percentage, LoadStep: null, rpe, rir,
             rir is null ? ExertionDisplayPreference.Rpe : ExertionDisplayPreference.Rir,
             null, null, null, manual);
 

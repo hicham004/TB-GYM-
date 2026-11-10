@@ -27,4 +27,16 @@ describe('an exercise’s set lines on the grid', () => {
     ]);
     expect(lines[0].querySelector('.sep')?.textContent).toBe(' · ');
   });
+
+  it('keeps a last time + step line’s step and its start whole (N6a)', async () => {
+    const fixture = TestBed.createComponent(SetLines);
+    fixture.componentRef.setInput('lines', ['3 × 10 · last time + 2 kg · start 5 kg']);
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+    expect(Array.from(host.querySelectorAll('.part')).map((part) => part.textContent)).toEqual([
+      '3 × 10',
+      'last time + 2 kg',
+      'start 5 kg',
+    ]);
+  });
 });

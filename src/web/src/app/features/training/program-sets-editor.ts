@@ -20,6 +20,7 @@ import {
   formulaShare,
   impossiblePercentage,
   isRpeLoaded,
+  MAXIMUM_LOAD_STEP,
   parseReps,
   repsText,
   setIssue,
@@ -33,12 +34,16 @@ import {
   type DraftExercise,
   type DraftSet,
   emptySet,
+  takesTypedWeight,
   withExertionPreference,
 } from './training-builder.models';
 
 /** "Normal" is said "Working": the other kinds but a warm-up are working sets too (B1). */
 const WORKING_HINT = $localize`Top, back-off, drop and failure sets are working sets too; a warm-up never counts in the summary or the records.`;
 const PERCENTAGE_HINT = $localize`Of this client’s training max, set when you assign the program.`;
+/** A last time + step set (N6a): the coach adds the step, never the app or the client (decision 21). */
+const STEP_HINT = $localize`You add the step each week, after reading the logged sets.`;
+const START_HINT = $localize`Optional. Without one, the client picks the weight.`;
 
 /** The buttons a formula's limit offers (critique B7a), in the order they are offered. */
 const WAY_OUT_LABELS: Record<SetWayOut, string> = {
@@ -104,7 +109,11 @@ export class ProgramSetsEditor {
     'PercentageWorkingMax',
     'RpeChart',
     'RpeBasedEpley',
+    'LastTimeStep',
   ] as const;
+  protected readonly maxStep = MAXIMUM_LOAD_STEP;
+  protected readonly stepHint = STEP_HINT;
+  protected readonly startHint = START_HINT;
   protected readonly typeItems: UiMenuItem[] = this.setTypes.map((action) => ({
     action,
     label: trainingSetTypeLabel(action),
@@ -134,6 +143,17 @@ export class ProgramSetsEditor {
 
   protected loadHelp(set: DraftSet): string | null {
     return set.loadStrategy === 'PercentageWorkingMax' ? PERCENTAGE_HINT : null;
+  }
+
+  /** A last time + step set's two boxes, in the set's own unit; nothing is converted. */
+  protected stepLabel(set: DraftSet): string {
+    const unit = set.loadUnit === 'Pound' ? 'lb' : 'kg';
+    return $localize`Step (${unit}:unit:)`;
+  }
+
+  protected startLabel(set: DraftSet): string {
+    const unit = set.loadUnit === 'Pound' ? 'lb' : 'kg';
+    return $localize`Starting weight (${unit}:unit:)`;
   }
 
   protected effortLabel(set: DraftSet): string {
@@ -180,12 +200,17 @@ export class ProgramSetsEditor {
   protected takeWay(set: DraftSet, way: SetWayOut): void {
     takeWayOut(set, way);
     this.changed();
+    this.fillNext(set, WAY_OUT_FIELD[way]);
+  }
+
+  /** Puts the cursor in the set's box the coach fills next, which is not refused before they leave it. */
+  private fillNext(set: DraftSet, selector: string): void {
     afterNextRender(
       () => {
         const row = Array.from(
           this.host.nativeElement.querySelectorAll<HTMLElement>('[data-set-key]'),
         ).find((element) => element.dataset['setKey'] === set.key);
-        row?.querySelector<HTMLElement>(WAY_OUT_FIELD[way])?.focus();
+        row?.querySelector<HTMLElement>(selector)?.focus();
         this.checked.update((keys) => new Set([...keys].filter((key) => key !== set.key)));
       },
       { injector: this.injector },
@@ -270,11 +295,17 @@ export class ProgramSetsEditor {
 
   protected strategyChanged(set: DraftSet, value: string): void {
     const strategy = this.strategies.find((item) => item === value);
-    if (strategy) {
-      set.loadStrategy = strategy;
-      if (strategy === 'None') set.manualLoadOverride = null;
-      this.changed();
+    if (!strategy) return;
+    // A starting weight is optional, so it keeps only a weight the coach typed, never a share read as kg.
+    if (strategy === 'LastTimeStep') {
+      set.loadValue = takesTypedWeight(set.loadStrategy) ? this.loadValue(set) : null;
     }
+    set.loadStrategy = strategy;
+    // A step set takes no fixed load instead: its box is hidden and the server refuses one.
+    if (strategy === 'None' || strategy === 'LastTimeStep') set.manualLoadOverride = null;
+    this.changed();
+    // The step is the box to fill next (N6a); its sentence shows until the coach leaves it.
+    if (strategy === 'LastTimeStep') this.fillNext(set, '[data-field="step"]');
   }
 
   protected loadValue(set: DraftSet): number | null {

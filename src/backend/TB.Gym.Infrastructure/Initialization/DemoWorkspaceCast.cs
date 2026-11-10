@@ -207,7 +207,8 @@ internal static class DemoWorkspaceCast
                 new("Lower A", 0, "Two warm-up sets, then the working sets. Leave one rep in the tank.",
                 [
                     Main("back-squat"), Acc("leg-press", 3, 10, 12), Acc("split-squat", 3, 8, 10),
-                    Acc("leg-curl", 3, 10, 12),
+                    // The demo's one last time + step lift (N6a), so its screens have one to show.
+                    Acc("leg-curl", 3, 10, 12, step: 2.5m),
                 ]),
                 new("Upper A", 1, null,
                 [
@@ -661,8 +662,8 @@ internal static class DemoWorkspaceCast
 
     private static DemoExercisePlan Main(string exerciseKey) => new(exerciseKey, 0, 0, 0, IsMainLift: true);
 
-    private static DemoExercisePlan Acc(string exerciseKey, int sets, int repsMinimum, int repsMaximum) =>
-        new(exerciseKey, sets, repsMinimum, repsMaximum);
+    private static DemoExercisePlan Acc(string exerciseKey, int sets, int repsMinimum, int repsMaximum, decimal? step = null) =>
+        new(exerciseKey, sets, repsMinimum, repsMaximum, Step: step);
 }
 
 internal sealed record DemoStaff(string Key, string FirstName, string LastName, string Email)
@@ -779,12 +780,17 @@ internal sealed record DemoSessionPlan(
     string? CoachNotes,
     IReadOnlyList<DemoExercisePlan> Exercises);
 
+/// <param name="Step">
+/// A last time + step accessory's step in kg, with no starting weight (notes plan N6a); not
+/// <see cref="DemoExercise.LoadStep"/>, the rounding grid of logged weights.
+/// </param>
 internal sealed record DemoExercisePlan(
     string ExerciseKey,
     int Sets,
     int RepsMinimum,
     int RepsMaximum,
-    bool IsMainLift = false);
+    bool IsMainLift = false,
+    decimal? Step = null);
 
 internal sealed record DemoCheckInForm(string Title, string Description, IReadOnlyList<DemoCheckInQuestion> Questions);
 

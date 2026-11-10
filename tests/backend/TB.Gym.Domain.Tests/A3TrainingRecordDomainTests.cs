@@ -196,6 +196,7 @@ public sealed class A3TrainingRecordDomainTests
             12.5m,
             TrainingLoadUnit.Kilogram,
             null,
+            LoadStep: null,
             8m,
             ExertionDisplayPreference.Rpe,
             90,

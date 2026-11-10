@@ -51,6 +51,16 @@ import {
 import { addDays } from './client-overview.models';
 
 /**
+ * Said after the weight step's help when the chosen weeks hold a last time + step set (N6a): the new
+ * weeks move its starting weight and copy its own step as it is (TRN-027), as the builder's copies do.
+ */
+function withStepLine(line: string, stepSets: number): string {
+  return stepSets > 0
+    ? `${line} ${$localize`On a last time + step set it moves the starting weight only.`}`
+    : line;
+}
+
+/**
  * "Build next block": repeat the weeks the coach picks, each copy a further step on in effort, reps,
  * percentage and weight (the builder's four steps, TRN-025), and append them to the program (STR-006,
  * STR-009). The server works every weight out again from the program's training maxes by each set's own
@@ -481,9 +491,12 @@ export class ProgramNextBlock {
           : $localize`No set in these weeks uses a % of training max.`,
       load: !reach
         ? null
-        : reach.load > 0
-          ? $localize`Sets moved: ${reach.load}:count:, fixed or typed weights.`
-          : $localize`No set in these weeks has a fixed weight.`,
+        : withStepLine(
+            reach.load > 0
+              ? $localize`Sets moved: ${reach.load}:count:, fixed or typed weights.`
+              : $localize`No set in these weeks has a fixed weight.`,
+            reach.stepSets,
+          ),
     };
   });
 

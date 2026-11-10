@@ -28,6 +28,7 @@ import {
   nullableNumeric,
   numeric,
   type ProgramDraft,
+  takesTypedWeight,
   toTrainingSessionRequest,
 } from '../training/training-builder.models';
 import { exerciseLines, type ExerciseLine, weightText } from './client-program.models';
@@ -153,10 +154,11 @@ function draftExercise(
           repetitionsMinimum: nullableNumeric(set.repetitionsMinimum),
           repetitionsMaximum: nullableNumeric(set.repetitionsMaximum),
           loadStrategy: set.loadStrategy,
-          loadValue:
-            set.loadStrategy === 'Direct'
-              ? nullableNumeric(set.directLoad)
-              : nullableNumeric(set.percentageWorkingMax),
+          // A step set's start and step travel back exactly, or the server would call it changed.
+          loadValue: takesTypedWeight(set.loadStrategy)
+            ? nullableNumeric(set.directLoad)
+            : nullableNumeric(set.percentageWorkingMax),
+          loadStep: nullableNumeric(set.loadStep ?? null),
           loadUnit: set.loadUnit ?? unit,
           exertionDisplayPreference: set.exertionDisplayPreference,
           exertionTarget:

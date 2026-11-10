@@ -21,6 +21,7 @@ import { button, field, fill, fold, press, query, settle, toggleFold } from '../
 import { personalRecord, programSummary } from '../../../testing/share-card-fixtures';
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { ShareCardMaker } from '../share-cards/share-card-maker';
+import { RestTimer } from './rest-timer';
 import { TodayTraining } from './today-training';
 import { trainingRoutes } from './training.routes';
 
@@ -34,6 +35,8 @@ function set(overrides: Partial<ClientSetView> = {}): ClientSetView {
     prescribedRepetitionsMaximum: 8,
     prescribedLoad: 60,
     prescribedLoadUnit: 'Kilogram',
+    loadStrategy: 'Direct',
+    loadStep: null,
     prescribedTargetRpe: 8,
     prescribedTargetRir: null,
     restSeconds: 120,
@@ -1698,5 +1701,184 @@ describe('TodayTraining, the audit’s player fixes', () => {
     );
     expect(textOf(lifted?.querySelector('strong'))).toBe('2,187.5');
     expect(host.textContent).not.toContain('× reps');
+  });
+});
+
+/**
+ * Notes plan N6a, TRN-029 v2: a last time + step set counts only with the reps the client did
+ * (decision 22), so its reps box starts empty and ✓ asks for them before anything is sent.
+ */
+describe('TodayTraining, a last time + step set', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+    TestBed.resetTestingModule();
+  });
+
+  /** A lateral raise of 10 reps, 7 kg to start and 2 kg a step, done at 5 kg × 12 last time. */
+  function stepDay(
+    workoutChanges: Partial<ClientWorkoutView> = {},
+    setChanges: Partial<ClientSetView> = {},
+  ): ClientTrainingDayResult {
+    return day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              prescribedExerciseName: 'Lateral raise',
+              actualExerciseName: 'Lateral raise',
+              previousPerformance: {
+                date: '2026-08-18',
+                bestLoad: 5,
+                unit: 'Kilogram',
+                repetitions: 12,
+                rpe: null,
+                sets: [{ position: 1, repetitions: 12, load: 5, loadUnit: 'Kilogram', rpe: null }],
+              },
+              sets: [
+                set({
+                  prescribedRepetitionsMinimum: 10,
+                  prescribedRepetitionsMaximum: 10,
+                  prescribedLoad: 7,
+                  loadStrategy: 'LastTimeStep',
+                  loadStep: 2,
+                  prescribedTargetRpe: null,
+                  ...setChanges,
+                }),
+              ],
+            }),
+          ],
+          ...workoutChanges,
+        }),
+      ],
+    });
+  }
+
+  const raiseSaved = () =>
+    saved({ actualRepetitions: 10, actualLoad: 7, actualRpe: null, clientNote: null });
+
+  it('starts the reps box empty and the weight at the coach’s, with last time beside it', async () => {
+    const { host } = await render({}, stepDay());
+
+    // Neither the coach's 10 nor last time's 12.
+    expect(field(host, 'Actual repetitions').value).toBe('');
+    expect(field(host, 'Actual load').value).toBe('7');
+    expect(textOf(query(host, '.set-previous'))).toBe('Last time 5 kg × 12');
+    // The Target line is the client's as before; the step is the coach's (decision 21).
+    const target = textOf(query(host, '.prescription'));
+    expect(target).toContain('Target: 10 reps · 7 kg');
+    expect(target).not.toMatch(/last time|\+/i);
+    // Nothing is asked until ✓ asks it.
+    expect(field(host, 'Actual repetitions').getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('starts the reps box empty before the workout is started too', async () => {
+    const { host } = await render(
+      {},
+      stepDay(
+        { workoutExecutionId: null, status: null, executionVersion: null },
+        { performanceId: null },
+      ),
+    );
+
+    expect(field(host, 'Actual repetitions').value).toBe('');
+    expect(field(host, 'Actual repetitions').disabled).toBe(true);
+    expect(field(host, 'Actual load').value).toBe('7');
+  });
+
+  it('asks for the reps before ✓ sends anything, and nothing waits on that set', async () => {
+    const sound = vi.spyOn(RestTimer.prototype, 'prepareSound');
+    const { fixture, host, api } = await render({}, stepDay());
+    document.body.append(host);
+
+    press(host, 'Log set');
+    await settle(fixture);
+
+    expect(api.recordMyTrainingSet).not.toHaveBeenCalled();
+    const summary = query(host, '#training-error-summary');
+    expect(textOf(summary)).toBe('Type your reps first.');
+    expect(document.activeElement).toBe(summary);
+    const error = query(host, '.set-card .player-error');
+    expect(textOf(error)).toBe('Type your reps first.');
+    const reps = field(host, 'Actual repetitions');
+    expect(reps.getAttribute('aria-invalid')).toBe('true');
+    expect(error.id).not.toBe('');
+    expect(reps.getAttribute('aria-describedby')).toBe(error.id);
+    // No rest starts, nor its tone, for a set not logged.
+    expect(host.querySelector('[role="timer"]')).toBeNull();
+    expect(sound).not.toHaveBeenCalled();
+    // The set is untouched: Finish opens its question, and leaving asks nothing.
+    expect(button(host, 'Log set').disabled).toBe(false);
+    press(host, 'Finish workout');
+    await settle(fixture);
+    expect(host.textContent).not.toContain('Save every edited set');
+    expect(textOf(query(host, '.finish-confirmation'))).toContain('0 of 1 sets logged');
+    expect(await fixture.componentInstance.canLeave()).toBe(true);
+  });
+
+  it('logs the set once the reps are typed, at the coach’s starting weight', async () => {
+    const sound = vi.spyOn(RestTimer.prototype, 'prepareSound');
+    const { fixture, host, api } = await render(
+      { recordMyTrainingSet: vi.fn(() => of(raiseSaved())) },
+      stepDay(),
+    );
+    press(host, 'Log set');
+    await settle(fixture);
+
+    fill(host, 'Actual repetitions', '10');
+    await settle(fixture);
+    // A number in the box ends the mark on it; the words stay until the next ✓.
+    expect(field(host, 'Actual repetitions').getAttribute('aria-invalid')).toBeNull();
+    press(host, 'Log set');
+    await settle(fixture);
+
+    expect(api.recordMyTrainingSet).toHaveBeenCalledTimes(1);
+    expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+      'execution-1',
+      'performance-1',
+      expect.objectContaining({
+        repetitions: 10,
+        load: 7,
+        loadUnit: 'Kilogram',
+        isCompleted: true,
+      }),
+    );
+    expect(sound).toHaveBeenCalledTimes(1);
+    expect(textOf(query(host, '#training-error-summary'))).toBe('');
+    expect(host.querySelector('.set-card .player-error')).toBeNull();
+    expect(host.textContent).toContain('Set saved.');
+    expect(query(host, '[role="timer"]').textContent).toContain('2:00');
+  });
+
+  it('takes 0 from the − stepper as reps done (decision 22)', async () => {
+    const { fixture, host, api } = await render({}, stepDay());
+
+    query<HTMLButtonElement>(host, 'button[aria-label="One rep less"]').click();
+    await settle(fixture);
+    expect(field(host, 'Actual repetitions').value).toBe('0');
+    press(host, 'Log set');
+    await settle(fixture);
+
+    expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+      'execution-1',
+      'performance-1',
+      expect.objectContaining({ repetitions: 0, load: 7 }),
+    );
+  });
+
+  it('asks nothing of a set with another weight choice, whose reps the client emptied', async () => {
+    const { fixture, host, api } = await render();
+
+    fill(host, 'Actual repetitions', '');
+    await settle(fixture);
+    press(host, 'Log set');
+    await settle(fixture);
+
+    expect(api.recordMyTrainingSet).toHaveBeenCalledWith(
+      'execution-1',
+      'performance-1',
+      expect.objectContaining({ repetitions: null, load: 60 }),
+    );
+    expect(host.textContent).not.toContain('Type your reps first.');
   });
 });

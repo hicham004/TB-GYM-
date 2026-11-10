@@ -11098,6 +11098,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsManualLoadOverride")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("LoadStep")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
                     b.Property<string>("LoadStrategy")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -11165,7 +11169,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ProgramTemplateSets", "training", t =>
                         {
-                            t.HasCheckConstraint("CK_ProgramTemplateSets_LoadStrategy", "(\"LoadStrategy\" = 'None') OR (\"LoadStrategy\" = 'Direct' AND \"DirectLoad\" > 0 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'PercentageWorkingMax' AND \"PercentageWorkingMax\" > 0 AND \"PercentageWorkingMax\" <= 150 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" IN ('RpeBasedEpley', 'RpeChart') AND \"TargetRpe\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND \"LoadUnit\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_ProgramTemplateSets_LoadStep", "\"LoadStep\" IS NULL OR \"LoadStrategy\" = 'LastTimeStep'");
+
+                            t.HasCheckConstraint("CK_ProgramTemplateSets_LoadStrategy", "(\"LoadStrategy\" = 'None') OR (\"LoadStrategy\" = 'Direct' AND \"DirectLoad\" > 0 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'PercentageWorkingMax' AND \"PercentageWorkingMax\" > 0 AND \"PercentageWorkingMax\" <= 150 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" IN ('RpeBasedEpley', 'RpeChart') AND \"TargetRpe\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'LastTimeStep' AND \"LoadStep\" IS NOT NULL AND \"LoadStep\" > 0 AND \"LoadStep\" <= 50 AND mod(\"LoadStep\" * 100, 1) = 0 AND \"LoadUnit\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND (\"DirectLoad\" IS NULL OR \"DirectLoad\" > 0))");
 
                             t.HasCheckConstraint("CK_ProgramTemplateSets_Position", "\"Position\" >= 0");
 
@@ -11471,6 +11477,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsManualLoadOverride")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("LoadStep")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
                     b.Property<string>("LoadStrategy")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -11548,7 +11558,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("SetPrescriptions", "training", t =>
                         {
-                            t.HasCheckConstraint("CK_SetPrescriptions_LoadStrategy", "(\"LoadStrategy\" = 'None') OR (\"LoadStrategy\" = 'Direct' AND \"DirectLoad\" > 0 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'PercentageWorkingMax' AND \"PercentageWorkingMax\" > 0 AND \"PercentageWorkingMax\" <= 150 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" IN ('RpeBasedEpley', 'RpeChart') AND \"TargetRpe\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND \"LoadUnit\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_SetPrescriptions_LoadStep", "\"LoadStep\" IS NULL OR \"LoadStrategy\" = 'LastTimeStep'");
+
+                            t.HasCheckConstraint("CK_SetPrescriptions_LoadStrategy", "(\"LoadStrategy\" = 'None') OR (\"LoadStrategy\" = 'Direct' AND \"DirectLoad\" > 0 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'PercentageWorkingMax' AND \"PercentageWorkingMax\" > 0 AND \"PercentageWorkingMax\" <= 150 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" IN ('RpeBasedEpley', 'RpeChart') AND \"TargetRpe\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'LastTimeStep' AND \"LoadStep\" IS NOT NULL AND \"LoadStep\" > 0 AND \"LoadStep\" <= 50 AND mod(\"LoadStep\" * 100, 1) = 0 AND \"LoadUnit\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND (\"DirectLoad\" IS NULL OR \"DirectLoad\" > 0))");
 
                             t.HasCheckConstraint("CK_SetPrescriptions_Position", "\"Position\" >= 0");
 
@@ -12140,10 +12152,18 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsCompleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LoadStrategySnapshot")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
                     b.Property<decimal?>("PrescribedLoad")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
+                    b.Property<decimal?>("PrescribedLoadStep")
                         .HasPrecision(8, 3)
                         .HasColumnType("numeric(8,3)");
 
@@ -12212,6 +12232,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_WorkoutSetPerformances_ActualReps", "\"ActualRepetitions\" IS NULL OR (\"ActualRepetitions\" >= 0 AND \"ActualRepetitions\" <= 200)");
 
                             t.HasCheckConstraint("CK_WorkoutSetPerformances_ActualRpe", "\"ActualRpe\" IS NULL OR (\"ActualRpe\" >= 5 AND \"ActualRpe\" <= 10 AND mod(\"ActualRpe\" * 2, 1) = 0)");
+
+                            t.HasCheckConstraint("CK_WorkoutSetPerformances_LoadStep", "(\"LoadStrategySnapshot\" IS DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NULL) OR (\"LoadStrategySnapshot\" IS NOT DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NOT NULL AND \"PrescribedLoadStep\" > 0 AND \"PrescribedLoadStep\" <= 50 AND \"PrescribedLoadUnit\" IS NOT NULL)");
                         });
                 });
 

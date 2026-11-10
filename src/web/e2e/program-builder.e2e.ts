@@ -583,6 +583,74 @@ for (const width of [390, 1440]) {
   });
 }
 
+for (const width of [390, 1440]) {
+  test(`a last time + step set at ${width}px autosaves its step and start, and Publish checks the step (N6a)`, async ({
+    page,
+  }) => {
+    const sent = await openBuilder(page, width, 900);
+    const exercise = week(page, 0).locator('.exercise-row').first();
+    await exercise.getByRole('button', { name: 'Edit sets for Back squat' }).click();
+    const inline = exercise.locator('.inline-sets');
+    await inline.getByRole('button', { name: '% of training max', exact: true }).click();
+    await page.getByRole('button', { name: 'Last time + step', exact: true }).click();
+
+    const step = inline.getByRole('spinbutton', { name: 'Step (kg)', exact: true });
+    const start = inline.getByRole('spinbutton', { name: 'Starting weight (kg)', exact: true });
+    // The cursor goes to the step; the set's 75% is never read as a 75 kg start.
+    await expect(step).toBeFocused();
+    await expect(step).not.toHaveAttribute('aria-invalid');
+    await expect(start).toHaveValue('');
+    await expect(
+      inline.getByText('You add the step each week, after reading the logged sets.'),
+    ).toBeVisible();
+    await expect(
+      inline.getByText('Optional. Without one, the client picks the weight.'),
+    ).toBeVisible();
+    await step.fill('2');
+    await start.fill('5');
+
+    await expect
+      .poll(() => sent.contents.at(-1)?.weeks[0].sessions[0].exercises[0].sets[0])
+      .toMatchObject({
+        loadStrategy: 'LastTimeStep',
+        loadStep: 2,
+        directLoad: 5,
+        loadUnit: 'Kilogram',
+        percentageWorkingMax: null,
+        manualLoadOverride: null,
+        repetitionsMaximum: 5,
+      });
+    await expect(page.locator('.status')).toHaveText(/^Saved at/);
+    // The other two sets keep their share; the grid says the step, then the start.
+    expect(sent.contents.at(-1)!.weeks[0].sessions[0].exercises[0].sets[1]).toMatchObject({
+      loadStrategy: 'PercentageWorkingMax',
+      percentageWorkingMax: 75,
+      loadStep: null,
+    });
+    await expect(exercise.locator('app-set-lines .run')).toHaveText([
+      '1 × 5 · last time + 2 kg · start 5 kg · RPE 7',
+      '2 × 5 · 75% of training max · RPE 7',
+    ]);
+    await expectNoHorizontalOverflow(page);
+    await week(page, 0)
+      .getByRole('button', { name: 'More for Lower A' })
+      .evaluate((button) => button.scrollIntoView({ block: 'center' }));
+    await axe(page);
+
+    // A step of 0 is refused by Publish's check, which names the set and sends nothing.
+    await step.fill('0');
+    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'a step must be' })).toHaveText(
+      /Week 1, Lower A: a step must be more than 0 and at most 50 kg, with at most two decimals\./,
+    );
+    await expect(page.getByRole('dialog', { name: 'Preview before publishing' })).toHaveCount(0);
+    expect(sent.published).toEqual([]);
+    await page.getByRole('button', { name: 'Fix the set', exact: true }).click();
+    await expect(step).toBeFocused();
+    await expect(step).toHaveAttribute('aria-invalid', 'true');
+  });
+}
+
 test('a dark preview hides unshared content and reflows at 200% text in RTL', async ({ page }) => {
   const program = versionView();
   program.weeks[0].isPublished = false;

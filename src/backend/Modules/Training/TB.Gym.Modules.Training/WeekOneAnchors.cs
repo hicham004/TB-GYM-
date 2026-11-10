@@ -20,7 +20,8 @@ public static class WeekOneAnchors
     /// <summary>
     /// The first working set of the exercise in week 1, by day and then position, that names a repetition
     /// count and an RPE the load formula covers. Warm-up sets never count. Null when week 1 has none, and
-    /// the caller says so rather than guessing (STR-010).
+    /// the caller says so rather than guessing (STR-010). A last time + step set never counts either: its
+    /// weight follows what was logged, not the week, so it never anchors a max (beside, not under: ADR 0036).
     /// </summary>
     /// <param name="weekOne">Week 1 of a published program version or of an assigned program.</param>
     /// <param name="exerciseId">The exercise whose max is being worked out.</param>
@@ -41,6 +42,7 @@ public static class WeekOneAnchors
                 foreach (var set in exercise.Sets.OrderBy(item => item.Position))
                 {
                     if (set.SetType == TrainingSetType.WarmUp ||
+                        set.LoadStrategy == TrainingLoadStrategy.LastTimeStep ||
                         set.RepetitionsMaximum is not { } repetitions ||
                         set.TargetRpe is not { } rpe ||
                         !isCovered(repetitions, rpe))

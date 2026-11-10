@@ -324,6 +324,8 @@
                                 +
                               </button>
                             </div>
+                            <!-- A last time + step set's reps start empty, before Start too, and ✓
+                                 asks for them (TRN-029 v2). -->
                             <div class="set-step">
                               <button
                                 type="button"
@@ -344,10 +346,16 @@
                                   inputmode="numeric"
                                   aria-label="Actual repetitions"
                                   i18n-aria-label
+                                  [attr.aria-invalid]="repsAsked(set, draft) || null"
+                                  [attr.aria-describedby]="
+                                    repsAsked(set, draft) ? 'set-error-' + set.performanceId : null
+                                  "
                                   [ngModel]="
                                     draft
                                       ? draft.actualRepetitions
-                                      : set.prescribedRepetitionsMinimum
+                                      : startsWithoutReps(set)
+                                        ? null
+                                        : set.prescribedRepetitionsMinimum
                                   "
                                   (ngModelChange)="
                                     updateSetDraft(set, { actualRepetitions: $event })
@@ -495,7 +503,9 @@
                           </app-disclosure>
                         }
                         @if (set.performanceId && setErrors()[set.performanceId]; as setError) {
-                          <p class="player-error">{{ setError }}</p>
+                          <p class="player-error" [id]="'set-error-' + set.performanceId">
+                            {{ setError }}
+                          </p>
                         }
                       </section>
                     }

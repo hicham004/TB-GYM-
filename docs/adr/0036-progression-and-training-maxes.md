@@ -239,7 +239,7 @@ a request that names only a logged set is refused. What stays: P2's own maxes, t
 history per lift (STR-015); and a max from a set they did (STR-017). Nothing stored changed here either: every
 keep stays in its append-only table, read by nothing, and a max applied from a suggestion keeps its set. The
 progression from logged sets that follows is +X kg (the notes plan's N6a to N6d), a step the coach reviews
-and applies each week, never a suggested max.
+and applies each week, never a suggested max (ADR 0040).
 
 N10c took it off the homepage: Sunday's stage no longer says that logged sets suggest a max, and its picture
 of the Training maxes panel was taken again from the sample demo without the suggestion.

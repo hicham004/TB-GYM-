@@ -67,8 +67,10 @@ type Answer = (
   draft: ProgramDraft,
 ) => Observable<WeekProgressionPreviewView>;
 
-async function render(answer: Answer = (request, draft) => of(previewFor(draft, request))) {
-  const draft = program();
+async function render(
+  answer: Answer = (request, draft) => of(previewFor(draft, request)),
+  draft: ProgramDraft = program(),
+) {
   const api = {
     previewWeekProgression: vi.fn((request: PreviewWeekProgressionRequest) =>
       answer(request, draft),
@@ -236,6 +238,93 @@ describe('Duplicate with progression', () => {
     expect(document.activeElement).toBe(formSummary(host));
     expect(host.querySelector('.result')).toBeNull();
     expect(addButton()?.disabled).toBe(true);
+  });
+
+  describe('a last time + step set (N6a)', () => {
+    const goblet = (loadValue: number | null) => {
+      const exercise = emptyExercise('goblet', false, 'Goblet squat');
+      exercise.sets = [
+        set({
+          loadStrategy: 'LastTimeStep',
+          loadStep: 2,
+          loadValue,
+          repetitionsMinimum: 10,
+          repetitionsMaximum: 10,
+        }),
+      ];
+      return exercise;
+    };
+
+    /** The server's copies, by the weight step alone: a typed weight and a starting weight move. */
+    const byWeight: Answer = (request) => {
+      const source = request.sourceWeek;
+      return of({
+        transformKey: 'WeekStep',
+        transformVersion: '1.0',
+        weeks: Array.from({ length: Number(request.copies) }, (_, index) => ({
+          ...source,
+          sessions: source.sessions.map((session) => ({
+            ...session,
+            exercises: session.exercises.map((exercise) => ({
+              ...exercise,
+              sets: exercise.sets.map((requested) =>
+                requested.directLoad === null
+                  ? requested
+                  : {
+                      ...requested,
+                      directLoad:
+                        Number(requested.directLoad) + Number(request.steps.loadStep) * (index + 1),
+                    },
+              ),
+            })),
+          })),
+        })),
+      });
+    };
+
+    it('says the weight step moves its starting weight only, and shows the step on the copies', async () => {
+      const draft = program();
+      draft.weeks[0].sessions[0].exercises.push(goblet(5));
+      const { fixture, host, api, press, text } = await render(byWeight, draft);
+
+      expect(text('.tb-field__support').at(-1)).toBe(
+        'Sets moved: 2, fixed or typed weights. On a last time + step set it moves the starting weight only.',
+      );
+      fill(host, 'Copies', '1');
+      fill(host, 'Weight a week (kg)', '2');
+      await settle(fixture);
+      await press('Show the new weeks');
+
+      // The week step is the request's loadStep; the set's own step rides on the set.
+      const request = api.previewWeekProgression.mock.calls[0][0];
+      expect(request.steps.loadStep).toBe(2);
+      expect(request.sourceWeek.sessions[0].exercises[2].sets[0]).toMatchObject({
+        loadStrategy: 'LastTimeStep',
+        directLoad: 5,
+        loadStep: 2,
+      });
+      expect(text('.week .set')).toEqual([
+        '5 · 70% of training max · RPE 6',
+        '5 · RPE 7 · 79% of training max',
+        '5 · 102 kg · RPE 7',
+        '10 · last time + 2 kg · start 7 kg',
+      ]);
+      expect(text('.week .set.changed')).toEqual([
+        '5 · 102 kg · RPE 7',
+        '10 · last time + 2 kg · start 7 kg',
+      ]);
+    });
+
+    it('says so too when no step set has a starting weight, so nothing of it moves', async () => {
+      const draft = program();
+      draft.weeks[0].sessions[0].exercises = [goblet(null)];
+      const { text } = await render(byWeight, draft);
+
+      expect(text('.tb-field__support').at(-1)).toBe(
+        'No set in this week has a fixed weight. On a last time + step set it moves the starting weight only.',
+      );
+      expect(text('.tb-field__label').at(-1)).toBe('Weight a week (kg)');
+    });
   });
 
   it('closes without adding when the coach cancels', async () => {

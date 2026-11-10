@@ -89,6 +89,43 @@ describe('the program’s client preview', () => {
     expect(host.textContent).toContain('Shared weeks open from the program’s start date.');
   });
 
+  it('shows a last time + step set’s step and start, and asks no max for its lift (N6a)', async () => {
+    const program = draftFromVersion(versionView());
+    for (const week of program.weeks) {
+      for (const set of week.sessions[1].exercises[0].sets) {
+        Object.assign(set, { loadStrategy: 'LastTimeStep', loadStep: 2, loadValue: 40 });
+      }
+    }
+    const fixture = TestBed.createComponent(ProgramPublishPreview);
+    fixture.componentRef.setInput('program', program);
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+    await toggleFold(fixture, host, 'Upper A');
+    const text = (selector: string) =>
+      (host.querySelector(selector)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+    expect(host.textContent).toContain('5 · last time + 2 kg · start 40 kg · RPE 7');
+    // Only the squat still works its weight out from a max.
+    expect(text('[data-needs-max]')).toBe(
+      'Needs a training max for: Back squat · set when you assign the program',
+    );
+
+    // A program of step sets alone says nothing of maxes.
+    for (const set of program.weeks
+      .flatMap((week) => week.sessions)
+      .flatMap((session) => session.exercises)
+      .flatMap((exercise) => exercise.sets)) {
+      Object.assign(set, { loadStrategy: 'LastTimeStep', loadStep: 2.5, loadValue: null });
+    }
+    const typed = TestBed.createComponent(ProgramPublishPreview);
+    typed.componentRef.setInput('program', structuredClone(program));
+    await settle(typed);
+    const typedHost = typed.nativeElement as HTMLElement;
+    expect(typedHost.querySelector('[data-needs-max]')).toBeNull();
+    expect(typedHost.querySelector('[data-weights-when]')).toBeNull();
+    expect(typedHost.textContent).toContain('5 · last time + 2.5 kg · RPE 7');
+  });
+
   it('shows the client’s unshared-week message without rendering its sessions', async () => {
     const { fixture, host } = await render();
     const radio = host.querySelector<HTMLInputElement>('input[value="1"]')!;

@@ -524,6 +524,8 @@ public sealed partial class GymDbContext
             entity.Property(item => item.SetTypeSnapshot).HasConversion<string>().HasMaxLength(24);
             entity.Property(item => item.PrescribedLoad).HasPrecision(8, 3);
             entity.Property(item => item.PrescribedLoadUnit).HasConversion<string>().HasMaxLength(16);
+            entity.Property(item => item.LoadStrategySnapshot).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.PrescribedLoadStep).HasPrecision(8, 3);
             entity.Property(item => item.PrescribedTargetRpe).HasPrecision(3, 1);
             entity.Property(item => item.PrescribedTempo).HasMaxLength(32);
             entity.Property(item => item.CoachNotesSnapshot).HasMaxLength(1_000);
@@ -540,6 +542,10 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint("CK_WorkoutSetPerformances_ActualReps", "\"ActualRepetitions\" IS NULL OR (\"ActualRepetitions\" >= 0 AND \"ActualRepetitions\" <= 200)");
                 table.HasCheckConstraint("CK_WorkoutSetPerformances_ActualLoad", "\"ActualLoad\" IS NULL OR (\"ActualLoad\" >= 0 AND \"ActualLoad\" <= 2000)");
                 table.HasCheckConstraint("CK_WorkoutSetPerformances_ActualRpe", "\"ActualRpe\" IS NULL OR (\"ActualRpe\" >= 5 AND \"ActualRpe\" <= 10 AND mod(\"ActualRpe\" * 2, 1) = 0)");
+                // A snapshot keeps its step exactly when it was started from a last time + step set (N6a).
+                table.HasCheckConstraint(
+                    "CK_WorkoutSetPerformances_LoadStep",
+                    "(\"LoadStrategySnapshot\" IS DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NULL) OR (\"LoadStrategySnapshot\" IS NOT DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NOT NULL AND \"PrescribedLoadStep\" > 0 AND \"PrescribedLoadStep\" <= 50 AND \"PrescribedLoadUnit\" IS NOT NULL)");
             });
             ConfigureTenantEntity(entity);
         });
@@ -623,6 +629,7 @@ public sealed partial class GymDbContext
         entity.Property(item => item.DirectLoad).HasPrecision(8, 3);
         entity.Property(item => item.LoadUnit).HasConversion<string>().HasMaxLength(16);
         entity.Property(item => item.PercentageWorkingMax).HasPrecision(6, 3);
+        entity.Property(item => item.LoadStep).HasPrecision(8, 3);
         entity.Property(item => item.TargetRpe).HasPrecision(3, 1);
         entity.Property(item => item.ExertionDisplayPreference).HasConversion<string>().HasMaxLength(16);
         entity.Property(item => item.Tempo).HasMaxLength(32);
@@ -638,6 +645,7 @@ public sealed partial class GymDbContext
         entity.Property(item => item.DirectLoad).HasPrecision(8, 3);
         entity.Property(item => item.LoadUnit).HasConversion<string>().HasMaxLength(16);
         entity.Property(item => item.PercentageWorkingMax).HasPrecision(6, 3);
+        entity.Property(item => item.LoadStep).HasPrecision(8, 3);
         entity.Property(item => item.TargetRpe).HasPrecision(3, 1);
         entity.Property(item => item.ExertionDisplayPreference).HasConversion<string>().HasMaxLength(16);
         entity.Property(item => item.Tempo).HasMaxLength(32);
@@ -661,6 +669,10 @@ public sealed partial class GymDbContext
             "\"RestSeconds\" IS NULL OR (\"RestSeconds\" >= 0 AND \"RestSeconds\" <= 3600)");
         table.HasCheckConstraint(
             $"CK_{prefix}_LoadStrategy",
-            "(\"LoadStrategy\" = 'None') OR (\"LoadStrategy\" = 'Direct' AND \"DirectLoad\" > 0 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'PercentageWorkingMax' AND \"PercentageWorkingMax\" > 0 AND \"PercentageWorkingMax\" <= 150 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" IN ('RpeBasedEpley', 'RpeChart') AND \"TargetRpe\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND \"LoadUnit\" IS NOT NULL)");
+            "(\"LoadStrategy\" = 'None') OR (\"LoadStrategy\" = 'Direct' AND \"DirectLoad\" > 0 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'PercentageWorkingMax' AND \"PercentageWorkingMax\" > 0 AND \"PercentageWorkingMax\" <= 150 AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" IN ('RpeBasedEpley', 'RpeChart') AND \"TargetRpe\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND \"LoadUnit\" IS NOT NULL) OR (\"LoadStrategy\" = 'LastTimeStep' AND \"LoadStep\" IS NOT NULL AND \"LoadStep\" > 0 AND \"LoadStep\" <= 50 AND mod(\"LoadStep\" * 100, 1) = 0 AND \"LoadUnit\" IS NOT NULL AND \"RepetitionsMaximum\" IS NOT NULL AND (\"DirectLoad\" IS NULL OR \"DirectLoad\" > 0))");
+        // A step rides on no other weight choice (N6a).
+        table.HasCheckConstraint(
+            $"CK_{prefix}_LoadStep",
+            "\"LoadStep\" IS NULL OR \"LoadStrategy\" = 'LastTimeStep'");
     }
 }

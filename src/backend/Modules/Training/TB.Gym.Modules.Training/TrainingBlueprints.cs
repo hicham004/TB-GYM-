@@ -27,6 +27,10 @@ public sealed record ExercisePrescriptionBlueprint(
     IReadOnlyList<Guid> MediaAssetIds,
     IReadOnlyList<SetPrescriptionBlueprint> Sets);
 
+/// <param name="LoadStep">
+/// A last time + step set's step, in the set's unit (N6a); null on every other set. Not the week copies'
+/// weight a week, <see cref="WeekProgressionSteps.LoadStep"/>.
+/// </param>
 public sealed record SetPrescriptionBlueprint(
     int Position,
     TrainingSetType SetType,
@@ -36,6 +40,7 @@ public sealed record SetPrescriptionBlueprint(
     decimal? DirectLoad,
     TrainingLoadUnit? LoadUnit,
     decimal? PercentageWorkingMax,
+    decimal? LoadStep,
     decimal? TargetRpe,
     ExertionDisplayPreference ExertionDisplayPreference,
     int? RestSeconds,
@@ -81,6 +86,12 @@ public enum TrainingLoadStrategy
     PercentageWorkingMax = 3,
     RpeBasedEpley = 4,
     RpeChart = 5,
+
+    /// <summary>
+    /// Last time + step (N6a): the coach's starting weight, or none, and a step the coach adds after reading
+    /// the logged sets (decision 21). A typed weight: never worked out from a max or rounded.
+    /// </summary>
+    LastTimeStep = 6,
 }
 
 public enum TrainingLoadUnit

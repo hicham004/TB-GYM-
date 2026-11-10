@@ -343,6 +343,8 @@ public sealed class WorkoutSetPerformance : TenantEntity
         PrescribedRepetitionsMaximum = prescription.RepetitionsMaximum;
         PrescribedLoad = prescription.PrescribedLoad ?? prescription.DirectLoad;
         PrescribedLoadUnit = prescription.LoadUnit;
+        LoadStrategySnapshot = prescription.LoadStrategy;
+        PrescribedLoadStep = prescription.LoadStep;
         PrescribedTargetRpe = prescription.TargetRpe;
         PrescribedRestSeconds = prescription.RestSeconds;
         PrescribedTempo = prescription.Tempo;
@@ -367,6 +369,12 @@ public sealed class WorkoutSetPerformance : TenantEntity
     public decimal? PrescribedLoad { get; private set; }
 
     public TrainingLoadUnit? PrescribedLoadUnit { get; private set; }
+
+    /// <summary>The set's weight choice when the workout started; null on a workout started before N6a.</summary>
+    public TrainingLoadStrategy? LoadStrategySnapshot { get; private set; }
+
+    /// <summary>A last time + step set's step when the workout started (N6a); null on every other set.</summary>
+    public decimal? PrescribedLoadStep { get; private set; }
 
     public decimal? PrescribedTargetRpe { get; private set; }
 

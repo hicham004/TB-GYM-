@@ -61,6 +61,8 @@ describe('CoachWorkout', () => {
                   prescribedRepetitionsMaximum: 8,
                   prescribedLoad: 60,
                   prescribedLoadUnit: 'Kilogram',
+                  loadStrategy: 'Direct',
+                  loadStep: null,
                   prescribedTargetRpe: 8,
                   prescribedTargetRir: null,
                   restSeconds: 120,
@@ -84,6 +86,8 @@ describe('CoachWorkout', () => {
                   prescribedRepetitionsMaximum: 5,
                   prescribedLoad: 60,
                   prescribedLoadUnit: 'Kilogram',
+                  loadStrategy: 'Direct',
+                  loadStep: null,
                   prescribedTargetRpe: null,
                   prescribedTargetRir: null,
                   restSeconds: 120,
@@ -370,6 +374,42 @@ describe('CoachWorkout', () => {
     expect(figures(fixture.nativeElement as HTMLElement)).toEqual([
       ['6–8 reps · 135 lb · RPE 8', '7 reps · RPE 8.5'],
       ['5 reps', '—'],
+    ]);
+  });
+
+  /** Notes plan N6a: the coach reads a last time + step set as the grid does (TRN-032). */
+  it('says a last time + step set’s step after its starting weight, in the set’s unit', async () => {
+    const detail = workoutDetail(null);
+    const sets = detail.detail!.workout.exercises[0].sets;
+    sets[0] = { ...sets[0], loadStrategy: 'LastTimeStep', loadStep: 2, prescribedLoad: 7 };
+    // With no starting weight the client picked the weight, so the step is all the weight says. The
+    // API may send a decimal as a string.
+    sets[1] = { ...sets[1], loadStrategy: 'LastTimeStep', loadStep: '2.5', prescribedLoad: null };
+    sets.push({
+      ...sets[1],
+      prescriptionId: 'set-3',
+      performanceId: 'set-performance-3',
+      position: 3,
+      loadStep: 5,
+      prescribedLoad: 45,
+      prescribedLoadUnit: 'Pound',
+    });
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: vi.fn(() => of(detail)) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    await settle(fixture);
+
+    expect(figures(fixture.nativeElement as HTMLElement)).toEqual([
+      ['6–8 reps · 7 kg · last time + 2 kg · RPE 8', '7 reps · 62.5 kg · RPE 8.5'],
+      ['5 reps · last time + 2.5 kg', '—'],
+      ['5 reps · 45 lb · last time + 5 lb', '—'],
     ]);
   });
 });

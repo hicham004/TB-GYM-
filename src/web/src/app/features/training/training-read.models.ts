@@ -5,6 +5,7 @@ import type {
   ClientWorkoutView,
   CoachWorkoutDetailResult,
 } from '../../core/api/generated';
+import { lastTimeStepWords } from './step-words';
 
 export interface DatedWorkout {
   date: string;
@@ -157,9 +158,18 @@ function repsText(minimum: Quantity, maximum: Quantity, locale: string): string 
   return $localize`${low}:low:–${high}:high: reps`;
 }
 
+const unitText = (unit: null | string) => (unit === 'Pound' ? 'lb' : 'kg');
+
 function loadText(load: Quantity, unit: null | string, locale: string): string | null {
   const value = numberText(load, locale);
-  return value === null ? null : `${value} ${unit === 'Pound' ? 'lb' : 'kg'}`;
+  return value === null ? null : `${value} ${unitText(unit)}`;
+}
+
+/** A last time + step set's step in the set's unit, "last time + 2 kg" (TRN-032); null on any other. */
+function stepText(set: ClientSetView, locale: string): string | null {
+  if (set.loadStrategy !== 'LastTimeStep') return null;
+  const step = numberText(set.loadStep, locale);
+  return step === null ? null : lastTimeStepWords(step, unitText(set.prescribedLoadUnit));
 }
 
 /** RPE is the canonical effort scale; RIR is said only when no RPE was set. */
@@ -174,11 +184,16 @@ function joined(parts: (string | null)[]): string {
   return parts.filter((part): part is string => part !== null).join(' · ');
 }
 
-/** What the coach asked for in a set, such as "6–8 reps · 60 kg · RPE 8". */
+/**
+ * What the coach asked for in a set, such as "6–8 reps · 60 kg · RPE 8"; a last time + step set adds
+ * its step after its starting weight, "6–8 reps · 7 kg · last time + 2 kg · RPE 8". Only the coach's
+ * logged workout says it: the client's player never shows the step (decision 21).
+ */
 export function setTargetText(set: ClientSetView, locale: string): string {
   const text = joined([
     repsText(set.prescribedRepetitionsMinimum, set.prescribedRepetitionsMaximum, locale),
     loadText(set.prescribedLoad, set.prescribedLoadUnit, locale),
+    stepText(set, locale),
     effortText(set.prescribedTargetRpe, set.prescribedTargetRir, locale),
   ]);
   return text === '' ? $localize`Open` : text;

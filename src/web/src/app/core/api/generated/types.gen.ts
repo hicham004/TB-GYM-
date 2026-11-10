@@ -1027,6 +1027,8 @@ export type ClientSetView = {
   prescribedRepetitionsMaximum: null | number | string;
   prescribedLoad: null | number | string;
   prescribedLoadUnit: null | TrainingLoadUnit;
+  loadStrategy: null | TrainingLoadStrategy;
+  loadStep: null | number | string;
   prescribedTargetRpe: null | number | string;
   prescribedTargetRir: null | number | string;
   restSeconds: null | number | string;
@@ -4096,6 +4098,7 @@ export type SetPrescriptionRequest = {
   directLoad: null | number | string;
   loadUnit: null | TrainingLoadUnit;
   percentageWorkingMax: null | number | string;
+  loadStep: null | number | string;
   targetRpe: null | number | string;
   targetRir: null | number | string;
   exertionDisplayPreference: ExertionDisplayPreference;
@@ -4115,6 +4118,7 @@ export type SetPrescriptionView = {
   directLoad: null | number | string;
   loadUnit: null | TrainingLoadUnit;
   percentageWorkingMax: null | number | string;
+  loadStep: null | number | string;
   targetRpe: null | number | string;
   targetRir: null | number | string;
   exertionDisplayPreference: ExertionDisplayPreference;
@@ -4267,7 +4271,7 @@ export type TodayTrainingCoverageView = {
 export type TrainingLoadRoundingMode = 'Nearest' | 'Down' | 'Up';
 
 export type TrainingLoadStrategy =
-  'None' | 'Direct' | 'PercentageWorkingMax' | 'RpeBasedEpley' | 'RpeChart';
+  'None' | 'Direct' | 'PercentageWorkingMax' | 'RpeBasedEpley' | 'RpeChart' | 'LastTimeStep';
 
 export type TrainingLoadUnit = 'Kilogram' | 'Pound';
 

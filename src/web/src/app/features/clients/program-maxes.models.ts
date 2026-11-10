@@ -481,7 +481,8 @@ export function chartCovers(repetitions: number, rpe: number): boolean {
 
 /**
  * The set a max would be worked out from: the first working set of the lift in week 1, by day and
- * then position, that names a repetition count and an RPE the chart covers. The server picks it the
+ * then position, that names a repetition count and an RPE the chart covers. A last time + step set
+ * never counts (TRN-032): its weight follows what was logged, not the week. The server picks it the
  * same way and answers for it; this only lets the sheet say which set the weight is for.
  */
 export function weekOneAnchor(
@@ -496,7 +497,12 @@ export function weekOneAnchor(
       .sort((a, b) => num(a.position) - num(b.position));
     for (const exercise of exercises) {
       for (const set of [...exercise.sets].sort((a, b) => num(a.position) - num(b.position))) {
-        if (set.setType === 'WarmUp' || set.repetitionsMaximum === null || set.targetRpe === null) {
+        if (
+          set.setType === 'WarmUp' ||
+          set.loadStrategy === 'LastTimeStep' ||
+          set.repetitionsMaximum === null ||
+          set.targetRpe === null
+        ) {
           continue;
         }
         const repetitions = num(set.repetitionsMaximum);

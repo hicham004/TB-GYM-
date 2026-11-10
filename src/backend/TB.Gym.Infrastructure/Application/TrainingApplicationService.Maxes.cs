@@ -606,6 +606,7 @@ internal sealed partial class TrainingApplicationService
             set.DirectLoad,
             set.LoadUnit,
             set.PercentageWorkingMax,
+            set.LoadStep,
             set.TargetRpe,
             set.ExertionDisplayPreference,
             set.RestSeconds,

@@ -497,12 +497,13 @@ public static class ProgramEditPlanner
 
     private static bool SameSet(SetPrescription stored, SetPrescriptionRequest request)
     {
-        // The request in the form the server stores it: a typed weight is a direct, manual one, and a
-        // target in reserve is a target in effort.
+        // The request in the form the server stores it: a typed weight is a direct, manual one, a step
+        // rides only on a last time + step set, and a target in reserve is a target in effort.
         var manual = request.ManualLoadOverride is not null;
         var strategy = manual ? TrainingLoadStrategy.Direct : request.LoadStrategy;
         var direct = manual ? request.ManualLoadOverride : request.DirectLoad;
         var percentage = manual ? null : request.PercentageWorkingMax;
+        var step = manual || strategy != TrainingLoadStrategy.LastTimeStep ? null : request.LoadStep;
         var rpe = request.TargetRpe ?? (request.TargetRir is { } reserve ? 10m - reserve : null);
         return stored.SetType == request.SetType &&
                stored.RepetitionsMinimum == request.RepetitionsMinimum &&
@@ -511,6 +512,7 @@ public static class ProgramEditPlanner
                stored.DirectLoad == direct &&
                (strategy == TrainingLoadStrategy.None || stored.LoadUnit == request.LoadUnit) &&
                stored.PercentageWorkingMax == percentage &&
+               stored.LoadStep == step &&
                stored.TargetRpe == rpe &&
                stored.ExertionDisplayPreference == request.ExertionDisplayPreference &&
                stored.RestSeconds == request.RestSeconds &&

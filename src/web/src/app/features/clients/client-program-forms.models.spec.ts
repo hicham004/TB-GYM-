@@ -643,10 +643,45 @@ describe('building the next block', () => {
       percentage: 1,
       load: 1,
       unit: 'kg',
+      stepSets: 0,
     });
     // Two weeks double the counts; none says nothing moves.
     expect(stepReach(program, ['block-lean-week5', 'block-lean-week6']).rpe).toBe(4);
-    expect(stepReach(program, [])).toEqual({ rpe: 0, reps: 0, percentage: 0, load: 0, unit: null });
+    expect(stepReach(program, [])).toEqual({
+      rpe: 0,
+      reps: 0,
+      percentage: 0,
+      load: 0,
+      unit: null,
+      stepSets: 0,
+    });
+  });
+
+  it('counts a last time + step set’s starting weight among the weights it moves (N6a)', () => {
+    const program = leanProgram();
+    const step = {
+      loadStrategy: 'LastTimeStep' as const,
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      loadStep: 2,
+    };
+    program.weeks[5].sessions[0].exercises.push(
+      exerciseView('goblet-6', 'Goblet squat', [
+        setView({ ...step, position: 1, loadUnit: 'Pound', directLoad: 15, prescribedLoad: 15 }),
+        // No starting weight: the server's weight step has nothing of it to move.
+        setView({ ...step, position: 2, loadUnit: 'Kilogram' }),
+        setView({ ...step, position: 3, setType: 'WarmUp', loadUnit: 'Kilogram', directLoad: 5 }),
+      ]),
+    );
+
+    expect(stepReach(program, ['block-lean-week6'])).toEqual({
+      rpe: 2,
+      reps: 5,
+      percentage: 1,
+      load: 2,
+      unit: 'kg / lb',
+      stepSets: 2,
+    });
   });
 
   it('counts a manual weight as a fixed one, in its own unit', () => {

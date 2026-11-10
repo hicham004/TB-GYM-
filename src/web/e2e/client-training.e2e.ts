@@ -597,6 +597,74 @@ test('a session opens in a sheet that names it, holds focus and gives it back on
   await expect(session).toBeFocused();
 });
 
+test('a last time + step set reads its weight, then its step, in the session sheet (N6a)', async ({
+  page,
+}) => {
+  // Explicit nulls where a step set has nothing, as the server sends them: no share, no effort.
+  const step = {
+    repetitionsMinimum: 10,
+    repetitionsMaximum: 10,
+    loadStrategy: 'LastTimeStep',
+    loadUnit: 'Kilogram',
+    directLoad: 7,
+    prescribedLoad: 7,
+    percentageWorkingMax: null,
+    loadStep: 2,
+    targetRpe: null,
+  };
+  const [week] = blockDetail.weeks;
+  const [lowerB] = week.sessions;
+  const detail = {
+    ...blockDetail,
+    weeks: [
+      {
+        ...week,
+        sessions: [
+          {
+            ...lowerB,
+            exercises: [
+              ...lowerB.exercises,
+              {
+                id: 'ex-3',
+                exerciseName: 'Goblet Squat',
+                coachNotes: null,
+                sets: [step, step, step],
+              },
+              {
+                id: 'ex-4',
+                exerciseName: 'Walking Lunge',
+                coachNotes: null,
+                sets: [
+                  {
+                    ...step,
+                    repetitionsMinimum: 12,
+                    repetitionsMaximum: 12,
+                    directLoad: null,
+                    prescribedLoad: null,
+                    loadStep: 2.5,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  await openTraining(page, 1440, 900, {
+    extra: { [`GET /api/training/mesocycles/${BLOCK}`]: (route) => json(route, 200, detail) },
+  });
+
+  await page.locator('.week.current button.session').nth(2).click();
+  const sheet = page.getByRole('dialog', { name: 'Lower B' });
+  await expect(sheet).toContainText('3 × 5 reps · 60 kg · RPE 8');
+  await expect(sheet).toContainText('3 × 10 reps · 7 kg · last time + 2 kg');
+  // No starting weight: the client picks it, so only the step is said.
+  await expect(sheet).toContainText('12 reps · last time + 2.5 kg');
+  await expect(sheet).not.toContainText('NaN');
+  await axe(page);
+});
+
 test('an exercise’s demo opens over the session sheet, as Maya was given it (P4)', async ({
   page,
 }) => {

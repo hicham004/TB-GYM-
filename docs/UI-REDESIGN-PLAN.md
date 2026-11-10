@@ -1904,7 +1904,8 @@ limited to the coach's assigned clients.
     per run of sets that differ (critique B7a, 2026-10-30, changing R6.3's one line; Edit weeks and
     the session sheet read the same). A chart set says the chart's share after its effort ("RPE 8 ·
     81% of training max"), and the head says "Needs a training max for: …" by Assign program's rule,
-    as the publish preview does. A chevron in the
+    as the publish preview does. A set whose weight goes up by a step names the step and any starting
+    weight ("3 × 10 · last time + 2 kg · start 5 kg", notes plan N6a). A chevron in the
     head folds a week to one line ("2 sessions · 3 exercises"); folded, it still takes a dropped
     session, on its first free day. Folds are kept per program in the browser
     (`tb.program-folds:<templateId>`, by position, since week keys are new on every load).
@@ -2260,7 +2261,8 @@ limited to the coach's assigned clients.
 **M2. Workout player (full rebuild of the logger)**
 - One exercise at a time, with a swipe or Next.
 - Set rows **start at the target, with last time's numbers beside them** (TRN-029). **One tap ✓** logs
-  a set as prescribed, and steppers adjust load and reps. The unit is chosen once per workout.
+  a set as prescribed, and steppers adjust load and reps. A set whose weight goes up by a step (notes
+  plan N6a) starts with its reps empty, and ✓ asks for them first. The unit is chosen once per workout.
 - A **rest timer ring** starts automatically, keeps time while the phone is locked, and keeps the
   screen awake (Wake Lock).
 - Exercise demo media, a note to the coach, and a PR badge with a vibration on Android.

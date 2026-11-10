@@ -27,6 +27,27 @@ describe('which lifts need a training max', () => {
     expect(maxFormulaOf({ loadStrategy: 'None' })).toBeNull();
   });
 
+  it('never asks a max for a last time + step lift, whose weight the coach types (N6a)', () => {
+    expect(maxFormulaOf({ loadStrategy: 'LastTimeStep' })).toBeNull();
+    const version = versionView();
+    for (const week of version.weeks) {
+      week.sessions[1].exercises[0].sets = [
+        setView({ loadStrategy: 'LastTimeStep', percentageWorkingMax: null, loadStep: 2 }),
+        setView({
+          loadStrategy: 'LastTimeStep',
+          percentageWorkingMax: null,
+          loadStep: 2,
+          directLoad: 40,
+        }),
+      ];
+    }
+    // The bench press now steps from what was logged; only the squat works from a max.
+    expect(liftsNeedingMax(version.weeks).map((lift) => lift.name)).toEqual(['Back squat']);
+    expect(liftsNeedingMax(draftFromVersion(version).weeks).map((lift) => lift.name)).toEqual([
+      'Back squat',
+    ]);
+  });
+
   it('says why a lift is listed: its sets, by formula, and the weeks that hold them', () => {
     const version = versionView();
     version.weeks[1].sessions[0].exercises[0] = prescription('squat', 'Back squat', {

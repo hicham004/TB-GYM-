@@ -12,6 +12,7 @@ import type {
 } from '../../core/api/generated';
 import { dayInZone, houseDay } from '../../core/i18n/house-dates';
 import type { StatusPillTone } from '../../ui/status-pill';
+import { lastTimeStepWords } from '../training/step-words';
 import { unitLabel } from '../training/training-program.models';
 import type { ClientAction } from './client-actions';
 import { addDays } from './client-overview.models';
@@ -680,9 +681,18 @@ function setText(set: SetPrescriptionView, fallbackUnit: TrainingLoadUnit, local
       : set.percentageWorkingMax !== null
         ? $localize`${formatNumber(count(set.percentageWorkingMax), locale, '1.0-2')}:percent:% of training max`
         : null;
+  // A last time + step set's step follows its starting weight, if it has one (N6a): "7 kg · last time + 2 kg".
+  const loadStep = set.loadStrategy === 'LastTimeStep' ? (set.loadStep ?? null) : null;
+  const step =
+    loadStep === null
+      ? null
+      : lastTimeStepWords(
+          formatNumber(count(loadStep), locale, '1.0-2'),
+          unitLabel(set.loadUnit ?? fallbackUnit),
+        );
   const effort =
     set.targetRpe === null ? null : `RPE ${formatNumber(count(set.targetRpe), locale, '1.0-1')}`;
-  return [reps, weight, effort].filter((part): part is string => part !== null).join(' · ');
+  return [reps, weight, step, effort].filter((part): part is string => part !== null).join(' · ');
 }
 
 /** The sets of one exercise, equal neighbours counted together: "3 × 8–10 reps · 60 kg · RPE 8". */

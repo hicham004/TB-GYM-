@@ -170,6 +170,34 @@ export function toRecordSetRequest(
 }
 
 /**
+ * A last time + step set (TRN-032) starts with its reps box empty (TRN-029 v2): it counts only with
+ * the reps the client did, so one tap can never log the reps it asked for as reps done (decision 22).
+ */
+export function startsWithoutReps(set: Pick<ClientSetView, 'loadStrategy'>): boolean {
+  return set.loadStrategy === 'LastTimeStep';
+}
+
+/**
+ * Whether ✓ asks for the reps before anything is sent (TRN-029 v2): only on a last time + step set,
+ * and only while its reps box holds no number. An empty box, nothing typed or a number that is not
+ * one counts as missing; 0 is typed. Any other set logs as before, with reps or without. It is the
+ * player's nudge, not a rule: the server still records a set sent without reps (notes plan N6a).
+ */
+export function repsMissing(
+  set: Pick<ClientSetView, 'loadStrategy'>,
+  draft: Pick<WorkoutSetDraft, 'actualRepetitions'> | null | undefined,
+): boolean {
+  if (!startsWithoutReps(set)) return false;
+  const reps = draft?.actualRepetitions;
+  return (
+    reps === null ||
+    reps === undefined ||
+    (typeof reps === 'string' && reps.trim() === '') ||
+    !Number.isFinite(Number(reps))
+  );
+}
+
+/**
  * The effort a set would send that the server refuses (STR-004: RPE 5 to 10, reps left 0 to 5, each
  * in half steps), found before the round trip (audit CLIENT-5). Null when there is none to refuse.
  */
@@ -305,12 +333,14 @@ function draftFromSet(
 }
 
 /**
- * Where a set not yet logged starts (TRN-029, `PrescriptionThenLastTime` v1), so one tap on ✓ logs
+ * Where a set not yet logged starts (TRN-029, `PrescriptionThenLastTime` v2), so one tap on ✓ logs
  * it as the coach prescribed: the prescribed load and unit, and the prescribed reps (the lowest of a
  * range). Last time's numbers on the same set fill only what the prescription leaves open, and a
  * load only in the set's own unit. A swapped exercise keeps the prescribed reps but not the load,
  * which the coach wrote for another lift. Once the client chooses kg or lb for the workout, that is
  * the set's unit: the coach's load counts only when written in it, else last time's in it.
+ * Version 2 (notes plan N6a): a last time + step set starts with no reps, neither the prescribed
+ * ones nor last time's, so ✓ asks for the reps done; its load starts as any set's.
  */
 function startingValues(
   set: ClientSetView,
@@ -326,11 +356,12 @@ function startingValues(
       ? null
       : set.prescribedLoad;
   return {
-    repetitions:
-      set.prescribedRepetitionsMinimum ??
-      set.prescribedRepetitionsMaximum ??
-      previous?.repetitions ??
-      null,
+    repetitions: startsWithoutReps(set)
+      ? null
+      : (set.prescribedRepetitionsMinimum ??
+        set.prescribedRepetitionsMaximum ??
+        previous?.repetitions ??
+        null),
     load: coachLoad ?? previousLoad?.load ?? null,
     loadUnit: unit ?? previousLoad?.loadUnit ?? null,
   };

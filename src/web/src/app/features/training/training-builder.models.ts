@@ -57,7 +57,16 @@ export interface DraftSet {
   /** What the coach typed in the Reps box until it settles; kept when it reads as no reps at all. */
   repetitionsEntry?: string;
   loadStrategy: TrainingLoadStrategy;
+  /**
+   * A typed weight (Direct), a share of the training max (PercentageWorkingMax), or a last time + step
+   * set's optional starting weight (LastTimeStep, notes plan N6a).
+   */
   loadValue: number | null;
+  /**
+   * A last time + step set's step, in the set's unit (TRN-032). Kept while another load is chosen and
+   * sent only with LastTimeStep; not the week copies' "weight a week".
+   */
+  loadStep: number | null;
   loadUnit: TrainingLoadUnit;
   exertionDisplayPreference: ExertionDisplayPreference;
   exertionTarget: number | null;
@@ -65,6 +74,11 @@ export interface DraftSet {
   tempo: string;
   coachNotes: string;
   manualLoadOverride: number | null;
+}
+
+/** The weight choices whose number is a weight the coach typed: a direct load, or a step set's start. */
+export function takesTypedWeight(strategy: TrainingLoadStrategy): boolean {
+  return strategy === 'Direct' || strategy === 'LastTimeStep';
 }
 
 let fallbackKey = 0;
@@ -139,6 +153,7 @@ export function emptySet(isMainLift = false): DraftSet {
     repetitionsMaximum: 5,
     loadStrategy: 'None',
     loadValue: null,
+    loadStep: null,
     loadUnit: 'Kilogram',
     exertionDisplayPreference: 'Rpe',
     exertionTarget: null,
@@ -302,10 +317,10 @@ export function weekFromRequest(
           repetitionsMinimum: nullableNumeric(set.repetitionsMinimum ?? null),
           repetitionsMaximum: nullableNumeric(set.repetitionsMaximum ?? null),
           loadStrategy: set.loadStrategy,
-          loadValue:
-            set.loadStrategy === 'Direct'
-              ? nullableNumeric(set.directLoad ?? null)
-              : nullableNumeric(set.percentageWorkingMax ?? null),
+          loadValue: takesTypedWeight(set.loadStrategy)
+            ? nullableNumeric(set.directLoad ?? null)
+            : nullableNumeric(set.percentageWorkingMax ?? null),
+          loadStep: nullableNumeric(set.loadStep ?? null),
           loadUnit: set.loadUnit ?? 'Kilogram',
           exertionDisplayPreference: set.exertionDisplayPreference,
           exertionTarget:
@@ -343,16 +358,18 @@ export function toTrainingSessionRequest(session: DraftSession): TrainingSession
         repetitionsMinimum: set.repetitionsMinimum,
         repetitionsMaximum: set.repetitionsMaximum,
         loadStrategy: set.loadStrategy,
-        directLoad: set.loadStrategy === 'Direct' ? set.loadValue : null,
+        directLoad: takesTypedWeight(set.loadStrategy) ? set.loadValue : null,
         loadUnit: set.loadStrategy === 'None' ? null : set.loadUnit,
         percentageWorkingMax: set.loadStrategy === 'PercentageWorkingMax' ? set.loadValue : null,
+        loadStep: set.loadStrategy === 'LastTimeStep' ? set.loadStep : null,
         targetRpe: set.exertionDisplayPreference === 'Rpe' ? set.exertionTarget : null,
         targetRir: set.exertionDisplayPreference === 'Rir' ? set.exertionTarget : null,
         exertionDisplayPreference: set.exertionDisplayPreference,
         restSeconds: set.restSeconds,
         tempo: nullableText(set.tempo),
         coachNotes: nullableText(set.coachNotes),
-        manualLoadOverride: set.manualLoadOverride,
+        // The server refuses a fixed load instead on a step set, whose typed weight is its start.
+        manualLoadOverride: set.loadStrategy === 'LastTimeStep' ? null : set.manualLoadOverride,
       })),
     })),
   };
@@ -394,10 +411,10 @@ function sessionFromView(
         repetitionsMinimum: nullableNumeric(set.repetitionsMinimum),
         repetitionsMaximum: nullableNumeric(set.repetitionsMaximum),
         loadStrategy: set.loadStrategy,
-        loadValue:
-          set.loadStrategy === 'Direct'
-            ? nullableNumeric(set.directLoad)
-            : nullableNumeric(set.percentageWorkingMax),
+        loadValue: takesTypedWeight(set.loadStrategy)
+          ? nullableNumeric(set.directLoad)
+          : nullableNumeric(set.percentageWorkingMax),
+        loadStep: nullableNumeric(set.loadStep ?? null),
         loadUnit: set.loadUnit ?? 'Kilogram',
         exertionDisplayPreference: set.exertionDisplayPreference,
         exertionTarget:

@@ -456,6 +456,28 @@ describe('week 1’s weight before the program exists', () => {
     ).toEqual({ repetitions: 4, rpe: 8.5 });
   });
 
+  it('passes over a last time + step set, whose weight follows what was logged (TRN-032)', () => {
+    expect(
+      weekOneAnchor(
+        version([
+          week(1, [
+            day(0, [
+              set(1, { loadStrategy: 'LastTimeStep', repetitionsMaximum: 10, targetRpe: 8 }),
+              set(2, { repetitionsMaximum: 6, targetRpe: 8 }),
+            ]),
+          ]),
+        ]),
+        'squat',
+      ),
+    ).toEqual({ repetitions: 6, rpe: 8 });
+    expect(
+      weekOneAnchor(
+        version([week(1, [day(0, [set(1, { loadStrategy: 'LastTimeStep' })])])]),
+        'squat',
+      ),
+    ).toBeNull();
+  });
+
   it('has none for a lift week 1 does not train, or trains outside the chart', () => {
     expect(weekOneAnchor(version([week(1, [day(0, [set(1)])])]), 'bench')).toBeNull();
     expect(

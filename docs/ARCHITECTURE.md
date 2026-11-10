@@ -1664,6 +1664,14 @@ strength changes never rewrite a captured program. A completed workout remains a
 the dated client view on its scheduled day so terminal mesocycle state does not erase the
 just-completed prescription/performance comparison. See ADR 0007.
 
+Notes plan N6a adds a sixth weight choice, `LastTimeStep` (TRN-032, ADR 0040). The set's step
+(`LoadStep`) rides on `training."ProgramTemplateSets"` and `training."SetPrescriptions"` beside its unit
+and optional starting weight (`DirectLoad`), held by their widened `CK_*_LoadStrategy` checks and a
+`CK_*_LoadStep` each; starting a workout copies the choice and the step into
+`training."WorkoutSetPerformances"`, where `protect_workout_set` keeps them unchanged. Assignment, the
+week copies, Build next block and Edit weeks carry the step and treat the starting weight as a typed
+weight, never worked out from a max or rounded; nothing in Training adds the step on its own.
+
 Critique B19 adds `training."ClientProgramVisibilities"`: one row per client once a coach has chosen
 "Can see finished programs" (TRN-031), no row meaning the default, so the migration moves no data. It is
 Training's, not a column on `clients."ClientProfiles"`, so the client's record and its version stay out of

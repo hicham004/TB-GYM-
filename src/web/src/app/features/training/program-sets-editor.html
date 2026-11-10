@@ -89,6 +89,40 @@
                   (ngModelChange)="loadValueChanged(set, $event)"
               /></app-field>
             }
+            @if (set.loadStrategy === 'LastTimeStep') {
+              <app-field
+                [errors]="errors(set, 'loadStep')"
+                [label]="stepLabel(set)"
+                [help]="stepHint"
+                density="compact"
+                ><input
+                  appControl
+                  data-field="step"
+                  type="number"
+                  min="0"
+                  [max]="maxStep"
+                  step="0.25"
+                  inputmode="decimal"
+                  [(ngModel)]="set.loadStep"
+                  (ngModelChange)="changed()"
+              /></app-field>
+              <app-field
+                [errors]="errors(set, 'loadValue')"
+                [label]="startLabel(set)"
+                [help]="startHint"
+                density="compact"
+                ><input
+                  appControl
+                  data-field="start"
+                  type="number"
+                  min="0"
+                  max="2000"
+                  step="0.25"
+                  inputmode="decimal"
+                  [ngModel]="set.loadValue"
+                  (ngModelChange)="loadValueChanged(set, $event)"
+              /></app-field>
+            }
             <app-field
               [errors]="errors(set, 'exertionTarget')"
               [help]="effortHelp(set)"

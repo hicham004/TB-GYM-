@@ -49,7 +49,8 @@ public sealed record WeekProgressionSteps(
 
 /// <summary>
 /// Week progression v1 (<c>WeekStep</c>, TRN-025): copies one week N times, each copy a further step
-/// away in RPE or RIR, repetitions, percentage of training max and fixed weight. It writes plain
+/// away in RPE or RIR, repetitions, percentage of training max and fixed weight (a typed weight, or a
+/// last time + step set's starting weight, whose step is copied as it is). It writes plain
 /// numbers and calculates no load, so programs already assigned keep their snapshots. Warm-up sets
 /// stay as they are. Any result outside a set's own limits refuses the whole copy with the reason.
 /// Build next block (P3a, ADR 0036) uses the same steps on a client's assigned weeks; there the server
@@ -177,9 +178,11 @@ public sealed class WeekStepProgressionTransform
             next = next with { PercentageWorkingMax = moved };
         }
 
+        // steps.LoadStep is the week's weight step; a last time + step set's own LoadStep rides on `with` as it is.
         if (steps.LoadStep != 0)
         {
-            if (set.LoadStrategy == TrainingLoadStrategy.Direct && set.DirectLoad is { } fixedLoad)
+            if (set.LoadStrategy is TrainingLoadStrategy.Direct or TrainingLoadStrategy.LastTimeStep &&
+                set.DirectLoad is { } fixedLoad)
             {
                 next = next with { DirectLoad = ShiftLoad(fixedLoad, steps.LoadStep * copy, where) };
             }

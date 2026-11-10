@@ -9,7 +9,11 @@ import type {
   TrainingLoadStrategy,
   WeekProgressionPreviewView,
 } from '../../core/api/generated';
-import { exerciseEquipmentLabel, movementPatternLabel } from '../../core/i18n/display-labels';
+import {
+  exerciseEquipmentLabel,
+  movementPatternLabel,
+  trainingLoadStrategyLabel,
+} from '../../core/i18n/display-labels';
 import {
   chartPercent,
   RPE_CHART_MAXIMUM_REPS,
@@ -17,6 +21,7 @@ import {
   RPE_CHART_MINIMUM_RPE,
 } from './rpe-chart';
 import { curvePercent } from './epley-curve';
+import { lastTimeStepWords } from './step-words';
 import {
   DraftExercise,
   DraftSession,
@@ -30,6 +35,7 @@ import {
   numeric,
   ProgramDraft,
   sessionFromSaved,
+  takesTypedWeight,
   toWeekRequest,
   weekFromRequest,
 } from './training-builder.models';
@@ -146,7 +152,8 @@ export function setSummary(set: DraftSet): string {
  * What a set asks after its reps: its load, then its effort. The share of a chart or Epley set follows
  * its effort, since the formula reads it from the reps and the RPE ("RPE 8 · 81% of training max"). A
  * saved weight comes first, as any weight does. The grid says nothing for a set with no load; the
- * set's own summary says so.
+ * set's own summary says so. A last time + step set names its step, then any starting weight ("last
+ * time + 2 kg · start 5 kg", N6a); no max works it out, so it has no saved weight and no override.
  */
 function setParts(set: DraftSet, sayEveryLoad: boolean, saved: string | null = null): string[] {
   const unit = set.loadUnit === 'Pound' ? 'lb' : 'kg';
@@ -155,7 +162,11 @@ function setParts(set: DraftSet, sayEveryLoad: boolean, saved: string | null = n
       ? null
       : `${set.exertionDisplayPreference === 'Rir' ? 'RIR' : 'RPE'} ${set.exertionTarget}`;
   const parts: string[] = [];
-  if (saved !== null) {
+  if (set.loadStrategy === 'LastTimeStep') {
+    if (set.loadStep !== null) parts.push(lastTimeStepWords(`${set.loadStep}`, unit));
+    else if (sayEveryLoad) parts.push(trainingLoadStrategyLabel('LastTimeStep'));
+    if (set.loadValue !== null) parts.push($localize`start ${set.loadValue}:load: ${unit}:unit:`);
+  } else if (saved !== null) {
     parts.push(saved);
   } else if (set.manualLoadOverride !== null) {
     parts.push(
@@ -553,6 +564,19 @@ export interface ProgressionReach {
   load: number;
   /** The unit of the fixed weights the load step moves: 'kg', 'lb', or both. */
   unit: string | null;
+  /** The last time + step sets, whose starting weight alone the load step moves (N6a). */
+  stepSets: number;
+}
+
+/**
+ * Whether the weight step moves this set, as the server's copies do (TRN-025): a typed weight or a
+ * step set's starting weight, and a fixed load instead, which a step set never sends.
+ */
+function movesByWeight(set: DraftSet): boolean {
+  return (
+    (takesTypedWeight(set.loadStrategy) && set.loadValue !== null) ||
+    (set.loadStrategy !== 'LastTimeStep' && set.manualLoadOverride !== null)
+  );
 }
 
 export function progressionReach(week: DraftWeek): ProgressionReach {
@@ -560,10 +584,7 @@ export function progressionReach(week: DraftWeek): ProgressionReach {
     .flatMap((session) => session.exercises)
     .flatMap((exercise) => exercise.sets)
     .filter((set) => set.setType !== 'WarmUp');
-  const fixed = sets.filter(
-    (set) =>
-      set.manualLoadOverride !== null || (set.loadStrategy === 'Direct' && set.loadValue !== null),
-  );
+  const fixed = sets.filter(movesByWeight);
   const units = new Set(fixed.map((set) => (set.loadUnit === 'Pound' ? 'lb' : 'kg')));
   return {
     rpe: sets.filter((set) => set.exertionTarget !== null).length,
@@ -574,6 +595,7 @@ export function progressionReach(week: DraftWeek): ProgressionReach {
     ).length,
     load: fixed.length,
     unit: units.size === 0 ? null : [...units].sort().join(' / '),
+    stepSets: sets.filter((set) => set.loadStrategy === 'LastTimeStep').length,
   };
 }
 
@@ -760,10 +782,47 @@ export interface SetIssue {
     | 'restSeconds'
     | 'exertionTarget'
     | 'manualLoadOverride'
-    | 'loadValue';
+    | 'loadValue'
+    | 'loadStep';
   message: string;
   /** A formula's limit, which the set editor offers a way out of (critique B7a); the caps stay. */
   limit?: 'chartEffort' | 'chartReps' | 'epleyReps';
+}
+
+/** The largest step a last time + step set takes, in the set's unit, as the server checks (TRN-032). */
+export const MAXIMUM_LOAD_STEP = 50;
+
+function hasAtMostTwoDecimals(value: number): boolean {
+  return Number.isFinite(value) && Math.abs(value * 100 - Math.round(value * 100)) < 1e-6;
+}
+
+/**
+ * A last time + step set's own limits (TRN-032): its step, then any starting weight, then the reps
+ * the step is judged against. Its unit is always one the builder holds.
+ */
+function lastTimeStepIssue(set: DraftSet): SetIssue | null {
+  const unit = set.loadUnit === 'Pound' ? 'lb' : 'kg';
+  const step = set.loadStep;
+  if (step === null || !(step > 0) || step > MAXIMUM_LOAD_STEP || !hasAtMostTwoDecimals(step)) {
+    return {
+      field: 'loadStep',
+      message: $localize`a step must be more than 0 and at most ${MAXIMUM_LOAD_STEP}:maximum: ${unit}:unit:, with at most two decimals.`,
+    };
+  }
+  // As the server judges it: the weight it would keep, to three decimals, is more than 0.
+  if (set.loadValue !== null && !(Math.round(set.loadValue * 1000) > 0 && set.loadValue <= 2000)) {
+    return {
+      field: 'loadValue',
+      message: $localize`a starting weight must be more than 0 and at most 2000, or left empty.`,
+    };
+  }
+  if (set.repetitionsMaximum === null) {
+    return {
+      field: 'repetitionsMaximum',
+      message: $localize`a last time + step set needs its reps: type one number, like 10, or a range, like 8-12.`,
+    };
+  }
+  return null;
 }
 
 /** Identifies the field as well as the rule, so both editors explain and focus the same problem. */
@@ -811,6 +870,8 @@ export function setIssue(set: DraftSet): SetIssue | null {
       };
     }
   }
+  // A step set sends no override (the server refuses one), so its own limits come first.
+  if (set.loadStrategy === 'LastTimeStep') return lastTimeStepIssue(set);
   // The server builds a direct prescription from an override before checking a calculated load.
   if (set.manualLoadOverride !== null) {
     return set.manualLoadOverride <= 0 ||

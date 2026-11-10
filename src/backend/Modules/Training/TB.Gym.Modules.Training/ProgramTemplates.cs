@@ -350,6 +350,7 @@ public sealed class ProgramTemplateSet : TenantEntity
         DirectLoad = blueprint.DirectLoad;
         LoadUnit = blueprint.LoadUnit;
         PercentageWorkingMax = blueprint.PercentageWorkingMax;
+        LoadStep = blueprint.LoadStep;
         TargetRpe = blueprint.TargetRpe;
         ExertionDisplayPreference = blueprint.ExertionDisplayPreference;
         RestSeconds = blueprint.RestSeconds;
@@ -375,6 +376,9 @@ public sealed class ProgramTemplateSet : TenantEntity
     public TrainingLoadUnit? LoadUnit { get; private set; }
 
     public decimal? PercentageWorkingMax { get; private set; }
+
+    /// <summary>A last time + step set's step, in the set's unit (N6a); null on every other set.</summary>
+    public decimal? LoadStep { get; private set; }
 
     public decimal? TargetRpe { get; private set; }
 
@@ -439,6 +443,9 @@ public sealed class SavedSessionTemplate : TenantEntity
 
 internal static class SetPrescriptionRules
 {
+    /// <summary>The largest step a last time + step set takes, in the set's unit (N6a).</summary>
+    internal const decimal MaximumLoadStep = 50m;
+
     public static void Validate(SetPrescriptionBlueprint source)
     {
         if (!Enum.IsDefined(source.SetType) ||
@@ -462,6 +469,15 @@ internal static class SetPrescriptionRules
             TrainingExertion.ValidateRpe(rpe);
         }
 
+        if (source.LoadStrategy == TrainingLoadStrategy.LastTimeStep)
+        {
+            ValidateLastTimeStep(source);
+        }
+        else if (source.LoadStep is not null)
+        {
+            throw new ArgumentException("Only a last time + step set takes a step.", nameof(source));
+        }
+
         switch (source.LoadStrategy)
         {
             case TrainingLoadStrategy.None:
@@ -473,9 +489,41 @@ internal static class SetPrescriptionRules
             case TrainingLoadStrategy.RpeBasedEpley or TrainingLoadStrategy.RpeChart
                 when source.TargetRpe is not null && source.RepetitionsMaximum is not null && source.LoadUnit is not null:
                 break;
+            case TrainingLoadStrategy.LastTimeStep:
+                break;
             default:
                 throw new ArgumentException("The selected load strategy is missing required fields.", nameof(source));
         }
     }
 
+    /// <summary>
+    /// A last time + step set (N6a): its step, its unit, and its reps, since the step is added only when every
+    /// set reached them (decision 20); the starting weight is optional.
+    /// </summary>
+    private static void ValidateLastTimeStep(SetPrescriptionBlueprint source)
+    {
+        if (source.LoadStep is not { } step || step is <= 0m or > MaximumLoadStep || decimal.Round(step, 2) != step)
+        {
+            throw new ArgumentException(
+                $"A step must be more than 0 and at most {MaximumLoadStep:0} in the set's unit, with at most two decimals.",
+                nameof(source));
+        }
+
+        if (source.LoadUnit is null)
+        {
+            throw new ArgumentException("A last time + step set needs its unit, kg or lb.", nameof(source));
+        }
+
+        if (source.RepetitionsMaximum is null)
+        {
+            throw new ArgumentException("A last time + step set needs its reps.", nameof(source));
+        }
+
+        // Judged as the database keeps it, to three decimals, so a start it would store as 0 is refused here.
+        if (source.DirectLoad is { } start &&
+            (decimal.Round(start, 3, MidpointRounding.AwayFromZero) <= 0m || start > 2_000m))
+        {
+            throw new ArgumentException("A starting weight must be more than 0 and at most 2,000.", nameof(source));
+        }
+    }
 }

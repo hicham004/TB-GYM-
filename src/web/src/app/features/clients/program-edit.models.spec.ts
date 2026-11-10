@@ -95,6 +95,84 @@ describe('editing a client’s weeks: the grid', () => {
     expect(hasEdits(edit.draft, renamed)).toBe(true);
   });
 
+  it('sends a last time + step set back exactly as stored, start and step, so it is no edit (N6a)', () => {
+    const view = program();
+    const stored = [
+      setView({
+        id: 'start',
+        position: 1,
+        repetitionsMinimum: 10,
+        repetitionsMaximum: 10,
+        loadStrategy: 'LastTimeStep',
+        loadUnit: 'Kilogram',
+        directLoad: '5',
+        prescribedLoad: '5',
+        loadStep: '2',
+        calculationStrategyKey: 'CoachStartingWeight',
+      }),
+      setView({
+        id: 'no-start',
+        position: 2,
+        repetitionsMinimum: 8,
+        repetitionsMaximum: 12,
+        loadStrategy: 'LastTimeStep',
+        loadUnit: 'Pound',
+        loadStep: 2.5,
+        exertionDisplayPreference: 'Rir',
+        targetRpe: 8,
+        targetRir: 2,
+      }),
+    ];
+    view.weeks[2].sessions[0].exercises[0].sets = stored;
+    const edit = programEdit(view, TODAY, states);
+    const sent = editRequest(edit.draft)[2].sessions[0].session.exercises[0].sets;
+
+    // Every field the server compares (SameSet) is what it stored.
+    expect(sent).toEqual([
+      expect.objectContaining({
+        setType: 'Normal',
+        repetitionsMinimum: 10,
+        repetitionsMaximum: 10,
+        loadStrategy: 'LastTimeStep',
+        directLoad: 5,
+        loadUnit: 'Kilogram',
+        percentageWorkingMax: null,
+        loadStep: 2,
+        targetRpe: null,
+        targetRir: null,
+        manualLoadOverride: null,
+      }),
+      expect.objectContaining({
+        repetitionsMinimum: 8,
+        repetitionsMaximum: 12,
+        loadStrategy: 'LastTimeStep',
+        directLoad: null,
+        loadUnit: 'Pound',
+        percentageWorkingMax: null,
+        loadStep: 2.5,
+        targetRpe: null,
+        targetRir: 2,
+        manualLoadOverride: null,
+      }),
+    ]);
+    expect(hasEdits(edit.draft, structuredClone(edit.draft))).toBe(false);
+
+    // No max works it out, so no saved weight stands in for its words on the grid.
+    const [first, second] = edit.draft.weeks[2].sessions[0].exercises[0].sets;
+    expect([edit.savedLoads.has(first.key), edit.savedLoads.has(second.key)]).toEqual([
+      false,
+      false,
+    ]);
+    expect(
+      gridLines(edit.draft.weeks[2].sessions[0].exercises[0], savedLoadOf(edit, 'en-US')),
+    ).toEqual(['1 × 10 · last time + 2 kg · start 5 kg', '1 × 8–12 · last time + 2.5 lb · RIR 2']);
+
+    // A changed step is an edit.
+    const stepped = structuredClone(edit.draft);
+    stepped.weeks[2].sessions[0].exercises[0].sets[0].loadStep = 2.5;
+    expect(hasEdits(edit.draft, stepped)).toBe(true);
+  });
+
   describe('the weight a set shows (critique B15)', () => {
     /** Week 3's Monday: 3 × 5 on the chart at 110 kg, 2 × 5 at 81% saved at 162.5 kg, one Epley set. */
     function opened() {
@@ -413,6 +491,40 @@ describe('editing a client’s weeks: the review', () => {
     ]);
     expect(moved).toMatchObject({ kind: 'Moved', from: 'Was week 3, Wed 14 Oct', lines: [] });
     expect(added).toMatchObject({ kind: 'New', hidden: 'Not shared with Maya' });
+  });
+
+  it('reads a changed last time + step set as the grid does, its step after its weight (N6a)', () => {
+    const step = {
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      loadStrategy: 'LastTimeStep' as const,
+      loadUnit: 'Kilogram' as const,
+      loadStep: 2,
+    };
+    const [edited] = editReview(
+      preview({
+        sessionChanges: [
+          {
+            ...preview().sessionChanges[0],
+            after: sessionView('w3-mon', 'Lower A', [
+              exerciseView('goblet', 'Goblet squat', [
+                setView({ ...step, position: 1, directLoad: 9, prescribedLoad: 9 }),
+                setView({ ...step, position: 2, directLoad: 9, prescribedLoad: 9 }),
+              ]),
+              exerciseView('lunge', 'Walking lunge', [setView({ ...step, loadStep: 2.5 })]),
+            ]),
+          },
+        ],
+      }),
+      'Kilogram',
+      'en-US',
+      'Maya',
+    ).sessions;
+
+    expect(edited.lines.map((line) => [line.name, line.sets])).toEqual([
+      ['Goblet squat', ['2 × 10 reps · 9 kg · last time + 2 kg']],
+      ['Walking lunge', ['10 reps · last time + 2.5 kg']],
+    ]);
   });
 
   it('says whether a week that kept its place was renamed or shared differently', () => {

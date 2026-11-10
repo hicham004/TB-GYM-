@@ -79,6 +79,11 @@ internal sealed partial class TrainingApplicationService
 
     private static SetPrescriptionBlueprint ToBlueprint(SetPrescriptionRequest request)
     {
+        if (request.ManualLoadOverride is not null && request.LoadStrategy == TrainingLoadStrategy.LastTimeStep)
+        {
+            throw new ArgumentException("A last time + step set takes no fixed load instead; type its starting weight.");
+        }
+
         if (request.TargetRpe is not null && request.TargetRir is not null)
         {
             throw new ArgumentException("Specify RPE or RIR, not both, for a set.");
@@ -107,7 +112,8 @@ internal sealed partial class TrainingApplicationService
                 TrainingLoadStrategy.Direct,
                 manual,
                 request.LoadUnit,
-                null,
+                PercentageWorkingMax: null,
+                LoadStep: null,
                 targetRpe,
                 request.ExertionDisplayPreference,
                 request.RestSeconds,
@@ -135,6 +141,7 @@ internal sealed partial class TrainingApplicationService
             request.DirectLoad,
             request.LoadUnit,
             request.PercentageWorkingMax,
+            request.LoadStrategy == TrainingLoadStrategy.LastTimeStep ? request.LoadStep : null,
             targetRpe,
             request.ExertionDisplayPreference,
             request.RestSeconds,
@@ -177,6 +184,7 @@ internal sealed partial class TrainingApplicationService
             set.DirectLoad,
             set.LoadUnit,
             set.PercentageWorkingMax,
+            set.LoadStep,
             set.TargetRpe,
             set.ExertionDisplayPreference,
             set.RestSeconds,
@@ -318,6 +326,23 @@ internal sealed partial class TrainingApplicationService
                 CalculationExplanation = set.IsManualLoadOverride
                     ? "Manual coach override; no automatic rounding was applied."
                     : "Direct coach-prescribed load; no automatic rounding was applied.",
+            };
+        }
+
+        if (set.LoadStrategy == TrainingLoadStrategy.LastTimeStep)
+        {
+            // Never worked out from a max or rounded (TRN-032, decision 22): the coach's starting weight, or none.
+            var starting = set.DirectLoad is not null;
+            return set with
+            {
+                WorkingMaxSnapshotId = null,
+                UnroundedRecommendedLoad = set.DirectLoad,
+                PrescribedLoad = set.DirectLoad,
+                CalculationStrategyKey = starting ? "CoachStartingWeight" : null,
+                CalculationStrategyVersion = starting ? "1.0" : null,
+                CalculationExplanation = starting
+                    ? "Starting weight typed by the coach; no automatic rounding was applied."
+                    : null,
             };
         }
 
@@ -798,6 +823,7 @@ internal sealed partial class TrainingApplicationService
             set.DirectLoad,
             set.LoadUnit,
             set.PercentageWorkingMax,
+            set.LoadStep,
             set.TargetRpe,
             set.TargetRpe is null ? null : TrainingExertion.RirFromRpe(set.TargetRpe.Value),
             set.ExertionDisplayPreference,
@@ -936,6 +962,7 @@ internal sealed partial class TrainingApplicationService
             set.DirectLoad,
             set.LoadUnit,
             set.PercentageWorkingMax,
+            set.LoadStep,
             set.TargetRpe,
             set.TargetRpe is null ? null : TrainingExertion.RirFromRpe(set.TargetRpe.Value),
             set.ExertionDisplayPreference,

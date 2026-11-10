@@ -312,6 +312,10 @@ public sealed record ExercisePrescriptionRequest(
     IReadOnlyList<Guid> ApprovedAlternativeExerciseIds,
     IReadOnlyList<SetPrescriptionRequest> Sets);
 
+/// <param name="LoadStep">
+/// A last time + step set's step, in the set's unit (N6a); ignored on any other set. Not the week copies'
+/// weight a week, <see cref="ProgressionPreviewRequest.LoadStep"/>.
+/// </param>
 public sealed record SetPrescriptionRequest(
     int Position,
     TrainingSetType SetType,
@@ -321,6 +325,7 @@ public sealed record SetPrescriptionRequest(
     decimal? DirectLoad,
     TrainingLoadUnit? LoadUnit,
     decimal? PercentageWorkingMax,
+    decimal? LoadStep,
     decimal? TargetRpe,
     decimal? TargetRir,
     ExertionDisplayPreference ExertionDisplayPreference,
@@ -675,6 +680,7 @@ public sealed record ExercisePrescriptionView(
     IReadOnlyList<SetPrescriptionView> Sets,
     IReadOnlyList<Guid> MediaAssetIds);
 
+/// <param name="LoadStep">A last time + step set's step, in the set's unit (N6a); null on every other set.</param>
 public sealed record SetPrescriptionView(
     Guid Id,
     int Position,
@@ -685,6 +691,7 @@ public sealed record SetPrescriptionView(
     decimal? DirectLoad,
     TrainingLoadUnit? LoadUnit,
     decimal? PercentageWorkingMax,
+    decimal? LoadStep,
     decimal? TargetRpe,
     decimal? TargetRir,
     ExertionDisplayPreference ExertionDisplayPreference,
@@ -930,6 +937,10 @@ public sealed record ClientExerciseView(
 
 public sealed record ExerciseAlternativeOptionView(Guid ExerciseId, string Name);
 
+/// <param name="LoadStrategy">
+/// The set's weight choice; null only for a workout started before N6a, whose snapshot kept no choice.
+/// </param>
+/// <param name="LoadStep">The set's step, in its unit: present exactly on a "Last time + step" set (N6a).</param>
 public sealed record ClientSetView(
     Guid PrescriptionId,
     Guid? PerformanceId,
@@ -939,6 +950,8 @@ public sealed record ClientSetView(
     int? PrescribedRepetitionsMaximum,
     decimal? PrescribedLoad,
     TrainingLoadUnit? PrescribedLoadUnit,
+    TrainingLoadStrategy? LoadStrategy,
+    decimal? LoadStep,
     decimal? PrescribedTargetRpe,
     decimal? PrescribedTargetRir,
     int? RestSeconds,

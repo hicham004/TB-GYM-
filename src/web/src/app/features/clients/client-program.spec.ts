@@ -1254,6 +1254,62 @@ describe('a client’s Training', () => {
       expect(textOf(sheet.querySelector('.swap summary'))).toBe('Swap this workout');
     });
 
+    it('reads a last time + step set as the grid does: its weight, then its step (N6a)', async () => {
+      const view = blockView();
+      const step = {
+        repetitionsMinimum: 10,
+        repetitionsMaximum: 10,
+        loadStrategy: 'LastTimeStep',
+        loadUnit: 'Kilogram',
+        directLoad: 7,
+        prescribedLoad: 7,
+        percentageWorkingMax: null,
+        loadStep: 2,
+        targetRpe: null,
+      };
+      (view.weeks[0].sessions[0].exercises as unknown[]).push(
+        {
+          id: 'ex-2',
+          exerciseName: 'Goblet squat',
+          coachNotes: null,
+          sets: [step, step, step],
+        },
+        {
+          id: 'ex-3',
+          exerciseName: 'Walking lunge',
+          coachNotes: null,
+          sets: [
+            {
+              ...step,
+              repetitionsMinimum: 12,
+              repetitionsMaximum: 12,
+              directLoad: null,
+              prescribedLoad: null,
+              loadStep: 2.5,
+            },
+          ],
+        },
+      );
+      const { harness, host } = await render({
+        api: { getTrainingMesocycle: vi.fn(() => of(view)) },
+      });
+
+      all(host.querySelector('.week.current')!, 'button.session')[2].click();
+      await settle(harness.fixture);
+
+      const sheet = dialog()!;
+      expect(
+        all(sheet, '.exercises > li').map((item) => [
+          textOf(item.querySelector('.exercise-name')),
+          all(item, '.sets li').map(textOf),
+        ]),
+      ).toEqual([
+        ['Back squat', ['2 × 8–10 reps · 60 kg · RPE 8']],
+        ['Goblet squat', ['3 × 10 reps · 7 kg · last time + 2 kg']],
+        ['Walking lunge', ['12 reps · last time + 2.5 kg']],
+      ]);
+    });
+
     it('swaps a workout for a saved one on the day it already has (TRAIN-3)', async () => {
       const view = blockView();
       (view.weeks[0].sessions[0] as unknown as { dayOffset: number }).dayOffset = 3;

@@ -395,6 +395,7 @@ public sealed class Phase3TrainingDomainTests
                     40m,
                     TrainingLoadUnit.Kilogram,
                     null,
+                    LoadStep: null,
                     8m,
                     ExertionDisplayPreference.Rpe,
                     120,

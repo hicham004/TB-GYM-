@@ -70,8 +70,10 @@ import {
   hasLoadUnitForActualLoad,
   previousSetFor,
   reconcileWorkoutSetDrafts,
+  repsMissing,
   snapshotWorkoutSetDraft,
   startingWorkoutUnit,
+  startsWithoutReps,
   toRecordSetRequest,
   updateWorkoutSetDraft,
   withWorkoutUnit,
@@ -246,6 +248,9 @@ export class TodayTraining implements HoldsUnsavedWork {
   protected readonly workoutStatusLabel = workoutStatusLabel;
   protected readonly noteTime = workoutNoteTime;
   protected readonly unitWord = unitWord;
+  protected readonly startsWithoutReps = startsWithoutReps;
+  /** What ✓ says on a last time + step set whose reps box is empty (TRN-029 v2). */
+  private readonly repsFirst = $localize`Type your reps first.`;
   protected readonly leaveMessage = signal('');
   protected readonly leaveConfirm = $localize`Leave without saving`;
   protected readonly leaveCancel = $localize`Stay`;
@@ -552,6 +557,13 @@ export class TodayTraining implements HoldsUnsavedWork {
         (set.performanceId && this.savingSetIds().has(set.performanceId))
       )
         return;
+      // A last time + step set counts only with the reps done (TRN-029 v2). Asked before the set is
+      // marked logged, so it stays untouched: nothing is sent, no rest starts, Finish and leaving
+      // wait for nothing.
+      if (set.performanceId && repsMissing(set, this.setDraft(set))) {
+        this.reportSetError(set.performanceId, this.repsFirst, true);
+        return;
+      }
       const trigger = event.currentTarget as HTMLElement | null;
       const restoreFocus = trigger !== null && document.activeElement === trigger;
       const rest = Number(set.restSeconds ?? 0);
@@ -868,6 +880,15 @@ export class TodayTraining implements HoldsUnsavedWork {
   /** The effort field whose number the server would refuse, so its hint says so at once. */
   protected effortProblem(draft: WorkoutSetDraft | null): 'rpe' | 'rir' | null {
     return draft ? effortOutOfRange(draft) : null;
+  }
+
+  /** The reps box ✓ asked for (TRN-029 v2), marked until a number is in it. */
+  protected repsAsked(set: ClientSetView, draft: WorkoutSetDraft | null): boolean {
+    return (
+      set.performanceId !== null &&
+      this.setErrors()[set.performanceId] === this.repsFirst &&
+      repsMissing(set, draft)
+    );
   }
 
   protected optionsShown(set: ClientSetView): boolean {

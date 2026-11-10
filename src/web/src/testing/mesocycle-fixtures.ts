@@ -23,6 +23,7 @@ export function setView(overrides: Partial<SetPrescriptionView> = {}): SetPrescr
     directLoad: null,
     loadUnit: null,
     percentageWorkingMax: null,
+    loadStep: null,
     targetRpe: null,
     targetRir: null,
     exertionDisplayPreference: 'Rpe',

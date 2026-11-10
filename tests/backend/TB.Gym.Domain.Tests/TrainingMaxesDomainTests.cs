@@ -475,6 +475,7 @@ public sealed class TrainingMaxesDomainTests
             load,
             load is null ? null : TrainingLoadUnit.Kilogram,
             null,
+            LoadStep: null,
             rpe,
             ExertionDisplayPreference.Rpe,
             120,

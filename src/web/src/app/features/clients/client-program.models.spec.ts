@@ -676,6 +676,54 @@ describe('what a workout prescribes', () => {
     expect(setLines([set({})], 'Kilogram', 'en-US')).toEqual(['Set']);
   });
 
+  it('names a last time + step set’s step after its starting weight, and counts equal ones (N6a)', () => {
+    const step = {
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      loadStrategy: 'LastTimeStep' as const,
+      loadUnit: 'Kilogram' as const,
+      directLoad: 7,
+      prescribedLoad: 7,
+      loadStep: '2',
+    };
+    expect(setLines([set(step), set(step), set(step)], 'Kilogram', 'en-US')).toEqual([
+      '3 × 10 reps · 7 kg · last time + 2 kg',
+    ]);
+    // With no starting weight the client picks it, so only the step is named; then any effort.
+    expect(
+      setLines(
+        [
+          set({
+            ...step,
+            repetitionsMinimum: 5,
+            repetitionsMaximum: 5,
+            directLoad: null,
+            prescribedLoad: null,
+            loadStep: 2.5,
+            targetRpe: 8,
+          }),
+        ],
+        'Kilogram',
+        'en-US',
+      ),
+    ).toEqual(['5 reps · last time + 2.5 kg · RPE 8']);
+    // Pounds stay pounds, and a set with no unit of its own takes the block's.
+    expect(
+      setLines(
+        [set({ ...step, loadUnit: 'Pound', directLoad: 45, prescribedLoad: 45, loadStep: 5 })],
+        'Kilogram',
+        'en-US',
+      ),
+    ).toEqual(['10 reps · 45 lb · last time + 5 lb']);
+    expect(setLines([set({ ...step, loadUnit: null })], 'Pound', 'en-US')).toEqual([
+      '10 reps · 7 lb · last time + 2 lb',
+    ]);
+    // A step on any other set is never said: the server keeps none there.
+    expect(setLines([set({ ...step, loadStrategy: 'Direct' })], 'Kilogram', 'en-US')).toEqual([
+      '10 reps · 7 kg',
+    ]);
+  });
+
   it('lists the exercises of a workout with their notes and demos', () => {
     const session = {
       id: 's1',
