@@ -38,10 +38,21 @@ internal sealed class WorkspaceBillingService(
                 Configured(options.Value.WhishNumber),
                 // The support inbox replies reach; it is set only beside a real provider.
                 email.Value.UsesProviderAdapter ? Configured(email.Value.Provider.ReplyToAddress) : null,
-                Configured(website.Value.WhatsAppNumber)));
+                Configured(website.Value.WhatsAppNumber)),
+            WorkspaceDiscount.RunningOrToCome(state.Discounts, today).Select(discount => ToOwnerView(discount, today)).ToList());
     }
 
     private static string? Configured(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // The owner reads a discount's name, rate and days, never who granted or revoked it (notes plan N7).
+    private static WorkspaceBillingDiscountView ToOwnerView(WorkspaceDiscount discount, DateOnly today) =>
+        new(
+            discount.Note,
+            discount.Percent,
+            discount.StartsOn,
+            discount.EndsOnExclusive.AddDays(-1),
+            discount.EndsOnExclusive,
+            discount.StartsOn > today);
 
     public async Task<WorkspaceBillingAccessView> GetAccessAsync(CancellationToken cancellationToken)
     {

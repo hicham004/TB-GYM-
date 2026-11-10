@@ -480,6 +480,10 @@ test('granting a discount of a chosen length, then revoking one after asking', a
   await page.getByRole('button', { name: 'Grant a discount' }).click();
   const sheet = page.getByRole('dialog');
   await sheet.getByLabel('Percent off').fill('100');
+  // N7: the note is what the owner's Billing page names the discount by.
+  await expect(sheet.getByLabel('What it is for')).toHaveAccessibleDescription(
+    'The owner sees this as the discount’s name.',
+  );
   await sheet.getByLabel('What it is for').fill('Founding coach');
   // The running 30% discount covers until 30 November: the sheet says so before the server does.
   await sheet.getByRole('button', { name: '3 months' }).click();

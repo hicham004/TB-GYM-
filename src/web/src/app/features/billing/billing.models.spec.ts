@@ -7,6 +7,7 @@ import type {
   PlatformInvoiceView,
   PlatformPaymentView,
   PricePlanView,
+  WorkspaceBillingDiscountView,
   WorkspaceBillingStatus,
   WorkspaceBillingView,
   WorkspaceDiscountView,
@@ -16,6 +17,7 @@ import {
   billingStatusLabel,
   billingStatusTone,
   billLines,
+  discountSentences,
   formatDay,
   formatMoney,
   formatMonth,
@@ -29,9 +31,11 @@ import {
   toDiscount,
   toEstimate,
   toInvoice,
+  toOwnerDiscount,
   toPayment,
   toPricePlan,
   toWorkspaceBilling,
+  type OwnerDiscount,
 } from './billing.models';
 
 /** The minus sign a discount line carries, which is not a hyphen. */
@@ -209,6 +213,16 @@ const DISCOUNT_VIEW: WorkspaceDiscountView = {
   revokedAtUtc: null,
 };
 
+/** What the owner's read sends of a discount (notes plan N7); a decimal may arrive as a string. */
+const OWNER_DISCOUNT_VIEW: WorkspaceBillingDiscountView = {
+  name: 'Early coach offer',
+  percent: '15.50',
+  startsOn: '2026-11-01',
+  lastDay: '2027-01-31',
+  endsOnExclusive: '2027-02-01',
+  startsLater: false,
+};
+
 /**
  * Runs `check` with every `Intl.DateTimeFormat` that names no zone of its own on Los Angeles's clock, west
  * of UTC, where midnight UTC on the 1st is still the last day of the month before. The process's own zone
@@ -272,6 +286,7 @@ describe('platform billing: what the API said, as numbers', () => {
         supportEmail: 'billing@tbgym.example',
         whatsAppNumber: '+96170123456',
       },
+      discounts: [OWNER_DISCOUNT_VIEW],
     };
 
     expect(toWorkspaceBilling(view)).toEqual({
@@ -285,6 +300,18 @@ describe('platform billing: what the API said, as numbers', () => {
       whishNumber: null,
       supportEmail: 'billing@tbgym.example',
       whatsAppNumber: '+96170123456',
+      discounts: [{ ...OWNER_DISCOUNT_VIEW, percent: 15.5 }],
+    });
+  });
+
+  it('reads a discount the owner is shown, its rate as a number and its days as the API sent them', () => {
+    expect(toOwnerDiscount(OWNER_DISCOUNT_VIEW)).toEqual({
+      name: 'Early coach offer',
+      percent: 15.5,
+      startsOn: '2026-11-01',
+      lastDay: '2027-01-31',
+      endsOnExclusive: '2027-02-01',
+      startsLater: false,
     });
   });
 
@@ -560,5 +587,141 @@ describe('platform billing: a bill line by line', () => {
       { label: 'Seats: 1 × $12.00', amount: '$12.00' },
       { label: 'Clients with a plan: 5, 5 included with your seats', amount: '$0.00' },
     ]);
+  });
+});
+
+describe('platform billing: the owner’s discount line', () => {
+  /** A discount as the owner's read sends it; the figures are this test's own. */
+  function stretch(
+    days: Pick<OwnerDiscount, 'startsOn' | 'lastDay' | 'endsOnExclusive'>,
+    more: Partial<OwnerDiscount> = {},
+  ): OwnerDiscount {
+    return { name: 'Early coach offer', percent: 40, startsLater: false, ...days, ...more };
+  }
+  const november = { startsOn: '2026-11-01', lastDay: '2026-11-30', endsOnExclusive: '2026-12-01' };
+  const december = { startsOn: '2026-12-01', lastDay: '2026-12-31', endsOnExclusive: '2027-01-01' };
+  const winter = { startsOn: '2027-01-01', lastDay: '2027-02-28', endsOnExclusive: '2027-03-01' };
+  const text = (discounts: readonly OwnerDiscount[]) =>
+    discountSentences(discounts, 'en-US').map((line) => `${line.name}: ${line.terms}`);
+
+  it('adds nothing when there is no discount', () => {
+    expect(discountSentences([], 'en-US')).toEqual([]);
+  });
+
+  it('names one running discount and its last day, then the normal price', () => {
+    expect(discountSentences([stretch(november, { percent: 15.5 })], 'en-US')).toEqual([
+      { name: 'Early coach offer', terms: '15.5% off until Nov 30, 2026, then the normal price.' },
+    ]);
+  });
+
+  it('carries on into a discount that starts the day after the last day of the one before', () => {
+    expect(
+      text([stretch(november), stretch(december, { percent: 20, startsLater: true })]),
+    ).toEqual([
+      'Early coach offer: 40% off until Nov 30, 2026, then 20% off until Dec 31, 2026, then the normal price.',
+    ]);
+  });
+
+  it('reads a free start then two rates in a row as one sentence, named after the first', () => {
+    expect(
+      text([
+        stretch(
+          { startsOn: '2026-11-01', lastDay: '2026-12-15', endsOnExclusive: '2026-12-16' },
+          { percent: 100 },
+        ),
+        stretch(
+          { startsOn: '2026-12-16', lastDay: '2027-03-15', endsOnExclusive: '2027-03-16' },
+          { percent: 35, name: 'Second stretch', startsLater: true },
+        ),
+        stretch(
+          { startsOn: '2027-03-16', lastDay: '2027-06-15', endsOnExclusive: '2027-06-16' },
+          { percent: 12.5, name: 'Third stretch', startsLater: true },
+        ),
+      ]),
+    ).toEqual([
+      'Early coach offer: free until Dec 15, 2026, then 35% off until Mar 15, 2027, then 12.5% off until Jun 15, 2027, then the normal price.',
+    ]);
+  });
+
+  it('reads two free stretches in a row as one, until the later last day, and two at one rate too', () => {
+    expect(
+      text([
+        stretch(november, { percent: 100, name: 'Until the company opens' }),
+        stretch(december, { percent: 100, startsLater: true }),
+        stretch(winter, { percent: 35, startsLater: true }),
+      ]),
+    ).toEqual([
+      'Until the company opens: free until Dec 31, 2026, then 35% off until Feb 28, 2027, then the normal price.',
+    ]);
+    expect(
+      text([
+        stretch(november, { percent: 30 }),
+        stretch(december, { percent: 30, startsLater: true }),
+      ]),
+    ).toEqual(['Early coach offer: 30% off until Dec 31, 2026, then the normal price.']);
+  });
+
+  it('reads two discounts with days between them as two sentences, the later one from its first day', () => {
+    expect(
+      text([
+        stretch(november),
+        stretch(
+          { startsOn: '2027-07-01', lastDay: '2027-08-31', endsOnExclusive: '2027-09-01' },
+          { percent: 10, name: 'Summer return', startsLater: true },
+        ),
+      ]),
+    ).toEqual([
+      'Early coach offer: 40% off until Nov 30, 2026, then the normal price.',
+      'Summer return: 10% off from Jul 1, 2027 until Aug 31, 2027, then the normal price.',
+    ]);
+    // One day between them is a gap too: only a discount starting the day the other ends carries on.
+    expect(
+      text([
+        stretch(november),
+        stretch(
+          { startsOn: '2026-12-02', lastDay: '2026-12-31', endsOnExclusive: '2027-01-01' },
+          { percent: 20, startsLater: true },
+        ),
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it('says from when a discount still to come begins, free or a rate, and carries on from it', () => {
+    expect(text([stretch(december, { percent: 20, startsLater: true })])).toEqual([
+      'Early coach offer: 20% off from Dec 1, 2026 until Dec 31, 2026, then the normal price.',
+    ]);
+    expect(
+      text([
+        stretch(
+          { startsOn: '2026-12-01', lastDay: '2026-12-20', endsOnExclusive: '2026-12-21' },
+          { percent: 100, startsLater: true },
+        ),
+        stretch(
+          { startsOn: '2026-12-21', lastDay: '2027-02-28', endsOnExclusive: '2027-03-01' },
+          { percent: 35, startsLater: true },
+        ),
+      ]),
+    ).toEqual([
+      'Early coach offer: free from Dec 1, 2026 until Dec 20, 2026, then 35% off until Feb 28, 2027, then the normal price.',
+    ]);
+  });
+
+  it('names UTC days whatever the device’s own zone', () => {
+    onDeviceWestOfUtc(() => {
+      expect(
+        text([
+          stretch(
+            { startsOn: '2026-11-01', lastDay: '2026-11-20', endsOnExclusive: '2026-11-21' },
+            { percent: 100 },
+          ),
+          stretch(
+            { startsOn: '2026-11-21', lastDay: '2026-12-31', endsOnExclusive: '2027-01-01' },
+            { startsLater: true },
+          ),
+        ]),
+      ).toEqual([
+        'Early coach offer: free until Nov 20, 2026, then 40% off until Dec 31, 2026, then the normal price.',
+      ]);
+    });
   });
 });

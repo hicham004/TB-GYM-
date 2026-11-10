@@ -2251,6 +2251,12 @@ limited to the coach's assigned clients.
   kit's checkbox "Show to my clients", described by its sentence, saving as it is flipped; a refusal puts it back
   with "Couldn’t save your choice. Try again." under the line and reads the lines again. No lines: "No lines yet.
   Send TB Gym your certificates…". Nothing on the page adds, edits or asks for a file.
+- Built in notes plan N7 (PBL-010): **Billing**'s hero names each discount TB Gym gave under the bill's state,
+  during the trial too: one sentence per run of discounts that follow on, named after its first (the name in its
+  own direction), "Early coach offer: free until Dec 31, 2026, then 40% off until Mar 31, 2027, then the normal
+  price."; stretches in a row at one rate read as one, one still to come says from when, a gap starts a new
+  sentence, and an ended or revoked one shows only on its invoices. The platform admin's Grant a discount sheet
+  says under What it is for "The owner sees this as the discount’s name."
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an

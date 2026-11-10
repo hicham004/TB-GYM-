@@ -165,6 +165,24 @@ public sealed record CurrentMonthEstimateView(
 /// </summary>
 public sealed record PaymentInstructionsView(string? WhishNumber, string? SupportEmail, string? WhatsAppNumber);
 
+/// <summary>
+/// A discount as the owner's Billing page names it (notes plan N7). The admin's note is its name. Days
+/// are UTC: <see cref="LastDay"/> is the last one it covers and <see cref="EndsOnExclusive"/> the day
+/// after, so the page can tell a discount that starts the day another ends without counting days.
+/// <see cref="StartsLater"/> says it has not begun on the server's day.
+/// </summary>
+public sealed record WorkspaceBillingDiscountView(
+    string Name,
+    decimal Percent,
+    DateOnly StartsOn,
+    DateOnly LastDay,
+    DateOnly EndsOnExclusive,
+    bool StartsLater);
+
+/// <param name="Discounts">
+/// The unrevoked discounts that are running or still to come, oldest first (notes plan N7). One that
+/// has ended shows only on the invoices it touched.
+/// </param>
 public sealed record WorkspaceBillingView(
     WorkspaceBillingStatus Status,
     DateTimeOffset TrialEndsAtUtc,
@@ -173,7 +191,8 @@ public sealed record WorkspaceBillingView(
     decimal UnpaidTotal,
     string CurrencyCode,
     DateOnly? ReadOnlyFrom,
-    PaymentInstructionsView PaymentInstructions);
+    PaymentInstructionsView PaymentInstructions,
+    IReadOnlyList<WorkspaceBillingDiscountView> Discounts);
 
 /// <param name="FoundingCoach">
 /// For the owner of a founding space, <see cref="FoundingBadgeState.Waiting"/> or

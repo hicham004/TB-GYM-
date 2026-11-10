@@ -56,6 +56,11 @@
   max-inline-size: 40rem;
 }
 
+// A discount's name is typed by TB Gym's admin, up to 200 characters with no space promised.
+.discount {
+  overflow-wrap: anywhere;
+}
+
 // ---------- how to pay ----------
 
 .steps {

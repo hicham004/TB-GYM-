@@ -614,7 +614,11 @@ export class PlatformVoid {
         }
       </div>
 
-      <app-field [label]="noteLabel" [errors]="shows('note') ? errors()['note'] : null">
+      <app-field
+        [label]="noteLabel"
+        [help]="noteHelp"
+        [errors]="shows('note') ? errors()['note'] : null"
+      >
         <input
           appControl
           name="note"
@@ -671,6 +675,8 @@ export class PlatformDiscount {
   protected readonly throughLabel = $localize`Last day`;
   protected readonly throughHelp = $localize`The discount covers this day too.`;
   protected readonly noteLabel = $localize`What it is for`;
+  /** The owner's Billing page names the discount by this note (notes plan N7). */
+  protected readonly noteHelp = $localize`The owner sees this as the discount’s name.`;
   protected readonly presetsLabel = $localize`Choose the last day by length`;
   protected readonly presets = [
     { months: 3, label: $localize`3 months` },

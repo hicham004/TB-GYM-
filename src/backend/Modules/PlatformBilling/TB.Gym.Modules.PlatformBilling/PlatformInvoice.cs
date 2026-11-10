@@ -332,4 +332,16 @@ public sealed class WorkspaceDiscount : TenantEntity
                 .OrderByDescending(discount => discount.Percent)
                 .ThenBy(discount => discount.GrantedAtUtc)
                 .FirstOrDefault();
+
+    /// <summary>
+    /// The discounts the owner's Billing page names (notes plan N7): every unrevoked one still running
+    /// or to come on <paramref name="today"/>, a UTC day, oldest first. One whose last day was before
+    /// today has ended; it stays only on the invoices it touched. Nothing billed depends on this.
+    /// </summary>
+    public static IReadOnlyList<WorkspaceDiscount> RunningOrToCome(IEnumerable<WorkspaceDiscount> discounts, DateOnly today) =>
+        discounts
+            .Where(discount => !discount.IsRevoked && discount.EndsOnExclusive > today)
+            .OrderBy(discount => discount.StartsOn)
+            .ThenBy(discount => discount.GrantedAtUtc)
+            .ToList();
 }

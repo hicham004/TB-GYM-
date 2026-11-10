@@ -4828,6 +4828,15 @@ export type WorkspaceBillingAccessView = {
   foundingCoach: null | FoundingBadgeState;
 };
 
+export type WorkspaceBillingDiscountView = {
+  name: string;
+  percent: number | string;
+  startsOn: string;
+  lastDay: string;
+  endsOnExclusive: string;
+  startsLater: boolean;
+};
+
 export type WorkspaceBillingStatus = 'Trial' | 'Active' | 'Overdue' | 'ReadOnly';
 
 export type WorkspaceBillingView = {
@@ -4839,6 +4848,7 @@ export type WorkspaceBillingView = {
   currencyCode: string;
   readOnlyFrom: null | string;
   paymentInstructions: PaymentInstructionsView;
+  discounts: Array<WorkspaceBillingDiscountView>;
 };
 
 export type WorkspaceDetails = {

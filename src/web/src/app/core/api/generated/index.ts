@@ -1942,6 +1942,7 @@ export type {
   WorkoutSetSaveView,
   WorkoutVolumeView,
   WorkspaceBillingAccessView,
+  WorkspaceBillingDiscountView,
   WorkspaceBillingStatus,
   WorkspaceBillingView,
   WorkspaceDetails,

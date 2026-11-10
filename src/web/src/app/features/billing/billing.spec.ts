@@ -76,6 +76,7 @@ function billing(overrides: Partial<WorkspaceBilling> = {}): WorkspaceBilling {
     whishNumber: '+961 70 123 456',
     supportEmail: null,
     whatsAppNumber: null,
+    discounts: [],
     ...overrides,
   };
 }
@@ -255,6 +256,7 @@ describe('Settings › Billing', () => {
     expect(textOf(host.querySelector('[data-utc-note]'))).toBe(
       'Dates here are UTC days, the one clock TB Gym bills every coaching space by, so a day here can start a few hours before or after your own midnight.',
     );
+    expect(host.querySelector('[data-discount]'), 'No discount, no discount line.').toBeNull();
 
     host.querySelector<HTMLButtonElement>('[data-invoice="invoice-1"] button')!.click();
     await settle(fixture);
@@ -306,6 +308,84 @@ describe('Settings › Billing', () => {
     expect(text(fixture)).toContain('Nothing is charged for it');
     expect(text(fixture)).toContain('nothing to pay this month so far');
     expect(text(fixture)).toContain('No invoices yet.');
+  });
+
+  it('names each discount and its last day under the bill’s state, a gap starting a new sentence', async () => {
+    const { host } = await render(() =>
+      of(
+        billing({
+          invoices: [],
+          unpaidTotal: 0,
+          readOnlyFrom: null,
+          discounts: [
+            {
+              name: 'Early coach offer',
+              percent: 100,
+              startsOn: '2026-08-01',
+              lastDay: '2026-08-20',
+              endsOnExclusive: '2026-08-21',
+              startsLater: false,
+            },
+            {
+              name: 'Early coach offer',
+              percent: 40,
+              startsOn: '2026-08-21',
+              lastDay: '2026-11-30',
+              endsOnExclusive: '2026-12-01',
+              startsLater: true,
+            },
+            {
+              name: 'Spring return',
+              percent: 10,
+              startsOn: '2027-03-01',
+              lastDay: '2027-03-31',
+              endsOnExclusive: '2027-04-01',
+              startsLater: true,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'You’re all paid up. An invoice comes on the 1st of each month for the month before.',
+      'Early coach offer: free until Aug 20, 2026, then 40% off until Nov 30, 2026, then the normal price.',
+      'Spring return: 10% off from Mar 1, 2027 until Mar 31, 2027, then the normal price.',
+    ]);
+    // The name is TB Gym's admin's words, isolated so one typed in Arabic keeps the line's order.
+    expect(host.querySelector('[data-discount] [dir="auto"]')?.textContent).toBe(
+      'Early coach offer',
+    );
+  });
+
+  it('says during the trial what follows it: the trial sentence, then the discount line', async () => {
+    const { host } = await render(() =>
+      of(
+        billing({
+          status: 'Trial',
+          trialEndsAtUtc: '2026-08-15T09:00:00Z',
+          invoices: [],
+          unpaidTotal: 0,
+          readOnlyFrom: null,
+          currentMonth: { ...billing().currentMonth, inTrial: true },
+          discounts: [
+            {
+              name: 'Early coach offer',
+              percent: 35,
+              startsOn: '2026-08-15',
+              lastDay: '2026-12-14',
+              endsOnExclusive: '2026-12-15',
+              startsLater: true,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'Your free trial runs until Aug 15, 2026. Nothing is charged for it, and your first invoice comes the month after.',
+      'Early coach offer: 35% off from Aug 15, 2026 until Dec 14, 2026, then the normal price.',
+    ]);
   });
 
   it('says plainly what read-only means for coaches and clients', async () => {

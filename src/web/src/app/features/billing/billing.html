@@ -43,6 +43,13 @@
             </p>
           }
           <p class="sentence">{{ statusSentence(billing) }}</p>
+          <!-- The name is TB Gym's admin's note: isolated, so a name in Arabic keeps the line's order. -->
+          @for (line of discountLines(); track $index) {
+            <p class="sentence discount" data-discount i18n>
+              <span dir="auto">{{ line.name }}</span
+              >: {{ line.terms }}
+            </p>
+          }
         </section>
 
         @if (unpaid().length > 0) {

@@ -101,3 +101,10 @@ Chosen by the implementer, to confirm:
 - Amended 2026-11-07 (notes plan N4b, ADR 0039): a coach's switch that shows one of their own certificate
   lines to their clients or hides it (`SetOwnCoachCertificateLineShown`) is a personal setting about
   themselves, a consent that can always be withdrawn, so it joins the read-only allow-list with `RoutineWrite`.
+- Amended 2026-11-10 (notes plan N7, decisions 11 to 14): the owner's read (`GET /api/billing`) also carries the
+  unrevoked discounts running or still to come on the server's UTC day, oldest first, each with its name (the
+  admin's note, which the grant sheet now says the owner sees), rate, first and last day, the day after its last,
+  and whether it starts later; never who granted or revoked it. The Billing page states them in one sentence per
+  run of discounts that follow on, "free until …, then 40% off until …, then the normal price.". Ended and revoked
+  ones are not sent; nothing billed changes and each invoice keeps its own discount line. Since the largest
+  discount touching a month applies, a month in which a run changes rate takes off the larger, never less.

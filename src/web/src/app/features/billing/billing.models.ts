@@ -9,6 +9,7 @@ import type {
   PlatformInvoiceView,
   PlatformPaymentView,
   PricePlanView,
+  WorkspaceBillingDiscountView,
   WorkspaceBillingStatus,
   WorkspaceBillingView,
   WorkspaceDiscountView,
@@ -86,6 +87,20 @@ export interface BillingEstimate {
   amounts: BillingAmounts;
 }
 
+/**
+ * A discount as the owner's Billing page names it (notes plan N7): TB Gym's admin's note as its name,
+ * its rate and its UTC days, all the API's. `endsOnExclusive` is only compared, never counted from.
+ */
+export interface OwnerDiscount {
+  readonly name: string;
+  readonly percent: number;
+  readonly startsOn: string;
+  readonly lastDay: string;
+  readonly endsOnExclusive: string;
+  /** It has not begun on the server's day. */
+  readonly startsLater: boolean;
+}
+
 export interface WorkspaceBilling {
   status: BillingStatus;
   trialEndsAtUtc: string;
@@ -99,6 +114,8 @@ export interface WorkspaceBilling {
   supportEmail: string | null;
   /** TB Gym's WhatsApp number, for the same. */
   whatsAppNumber: string | null;
+  /** The unrevoked discounts running or still to come, oldest first; an ended one is only on its invoices. */
+  discounts: readonly OwnerDiscount[];
 }
 
 export interface AdminWorkspace {
@@ -239,7 +256,12 @@ export function toWorkspaceBilling(value: WorkspaceBillingView): WorkspaceBillin
     whishNumber: value.paymentInstructions.whishNumber,
     supportEmail: value.paymentInstructions.supportEmail,
     whatsAppNumber: value.paymentInstructions.whatsAppNumber,
+    discounts: value.discounts.map(toOwnerDiscount),
   };
+}
+
+export function toOwnerDiscount(value: WorkspaceBillingDiscountView): OwnerDiscount {
+  return { ...value, percent: toNumber(value.percent) };
 }
 
 export function toAdminWorkspace(value: ContractAdminWorkspaceSummary): AdminWorkspace {
@@ -417,6 +439,61 @@ export function billLines(
     });
   }
   return lines;
+}
+
+/** One sentence of the owner's discount line: the name TB Gym's admin typed, and what it gives. */
+export interface DiscountSentence {
+  readonly name: string;
+  /** What follows the name and its colon, such as "free until Dec 31, 2026, then the normal price." */
+  readonly terms: string;
+}
+
+/**
+ * The owner's discount line (notes plan N7): one sentence for each run of discounts that follow on, a
+ * discount that starts the day the one before ends, named after the run's first: "free until <day>,
+ * then 40% off until <day>, then the normal price." A run that has not begun says from when. Stretches
+ * in a row at the same rate read as one, until the later last day. Every rate and day is the API's;
+ * nothing is counted here.
+ */
+export function discountSentences(
+  discounts: readonly OwnerDiscount[],
+  locale: string,
+): readonly DiscountSentence[] {
+  const runs: OwnerDiscount[][] = [];
+  for (const discount of discounts) {
+    const run = runs.at(-1);
+    const before = run?.at(-1);
+    if (!run || !before || discount.startsOn !== before.endsOnExclusive) {
+      runs.push([discount]);
+    } else if (discount.percent === before.percent) {
+      run[run.length - 1] = {
+        ...before,
+        lastDay: discount.lastDay,
+        endsOnExclusive: discount.endsOnExclusive,
+      };
+    } else {
+      run.push(discount);
+    }
+  }
+  return runs.map((run) => {
+    const clauses = run
+      .map((stretch, index) => discountClause(stretch, index === 0, locale))
+      .join($localize`, then `);
+    return { name: run[0].name, terms: $localize`${clauses}:terms:, then the normal price.` };
+  });
+}
+
+function discountClause(stretch: OwnerDiscount, first: boolean, locale: string): string {
+  const until = formatDay(stretch.lastDay, locale);
+  if (first && stretch.startsLater) {
+    const from = formatDay(stretch.startsOn, locale);
+    return stretch.percent === 100
+      ? $localize`free from ${from}:from: until ${until}:until:`
+      : $localize`${stretch.percent}:percent:% off from ${from}:from: until ${until}:until:`;
+  }
+  return stretch.percent === 100
+    ? $localize`free until ${until}:until:`
+    : $localize`${stretch.percent}:percent:% off until ${until}:until:`;
 }
 
 /** An invoice's own prices, as it was issued. */

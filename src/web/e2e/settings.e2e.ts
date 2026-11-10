@@ -177,6 +177,25 @@ const BILLING = {
   currencyCode: 'USD',
   readOnlyFrom: null,
   paymentInstructions: { whishNumber: '+961 70 123 456' },
+  // N7: October's 20% runs on into a lower rate; the figures are this test's own.
+  discounts: [
+    {
+      name: 'Early coach offer',
+      percent: 20,
+      startsOn: '2026-09-01',
+      lastDay: '2026-10-31',
+      endsOnExclusive: '2026-11-01',
+      startsLater: false,
+    },
+    {
+      name: 'Early coach offer',
+      percent: 10,
+      startsOn: '2026-11-01',
+      lastDay: '2027-01-31',
+      endsOnExclusive: '2027-02-01',
+      startsLater: true,
+    },
+  ],
 };
 
 const PREFERENCES = {
@@ -399,6 +418,10 @@ test('Billing opens an invoice in a sheet with its lines and payment', async ({ 
   await open(page, '/billing', 'Billing', { width: 390 });
 
   await expect(page.locator('[data-unpaid]')).toHaveText(/To pay\s*\$55\.00/);
+  // N7: the discount's name and its days, as the server sent them, in UTC days in every zone.
+  await expect(page.locator('[data-billing-status] [data-discount]')).toHaveText(
+    'Early coach offer: 20% off until Oct 31, 2026, then 10% off until Jan 31, 2027, then the normal price.',
+  );
   await page.locator('[data-invoice="inv-aug"] button').click();
   const sheet = page.getByRole('dialog');
   await expect(sheet.getByRole('heading', { name: 'August 2026 invoice' })).toBeVisible();

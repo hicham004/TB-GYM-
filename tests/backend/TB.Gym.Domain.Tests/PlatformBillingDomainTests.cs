@@ -388,6 +388,24 @@ public sealed class PlatformBillingDomainTests
     }
 
     [TestMethod]
+    public void TheOwnersPageNamesTheUnrevokedDiscountsStillRunningOrToComeOldestFirst()
+    {
+        var today = new DateOnly(2026, 11, 10);
+        var endedYesterday = WorkspaceDiscount.Grant(TenantId, 20m, new(2026, 10, 1), today, "Ended", AdminUserId, LaunchedAt);
+        var lastDayToday = WorkspaceDiscount.Grant(TenantId, 100m, today, today.AddDays(1), "Free start", AdminUserId, LaunchedAt);
+        var next = WorkspaceDiscount.Grant(TenantId, 35m, today.AddDays(1), new(2027, 3, 1), "Next", AdminUserId, LaunchedAt);
+        var later = WorkspaceDiscount.Grant(TenantId, 12.5m, new(2027, 3, 1), new(2027, 6, 1), "Later", AdminUserId, LaunchedAt);
+        var revoked = WorkspaceDiscount.Grant(TenantId, 10m, new(2027, 6, 1), new(2027, 7, 1), "Revoked", AdminUserId, LaunchedAt);
+        revoked.Revoke(AdminUserId, LaunchedAt);
+
+        var shown = WorkspaceDiscount.RunningOrToCome([later, revoked, endedYesterday, next, lastDayToday], today);
+
+        CollectionAssert.AreEqual(new[] { lastDayToday, next, later }, shown.ToArray(), "Oldest first, the one whose last day is today still running.");
+        Assert.IsEmpty(WorkspaceDiscount.RunningOrToCome([endedYesterday, revoked], today), "Ended and revoked ones are not named.");
+        CollectionAssert.AreEqual(new[] { later }, WorkspaceDiscount.RunningOrToCome([later, next, lastDayToday], new(2027, 3, 1)).ToArray());
+    }
+
+    [TestMethod]
     public void ADiscountNeedsAPercentageAndDatesThatMakeSense()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => WorkspaceDiscount.Grant(TenantId, 0m, new(2026, 9, 1), new(2026, 10, 1), "x", AdminUserId, LaunchedAt));

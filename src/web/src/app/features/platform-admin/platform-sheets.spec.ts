@@ -459,6 +459,10 @@ describe('Platform billing sheets: granting a discount', () => {
     expect(textOf(host.querySelector('.about'))).toBe(
       'Atlas Performance Comes off every invoice for a month it touches. Two discounts cannot overlap.',
     );
+    // N7: the note is the discount's name on the owner's Billing page, and the sheet says so.
+    expect(description(field(host, 'What it is for'))).toBe(
+      'The owner sees this as the discount’s name.',
+    );
     press(host, 'Grant discount');
     await settle(fixture);
 

@@ -30,6 +30,7 @@ import {
   billingStatusTone,
   billLines,
   type BillingInvoice,
+  discountSentences,
   formatDay,
   formatMoney,
   formatMonth,
@@ -82,6 +83,10 @@ export class Billing {
     const invoice = this.shown();
     return invoice ? billLines(invoice.amounts, this.locale, invoicePrices(invoice)) : [];
   });
+  /** Each discount TB Gym gave and until when, under the bill's state, during the trial too (N7). */
+  protected readonly discountLines = computed(() =>
+    discountSentences(this.billing()?.discounts ?? [], this.locale),
+  );
   /**
    * How to ask TB Gym for the payment details while no Whish number is set (audit BILL-2): its
    * support inbox and WhatsApp number, or null when this server has neither.

@@ -574,6 +574,16 @@ earned whatever the counts do later, and only an end takes it away. The owner ma
 clients; a client sees it only while their assigned coach is that owner. It changes no access, no bill
 and no discount, and no word for it says a coach's qualifications were checked.
 
+**PBL-010** Discounts (ADR 0028; notes plan N7). The platform admin grants a workspace a percentage off,
+more than 0 and up to 100 to two decimals, for UTC days `[StartsOn, EndsOnExclusive)`, with a note; a
+workspace's unrevoked discounts never overlap, none is edited or deleted, and one is revoked at most once,
+the revocation kept. A month takes the largest unrevoked discount touching it. The owner's read carries
+each unrevoked discount still running or to come on the server's UTC day: its note as its name, its rate,
+and its first and last day. The Billing page states them in one sentence per run of discounts that start
+the day the one before ends, named by the run's first note: each rate until its last day, from its first
+day only when the run has not begun, and stretches in a row at one rate as one clause. An ended one stays
+only on the invoices it touched. Naming them bills nothing, and every figure is the admin's.
+
 ## 4. Program templates and assigned snapshots
 
 **TRN-001** A training template is coach-owned reusable content. Assigning it creates a deep,
