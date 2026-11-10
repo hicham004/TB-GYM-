@@ -25,6 +25,7 @@ class Destination {}
         Save changes
       </button>
       <button id="cancel" appButton type="button" variant="outlined" size="touch">Cancel</button>
+      <button id="more" appButton type="button" variant="link">Show all 12</button>
       <button
         id="publish"
         appButton
@@ -47,6 +48,7 @@ class Destination {}
       </button>
     </form>
     <a id="next" appButton variant="outlined" routerLink="/next">Next step</a>
+    <a id="month" appButton variant="link" routerLink="/next">See this month and last</a>
   `,
 })
 class Host {
@@ -84,6 +86,16 @@ describe('appButton', () => {
     expect(query(host, '#cancel').classList).toContain('tb-button--outlined');
     expect(query(host, '#cancel').classList).toContain('tb-button--touch');
     expect(query(host, '#publish').classList).toContain('tb-button--text');
+  });
+
+  it('draws the link look as a variant of its own, never the text look (notes plan N5)', async () => {
+    const { host } = await render();
+    const more = query(host, '#more');
+
+    expect(more.className).toContain('tb-button tb-button--link');
+    expect(more.classList).not.toContain('tb-button--text');
+    expect(more.classList).not.toContain('tb-button--filled');
+    expect(query(host, '#publish').classList).not.toContain('tb-button--link');
   });
 
   it('submits and fires its handler once per click when idle', async () => {
@@ -162,6 +174,17 @@ describe('appButton on a link', () => {
     expect(next.hasAttribute('role')).toBe(false);
     expect(next.hasAttribute('aria-disabled')).toBe(false);
     expect(next.classList).toContain('tb-button--outlined');
+  });
+
+  it('takes the link look too, staying a real link (notes plan N5)', async () => {
+    const { host } = await render();
+    const month = query<HTMLAnchorElement>(host, '#month');
+
+    expect(month.className).toContain('tb-button tb-button--link');
+    expect(month.classList).not.toContain('tb-button--filled');
+    expect(month.getAttribute('href')).toBe('/next');
+    expect(month.hasAttribute('type')).toBe(false);
+    expect(query(host, '#next').classList).not.toContain('tb-button--link');
   });
 
   it('navigates like any router link', async () => {

@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Button } from '../../ui/button';
+import { Icon } from '../../ui/icon';
 import type { ModalSurface } from '../../ui/modal-surface';
 import { UiSheet } from '../../ui/sheet';
 import { StatusPill } from '../../ui/status-pill';
@@ -22,7 +23,7 @@ import { DayMarkView } from './day-mark';
  */
 @Component({
   selector: 'app-statuses-help',
-  imports: [Button, DayMarkView, StatusPill, Tag],
+  imports: [Button, DayMarkView, Icon, StatusPill, Tag],
   templateUrl: './statuses-help.html',
   styleUrl: './statuses-help.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -1,7 +1,11 @@
 import { booleanAttribute, DestroyRef, Directive, ElementRef, inject, input } from '@angular/core';
 
-/** Action/Button emphasis. Filled is the one primary action in a region. */
-export type ButtonVariant = 'filled' | 'accent' | 'outlined' | 'text';
+/**
+ * Action/Button emphasis. Filled is the one primary action in a region. Link is the text look's ink
+ * underlined, as the Overview's "Open progress" is, for a footer's "how this works" or "see all" that
+ * must read as pressable without a mouse over it (notes plan N5).
+ */
+export type ButtonVariant = 'filled' | 'accent' | 'outlined' | 'text' | 'link';
 /** Pointer / 40 for desktop; Touch / 48 for touch-first client screens and primary mobile CTAs. */
 export type ButtonSize = 'pointer' | 'touch';
 export type ButtonType = 'button' | 'submit' | 'reset';
@@ -42,6 +46,7 @@ function blockActivationWhile(isBusy: () => boolean): void {
     '[class.tb-button--accent]': "variant() === 'accent'",
     '[class.tb-button--outlined]': "variant() === 'outlined'",
     '[class.tb-button--text]': "variant() === 'text'",
+    '[class.tb-button--link]': "variant() === 'link'",
     '[class.tb-button--touch]': "size() === 'touch'",
     '[class.tb-button--loading]': 'loading()',
     '[attr.aria-disabled]': "loading() ? 'true' : null",
@@ -71,6 +76,7 @@ export class Button {
     '[class.tb-button--accent]': "variant() === 'accent'",
     '[class.tb-button--outlined]': "variant() === 'outlined'",
     '[class.tb-button--text]': "variant() === 'text'",
+    '[class.tb-button--link]': "variant() === 'link'",
     '[class.tb-button--touch]': "size() === 'touch'",
   },
 })

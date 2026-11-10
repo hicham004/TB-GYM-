@@ -1,13 +1,14 @@
+<!-- The link look with an ⓘ, so it reads as help to press on a phone too (notes plan N5). -->
 <button
   appButton
   type="button"
-  variant="text"
+  variant="link"
   class="opener"
   aria-haspopup="dialog"
   (click)="show()"
-  i18n
 >
-  How these statuses work
+  <app-icon name="info" />
+  <span i18n>How these statuses work</span>
 </button>
 
 <ng-template #sheet>

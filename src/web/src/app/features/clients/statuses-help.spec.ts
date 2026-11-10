@@ -30,6 +30,23 @@ describe('How these statuses work (critique B4a)', () => {
     expect(squash(sheet.querySelector('h2')?.textContent)).toBe('How these statuses work');
   });
 
+  it('reads as a link with an ⓘ before its words, which its name leaves out (notes plan N5)', async () => {
+    const { host } = await open();
+    const opener = host.querySelector<HTMLButtonElement>('button');
+    const icon = opener?.querySelector('app-icon');
+
+    expect(opener?.classList).toContain('tb-button--link');
+    expect(opener?.classList).not.toContain('tb-button--text');
+    expect(icon?.getAttribute('name')).toBe('info');
+    expect(icon?.getAttribute('aria-hidden')).toBe('true');
+    // Nothing a person sees comes before the glyph, so it leads the words in either direction.
+    const first = Array.from(opener?.childNodes ?? []).find(
+      (node) => node.nodeType === Node.ELEMENT_NODE || (node.textContent ?? '').trim() !== '',
+    );
+    expect(first).toBe(icon);
+    expect(squash(opener?.textContent)).toBe('How these statuses work');
+  });
+
   it('names every reason in Today’s order, with when it starts and when it clears', async () => {
     const { sheet } = await open();
 

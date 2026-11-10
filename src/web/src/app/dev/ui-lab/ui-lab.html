@@ -237,6 +237,15 @@
       <button appButton type="button" (click)="press('Save changes')">Save changes</button>
       <button appButton type="button" variant="outlined" (click)="press('Apply')">Apply</button>
       <button appButton type="button" variant="text" (click)="press('Edit')">Edit</button>
+      <button appButton type="button" variant="link" (click)="press('See all')">See all</button>
+      <a
+        appButton
+        variant="link"
+        [routerLink]="[]"
+        queryParamsHandling="preserve"
+        fragment="lab-form"
+        >Go to the form</a
+      >
     </div>
 
     <h3 class="lab-group-title">Leading icon</h3>
@@ -246,6 +255,9 @@
       </button>
       <button appButton type="button" variant="text" (click)="press('Add muscle')">
         <app-icon name="plus" />Add muscle
+      </button>
+      <button appButton type="button" variant="link" (click)="press('How these statuses work')">
+        <app-icon name="info" />How these statuses work
       </button>
     </div>
 
@@ -260,6 +272,9 @@
       <button appButton type="button" size="touch" variant="text" (click)="press('Skip for now')">
         Skip for now
       </button>
+      <button appButton type="button" size="touch" variant="link" (click)="press('Show all 12')">
+        Show all 12
+      </button>
     </div>
 
     <h3 class="lab-group-title">Disabled</h3>
@@ -271,10 +286,13 @@
       <button appButton type="button" variant="text" disabled (click)="press('Restore')">
         Restore
       </button>
+      <button appButton type="button" variant="link" disabled (click)="press('Compare')">
+        Compare
+      </button>
     </div>
     <p class="lab-caption">
       Native disabled leaves the tab order, so the reason is written out: there is no saved version
-      to publish, archive or restore.
+      to publish, archive, restore or compare.
     </p>
 
     <h3 class="lab-group-title">Loading</h3>

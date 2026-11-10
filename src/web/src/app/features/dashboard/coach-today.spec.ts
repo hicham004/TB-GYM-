@@ -549,6 +549,26 @@ describe('CoachToday', () => {
     expect(host.querySelector('button.feed-toggle')).toBeNull();
   });
 
+  it('draws its three footers in the link look, the ⓘ on the help alone (notes plan N5)', async () => {
+    const base = coachTodayView();
+    const activity = Array.from({ length: 9 }, (_, index) => ({
+      ...base.activity[2],
+      subjectId: `w-${index}`,
+    }));
+    const { host } = await render(() => of(coachTodayView({ activity })));
+    const help = host.querySelector<HTMLElement>('.queue-foot app-statuses-help button')!;
+    const month = host.querySelector<HTMLElement>('section.month .month-foot a')!;
+    const toggle = host.querySelector<HTMLElement>('button.feed-toggle')!;
+
+    for (const footer of [help, month, toggle]) {
+      expect(footer.classList).toContain('tb-button--link');
+      expect(footer.classList).not.toContain('tb-button--text');
+    }
+    expect(help.querySelector('app-icon')?.getAttribute('name')).toBe('info');
+    expect(month.querySelector('app-icon')).toBeNull();
+    expect(toggle.querySelector('app-icon')).toBeNull();
+  });
+
   it('folds the feed under Needs you on a phone, with its count, and opens it on request', async () => {
     stubWidth(true);
     const base = coachTodayView();

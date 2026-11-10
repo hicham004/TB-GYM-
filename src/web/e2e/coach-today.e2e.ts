@@ -199,6 +199,74 @@ test('Coach Today follows dark mode', async ({ page }) => {
   await page.screenshot({ path: 'test-results/r32-coach-today-dark-1440.png', fullPage: true });
 });
 
+/** A colour token resolved where the footers sit, in the mode shown. */
+async function inkOf(page: Page, token: string): Promise<string> {
+  return page.locator('section.queue').evaluate((section, name) => {
+    const probe = document.createElement('span');
+    probe.style.color = `var(${name})`;
+    section.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
+test('the three footers read as links in the link ink, light and dark (notes plan N5)', async ({
+  page,
+}) => {
+  // Decision 19, option 4E: underlined in the link ink, the stronger ink on hover, never a fill.
+  const base = coachTodayView();
+  const activity = Array.from({ length: 9 }, (_, index) => ({
+    ...base.activity[2],
+    subjectId: `w-${index}`,
+  }));
+  await openToday(page, 1440, 900, coachTodayView({ activity }));
+  const help = page.locator('.queue-foot').getByRole('button', { name: 'How these statuses work' });
+  const footers = [
+    help,
+    page.getByRole('link', { name: 'See this month and last' }),
+    page.getByRole('button', { name: 'Show all 9' }),
+  ];
+  const clear = 'rgba(0, 0, 0, 0)';
+
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator('section.queue')).toHaveCSS(
+      'background-color',
+      colorScheme === 'dark' ? 'rgb(22, 30, 27)' : 'rgb(255, 255, 255)',
+    );
+    const ink = await inkOf(page, '--tb-accent-ink');
+    const strong = await inkOf(page, '--tb-accent-ink-strong');
+    expect(ink).not.toBe(strong);
+    for (const footer of footers) {
+      await expect(footer).toHaveCSS('text-decoration-line', 'underline');
+      await expect(footer).toHaveCSS('color', ink);
+      await expect(footer).toHaveCSS('background-color', clear);
+      await footer.hover();
+      await expect(footer).toHaveCSS('color', strong);
+      await expect(footer).toHaveCSS('background-color', clear);
+      await page.mouse.move(0, 0);
+    }
+  }
+
+  // Pressed, the help takes no fill either; let go elsewhere, so nothing opens.
+  await help.hover();
+  await page.mouse.down();
+  await expect(help).toHaveCSS('background-color', clear);
+  await page.mouse.move(0, 0);
+  await page.mouse.up();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // The ⓘ on the help alone, before its words and outside its name.
+  await expect(help.locator('app-icon')).toHaveAttribute('aria-hidden', 'true');
+  const [glyph, words] = await Promise.all([
+    help.locator('app-icon').boundingBox(),
+    help.locator('span').boundingBox(),
+  ]);
+  expect(glyph!.x + glyph!.width).toBeLessThanOrEqual(words!.x);
+  for (const footer of footers.slice(1)) await expect(footer.locator('app-icon')).toHaveCount(0);
+});
+
 test('an empty coaching space invites the first client instead of showing zeros', async ({
   page,
 }) => {

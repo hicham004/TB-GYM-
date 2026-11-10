@@ -210,6 +210,66 @@ test('Clients reads right to left', async ({ page }) => {
   await page.screenshot({ path: 'test-results/r33a-clients-rtl-1440.png', fullPage: true });
 });
 
+/** The help's glyph and the lines of its words, as drawn. */
+async function helpLayout(page: Page) {
+  return page.getByRole('button', { name: 'How these statuses work' }).evaluate((button) => {
+    const glyph = button.querySelector('app-icon')!.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(button.querySelector('span')!);
+    const lines = Array.from(range.getClientRects());
+    return {
+      glyph: { left: glyph.left, right: glyph.right },
+      first: { left: lines[0].left, right: lines[0].right },
+      lines: new Set(lines.map((line) => Math.round(line.top))).size,
+    };
+  });
+}
+
+test('How these statuses work reads as a link, its ⓘ first either way (notes plan N5)', async ({
+  page,
+}) => {
+  await openClients(page, 1440, 900);
+  const help = page.getByRole('button', { name: 'How these statuses work' });
+  const ink = await help.evaluate((button) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--tb-accent-ink)';
+    button.parentElement!.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+
+  await expect(help).toHaveCSS('text-decoration-line', 'underline');
+  await expect(help).toHaveCSS('color', ink);
+  await expect(help).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(help.locator('app-icon')).toHaveAttribute('aria-hidden', 'true');
+  const ltr = await helpLayout(page);
+  expect(ltr.glyph.right).toBeLessThanOrEqual(ltr.first.left);
+
+  await useRtl(page);
+  const rtl = await helpLayout(page);
+  expect(rtl.glyph.left).toBeGreaterThanOrEqual(rtl.first.right);
+});
+
+test('at 200% text on a phone the help’s words wrap beside its ⓘ (notes plan N5)', async ({
+  page,
+}) => {
+  await openClients(page, 390, 844);
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+  // The words take two lines and the first starts by the glyph (the kit's 8 px gap), not centred
+  // away from it.
+  const ltr = await helpLayout(page);
+  expect(ltr.lines).toBeGreaterThan(1);
+  expect(ltr.first.left - ltr.glyph.right).toBeLessThanOrEqual(12);
+
+  await useRtl(page);
+  const rtl = await helpLayout(page);
+  expect(rtl.lines).toBeGreaterThan(1);
+  expect(rtl.glyph.left - rtl.first.right).toBeLessThanOrEqual(12);
+  await expectNoHorizontalOverflow(page);
+});
+
 test('a plan’s name reads in its own writing direction, whichever way the page reads', async ({
   page,
 }) => {

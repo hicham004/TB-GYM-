@@ -192,6 +192,17 @@
   color: var(--color-accent);
 }
 
+// Link (notes plan N5, decision 19): the text look's ink underlined, as the Overview's "Open
+// progress" is, so it reads as pressable on a phone too. Box, height and focus ring stay the button's;
+// it takes no fill, on hover or on press. Words that wrap (200% text) start beside a leading icon, as
+// a link's lines do, rather than centred away from it.
+.tb-button--link {
+  color: var(--color-accent);
+  text-align: start;
+  text-decoration-line: underline;
+  text-underline-offset: 0.2em;
+}
+
 @media (hover: hover) {
   .tb-button--filled:hover:not(:disabled, [aria-disabled='true']) {
     background-color: var(--color-accent-hover);
@@ -207,7 +218,8 @@
     background-color: var(--color-surface-subtle);
   }
 
-  .tb-button--text:hover:not(:disabled, [aria-disabled='true']) {
+  .tb-button--text:hover:not(:disabled, [aria-disabled='true']),
+  .tb-button--link:hover:not(:disabled, [aria-disabled='true']) {
     color: var(--color-accent-hover);
   }
 }
@@ -227,6 +239,10 @@
 .tb-button--text:active:not(:disabled, [aria-disabled='true']),
 .tb-icon-button:active:not(:disabled, [aria-disabled='true']) {
   background-color: var(--color-accent-subtle);
+}
+
+.tb-button--link:active:not(:disabled, [aria-disabled='true']) {
+  color: var(--color-accent-hover);
 }
 
 // Disabled and loading: content at 45% (Figma), fill at 45% on Filled. Colour alpha rather than
@@ -260,7 +276,9 @@
 }
 
 .tb-button--text:disabled,
-.tb-button--text[aria-disabled='true'] {
+.tb-button--text[aria-disabled='true'],
+.tb-button--link:disabled,
+.tb-button--link[aria-disabled='true'] {
   color: color-mix(in srgb, var(--color-accent) 45%, transparent);
 }
 

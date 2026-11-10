@@ -185,6 +185,14 @@ const GLYPHS = {
       'M8.25 7.1V12.9L13 10L8.25 7.1ZM17.25 10C17.25 14.004 14.004 17.25 10 17.25C5.996 17.25' +
       ' 2.75 14.004 2.75 10C2.75 5.996 5.996 2.75 10 2.75C14.004 2.75 17.25 5.996 17.25 10Z',
   },
+  // "How these statuses work" (notes plan N5): play's ring with an "i" inside, drawn in code on the
+  // same grid; the dot is the round cap of a 0.01 stroke, as wide as the stem.
+  info: {
+    size: 20,
+    path:
+      'M17.25 10C17.25 14.004 14.004 17.25 10 17.25C5.996 17.25 2.75 14.004 2.75 10C2.75 5.996' +
+      ' 5.996 2.75 10 2.75C14.004 2.75 17.25 5.996 17.25 10ZM10 9.75V13.25M10 6.75V6.76',
+  },
   // Printing a client's recipe (R4.4d): a printer, drawn in code on the 20px, 1.5px-stroke grid.
   print: {
     size: 20,

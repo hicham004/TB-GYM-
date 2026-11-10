@@ -55,7 +55,7 @@ browser). The live copy is at https://claude.ai/artifact/RHKaDiQAVU8FBJBBTQMyn4.
 | R0.1 | **Demo workspace generator** (§7). Development-only CLI next to `platform-admin grant`. Running it on production for sales demos is a later owner decision | One command fills an empty dev database with "Atlas Performance". Coach Today, Clients and client Today look real in screenshots | Done · 2026-09-29 · efbaaa0 |
 | R0.2 | **Words pass** (§6). Text only, on the existing screens | No system word from §6 is left in visible template text; tests are updated | Done · 2026-09-29 |
 | R1.1 | **Brand v2 tokens, theme-ready** (§3, §3.1). Brand, accent and light/dark as custom properties; legacy aliases kept for now | Lab and shells render in all 4 prototype brands, in light and dark, at AA contrast | Done · 2026-09-29 · a728fa8 |
-| R1.2 | **Component kit v2 core** (§4): Card, StatTile, Avatar/Stack, StatusPill, Buttons, Sheet, Dialog, Toast, EmptyState, Skeleton, ProgressRing, Sparkline, SegmentedControl, Tabs | All of them are in the UI lab, pass axe, and work in RTL and dark | Done · 2026-09-29 · 7668dd9 |
+| R1.2 | **Component kit v2 core** (§4): Card, StatTile, Avatar/Stack, StatusPill, Buttons (the Link look since notes plan N5), Sheet, Dialog, Toast, EmptyState, Skeleton, ProgressRing, Sparkline, SegmentedControl, Tabs | All of them are in the UI lab, pass axe, and work in RTL and dark | Done · 2026-09-29 · 7668dd9 |
 | R1.3 | **Three hero screens in the lab** on demo data: Coach Today, Client Today, Workout player, matching the prototype (GSAP moments included) | Side-by-side screenshots against the prototype at 390 and 1440 px | Done · 2026-09-29 · 6dfb5af |
 | R1.4 | 🚦 **Owner and partner approve the look** | The owner says go | Done · approved 2026-09-29 · f3e3e96 |
 | R2.1 | **Client Today** (M1) for real, plus the personal light/dark setting (§3.1) | §2 definition of done | Done · 2026-09-30 · 3124581 |
@@ -1569,6 +1569,12 @@ Tokens are theme-ready from R1, so this costs little later.
 - Built in critique B4a: `Tag` (`ui/tag.ts`, `app-tag`), a reason with its count in the warning tone, "2
   check-ins to review": with a `link` a link with a 24 px target and the kit's focus ring, without one the same
   look where the reason is only named. A state that is not a reason to act stays a `StatusPill`.
+- Built in notes plan N5 (decision 19, option 4E): the `Button` set's fifth look, `variant="link"` on a button
+  or a link: the text look's ink (`--tb-accent-ink`), underlined at 0.2em, the stronger ink on hover and press and
+  never a fill, and words that wrap start beside a leading icon rather than centred; the 40 px height, the focus
+  ring and the disabled look stay. "How these statuses work" (the new `info` glyph before its words, outside its
+  name), "See this month and last" and the feed's "Show all" take it; the app's other text buttons keep the text
+  look.
 - Built in R6.2a: two more packages, `@angular/platform-server` and `@angular/ssr`, pinned to the
   installed Angular version, for one thing only: the production build renders the homepage as finished
   HTML (`index.html`) and keeps the plain shell as `index.csr.html`; there is no Node server. nginx serves
