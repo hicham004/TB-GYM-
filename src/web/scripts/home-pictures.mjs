@@ -4,7 +4,10 @@
 // screen changes, and the cheap one (framing and encoding) whenever the look does:
 //
 //   node scripts/home-pictures.mjs capture --base http://127.0.0.1:4340 --out <shots> [--only name,name]
-//   node scripts/home-pictures.mjs compose --shots <shots> --bezel "<Apple's bezel PNG>" --out <pictures> [--only name]
+//   node scripts/home-pictures.mjs compose --shots <shots> --out <pictures> [--bezel "<Apple's bezel PNG>"] [--only name]
+//
+// Only a phone needs Apple's bezel and the status bars `capture` draws: `compose` asks for them
+// when it makes one, so a coach window alone (`--only maxes-dark`) is made without them.
 //
 // `capture` signs in to the demo built with `demo-workspace --cast sample` (scripts/demo-workspace.ps1):
 // the first-name cast in "Oakline Strength", so no picture carries a full name. It photographs the
@@ -28,7 +31,7 @@
 // task): install it outside the repository and point TB_HOME_TOOLS at that folder, e.g.
 //   mkdir %TEMP%\tb-home-tools && cd %TEMP%\tb-home-tools && npm init -y && npm i sharp
 // (that folder is the default). Playwright comes from the web project itself.
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -234,15 +237,17 @@ const WINDOWS = [
     width: 620,
     height: 640,
   },
-  // Sunday: the training maxes with the suggestion from logged sets.
-  { name: 'maxes', shot: 'coach-client-training', left: 1050, top: 300, width: 360, height: 580 },
+  // Sunday: the program's training maxes, each with where it came from, down to the button that
+  // updates them for the coming weeks (the whole panel, 4 px of page at each side, 10 px above and
+  // below; N10c).
+  { name: 'maxes', shot: 'coach-client-training', left: 1052, top: 300, width: 360, height: 492 },
   {
     name: 'maxes-dark',
     shot: 'coach-client-training-dark',
-    left: 1050,
+    left: 1052,
     top: 300,
     width: 360,
-    height: 580,
+    height: 492,
   },
   // The feature rows (UI plan R6.2f): a 560-750 px region of the coach's screen beside the phone,
   // and a narrower region of the same screen for phones, where the window is drawn about 350 px
@@ -593,36 +598,67 @@ async function statusBars(browser, out) {
 // compose
 // ---------------------------------------------------------------------------------------------
 
+/** The two status bars `capture` draws for `compose` to lay over each phone. */
+const STATUS_BARS = ['statusbar-on-light.png', 'statusbar-on-dark.png'];
+
+/**
+ * What `compose` makes from the files in the shots folder: each wanted client shot as a phone and
+ * each wanted coach window. Only a phone needs Apple's bezel and the two status bars, so a window
+ * alone (`--only maxes-dark`) asks for neither, and a phone that lacks one is refused before any
+ * work, naming what is missing. `exists` is the file check, passed in by the tests.
+ */
+export function composePlan(options, files, exists = existsSync) {
+  const phones = files
+    .filter((file) => file.startsWith('client-') && file.endsWith('.png'))
+    .map((file) => file.slice(0, -4))
+    .filter((name) => wanted(options, name));
+  const windows = WINDOWS.filter((window) => wanted(options, window.name));
+  if (phones.length > 0) {
+    const missing = [];
+    if (!options.bezel) {
+      missing.push('--bezel with the path to Apple’s portrait iPhone 17 bezel PNG');
+    } else if (!exists(options.bezel)) {
+      missing.push(`the bezel at ${options.bezel}, which is not there`);
+    }
+    for (const bar of STATUS_BARS) {
+      if (!files.includes(bar)) {
+        missing.push(`${bar}, which capture draws`);
+      }
+    }
+    if (missing.length > 0) {
+      throw new Error(`The phones ${phones.join(', ')} need ${missing.join('; ')}.`);
+    }
+  }
+  return { phones, windows };
+}
+
 async function compose(options) {
   const shots = options.shots ?? join(tmpdir(), 'tb-home-shots');
   const out = options.out ?? join(tmpdir(), 'tb-home-pictures');
-  if (!options.bezel || !existsSync(options.bezel)) {
-    throw new Error('Pass --bezel with the path to Apple’s portrait iPhone 17 bezel PNG.');
+  const { phones, windows } = composePlan(options, readdirSync(shots));
+  if (phones.length === 0 && windows.length === 0) {
+    console.log(`nothing to compose${options.only ? ` for --only ${options.only}` : ''}`);
+    return;
   }
   mkdirSync(out, { recursive: true });
   const tools = process.env['TB_HOME_TOOLS'] ?? join(tmpdir(), 'tb-home-tools');
   const sharp = createRequire(join(tools, 'package.json'))('sharp');
 
-  const bezel = await screenWindow(sharp, options.bezel);
-  console.log(
-    `bezel ${bezel.width} x ${bezel.height}, screen at ${bezel.left},${bezel.top} ${bezel.screenWidth} x ${bezel.screenHeight}`,
-  );
-  const bars = {
-    light: await sharp(join(shots, 'statusbar-on-light.png')).png().toBuffer(),
-    dark: await sharp(join(shots, 'statusbar-on-dark.png')).png().toBuffer(),
-  };
-
-  for (const file of listShots(shots)) {
-    if (!wanted(options, file)) {
-      continue;
+  if (phones.length > 0) {
+    const bezel = await screenWindow(sharp, options.bezel);
+    console.log(
+      `bezel ${bezel.width} x ${bezel.height}, screen at ${bezel.left},${bezel.top} ${bezel.screenWidth} x ${bezel.screenHeight}`,
+    );
+    const bars = {
+      light: await sharp(join(shots, STATUS_BARS[0])).png().toBuffer(),
+      dark: await sharp(join(shots, STATUS_BARS[1])).png().toBuffer(),
+    };
+    for (const name of phones) {
+      await phonePicture(sharp, join(shots, `${name}.png`), name, bezel, bars, out);
     }
-    await phonePicture(sharp, join(shots, `${file}.png`), file, bezel, bars, out);
   }
 
-  for (const window of WINDOWS) {
-    if (!wanted(options, window.name)) {
-      continue;
-    }
+  for (const window of windows) {
     const source = join(shots, `${window.shot}.png`);
     if (!existsSync(source)) {
       console.log(`skip ${window.name}: no ${window.shot}.png`);
@@ -630,13 +666,6 @@ async function compose(options) {
     }
     await windowPicture(sharp, source, window, out);
   }
-}
-
-function listShots(shots) {
-  const { readdirSync } = require('node:fs');
-  return readdirSync(shots)
-    .filter((file) => file.startsWith('client-') && file.endsWith('.png'))
-    .map((file) => file.slice(0, -4));
 }
 
 /** Finds the bezel's transparent screen window from its alpha channel, so another model needs no numbers. */

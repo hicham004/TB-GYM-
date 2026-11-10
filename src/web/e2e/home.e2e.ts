@@ -202,7 +202,7 @@ test('on a short laptop window the panel’s caption sits on its own strip, with
   page,
 }) => {
   // The owner's laptop: 1536 px wide, about 730 px tall in the browser, where the panel is short
-  // and Sunday's maxes run down to its foot.
+  // and Sunday's maxes run down under its caption.
   await page.setViewportSize({ width: 1536, height: 730 });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await openHome(page);

@@ -69,12 +69,12 @@ export const WEEK_STAGES: readonly WeekStage[] = [
     day: 6,
     when: $localize`Sunday · Progress`,
     title: $localize`You both see it.`,
-    body: $localize`Twelve weeks of weigh-ins become one trend both of them see. Maya's logged sets suggest a new deadlift max; Lea keeps the old one or reviews the coming weeks' weights, never silently.`,
+    body: $localize`Twelve weeks of weigh-ins become one trend both of them see. When Lea changes one of Maya's training maxes, she reads every weight it moves in the coming weeks before it lands.`,
     numeral: '3.4',
     numeralLabel: $localize`kg down since 9 August`,
     window: WINDOWS.maxesDark,
     phone: 'client-progress',
-    screens: $localize`On Lea's screen: Maya's training maxes, where logged sets suggest a deadlift max of about 80 kg, up from 77.5. On Maya's phone: Progress, 65 kg and 3.4 kg down since 9 August, with the trend chart.`,
+    screens: $localize`On Lea's screen: Maya's training maxes, back squat 62.5 kg, bench press 35 kg, deadlift 77.5 kg and overhead press 25 kg, each typed by Lea, with a button to update them for the coming weeks. On Maya's phone: Progress, 65 kg and 3.4 kg down since 9 August, with the trend chart.`,
   },
 ];
 

@@ -47,8 +47,8 @@ export const WINDOWS = {
   /** The check-in review: this week's answers beside last week's; narrow, this week's answers. */
   reviewDark: { name: 'checkin-review-dark', width: 700, height: 460 },
   reviewNarrow: { name: 'review-narrow', width: 380, height: 520 },
-  /** Training maxes, where logged sets suggest a new deadlift max. */
-  maxesDark: { name: 'maxes-dark', width: 360, height: 580 },
+  /** Training maxes: four lifts the coach typed, and Update maxes for the coming weeks. */
+  maxesDark: { name: 'maxes-dark', width: 360, height: 492 },
   /** The builder with the program's name and its first week. */
   programs: { name: 'programs', width: 745, height: 680 },
   programsNarrow: { name: 'programs-narrow', width: 380, height: 680 },

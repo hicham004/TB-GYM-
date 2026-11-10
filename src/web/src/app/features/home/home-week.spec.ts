@@ -167,4 +167,15 @@ describe('HomeWeek', () => {
       WEEK_STAGES.map((stage) => stage.title),
     );
   });
+
+  it('lets no stage say that logged sets suggest a max, or offer to keep one (N10c)', async () => {
+    for (const stage of WEEK_STAGES) {
+      expect(`${stage.body} ${stage.screens}`, stage.id).not.toMatch(/suggest|\bkeep/i);
+    }
+
+    const { host } = await render(false);
+    const sunday = query(host, '[data-stage-id="see"]').textContent;
+    expect(sunday).toContain('she reads every weight it moves in the coming weeks before it lands');
+    expect(sunday).not.toMatch(/suggest|\bkeep/i);
+  });
 });

@@ -33,6 +33,8 @@ test('the homepage is served as finished HTML, with its headline, its week and l
   expect(html).toMatch(/<h1[^>]*>\s*Coach both[\s\S]*sides of[\s\S]*the week\./);
   // The whole page is in the HTML: nothing below the fold waits for the browser.
   expect(pageText(html)).toMatch(/You both see it\./);
+  // No line promises a max suggested from logged sets: the app has none (notes plan N10c).
+  expect(pageText(html)).not.toMatch(/suggest/i);
   expect(pageText(html)).toMatch(/Built for one coach\. Ready for a whole floor\./);
   expect(html.match(/<article[^>]*data-stage-id="/g)).toHaveLength(4);
   expect(html.match(/<article[^>]*data-row="/g)).toHaveLength(6);

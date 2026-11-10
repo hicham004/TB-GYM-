@@ -168,8 +168,9 @@ of the implemented R1.3 screens before production rollout.
   name), for the public pictures only; "Atlas Performance" is a Florida training centre and a US
   trademark, "Oakline Strength" matched no business when searched on 2026-10-12. The pipeline
   (`scripts/home-pictures.ps1`, `src/web/scripts/home-pictures.mjs`) needs Apple's iPhone 17 bezel
-  from its Design Resources (a disk image; 7-Zip opens it; kept out of git) and `sharp` outside the
-  repository. Known limits: the share-card shot only exists right after the finish summary, so it
+  for the phone pictures, from its Design Resources (a disk image; 7-Zip opens it; kept out of git;
+  since N10c a run of coach windows alone needs none), and `sharp` outside the repository. Known
+  limits: the share-card shot only exists right after the finish summary, so it
   needs a demo whose hero client has not trained yet; the coach's greeting follows the capture
   time (a night run says "Good evening", capture in the Beirut morning for the hero); the 390 px
   rows scale the coach crops, so R6.2f should crop narrower regions for phones; the composite
@@ -179,7 +180,8 @@ of the implemented R1.3 screens before production rollout.
   window. Still open: the hero's coach window says "Good evening", and the share card is not
   pictured anywhere on the page (its shot needs a fresh demo); a morning capture of the sample demo
   would refresh both, through `scripts/home-pictures.ps1` and the picture names in
-  `home-pictures.ts`.
+  `home-pictures.ts`. N10c took Sunday's `maxes-dark` again from a demo built on 7 Nov; its master
+  is in `artifacts/home-pictures/n10c/`.
 - **Homepage decisions taken in R6.2f (Claude for the owner, 2026-10-13).** Every feature row's quiet
   link is an invitation to register ("Build your first program →"), because the product has no
   per-feature pages and the registration page is where each of them starts; the gym story's button
@@ -739,8 +741,8 @@ of the implemented R1.3 screens before production rollout.
   offered them to Assign program as saved maxes. Recorded rows say "Recorded by a coach", "Tested" or
   "Estimated (Epley)" instead of a method code, and the column is "Where from". (9) is the no-break space.
   The history itself became the Strength history card in R5.3d2. **The suggestions went on the owner's word of
-  7 Nov 2026** (decision 19's note; notes plan N10a and N10b, ADR 0036's last section): no screen of the app says
-  that logged sets suggest a max (the homepage's Sunday stage goes in N10c). Coach Today, a client's page,
+  7 Nov 2026** (decision 19's note; notes plan N10a to N10c, ADR 0036's last section): no screen of the app says
+  that logged sets suggest a max, nor, since N10c, does the homepage. Coach Today, a client's page,
   Messages and Clients lost maxes to review, with Review maxes and the chip; the Training maxes panel lost the
   suggestion, Review the new weights, Keep and the kept line; the update sheet lost its estimate from logged
   sets and Assign program its "Use …". The max history (8) and the next program starting where the last one
@@ -2421,6 +2423,10 @@ limited to the coach's assigned clients.
   homepage only (R6.2b); then the premium rebuild on real device pictures of the sample demo, with
   four pinned week stages, six feature rows and a build-time `/changelog` page (R6.2f). Later, when
   the owner has made it in Jitter: a real product video loop in the hero (R6.2c).
+- Notes plan N10c (the owner's word of 7 Nov 2026, decision 19's note): Sunday's stage no longer
+  says that logged sets suggest a max. Its second sentence says Lea reads every weight a changed
+  training max moves before it lands, and its coach window, `maxes-dark`, is the Training maxes
+  panel as it is now, taken again from the sample demo.
 
 ---
 
