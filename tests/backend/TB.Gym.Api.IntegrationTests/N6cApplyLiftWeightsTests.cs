@@ -959,7 +959,10 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     /// <summary>
     /// Sends the two applies at once, the token refreshed once before, and holds each at its write until both are there:
-    /// each has read where the lift stands and loaded the program, so the database decides between them.
+    /// each has read where the lift stands and loaded the program, so the database decides between them. Released
+    /// together, two inserts under one key can each wait on the other's row in the one-request-per-key exclusion
+    /// constraint; PostgreSQL then ends one as a deadlock (40P01) and the execution strategy saves it again, so it
+    /// reaches the insert a third time. Both arriving is what shows the race.
     /// </summary>
     private async Task<HttpResponseMessage[]> N6cRaceAsync(
         HttpClient coach,
@@ -974,7 +977,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             var answers = await Task.WhenAll(
                 coach.PostAsJsonAsync(N6cUrl(clientId), one, SliceReadJson),
                 coach.PostAsJsonAsync(N6cUrl(clientId), other, SliceReadJson));
-            Assert.AreEqual(2, RequiredInsertBarrier.Arrived, "The two applies never raced.");
+            Assert.IsGreaterThanOrEqualTo(2, RequiredInsertBarrier.Arrived, "The two applies never raced.");
             return answers;
         }
         finally
