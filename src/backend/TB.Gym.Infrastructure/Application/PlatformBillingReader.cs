@@ -25,6 +25,8 @@ internal sealed record InvoiceFacts(
     Guid? ReplacedByInvoiceId);
 
 /// <summary>Everything billing knows about one workspace at one instant.</summary>
+/// <param name="Grants">Every extra included clients grant of the space, revoked ones included, oldest first.</param>
+/// <param name="FoundingSeatNow">The open founding status's seat at this instant, before the plan's seat is compared.</param>
 internal sealed record WorkspaceBillingState(
     BillingWorkspace Workspace,
     DateTimeOffset TrialEndsAtUtc,
@@ -34,7 +36,9 @@ internal sealed record WorkspaceBillingState(
     WorkspaceBillingStatus Status,
     decimal UnpaidTotal,
     DateOnly? ReadOnlyFrom,
-    DateOnly? OldestUnpaidDueOn);
+    DateOnly? OldestUnpaidDueOn,
+    IReadOnlyList<IncludedClientGrant> Grants,
+    FoundingSeat? FoundingSeatNow);
 
 /// <summary>
 /// The reads and the one calculation path platform billing shares between the owner's page, the admin
@@ -177,8 +181,44 @@ internal static class PlatformBillingReader
             .OrderBy(discount => discount.StartsOn)
             .ToListAsync(cancellationToken);
 
+    /// <summary>A space's extra included clients grants, revoked ones included, oldest first (notes plan N11a).</summary>
+    public static Task<List<IncludedClientGrant>> GrantsAsync(
+        GymDbContext dbContext,
+        Guid tenantId,
+        CancellationToken cancellationToken) =>
+        dbContext.IncludedClientGrants
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(grant => grant.TenantId == tenantId)
+            .OrderBy(grant => grant.StartsOn)
+            .ThenBy(grant => grant.GrantedAtUtc)
+            .ToListAsync(cancellationToken);
+
+    /// <summary>Every published founding terms version, oldest first: a founding seat keeps the highest number it has had.</summary>
+    public static Task<List<FoundingTerms>> FoundingTermsVersionsAsync(GymDbContext dbContext, CancellationToken cancellationToken) =>
+        dbContext.FoundingTermsVersions.AsNoTracking().OrderBy(terms => terms.VersionNumber).ToListAsync(cancellationToken);
+
     /// <summary>
-    /// Counts usage and prices it: the one path an invoice or a reissue is built through.
+    /// Where a billed window's included clients come from beyond the plan's seats (<c>platform-invoice-v2</c>),
+    /// as of <paramref name="asOf"/>: the founding seat and every unrevoked grant touching the window.
+    /// </summary>
+    public static async Task<IncludedClientSources> IncludedClientSourcesAsync(
+        GymDbContext dbContext,
+        Guid tenantId,
+        UsageWindow window,
+        DateTimeOffset asOf,
+        CancellationToken cancellationToken)
+    {
+        var statuses = await FoundingReader.StatusesAsync(dbContext, tenantId, cancellationToken);
+        var versions = await FoundingTermsVersionsAsync(dbContext, cancellationToken);
+        var grants = await GrantsAsync(dbContext, tenantId, cancellationToken);
+        return IncludedClientSources.For(statuses, versions, grants, window, asOf);
+    }
+
+    /// <summary>
+    /// Counts usage and prices it: the one path an invoice or a reissue is built through. The founding seat
+    /// and the grants are read over the billed window, as the discount is, as they stand now: the seat takes
+    /// the highest number its status had while it ran, up to now (PBL-011).
     /// </summary>
     public static async Task<PlatformInvoice> BuildInvoiceAsync(
         GymDbContext dbContext,
@@ -195,7 +235,8 @@ internal static class PlatformBillingReader
         var discount = WorkspaceDiscount.ApplicableTo(
             await DiscountsAsync(dbContext, workspace.TenantId, cancellationToken),
             window);
-        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, quantities, discount?.Percent ?? 0m);
+        var includedClients = await IncludedClientSourcesAsync(dbContext, workspace.TenantId, window, now, cancellationToken);
+        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, quantities, includedClients, discount?.Percent ?? 0m);
         return PlatformInvoice.Issue(
             workspace.TenantId,
             month,
@@ -203,6 +244,7 @@ internal static class PlatformBillingReader
             plan,
             amounts,
             discount?.Id,
+            includedClients,
             InvoiceReference.Create(referencePrefix, month),
             now,
             replacesInvoiceId);
@@ -252,7 +294,18 @@ internal static class PlatformBillingReader
         var trialEndsAt = TrialEndsAt(workspace, plans);
         var invoices = await InvoicesAsync(dbContext, workspace.TenantId, cancellationToken);
         var discounts = await DiscountsAsync(dbContext, workspace.TenantId, cancellationToken);
-        var estimate = await EstimateAsync(dbContext, workspace, plans, discounts, trialEndsAt, now, cancellationToken);
+        var statuses = await FoundingReader.StatusesAsync(dbContext, workspace.TenantId, cancellationToken);
+        var versions = await FoundingTermsVersionsAsync(dbContext, cancellationToken);
+        var grants = await GrantsAsync(dbContext, workspace.TenantId, cancellationToken);
+        var estimate = await EstimateAsync(
+            dbContext,
+            workspace,
+            plans,
+            discounts,
+            (statuses, versions, grants),
+            trialEndsAt,
+            now,
+            cancellationToken);
         var today = PaymentSchedule.Today(now);
         var unpaid = invoices.Where(item => IsUnpaid(item)).ToList();
         var status = PlatformInvoiceStatusPolicy.Workspace(
@@ -268,7 +321,9 @@ internal static class PlatformBillingReader
             status,
             unpaid.Sum(item => item.Invoice.Total),
             unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.ReadOnlyFrom),
-            unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.DueOn));
+            unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.DueOn),
+            grants,
+            FoundingSeatPolicy.Now(statuses, versions, now));
     }
 
     public static bool IsUnpaid(InvoiceFacts facts) =>
@@ -276,13 +331,15 @@ internal static class PlatformBillingReader
 
     /// <summary>
     /// This month so far, priced with the latest plan. While the whole of it is inside the trial, the
-    /// counts are shown and nothing is charged.
+    /// counts are shown and nothing is charged. The discount, the founding seat and the grants are read over
+    /// the rest of the month, as the invoice will read them over the whole of it.
     /// </summary>
     private static async Task<CurrentMonthEstimateView> EstimateAsync(
         GymDbContext dbContext,
         BillingWorkspace workspace,
         IReadOnlyList<PlatformPricePlan> plans,
         IReadOnlyList<WorkspaceDiscount> discounts,
+        (IReadOnlyList<FoundingStatus> Statuses, IReadOnlyList<FoundingTerms> Versions, IReadOnlyList<IncludedClientGrant> Grants) founding,
         DateTimeOffset trialEndsAt,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -301,12 +358,30 @@ internal static class PlatformBillingReader
                 soFar.End,
                 true,
                 plan.VersionNumber,
-                new BillingAmountsView(counted.Seats, counted.BillableClients, 0, 0, 0m, 0m, 0m, 0m, 0m, 0m, 0m, plan.CurrencyCode));
+                new BillingAmountsView(
+                    Seats: counted.Seats,
+                    BillableClients: counted.BillableClients,
+                    IncludedClients: 0,
+                    ExtraClients: 0,
+                    SeatAmount: 0m,
+                    ExtraClientAmount: 0m,
+                    GymFeeAmount: 0m,
+                    Subtotal: 0m,
+                    DiscountPercent: 0m,
+                    DiscountAmount: 0m,
+                    Total: 0m,
+                    CurrencyCode: plan.CurrencyCode,
+                    SeatIncludedClients: 0,
+                    FoundingIncludedClients: 0,
+                    GrantedIncludedClients: 0),
+                FoundingTermsVersion: null);
         }
 
         var quantities = await CountAsync(dbContext, workspace, window, cancellationToken);
-        var discount = WorkspaceDiscount.ApplicableTo(discounts, new UsageWindow(window.Start, month.EndUtc));
-        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, quantities, discount?.Percent ?? 0m);
+        var restOfMonth = new UsageWindow(window.Start, month.EndUtc);
+        var discount = WorkspaceDiscount.ApplicableTo(discounts, restOfMonth);
+        var includedClients = IncludedClientSources.For(founding.Statuses, founding.Versions, founding.Grants, restOfMonth, now);
+        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, quantities, includedClients, discount?.Percent ?? 0m);
         return new CurrentMonthEstimateView(
             month.Start,
             month.EndExclusive,
@@ -314,7 +389,8 @@ internal static class PlatformBillingReader
             window.End,
             false,
             plan.VersionNumber,
-            ToView(amounts, plan.CurrencyCode));
+            ToView(amounts, plan.CurrencyCode),
+            includedClients.FoundingSeat?.TermsVersion);
     }
 
     public static BillingAmountsView ToView(InvoiceAmounts amounts, string currencyCode) => new(
@@ -329,7 +405,10 @@ internal static class PlatformBillingReader
         amounts.DiscountPercent,
         amounts.DiscountAmount,
         amounts.Total,
-        currencyCode);
+        currencyCode,
+        amounts.SeatIncludedClients,
+        amounts.FoundingIncludedClients,
+        amounts.GrantedIncludedClients);
 
     public static PlatformInvoiceView ToView(InvoiceFacts facts, DateOnly today, bool forAdmin)
     {
@@ -364,14 +443,21 @@ internal static class PlatformBillingReader
                 invoice.DiscountPercent,
                 invoice.DiscountAmount,
                 invoice.Total,
-                invoice.CurrencyCode),
+                invoice.CurrencyCode,
+                // The sources as the invoice recorded them; a v1 invoice holds no founding seat and no grant.
+                checked(invoice.Seats * invoice.PlanIncludedClientsPerSeat),
+                FoundingSeatPolicy.AddedOver(invoice.FoundingSeatIncludedClients, invoice.PlanIncludedClientsPerSeat),
+                invoice.GrantedIncludedClients),
             PlatformInvoiceStatusPolicy.Evaluate(invoice.Total, invoice.DueOn, isVoid, isPaid, today),
             PlatformInvoiceStatusPolicy.LocksWorkspace(invoice.Total, invoice.ReadOnlyFrom, isVoid, isPaid, today),
             facts.Payment is { } payment ? ToView(payment, forAdmin) : null,
             facts.Void?.VoidedAtUtc,
             facts.Void?.Reason,
             invoice.ReplacesInvoiceId,
-            facts.ReplacedByInvoiceId);
+            facts.ReplacedByInvoiceId,
+            invoice.FoundingSeatIncludedClients,
+            invoice.FoundingTermsVersion,
+            invoice.GrantedIncludedClients);
     }
 
     /// <summary>The admin's own note stays on the admin screen; the owner sees the payment itself.</summary>
@@ -394,8 +480,28 @@ internal static class PlatformBillingReader
         discount.GrantedAtUtc,
         discount.RevokedAtUtc);
 
+    /// <summary>The admin's view of a grant, with its note: never the owner's.</summary>
+    public static IncludedClientGrantView ToView(IncludedClientGrant grant) => new(
+        grant.Id,
+        grant.Clients,
+        grant.StartsOn,
+        grant.EndsOnExclusive,
+        grant.Note,
+        grant.GrantedAtUtc,
+        grant.RevokedAtUtc);
+
     public static Task LockInvoiceAsync(GymDbContext dbContext, Guid invoiceId, CancellationToken cancellationToken) =>
         dbContext.Database.ExecuteSqlAsync(
             $"""SELECT 1 FROM billing."Invoices" WHERE "Id" = {invoiceId} FOR UPDATE /* platform-billing */""",
+            cancellationToken);
+
+    /// <summary>
+    /// Locks a space's open founding status, when it has one, until the transaction ends: a grant then waits
+    /// for another grant and for an end of the status, so a double press finds the first grant, and a grant
+    /// never lands on a status that ended meanwhile.
+    /// </summary>
+    public static Task LockOpenFoundingStatusAsync(GymDbContext dbContext, Guid tenantId, CancellationToken cancellationToken) =>
+        dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM billing."FoundingStatuses" WHERE "TenantId" = {tenantId} AND "EndedAtUtc" IS NULL FOR UPDATE /* platform-billing */""",
             cancellationToken);
 }

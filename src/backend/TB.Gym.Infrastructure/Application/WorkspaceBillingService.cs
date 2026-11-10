@@ -26,6 +26,7 @@ internal sealed class WorkspaceBillingService(
         var workspace = (await PlatformBillingReader.WorkspacesAsync(dbContext, tenantContext.TenantId, cancellationToken)).Single();
         var state = await PlatformBillingReader.StateAsync(dbContext, workspace, plans, now, cancellationToken);
         var today = PaymentSchedule.Today(now);
+        var latestPlan = plans.MaxBy(plan => plan.VersionNumber)!;
         return new WorkspaceBillingView(
             state.Status,
             state.TrialEndsAtUtc,
@@ -39,7 +40,10 @@ internal sealed class WorkspaceBillingService(
                 // The support inbox replies reach; it is set only beside a real provider.
                 email.Value.UsesProviderAdapter ? Configured(email.Value.Provider.ReplyToAddress) : null,
                 Configured(website.Value.WhatsAppNumber)),
-            WorkspaceDiscount.RunningOrToCome(state.Discounts, today).Select(discount => ToOwnerView(discount, today)).ToList());
+            WorkspaceDiscount.RunningOrToCome(state.Discounts, today).Select(discount => ToOwnerView(discount, today)).ToList(),
+            // What the owner's seat includes now, during the trial too, against the plan new bills use.
+            FoundingSeatPolicy.Raised(state.FoundingSeatNow, latestPlan.IncludedClientsPerSeat),
+            IncludedClientGrant.RunningOrToCome(state.Grants, today).Select(grant => ToOwnerView(grant, today)).ToList());
     }
 
     private static string? Configured(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -53,6 +57,15 @@ internal sealed class WorkspaceBillingService(
             discount.EndsOnExclusive.AddDays(-1),
             discount.EndsOnExclusive,
             discount.StartsOn > today);
+
+    // The owner reads a grant's clients and months, never its note or who granted it (notes plan N11a).
+    private static WorkspaceBillingIncludedClientGrantView ToOwnerView(IncludedClientGrant grant, DateOnly today) =>
+        new(
+            grant.Clients,
+            grant.StartsOn,
+            grant.EndsOnExclusive.AddDays(-1),
+            grant.EndsOnExclusive,
+            grant.StartsOn > today);
 
     public async Task<WorkspaceBillingAccessView> GetAccessAsync(CancellationToken cancellationToken)
     {

@@ -319,6 +319,15 @@ public sealed partial class Phase3TrainingWorkflowTests
                 $"/api/platform-admin/coaches/{Guid.NewGuid()}/spaces/{Guid.NewGuid()}/lines",
                 new { what = "x", shownOn = new DateOnly(2026, 6, 1) }),
             HttpStatusCode.Unauthorized);
+        // Extra included clients (notes plan N11a) too.
+        await AssertStatusAsync(
+            await anonymous.PostAsJsonAsync(
+                $"/api/platform-admin/workspaces/{Guid.NewGuid()}/included-client-grants",
+                new { clients = 4, startsOn = new DateOnly(2026, 7, 1), endsOnExclusive = new DateOnly(2026, 10, 1), note = "x" }),
+            HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(
+            await anonymous.PostAsync($"/api/platform-admin/included-client-grants/{Guid.NewGuid()}/revoke", null),
+            HttpStatusCode.Unauthorized);
 
         using var owner = CreateClient();
         var workspaceId = await RegisterCoachAsync(owner, "authz-owner@example.test", "Authz Owner", "Authz Gym");
@@ -360,6 +369,14 @@ public sealed partial class Phase3TrainingWorkflowTests
                 await caller.PostAsJsonAsync(
                     $"/api/platform-admin/coaches/{Guid.NewGuid()}/spaces/{workspaceId}/lines",
                     new { what = "Self-recorded", shownOn = new DateOnly(2026, 6, 1) }),
+                HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PostAsJsonAsync(
+                    $"/api/platform-admin/workspaces/{workspaceId}/included-client-grants",
+                    new { clients = 4, startsOn = new DateOnly(2026, 7, 1), endsOnExclusive = new DateOnly(2026, 10, 1), note = "Self-granted" }),
+                HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PostAsync($"/api/platform-admin/included-client-grants/{Guid.NewGuid()}/revoke", null),
                 HttpStatusCode.Forbidden);
         }
 

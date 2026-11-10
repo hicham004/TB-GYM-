@@ -85,6 +85,27 @@ public sealed class A10RequestHygieneTests
         Assert.AreEqual(
             new UnreadableRequestAnswer("request_invalid", "take", "The value of take could not be read. Check it and send the request again."),
             UnreadableRequestExceptionHandler.Describe(new BadHttpRequestException("Failed to bind parameter \"int? take\" from \"abc\".")));
+
+        // A key the body must carry, left out (notes plan N11a's founding number), names that key; a body the
+        // reader stopped at the root of names no field, never the code's parameter.
+        const string unreadBody = "Failed to read parameter \"PublishFoundingTermsRequest request\" from the request body as JSON.";
+        Assert.AreEqual(
+            new UnreadableRequestAnswer(
+                "request_invalid",
+                "foundingSeatIncludedClients",
+                "This request is missing foundingSeatIncludedClients. Reload the page and send it again."),
+            UnreadableRequestExceptionHandler.Describe(new BadHttpRequestException(
+                unreadBody,
+                new JsonException(
+                    "JSON deserialization for type 'TB.Gym.Modules.PlatformBilling.PublishFoundingTermsRequest' was missing required properties including: 'foundingSeatIncludedClients'. Path: $ | LineNumber: 0 | BytePositionInLine: 92.",
+                    "$",
+                    0,
+                    92))));
+        Assert.AreEqual(
+            new UnreadableRequestAnswer("request_invalid", null, "This request could not be read. Check its fields and send it again."),
+            UnreadableRequestExceptionHandler.Describe(new BadHttpRequestException(
+                unreadBody,
+                new JsonException("The JSON value could not be converted to PublishFoundingTermsRequest. Path: $", "$", 0, 0))));
     }
 
     [TestMethod]

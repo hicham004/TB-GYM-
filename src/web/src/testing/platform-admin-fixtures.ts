@@ -374,6 +374,7 @@ export function foundingTerms(overrides: Partial<FoundingTerms> = {}): FoundingT
     note: null,
     publishedAtUtc: '2026-09-01T00:00:00Z',
     isCurrent: true,
+    foundingSeatIncludedClients: null,
     ...overrides,
   };
 }

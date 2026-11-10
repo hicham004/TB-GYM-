@@ -32,10 +32,12 @@ public sealed record FoundingBadgeTerms(int ClientsWithActivePlan, int MonthsSin
 }
 
 /// <summary>
-/// One published, immutable version of the Founding coach badge's terms. The latest version is in force;
-/// a badge records the version it was earned under, so publishing a new one never changes a badge already
-/// earned. Version 1 (10 clients, 2 months) is seeded by the migration. A database trigger refuses
-/// updating or deleting a version.
+/// One published, immutable version of the founding terms: the Founding coach badge's two thresholds and,
+/// since notes plan N11a, the clients a founding space's owner seat includes. The latest version is in
+/// force; a badge records the version it was earned under, so publishing a new one never changes a badge
+/// already earned, and an invoice records the version its founding seat came from. Version 1 (10 clients,
+/// 2 months, no seat number) is seeded by the migration. A database trigger refuses updating or deleting a
+/// version.
 /// </summary>
 public sealed class FoundingTerms
 {
@@ -51,6 +53,13 @@ public sealed class FoundingTerms
 
     public int MonthsSinceStart { get; private set; }
 
+    /// <summary>
+    /// The clients a founding space's owner seat includes under this version (decision 11), 0 to 1,000, or
+    /// null for none: the owner's seat then includes what the price plan's seat includes. Only the admin's
+    /// publish sets it (<see cref="FoundingSeatPolicy"/>).
+    /// </summary>
+    public int? FoundingSeatIncludedClients { get; private set; }
+
     public string? Note { get; private set; }
 
     public DateTimeOffset PublishedAtUtc { get; private set; }
@@ -62,6 +71,7 @@ public sealed class FoundingTerms
     public static FoundingTerms Publish(
         int versionNumber,
         FoundingBadgeTerms terms,
+        int? foundingSeatIncludedClients,
         string? note,
         Guid? publishedByUserId,
         DateTimeOffset now)
@@ -77,11 +87,19 @@ public sealed class FoundingTerms
             throw new ArgumentException("The founding badge terms are not publishable.", nameof(terms));
         }
 
+        if (!FoundingSeatPolicy.IsValidIncludedClients(foundingSeatIncludedClients))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(foundingSeatIncludedClients),
+                FoundingText.TermsSeatIncludedClientsInvalid);
+        }
+
         return new FoundingTerms
         {
             VersionNumber = versionNumber,
             ClientsWithActivePlan = terms.ClientsWithActivePlan,
             MonthsSinceStart = terms.MonthsSinceStart,
+            FoundingSeatIncludedClients = foundingSeatIncludedClients,
             Note = BillingText.Optional(note, FoundingText.TermsNoteMaxLength, nameof(note)),
             PublishedAtUtc = now,
             PublishedByUserId = publishedByUserId,
@@ -108,7 +126,10 @@ public enum FoundingBadgeState
 /// A row is never edited or deleted: the earned day, the terms version and the client count are written
 /// once and survive an end; ending is recorded on the row, once; the owner's hide switch changes while
 /// the status is open. A space may be marked again after an ended status, so the rows are its history.
-/// The status changes no access and no bill: it is separate from <see cref="WorkspaceDiscount"/>.
+/// The status changes no access and no discount: it is separate from <see cref="WorkspaceDiscount"/>. On
+/// the bill it changes one thing only (notes plan N11a, PBL-011): while it runs, the owner's seat includes
+/// the founding terms' number of clients when that raises the plan's seat (<see cref="FoundingSeatPolicy"/>),
+/// and only an open status can be granted extra included clients (<see cref="IncludedClientGrant"/>).
 /// Database triggers are the guarantee.
 /// </remarks>
 public sealed class FoundingStatus : TenantEntity
@@ -404,4 +425,31 @@ public static class FoundingText
     public const string TermsChangedCode = "founding_terms_changed";
 
     public const string TermsChanged = "Newer founding badge terms were published since this page loaded. Refresh and try again.";
+
+    // The founding seat and extra included clients (notes plan N11a).
+    public const int GrantNoteMaxLength = 200;
+
+    public const string TermsSeatIncludedClientsInvalid =
+        "Enter a whole number of clients from 0 to 1000, or none for what the price plan's seat includes.";
+
+    public const string GrantClientsInvalid = "Enter a whole number of clients from 1 to 1000.";
+
+    public const string GrantStartsOnInvalid = "Start on the first day of a month: extra clients are granted for whole months.";
+
+    public const string GrantStartsOnTooEarly = "Start on the first day of a month from January 2000.";
+
+    public const string GrantEndsOnInvalid = "End on the last day of a month: extra clients are granted for whole months.";
+
+    public const string GrantEndsBeforeStart = "End after the first month starts.";
+
+    public const string GrantNoteInvalid = "Say what the extra clients are for, in up to 200 characters.";
+
+    public const string NotFoundingCode = "space_not_founding";
+
+    public const string NotFounding =
+        "Only a founding coaching space is granted extra included clients. Mark the space as founding first.";
+
+    public const string GrantRevokedCode = "grant_revoked";
+
+    public const string GrantRevoked = "These extra clients were already revoked.";
 }

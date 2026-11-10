@@ -66,13 +66,38 @@ internal sealed partial class UnreadableRequestExceptionHandler : IExceptionHand
             return new(InvalidCode, null, "This request needs its fields as a JSON body.");
         }
 
-        var field = FieldOf(json) ?? ParameterOf(badRequest.Message);
+        // A key the body must carry, left out (a [JsonRequired] field, such as the founding terms' number, notes
+        // plan N11a): the reader stops at the root and names the key in its own sentence. A page older than the
+        // field is the usual sender, hence the reload.
+        if (FieldOf(json) is null && MissingFieldOf(json) is { } missing)
+        {
+            return new(InvalidCode, missing, $"This request is missing {missing}. Reload the page and send it again.");
+        }
+
+        // Anything else the reader stopped at the root of names no field: a body parameter's name is the code's.
+        var field = json is null ? ParameterOf(badRequest.Message) : FieldOf(json);
         return new(
             InvalidCode,
             field,
             field is null
                 ? "This request could not be read. Check its fields and send it again."
                 : $"The value of {field} could not be read. Check it and send the request again.");
+    }
+
+    /// <summary>
+    /// The first key a body left out that the reader requires, from System.Text.Json's own sentence: "… was missing
+    /// required properties including: 'foundingSeatIncludedClients'." Only the key's name is echoed, never a value.
+    /// </summary>
+    internal static string? MissingFieldOf(JsonException? exception)
+    {
+        var match = exception is null ? Match.Empty : MissingRequired().Match(exception.Message);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var field = match.Groups["name"].Value;
+        return field.Length > LongestField ? field[..LongestField] : field;
     }
 
     /// <summary>The field a JSON reader stopped at, without the root: "$.sets[0].reps" reads "sets[0].reps".</summary>
@@ -98,6 +123,10 @@ internal sealed partial class UnreadableRequestExceptionHandler : IExceptionHand
     // `Failed to bind parameter "int take" from "abc".` and `Required parameter "Guid id" was not provided…`
     [GeneratedRegex(@"parameter ""(?:[^""]* )?(?<name>[A-Za-z_][A-Za-z0-9_]*)""", RegexOptions.CultureInvariant)]
     private static partial Regex BoundParameter();
+
+    // System.Text.Json: `JSON deserialization for type 'T' was missing required properties including: 'a', 'b'.`
+    [GeneratedRegex(@"missing required properties including: '(?<name>[A-Za-z_][A-Za-z0-9_]*)'", RegexOptions.CultureInvariant)]
+    private static partial Regex MissingRequired();
 }
 
 /// <summary>What <see cref="UnreadableRequestExceptionHandler"/> answers: a code, the field when known, a sentence.</summary>

@@ -22,7 +22,9 @@ Business rules, decided by the product owner on 2026-09-24:
   client with another plan they could use that month still counts.
 - **Price** = seats × seat price + extra clients × extra-client price + a gym fee from a minimum seat
   count, where extra clients = billable clients − seats × clients included per seat (pooled, never
-  below zero). A founding-coach discount (percentage, start and end date) comes off the total.
+  below zero). A founding-coach discount (percentage, start and end date) comes off the total. Since
+  notes plan N11a the included clients also count a founding seat's extra and the admin's grants
+  (`platform-invoice-v2`, PBL-011); the discount still comes off the whole subtotal.
 - **Every number is a placeholder in a versioned, immutable price plan** (seat price, included
   clients, extra-client price, gym fee and its seat threshold, trial days, payment days, grace days).
   The platform admin publishes a new version; new invoices use the latest one. An invoice snapshots its
@@ -41,7 +43,9 @@ Chosen by the implementer, to confirm:
 
 - The trial runs from workspace creation for the trial length of the plan current then. A month fully
   inside the trial is not invoiced; in the month the trial ends, only usage after it counts.
-- A reissue keeps the voided invoice's plan version and recounts usage and discount now.
+- A reissue keeps the voided invoice's plan version and recounts usage and discount now (since N11a,
+  the founding seat and the grants too: the seat takes the highest number its status had while it ran,
+  up to now, PBL-011).
 - Discounts for one workspace may not overlap. A discount applies to every month it touches; if two
   touch a month, the larger applies. A total of zero issues an invoice with nothing to pay.
 - A client who leaves and returns within a month counts once.
@@ -93,8 +97,9 @@ Chosen by the implementer, to confirm:
   tenant-owned `billing."FoundingStatuses"` row per mark (one open per workspace by a partial unique index;
   a trigger refuses deleting it, changing its mark or a recorded badge, and touching it once ended) and
   global, immutable `billing."FoundingTerms"` versions (version 1, 10 clients and 2 months, seeded by the
-  migration). Founding status is separate from the founding-coach discount above: marking, ending or
-  earning changes no invoice, and revoking a discount leaves the badge. The Worker's sweep also runs the
+  migration). Founding status is separate from the founding-coach discount above: earning or hiding the
+  badge changes no invoice, and revoking a discount leaves the badge (since N11a an open status gives its
+  owner's seat the founding terms' clients, below). The Worker's sweep also runs the
   badge check after the invoices and reminders, in its own try. The owner's switch that hides the badge
   from their clients (`SetFoundingBadgeVisibility`) is a personal display setting on the owner's own
   status, so it is on the read-only allow-list and uses `RoutineWrite`.
@@ -108,3 +113,15 @@ Chosen by the implementer, to confirm:
   run of discounts that follow on, "free until …, then 40% off until …, then the normal price.". Ended and revoked
   ones are not sent; nothing billed changes and each invoice keeps its own discount line. Since the largest
   discount touching a month applies, a month in which a run changes rate takes off the larger, never less.
+- Amended 2026-11-10 (notes plan N11a, decisions 11 and 17, PBL-011): included clients come from three sources
+  under `platform-invoice-v2`, invoices issued before keeping `platform-invoice-v1`: the plan's per-seat number for
+  every seat; for the owner's seat alone, what the founding terms' new `FoundingSeatIncludedClients` adds over it
+  while a founding status touches the month (the highest number the status had; none is seeded); and the clients
+  of every unrevoked grant in the new tenant-owned `billing."IncludedClientGrants"` touching the month. Grants are
+  whole UTC calendar months, only for a space with an open founding status, never overlap-checked (they add up),
+  one per identical request (a partial unique index behind a lock on the open status), and revoked once:
+  `billing.protect_included_client_grant()` and the context's guard refuse an edit or a delete. An invoice records
+  the founding number, its terms version, the founding status (a composite key in its space) and the grants' ids (a
+  `uuid[]` frozen with the row); `CK_Invoices_Quantities` checks the v2 sum, and a v1 invoice holds neither. The
+  columns came with constant defaults, so no issued invoice was rewritten. The admin grants and revokes under the
+  platform-admin policy with `SensitiveWrite`; the read-only allow-list is unchanged.

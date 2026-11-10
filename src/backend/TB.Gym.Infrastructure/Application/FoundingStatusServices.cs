@@ -103,7 +103,32 @@ internal static class FoundingReader
 
         var terms = await CurrentTermsAsync(dbContext, cancellationToken);
         var reading = await ReadAsync(dbContext, workspace, open, terms, now, cancellationToken);
-        return (new AdminFoundingView(ToView(open), ToView(reading)), history);
+        return (
+            new AdminFoundingView(ToView(open), ToView(reading), await SeatIncludedClientsAsync(dbContext, open, now, cancellationToken)),
+            history);
+    }
+
+    /// <summary>
+    /// What an open status's owner seat includes now (notes plan N11a): the highest founding number it has
+    /// had, when that raises the latest plan's seat; null otherwise, and for an ended status.
+    /// </summary>
+    public static async Task<int?> SeatIncludedClientsAsync(
+        GymDbContext dbContext,
+        FoundingStatus status,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (status.IsEnded)
+        {
+            return null;
+        }
+
+        var versions = await PlatformBillingReader.FoundingTermsVersionsAsync(dbContext, cancellationToken);
+        var plans = await PlatformBillingReader.PlansAsync(dbContext, cancellationToken);
+        var latestPlan = plans.MaxBy(plan => plan.VersionNumber);
+        return latestPlan is null
+            ? null
+            : FoundingSeatPolicy.Raised(FoundingSeatPolicy.Now([status], versions, now), latestPlan.IncludedClientsPerSeat);
     }
 
     /// <summary>
@@ -161,7 +186,8 @@ internal static class FoundingReader
         terms.MonthsSinceStart,
         terms.Note,
         terms.PublishedAtUtc,
-        isCurrent);
+        isCurrent,
+        terms.FoundingSeatIncludedClients);
 
     public static bool IsUniqueViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
@@ -321,6 +347,13 @@ internal sealed class FoundingAdminService(
             errors[nameof(request.ExpectedCurrentVersion)] = [FoundingText.ExpectedVersionRequired];
         }
 
+        // The founding seat's number (notes plan N11a). Its key is required, so a request that left it out
+        // never reached here; null is the admin's "none": the plan's seat.
+        if (!FoundingSeatPolicy.IsValidIncludedClients(request.FoundingSeatIncludedClients))
+        {
+            errors[nameof(request.FoundingSeatIncludedClients)] = [FoundingText.TermsSeatIncludedClientsInvalid];
+        }
+
         var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
         if (note is { Length: > FoundingText.TermsNoteMaxLength })
         {
@@ -338,7 +371,13 @@ internal sealed class FoundingAdminService(
             return TermsChanged();
         }
 
-        var published = FoundingTerms.Publish(current + 1, terms, note, RequiredAdmin(), clock.UtcNow);
+        var published = FoundingTerms.Publish(
+            current + 1,
+            terms,
+            request.FoundingSeatIncludedClients,
+            note,
+            RequiredAdmin(),
+            clock.UtcNow);
         dbContext.FoundingTermsVersions.Add(published);
         try
         {
@@ -360,7 +399,10 @@ internal sealed class FoundingAdminService(
     {
         var terms = await FoundingReader.CurrentTermsAsync(dbContext, cancellationToken);
         var reading = await FoundingReader.ReadAsync(dbContext, workspace, status, terms, now, cancellationToken);
-        return new AdminFoundingView(FoundingReader.ToView(status), FoundingReader.ToView(reading));
+        return new AdminFoundingView(
+            FoundingReader.ToView(status),
+            FoundingReader.ToView(reading),
+            await FoundingReader.SeatIncludedClientsAsync(dbContext, status, now, cancellationToken));
     }
 
     private Guid RequiredAdmin() =>

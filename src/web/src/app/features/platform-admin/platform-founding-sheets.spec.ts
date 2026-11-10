@@ -266,7 +266,8 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
   });
 
   describe('changing the badge’s terms', () => {
-    const inputs = { current: foundingTerms() };
+    // The version in force names a founding seat's number (notes plan N11a); new thresholds keep it.
+    const inputs = { current: foundingTerms({ foundingSeatIncludedClients: 13 }) };
 
     it('publishes only a change, against the version it saw', async () => {
       const view = await render(PlatformFoundingTerms, inputs);
@@ -298,6 +299,7 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
         monthsSinceStart: 3,
         note: 'After the first ten talks',
         expectedCurrentVersion: 1,
+        foundingSeatIncludedClients: 13,
       });
       expect(view.csrf.refresh.mock.invocationCallOrder[0]).toBeLessThan(
         view.api.publishFoundingTerms.mock.invocationCallOrder[0],

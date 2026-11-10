@@ -55,6 +55,9 @@ const AMOUNTS_VIEW: BillingAmountsView = {
   discountAmount: '7.39',
   total: '51.71',
   currencyCode: 'USD',
+  seatIncludedClients: '15',
+  foundingIncludedClients: 0,
+  grantedIncludedClients: 0,
 };
 
 const AMOUNTS = {
@@ -108,6 +111,9 @@ function invoiceView(overrides: Partial<PlatformInvoiceView> = {}): PlatformInvo
     voidReason: null,
     replacesInvoiceId: 'invoice-0',
     replacedByInvoiceId: null,
+    foundingSeatIncludedClients: null,
+    foundingTermsVersion: null,
+    grantedIncludedClients: 0,
     ...overrides,
   };
 }
@@ -154,6 +160,7 @@ const ESTIMATE_VIEW: CurrentMonthEstimateView = {
   inTrial: false,
   pricePlanVersion: '2',
   amounts: AMOUNTS_VIEW,
+  foundingTermsVersion: null,
 };
 
 const ESTIMATE = {
@@ -287,6 +294,8 @@ describe('platform billing: what the API said, as numbers', () => {
         whatsAppNumber: '+96170123456',
       },
       discounts: [OWNER_DISCOUNT_VIEW],
+      foundingSeatIncludedClients: null,
+      includedClientGrants: [],
     };
 
     expect(toWorkspaceBilling(view)).toEqual({
@@ -326,6 +335,7 @@ describe('platform billing: what the API said, as numbers', () => {
         discounts: [DISCOUNT_VIEW],
         founding: null,
         foundingHistory: [],
+        includedClientGrants: [],
       }),
     ).toEqual({
       summary: SUMMARY,
@@ -379,8 +389,10 @@ describe('platform billing: what the API said, as numbers', () => {
           endedOn: null,
           hidden: true,
         },
+        foundingSeatIncludedClients: null,
       },
       foundingHistory: [ended],
+      includedClientGrants: [],
     });
 
     expect(detail.summary.isFounding).toBe(true);

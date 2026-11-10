@@ -251,7 +251,11 @@ public static class BillableClientCounter
 /// <summary>What was counted for one invoice or estimate.</summary>
 public sealed record InvoiceQuantities(int Seats, int BillableClients);
 
-/// <summary>Every line of an invoice, as the calculation produced it.</summary>
+/// <summary>
+/// Every line of an invoice, as the calculation produced it. <see cref="IncludedClients"/> is the sum of
+/// its three sources (notes plan N11a): the seats' (<see cref="SeatIncludedClients"/>), what a founding seat
+/// adds over the plan's (<see cref="FoundingIncludedClients"/>) and the grants' (<see cref="GrantedIncludedClients"/>).
+/// </summary>
 public sealed record InvoiceAmounts(
     int Seats,
     int BillableClients,
@@ -263,25 +267,44 @@ public sealed record InvoiceAmounts(
     decimal Subtotal,
     decimal DiscountPercent,
     decimal DiscountAmount,
-    decimal Total);
+    decimal Total,
+    int SeatIncludedClients,
+    int FoundingIncludedClients,
+    int GrantedIncludedClients);
 
 /// <summary>
 /// The named, versioned invoice calculation. A new rule is a new name; an issued invoice records the
-/// name it was calculated with.
+/// name it was calculated with, so an invoice issued under <see cref="Version1Name"/> keeps it.
 /// </summary>
 /// <remarks>
 /// <c>platform-invoice-v1</c>: included clients are pooled across seats; extra clients never go below
 /// zero; the gym fee applies from the plan's minimum seat count; the discount is a percentage of the
 /// subtotal rounded half away from zero to the cent, and the total is the subtotal minus it.
+/// <para>
+/// <c>platform-invoice-v2</c> (notes plan N11a, PBL-011): as v1, but included clients are the sum of three
+/// parts: the seats times the plan's per-seat number; for a window with a founding seat, what the founding
+/// number adds over the plan's per-seat number, for the owner's seat alone (the larger of the two applies,
+/// so a founding number at or below the plan's adds nothing); and the clients of every unrevoked grant that
+/// touches the window. The discount still comes off the whole subtotal, after the included clients are
+/// counted. A space that is neither founding nor granted gets the amounts v1 gives it.
+/// </para>
 /// </remarks>
 public static class PlatformInvoiceCalculation
 {
-    public const string Name = "platform-invoice-v1";
+    public const string Name = "platform-invoice-v2";
 
-    public static InvoiceAmounts Calculate(PricePlanTerms terms, InvoiceQuantities quantities, decimal discountPercent)
+    /// <summary>The rule every invoice issued before notes plan N11a was calculated with.</summary>
+    public const string Version1Name = "platform-invoice-v1";
+
+    public static InvoiceAmounts Calculate(
+        PricePlanTerms terms,
+        InvoiceQuantities quantities,
+        IncludedClientSources includedClients,
+        decimal discountPercent)
     {
         ArgumentNullException.ThrowIfNull(terms);
         ArgumentNullException.ThrowIfNull(quantities);
+        ArgumentNullException.ThrowIfNull(includedClients);
         if (quantities.Seats < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(quantities), "A workspace always has at least the owner's seat.");
@@ -293,8 +316,16 @@ public static class PlatformInvoiceCalculation
         }
 
         WorkspaceDiscount.ValidatePercent(discountPercent);
+        var foundingNumber = includedClients.FoundingSeat?.IncludedClients;
+        if (!FoundingSeatPolicy.IsValidIncludedClients(foundingNumber))
+        {
+            throw new ArgumentOutOfRangeException(nameof(includedClients), FoundingText.TermsSeatIncludedClientsInvalid);
+        }
 
-        var included = checked(quantities.Seats * terms.IncludedClientsPerSeat);
+        var seatIncluded = checked(quantities.Seats * terms.IncludedClientsPerSeat);
+        var foundingIncluded = FoundingSeatPolicy.AddedOver(foundingNumber, terms.IncludedClientsPerSeat);
+        var grantedIncluded = includedClients.GrantedIncludedClients;
+        var included = checked(seatIncluded + foundingIncluded + grantedIncluded);
         var extra = Math.Max(0, quantities.BillableClients - included);
         var seatAmount = quantities.Seats * terms.SeatPrice;
         var extraAmount = extra * terms.ExtraClientPrice;
@@ -312,7 +343,10 @@ public static class PlatformInvoiceCalculation
             subtotal,
             discountPercent,
             discount,
-            subtotal - discount);
+            subtotal - discount,
+            seatIncluded,
+            foundingIncluded,
+            grantedIncluded);
     }
 }
 

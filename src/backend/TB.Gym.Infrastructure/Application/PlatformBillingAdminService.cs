@@ -62,7 +62,13 @@ internal sealed class PlatformBillingAdminService(
             state.Invoices.Select(item => PlatformBillingReader.ToView(item, today, forAdmin: true)).ToList(),
             state.Discounts.OrderByDescending(item => item.StartsOn).Select(PlatformBillingReader.ToView).ToList(),
             founding,
-            foundingHistory);
+            foundingHistory,
+            state.Grants
+                .OrderByDescending(item => item.StartsOn)
+                .ThenByDescending(item => item.GrantedAtUtc)
+                .ThenByDescending(item => item.Id)
+                .Select(PlatformBillingReader.ToView)
+                .ToList());
     }
 
     public async Task<IReadOnlyList<PricePlanView>> ListPricePlansAsync(CancellationToken cancellationToken)
@@ -367,6 +373,124 @@ internal sealed class PlatformBillingAdminService(
 
         return BillingCommand.Success<WorkspaceDiscountView>(PlatformBillingReader.ToView(discount));
     }
+
+    public async Task<BillingCommandResult<IncludedClientGrantView>> GrantIncludedClientsAsync(
+        Guid tenantId,
+        GrantIncludedClientsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var note = request.Note?.Trim() ?? string.Empty;
+        var errors = IncludedClientGrant.Validate(request.Clients, request.StartsOn, request.EndsOnExclusive, note);
+        if (errors.Count > 0)
+        {
+            return BillingCommand.Invalid<IncludedClientGrantView>(errors);
+        }
+
+        if (!await dbContext.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken))
+        {
+            return BillingCommand.NotFound<IncludedClientGrantView>();
+        }
+
+        tenantContext.SetTenant(tenantId);
+        return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            // One open founding status per space: holding it serializes this grant against a second press
+            // and against an end of the status, so the reads below see what either committed.
+            await PlatformBillingReader.LockOpenFoundingStatusAsync(dbContext, tenantId, cancellationToken);
+            if (!await dbContext.FoundingStatuses.AnyAsync(status => status.EndedAtUtc == null, cancellationToken))
+            {
+                return BillingCommand.Conflict<IncludedClientGrantView>(FoundingText.NotFoundingCode, FoundingText.NotFounding);
+            }
+
+            var existing = await SameGrantAsync(request, note, cancellationToken);
+            if (existing is not null)
+            {
+                return BillingCommand.Success(PlatformBillingReader.ToView(existing));
+            }
+
+            var grant = IncludedClientGrant.Grant(
+                tenantId,
+                request.Clients,
+                request.StartsOn,
+                request.EndsOnExclusive,
+                note,
+                RequiredAdmin(),
+                clock.UtcNow);
+            dbContext.IncludedClientGrants.Add(grant);
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (IsViolation(exception, PostgresErrorCodes.UniqueViolation))
+            {
+                // The partial unique index behind the lock: the same grant was made a moment earlier.
+                await transaction.RollbackAsync(cancellationToken);
+                dbContext.ChangeTracker.Clear();
+                return await SameGrantAsync(request, note, cancellationToken) is { } winner
+                    ? BillingCommand.Success(PlatformBillingReader.ToView(winner))
+                    : throw new InvalidOperationException("An identical grant was refused but cannot be found.", exception);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return BillingCommand.Success(PlatformBillingReader.ToView(grant));
+        });
+    }
+
+    public async Task<BillingCommandResult<IncludedClientGrantView>> RevokeIncludedClientGrantAsync(
+        Guid grantId,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = await dbContext.IncludedClientGrants
+            .IgnoreQueryFilters()
+            .Where(item => item.Id == grantId)
+            .Select(item => (Guid?)item.TenantId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (tenantId is null)
+        {
+            return BillingCommand.NotFound<IncludedClientGrantView>();
+        }
+
+        tenantContext.SetTenant(tenantId.Value);
+        var grant = await dbContext.IncludedClientGrants.SingleAsync(item => item.Id == grantId, cancellationToken);
+        if (grant.IsRevoked)
+        {
+            return GrantRevoked();
+        }
+
+        grant.Revoke(RequiredAdmin(), clock.UtcNow);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another revoke saved first; the row's version refuses this one before the trigger would.
+            return GrantRevoked();
+        }
+
+        return BillingCommand.Success(PlatformBillingReader.ToView(grant));
+    }
+
+    /// <summary>The unrevoked grant with the same clients, days and note in the request's space, if any.</summary>
+    private Task<IncludedClientGrant?> SameGrantAsync(
+        GrantIncludedClientsRequest request,
+        string note,
+        CancellationToken cancellationToken) =>
+        dbContext.IncludedClientGrants
+            .AsNoTracking()
+            .Where(item =>
+                item.RevokedAtUtc == null &&
+                item.Clients == request.Clients &&
+                item.StartsOn == request.StartsOn &&
+                item.EndsOnExclusive == request.EndsOnExclusive &&
+                item.Note == note)
+            .OrderBy(item => item.GrantedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static BillingCommandResult<IncludedClientGrantView> GrantRevoked() =>
+        BillingCommand.Conflict<IncludedClientGrantView>(FoundingText.GrantRevokedCode, FoundingText.GrantRevoked);
 
     /// <summary>Finds which workspace an invoice belongs to and acts inside it for this request.</summary>
     private async Task<bool> EnterInvoiceWorkspaceAsync(Guid invoiceId, CancellationToken cancellationToken)

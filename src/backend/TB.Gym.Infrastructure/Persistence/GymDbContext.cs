@@ -1113,6 +1113,26 @@ public sealed partial class GymDbContext(
             }
         }
 
+        // Extra included clients (notes plan N11a) follow the discount's rule: revoked once, never edited.
+        if (ChangeTracker.Entries<IncludedClientGrant>().Any(item => item.State == EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Extra included clients are never deleted; revoke the grant instead.");
+        }
+
+        foreach (var entry in ChangeTracker.Entries<IncludedClientGrant>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.OriginalValues.GetValue<DateTimeOffset?>(nameof(IncludedClientGrant.RevokedAtUtc)) is not null ||
+                entry.Properties.Any(property =>
+                    property.IsModified &&
+                    property.Metadata.Name is not (nameof(IncludedClientGrant.RevokedAtUtc)
+                        or nameof(IncludedClientGrant.RevokedByUserId)
+                        or nameof(IncludedClientGrant.UpdatedAtUtc)
+                        or nameof(IncludedClientGrant.UpdatedByUserId))))
+            {
+                throw new InvalidOperationException("A grant of extra included clients is never edited; it can only be revoked, once.");
+            }
+        }
+
         RejectFoundingStatusMutations();
 
         if (ChangeTracker.Entries<BodyweightObservation>().Any(item => item.State == EntityState.Deleted))

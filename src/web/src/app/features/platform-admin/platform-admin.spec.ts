@@ -439,6 +439,7 @@ describe('Platform billing', () => {
       monthsSinceStart: 2,
       note: null,
       expectedCurrentVersion: 1,
+      foundingSeatIncludedClients: null,
     });
     expect(csrf.refresh.mock.invocationCallOrder[0]).toBeLessThan(
       founding.publishFoundingTerms.mock.invocationCallOrder[0],

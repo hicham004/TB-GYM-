@@ -7504,8 +7504,6 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasAlternateKey("TenantId", "Id");
-
                     b.HasIndex("EarnedUnderTermsVersion");
 
                     b.HasIndex("TenantId")
@@ -7538,6 +7536,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<int>("ClientsWithActivePlan")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("FoundingSeatIncludedClients")
+                        .HasColumnType("integer");
+
                     b.Property<int>("MonthsSinceStart")
                         .HasColumnType("integer");
 
@@ -7562,7 +7563,89 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_FoundingTerms_Months", "\"MonthsSinceStart\" >= 0 AND \"MonthsSinceStart\" <= 24");
 
+                            t.HasCheckConstraint("CK_FoundingTerms_SeatIncludedClients", "\"FoundingSeatIncludedClients\" IS NULL OR (\"FoundingSeatIncludedClients\" >= 0 AND \"FoundingSeatIncludedClients\" <= 1000)");
+
                             t.HasCheckConstraint("CK_FoundingTerms_Version", "\"VersionNumber\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.IncludedClientGrant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Clients")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EndsOnExclusive")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("GrantedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GrantedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RevokedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "StartsOn");
+
+                    b.HasIndex("TenantId", "Clients", "StartsOn", "EndsOnExclusive", "Note")
+                        .IsUnique()
+                        .HasDatabaseName("IX_IncludedClientGrants_Same_Unrevoked")
+                        .HasFilter("\"RevokedAtUtc\" IS NULL");
+
+                    b.ToTable("IncludedClientGrants", "billing", t =>
+                        {
+                            t.HasCheckConstraint("CK_IncludedClientGrants_Clients", "\"Clients\" >= 1 AND \"Clients\" <= 1000");
+
+                            t.HasCheckConstraint("CK_IncludedClientGrants_Months", "EXTRACT(DAY FROM \"StartsOn\") = 1 AND EXTRACT(DAY FROM \"EndsOnExclusive\") = 1 AND \"EndsOnExclusive\" > \"StartsOn\" AND \"StartsOn\" >= DATE '2000-01-01'");
+
+                            t.HasCheckConstraint("CK_IncludedClientGrants_Note", "btrim(\"Note\") <> ''");
+
+                            t.HasCheckConstraint("CK_IncludedClientGrants_Revocation", "(\"RevokedAtUtc\" IS NULL) = (\"RevokedByUserId\" IS NULL)");
                         });
                 });
 
@@ -7615,9 +7698,27 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<int>("ExtraClients")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("FoundingSeatIncludedClients")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("FoundingStatusId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("FoundingTermsVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GrantedIncludedClients")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("GymFeeAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.PrimitiveCollection<Guid[]>("IncludedClientGrantIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasDefaultValueSql("'{}'::uuid[]");
 
                     b.Property<int>("IncludedClients")
                         .HasColumnType("integer");
@@ -7703,10 +7804,14 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FoundingTermsVersion");
+
                     b.HasIndex("PricePlanId");
 
                     b.HasIndex("ReferenceCode")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "FoundingStatusId");
 
                     b.HasIndex("TenantId", "PeriodStart")
                         .IsUnique()
@@ -7729,9 +7834,15 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_Invoices_Discount", "\"DiscountPercent\" >= 0 AND \"DiscountPercent\" <= 100");
 
+                            t.HasCheckConstraint("CK_Invoices_FoundingSeat", "(\"FoundingSeatIncludedClients\" IS NULL) = (\"FoundingTermsVersion\" IS NULL) AND (\"FoundingSeatIncludedClients\" IS NULL) = (\"FoundingStatusId\" IS NULL) AND (\"FoundingSeatIncludedClients\" IS NULL OR (\"FoundingSeatIncludedClients\" >= 0 AND \"FoundingSeatIncludedClients\" <= 1000))");
+
+                            t.HasCheckConstraint("CK_Invoices_Grants", "\"GrantedIncludedClients\" >= cardinality(\"IncludedClientGrantIds\") AND (\"GrantedIncludedClients\" = 0) = (cardinality(\"IncludedClientGrantIds\") = 0)");
+
                             t.HasCheckConstraint("CK_Invoices_Period", "EXTRACT(DAY FROM \"PeriodStart\") = 1 AND \"PeriodEndExclusive\" = (\"PeriodStart\" + INTERVAL '1 month')::date");
 
-                            t.HasCheckConstraint("CK_Invoices_Quantities", "\"Seats\" >= 1 AND \"BillableClients\" >= 0 AND \"IncludedClients\" = \"Seats\" * \"PlanIncludedClientsPerSeat\" AND \"ExtraClients\" = GREATEST(0, \"BillableClients\" - \"IncludedClients\")");
+                            t.HasCheckConstraint("CK_Invoices_Quantities", "\"Seats\" >= 1 AND \"BillableClients\" >= 0 AND \"IncludedClients\" = \"Seats\" * \"PlanIncludedClientsPerSeat\" + GREATEST(0, COALESCE(\"FoundingSeatIncludedClients\", 0) - \"PlanIncludedClientsPerSeat\") + \"GrantedIncludedClients\" AND \"ExtraClients\" = GREATEST(0, \"BillableClients\" - \"IncludedClients\")");
+
+                            t.HasCheckConstraint("CK_Invoices_Version1", "\"CalculationName\" <> 'platform-invoice-v1' OR (\"FoundingSeatIncludedClients\" IS NULL AND \"GrantedIncludedClients\" = 0)");
                         });
                 });
 
@@ -13830,8 +13941,23 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.IncludedClientGrant", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.PlatformBilling.PlatformInvoice", b =>
                 {
+                    b.HasOne("TB.Gym.Modules.PlatformBilling.FoundingTerms", null)
+                        .WithMany()
+                        .HasForeignKey("FoundingTermsVersion")
+                        .HasPrincipalKey("VersionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("TB.Gym.Modules.PlatformBilling.PlatformPricePlan", null)
                         .WithMany()
                         .HasForeignKey("PricePlanId")
@@ -13843,6 +13969,12 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.PlatformBilling.FoundingStatus", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "FoundingStatusId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TB.Gym.Modules.PlatformBilling.PlatformInvoiceVoid", null)
                         .WithMany()

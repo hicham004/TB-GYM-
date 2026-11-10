@@ -27,6 +27,9 @@ public sealed partial class GymDbContext
     /// <summary>The Founding coach badge's immutable terms versions, global (notes plan N3a).</summary>
     public DbSet<FoundingTerms> FoundingTermsVersions => Set<FoundingTerms>();
 
+    /// <summary>Extra included clients granted to founding spaces, revoked once, never edited (notes plan N11a).</summary>
+    public DbSet<IncludedClientGrant> IncludedClientGrants => Set<IncludedClientGrant>();
+
     /// <summary>Append-only membership status history, written by a database trigger (ADR 0028).</summary>
     public DbSet<MembershipStatusChange> MembershipStatusChanges => Set<MembershipStatusChange>();
 
@@ -101,6 +104,10 @@ public sealed partial class GymDbContext
             entity.Property(item => item.ReferenceCode).HasMaxLength(40).IsRequired();
             entity.Property(item => item.DueOn).HasColumnType("date");
             entity.Property(item => item.ReadOnlyFrom).HasColumnType("date");
+            // Where its included clients came from (notes plan N11a). The array is frozen with the row.
+            entity.PrimitiveCollection(item => item.IncludedClientGrantIds)
+                .HasDefaultValueSql("'{}'::uuid[]")
+                .IsRequired();
             entity.Ignore(item => item.Period);
             entity.HasIndex(item => item.ReferenceCode).IsUnique();
             // One original invoice per workspace and month, so the monthly run can never bill twice.
@@ -127,15 +134,39 @@ public sealed partial class GymDbContext
                 .HasForeignKey(item => new { item.TenantId, item.ReplacesInvoiceId })
                 .HasPrincipalKey(item => new { item.TenantId, item.InvoiceId })
                 .OnDelete(DeleteBehavior.Restrict);
+            // The founding status that made the space founding, in the invoice's own space (notes plan N11a).
+            entity.HasOne<FoundingStatus>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.FoundingStatusId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<FoundingTerms>()
+                .WithMany()
+                .HasForeignKey(item => item.FoundingTermsVersion)
+                .HasPrincipalKey(item => item.VersionNumber)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint("CK_Invoices_Currency", "\"CurrencyCode\" ~ '^[A-Z]{3}$'");
                 table.HasCheckConstraint(
                     "CK_Invoices_Period",
                     "EXTRACT(DAY FROM \"PeriodStart\") = 1 AND \"PeriodEndExclusive\" = (\"PeriodStart\" + INTERVAL '1 month')::date");
+
+                // platform-invoice-v2 (notes plan N11a): the seats' clients, what a founding seat adds over the
+                // plan's seat for the owner's seat alone, and the grants'. A v1 invoice holds neither of the last
+                // two, so it meets this as it met v1's rule.
                 table.HasCheckConstraint(
                     "CK_Invoices_Quantities",
-                    "\"Seats\" >= 1 AND \"BillableClients\" >= 0 AND \"IncludedClients\" = \"Seats\" * \"PlanIncludedClientsPerSeat\" AND \"ExtraClients\" = GREATEST(0, \"BillableClients\" - \"IncludedClients\")");
+                    "\"Seats\" >= 1 AND \"BillableClients\" >= 0 AND \"IncludedClients\" = \"Seats\" * \"PlanIncludedClientsPerSeat\" + GREATEST(0, COALESCE(\"FoundingSeatIncludedClients\", 0) - \"PlanIncludedClientsPerSeat\") + \"GrantedIncludedClients\" AND \"ExtraClients\" = GREATEST(0, \"BillableClients\" - \"IncludedClients\")");
+                table.HasCheckConstraint(
+                    "CK_Invoices_FoundingSeat",
+                    $"(\"FoundingSeatIncludedClients\" IS NULL) = (\"FoundingTermsVersion\" IS NULL) AND (\"FoundingSeatIncludedClients\" IS NULL) = (\"FoundingStatusId\" IS NULL) AND (\"FoundingSeatIncludedClients\" IS NULL OR (\"FoundingSeatIncludedClients\" >= {FoundingSeatPolicy.MinimumIncludedClients} AND \"FoundingSeatIncludedClients\" <= {FoundingSeatPolicy.MaximumIncludedClients}))");
+                table.HasCheckConstraint(
+                    "CK_Invoices_Grants",
+                    "\"GrantedIncludedClients\" >= cardinality(\"IncludedClientGrantIds\") AND (\"GrantedIncludedClients\" = 0) = (cardinality(\"IncludedClientGrantIds\") = 0)");
+                table.HasCheckConstraint(
+                    "CK_Invoices_Version1",
+                    "\"CalculationName\" <> 'platform-invoice-v1' OR (\"FoundingSeatIncludedClients\" IS NULL AND \"GrantedIncludedClients\" = 0)");
                 table.HasCheckConstraint(
                     "CK_Invoices_Amounts",
                     "\"SeatAmount\" >= 0 AND \"ExtraClientAmount\" >= 0 AND \"GymFeeAmount\" >= 0 AND \"DiscountAmount\" >= 0 AND \"Subtotal\" = \"SeatAmount\" + \"ExtraClientAmount\" + \"GymFeeAmount\" AND \"Total\" = \"Subtotal\" - \"DiscountAmount\" AND \"Total\" >= 0");
@@ -225,6 +256,47 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_FoundingTerms_Months",
                     $"\"MonthsSinceStart\" >= 0 AND \"MonthsSinceStart\" <= {FoundingBadgeTerms.MaximumMonths}");
+                table.HasCheckConstraint(
+                    "CK_FoundingTerms_SeatIncludedClients",
+                    $"\"FoundingSeatIncludedClients\" IS NULL OR (\"FoundingSeatIncludedClients\" >= {FoundingSeatPolicy.MinimumIncludedClients} AND \"FoundingSeatIncludedClients\" <= {FoundingSeatPolicy.MaximumIncludedClients})");
+            });
+        });
+
+        builder.Entity<IncludedClientGrant>(entity =>
+        {
+            entity.ToTable("IncludedClientGrants", "billing");
+            entity.HasKey(item => item.Id);
+            ConfigureTenantEntity(entity);
+            entity.Property(item => item.StartsOn).HasColumnType("date");
+            entity.Property(item => item.EndsOnExclusive).HasColumnType("date");
+            entity.Property(item => item.Note).HasMaxLength(FoundingText.GrantNoteMaxLength).IsRequired();
+            entity.Ignore(item => item.IsRevoked);
+            entity.Ignore(item => item.StartsAtUtc);
+            entity.Ignore(item => item.EndsAtUtc);
+            entity.HasIndex(item => new { item.TenantId, item.StartsOn });
+            // The same grant twice is one grant: two presses at once cannot both land (notes plan N11a).
+            entity.HasIndex(item => new { item.TenantId, item.Clients, item.StartsOn, item.EndsOnExclusive, item.Note })
+                .IsUnique()
+                .HasFilter("\"RevokedAtUtc\" IS NULL")
+                .HasDatabaseName("IX_IncludedClientGrants_Same_Unrevoked");
+            entity.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(item => item.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_IncludedClientGrants_Clients",
+                    $"\"Clients\" >= {IncludedClientGrant.MinimumClients} AND \"Clients\" <= {IncludedClientGrant.MaximumClients}");
+
+                // Whole UTC calendar months: a grant counts in exactly the invoices of the months it names.
+                table.HasCheckConstraint(
+                    "CK_IncludedClientGrants_Months",
+                    "EXTRACT(DAY FROM \"StartsOn\") = 1 AND EXTRACT(DAY FROM \"EndsOnExclusive\") = 1 AND \"EndsOnExclusive\" > \"StartsOn\" AND \"StartsOn\" >= DATE '2000-01-01'");
+                table.HasCheckConstraint("CK_IncludedClientGrants_Note", "btrim(\"Note\") <> ''");
+                table.HasCheckConstraint(
+                    "CK_IncludedClientGrants_Revocation",
+                    "(\"RevokedAtUtc\" IS NULL) = (\"RevokedByUserId\" IS NULL)");
             });
         });
 

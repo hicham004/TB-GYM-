@@ -140,7 +140,10 @@ export function termsChanges(current: FoundingTerms, entry: TermsEntry): readonl
     }));
 }
 
-/** The next version, against the one the admin saw, so a stale one is refused (409). */
+/**
+ * The next version, against the one the admin saw, so a stale one is refused (409). The founding
+ * seat's number is the version in force's, unchanged, so new thresholds never drop it (notes plan N11a).
+ */
 export function toPublishTermsRequest(
   entry: TermsEntry,
   current: FoundingTerms,
@@ -150,5 +153,6 @@ export function toPublishTermsRequest(
     monthsSinceStart: entry.monthsSinceStart ?? 0,
     note: entry.note.trim() || null,
     expectedCurrentVersion: current.versionNumber,
+    foundingSeatIncludedClients: current.foundingSeatIncludedClients,
   };
 }

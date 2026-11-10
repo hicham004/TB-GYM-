@@ -63,6 +63,25 @@ public sealed class PlatformInvoice : TenantEntity
 
     public decimal Total { get; private set; }
 
+    /// <summary>
+    /// The founding terms' number of clients the owner's seat includes, when a founding seat applied
+    /// (<c>platform-invoice-v2</c>, notes plan N11a); what it added is its excess over the plan's per-seat
+    /// number. Null with <see cref="FoundingTermsVersion"/> and <see cref="FoundingStatusId"/> when none did.
+    /// </summary>
+    public int? FoundingSeatIncludedClients { get; private set; }
+
+    /// <summary>The founding terms version the founding seat's number came from.</summary>
+    public int? FoundingTermsVersion { get; private set; }
+
+    /// <summary>The founding status that made the space founding for this month, as <see cref="DiscountId"/> names its discount.</summary>
+    public Guid? FoundingStatusId { get; private set; }
+
+    /// <summary>The clients of every extra included clients grant this invoice counted, 0 when none.</summary>
+    public int GrantedIncludedClients { get; private set; }
+
+    /// <summary>The grants this invoice counted, oldest first; empty when none.</summary>
+    public Guid[] IncludedClientGrantIds { get; private set; } = [];
+
     public string ReferenceCode { get; private set; } = string.Empty;
 
     public DateTimeOffset IssuedAtUtc { get; private set; }
@@ -83,12 +102,14 @@ public sealed class PlatformInvoice : TenantEntity
         PlatformPricePlan plan,
         InvoiceAmounts amounts,
         Guid? discountId,
+        IncludedClientSources includedClients,
         string referenceCode,
         DateTimeOffset issuedAtUtc,
         Guid? replacesInvoiceId = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(amounts);
+        ArgumentNullException.ThrowIfNull(includedClients);
         if (usageFromUtc < period.StartUtc || usageFromUtc >= period.EndUtc)
         {
             throw new ArgumentOutOfRangeException(nameof(usageFromUtc), "Usage must start inside the billed month.");
@@ -97,6 +118,16 @@ public sealed class PlatformInvoice : TenantEntity
         if (issuedAtUtc < period.EndUtc)
         {
             throw new InvalidOperationException("A month is invoiced only once it has ended.");
+        }
+
+        // The snapshot has to explain the amounts: each source of the included clients is the one counted.
+        var founding = includedClients.FoundingSeat;
+        if (amounts.SeatIncludedClients != checked(amounts.Seats * plan.IncludedClientsPerSeat) ||
+            amounts.FoundingIncludedClients != FoundingSeatPolicy.AddedOver(founding?.IncludedClients, plan.IncludedClientsPerSeat) ||
+            amounts.GrantedIncludedClients != includedClients.GrantedIncludedClients ||
+            amounts.IncludedClients != amounts.SeatIncludedClients + amounts.FoundingIncludedClients + amounts.GrantedIncludedClients)
+        {
+            throw new InvalidOperationException("The amounts were not calculated from this plan and these included clients.");
         }
 
         var dueOn = PaymentSchedule.DueOn(issuedAtUtc, plan.PaymentTermDays);
@@ -127,6 +158,11 @@ public sealed class PlatformInvoice : TenantEntity
             DiscountPercent = amounts.DiscountPercent,
             DiscountAmount = amounts.DiscountAmount,
             Total = amounts.Total,
+            FoundingSeatIncludedClients = founding?.IncludedClients,
+            FoundingTermsVersion = founding?.TermsVersion,
+            FoundingStatusId = founding?.FoundingStatusId,
+            GrantedIncludedClients = amounts.GrantedIncludedClients,
+            IncludedClientGrantIds = includedClients.Grants.Select(grant => grant.Id).ToArray(),
             ReferenceCode = BillingText.Required(referenceCode, 40, nameof(referenceCode)),
             IssuedAtUtc = issuedAtUtc,
             DueOn = dueOn,

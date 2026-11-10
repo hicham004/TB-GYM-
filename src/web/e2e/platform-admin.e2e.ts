@@ -172,6 +172,7 @@ async function openAdmin(
           monthsSinceStart: number;
           note: string | null;
           expectedCurrentVersion: number;
+          foundingSeatIncludedClients: number | null;
         };
         writes.terms.push(body);
         const next = foundingTerms({
@@ -181,6 +182,7 @@ async function openAdmin(
           monthsSinceStart: body.monthsSinceStart,
           note: body.note,
           publishedAtUtc: NOW,
+          foundingSeatIncludedClients: body.foundingSeatIncludedClients,
         });
         terms = [next, ...terms.map((item) => ({ ...item, isCurrent: false }))];
         return json(route, 200, next);
@@ -722,7 +724,13 @@ for (const width of [390, 1440]) {
     await sheet.getByRole('button', { name: 'Publish version 2' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(writes.terms).toEqual([
-      { clientsWithActivePlan: 12, monthsSinceStart: 3, note: null, expectedCurrentVersion: 1 },
+      {
+        clientsWithActivePlan: 12,
+        monthsSinceStart: 3,
+        note: null,
+        expectedCurrentVersion: 1,
+        foundingSeatIncludedClients: null,
+      },
     ]);
     await expect(panel.locator('.panel-head .quiet')).toHaveText('Version 2 · since Oct 9, 2026');
     await expect(panel.locator('[data-terms-sentence]')).toHaveText(

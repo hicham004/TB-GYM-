@@ -204,6 +204,42 @@ public static class PlatformBillingEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // Extra included clients (notes plan N11a, decision 17): granted to a founding space alone, for
+        // whole calendar months, and revoked once.
+        admin.MapPost("/workspaces/{tenantId:guid}/included-client-grants", async (
+                Guid tenantId,
+                GrantIncludedClientsRequest request,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                IPlatformBillingAdminService service,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return ToResult(await service.GrantIncludedClientsAsync(tenantId, request, cancellationToken));
+            })
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+            .WithName("GrantIncludedClients")
+            .Produces<IncludedClientGrantView>()
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        admin.MapPost("/included-client-grants/{grantId:guid}/revoke", async (
+                Guid grantId,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                IPlatformBillingAdminService service,
+                CancellationToken cancellationToken) =>
+            {
+                await antiforgery.ValidateRequestAsync(context);
+                return ToResult(await service.RevokeIncludedClientGrantAsync(grantId, cancellationToken));
+            })
+            .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
+            .WithName("RevokeIncludedClientGrant")
+            .Produces<IncludedClientGrantView>()
+            .Produces(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         // Founding status (decision 15, 5 Nov 2026): marked and ended by the admin's hand only, and
         // separate from any discount.
         admin.MapPost("/workspaces/{tenantId:guid}/founding", async (

@@ -225,10 +225,10 @@ public sealed partial class Phase3TrainingWorkflowTests
             "MonthsSinceStart");
         // A version can never be changed, so a number left out is refused rather than read as 0.
         await N3aAssertInvalidAsync(
-            await admin.PostAsJsonAsync(N3aTermsUrl, new { clientsWithActivePlan = 10, note = "No months", expectedCurrentVersion = 1 }),
+            await admin.PostAsJsonAsync(N3aTermsUrl, new { clientsWithActivePlan = 10, note = "No months", expectedCurrentVersion = 1, foundingSeatIncludedClients = (int?)null }),
             "MonthsSinceStart");
         await N3aAssertInvalidAsync(
-            await admin.PostAsJsonAsync(N3aTermsUrl, new { monthsSinceStart = 2, note = "No clients or version" }),
+            await admin.PostAsJsonAsync(N3aTermsUrl, new { monthsSinceStart = 2, note = "No clients or version", foundingSeatIncludedClients = (int?)null }),
             "ClientsWithActivePlan",
             "ExpectedCurrentVersion");
         Assert.HasCount(1, await RequiredJsonAsync<N3aTerms[]>(await admin.GetAsync("/api/platform-admin/founding-terms")));
@@ -584,12 +584,14 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     private static string N3aEndUrl(Guid foundingId) => $"/api/platform-admin/founding/{foundingId}/end";
 
-    private static object N3aTermsRequest(int clients, int months, int expectedCurrentVersion) => new
+    // The founding seat's number (notes plan N11a) is a required key: null is the admin's none.
+    private static object N3aTermsRequest(int clients, int months, int expectedCurrentVersion, int? foundingSeatIncludedClients = null) => new
     {
         clientsWithActivePlan = clients,
         monthsSinceStart = months,
         note = "Test terms",
         expectedCurrentVersion,
+        foundingSeatIncludedClients,
     };
 
     /// <summary>The check as the Worker's sweep runs it.</summary>

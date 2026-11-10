@@ -27,6 +27,8 @@ export interface PublishFoundingTerms {
   monthsSinceStart: number;
   note: string | null;
   expectedCurrentVersion: number;
+  /** Always sent, null for none: the server refuses a publish that leaves it out (notes plan N11a). */
+  foundingSeatIncludedClients: number | null;
 }
 
 /**

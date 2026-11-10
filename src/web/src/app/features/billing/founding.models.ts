@@ -51,7 +51,10 @@ export interface AdminFounding {
   badge: FoundingBadge;
 }
 
-/** One published version of the badge's two thresholds; the newest is in force. */
+/**
+ * One published version of the founding terms, the newest in force: the badge's two thresholds and
+ * the clients a founding space's owner seat includes (notes plan N11a), null for none.
+ */
 export interface FoundingTerms {
   id: string;
   versionNumber: number;
@@ -60,6 +63,7 @@ export interface FoundingTerms {
   note: string | null;
   publishedAtUtc: string;
   isCurrent: boolean;
+  foundingSeatIncludedClients: number | null;
 }
 
 /** The badge's name, the same everywhere it shows (the plan's Point 8). */
@@ -101,6 +105,7 @@ export function toFoundingTerms(value: FoundingTermsView): FoundingTerms {
     versionNumber: toNumber(value.versionNumber),
     clientsWithActivePlan: toNumber(value.clientsWithActivePlan),
     monthsSinceStart: toNumber(value.monthsSinceStart),
+    foundingSeatIncludedClients: toNullableNumber(value.foundingSeatIncludedClients),
   };
 }
 

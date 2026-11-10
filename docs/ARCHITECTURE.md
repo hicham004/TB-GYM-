@@ -77,7 +77,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Media            | Object metadata, provider-neutral locators and ranges, scan evidence, protected access, subordinate renditions, external embeds, retention and leased purge                              |
 | Gamification     | Tenant theme, levels, ranks and auditable experience events                                                                                                                              |
 | Integrations     | AI, payment, nutrition-data and other external provider contracts                                                                                                                        |
-| Platform billing | What TB Gym charges workspaces: versioned price plans, monthly invoices, voids, payments, discounts, the `platform-invoice-v1` calculation (ADR 0028); founding status and its badge terms (PBL-009) |
+| Platform billing | What TB Gym charges workspaces: versioned price plans, monthly invoices, voids, payments, discounts, extra included clients granted to founding spaces, the `platform-invoice-v2` calculation (earlier invoices keep v1; ADR 0028); founding status, its terms and the founding seat's included clients (PBL-009, PBL-011) |
 | Website          | The public website: Talk-to-us requests from gyms (no tenant, facts frozen, the owner's email as the fourth action-mail queue, the platform admin's list of requests not yet emailed) and the settings the homepage reads (ADR 0037) |
 
 Theme and gamification currently share one boundary because theme-driven labels and rewards

@@ -21,7 +21,7 @@ public sealed class N3aFoundingStatusDomainTests
     private static readonly DateTimeOffset MarkedAt = new(2027, 1, 20, 10, 0, 0, TimeSpan.Zero);
 
     /// <summary>Version 1 as the migration seeds it: 10 clients with an active plan and 2 months.</summary>
-    private static readonly FoundingTerms VersionOne = FoundingTerms.Publish(1, new FoundingBadgeTerms(10, 2), null, null, MarkedAt);
+    private static readonly FoundingTerms VersionOne = FoundingTerms.Publish(1, new FoundingBadgeTerms(10, 2), null, null, null, MarkedAt);
 
     private static readonly string[] TermsFields = ["ClientsWithActivePlan", "MonthsSinceStart"];
 
@@ -106,7 +106,7 @@ public sealed class N3aFoundingStatusDomainTests
         Assert.AreEqual(new DateOnly(2027, 3, 12), later.EarnedOn);
 
         // Stricter terms published later do not take it away either.
-        var stricter = FoundingTerms.Publish(2, new FoundingBadgeTerms(50, 12), "Stricter", AdminUserId, MarkedAt.AddMonths(6));
+        var stricter = FoundingTerms.Publish(2, new FoundingBadgeTerms(50, 12), null, "Stricter", AdminUserId, MarkedAt.AddMonths(6));
         Assert.AreEqual(FoundingBadgeState.Earned, FoundingBadgePolicy.Read(status, stricter, SpaceCreated, 0, new DateOnly(2027, 9, 1)).State);
         Assert.AreEqual(1, status.EarnedUnderTermsVersion);
     }
@@ -176,7 +176,7 @@ public sealed class N3aFoundingStatusDomainTests
     [TestMethod]
     public void EveryThresholdComesFromTheTermsNotFromCode()
     {
-        var lenient = FoundingTerms.Publish(2, new FoundingBadgeTerms(3, 0), "Trying the badge", AdminUserId, MarkedAt);
+        var lenient = FoundingTerms.Publish(2, new FoundingBadgeTerms(3, 0), null, "Trying the badge", AdminUserId, MarkedAt);
         var sameDay = new DateOnly(2027, 1, 20);
 
         var due = FoundingBadgePolicy.Read(MarkedSpace(), lenient, SpaceCreated, 3, sameDay);
@@ -258,10 +258,10 @@ public sealed class N3aFoundingStatusDomainTests
         Assert.IsEmpty(new FoundingBadgeTerms(1, 0).Validate());
         Assert.IsEmpty(new FoundingBadgeTerms(1_000, 24).Validate());
 
-        Assert.Throws<ArgumentException>(() => FoundingTerms.Publish(2, new FoundingBadgeTerms(0, 2), null, AdminUserId, MarkedAt));
-        Assert.Throws<ArgumentOutOfRangeException>(() => FoundingTerms.Publish(0, new FoundingBadgeTerms(10, 2), null, AdminUserId, MarkedAt));
+        Assert.Throws<ArgumentException>(() => FoundingTerms.Publish(2, new FoundingBadgeTerms(0, 2), null, null, AdminUserId, MarkedAt));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FoundingTerms.Publish(0, new FoundingBadgeTerms(10, 2), null, null, AdminUserId, MarkedAt));
         Assert.Throws<ArgumentException>(() =>
-            FoundingTerms.Publish(2, new FoundingBadgeTerms(10, 2), new string('n', 501), AdminUserId, MarkedAt));
+            FoundingTerms.Publish(2, new FoundingBadgeTerms(10, 2), null, new string('n', 501), AdminUserId, MarkedAt));
     }
 
     [TestMethod]

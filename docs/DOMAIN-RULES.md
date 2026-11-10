@@ -530,11 +530,13 @@ at any moment of the month, zero-price plans included. Whoever touched the month
 time is not coverage: a client paused for the whole month is not billable, one paused for part of it
 is. Pauses come from the append-only enrollment status history.
 
-**PBL-003** Every price, the included clients, the gym-fee threshold, and the trial, payment and
+**PBL-003** Every price, the clients a seat includes, the gym-fee threshold, and the trial, payment and
 grace days come from the latest published price plan version; nothing is a constant in code. An
-invoice snapshots its plan, quantities and the calculation name `platform-invoice-v1`, and is never
-changed: a correction voids it and reissues at the same plan's prices. A workspace's trial length
-is the one of the plan current when it was created.
+invoice's included clients come from the plan's seats, a founding seat (the founding terms) and the
+admin's grants, under the calculation `platform-invoice-v2` (PBL-011); one issued before keeps
+`platform-invoice-v1`. An invoice snapshots its plan, quantities, the calculation's name and where its
+included clients came from, and is never changed: a correction voids it and reissues at the same plan's
+prices. A workspace's trial length is the one of the plan current when it was created.
 
 **PBL-004** One exact, append-only payment per invoice, never on a voided one; a paid invoice is
 never voided. No partial payments, refunds or credit.
@@ -571,8 +573,9 @@ calendar months since the UTC day the workspace was created (10 and 2 in version
 constant in code). The check runs on the Worker's billing sweep and on the admin's demand, and records
 the badge once with the terms version, the client count and the rule `founding-badge-v1`; it stays
 earned whatever the counts do later, and only an end takes it away. The owner may hide it from their
-clients; a client sees it only while their assigned coach is that owner. It changes no access, no bill
-and no discount, and no word for it says a coach's qualifications were checked.
+clients; a client sees it only while their assigned coach is that owner. It changes no access and no
+discount; on the bill it changes one thing, the clients its owner's seat includes (PBL-011). No word for
+it says a coach's qualifications were checked.
 
 **PBL-010** Discounts (ADR 0028; notes plan N7). The platform admin grants a workspace a percentage off,
 more than 0 and up to 100 to two decimals, for UTC days `[StartsOn, EndsOnExclusive)`, with a note; a
@@ -583,6 +586,20 @@ and its first and last day. The Billing page states them in one sentence per run
 the day the one before ends, named by the run's first note: each rate until its last day, from its first
 day only when the run has not begun, and stretches in a row at one rate as one clause. An ended one stays
 only on the invoices it touched. Naming them bills nothing, and every figure is the admin's.
+
+**PBL-011** Included clients (notes plan N11a, decisions 11 and 17). A founding space's owner seat includes
+the founding terms' number of clients (0 to 1,000, or none for the plan's seat), which the platform admin
+publishes in a terms version, never a constant and never seeded; the larger of it and the plan's per-seat
+number applies, for the owner's seat alone. A billed window has the founding seat when one of the space's
+founding statuses touches it, a status running from UTC midnight of its founding day to its end, so the
+month it ended in keeps the seat; the seat takes the highest number among the versions in force while the
+status ran, up to the bill, so a lower number never takes clients from it. The admin also grants a
+founding space extra included clients for whole UTC calendar months with a note only the admin reads;
+grants touching a month add up, the same grant sent twice is one, and a grant is never edited or deleted,
+only revoked once with the revocation kept. `platform-invoice-v2` counts the seats', the founding seat's
+and the grants' included clients, then the discount comes off the whole subtotal; the invoice records the
+founding number, its version, the status and the grants it counted, and a reissue counts them again. The
+owner reads what their seat includes now and the grants running or to come, never a note.
 
 ## 4. Program templates and assigned snapshots
 

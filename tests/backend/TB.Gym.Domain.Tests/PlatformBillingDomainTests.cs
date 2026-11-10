@@ -21,12 +21,12 @@ public sealed class PlatformBillingDomainTests
     private static readonly string[] ExpectedPlanErrors =
         ["CurrencyCode", "SeatPrice", "IncludedClientsPerSeat", "ExtraClientPrice", "GymFeeMinimumSeats", "TrialDays"];
 
-    // ---- platform-invoice-v1 reference cases ----
+    // ---- platform-invoice-v1 reference cases: v2 gives a space neither founding nor granted the same ----
 
     [TestMethod]
     public void ASoloCoachWithFewerThanFiveClientsPaysOneSeat()
     {
-        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 3), 0m);
+        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 3), IncludedClientSources.None, 0m);
 
         Assert.AreEqual(5, amounts.IncludedClients);
         Assert.AreEqual(0, amounts.ExtraClients);
@@ -39,7 +39,7 @@ public sealed class PlatformBillingDomainTests
     [TestMethod]
     public void ASoloCoachWithMoreThanFiveClientsPaysForEachExtraClient()
     {
-        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 8), 0m);
+        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 8), IncludedClientSources.None, 0m);
 
         Assert.AreEqual(3, amounts.ExtraClients);
         Assert.AreEqual(6.00m, amounts.ExtraClientAmount);
@@ -50,7 +50,7 @@ public sealed class PlatformBillingDomainTests
     [TestMethod]
     public void AGymWithFourSeatsAndSixtyClientsPoolsIncludedClientsAndPaysTheGymFee()
     {
-        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(4, 60), 0m);
+        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(4, 60), IncludedClientSources.None, 0m);
 
         Assert.AreEqual(20, amounts.IncludedClients, "5 included per seat, pooled across the workspace.");
         Assert.AreEqual(40, amounts.ExtraClients);
@@ -64,16 +64,16 @@ public sealed class PlatformBillingDomainTests
     [TestMethod]
     public void ADiscountComesOffTheSubtotalRoundedToTheCent()
     {
-        var founding = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(4, 60), 30m);
+        var founding = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(4, 60), IncludedClientSources.None, 30m);
         Assert.AreEqual(45.00m, founding.DiscountAmount);
         Assert.AreEqual(105.00m, founding.Total);
 
         // 33.33% of 21.00 is 6.9993: rounded half away from zero to 7.00.
-        var odd = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 8), 33.33m);
+        var odd = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 8), IncludedClientSources.None, 33.33m);
         Assert.AreEqual(7.00m, odd.DiscountAmount);
         Assert.AreEqual(14.00m, odd.Total);
 
-        var free = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(2, 12), 100m);
+        var free = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(2, 12), IncludedClientSources.None, 100m);
         Assert.AreEqual(0m, free.Total, "Founding coaches' free months still issue an invoice, with nothing to pay.");
     }
 
@@ -82,12 +82,12 @@ public sealed class PlatformBillingDomainTests
     {
         var other = new PricePlanTerms("USD", 20m, 3, 1.50m, 25m, 3, 14, 10, 5);
 
-        var twoSeats = PlatformInvoiceCalculation.Calculate(other, new InvoiceQuantities(2, 10), 0m);
+        var twoSeats = PlatformInvoiceCalculation.Calculate(other, new InvoiceQuantities(2, 10), IncludedClientSources.None, 0m);
         Assert.AreEqual(6, twoSeats.IncludedClients);
         Assert.AreEqual(4, twoSeats.ExtraClients);
         Assert.AreEqual(40.00m + 6.00m, twoSeats.Total, "Two seats are below this plan's gym-fee threshold of three.");
 
-        var threeSeats = PlatformInvoiceCalculation.Calculate(other, new InvoiceQuantities(3, 9), 0m);
+        var threeSeats = PlatformInvoiceCalculation.Calculate(other, new InvoiceQuantities(3, 9), IncludedClientSources.None, 0m);
         Assert.AreEqual(60.00m + 25.00m, threeSeats.Total);
     }
 
@@ -95,12 +95,323 @@ public sealed class PlatformBillingDomainTests
     public void TheCalculationRefusesImpossibleQuantities()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(0, 1), 0m));
+            PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(0, 1), IncludedClientSources.None, 0m));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, -1), 0m));
+            PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, -1), IncludedClientSources.None, 0m));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 1), 101m));
+            PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 1), IncludedClientSources.None, 101m));
     }
+
+    // ---- platform-invoice-v2 reference cases (notes plan N11a): the founding seat and extra included clients ----
+    // Every figure here is made up: the founding number and each grant's clients and months are the admin's.
+
+    [TestMethod]
+    public void ASpaceNeitherFoundingNorGrantedGetsTheAmountsV1Gave()
+    {
+        foreach (var (seats, clients, percent, total) in new[] { (1, 3, 0m, 15.00m), (1, 9, 0m, 23.00m), (4, 60, 30m, 105.00m) })
+        {
+            var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(seats, clients), IncludedClientSources.None, percent);
+            Assert.AreEqual(seats * 5, amounts.IncludedClients);
+            Assert.AreEqual(seats * 5, amounts.SeatIncludedClients);
+            Assert.AreEqual(0, amounts.FoundingIncludedClients);
+            Assert.AreEqual(0, amounts.GrantedIncludedClients);
+            Assert.AreEqual(total, amounts.Total);
+        }
+    }
+
+    [TestMethod]
+    public void AFoundingNumberAboveThePlansAddsTheDifferenceForTheOwnersSeatAlone()
+    {
+        var founding = Sources(new FoundingSeat(Guid.NewGuid(), 2, 12));
+
+        var solo = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 16), founding, 0m);
+        Assert.AreEqual(5, solo.SeatIncludedClients);
+        Assert.AreEqual(7, solo.FoundingIncludedClients, "12 for the founding seat, 5 of them the plan's.");
+        Assert.AreEqual(12, solo.IncludedClients);
+        Assert.AreEqual(4, solo.ExtraClients);
+        Assert.AreEqual(23.00m, solo.Total);
+
+        // A gym: every other seat includes the plan's number (Open 1).
+        var gym = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(4, 40), founding, 0m);
+        Assert.AreEqual(20, gym.SeatIncludedClients);
+        Assert.AreEqual(7, gym.FoundingIncludedClients);
+        Assert.AreEqual(27, gym.IncludedClients);
+        Assert.AreEqual(13, gym.ExtraClients);
+        Assert.AreEqual(60.00m + 26.00m + 10.00m, gym.Total);
+    }
+
+    [TestMethod]
+    public void AFoundingNumberAtOrBelowThePlansAddsNothing()
+    {
+        foreach (var number in new[] { 5, 4, 0 })
+        {
+            var amounts = PlatformInvoiceCalculation.Calculate(
+                Placeholder,
+                new InvoiceQuantities(1, 9),
+                Sources(new FoundingSeat(Guid.NewGuid(), 2, number)),
+                0m);
+            Assert.AreEqual(0, amounts.FoundingIncludedClients, $"A founding number of {number} never includes fewer than the plan's 5.");
+            Assert.AreEqual(5, amounts.IncludedClients);
+            Assert.AreEqual(23.00m, amounts.Total);
+        }
+
+        Assert.IsNull(FoundingSeatPolicy.Raised(new FoundingSeat(Guid.NewGuid(), 2, 5), 5));
+        Assert.AreEqual(12, FoundingSeatPolicy.Raised(new FoundingSeat(Guid.NewGuid(), 2, 12), 5));
+        Assert.IsNull(FoundingSeatPolicy.Raised(null, 5));
+    }
+
+    [TestMethod]
+    public void GrantsTouchingAMonthAddTheirClientsAndAddUp()
+    {
+        var july = Grant(4, new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 1));
+        var september = Grant(7, new DateOnly(2026, 9, 1), new DateOnly(2027, 1, 1));
+        var sources = IncludedClientSources.For([], [], [july, september], Whole(September), September.EndUtc);
+
+        CollectionAssert.AreEqual(new[] { july.Id, september.Id }, sources.Grants.Select(grant => grant.Id).ToArray());
+        Assert.AreEqual(11, sources.GrantedIncludedClients);
+        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 20), sources, 0m);
+        Assert.AreEqual(11, amounts.GrantedIncludedClients);
+        Assert.AreEqual(16, amounts.IncludedClients);
+        Assert.AreEqual(4, amounts.ExtraClients);
+        Assert.AreEqual(15.00m + 8.00m, amounts.Total);
+    }
+
+    [TestMethod]
+    public void AGrantCountsInEachWholeMonthItNamesAndNowhereElse()
+    {
+        var summer = Grant(4, new DateOnly(2026, 6, 1), new DateOnly(2026, 9, 1));
+        foreach (var month in new[] { new BillingMonth(2026, 6), new BillingMonth(2026, 7), new BillingMonth(2026, 8) })
+        {
+            Assert.HasCount(1, IncludedClientGrant.Touching([summer], Whole(month)), $"{month} is one of the grant's months.");
+        }
+
+        Assert.IsEmpty(IncludedClientGrant.Touching([summer], Whole(September)), "It ends on September's first day, so September is not its month.");
+        Assert.IsEmpty(IncludedClientGrant.Touching([summer], Whole(new BillingMonth(2026, 5))), "It starts after May.");
+
+        var revoked = Grant(7, new DateOnly(2026, 9, 1), new DateOnly(2026, 12, 1));
+        revoked.Revoke(AdminUserId, LaunchedAt);
+        Assert.IsEmpty(IncludedClientGrant.Touching([revoked], Whole(September)), "A revoked grant counts nowhere.");
+        var midJuly = new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero);
+        Assert.IsEmpty(IncludedClientGrant.Touching([summer], new UsageWindow(midJuly, midJuly)), "An empty window, even inside the grant, counts none.");
+        Assert.Throws<InvalidOperationException>(() => revoked.Revoke(AdminUserId, LaunchedAt));
+    }
+
+    [TestMethod]
+    public void AFoundingStatusTouchingTheWindowGivesItsSeatAndOneEndedBeforeItGivesNone()
+    {
+        var terms = new[] { Terms(1, null, LaunchedAt.AddMonths(-6)), Terms(2, 12, LaunchedAt.AddMonths(-3)) };
+
+        var foundedMidMonth = Founding(new DateOnly(2026, 9, 15), At(9, 15, 10));
+        var seat = FoundingSeatPolicy.For([foundedMidMonth], terms, Whole(September), September.EndUtc);
+        Assert.AreEqual(new FoundingSeat(foundedMidMonth.Id, 2, 12), seat, "Founded on the 15th: September has the seat.");
+        Assert.IsNull(FoundingSeatPolicy.For([foundedMidMonth], terms, Whole(new BillingMonth(2026, 8)), September.EndUtc));
+
+        var endedMidMonth = Founding(new DateOnly(2026, 7, 1), At(7, 1, 9));
+        endedMidMonth.End("The coach asked", AdminUserId, At(9, 20, 12));
+        Assert.AreEqual(12, FoundingSeatPolicy.For([endedMidMonth], terms, Whole(September), September.EndUtc)?.IncludedClients,
+            "Ended on the 20th: September keeps the seat (Open 3).");
+        Assert.IsNull(FoundingSeatPolicy.For([endedMidMonth], terms, Whole(new BillingMonth(2026, 10)), At(11, 1, 0)),
+            "From the month after the end, none.");
+        Assert.IsNull(FoundingSeatPolicy.Now([endedMidMonth], terms, At(9, 25, 0)), "An ended status has no seat now.");
+    }
+
+    [TestMethod]
+    public void AFoundingSpaceKeepsTheHighestNumberItHasHadWhileItsStatusStaysOpen()
+    {
+        var status = Founding(new DateOnly(2026, 8, 1), At(8, 1, 9));
+        var raised = Terms(2, 12, At(8, 10, 0));
+        var lowered = Terms(3, 9, At(9, 5, 0));
+        var none = Terms(4, null, At(9, 10, 0));
+        var versions = new[] { Terms(1, null, LaunchedAt.AddMonths(-6)), raised, lowered, none };
+
+        Assert.IsNull(FoundingSeatPolicy.For([status], versions, Whole(new BillingMonth(2026, 8)), At(8, 5, 0)),
+            "Read before any number was published: none.");
+        Assert.AreEqual(new FoundingSeat(status.Id, 2, 12), FoundingSeatPolicy.For([status], versions, Whole(September), September.EndUtc),
+            "A lower number, then none, never take clients from an open status (Open 5).");
+
+        var higher = Terms(5, 17, At(9, 20, 0));
+        Assert.AreEqual(new FoundingSeat(status.Id, 5, 17), FoundingSeatPolicy.For([status], [.. versions, higher], Whole(September), September.EndUtc),
+            "A higher number applies from the next reading.");
+        Assert.AreEqual(12, FoundingSeatPolicy.For([status], [.. versions, higher], Whole(September), At(9, 19, 0))?.IncludedClients,
+            "A version published after the reading does not count.");
+
+        // A space marked after the higher number was replaced has only what was in force since its founding day.
+        var later = Founding(new DateOnly(2026, 9, 6), At(9, 6, 9));
+        Assert.AreEqual(new FoundingSeat(later.Id, 3, 9), FoundingSeatPolicy.For([later], versions, Whole(September), September.EndUtc));
+        var ended = Founding(new DateOnly(2026, 8, 1), At(8, 1, 9));
+        ended.End("Harm to clients", AdminUserId, At(8, 20, 0));
+        Assert.AreEqual(12, FoundingSeatPolicy.For([ended], [.. versions, higher], Whole(new BillingMonth(2026, 8)), September.EndUtc)?.IncludedClients,
+            "A version published after the status ended is not one it had.");
+    }
+
+    [TestMethod]
+    public void TheDiscountStillComesOffTheWholeSubtotalAfterTheIncludedClients()
+    {
+        var sources = new IncludedClientSources(
+            new FoundingSeat(Guid.NewGuid(), 2, 9),
+            [Grant(4, new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 1)), Grant(7, new DateOnly(2026, 9, 1), new DateOnly(2027, 1, 1))]);
+
+        var amounts = PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(2, 30), sources, 33.33m);
+
+        Assert.AreEqual(10, amounts.SeatIncludedClients);
+        Assert.AreEqual(4, amounts.FoundingIncludedClients);
+        Assert.AreEqual(11, amounts.GrantedIncludedClients);
+        Assert.AreEqual(25, amounts.IncludedClients);
+        Assert.AreEqual(5, amounts.ExtraClients);
+        Assert.AreEqual(50.00m, amounts.Subtotal, "$30 of seats, $10 of extra clients, the $10 gym fee.");
+        Assert.AreEqual(16.67m, amounts.DiscountAmount, "16.665 rounds half away from zero, never to the even 16.66.");
+        Assert.AreEqual(33.33m, amounts.Total);
+    }
+
+    [TestMethod]
+    public void EveryIncludedClientComesFromThePlanTheTermsOrAGrantNotFromCode()
+    {
+        var other = new PricePlanTerms("USD", 20m, 3, 1.50m, 25m, 3, 14, 10, 5);
+        var grant = Grant(4, new DateOnly(2026, 9, 1), new DateOnly(2026, 12, 1));
+
+        var nine = PlatformInvoiceCalculation.Calculate(other, new InvoiceQuantities(2, 20), new IncludedClientSources(new FoundingSeat(Guid.NewGuid(), 2, 9), [grant]), 0m);
+        Assert.AreEqual(6 + 6 + 4, nine.IncludedClients);
+        Assert.AreEqual(40.00m + 6.00m, nine.Total);
+
+        var twelve = PlatformInvoiceCalculation.Calculate(other, new InvoiceQuantities(2, 20), new IncludedClientSources(new FoundingSeat(Guid.NewGuid(), 3, 12), [grant]), 0m);
+        Assert.AreEqual(9, twelve.FoundingIncludedClients);
+        Assert.AreEqual(40.00m + 1.50m, twelve.Total);
+
+        var bigger = Grant(7, new DateOnly(2026, 9, 1), new DateOnly(2026, 12, 1));
+        var granted = PlatformInvoiceCalculation.Calculate(other, new InvoiceQuantities(2, 20), Sources(null, bigger), 0m);
+        Assert.AreEqual(6 + 7, granted.IncludedClients);
+        Assert.AreEqual(40.00m + 10.50m, granted.Total);
+    }
+
+    [TestMethod]
+    public void AnInvoiceRecordsWhereItsIncludedClientsCameFrom()
+    {
+        var plan = PlatformPricePlan.Publish(1, Placeholder, null, null, LaunchedAt);
+        var status = Founding(new DateOnly(2026, 8, 1), At(8, 1, 9));
+        var first = Grant(4, new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 1));
+        var second = Grant(7, new DateOnly(2026, 9, 1), new DateOnly(2027, 1, 1));
+        var sources = IncludedClientSources.For([status], [Terms(1, null, LaunchedAt.AddMonths(-6)), Terms(2, 12, At(8, 10, 0))], [second, first], Whole(September), September.EndUtc);
+        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, new InvoiceQuantities(1, 30), sources, 0m);
+
+        var invoice = PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, amounts, null, sources, "TBG-202609-NKKAAA", September.EndUtc);
+
+        Assert.AreEqual("platform-invoice-v2", invoice.CalculationName);
+        Assert.AreEqual(12, invoice.FoundingSeatIncludedClients);
+        Assert.AreEqual(2, invoice.FoundingTermsVersion);
+        Assert.AreEqual(status.Id, invoice.FoundingStatusId);
+        Assert.AreEqual(11, invoice.GrantedIncludedClients);
+        CollectionAssert.AreEqual(new[] { first.Id, second.Id }, invoice.IncludedClientGrantIds, "Oldest first.");
+        Assert.AreEqual(5 + 7 + 11, invoice.IncludedClients);
+        Assert.AreEqual(7, invoice.ExtraClients);
+
+        var plain = PlatformInvoice.Issue(
+            TenantId,
+            September,
+            September.StartUtc,
+            plan,
+            PlatformInvoiceCalculation.Calculate(plan.Terms, new InvoiceQuantities(1, 30), IncludedClientSources.None, 0m),
+            null,
+            IncludedClientSources.None,
+            "TBG-202609-NKKAAB",
+            September.EndUtc);
+        Assert.IsNull(plain.FoundingSeatIncludedClients);
+        Assert.IsNull(plain.FoundingTermsVersion);
+        Assert.IsNull(plain.FoundingStatusId);
+        Assert.AreEqual(0, plain.GrantedIncludedClients);
+        Assert.IsEmpty(plain.IncludedClientGrantIds);
+
+        // The snapshot must explain the amounts: amounts worked out without the grants are refused with them.
+        var withoutGrants = PlatformInvoiceCalculation.Calculate(plan.Terms, new InvoiceQuantities(1, 30), IncludedClientSources.None, 0m);
+        Assert.Throws<InvalidOperationException>(() =>
+            PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, withoutGrants, null, sources, "TBG-202609-NKKAAC", September.EndUtc));
+    }
+
+    [TestMethod]
+    public void AGrantIsWholeClientsForWholeMonthsWithANote()
+    {
+        var start = new DateOnly(2026, 9, 1);
+        var end = new DateOnly(2026, 12, 1);
+        Assert.IsEmpty(IncludedClientGrant.Validate(1, start, end, "x"));
+        Assert.IsEmpty(IncludedClientGrant.Validate(1_000, start, end, new string('n', 200)));
+
+        Assert.AreEqual("Clients", OnlyRefusal(0, start, end, "Brought a coach"));
+        Assert.AreEqual("Clients", OnlyRefusal(1_001, start, end, "Brought a coach"));
+        Assert.AreEqual("StartsOn", OnlyRefusal(4, new DateOnly(2026, 9, 2), end, "Brought a coach"));
+        Assert.AreEqual("StartsOn", OnlyRefusal(4, default, end, "Brought a coach"), "A day left out reads as 1 January of year 1, which is refused.");
+        Assert.AreEqual("EndsOnExclusive", OnlyRefusal(4, start, new DateOnly(2026, 11, 30), "Brought a coach"));
+        Assert.AreEqual("EndsOnExclusive", OnlyRefusal(4, start, start, "Brought a coach"));
+        Assert.AreEqual("EndsOnExclusive", OnlyRefusal(4, start, new DateOnly(2026, 8, 1), "Brought a coach"));
+        Assert.AreEqual("Note", OnlyRefusal(4, start, end, "  "));
+        Assert.AreEqual("Note", OnlyRefusal(4, start, end, new string('n', 201)));
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => IncludedClientGrant.Grant(TenantId, 0, start, end, "x", AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => IncludedClientGrant.Grant(TenantId, 4, new DateOnly(2026, 9, 15), end, "x", AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => IncludedClientGrant.Grant(TenantId, 4, start, new DateOnly(2026, 12, 31), "x", AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => IncludedClientGrant.Grant(TenantId, 4, end, start, "x", AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentException>(() => IncludedClientGrant.Grant(TenantId, 4, start, end, " ", AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentException>(() => IncludedClientGrant.Grant(TenantId, 4, start, end, new string('n', 201), AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentException>(() => IncludedClientGrant.Grant(Guid.Empty, 4, start, end, "x", AdminUserId, LaunchedAt));
+
+        var grant = IncludedClientGrant.Grant(TenantId, 4, start, end, "  Brought a coach  ", AdminUserId, LaunchedAt);
+        Assert.AreEqual("Brought a coach", grant.Note);
+        Assert.IsTrue(grant.IsSameGrantAs(4, start, end, " Brought a coach "));
+        Assert.IsFalse(grant.IsSameGrantAs(7, start, end, "Brought a coach"));
+        Assert.ThrowsExactly<ArgumentException>(() => grant.Revoke(Guid.Empty, LaunchedAt));
+        grant.Revoke(AdminUserId, LaunchedAt);
+        Assert.IsFalse(grant.IsSameGrantAs(4, start, end, "Brought a coach"), "A revoked grant is no longer the one a repeat answers.");
+        Assert.ThrowsExactly<InvalidOperationException>(() => grant.Revoke(AdminUserId, LaunchedAt));
+    }
+
+    [TestMethod]
+    public void AFoundingNumberIsAWholeNumberFromZeroToOneThousandOrNone()
+    {
+        Assert.IsTrue(FoundingSeatPolicy.IsValidIncludedClients(null));
+        Assert.IsTrue(FoundingSeatPolicy.IsValidIncludedClients(0));
+        Assert.IsTrue(FoundingSeatPolicy.IsValidIncludedClients(1_000));
+        Assert.IsFalse(FoundingSeatPolicy.IsValidIncludedClients(-1));
+        Assert.IsFalse(FoundingSeatPolicy.IsValidIncludedClients(1_001));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), -1, null, AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), 1_001, null, AdminUserId, LaunchedAt));
+        Assert.AreEqual(12, FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), 12, null, AdminUserId, LaunchedAt).FoundingSeatIncludedClients);
+        Assert.IsNull(FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), null, null, AdminUserId, LaunchedAt).FoundingSeatIncludedClients);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 1), Sources(new FoundingSeat(Guid.NewGuid(), 2, 1_001)), 0m));
+    }
+
+    [TestMethod]
+    public void TheOwnerReadsTheGrantsStillRunningOrToComeOldestFirst()
+    {
+        var today = new DateOnly(2026, 11, 10);
+        var ended = Grant(4, new DateOnly(2026, 7, 1), new DateOnly(2026, 11, 1));
+        var running = Grant(7, new DateOnly(2026, 11, 1), new DateOnly(2027, 2, 1));
+        var coming = Grant(4, new DateOnly(2027, 3, 1), new DateOnly(2027, 6, 1));
+        var revoked = Grant(7, new DateOnly(2027, 1, 1), new DateOnly(2027, 4, 1));
+        revoked.Revoke(AdminUserId, LaunchedAt);
+
+        CollectionAssert.AreEqual(
+            new[] { running.Id, coming.Id },
+            IncludedClientGrant.RunningOrToCome([coming, revoked, ended, running], today).Select(grant => grant.Id).ToArray());
+    }
+
+    private static string OnlyRefusal(int clients, DateOnly startsOn, DateOnly endsOnExclusive, string note) =>
+        IncludedClientGrant.Validate(clients, startsOn, endsOnExclusive, note).Keys.Single();
+
+    private static IncludedClientSources Sources(FoundingSeat? seat, params IncludedClientGrant[] grants) => new(seat, grants);
+
+    private static IncludedClientGrant Grant(int clients, DateOnly startsOn, DateOnly endsOnExclusive) =>
+        IncludedClientGrant.Grant(TenantId, clients, startsOn, endsOnExclusive, $"Brought a coach ({clients})", AdminUserId, LaunchedAt);
+
+    private static FoundingTerms Terms(int version, int? seatIncludedClients, DateTimeOffset publishedAt) =>
+        FoundingTerms.Publish(version, new FoundingBadgeTerms(8, 1), seatIncludedClients, null, AdminUserId, publishedAt);
+
+    private static FoundingStatus Founding(DateOnly foundingSince, DateTimeOffset markedAt) =>
+        FoundingStatus.Mark(TenantId, foundingSince, "One of the first coaches", AdminUserId, markedAt);
+
+    private static UsageWindow Whole(BillingMonth month) => new(month.StartUtc, month.EndUtc);
+
+    private static DateTimeOffset At(int month, int day, int hour) => new(2026, month, day, hour, 0, 0, TimeSpan.Zero);
 
     // ---- trial ----
 
@@ -296,9 +607,9 @@ public sealed class PlatformBillingDomainTests
     {
         var plan = PlatformPricePlan.Publish(1, Placeholder, null, null, LaunchedAt);
         var issuedAt = new DateTimeOffset(2026, 10, 1, 0, 5, 0, TimeSpan.Zero);
-        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, new InvoiceQuantities(2, 12), 0m);
+        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, new InvoiceQuantities(2, 12), IncludedClientSources.None, 0m);
 
-        var invoice = PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, amounts, null, "TBG-202609-ABCDEF", issuedAt);
+        var invoice = PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, amounts, null, IncludedClientSources.None, "TBG-202609-ABCDEF", issuedAt);
 
         Assert.AreEqual(new DateOnly(2026, 10, 8), invoice.DueOn);
         Assert.AreEqual(new DateOnly(2026, 10, 15), invoice.ReadOnlyFrom);
@@ -306,7 +617,7 @@ public sealed class PlatformBillingDomainTests
         Assert.AreEqual(1, invoice.PricePlanVersion);
         Assert.AreEqual(44.00m, invoice.Total);
         Assert.Throws<InvalidOperationException>(() =>
-            PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, amounts, null, "TBG-202609-ABCDEG", September.EndUtc.AddTicks(-1)));
+            PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, amounts, null, IncludedClientSources.None, "TBG-202609-ABCDEG", September.EndUtc.AddTicks(-1)));
     }
 
     [TestMethod]
@@ -339,8 +650,8 @@ public sealed class PlatformBillingDomainTests
     public void APaymentMustBeExactlyTheInvoiceTotal()
     {
         var plan = PlatformPricePlan.Publish(1, Placeholder, null, null, LaunchedAt);
-        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, new InvoiceQuantities(1, 8), 0m);
-        var invoice = PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, amounts, null, "TBG-202609-ABCDEF", September.EndUtc);
+        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, new InvoiceQuantities(1, 8), IncludedClientSources.None, 0m);
+        var invoice = PlatformInvoice.Issue(TenantId, September, September.StartUtc, plan, amounts, null, IncludedClientSources.None, "TBG-202609-ABCDEF", September.EndUtc);
 
         Assert.Throws<ArgumentException>(() =>
             PlatformPayment.Record(invoice, 20m, "WH-1", null, new DateOnly(2026, 10, 2), AdminUserId, September.EndUtc));

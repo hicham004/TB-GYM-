@@ -37,6 +37,7 @@ const terms = (overrides: Partial<FoundingTerms> = {}): FoundingTerms => ({
   note: null,
   publishedAtUtc: '2026-09-01T00:00:00Z',
   isCurrent: true,
+  foundingSeatIncludedClients: null,
   ...overrides,
 });
 
@@ -82,6 +83,7 @@ describe('The Founding coach badge as the screens read it (notes plan N3b)', () 
         note: null,
         publishedAtUtc: '2026-10-01T00:00:00Z',
         isCurrent: true,
+        foundingSeatIncludedClients: '13',
       }),
     ).toEqual(
       terms({
@@ -90,6 +92,7 @@ describe('The Founding coach badge as the screens read it (notes plan N3b)', () 
         clientsWithActivePlan: 12,
         monthsSinceStart: 3,
         publishedAtUtc: '2026-10-01T00:00:00Z',
+        foundingSeatIncludedClients: 13,
       }),
     );
     const older = terms({ isCurrent: false });

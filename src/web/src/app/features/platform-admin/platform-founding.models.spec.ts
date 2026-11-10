@@ -92,7 +92,15 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
       monthsSinceStart: 3,
       note: null,
       expectedCurrentVersion: 3,
+      foundingSeatIncludedClients: null,
     });
+    // The founding seat's number goes as the version in force has it, so new thresholds never drop it.
+    expect(
+      toPublishTermsRequest(
+        { clientsWithActivePlan: 12, monthsSinceStart: 3, note: '' },
+        foundingTerms({ versionNumber: 3, foundingSeatIncludedClients: 13 }),
+      ).foundingSeatIncludedClients,
+    ).toBe(13);
     expect(
       toPublishTermsRequest(
         { clientsWithActivePlan: 12, monthsSinceStart: 3, note: ' After the talks ' },

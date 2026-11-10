@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TB.Gym.Modules.PlatformBilling;
 
 /// <summary>What the workspace owner sees on the Billing page, and what the coach app's banner reads.</summary>
@@ -86,6 +88,20 @@ public interface IPlatformBillingAdminService
     Task<BillingCommandResult<WorkspaceDiscountView>> RevokeDiscountAsync(
         Guid discountId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Grants a founding space extra included clients for whole UTC calendar months (notes plan N11a,
+    /// decision 17). The same clients, days and note sent again answer the grant that exists.
+    /// </summary>
+    Task<BillingCommandResult<IncludedClientGrantView>> GrantIncludedClientsAsync(
+        Guid tenantId,
+        GrantIncludedClientsRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Revokes a grant, once; invoices already issued keep it.</summary>
+    Task<BillingCommandResult<IncludedClientGrantView>> RevokeIncludedClientGrantAsync(
+        Guid grantId,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -99,6 +115,12 @@ public interface IPlatformInvoiceRun
     Task<int> QueueRemindersAsync(CancellationToken cancellationToken);
 }
 
+/// <param name="SeatIncludedClients">The included clients the seats bring: seats times the plan's per-seat number.</param>
+/// <param name="FoundingIncludedClients">
+/// What a founding seat adds over the plan's seat, for the owner's seat alone (notes plan N11a); 0 when none.
+/// </param>
+/// <param name="GrantedIncludedClients">The clients of the extra included clients grants counted; 0 when none.</param>
+/// <remarks>The three add up to <see cref="IncludedClients"/>, so a screen adds nothing up.</remarks>
 public sealed record BillingAmountsView(
     int Seats,
     int BillableClients,
@@ -111,7 +133,10 @@ public sealed record BillingAmountsView(
     decimal DiscountPercent,
     decimal DiscountAmount,
     decimal Total,
-    string CurrencyCode);
+    string CurrencyCode,
+    int SeatIncludedClients,
+    int FoundingIncludedClients,
+    int GrantedIncludedClients);
 
 public sealed record PlatformPaymentView(
     Guid Id,
@@ -123,6 +148,12 @@ public sealed record PlatformPaymentView(
     DateOnly ReceivedOn,
     DateTimeOffset RecordedAtUtc);
 
+/// <param name="FoundingSeatIncludedClients">
+/// The founding terms' number of clients the owner's seat included, when a founding seat applied (notes plan
+/// N11a); null with <see cref="FoundingTermsVersion"/> when none did.
+/// </param>
+/// <param name="FoundingTermsVersion">The founding terms version that number came from.</param>
+/// <param name="GrantedIncludedClients">The clients of the extra included clients grants it counted; 0 when none.</param>
 public sealed record PlatformInvoiceView(
     Guid Id,
     string ReferenceCode,
@@ -146,9 +177,16 @@ public sealed record PlatformInvoiceView(
     DateTimeOffset? VoidedAtUtc,
     string? VoidReason,
     Guid? ReplacesInvoiceId,
-    Guid? ReplacedByInvoiceId);
+    Guid? ReplacedByInvoiceId,
+    int? FoundingSeatIncludedClients,
+    int? FoundingTermsVersion,
+    int GrantedIncludedClients);
 
 /// <summary>This month so far: usage up to now, priced with the latest plan. An estimate, not an invoice.</summary>
+/// <param name="FoundingTermsVersion">
+/// The founding terms version whose number the estimate's founding seat took (notes plan N11a); null when no
+/// founding seat counts, and while the whole month so far is inside the trial.
+/// </param>
 public sealed record CurrentMonthEstimateView(
     DateOnly PeriodStart,
     DateOnly PeriodEndExclusive,
@@ -156,7 +194,8 @@ public sealed record CurrentMonthEstimateView(
     DateTimeOffset UsageToUtc,
     bool InTrial,
     int PricePlanVersion,
-    BillingAmountsView Amounts);
+    BillingAmountsView Amounts,
+    int? FoundingTermsVersion);
 
 /// <summary>
 /// How to pay: a Whish number from configuration, and each unpaid invoice's own reference code. While
@@ -179,9 +218,30 @@ public sealed record WorkspaceBillingDiscountView(
     DateOnly EndsOnExclusive,
     bool StartsLater);
 
+/// <summary>
+/// Extra included clients as the owner's Billing page names them (notes plan N11a): never the admin's note.
+/// Days are UTC, whole calendar months: <see cref="LastDay"/> is the last one it covers and
+/// <see cref="EndsOnExclusive"/> the day after. <see cref="StartsLater"/> says it has not begun on the
+/// server's day.
+/// </summary>
+public sealed record WorkspaceBillingIncludedClientGrantView(
+    int Clients,
+    DateOnly StartsOn,
+    DateOnly LastDay,
+    DateOnly EndsOnExclusive,
+    bool StartsLater);
+
 /// <param name="Discounts">
 /// The unrevoked discounts that are running or still to come, oldest first (notes plan N7). One that
 /// has ended shows only on the invoices it touched.
+/// </param>
+/// <param name="FoundingSeatIncludedClients">
+/// What the owner's seat includes now as a founding space (notes plan N11a): the founding number, while the
+/// space's founding status is open and the number raises the plan's seat, the trial included; null otherwise.
+/// </param>
+/// <param name="IncludedClientGrants">
+/// The unrevoked extra included clients grants running or still to come, oldest first. One that has ended
+/// shows only on the invoices it touched.
 /// </param>
 public sealed record WorkspaceBillingView(
     WorkspaceBillingStatus Status,
@@ -192,7 +252,9 @@ public sealed record WorkspaceBillingView(
     string CurrencyCode,
     DateOnly? ReadOnlyFrom,
     PaymentInstructionsView PaymentInstructions,
-    IReadOnlyList<WorkspaceBillingDiscountView> Discounts);
+    IReadOnlyList<WorkspaceBillingDiscountView> Discounts,
+    int? FoundingSeatIncludedClients,
+    IReadOnlyList<WorkspaceBillingIncludedClientGrantView> IncludedClientGrants);
 
 /// <param name="FoundingCoach">
 /// For the owner of a founding space, <see cref="FoundingBadgeState.Waiting"/> or
@@ -239,15 +301,27 @@ public sealed record WorkspaceDiscountView(
     DateTimeOffset GrantedAtUtc,
     DateTimeOffset? RevokedAtUtc);
 
+/// <summary>One extra included clients grant as recorded, for the platform admin alone (notes plan N11a).</summary>
+public sealed record IncludedClientGrantView(
+    Guid Id,
+    int Clients,
+    DateOnly StartsOn,
+    DateOnly EndsOnExclusive,
+    string Note,
+    DateTimeOffset GrantedAtUtc,
+    DateTimeOffset? RevokedAtUtc);
+
 /// <param name="Founding">The open founding status with its live reading, or null.</param>
 /// <param name="FoundingHistory">The ended founding statuses, newest first.</param>
+/// <param name="IncludedClientGrants">Every extra included clients grant, newest first, the revoked ones kept.</param>
 public sealed record AdminWorkspaceDetail(
     AdminWorkspaceSummary Summary,
     CurrentMonthEstimateView CurrentMonth,
     IReadOnlyList<PlatformInvoiceView> Invoices,
     IReadOnlyList<WorkspaceDiscountView> Discounts,
     AdminFoundingView? Founding,
-    IReadOnlyList<FoundingStatusView> FoundingHistory);
+    IReadOnlyList<FoundingStatusView> FoundingHistory,
+    IReadOnlyList<IncludedClientGrantView> IncludedClientGrants);
 
 /// <summary>
 /// A space's Founding coach badge on today's UTC day (<see cref="FoundingBadgePolicy"/>), with the terms
@@ -281,8 +355,19 @@ public sealed record FoundingStatusView(
     DateTimeOffset? EndedAtUtc,
     string? EndReason);
 
-public sealed record AdminFoundingView(FoundingStatusView Status, FoundingBadgeView Badge);
+/// <param name="FoundingSeatIncludedClients">
+/// The clients the owner's seat includes now while this status stays open (notes plan N11a): the highest
+/// founding number it has had, null when no number applies or when it does not raise the plan's seat.
+/// </param>
+public sealed record AdminFoundingView(
+    FoundingStatusView Status,
+    FoundingBadgeView Badge,
+    int? FoundingSeatIncludedClients);
 
+/// <param name="FoundingSeatIncludedClients">
+/// The clients a founding space's owner seat includes under this version (notes plan N11a), or null for none:
+/// the plan's seat.
+/// </param>
 public sealed record FoundingTermsView(
     Guid Id,
     int VersionNumber,
@@ -290,7 +375,8 @@ public sealed record FoundingTermsView(
     int MonthsSinceStart,
     string? Note,
     DateTimeOffset PublishedAtUtc,
-    bool IsCurrent);
+    bool IsCurrent,
+    int? FoundingSeatIncludedClients);
 
 /// <param name="FoundingSince">A UTC day, today or earlier.</param>
 public sealed record MarkFoundingRequest(DateOnly? FoundingSince, string Note);
@@ -298,15 +384,22 @@ public sealed record MarkFoundingRequest(DateOnly? FoundingSince, string Note);
 public sealed record EndFoundingRequest(string Reason);
 
 /// <summary>
-/// New badge terms. <see cref="ExpectedCurrentVersion"/> is the version the admin saw, so two admins
+/// New founding terms. <see cref="ExpectedCurrentVersion"/> is the version the admin saw, so two admins
 /// publishing at once conflict instead of one silently replacing the other. Every number is required:
 /// a version is immutable, so a field left out is refused rather than read as 0.
 /// </summary>
+/// <param name="FoundingSeatIncludedClients">
+/// The clients a founding space's owner seat includes (notes plan N11a), 0 to 1,000, or null on purpose
+/// for none: the plan's seat. The key is required, so a request that leaves it out is refused by the JSON
+/// reader (400) and publishes nothing, never read as none: a page or a call that predates the number cannot
+/// drop every founding seat from the next invoice.
+/// </param>
 public sealed record PublishFoundingTermsRequest(
     int? ClientsWithActivePlan,
     int? MonthsSinceStart,
     string? Note,
-    int? ExpectedCurrentVersion);
+    int? ExpectedCurrentVersion,
+    [property: JsonRequired] int? FoundingSeatIncludedClients);
 
 /// <param name="Hidden">Required: true hides the badge from the owner's clients, false shows it.</param>
 public sealed record SetFoundingBadgeVisibilityRequest(bool? Hidden);
@@ -353,6 +446,13 @@ public sealed record VoidInvoiceRequest(string Reason, bool Reissue);
 public sealed record VoidInvoiceResponse(PlatformInvoiceView Voided, PlatformInvoiceView? Reissued);
 
 public sealed record GrantDiscountRequest(decimal Percent, DateOnly StartsOn, DateOnly EndsOnExclusive, string Note);
+
+/// <summary>
+/// Extra included clients for a founding space (notes plan N11a): whole UTC calendar months, so
+/// <see cref="StartsOn"/> and <see cref="EndsOnExclusive"/> (the day after the last) are each the first day
+/// of a month; the note says what it is for, such as which coach was brought, and only TB Gym's admin reads it.
+/// </summary>
+public sealed record GrantIncludedClientsRequest(int Clients, DateOnly StartsOn, DateOnly EndsOnExclusive, string Note);
 
 public sealed record IssueInvoicesRequest(DateOnly? PeriodStart);
 

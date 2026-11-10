@@ -100,6 +100,7 @@ export type AddWorkoutNoteRequest = {
 export type AdminFoundingView = {
   status: FoundingStatusView;
   badge: FoundingBadgeView;
+  foundingSeatIncludedClients: null | number | string;
 };
 
 export type AdminWorkspaceDetail = {
@@ -109,6 +110,7 @@ export type AdminWorkspaceDetail = {
   discounts: Array<WorkspaceDiscountView>;
   founding: null | AdminFoundingView;
   foundingHistory: Array<FoundingStatusView>;
+  includedClientGrants: Array<IncludedClientGrantView>;
 };
 
 export type AdminWorkspaceSummary = {
@@ -281,6 +283,9 @@ export type BillingAmountsView = {
   discountAmount: number | string;
   total: number | string;
   currencyCode: string;
+  seatIncludedClients: number | string;
+  foundingIncludedClients: number | string;
+  grantedIncludedClients: number | string;
 };
 
 export type BodyMeasurementDayView = {
@@ -1897,6 +1902,7 @@ export type CurrentMonthEstimateView = {
   inTrial: boolean;
   pricePlanVersion: number | string;
   amounts: BillingAmountsView;
+  foundingTermsVersion: null | number | string;
 };
 
 export type CurrentUserResponse = {
@@ -2432,6 +2438,7 @@ export type FoundingTermsView = {
   note: null | string;
   publishedAtUtc: string;
   isCurrent: boolean;
+  foundingSeatIncludedClients: null | number | string;
 };
 
 export type GenerateAiMealDraftRequest = {
@@ -2456,6 +2463,13 @@ export type GrantDiscountRequest = {
   note: string;
 };
 
+export type GrantIncludedClientsRequest = {
+  clients: number | string;
+  startsOn: string;
+  endsOnExclusive: string;
+  note: string;
+};
+
 export type HttpValidationProblemDetails = {
   type?: null | string;
   title?: null | string;
@@ -2471,6 +2485,16 @@ export type IFormFile = Blob | File;
 
 export type ImportUsdaFoodRequest = {
   fdcId: string;
+};
+
+export type IncludedClientGrantView = {
+  id: string;
+  clients: number | string;
+  startsOn: string;
+  endsOnExclusive: string;
+  note: string;
+  grantedAtUtc: string;
+  revokedAtUtc: null | string;
 };
 
 export type InvitationAcceptanceResponse = {
@@ -3277,6 +3301,9 @@ export type PlatformInvoiceView = {
   voidReason: null | string;
   replacesInvoiceId: null | string;
   replacedByInvoiceId: null | string;
+  foundingSeatIncludedClients: null | number | string;
+  foundingTermsVersion: null | number | string;
+  grantedIncludedClients: number | string;
 };
 
 export type PlatformPaymentView = {
@@ -3654,6 +3681,7 @@ export type PublishFoundingTermsRequest = {
   monthsSinceStart: null | number | string;
   note: null | string;
   expectedCurrentVersion: null | number | string;
+  foundingSeatIncludedClients: null | number | string;
 };
 
 export type PublishLegalDocumentRequest = {
@@ -4837,6 +4865,14 @@ export type WorkspaceBillingDiscountView = {
   startsLater: boolean;
 };
 
+export type WorkspaceBillingIncludedClientGrantView = {
+  clients: number | string;
+  startsOn: string;
+  lastDay: string;
+  endsOnExclusive: string;
+  startsLater: boolean;
+};
+
 export type WorkspaceBillingStatus = 'Trial' | 'Active' | 'Overdue' | 'ReadOnly';
 
 export type WorkspaceBillingView = {
@@ -4849,6 +4885,8 @@ export type WorkspaceBillingView = {
   readOnlyFrom: null | string;
   paymentInstructions: PaymentInstructionsView;
   discounts: Array<WorkspaceBillingDiscountView>;
+  foundingSeatIncludedClients: null | number | string;
+  includedClientGrants: Array<WorkspaceBillingIncludedClientGrantView>;
 };
 
 export type WorkspaceDetails = {
@@ -13518,6 +13556,76 @@ export type RevokeWorkspaceDiscountResponses = {
 
 export type RevokeWorkspaceDiscountResponse =
   RevokeWorkspaceDiscountResponses[keyof RevokeWorkspaceDiscountResponses];
+
+export type GrantIncludedClientsData = {
+  body: GrantIncludedClientsRequest;
+  path: {
+    tenantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/workspaces/{tenantId}/included-client-grants';
+};
+
+export type GrantIncludedClientsErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type GrantIncludedClientsError =
+  GrantIncludedClientsErrors[keyof GrantIncludedClientsErrors];
+
+export type GrantIncludedClientsResponses = {
+  /**
+   * OK
+   */
+  200: IncludedClientGrantView;
+};
+
+export type GrantIncludedClientsResponse =
+  GrantIncludedClientsResponses[keyof GrantIncludedClientsResponses];
+
+export type RevokeIncludedClientGrantData = {
+  body?: never;
+  path: {
+    grantId: string;
+  };
+  query?: never;
+  url: '/api/platform-admin/included-client-grants/{grantId}/revoke';
+};
+
+export type RevokeIncludedClientGrantErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RevokeIncludedClientGrantError =
+  RevokeIncludedClientGrantErrors[keyof RevokeIncludedClientGrantErrors];
+
+export type RevokeIncludedClientGrantResponses = {
+  /**
+   * OK
+   */
+  200: IncludedClientGrantView;
+};
+
+export type RevokeIncludedClientGrantResponse =
+  RevokeIncludedClientGrantResponses[keyof RevokeIncludedClientGrantResponses];
 
 export type MarkWorkspaceFoundingData = {
   body: MarkFoundingRequest;
