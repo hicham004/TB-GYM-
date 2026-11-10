@@ -46,8 +46,10 @@ its own waits for the owner in section 3.
 
 **Where.** On this laptop, by the plan runner: `.\scripts\start-plan-runner.ps1 -Plan notes`, one fresh chat per Open
 row on Opus 5.5 at max effort, with ultracode on: the chat orchestrates its understanding of the area, the build and an
-adversarial review of its own diff with the Workflow tool (the owner's word of 5 November). A chat builds the first Open
-row in section 0's order, commits on main once its checks are green, and the runner pushes each row that ends Done.
+adversarial review of its own diff with the Workflow tool (the owner's word of 5 November), within the owner's limits of
+10 November: at most four readers, and one review of at most four lenses with one skeptic a finding, two on security,
+tenancy or money (the review's agents had been half of every row's tokens). A chat builds the first Open row in section
+0's order, commits on main once its checks are green, and the runner pushes each row that ends Done.
 Nobody watches: the owner reads the reports and the screenshots afterwards.
 
 **What every row keeps.**
@@ -66,11 +68,17 @@ Nobody watches: the owner reads the reports and the screenshots afterwards.
 - Where a row changes a rule, it updates DOMAIN-RULES.md, the ADR or ARCHITECTURE.md in a few lines, as AGENTS.md
   asks. No new docs, reports or checklists.
 
-**Checks**, in proportion to what changed (AGENTS.md). A row that changes server code builds the backend and runs the
-full suite with `scripts/TestPostgres.ps1` and a container name of its own, about 1 h 30 on this laptop, before it
-commits; a failure an earlier row left is fixed first, in its own commit, and named in the report. A web row runs
-`format:check`, `lint`, the production build, Vitest and `git diff --check`, plus the mocked Playwright specs of the
-screens it changed, not the whole suite. Every new or changed screen gets a live pass against a fresh demo in a
+**Checks**, in proportion to what changed (AGENTS.md), and never the whole backend suite or the whole of Vitest inside a
+row (the owner's word of 10 November: the full backend suite had taken 1.6 to 2.1 hours of every row). While a row is
+built it runs only the tests it is writing or changing. Once at the end, after the review's fixes, a row that changes
+server code builds the backend and runs the domain and architecture tests whole (seconds) and the integration test
+classes it added or changed, plus every class that calls an endpoint, service or table its diff changed, with
+`scripts/TestPostgres.ps1` and a container name of its own; a failure an earlier row left is fixed first, in its own
+commit, and named in the report. A web row runs `format:check`, `lint`, the production build, the Vitest spec files
+of the code it changed and `git diff --check`, plus the mocked Playwright specs of the screens it changed. When a run
+has built its rows, the runner itself runs the full backend suite and Vitest once; what fails there, and fails again
+when rerun alone, goes to one fix chat that commits the fix on its own, and the check runs once more. Every new or
+changed screen gets a live pass against a fresh demo in a
 throwaway database of the chat's own (`ConnectionStrings__Database` pointed at it, built with the `demo-workspace`
 command), never against the owner's API (port 5134), web (port 4200) or the `tbgym` and `tbgym_demo` databases: 390 px
 and 1440 px stills in light and dark into `artifacts/notes-plan/<row>/` (git-ignored), axe clean, no sideways scroll,
@@ -743,7 +751,7 @@ What the coach sees: the weekly homework last in Needs you, one tap from the pan
 - Integration (PostgreSQL): the owner reads a running and an upcoming discount with name and days, and a chain of three in a row starting with a 100% one, not a revoked or an ended one; a coach gets 403 on `/api/billing`; another space's owner reads none of them (a second workspace and the wrong `X-Tenant-Id`).
 - Vitest: the sentence for none, one, two in a row, three in a row with a 100% start, two 100% stretches in a row, two with a gap, one still to come, and during the trial; the sheet's new help line.
 - Mocked e2e: Billing at 1440 and 390, light and dark, axe clean, no sideways scroll, 200% text inside the page.
-- Live: on a scratch demo (the owner's databases and ports never), grant a chain of three as the admin (a 100% start and two rates) and read the owner's page; stills at 1440 and 390 in light and dark. Server code changes, so the full backend suite runs.
+- Live: on a scratch demo (the owner's databases and ports never), grant a chain of three as the admin (a 100% start and two rates) and read the owner's page; stills at 1440 and 390 in light and dark. Server code changes, so the backend tests of section 1 run.
 - Test figures are the chat's own, never the owners' offer.
 
 **Left out**
@@ -924,7 +932,7 @@ What the coach and the client see: nothing yet. N11b draws the admin's and the o
     3. issue that month with `POST /api/platform-admin/invoices/issue` and `periodStart`;
     4. read the invoice on the admin's detail and on the owner's `GET /api/billing`;
     5. revoke the grant, then void and reissue.
-- The full backend suite with `scripts/TestPostgres.ps1` and a container name of its own, since server code changed.
+- The backend tests of section 1 with `scripts/TestPostgres.ps1` and a container name of its own, since server code changed.
 
 **Left out**
 
@@ -1140,7 +1148,7 @@ Words on screen: "TB Gym" (the group), "TB Gym website", "What changed", "Back t
 - Integration (PostgreSQL): mark a space founding with a discount, publish terms with N, publish price plan version 2, issue a past month by hand (`POST /api/platform-admin/invoices/issue` with `periodStart`, the test clock moved as the billing tests do): the founding space's invoice and estimate carry version 1 and a plain space's version 2; after the guarantee's end day, version 2; a version cheaper than version 1 published while the guarantee runs bills the founding space at that version (b); an ended founding status: the month it ended in at the held version and the next at the latest (c); a reissue keeps its version; a terms publish against a stale version answers 409 as N3a's does; the owner reads the held-until day, a coach gets 403, another space's owner reads nothing of it; the admin routes stay admin-only.
 - Vitest: the sentences on both pages, the plan sheet, the mark and end sheets, and the terms sheet's third number.
 - Mocked e2e: Billing and the admin's space page at 1440 and 390, light and dark, axe clean.
-- Live: on a scratch stack of the chat's own; the demo space is created 77 days before the build day (`DemoWorkspaceCast.WorkspaceCreatedDay = -77`), so its trial is over and at least one ended month can be issued by hand without touching dates: mark founding, grant a discount, publish terms with N, publish a new version, issue a past month, read both pages; never the owner's databases or ports. Server code changes, so the full backend suite runs.
+- Live: on a scratch stack of the chat's own; the demo space is created 77 days before the build day (`DemoWorkspaceCast.WorkspaceCreatedDay = -77`), so its trial is over and at least one ended month can be issued by hand without touching dates: mark founding, grant a discount, publish terms with N, publish a new version, issue a past month, read both pages; never the owner's databases or ports. Server code changes, so the backend tests of section 1 run.
 - N in the tests is the chat's own number, never decision 16's.
 
 **Left out**

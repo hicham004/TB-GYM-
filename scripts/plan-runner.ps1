@@ -46,12 +46,19 @@ A step a weekly limit stopped leaves its work uncommitted in the tree. -ResumeSe
 that chat's session id (runner.log names it) makes the first step resume the same chat,
 with its context, instead of refusing to start on the changed tree.
 
+Rows run focused tests only (the owner, 2026-11-10: the full backend suite took 1.6 to 2.1
+hours of every row, and review agents half of every row's tokens). A run that ends because
+its rows are built, or at -MaxSteps, then runs the full backend suite and Vitest itself, with
+no chat waiting on them: what fails is rerun alone once to tell a flake, what fails again goes
+to one fix chat, and the check runs once more after it. -FinalCheck runs only that check.
+
 .EXAMPLE
 .\scripts\plan-runner.ps1 -DryRun       # what would run next; starts nothing
 .\scripts\plan-runner.ps1 -SelfTest     # one tiny chat per model outside the repo: model, effort, deny rule
 .\scripts\plan-runner.ps1 -WaitForIdle  # wait until other chats are finished, then run
 .\scripts\plan-runner.ps1 -WaitForIdle -NoNewStepAfter 08:00   # a night run that leaves the morning free
 .\scripts\plan-runner.ps1 -WaitForIdle -ResumeSession <id>     # carry on with the step a limit stopped
+.\scripts\plan-runner.ps1 -FinalCheck   # the full backend suite and Vitest now, a fix chat if they fail
 #>
 [CmdletBinding()]
 param(
@@ -78,6 +85,8 @@ param(
     [switch]$WaitForIdle,
     [switch]$DryRun,
     [switch]$SelfTest,
+    # Only the final check: the full backend suite and Vitest on the current commit, a fix chat if they fail.
+    [switch]$FinalCheck,
     [switch]$Force
 )
 
@@ -264,13 +273,20 @@ If section 0 gives a different row, change nothing and say why.
 ultracode: the owner asked for every row of this plan to be built with ultracode on
 (2026-11-05). Use the Workflow tool as the workflow-authoring skill's Ultracode section
 says: understand the area with parallel readers, build, then review your own diff
-adversarially before the checks. Solo only for trivial edits.
+adversarially before the checks. Solo only for trivial edits. The owner's limits of
+2026-11-10 come before that section's "token cost is not a constraint": the review's
+agents were half of every row's tokens (51 to 73 agents a row from N6b to N6d).
+- At most four readers, each on its own part of the area.
+- One adversarial review of the diff, with at most four finder lenses (correctness and
+  the domain rules; security, tenancy and money; the tests; the screens and the words).
+  One skeptic checks each finding, and a second only a finding on security, tenant
+  isolation or money. No second review round: the focused tests check the fixes.
 
 Traps on this laptop (your memory notes have more):
-- A full backend suite started between 00:00 and 01:00 Beirut time fails R34a and R25b
-  on the day boundary: start it after 01:00 or rerun those two alone. The known flakes
-  (the rate-limit test, the Redis-outage SignalR test, the Step3Renewal double tap) pass
-  when rerun alone.
+- A backend test run started between 00:00 and 01:00 Beirut time fails R34a and R25b on
+  the day boundary: start it after 01:00 or rerun those two alone. The known flakes (the
+  rate-limit test, the Redis-outage SignalR test, the Step3Renewal double tap) pass when
+  rerun alone.
 - The live pass runs against a fresh demo in a throwaway database of your own
   (ConnectionStrings__Database pointed at it), never against the owner's own API
   (port 5134), web (port 4200) or the tbgym and tbgym_demo databases. Never drop a
@@ -291,9 +307,20 @@ The owner's decisions for this run (2026-11-05, "start building what's decided")
   built, the other way, your recommendation). A new money rule, legal wording or work
   outside the row: leave that item out, add it to section 3 with your recommendation, and
   build the rest of the row. The row's status says how many lines you added to section 3.
-- The full backend suite runs on this laptop before you commit whenever you changed
-  server code: scripts/TestPostgres.ps1 with a container name of your own, about 1 h 30.
-  A failure an earlier row left is fixed first, in its own commit, and named in your report.
+- Tests in proportion (the owner, 2026-11-10; for a row this replaces AGENTS.md's full
+  backend suite and any Checks line of section 2 that names it). Never run the whole
+  backend suite or the whole of Vitest in a row: the suite took 1.6 to 2.1 hours of every
+  row. While you build, run only the tests you are writing or changing. Once at the end,
+  after the review's fixes: a row that changed server code builds the backend, runs the
+  domain and architecture test projects whole (seconds), and runs the integration test
+  classes it added or changed plus every class that calls an endpoint, service or table
+  its diff changed (search the test project for them), inside
+  Start/Stop-TbGymTestPostgres with a container name of your own; a row that changed web
+  code runs format:check, lint, the production build, the Vitest spec files of the code
+  it changed and the mocked Playwright specs of the screens it changed. A failure an
+  earlier row left is fixed first, in its own commit, and named in your report. When the
+  run ends, the runner itself runs the full backend suite and Vitest once and starts a
+  chat to fix what fails.
 - A row too big to finish well in one chat: split it into parts (N4a, N4b), each with
   its scope, build and commit the first, and leave the others Open for the next chat.
 - Where a row changes a rule, update DOMAIN-RULES, the ADR or ARCHITECTURE in a few
@@ -303,8 +330,9 @@ The owner's decisions for this run (2026-11-05, "start building what's decided")
 
 $sharedRules = @'
 - Commit approved. When the step meets its definition of done and every check AGENTS.md
-  asks for has passed (the full backend suite when backend code changed, the web checks
-  when web code changed, git diff --check, and a live pass of every new or changed screen),
+  and the rules above ask for has passed (the backend tests they name when backend code
+  changed, the web checks when web code changed, git diff --check, and a live pass of
+  every new or changed screen),
   commit the step on the current branch, then record the hash in its status row in a
   second small commit, in the form section 0 uses. Stage only the files this step changed,
   by explicit path. No co-author or "Generated with" lines. Never push (<<PUSH>>),
@@ -315,8 +343,10 @@ $sharedRules = @'
 How an unattended run works:
 - Ask nothing and do not use plan mode. State your plan in a message, then build.
 - Background commands are stopped after 10 minutes here unless you pass a timeout. Start
-  long ones (the full backend suite, the API, ng serve) with run_in_background and timeout
-  7200000. While the suite runs you may end your turn; you get another turn when it exits.
+  long ones (a test run, the API, ng serve) with run_in_background and timeout 7200000,
+  then do other work or end your turn: you get another turn when one exits. Never wait on
+  one with sleep or polling loops: every turn re-reads the whole chat, about 600,000
+  tokens late in a row.
 - Before your final message, stop the servers and background commands you started, and
   only those. Never kill processes by name.
 - Leave scripts/plan-runner.ps1 and artifacts/plan-runner/ alone; they belong to the runner.
@@ -332,15 +362,110 @@ $stepPrompt = ($planPrompts[$Plan] + "`n" + $sharedRules).Replace('<<PUSH>>', $p
 
 $resumePrompt = 'The run stopped ({0}). Servers you started may still be running, and test runs you started have ended. Carry on with step {1} from where you stopped. The unattended-run rules in the first message still apply.'
 # For -ResumeSession: hours may have passed since the chat stopped, and its runner has exited.
-$stoppedResumePrompt = 'A usage limit or the owner stopped this chat and ended that run of the runner. A new run resumes you now, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, test runs you started have ended, and other commits may have reached main. Uncommitted changes another session made in files outside your step may have been set aside since: commit only your own files. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
+$stoppedResumePrompt = 'A usage limit or the owner stopped this chat and ended that run of the runner. A new run resumes you now, so the clock has moved on: read it before a backend test run. Servers you started may still be running, test runs you started have ended, and other commits may have reached main. Uncommitted changes another session made in files outside your step may have been set aside since: commit only your own files. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
 # After -OnWeeklyLimit wait: the same run waited, possibly for days, while the chat was stopped.
-$weeklyResumePrompt = 'A weekly usage limit stopped this chat, and the runner waited for it to reset, so the clock has moved on: read it before a full backend suite. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
+$weeklyResumePrompt = 'A weekly usage limit stopped this chat, and the runner waited for it to reset, so the clock has moved on: read it before a backend test run. Servers you started may still be running, and test runs you started have ended. Carry on with step {0} from where you stopped. The unattended-run rules in the first message still apply.'
 # A resumed chat runs in a new process: name ultracode again, as the notes plan's first message does.
 if ($Plan -eq 'notes') {
     $resumePrompt += ' ultracode stays on.'
     $stoppedResumePrompt += ' ultracode stays on.'
     $weeklyResumePrompt += ' ultracode stays on.'
 }
+
+# The run's final check (the owner, 2026-11-10): rows run focused tests only, and when the run ends
+# the runner itself runs the full backend suite and Vitest once, so no chat waits hours on them.
+$finalCheckHours = 4
+# The backend tests as check.ps1 runs them, in a child PowerShell. Written out as a file; ASCII only.
+$backendTestsScript = @'
+# Written by scripts/plan-runner.ps1 for its final check: the backend tests, as check.ps1 runs them.
+param([string]$Root, [string]$Log, [string]$Results, [string]$Container, [string]$Filter = '', [switch]$NoBuild)
+$ErrorActionPreference = 'Continue'
+Set-Location $Root
+function Write-Log([string]$Text) { $Text | Out-File -FilePath $Log -Append -Encoding utf8 }
+# Toolchain.ps1 would point an empty setting at the owner's database; the test container sets its own below.
+$env:ConnectionStrings__Database = 'Host=unused;Database=unused;Username=unused;Password=unused'
+. .\scripts\Toolchain.ps1
+Initialize-TbGymToolchains -RepositoryRoot $Root | Out-Null
+. .\scripts\TestPostgres.ps1
+$TbGymTestPostgresContainer = $Container
+Write-Log ('START ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+$env:TB_GYM_REQUIRE_POSTGRES_TESTS = 'true'
+$env:TB_GYM_REQUIRE_REDIS_TESTS = 'true'
+docker pull redis:8.2.2-alpine *>&1 | Out-File -FilePath $Log -Append -Encoding utf8
+docker pull $TbGymTestPostgresImage *>&1 | Out-File -FilePath $Log -Append -Encoding utf8
+if (-not $NoBuild) {
+    dotnet restore TB.Gym.slnx *>&1 | Out-File -FilePath $Log -Append -Encoding utf8
+    dotnet build TB.Gym.slnx --configuration Release --no-restore -v q -nologo *>&1 | Out-File -FilePath $Log -Append -Encoding utf8
+    $built = $LASTEXITCODE
+    Write-Log ('BUILD exit=' + $built)
+    if ($built -ne 0) { Write-Log ('END exit=' + $built); exit $built }
+}
+$testArgs = @('test', 'TB.Gym.slnx', '--configuration', 'Release', '--no-build', '--logger', 'console;verbosity=normal',
+    '--logger', 'trx', '--results-directory', $Results, '--blame-hang-timeout', '30m', '--blame-hang-dump-type', 'none')
+if ($Filter) { $testArgs += @('--filter', $Filter) }
+$exit = 1
+try {
+    $previous = Start-TbGymTestPostgres
+    try {
+        & dotnet @testArgs *>&1 | Out-File -FilePath $Log -Append -Encoding utf8
+        $exit = $LASTEXITCODE
+    }
+    finally { Stop-TbGymTestPostgres $previous }
+}
+catch { Write-Log ('RUNNER-ERROR ' + $_.Exception.Message) }
+Write-Log ('END exit=' + $exit + ' ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+exit $exit
+'@
+$vitestScript = @'
+# Written by scripts/plan-runner.ps1 for its final check: every Vitest spec.
+param([string]$Root, [string]$Log)
+$ErrorActionPreference = 'Continue'
+Set-Location $Root
+. .\scripts\Toolchain.ps1
+Initialize-TbGymToolchains -RepositoryRoot $Root | Out-Null
+Set-Location (Join-Path $Root 'src\web')
+$env:CI = 'true'
+cmd /c "npx ng test --watch=false > `"$Log`" 2>&1"
+$exit = $LASTEXITCODE
+('END exit=' + $exit) | Out-File -FilePath $Log -Append -Encoding utf8
+exit $exit
+'@
+# The one chat that fixes what the final check found.
+$finalFixPrompt = @'
+The plan runner ran the full backend suite and Vitest once at the end of its run, on main
+at <<HEAD>> (the owner's rule of 2026-11-10: rows run focused tests, the runner the whole
+suite). These failed, and failed again when rerun alone:
+<<FAILURES>>
+Logs: <<LOGS>>
+The run's commits, newest first:
+<<COMMITS>>
+
+This chat runs unattended. scripts/plan-runner.ps1 started it, and nobody will see or
+answer anything until it has finished. Fix these failures and nothing else.
+- Find each failure's cause in the code and in the commits above. Fix whatever is wrong,
+  which may be the test: a test that pins behaviour a row changed on purpose follows that
+  row's spec in section 2 of the plan file the commits name.
+- A failure that comes from this laptop rather than the code (Docker, a port, the clock,
+  a known flake from your memory notes): change nothing for it and say so.
+- Run the tests that failed and the focused tests of what you change: backend tests
+  inside Start/Stop-TbGymTestPostgres from scripts/TestPostgres.ps1 with a container name
+  of your own, Vitest only the spec files involved. Never the whole suite: the runner runs
+  it again after you.
+- Ask nothing, do not use plan mode, and use no workflows: this is a small fix.
+- Commit approved: one commit on the current branch for the fix, after git diff --check,
+  staging only the files you changed, by explicit path. No co-author or "Generated with"
+  lines. Never push (<<PUSH>>), never create or switch branches, never amend, rebase or
+  reset commits. Leave scripts/plan-runner.ps1 and artifacts/plan-runner/ alone.
+- Background commands are stopped after 10 minutes here unless you pass a timeout. Start
+  a long one with run_in_background and timeout 7200000, then end your turn: you get
+  another turn when it exits. Never wait with sleep or polling loops.
+- Before your final message, stop the servers and background commands you started, and
+  only those. Never kill processes by name.
+- Your final message is the owner's report: each failure, its cause, what you changed and
+  the tests you ran. End it with exactly one of these lines:
+  RUNNER-RESULT: done final-check <commit hash>
+  RUNNER-RESULT: stopped <one-line reason>
+'@
 
 function Write-Note([string]$Message) {
     $line = '{0:yyyy-MM-dd HH:mm}  {1}' -f (Get-Date), $Message
@@ -507,7 +632,7 @@ function Get-EnvironmentNotes {
     }
     catch { }
     if (-not (Get-Process -Name 'com.docker.backend', 'Docker Desktop' -ErrorAction SilentlyContinue)) {
-        'Docker is not running: the full backend suite takes about an hour instead of 35 minutes.'
+        'Docker is not running: backend tests need its test PostgreSQL, and the final check starts Docker Desktop.'
     }
 }
 
@@ -775,7 +900,7 @@ function Invoke-Push {
     }
 }
 
-function Invoke-Step($Row, [string]$ResumeId = '') {
+function Invoke-Step($Row, [string]$ResumeId = '', [string]$FirstPrompt = '') {
     $started = Get-Date
     $name = 'Plan runner ' + $Row.Id
     $base = Join-Path $logDir ('{0:yyyyMMdd-HHmm}-{1}' -f $started, ($Row.Id -replace '[^A-Za-z0-9.]', '_'))
@@ -784,7 +909,16 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
     $branchBefore = @(Invoke-Git rev-parse --abbrev-ref HEAD)[0]
     $untrackedBefore = @(Get-Untracked)
     $stepModel = Get-RowModel $Row.Id
-    $prompt = $stepPrompt.Replace('<<ROW>>', $Row.Id)
+    # The final check's fix chat brings its own first message, and runs without ultracode.
+    $firstText = $stepPrompt.Replace('<<ROW>>', $Row.Id)
+    $limitResumeText = $resumePrompt
+    $weeklyResumeText = $weeklyResumePrompt
+    if ($FirstPrompt) {
+        $firstText = $FirstPrompt
+        $limitResumeText = $resumePrompt.Replace(' ultracode stays on.', '')
+        $weeklyResumeText = $weeklyResumePrompt.Replace(' ultracode stays on.', '')
+    }
+    $prompt = $firstText
     if ($ResumeId) {
         $prompt = $stoppedResumePrompt -f $Row.Id
         Write-Note ('Resuming chat {0} for {1} ({2}, effort {3}). Log: {4}' -f $ResumeId, $Row.Id, $stepModel, $effort, $log)
@@ -801,8 +935,8 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
         if (-not $reason) { $reason = 'a usage limit, with no result' }
         $delay = Get-ResumeDelay $run
         # A chat that never got a session id starts again with the whole step prompt.
-        $prompt = $stepPrompt.Replace('<<ROW>>', $Row.Id)
-        if ($run.SessionId) { $prompt = $resumePrompt -f $reason, $Row.Id }
+        $prompt = $firstText
+        if ($run.SessionId) { $prompt = $limitResumeText -f $reason, $Row.Id }
         if (Test-LongLimit $run $delay) {
             $resetText = 'later this week'
             if ($delay -gt 12 * 3600) { $resetText = '{0:ddd HH:mm}' -f (Get-Date).AddSeconds($delay) }
@@ -828,7 +962,7 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
                 }
                 Write-Note ('{0} hit a weekly limit ("{1}"). Waiting for its reset; the chat resumes at {2:ddd HH:mm}.' -f $stepModel, $reason, (Get-Date).AddSeconds($delay))
                 if (-not (Wait-UnlessStopped $delay)) { $run.Stopped = 'the STOP file ended the wait for the weekly limit'; break }
-                if ($run.SessionId) { $prompt = $weeklyResumePrompt -f $Row.Id }
+                if ($run.SessionId) { $prompt = $weeklyResumeText -f $Row.Id }
                 $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ResumeId $run.SessionId -ChatModel $stepModel
                 continue
             }
@@ -900,6 +1034,216 @@ function Invoke-Step($Row, [string]$ResumeId = '') {
     return $ok
 }
 
+# Runs a script in a hidden child PowerShell and waits for its exit code, at most $Hours; $null when
+# the STOP file or the time limit ended it (its process tree is killed, never anything by name).
+function Invoke-ChildScript([string]$Path, [string]$Arguments, [double]$Hours) {
+    $process = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -PassThru `
+        -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "{0}" {1}' -f $Path, $Arguments)
+    # Without the handle, a Start-Process object can lose its exit code.
+    $null = $process.Handle
+    $until = (Get-Date).AddHours($Hours)
+    while (-not $process.WaitForExit(30000)) {
+        if ((Test-Path $stopFile) -or (Get-Date) -gt $until) {
+            Stop-ProcessTree $process
+            [void]$process.WaitForExit(30000)
+            return $null
+        }
+    }
+    return $process.ExitCode
+}
+
+# Every test a TRX file under $Directory reports as not passed (Class.Method, skipped tests aside), and
+# the counts per test project. Read as a stream: the integration TRX holds every test's output (50 MB).
+function Read-TrxResults([string]$Directory) {
+    $failed = New-Object System.Collections.Generic.List[string]
+    $counts = New-Object System.Collections.Generic.List[string]
+    if (-not (Test-Path $Directory)) { return [pscustomobject]@{ Failed = @(); Counts = @() } }
+    foreach ($file in @(Get-ChildItem -Path $Directory -Filter '*.trx' -File)) {
+        $methods = @{}
+        $failedIds = New-Object System.Collections.Generic.List[object]
+        $unitTestId = $null
+        $reader = [Xml.XmlReader]::Create($file.FullName)
+        try {
+            while ($reader.Read()) {
+                if ($reader.NodeType -ne [Xml.XmlNodeType]::Element) { continue }
+                $element = $reader.LocalName
+                if ($element -eq 'UnitTestResult') {
+                    if (@('Failed', 'Error', 'Timeout', 'Aborted') -contains $reader.GetAttribute('outcome')) {
+                        $failedIds.Add(@($reader.GetAttribute('testId'), $reader.GetAttribute('testName')))
+                    }
+                }
+                elseif ($element -eq 'UnitTest') { $unitTestId = $reader.GetAttribute('id') }
+                elseif ($element -eq 'TestMethod' -and $unitTestId) {
+                    $methods[$unitTestId] = '{0}.{1}' -f $reader.GetAttribute('className'), $reader.GetAttribute('name')
+                }
+                elseif ($element -eq 'Counters') {
+                    $counts.Add(('{0} of {1} passed' -f $reader.GetAttribute('passed'), $reader.GetAttribute('total')))
+                }
+            }
+        }
+        catch { $counts.Add(('{0} could not be read: {1}' -f $file.Name, $_.Exception.Message)) }
+        finally { $reader.Dispose() }
+        foreach ($pair in $failedIds) {
+            $testName = $methods[$pair[0]]
+            if (-not $testName) { $testName = $pair[1] }
+            if (-not $failed.Contains($testName)) { $failed.Add($testName) }
+        }
+    }
+    return [pscustomobject]@{ Failed = $failed.ToArray(); Counts = $counts.ToArray() }
+}
+
+# The backend tests in a child PowerShell: the whole suite, or only -Filter on the last build.
+function Invoke-BackendTests([string]$Base, [string]$Filter = '', [switch]$NoBuild) {
+    $path = $Base + '.ps1'
+    $log = $Base + '.log'
+    $results = $Base + '-trx'
+    [IO.File]::WriteAllText($path, $backendTestsScript, $utf8)
+    $arguments = '-Root "{0}" -Log "{1}" -Results "{2}" -Container tbgym-test-postgres-runner' -f $repositoryRoot, $log, $results
+    if ($Filter) { $arguments += ' -Filter "{0}"' -f $Filter }
+    if ($NoBuild) { $arguments += ' -NoBuild' }
+    $exit = Invoke-ChildScript $path $arguments $finalCheckHours
+    $text = ''
+    if (Test-Path $log) { $text = ([IO.File]::ReadAllText($log)).Replace([string][char]0, '') }
+    $trx = Read-TrxResults $results
+    $buildFailed = $text -match '(?m)^BUILD exit=[1-9]'
+    # A run that never got to its tests (Docker, the container, a kill) is not the code's failure.
+    $ran = ($null -ne $exit) -and ($buildFailed -or @($trx.Counts).Count -gt 0) -and $text -notmatch '(?m)^RUNNER-ERROR '
+    return [pscustomobject]@{ Exit = $exit; Ran = $ran; BuildFailed = $buildFailed; Failed = @($trx.Failed); Counts = @($trx.Counts); Log = $log }
+}
+
+function Invoke-Vitest([string]$Base) {
+    $path = $Base + '.ps1'
+    $log = $Base + '.log'
+    [IO.File]::WriteAllText($path, $vitestScript, $utf8)
+    $exit = Invoke-ChildScript $path ('-Root "{0}" -Log "{1}"' -f $repositoryRoot, $log) 1
+    $counts = ''
+    if (Test-Path $log) {
+        $counts = (@([IO.File]::ReadAllText($log) -split "`r?`n" | Where-Object { $_ -match '^\s*(Test Files|Tests)\s' } | ForEach-Object { $_.Trim() }) -join '; ')
+    }
+    return [pscustomobject]@{ Exit = $exit; Counts = $counts; Log = $log }
+}
+
+function Test-Docker {
+    $ErrorActionPreference = 'Continue'
+    try { $null = & docker info --format '{{.ServerVersion}}' 2>&1; return $LASTEXITCODE -eq 0 } catch { return $false }
+}
+
+# Docker Desktop started if it is not running; true once its engine answers, within five minutes.
+function Confirm-Docker {
+    if (Test-Docker) { return $true }
+    $desktop = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
+    if (-not (Test-Path $desktop)) { return $false }
+    Write-Note 'Final check: starting Docker Desktop for the test PostgreSQL.'
+    Start-Process -FilePath $desktop
+    $until = (Get-Date).AddMinutes(5)
+    while ((Get-Date) -lt $until) {
+        Start-Sleep -Seconds 15
+        if (Test-Docker) { return $true }
+    }
+    return $false
+}
+
+# One pass of the final check: the full backend suite, then Vitest, each failure rerun alone once to
+# tell a flake from a break. Returns what still fails, and the lines for summary.md.
+function Invoke-FinalPass([string]$Base) {
+    $lines = New-Object System.Collections.Generic.List[string]
+    $failures = New-Object System.Collections.Generic.List[string]
+    $logs = New-Object System.Collections.Generic.List[string]
+    $suite = Invoke-BackendTests ($Base + '-backend')
+    $logs.Add($suite.Log)
+    if (-not $suite.Ran) {
+        $lines.Add(('- Backend suite: did not run to the end (exit {0}); read {1}' -f $suite.Exit, $suite.Log))
+        return [pscustomobject]@{ Failures = @(); Lines = $lines.ToArray(); Logs = $logs.ToArray(); Broken = $true }
+    }
+    if ($suite.BuildFailed) {
+        $failures.Add('the backend build (dotnet build TB.Gym.slnx -c Release)')
+        $lines.Add(('- Backend suite: the build failed; read {0}' -f $suite.Log))
+    }
+    else {
+        $lines.Add(('- Backend suite: {0} (exit {1})' -f ($suite.Counts -join ', '), $suite.Exit))
+        $stillFailing = @($suite.Failed)
+        if ($stillFailing.Count -eq 0 -and $suite.Exit -ne 0) {
+            $failures.Add(('the backend suite ended with exit {0} and no failed test; read {1}' -f $suite.Exit, $suite.Log))
+        }
+        elseif ($stillFailing.Count -gt 0 -and $stillFailing.Count -le 40) {
+            # The known flakes pass alone (the plan's traps); only what fails again is a break.
+            $filter = ($stillFailing | ForEach-Object { 'FullyQualifiedName~' + $_ }) -join '|'
+            $rerun = Invoke-BackendTests ($Base + '-backend-rerun') -Filter $filter -NoBuild
+            $logs.Add($rerun.Log)
+            if ($rerun.Ran) {
+                $flaky = @($stillFailing | Where-Object { @($rerun.Failed) -notcontains $_ })
+                if ($flaky.Count -gt 0) { $lines.Add(('- Passed when rerun alone: {0}' -f ($flaky -join ', '))) }
+                $stillFailing = @($rerun.Failed)
+            }
+        }
+        foreach ($test in $stillFailing) { $failures.Add($test) }
+    }
+    $vitest = Invoke-Vitest ($Base + '-vitest')
+    if ($null -ne $vitest.Exit -and $vitest.Exit -ne 0) { $vitest = Invoke-Vitest ($Base + '-vitest-rerun') }
+    $logs.Add($vitest.Log)
+    $lines.Add(('- Vitest: {0} (exit {1})' -f $vitest.Counts, $vitest.Exit))
+    if ($null -eq $vitest.Exit) { return [pscustomobject]@{ Failures = $failures.ToArray(); Lines = $lines.ToArray(); Logs = $logs.ToArray(); Broken = $true } }
+    if ($vitest.Exit -ne 0) { $failures.Add(('Vitest, twice: {0}; read {1}' -f $vitest.Counts, $vitest.Log)) }
+    return [pscustomobject]@{ Failures = $failures.ToArray(); Lines = $lines.ToArray(); Logs = $logs.ToArray(); Broken = $false }
+}
+
+# The full backend suite and Vitest once when a run ends (the owner, 2026-11-10). What still fails
+# goes to one fix chat, and the check runs once more after it. No chat waits on the suite itself.
+function Invoke-FinalCheck([string]$RunStart) {
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add('## Final check')
+    $head = @(Invoke-Git rev-parse --short HEAD)[0]
+    $outcome = ''
+    if (@(Get-TrackedChanges).Count -gt 0) { $outcome = 'not run: tracked files are changed and not committed' }
+    elseif (-not (Confirm-Docker)) { $outcome = 'not run: Docker does not answer, and the suite needs its test PostgreSQL' }
+    else {
+        # R34a and R25b fail on the day boundary when the suite starts between 00:00 and 01:00.
+        if ((Get-Date).Hour -eq 0) {
+            Write-Note 'Final check: waiting until 01:05, past the day boundary two tests trip on.'
+            if (-not (Wait-UnlessStopped ([int]([datetime]::Today.AddHours(1).AddMinutes(5) - (Get-Date)).TotalSeconds))) { $outcome = 'not run: the STOP file ended the wait' }
+        }
+    }
+    if (-not $outcome) {
+        $started = Get-Date
+        $base = Join-Path $logDir ('{0:yyyyMMdd-HHmm}-final-check' -f $started)
+        Write-Note ('Final check on {0}: the full backend suite, then Vitest (about 2 hours). Logs: {1}-*' -f $head, $base)
+        $pass = Invoke-FinalPass $base
+        $lines.Add(('- {0:yyyy-MM-dd HH:mm} to {1:HH:mm} on {2}' -f $started, (Get-Date), $head))
+        foreach ($line in $pass.Lines) { $lines.Add($line) }
+        if ($pass.Broken) { $outcome = 'not finished: a run was cut short (the STOP file, the time limit, Docker or the test container)' }
+        elseif ($pass.Failures.Count -eq 0) { $outcome = 'passed' }
+        else {
+            $lines.Add(('- Still failing: {0}' -f ($pass.Failures -join '; ')))
+            [IO.File]::AppendAllText($summaryPath, ($lines -join "`r`n") + "`r`n`r`n", $utf8)
+            $lines.Clear()
+            $lines.Add('## Final check, after the fix chat')
+            $commits = @(Invoke-Git log --oneline --no-decorate -20 ('{0}..HEAD' -f $RunStart))
+            if ($commits.Count -eq 0) { $commits = @(Invoke-Git log --oneline --no-decorate -10) }
+            $prompt = $finalFixPrompt.Replace('<<HEAD>>', $head).Replace('<<PUSH>>', $pushNote).Replace('<<LOGS>>', ($pass.Logs -join ', '))
+            $prompt = $prompt.Replace('<<FAILURES>>', (($pass.Failures | Select-Object -First 60 | ForEach-Object { '- ' + $_ }) -join "`n"))
+            $prompt = $prompt.Replace('<<COMMITS>>', (($commits | ForEach-Object { '- ' + (Get-ShortText $_ 160) }) -join "`n"))
+            $fixed = Invoke-Step ([pscustomobject]@{ Id = 'final-check'; What = 'fix what the final check found'; Gate = $false; Status = 'Open' }) -FirstPrompt $prompt
+            if (Test-Path $stopFile) { $outcome = 'not run again: the STOP file' }
+            elseif (@(Get-TrackedChanges).Count -gt 0) { $outcome = 'not run again: the fix chat left tracked files changed' }
+            else {
+                $again = Get-Date
+                $head = @(Invoke-Git rev-parse --short HEAD)[0]
+                Write-Note ('Final check again on {0}, after the fix chat (it ended {1}).' -f $head, $(if ($fixed) { 'Done' } else { 'stopped' }))
+                $pass = Invoke-FinalPass ($base + '-2')
+                $lines.Add(('- {0:yyyy-MM-dd HH:mm} to {1:HH:mm} on {2}' -f $again, (Get-Date), $head))
+                foreach ($line in $pass.Lines) { $lines.Add($line) }
+                if ($pass.Broken) { $outcome = 'not finished: a run was cut short' }
+                elseif ($pass.Failures.Count -eq 0) { $outcome = 'passed' }
+                else { $outcome = 'failed again, for the owner: ' + ($pass.Failures -join '; ') }
+            }
+        }
+    }
+    $lines.Add('- Outcome: ' + $outcome)
+    [IO.File]::AppendAllText($summaryPath, ($lines -join "`r`n") + "`r`n`r`n", $utf8)
+    if (Test-Path $stopFile) { Remove-Item $stopFile }
+    Write-Note ('Final check: {0}.' -f $outcome)
+}
+
 function Invoke-SelfTest([string]$TestModel) {
     $workDir = Join-Path $env:TEMP 'tbgym-plan-runner-selftest'
     [IO.Directory]::CreateDirectory($workDir) | Out-Null
@@ -947,6 +1291,7 @@ function Show-DryRun {
     Write-Note ('Plan: {0} ({1}){2}.' -f $Plan, $planFiles[$Plan], (Get-CutoffText))
     Write-Note ('Each chat: --effort {0} ({1}), bypassPermissions, git push denied, at most {2} hours.' -f $effort, (Get-RowModelText), $StepHours)
     Write-Note ('Runner: {0}.' -f (Get-RunRulesText))
+    Write-Note ('Final check: when the rows are built (or at -MaxSteps), the full backend suite and Vitest, Docker {0}.' -f $(if (Test-Docker) { 'answering' } else { 'not answering yet' }))
     if (-not $NoPush) { Write-Note ('Push target: github.com/{0}.' -f (Get-GitHubRepository)) }
     foreach ($note in @(Get-EnvironmentNotes)) { Write-Note ('Note: ' + $note) }
     foreach ($chat in @(Get-RecentChats)) {
@@ -977,9 +1322,18 @@ if ($DryRun) {
 
 Enter-RunnerLock
 try {
+    if ($FinalCheck) {
+        Write-Note 'Runner started for the final check only.'
+        Invoke-FinalCheck (@(Invoke-Git rev-parse HEAD)[0])
+        return
+    }
     Write-Note ('Runner started on the {0} plan: up to {1} steps{2}, each a new chat at {3} effort ({4}); {5}.' -f $Plan, $MaxSteps, (Get-CutoffText), $effort, (Get-RowModelText), (Get-RunRulesText))
     foreach ($note in @(Get-EnvironmentNotes)) { Write-Note ('Note: ' + $note) }
+    $runStart = @(Invoke-Git rev-parse HEAD)[0]
     $steps = 0
+    $doneSteps = 0
+    # Only a run that ends because its rows are built (or at -MaxSteps) runs the final check.
+    $finished = $false
     $lastBlocker = ''
     while ($true) {
         if (Test-Path $stopFile) {
@@ -1000,8 +1354,8 @@ try {
         }
         $row = Get-NextRow
         $problem = Get-RowProblem $row
-        if ($problem) { Write-Note ('Stopping: ' + $problem + '.'); break }
-        if ($steps -ge $MaxSteps) { Write-Note ('Stopping after {0} steps (-MaxSteps). Next is {1}.' -f $steps, $row.Id); break }
+        if ($problem) { Write-Note ('Stopping: ' + $problem + '.'); $finished = $true; break }
+        if ($steps -ge $MaxSteps) { Write-Note ('Stopping after {0} steps (-MaxSteps). Next is {1}.' -f $steps, $row.Id); $finished = $true; break }
         if ($stepCutoff -and (Get-Date) -gt $stepCutoff) { Write-Note ('Stopping: it is past {0:HH:mm} (-NoNewStepAfter). Next is {1}.' -f $stepCutoff, $row.Id); break }
         $steps++
         if (-not (Invoke-Step $row $resumeId)) {
@@ -1010,7 +1364,12 @@ try {
             Write-Note ('Stopped. Read {0}' -f $summaryPath)
             break
         }
+        $doneSteps++
         if ($script:pushStop) { Write-Note ('Stopped before the next step: the push needs the owner. Read {0}' -f $summaryPath); break }
+    }
+    if ($doneSteps -gt 0) {
+        if ($finished) { Invoke-FinalCheck $runStart }
+        else { Write-Note 'No final check: the run did not finish its rows. When it has: .\scripts\plan-runner.ps1 -FinalCheck' }
     }
 }
 finally {

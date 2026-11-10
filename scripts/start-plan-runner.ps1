@@ -11,7 +11,8 @@ chat at a time until every row is Done or waits for the owner, pushing each row 
 (-NoPush keeps commits local) and waiting out a used-up weekly limit (-OnWeeklyLimit stop ends the
 run instead), the owner's choices of 2026-10-29. It stops early at the first gate, Optional row or
 step that does not end Done, or, when given -NoNewStepAfter, before a step that would start after
-that clock time.
+that clock time. Rows run focused tests; once the rows are built, the runner runs the full backend
+suite and Vitest itself and starts one chat to fix what fails (the owner, 2026-11-10).
 Closing VS Code or any chat does not stop the task; the laptop sleeping does (keep it on power with
 the lid open). Windows asks for nothing: the task runs as you, already signed in.
 
@@ -73,7 +74,7 @@ if ($Status) {
 
 # Warnings only; the runner itself refuses to start on a changed tree or a non-Open row.
 if (-not (Get-Process -Name 'com.docker.backend', 'Docker Desktop' -ErrorAction SilentlyContinue)) {
-    Write-Warning 'Docker is not running: a backend step will test against a normal PostgreSQL and take about an hour.'
+    Write-Warning 'Docker is not running: backend tests need its test PostgreSQL (the final check starts Docker Desktop itself).'
 }
 try {
     Add-Type -AssemblyName System.Windows.Forms
