@@ -474,7 +474,29 @@ public sealed record TrainingMesocycleView(
     IReadOnlyList<WorkingMaxSnapshotView> WorkingMaxes,
     IReadOnlyList<TrainingWeekView> Weeks,
     IReadOnlyList<MesocycleLifecycleEventView> Lifecycle,
-    uint Version);
+    uint Version,
+    IReadOnlyList<LiftStandingView>? LiftStandings = null);
+
+/// <summary>
+/// Where one writing of a lift with "Last time + step" sets stands for its coming session (<c>LastTimeStep</c> v1,
+/// STR-019, notes plan N6b): the coach's reads alone carry it, and only while the read is open (TRN-023).
+/// <c>SessionId</c> is the lift's coming session, the earliest one not started and not before today in an open
+/// block that writes it with a step; <c>Occurrence</c> says which writing of the lift there it is (the first by
+/// position is 1); <c>ExertionDisplay</c> is how the coach wrote the set's effort, RPE or RIR.
+/// </summary>
+public sealed record LiftStandingView(
+    string RuleKey,
+    int RuleVersion,
+    Guid MesocycleId,
+    Guid SessionId,
+    string SessionName,
+    DateOnly SessionDate,
+    Guid ExercisePrescriptionId,
+    Guid ExerciseId,
+    string ExerciseName,
+    int Occurrence,
+    ExertionDisplayPreference ExertionDisplay,
+    LiftStanding Standing);
 
 public sealed record MesocycleLifecycleEventView(
     Guid Id,
@@ -897,11 +919,16 @@ public sealed record ActiveTrainingBlockView(
 
 public sealed record DatedWorkoutView(DateOnly Date, string TimeZoneId, ClientWorkoutView Workout, bool HasMoreNotes);
 
+/// <param name="LiftStandings">
+/// Where each lift done in the workout stands for its coming session (STR-019): the coach's read alone carries it,
+/// never the client's (whose reads share <c>DatedWorkoutView</c>), and a closed read none.
+/// </param>
 public sealed record CoachWorkoutDetailResult(
     bool IsAllowed,
     string AccessReason,
     DatedWorkoutView? Detail,
-    int? NextNotesSkip);
+    int? NextNotesSkip,
+    IReadOnlyList<LiftStandingView>? LiftStandings = null);
 
 /// <param name="DurationSeconds">
 /// Set once the workout is finished: its finish summary's duration, so a finished workout shows the time it took
@@ -1070,6 +1097,8 @@ public sealed record ClientProgramSessionView(
 /// A client's programs as their coach reads them (R3.4a, TRN-022): the newest blocks first, each with
 /// every week, shared or not, and the state of each session. A closed feature carries its reason and
 /// no blocks, never an empty list, and no <c>FinishedPrograms</c>: that choice opens with the read (TRN-031).
+/// <c>LiftStandings</c> says where each lift with a step stands for its coming session (STR-019); a closed read
+/// carries none.
 /// </summary>
 public sealed record CoachClientProgramView(
     bool IsAllowed,
@@ -1078,7 +1107,8 @@ public sealed record CoachClientProgramView(
     IReadOnlyList<CoachProgramBlockView> Blocks,
     string SessionStateRuleKey,
     int SessionStateRuleVersion,
-    FinishedProgramsVisibilityView? FinishedPrograms);
+    FinishedProgramsVisibilityView? FinishedPrograms,
+    IReadOnlyList<LiftStandingView>? LiftStandings = null);
 
 /// <summary>
 /// Counts cover every session of the block, shared or not. <c>CurrentWeekNumber</c> is set only while

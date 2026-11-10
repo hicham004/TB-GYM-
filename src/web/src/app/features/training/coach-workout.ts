@@ -22,6 +22,12 @@ import { StatusLabel } from '../../ui/status-label';
 import { firstValueFrom } from 'rxjs';
 import type { ClientSetView, WorkoutNoteView } from '../../core/api/generated';
 import {
+  standingBelongsTo,
+  standingLine,
+  standingsByExercise,
+  type StandingLine,
+} from './standing-words';
+import {
   coachWorkoutAccessLabel,
   mapCoachWorkoutDetail,
   setActualText,
@@ -80,6 +86,29 @@ export class CoachWorkout {
       void this.load();
     });
   }
+
+  protected readonly separator = ' · ';
+
+  /**
+   * Where each lift done here stands for its coming session (STR-019), under the lift: the coach's read alone
+   * carries it, a lift with no step set coming has none, and an older workout than the one the answer read
+   * says nothing, since the line would describe another workout's sets.
+   */
+  protected readonly standings = computed(() => {
+    const result = this.result();
+    const found = new Map<string, StandingLine>();
+    const detail = result?.detail;
+    if (!detail) return found;
+    for (const [id, standing] of standingsByExercise(
+      detail.workout.exercises,
+      result.liftStandings,
+    )) {
+      if (standingBelongsTo(standing, detail.workout)) {
+        found.set(id, standingLine(standing, this.locale));
+      }
+    }
+    return found;
+  });
 
   protected target(set: ClientSetView): string {
     return setTargetText(set, this.locale);

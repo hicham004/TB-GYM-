@@ -75,6 +75,21 @@ h4 {
   padding: 0.75rem;
 }
 
+// Where the lift stands for its coming session (N6b): what happens next in ink, the rest muted.
+.standing {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  margin: 0;
+  text-wrap: pretty;
+
+  strong {
+    color: var(--tb-ink);
+    font-weight: 600;
+  }
+}
+
 .sets,
 .notes {
   list-style: none;

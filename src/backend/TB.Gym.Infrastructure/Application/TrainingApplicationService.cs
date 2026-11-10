@@ -228,7 +228,21 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         CancellationToken cancellationToken)
     {
         var item = await LoadMesocycleAsync(mesocycleId, tracking: false, cancellationToken);
-        return item is null ? null : await ToViewAsync(item, cancellationToken);
+        if (item is null)
+        {
+            return null;
+        }
+
+        var view = await ToViewAsync(item, cancellationToken);
+        // Where each lift stands (STR-019) rides this read alone, never a write's answer, and only while the coach's
+        // read of the client's training is open (TRN-023); the block itself reads as before.
+        if (!(await GetCoachTrainingAccessAsync(item.ClientProfileId, cancellationToken)).IsAllowed)
+        {
+            return view;
+        }
+
+        var standings = await ReadLiftStandingsAsync(item.ClientProfileId, cancellationToken);
+        return view with { LiftStandings = standings.Where(standing => standing.MesocycleId == item.Id).ToArray() };
     }
 
     public async Task<TrainingCommandResult> AssignMesocycleAsync(

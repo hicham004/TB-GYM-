@@ -4,6 +4,7 @@ import type {
   ClientTrainingUpcomingView,
   ClientWorkoutView,
   CoachWorkoutDetailResult,
+  LiftStandingView,
 } from '../../core/api/generated';
 import { lastTimeStepWords } from './step-words';
 
@@ -45,6 +46,8 @@ export interface CoachWorkoutDetail {
   accessReason: string;
   detail: DatedWorkout | null;
   nextNotesSkip: number | null;
+  /** Where each lift done in the workout stands for its coming session (STR-019); none on a closed read. */
+  liftStandings: readonly LiftStandingView[] | null;
 }
 
 export function mapUpcomingTraining(value: ClientTrainingUpcomingView): UpcomingTraining {
@@ -73,6 +76,7 @@ export function mapCoachWorkoutDetail(value: CoachWorkoutDetailResult): CoachWor
     ...value,
     detail: value.detail ? { ...value.detail } : null,
     nextNotesSkip: value.nextNotesSkip == null ? null : Number(value.nextNotesSkip),
+    liftStandings: value.liftStandings ?? null,
   };
 }
 

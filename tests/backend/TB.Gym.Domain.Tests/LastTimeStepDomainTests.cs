@@ -14,7 +14,7 @@ namespace TB.Gym.Domain.Tests;
 /// reps; it never takes a weight worked out from a max, never anchors one, and a draft keeps it as typed.
 /// </summary>
 [TestClass]
-public sealed class LastTimeStepDomainTests
+public sealed partial class LastTimeStepDomainTests
 {
     private static readonly Guid TenantId = Guid.Parse("10000000-0000-0000-0000-0000000006a1");
     private static readonly Guid ClientId = Guid.Parse("20000000-0000-0000-0000-0000000006a1");

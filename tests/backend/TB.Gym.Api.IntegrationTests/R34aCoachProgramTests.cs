@@ -177,7 +177,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         var program = await ReadSliceAsync<CoachClientProgramView>(coach, R34aProgramUrl(mayaId));
         var queries = RequiredTodayQueryCounter.Count;
         Console.WriteLine($"R3.4a coach program: {queries} SQL commands for 24 blocks.");
-        // Observed 15, sign-in and tenant checks included: a fixed number, whatever the block count.
+        // Observed 18, sign-in and tenant checks included (17 before N6b's lift standings, STR-019, read
+        // the coming step sets in one query): a fixed number, whatever the block count.
         Assert.IsLessThanOrEqualTo(18, queries, "The coach's program read must not query once per block.");
         Assert.HasCount(24, program.Blocks);
         CollectionAssert.AreEqual(

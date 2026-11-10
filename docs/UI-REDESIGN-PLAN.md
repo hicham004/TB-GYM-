@@ -1813,7 +1813,12 @@ limited to the coach's assigned clients.
     cancelled program, has no Missed.
   - A session opens a sheet: what it prescribes (equal sets told once, "3 × 8–10 reps · 60 kg · RPE
     8"), what the client did when they started it (the coach's workout view, set by set against the
-    target) and, for one still to come, a swap for one of the coach's saved sessions.
+    target) and, for one still to come, a swap for one of the coach's saved sessions. A lift with a last
+    time + step set says where it stands under its sets, on its coming session, and under the lift in the
+    logged workout it was read from, or the running one a forgotten Finish waits on (notes plan N6b,
+    STR-019): "Last 15 kg × 10, 10, 10 on Tue · every set done · next time 17 kg", or a hold and why, "Same
+    weight · set 3 reached 8 of 10 on Tue", what happens next in ink and the rest muted. The client's screens
+    say nothing of it (decision 21: the coach moves it).
   - Manage program: Assign program, Build next block, Edit weeks (P3b), Reschedule, Open every shared week now (or
     Open weeks as they start), Close program and Cancel program. What cannot be done stays in the list
     with its reason: a started program cannot move, Close program waits for every session to be done

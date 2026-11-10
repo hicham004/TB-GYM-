@@ -1351,6 +1351,7 @@ export type CoachClientProgramView = {
   sessionStateRuleKey: string;
   sessionStateRuleVersion: number | string;
   finishedPrograms: null | FinishedProgramsVisibilityView;
+  liftStandings?: null | Array<LiftStandingView>;
 };
 
 export type CoachClientRef = {
@@ -1532,6 +1533,7 @@ export type CoachWorkoutDetailResult = {
   accessReason: string;
   detail: null | DatedWorkoutView;
   nextNotesSkip: null | number | string;
+  liftStandings?: null | Array<LiftStandingView>;
 };
 
 export type CommercialNotificationKind =
@@ -2538,7 +2540,81 @@ export type LegalDocumentView = {
 
 export type LengthUnit = 'Centimeter' | 'Inch';
 
+export type LiftLastTime = {
+  workoutExecutionId: string;
+  day: string;
+  sets: Array<LoggedSet>;
+};
+
+export type LiftStanding = {
+  outcome: LiftStandingOutcome;
+  reason: LiftStandingReasonDetail;
+  lastTime: null | LiftLastTime;
+  sets: Array<SetStanding>;
+  judgedOn: string;
+};
+
+export type LiftStandingOutcome = 'StepUp' | 'Hold';
+
+export type LiftStandingReason =
+  | 'EverySetDone'
+  | 'NeverDone'
+  | 'LastDoneTooLongAgo'
+  | 'WorkoutInProgress'
+  | 'NoMatchLastTime'
+  | 'LoggedInOtherUnit'
+  | 'LooksLikeTypo'
+  | 'SetNotLogged'
+  | 'NoRepsTyped'
+  | 'RepsShort'
+  | 'HarderThanPlanned'
+  | 'NoWeightLogged'
+  | 'AboveLimit';
+
+export type LiftStandingReasonDetail = {
+  kind: LiftStandingReason;
+  day: null | string;
+  setNumber: null | number | string;
+  repetitions: null | number | string;
+  repetitionsAsked: null | number | string;
+  rpe: null | number | string;
+  targetRpe: null | number | string;
+  weight: null | number | string;
+  earlierWeight: null | number | string;
+  unit: null | TrainingLoadUnit;
+  workoutExecutionId: null | string;
+};
+
+export type LiftStandingView = {
+  ruleKey: string;
+  ruleVersion: number | string;
+  mesocycleId: string;
+  sessionId: string;
+  sessionName: string;
+  sessionDate: string;
+  exercisePrescriptionId: string;
+  exerciseId: string;
+  exerciseName: string;
+  occurrence: number | string;
+  exertionDisplay: ExertionDisplayPreference;
+  standing: LiftStanding;
+};
+
 export type LoadUnit = 'Kilogram' | 'Pound';
+
+export type LoggedSet = {
+  setNumber: number | string;
+  setType: TrainingSetType;
+  repetitionsAsked: null | number | string;
+  targetRpe: null | number | string;
+  prescribedWeight: null | number | string;
+  prescribedUnit: null | TrainingLoadUnit;
+  isCompleted: boolean;
+  repetitions: null | number | string;
+  weight: null | number | string;
+  unit: null | TrainingLoadUnit;
+  rpe: null | number | string;
+};
 
 export type LoginRequest = {
   email: string;
@@ -4134,6 +4210,21 @@ export type SetPrescriptionView = {
   isManualLoadOverride: boolean;
 };
 
+export type SetStanding = {
+  setPrescriptionId: string;
+  setNumber: number | string;
+  move: SetStandingMove;
+  weight: null | number | string;
+  currentWeight: null | number | string;
+  unit: TrainingLoadUnit;
+  step: number | string;
+  note: SetStandingNote;
+};
+
+export type SetStandingMove = 'StepUp' | 'SameAsLastTime' | 'Unchanged';
+
+export type SetStandingNote = 'None' | 'NewSet' | 'NoWeightLogged' | 'AboveLimit' | 'NoRepsTyped';
+
 export type SetWeekPublishedRequest = {
   isPublished: boolean;
   version: number | string;
@@ -4402,6 +4493,7 @@ export type TrainingMesocycleView = {
   weeks: Array<TrainingWeekView>;
   lifecycle: Array<MesocycleLifecycleEventView>;
   version: number | string;
+  liftStandings?: null | Array<LiftStandingView>;
 };
 
 export type TrainingSessionRequest = {

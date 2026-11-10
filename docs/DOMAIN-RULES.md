@@ -880,10 +880,11 @@ snapshots the choice and the step (TRN-012), so a started workout keeps the step
 builder's copies (TRN-025) and Build next block (TRN-027) move its starting weight by the weight step, as
 they move a typed weight, and copy the set's own step as it is; Edit weeks (TRN-028) keeps a session sent
 as stored, and a changed step set is neither worked out from a max nor rounded. Nothing adds the step yet,
-and nothing will on its own: the notes plan's N6b is to say where each lift stands and N6c to let the
-coach apply the step; until then the coach changes the weight with Edit weeks. The player starts the set's
-reps box empty and asks for the reps before ✓ (TRN-029), while the server still records a set logged
-without reps. Database checks hold the shape, on the sets and on the workout's snapshot.
+and nothing will on its own: STR-019 now says where each lift stands (notes plan N6b), and N6c is to let
+the coach apply the step; until then the coach changes the weight with Edit weeks. The player starts the
+set's reps box empty and asks for the reps before ✓ (TRN-029), while the server still records a set logged
+without reps, which STR-019 never counts. Database checks hold the shape, on the sets and on the workout's
+snapshot.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
@@ -1086,6 +1087,33 @@ its own after its effort ("3 × 5 · RPE 8 · 81% of training max"), in whole pe
 help gives 81.1%), from the builder's pinned copy of WorkingMaxLoad v2's curve (`epley-curve.ts`, one
 cell per half rep of reps plus reserve, compared cell by cell with the server's numbers by a domain
 test), as `rpe-chart.ts` pins the chart (STR-010). Past the curve's limit (STR-005) the line says so.
+
+**STR-019** Where a lift stands (`LastTimeStep` v1, notes plan N6b; decisions 20 to 22 of 5 and 7 Nov
+2026, ADR 0040). A lift's coming session is the earliest one not started and not before today, in a
+program neither completed nor cancelled, that writes it with a "Last time + step" set (TRN-032); each such
+writing there gets an answer. The client's latest workout of the lift decides, by scheduled day on or
+before the coming session's, from any program of their profile under any session name (d, carry-on); a
+writing counts as the lift's only where it was done as the coach wrote it, never swapped. Writings and sets
+are matched by order: the session's first writing of the lift to the first one written last time (a
+swapped one keeps its place), then set by set, warm-ups counted (f, i). The first hold that applies, in
+this order, is the answer: the lift never done; the latest workout, finished or still running, more than
+14 days before today in the coming program's time zone (b); the latest still running, a forgotten Finish
+(g); no matching writing last time (f); a set logged last time in another unit than the coming set's
+(warm-ups too); a likely typo (e), where a weight logged last time (warm-ups too) is more than 25% from
+that set's latest earlier log that stood and from the weight that workout asked (a first log stands, a
+typo after a log that stood holds once, an applied step never holds, and a typo logged again holds until
+a workout logs the set near a weight the coach types); a working set (never a warm-up) not logged, logged
+with no reps typed (never counted, decision 22) or short of the reps that workout asked, the top of a
+range (a, h); a working set rated above its target effort (c; no rating is no hold). Otherwise each set
+steps up: last time's logged weight on its set plus its own step, exact, never rounded or converted
+(decision 22). A hold of (a) or (c) keeps last time's weight on each set; the holds before them keep the
+set's own. A set that cannot step or keep last time's weight (its match had no weight or, on a step, no
+reps typed) carries on its latest log that stood when that was within the 14 days, else keeps its own,
+and says so; a set with no match last time keeps its own (i); a step past 2,000 keeps last time's; a lift
+where no set can step holds. Every answer names the rule and its version and the reason (with the workout
+of a (b) or (g) hold), and last time's sets whenever a finished workout was read. The coach's program read
+(TRN-022), mesocycle read and logged workout read carry the answers, only while the coach's read is open
+(TRN-023); the client's reads never do. Nothing is written: the coach applies (N6c).
 
 ## 6. Nutrition, recipes, and calorie targets
 

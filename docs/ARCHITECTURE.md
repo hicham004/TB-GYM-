@@ -1672,6 +1672,14 @@ and optional starting weight (`DirectLoad`), held by their widened `CK_*_LoadStr
 week copies, Build next block and Edit weeks carry the step and treat the starting weight as a typed
 weight, never worked out from a max or rounded; nothing in Training adds the step on its own.
 
+Notes plan N6b adds where a lift stands, `LastTimeStep` v1 (STR-019, ADR 0040). `LastTimeStepRule` in
+Training is a pure rule: input records in, an answer out, no database and no clock. In Infrastructure,
+`TrainingApplicationService.Standings.cs` reads the coming step sets and, only when there are some, the
+client's workouts of those lifts (two queries at most); the coach's program, mesocycle and logged workout
+reads carry the answers as `LiftStandingView`, on `CoachClientProgramView`, `TrainingMesocycleView` and
+`CoachWorkoutDetailResult`. The client's reads share `ClientWorkoutView` with the coach's workout read and
+never carry them, and nothing is written.
+
 Critique B19 adds `training."ClientProgramVisibilities"`: one row per client once a coach has chosen
 "Can see finished programs" (TRN-031), no row meaning the default, so the migration moves no data. It is
 Training's, not a column on `clients."ClientProfiles"`, so the client's record and its version stay out of

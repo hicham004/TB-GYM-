@@ -1,7 +1,7 @@
 # ADR 0040: Last time + step
 
 Status: accepted, 2026-11-10 (notes plan N6a; decisions 21 and 22 of 5 Nov 2026, with 20 and the rest of 22
-decided on 7 Nov); N6b and N6c will amend it
+decided on 7 Nov); amended 2026-11-10 (notes plan N6b); N6c will amend it
 
 ## Context
 
@@ -28,11 +28,11 @@ Decision 20 (7 Nov): the step only when every set reached its reps.
    (their weight step moves the starting weight as it moves a typed weight, and the set's own step is copied as
    it is), Edit weeks, and the workout's snapshot at start, so a started workout keeps the choice and the step
    it began with.
-3. The coach applies, never the app or the client (decision 21). N6a never adds the step: N6b will say where
-   each lift stands, by a named, versioned rule, and N6c will let the coach apply it; until then the coach
-   changes the weight with Edit weeks.
+3. The coach applies, never the app or the client (decision 21). N6a never adds the step: N6b says where each
+   lift stands, by a named, versioned rule (STR-019, below), and N6c will let the coach apply it; until then the
+   coach changes the weight with Edit weeks.
 4. Reps first (decision 22): the player starts a step set's reps box empty and asks for the reps before ✓. It is
-   a nudge only: the server still records a set logged without reps, and N6b's rule will never count it.
+   a nudge only: the server still records a set logged without reps, and N6b's rule never counts it (STR-019).
 
 Why the coach (decision 21): ADR 0036's reasons for maxes hold for a step too. One day's sets move with sleep
 and fatigue, which a coach can read and a rule cannot; typed weights win (STR-011); and nothing changes a weight
@@ -48,6 +48,31 @@ on its own.
   is never rounded (decision 22: the client types the nearest weight they have).
 - STR-009 holds: N6a adds no transform of its own, and a step reaches a weight only when the coach applies it
   (N6c).
+
+## Where a lift stands (notes plan N6b)
+
+`LastTimeStep` v1 (STR-019) is a named, versioned rule in the Training module, `LastTimeStepRule`, whose input
+records Infrastructure fills from the rows. For each writing with a step set in a lift's coming session, the
+client's latest workout of the lift by scheduled day decides, from any program under any session name. It
+answers per set a new weight (last time's logged weight plus the step, exact, never rounded or converted) or a
+hold with its reason. Each line is the owner's to change in a later version; the first hold that applies wins:
+
+- never done; (b) the latest workout over 14 days old, even if still running; (g) the latest still running;
+- (f) no writing to match last time (writings, then sets, are matched by order, warm-ups counted; a writing is
+  the lift's only where it was done as written, and a swapped one keeps its place); the unit: a set logged in
+  the other unit (warm-ups too);
+- (e) a weight more than 25% from that set's latest earlier log that stood and from the weight that workout
+  asked (warm-ups too): a first log stands, a typo after a log that stood holds once, an applied step never
+  holds, and a typo logged again holds until a workout logs the set near a weight the coach types;
+- (a, h) a working set not logged, logged with no reps typed (decision 22) or short of the reps that workout
+  asked; (c) a working set rated above its target effort. Warm-ups never count in (a) or (c).
+
+(d) Carry-on: a hold of (a) or (c) keeps last time's weight, the holds before them the set's own; (i) each set
+steps by its own number. A set whose match gave nothing to step from or keep (no weight, or on a step no reps
+typed) carries on its latest log that stood within the 14 days, else keeps its own; a set with no match keeps
+its own. The coach's program read (TRN-022), mesocycle read and logged workout read carry the answers while the
+coach's read is open (TRN-023), never the client's reads. N6b writes nothing, no table and no migration: the
+coach applies (N6c).
 
 ## Consequences
 

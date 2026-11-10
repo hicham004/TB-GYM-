@@ -27,6 +27,7 @@ import { StatusPill } from '../../ui/status-pill';
 import { sessionFromSaved, toTrainingSessionRequest } from '../training/training-builder.models';
 import { CoachWorkout } from '../training/coach-workout';
 import { ExerciseDemo } from '../training/exercise-demo';
+import { standingFor, standingLine, type StandingLine } from '../training/standing-words';
 import {
   exerciseLines,
   markTone,
@@ -106,6 +107,20 @@ import { ClientWorkspaceContext } from './client-workspace.context';
                       <li>{{ line }}</li>
                     }
                   </ul>
+                  @if (standings().get(exercise.id); as standing) {
+                    <p class="standing" [attr.data-standing]="standing.outcome">
+                      @for (part of standing.parts; track $index) {
+                        @if (!$first) {
+                          {{ separator }}
+                        }
+                        @if (part.strong) {
+                          <strong>{{ part.text }}</strong>
+                        } @else {
+                          {{ part.text }}
+                        }
+                      }
+                    </p>
+                  }
                   @if (exercise.notes) {
                     <p class="exercise-note" dir="auto">{{ exercise.notes }}</p>
                   }
@@ -259,6 +274,21 @@ import { ClientWorkspaceContext } from './client-workspace.context';
       margin-block-start: 0.25rem;
     }
 
+    /* Where the lift stands for this coming session (N6b): what happens next in ink, the rest muted. */
+    .standing {
+      color: var(--tb-muted);
+      font-size: 0.875rem;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.4;
+      margin-block-start: 0.25rem;
+      text-wrap: pretty;
+    }
+
+    .standing strong {
+      color: var(--tb-ink);
+      font-weight: 600;
+    }
+
     .problem {
       align-items: center;
       display: flex;
@@ -336,6 +366,22 @@ export class ProgramSession {
     const detail = this.detail();
     const view = this.view();
     return detail && view ? exerciseLines(detail, view.loadUnit, this.locale) : [];
+  });
+
+  protected readonly separator = ' · ';
+
+  /**
+   * Where each lift with a step stands, on its coming session only (STR-019): the server answers for the
+   * lift's next session not started, so a later session of the same lift says nothing yet.
+   */
+  protected readonly standings = computed(() => {
+    const found = new Map<string, StandingLine>();
+    const standings = this.view()?.liftStandings;
+    for (const exercise of this.detail()?.exercises ?? []) {
+      const standing = standingFor(standings, exercise.id);
+      if (standing) found.set(exercise.id, standingLine(standing, this.locale));
+    }
+    return found;
   });
 
   /** Still to come and never started, in a program that is still open: the server's conditions. */

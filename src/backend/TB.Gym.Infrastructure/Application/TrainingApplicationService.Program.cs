@@ -275,7 +275,8 @@ internal sealed partial class TrainingApplicationService
         }).ToArray();
         return new(true, access.Reason.ToString(), today, views,
             ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version,
-            await ReadFinishedProgramsVisibilityAsync(clientProfileId, cancellationToken));
+            await ReadFinishedProgramsVisibilityAsync(clientProfileId, cancellationToken),
+            await ReadLiftStandingsAsync(clientProfileId, cancellationToken));
     }
 
     public async Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(

@@ -25,6 +25,7 @@ describe('CoachWorkout', () => {
       isAllowed: true,
       accessReason: 'Granted',
       nextNotesSkip: notesSkip,
+      liftStandings: null,
       detail: {
         date: '2026-08-25',
         timeZoneId: 'UTC',
@@ -141,7 +142,13 @@ describe('CoachWorkout', () => {
     fixture.componentRef.setInput('clientId', 'second-client');
     fixture.componentRef.setInput('workoutId', 'second-workout');
     await settle(fixture);
-    delayed.next({ isAllowed: false, accessReason: 'Paused', detail: null, nextNotesSkip: null });
+    delayed.next({
+      isAllowed: false,
+      accessReason: 'Paused',
+      detail: null,
+      nextNotesSkip: null,
+      liftStandings: null,
+    });
     delayed.complete();
     await settle(fixture);
     const host = fixture.nativeElement as HTMLElement;
@@ -411,5 +418,145 @@ describe('CoachWorkout', () => {
       ['5 reps · last time + 2.5 kg', '—'],
       ['5 reps · 45 lb · last time + 5 lb', '—'],
     ]);
+  });
+
+  /** Notes plan N6b: where the lift done stands for its coming session, under the lift (STR-019). */
+  it('says where each lift done stands under it, and nothing under a lift with no standing', async () => {
+    const detail = workoutDetail(null);
+    const exercises = detail.detail!.workout.exercises;
+    exercises.push({
+      ...exercises[0],
+      prescriptionId: 'prescription-2',
+      prescribedExerciseId: 'leg-curl',
+      prescribedExerciseName: 'Seated Leg Curl',
+      actualExerciseId: 'leg-curl',
+      actualExerciseName: 'Seated Leg Curl',
+      wasSubstituted: false,
+      coachNotes: null,
+    });
+    const standing = (occurrence: number, exerciseId: string, lastWorkout = 'workout-1') => ({
+      ruleKey: 'LastTimeStep',
+      ruleVersion: 1,
+      mesocycleId: 'mesocycle-1',
+      sessionId: 'session-2',
+      sessionName: 'Lower A',
+      sessionDate: '2026-09-01',
+      exercisePrescriptionId: 'coming-prescription',
+      exerciseId,
+      exerciseName: 'Seated Leg Curl',
+      occurrence,
+      exertionDisplay: 'Rpe' as const,
+      standing: {
+        outcome: 'Hold' as const,
+        reason: {
+          kind: 'RepsShort' as const,
+          day: '2026-08-25',
+          setNumber: 3,
+          repetitions: 8,
+          repetitionsAsked: 10,
+          rpe: null,
+          targetRpe: null,
+          weight: null,
+          earlierWeight: null,
+          unit: null,
+          workoutExecutionId: null,
+        },
+        // The answer read this workout as last time, so the line belongs under it.
+        lastTime: { workoutExecutionId: lastWorkout, day: '2026-08-25', sets: [] },
+        sets: [
+          {
+            setPrescriptionId: 'coming-set-1',
+            setNumber: 1,
+            move: 'SameAsLastTime' as const,
+            weight: 25,
+            currentWeight: 25,
+            unit: 'Kilogram' as const,
+            step: 2.5,
+            note: 'None' as const,
+          },
+        ],
+        judgedOn: '2026-08-27',
+      },
+    });
+    // The curl's own standing, and one of the squat's second writing that nothing here matches (line f).
+    detail.liftStandings = [standing(1, 'leg-curl'), standing(2, 'exercise-2')];
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: vi.fn(() => of(detail)) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    await settle(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const lines = Array.from(host.querySelectorAll('.exercise')).map(
+      (exercise) =>
+        exercise.querySelector('.standing')?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
+    );
+    expect(lines).toEqual([null, 'Same weight · set 3 reached 8 of 10 on Tue']);
+    expect(host.querySelector('.standing strong')?.textContent?.trim()).toBe('Same weight');
+    expect(host.querySelector('.standing')?.getAttribute('data-standing')).toBe('Hold');
+  });
+
+  it('says nothing under a lift on an older workout than the one the answer read', async () => {
+    const detail = workoutDetail(null);
+    const exercises = detail.detail!.workout.exercises;
+    exercises[0] = {
+      ...exercises[0],
+      prescribedExerciseId: 'exercise-2',
+      actualExerciseId: 'exercise-2',
+      wasSubstituted: false,
+    };
+    const answer = {
+      ruleKey: 'LastTimeStep',
+      ruleVersion: 1,
+      mesocycleId: 'mesocycle-1',
+      sessionId: 'session-2',
+      sessionName: 'Lower A',
+      sessionDate: '2026-09-01',
+      exercisePrescriptionId: 'coming-prescription',
+      exerciseId: 'exercise-2',
+      exerciseName: 'Front squat',
+      occurrence: 1,
+      exertionDisplay: 'Rpe' as const,
+      standing: {
+        outcome: 'StepUp' as const,
+        reason: {
+          kind: 'EverySetDone' as const,
+          day: '2026-08-27',
+          setNumber: null,
+          repetitions: null,
+          repetitionsAsked: null,
+          rpe: null,
+          targetRpe: null,
+          weight: null,
+          earlierWeight: null,
+          unit: null,
+          workoutExecutionId: null,
+        },
+        // A later workout is last time: this one's sets are not what the line would describe.
+        lastTime: { workoutExecutionId: 'workout-later', day: '2026-08-27', sets: [] },
+        sets: [],
+        judgedOn: '2026-08-28',
+      },
+    };
+    detail.liftStandings = [answer];
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: vi.fn(() => of(detail)) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    await settle(fixture);
+
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.standing')).toHaveLength(0);
   });
 });

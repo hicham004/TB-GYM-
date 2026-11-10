@@ -64,6 +64,20 @@
               </li>
             }
           </ol>
+          @if (standings().get(exercise.prescriptionId); as standing) {
+            <p class="standing" [attr.data-standing]="standing.outcome">
+              @for (part of standing.parts; track $index) {
+                @if (!$first) {
+                  {{ separator }}
+                }
+                @if (part.strong) {
+                  <strong>{{ part.text }}</strong>
+                } @else {
+                  {{ part.text }}
+                }
+              }
+            </p>
+          }
         </section>
       }
       <h4 class="notes-title" i18n>Workout notes</h4>

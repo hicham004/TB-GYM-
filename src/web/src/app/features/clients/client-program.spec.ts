@@ -1310,6 +1310,99 @@ describe('a client’s Training', () => {
       ]);
     });
 
+    it('says where each lift with a step stands, under its sets, on its coming session (N6b)', async () => {
+      const view = blockView();
+      const step = {
+        repetitionsMinimum: 10,
+        repetitionsMaximum: 10,
+        loadStrategy: 'LastTimeStep',
+        loadUnit: 'Kilogram',
+        directLoad: 7,
+        prescribedLoad: 7,
+        percentageWorkingMax: null,
+        loadStep: 2,
+        targetRpe: null,
+      };
+      (view.weeks[0].sessions[0].exercises as unknown[]).push({
+        id: 'ex-2',
+        exerciseName: 'Goblet squat',
+        coachNotes: null,
+        sets: [step, step, step],
+      });
+      const logged = (setNumber: number, weight: number, repetitions: number) => ({
+        setNumber,
+        setType: 'Normal',
+        repetitionsAsked: 10,
+        targetRpe: null,
+        prescribedWeight: weight,
+        prescribedUnit: 'Kilogram',
+        isCompleted: true,
+        repetitions,
+        weight,
+        unit: 'Kilogram',
+        rpe: null,
+      });
+      // The server's answer, judged on the workspace's day: last time on Tue 29 Sep, every set done.
+      (view as unknown as { liftStandings: unknown[] }).liftStandings = [
+        {
+          ruleKey: 'LastTimeStep',
+          ruleVersion: 1,
+          mesocycleId: 'block-lean',
+          sessionId: 'block-lean-s33',
+          sessionName: 'Lower B',
+          sessionDate: '2026-10-01',
+          exercisePrescriptionId: 'ex-2',
+          exerciseId: 'goblet-squat',
+          exerciseName: 'Goblet squat',
+          occurrence: 1,
+          exertionDisplay: 'Rpe',
+          standing: {
+            outcome: 'StepUp',
+            reason: {
+              kind: 'EverySetDone',
+              day: '2026-09-29',
+              setNumber: null,
+              repetitions: null,
+              repetitionsAsked: null,
+              rpe: null,
+              targetRpe: null,
+              weight: null,
+              earlierWeight: null,
+              unit: null,
+            },
+            lastTime: {
+              workoutExecutionId: 'workout-0',
+              day: '2026-09-29',
+              sets: [logged(1, 7, 10), logged(2, 7, 10), logged(3, 7, 11)],
+            },
+            sets: [1, 2, 3].map((setNumber) => ({
+              setPrescriptionId: `step-${setNumber}`,
+              setNumber,
+              move: 'StepUp',
+              weight: 9,
+              currentWeight: 7,
+              unit: 'Kilogram',
+              step: 2,
+              note: 'None',
+            })),
+            judgedOn: '2026-10-01',
+          },
+        },
+      ];
+      const { harness, host } = await render({
+        api: { getTrainingMesocycle: vi.fn(() => of(view)) },
+      });
+
+      all(host.querySelector('.week.current')!, 'button.session')[2].click();
+      await settle(harness.fixture);
+
+      const sheet = dialog()!;
+      expect(
+        all(sheet, '.exercises > li').map((item) => textOf(item.querySelector('.standing'))),
+      ).toEqual(['', 'Last 7 kg × 10, 10, 11 on Tue · every set done · next time 9 kg']);
+      expect(textOf(sheet.querySelector('.standing strong'))).toBe('next time 9 kg');
+    });
+
     it('swaps a workout for a saved one on the day it already has (TRAIN-3)', async () => {
       const view = blockView();
       (view.weeks[0].sessions[0] as unknown as { dayOffset: number }).dayOffset = 3;

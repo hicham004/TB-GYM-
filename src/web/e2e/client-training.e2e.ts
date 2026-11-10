@@ -665,6 +665,230 @@ test('a last time + step set reads its weight, then its step, in the session she
   await axe(page);
 });
 
+/** The server's answer for one writing of a lift (LastTimeStep v1, STR-019), judged on Thu 1 Oct. */
+function standing(exercisePrescriptionId: string, exerciseId: string, answer: object) {
+  return {
+    ruleKey: 'LastTimeStep',
+    ruleVersion: 1,
+    mesocycleId: BLOCK,
+    sessionId: `${BLOCK}-s33`,
+    sessionName: 'Lower B',
+    sessionDate: '2026-10-01',
+    exercisePrescriptionId,
+    exerciseId,
+    exerciseName: 'Goblet Squat',
+    occurrence: 1,
+    exertionDisplay: 'Rpe',
+    standing: { judgedOn: '2026-10-01', ...answer },
+  };
+}
+
+const goblet = {
+  outcome: 'StepUp',
+  reason: {
+    kind: 'EverySetDone',
+    day: '2026-09-29',
+    setNumber: null,
+    repetitions: null,
+    repetitionsAsked: null,
+    rpe: null,
+    targetRpe: null,
+    weight: null,
+    earlierWeight: null,
+    unit: null,
+  },
+  lastTime: {
+    workoutExecutionId: `${BLOCK}-w31`,
+    day: '2026-09-29',
+    sets: [10, 10, 11].map((repetitions, index) => ({
+      setNumber: index + 1,
+      setType: 'Normal',
+      repetitionsAsked: 10,
+      targetRpe: null,
+      prescribedWeight: 7,
+      prescribedUnit: 'Kilogram',
+      isCompleted: true,
+      repetitions,
+      weight: 7,
+      unit: 'Kilogram',
+      rpe: null,
+    })),
+  },
+  sets: [1, 2, 3].map((setNumber) => ({
+    setPrescriptionId: `step-${setNumber}`,
+    setNumber,
+    move: 'StepUp',
+    weight: 9,
+    currentWeight: 7,
+    unit: 'Kilogram',
+    step: 2,
+    note: 'None',
+  })),
+};
+
+const lungeHold = {
+  outcome: 'Hold',
+  reason: {
+    ...goblet.reason,
+    kind: 'RepsShort',
+    setNumber: 1,
+    repetitions: 10,
+    repetitionsAsked: 12,
+  },
+  lastTime: null,
+  sets: [{ ...goblet.sets[0], move: 'SameAsLastTime', weight: 20, currentWeight: 20, step: 2.5 }],
+};
+
+test('the session sheet says where each lift with a step stands for its coming session (N6b)', async ({
+  page,
+}) => {
+  const step = {
+    repetitionsMinimum: 10,
+    repetitionsMaximum: 10,
+    loadStrategy: 'LastTimeStep',
+    loadUnit: 'Kilogram',
+    directLoad: 7,
+    prescribedLoad: 7,
+    percentageWorkingMax: null,
+    loadStep: 2,
+    targetRpe: null,
+  };
+  const [week] = blockDetail.weeks;
+  const [lowerB] = week.sessions;
+  const detail = {
+    ...blockDetail,
+    weeks: [
+      {
+        ...week,
+        sessions: [
+          {
+            ...lowerB,
+            exercises: [
+              ...lowerB.exercises,
+              {
+                id: 'ex-3',
+                exerciseName: 'Goblet Squat',
+                coachNotes: null,
+                sets: [step, step, step],
+              },
+              {
+                id: 'ex-4',
+                exerciseName: 'Walking Lunge',
+                coachNotes: null,
+                sets: [{ ...step, repetitionsMinimum: 12, repetitionsMaximum: 12, loadStep: 2.5 }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    liftStandings: [
+      standing('ex-3', 'goblet-squat', goblet),
+      standing('ex-4', 'walking-lunge', lungeHold),
+    ],
+  };
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ]) {
+    await openTraining(page, width, height, {
+      extra: { [`GET /api/training/mesocycles/${BLOCK}`]: (route) => json(route, 200, detail) },
+    });
+    await page.locator('.week.current button.session').nth(2).click();
+    const sheet = page.getByRole('dialog', { name: 'Lower B' });
+    const lines = sheet.locator('.standing');
+    await expect(lines).toHaveText([
+      'Last 7 kg × 10, 10, 11 on Tue · every set done · next time 9 kg',
+      'Same weight · set 1 reached 10 of 12 on Tue',
+    ]);
+    // A lift with no step says nothing new; the squat's own lines are as before.
+    await expect(sheet.locator('.exercises > li').first().locator('.standing')).toHaveCount(0);
+    await expect(sheet).not.toContainText('NaN');
+    await axe(page);
+    await expect
+      .poll(() => page.evaluate(() => document.scrollingElement!.scrollWidth <= innerWidth))
+      .toBe(true);
+  }
+});
+
+test('a logged workout says where its lifts stand under them (N6b)', async ({ page }) => {
+  const set = {
+    prescriptionId: 'logged-set-1',
+    performanceId: 'logged-perf-1',
+    position: 1,
+    setType: 'Normal',
+    prescribedRepetitionsMinimum: 10,
+    prescribedRepetitionsMaximum: 10,
+    prescribedLoad: 7,
+    prescribedLoadUnit: 'Kilogram',
+    loadStrategy: 'LastTimeStep',
+    loadStep: 2,
+    prescribedTargetRpe: null,
+    prescribedTargetRir: null,
+    restSeconds: 90,
+    tempo: null,
+    coachNotes: null,
+    actualRepetitions: 10,
+    actualLoad: 7,
+    actualLoadUnit: 'Kilogram',
+    actualRpe: null,
+    actualRir: null,
+    isCompleted: true,
+    clientNote: null,
+  };
+  const workout = {
+    isAllowed: true,
+    accessReason: 'Granted',
+    nextNotesSkip: null,
+    detail: {
+      date: '2026-09-29',
+      timeZoneId: 'Asia/Beirut',
+      hasMoreNotes: false,
+      workout: {
+        sessionId: `${BLOCK}-s31`,
+        mesocycleId: BLOCK,
+        workoutExecutionId: `${BLOCK}-w31`,
+        name: 'Lower A',
+        coachNotes: null,
+        status: 'Completed',
+        executionVersion: 4,
+        exercises: [
+          {
+            prescriptionId: 'logged-ex-1',
+            performanceId: 'logged-ex-perf-1',
+            prescribedExerciseId: 'goblet-squat',
+            prescribedExerciseName: 'Goblet Squat',
+            actualExerciseId: 'goblet-squat',
+            actualExerciseName: 'Goblet Squat',
+            wasSubstituted: false,
+            modificationPolicy: 'Locked',
+            alternatives: [],
+            coachNotes: null,
+            mediaAssetIds: [],
+            previousPerformance: null,
+            sets: [set, { ...set, prescriptionId: 'logged-set-2', position: 2 }],
+          },
+        ],
+        notes: [],
+      },
+    },
+    liftStandings: [standing('ex-3', 'goblet-squat', goblet)],
+  };
+  await openTraining(page, 1440, 900, {
+    extra: {
+      [`GET /api/training/clients/${ID}/workouts/${BLOCK}-w31`]: (route) =>
+        json(route, 200, workout),
+    },
+  });
+
+  await page.locator('.week.current button.session').nth(0).click();
+  const sheet = page.getByRole('dialog', { name: 'Lower A' });
+  await expect(sheet.locator('app-coach-workout .standing')).toHaveText(
+    'Last 7 kg × 10, 10, 11 on Tue · every set done · next time 9 kg',
+  );
+  await axe(page);
+});
+
 test('an exercise’s demo opens over the session sheet, as Maya was given it (P4)', async ({
   page,
 }) => {

@@ -140,8 +140,17 @@ internal sealed partial class TrainingApplicationService
         // Coaches can inspect their own unpublished programming. Client calendar visibility
         // applies to the client projection; it does not conceal coaching history from its coach.
         var detail = (await ReadWorkoutDetailsAsync([workoutExecutionId], notesSkip, cancellationToken)).SingleOrDefault();
+        // Where each lift done here as written stands for its coming session (STR-019), on this coach-only result:
+        // the workout itself is the client's own view, which their reads share.
+        var done = detail?.Workout.Exercises
+            .Where(item => item.ActualExerciseId == item.PrescribedExerciseId)
+            .Select(item => item.ActualExerciseId).ToHashSet() ?? [];
+        var standings = done.Count == 0
+            ? []
+            : (await ReadLiftStandingsAsync(clientProfileId, cancellationToken))
+                .Where(item => done.Contains(item.ExerciseId)).ToArray();
         return new(true, access.Reason.ToString(), detail,
-            detail is { HasMoreNotes: true } ? notesSkip + WorkoutNotesPageSize : null);
+            detail is { HasMoreNotes: true } ? notesSkip + WorkoutNotesPageSize : null, standings);
     }
 
     private async Task<IReadOnlyList<DatedWorkoutView>> ReadWorkoutDetailsAsync(
