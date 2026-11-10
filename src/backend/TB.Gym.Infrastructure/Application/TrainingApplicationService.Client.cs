@@ -232,17 +232,24 @@ internal sealed partial class TrainingApplicationService
             .Where(item => exerciseIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, item => item.Name, cancellationToken);
         var previous = await LoadPreviousPerformancesAsync(client.Id, today, exerciseIds, cancellationToken);
+        // Why a lift's weight is what the coach applied (N6c, STR-020): a query only when a set carries one.
+        var weightNotes = await ReadWeightNotesAsync(
+            scheduled.SelectMany(item => executions.TryGetValue(item.Session.Id, out var started)
+                ? WeightNoteCandidates(started)
+                : WeightNoteCandidates(item.Session)).ToArray(),
+            cancellationToken);
 
         var workouts = scheduled.Select(item =>
         {
             executions.TryGetValue(item.Session.Id, out var execution);
             return execution is null
-                ? ToClientWorkout(item.MesocycleId, item.Session, exerciseNames, previous)
+                ? ToClientWorkout(item.MesocycleId, item.Session, exerciseNames, previous, weightNotes)
                 : ToClientWorkout(
                     execution,
                     notes.Where(note => note.WorkoutExecutionId == execution.Id).ToArray(),
                     exerciseNames,
-                    previous);
+                    previous,
+                    weightNotes);
         }).ToArray();
         return new ClientTrainingDayResult(true, access.Reason.ToString(), today, workouts);
     }
@@ -920,7 +927,8 @@ internal sealed partial class TrainingApplicationService
         Guid mesocycleId,
         TrainingSession session,
         IReadOnlyDictionary<Guid, string> names,
-        IReadOnlyDictionary<Guid, PreviousExercisePerformanceView> previous) =>
+        IReadOnlyDictionary<Guid, PreviousExercisePerformanceView> previous,
+        IReadOnlyDictionary<Guid, ClientWeightNoteView> weightNotes) =>
         new(
             session.Id,
             mesocycleId,
@@ -943,7 +951,8 @@ internal sealed partial class TrainingApplicationService
                 exercise.CoachNotes,
                 exercise.Media.OrderBy(item => item.DisplayOrder).Select(item => item.MediaAssetId).ToArray(),
                 previous.GetValueOrDefault(exercise.ExerciseId),
-                exercise.Sets.OrderBy(item => item.Position).Select(ToClientSet).ToArray())).ToArray(),
+                exercise.Sets.OrderBy(item => item.Position).Select(ToClientSet).ToArray(),
+                weightNotes.GetValueOrDefault(exercise.Id))).ToArray(),
             [],
             null);
 
@@ -951,7 +960,8 @@ internal sealed partial class TrainingApplicationService
         WorkoutExecution execution,
         IReadOnlyList<WorkoutNote> notes,
         IReadOnlyDictionary<Guid, string> names,
-        IReadOnlyDictionary<Guid, PreviousExercisePerformanceView> previous) =>
+        IReadOnlyDictionary<Guid, PreviousExercisePerformanceView> previous,
+        IReadOnlyDictionary<Guid, ClientWeightNoteView> weightNotes) =>
         new(
             execution.TrainingSessionId,
             execution.MesocycleId,
@@ -974,7 +984,8 @@ internal sealed partial class TrainingApplicationService
                 exercise.CoachNotesSnapshot,
                 exercise.Media.OrderBy(item => item.DisplayOrder).Select(item => item.MediaAssetId).ToArray(),
                 previous.GetValueOrDefault(exercise.ActualExerciseId),
-                exercise.Sets.OrderBy(item => item.Position).Select(ToClientSet).ToArray())).ToArray(),
+                exercise.Sets.OrderBy(item => item.Position).Select(ToClientSet).ToArray(),
+                exercise.WasSubstituted ? null : weightNotes.GetValueOrDefault(exercise.ExercisePrescriptionId))).ToArray(),
             notes.Select(ToView).ToArray(),
             execution.Version,
             execution.StartedAtUtc,

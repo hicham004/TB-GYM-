@@ -63,6 +63,13 @@ public sealed record SetLoadCalculation(
     string StrategyVersion,
     string Explanation);
 
+/// <summary>
+/// The weight a coach applied on a "Last time + step" set from where its lift stood (notes plan N6c, STR-020), in
+/// the set's own unit, with why in plain words (<see cref="LastTimeStepRule.Explain"/>). <paramref name="From"/> is
+/// the set's weight as the coach read it (null when the client picked): the set must still hold it.
+/// </summary>
+public sealed record AppliedLiftWeight(decimal? From, decimal Weight, TrainingLoadUnit Unit, string Explanation);
+
 public enum PrescriptionModificationPolicy
 {
     Locked = 1,

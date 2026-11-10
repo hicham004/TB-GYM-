@@ -36,6 +36,12 @@ import {
   toggleFold,
   type,
 } from '../../../testing/dom';
+import {
+  liftStanding,
+  liftWeightsApplied,
+  standingReason,
+  standingSet,
+} from '../../../testing/lift-weight-fixtures';
 import { ClientProgramApi } from './client-program-api';
 import { ClientProgram } from './client-program';
 import { ClientWorkspaceContext } from './client-workspace.context';
@@ -1403,6 +1409,93 @@ describe('a client’s Training', () => {
       expect(textOf(sheet.querySelector('.standing strong'))).toBe('next time 9 kg');
     });
 
+    it('applies a lift’s weight from its session sheet and says so there (N6c)', async () => {
+      const view = blockView();
+      (view.weeks[0].sessions[0].exercises as unknown[]).push({
+        id: 'ex-2',
+        exerciseName: 'Goblet squat',
+        coachNotes: null,
+        sets: [1, 2].map(() => ({
+          repetitionsMinimum: 10,
+          repetitionsMaximum: 10,
+          loadStrategy: 'LastTimeStep',
+          loadUnit: 'Kilogram',
+          directLoad: 7,
+          prescribedLoad: 7,
+          percentageWorkingMax: null,
+          loadStep: 2,
+          targetRpe: null,
+        })),
+      });
+      const goblet = liftStanding(
+        {
+          sets: [1, 2].map((n) => standingSet(n, { weight: 9, currentWeight: 7 })),
+          judgedOn: '2026-10-01',
+          lastTime: {
+            workoutExecutionId: 'workout-0',
+            day: '2026-09-29',
+            sets: [1, 2].map((n) => ({
+              ...liftStanding().standing.lastTime!.sets[0],
+              setNumber: n,
+              weight: 7,
+            })),
+          },
+        },
+        {
+          mesocycleId: 'block-lean',
+          sessionId: 'block-lean-s33',
+          sessionName: 'Lower B',
+          sessionDate: '2026-10-01',
+          exercisePrescriptionId: 'ex-2',
+          exerciseName: 'Goblet squat',
+        },
+      );
+      (view as unknown as { liftStandings: unknown[] }).liftStandings = [goblet];
+      const after = blockView();
+      (after as unknown as { liftStandings: unknown[] }).liftStandings = [];
+      const reads = [view, after];
+      const getTrainingMesocycle = vi.fn(() => of(reads.shift() ?? after));
+      const applyLiftWeights = vi.fn(() => of(liftWeightsApplied([goblet])));
+      const { harness, host, getProgram } = await render({
+        api: { getTrainingMesocycle },
+        programApi: { applyLiftWeights },
+      });
+
+      all(host.querySelector('.week.current')!, 'button.session')[2].click();
+      await settle(harness.fixture);
+      const sheet = dialog()!;
+      const apply = sheet.querySelector<HTMLButtonElement>('.apply button')!;
+      expect(textOf(apply)).toBe('Apply 9 kg');
+      expect(apply.getAttribute('aria-label')).toBe('Apply 9 kg to Goblet squat, Lower B today');
+
+      apply.click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+
+      expect(applyLiftWeights).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({
+          lifts: [
+            {
+              exercisePrescriptionId: 'ex-2',
+              sets: [1, 2].map((n) => ({
+                setPrescriptionId: `set-${n}`,
+                currentWeight: 7,
+                weight: 9,
+              })),
+            },
+          ],
+        }),
+      );
+      // The sheet reads the workout again quietly and says what changed where the coach is; the page reads behind it.
+      expect(getTrainingMesocycle).toHaveBeenCalledTimes(2);
+      expect(sheet.querySelector('.apply button')).toBeNull();
+      const status = sheet.querySelector<HTMLElement>('.applied')!;
+      expect(textOf(status)).toBe('Goblet squat is now 9 kg today. Maya sees it on that workout.');
+      expect(document.activeElement).toBe(status);
+      expect(getProgram).toHaveBeenCalledTimes(2);
+    });
+
     it('swaps a workout for a saved one on the day it already has (TRAIN-3)', async () => {
       const view = blockView();
       (view.weeks[0].sessions[0] as unknown as { dayOffset: number }).dayOffset = 3;
@@ -1554,6 +1647,137 @@ describe('a client’s Training', () => {
       expect(textOf(sheet)).toContain('What Maya did');
       expect(sheet.querySelector('app-coach-workout')).not.toBeNull();
       expect(sheet.querySelector('.swap')).toBeNull();
+    });
+  });
+
+  describe('weights to apply (N6c)', () => {
+    // Where Maya's lifts stand, as the program read carries it (N6b): the leg curl steps 15 → 17 kg, and the leg
+    // press holds at the weight it already has, so it moves nothing.
+    const curl = liftStanding({}, { mesocycleId: 'block-lean' });
+    const held = liftStanding(
+      {
+        outcome: 'Hold',
+        reason: standingReason({
+          kind: 'RepsShort',
+          setNumber: 2,
+          repetitions: 8,
+          repetitionsAsked: 10,
+        }),
+        sets: [1, 2, 3].map((n) =>
+          standingSet(n, { move: 'SameAsLastTime', weight: 15, currentWeight: 15 }),
+        ),
+      },
+      {
+        mesocycleId: 'block-lean',
+        exercisePrescriptionId: 'prescription-2',
+        exerciseName: 'Leg press',
+      },
+    );
+    const appliedCurl = liftStanding(
+      { sets: [1, 2, 3].map((n) => standingSet(n, { weight: 17, currentWeight: 17 })) },
+      { mesocycleId: 'block-lean' },
+    );
+
+    it('lists the lifts that move a weight first on the tab, and applies one from there', async () => {
+      const reads = [
+        coachProgram(undefined, { liftStandings: [curl, held] }),
+        coachProgram(undefined, { liftStandings: [appliedCurl, held] }),
+      ];
+      const getProgram = vi.fn(() =>
+        of(reads.shift() ?? coachProgram(undefined, { liftStandings: [appliedCurl, held] })),
+      );
+      const applyLiftWeights = vi.fn(() => of(liftWeightsApplied([curl])));
+      const { harness, host, context, csrf } = await render({
+        getProgram,
+        programApi: { applyLiftWeights },
+      });
+
+      // Before the program: the coach's homework for this client this week.
+      const program = host.querySelector('.program')!;
+      expect(program.firstElementChild?.tagName.toLowerCase()).toBe('app-program-weights');
+      const panel = host.querySelector('app-program-weights')!;
+      expect(all(panel, '.lift .name').map(textOf)).toEqual(['Seated Leg Curl']);
+      expect(all(panel, 'button').map(textOf)).toEqual(['Apply 17 kg']);
+
+      all(panel, 'button')[0].click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+
+      expect(csrf.refresh).toHaveBeenCalled();
+      expect(applyLiftWeights).toHaveBeenCalledWith(
+        'client-1',
+        expect.objectContaining({
+          lifts: [
+            {
+              exercisePrescriptionId: 'prescription-1',
+              sets: [1, 2, 3].map((n) => ({
+                setPrescriptionId: `set-${n}`,
+                currentWeight: 15,
+                weight: 17,
+              })),
+            },
+          ],
+        }),
+      );
+      expect(context.notice()).toBe(
+        'Seated Leg Curl is now 17 kg on Thu 12 Nov. Maya sees it on that workout.',
+      );
+      expect(getProgram).toHaveBeenCalledTimes(2);
+      // Nothing is left to apply, so the panel goes and the coach is put back on the program.
+      expect(host.querySelector('app-program-weights')).toBeNull();
+      expect(document.activeElement?.id).toBe('program-title');
+    });
+
+    it('lists nothing when no lift moves a weight, or for a former client', async () => {
+      const quiet = await render({ program: coachProgram(undefined, { liftStandings: [held] }) });
+      expect(quiet.host.querySelector('app-program-weights')).toBeNull();
+      TestBed.resetTestingModule();
+
+      const former = await render({ program: coachProgram(undefined, { liftStandings: [curl] }) });
+      expect(former.host.querySelector('app-program-weights')).not.toBeNull();
+      former.context.profile.set({
+        ...former.context.profile()!,
+        release: { releasedAtUtc: '2026-10-01T08:00:00Z' },
+      } as never);
+      await settle(former.harness.fixture);
+      expect(former.host.querySelector('app-program-weights')).toBeNull();
+    });
+
+    it('reads the program again when an apply was refused because the lift changed', async () => {
+      const refused = new HttpErrorResponse({
+        status: 409,
+        error: {
+          code: 'lift_standing_changed',
+          message: 'Where this lift stands changed since it was read.',
+        },
+      });
+      const reads = [
+        coachProgram(undefined, { liftStandings: [curl] }),
+        // Read again: someone applied it meanwhile, so nothing is left and the panel goes.
+        coachProgram(undefined, { liftStandings: [appliedCurl] }),
+      ];
+      const getProgram = vi.fn(() =>
+        of(reads.shift() ?? coachProgram(undefined, { liftStandings: [] })),
+      );
+      const { harness, host, context } = await render({
+        getProgram,
+        programApi: { applyLiftWeights: vi.fn(() => throwError(() => refused)) },
+      });
+      document.body.append(host);
+
+      all(host.querySelector('app-program-weights')!, 'button')[0].click();
+      await settle(harness.fixture);
+      await settle(harness.fixture);
+
+      // Said on the page, which outlives the panel, and the coach is put back on the program.
+      expect(context.error()).toBe(
+        'Where a lift stands changed since this was read. It has been read again: check it, then apply.',
+      );
+      expect(context.notice()).toBeNull();
+      expect(getProgram).toHaveBeenCalledTimes(2);
+      expect(host.querySelector('app-program-weights')).toBeNull();
+      expect(document.activeElement?.id).toBe('program-title');
+      host.remove();
     });
   });
 

@@ -90,6 +90,17 @@ h4 {
   }
 }
 
+// Apply (N6c): one outlined button under the line, and a refusal under it.
+.apply {
+  margin-block-start: 0.5rem;
+}
+
+.apply-problem {
+  color: var(--tb-danger);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
 .sets,
 .notes {
   list-style: none;

@@ -44,6 +44,20 @@ internal static class DatabaseConstraintNames
         "IX_WorkingMaxUpdates_TenantId_IdempotencyKey";
 
     /// <summary>
+    /// One record per lift and idempotency key of an apply (notes plan N6c, STR-020). A retry that loses the race
+    /// to the first answers with the first one's result.
+    /// </summary>
+    public const string OneLiftWeightApplicationPerKeyAndLift =
+        "IX_LiftWeightApplications_OnePerKeyAndLift";
+
+    /// <summary>
+    /// One request per idempotency key of an apply: rows of one key never hold two requests' fingerprints, even when
+    /// two requests reusing a key name different lifts at the same moment (N6c).
+    /// </summary>
+    public const string OneLiftWeightRequestPerKey =
+        "EX_LiftWeightApplications_OneRequestPerKey";
+
+    /// <summary>
     /// One keep per max and logged set (STR-013). Nothing writes a keep since N10b; the model still names the
     /// index with it.
     /// </summary>

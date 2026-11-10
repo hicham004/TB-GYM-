@@ -498,6 +498,26 @@ public static class TrainingEndpoints
         .Produces<CoachClientProgramView>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // The coach applies where the client's lifts stand, one lift or all of them (notes plan N6c, STR-020;
+        // decision 21). A write like any other: never open while the workspace is read-only for an unpaid bill.
+        coach.MapPost("/clients/{clientProfileId:guid}/lift-weights/apply", async (
+            Guid clientProfileId,
+            ApplyLiftWeightsRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.ApplyLiftWeightsAsync(clientProfileId, request, cancellationToken));
+        })
+        .WithName("ApplyLiftWeights")
+        .Produces<LiftWeightsAppliedView>()
+        .ProducesValidationProblem()
+        .ProducesProblem(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
+
         // Where the client's latest program ended, for Assign program to start from (P4c, STR-014).
         coach.MapGet("/clients/{clientProfileId:guid}/previous-maxes", async (
             Guid clientProfileId,
@@ -787,6 +807,7 @@ public static class TrainingEndpoints
                 (object?)result.SetSave ??
                 (object?)result.Draft ??
                 (object?)result.FinishedPrograms ??
+                (object?)result.LiftWeights ??
                 result.WorkoutExecution),
             TrainingCommandStatus.NotFound => Results.NotFound(),
             TrainingCommandStatus.Forbidden => Results.Forbid(),

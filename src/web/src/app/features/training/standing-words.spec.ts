@@ -158,6 +158,23 @@ describe('standingLine (LastTimeStep v1, STR-019)', () => {
     );
   });
 
+  it('says a set carries on at a weight the coach would apply, not that it stays there (N6c)', () => {
+    // The set is at 17 kg now; the answer carries it on at its latest log, 15 kg, so Apply would move it.
+    const value = view({
+      sets: [
+        set(1),
+        set(2, { move: 'SameAsLastTime', weight: 15, currentWeight: 17, note: 'NoWeightLogged' }),
+        set(3, { move: 'SameAsLastTime', weight: 15, currentWeight: null, note: 'NoRepsTyped' }),
+        set(4, { move: 'SameAsLastTime', weight: 1999, currentWeight: 1990, note: 'AboveLimit' }),
+      ],
+    });
+    expect(line(value)).toBe(
+      'Last 15 kg × 10, 10, 10 on Thu · every set done · next time 17 kg · set 2 had no weight logged, ' +
+        'carries on at 15 kg · set 3 was logged without reps, carries on at 15 kg · ' +
+        'set 4 carries on at 1,999 kg, as a step would pass 2,000 kg',
+    );
+  });
+
   it('says when a set keeps its weight while the others step (line i)', () => {
     const value = view({
       sets: [

@@ -229,6 +229,20 @@
                       >
                     </p>
                   }
+                  @if (weightNote(exercise); as note) {
+                    <p class="weight-note" dir="auto">
+                      @for (part of note.parts; track $index) {
+                        @if (!$first) {
+                          ·
+                        }
+                        @if (part.strong) {
+                          <strong>{{ part.text }}</strong>
+                        } @else {
+                          {{ part.text }}
+                        }
+                      }
+                    </p>
+                  }
                   <div class="set-head" aria-hidden="true">
                     <span i18n>Set</span><span i18n>Last time</span><span i18n>Load</span
                     ><span i18n>Reps</span><span></span>

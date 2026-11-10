@@ -54,6 +54,7 @@ import { externalVideo } from './external-video';
 import { PlatesSheet } from './plates-sheet';
 import { type FinishFormats, playFinishMoment } from './finish-moment';
 import { playPlayerMoment } from './player-moment';
+import { weightNoteLine, type WeightNoteLine } from './weight-note-words';
 import { RestTimer } from './rest-timer';
 import { buzzSet, planSetMoment, playSetMoment, recordNotice } from './set-moment';
 import { nullableNumeric, numeric } from './training-builder.models';
@@ -132,6 +133,7 @@ function isConflict(error: unknown): error is HttpErrorResponse {
     './today-training-sets.scss',
     './today-training-media.scss',
     './today-training-moments.scss',
+    './today-training-note.scss',
   ],
   // The player is always drawn on the night colour, so the kit pieces inside it read the dark tokens.
   host: { 'data-mode': 'dark', '(window:beforeunload)': 'onBeforeUnload($event)' },
@@ -727,6 +729,18 @@ export class TodayTraining implements HoldsUnsavedWork {
   }
 
   /** Last time's numbers on this set, by position, as the drafts read them (TRN-029). */
+  /**
+   * Why the coach set this lift's weight (notes plan N6c): "Up 2 kg · all 3 × 10 done on Tue", from the day's own
+   * date. None on a swap, as the Target line leaves the coach's weight out there (TRN-029).
+   */
+  protected weightNote(exercise: ClientExerciseView): WeightNoteLine | null {
+    const note = exercise.weightNote;
+    const today = this.day()?.localDate;
+    return note && today && !exercise.wasSubstituted
+      ? weightNoteLine(note, today, this.locale)
+      : null;
+  }
+
   protected previousSet(exercise: ClientExerciseView, set: ClientSetView) {
     return previousSetFor(exercise, set);
   }

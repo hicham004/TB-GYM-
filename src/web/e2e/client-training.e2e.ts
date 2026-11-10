@@ -889,6 +889,213 @@ test('a logged workout says where its lifts stand under them (N6b)', async ({ pa
   await axe(page);
 });
 
+/** What the server answers once the given lifts are applied (N6c), each set to its standing's weight. */
+function appliedAnswer(views: ReturnType<typeof standing>[]) {
+  return {
+    clientProfileId: ID,
+    lifts: views.map((view, index) => ({
+      applicationId: `application-${index + 1}`,
+      mesocycleId: view.mesocycleId,
+      sessionId: view.sessionId,
+      sessionName: view.sessionName,
+      sessionDate: view.sessionDate,
+      exercisePrescriptionId: view.exercisePrescriptionId,
+      exerciseId: view.exerciseId,
+      exerciseName: view.exerciseName,
+      sets: (view.standing as typeof goblet).sets
+        .filter((set) => set.weight !== set.currentWeight)
+        .map((set) => ({
+          setPrescriptionId: set.setPrescriptionId,
+          setNumber: set.setNumber,
+          move: set.move,
+          weightBefore: set.currentWeight,
+          weightAfter: set.weight,
+          unit: set.unit,
+          step: set.step,
+        })),
+      appliedAtUtc: '2026-10-01T12:00:00Z',
+    })),
+  };
+}
+
+// The goblet squat steps 7 → 9 kg on Lower B, and the walking lunge keeps last time's 20 kg over the 25 kg the
+// session has (line d, decision 22): two weights to apply, first on Maya's Training tab.
+const lungeKept = {
+  ...lungeHold,
+  lastTime: { ...goblet.lastTime, sets: [{ ...goblet.lastTime.sets[0], weight: 20 }] },
+  sets: [{ ...lungeHold.sets[0], weight: 20, currentWeight: 25 }],
+};
+const toApply = () => [
+  standing('ex-3', 'goblet-squat', goblet),
+  { ...standing('ex-4', 'walking-lunge', lungeKept), exerciseName: 'Walking Lunge' },
+];
+
+test('the Training tab lists the weights to apply first and applies them all in one request (N6c)', async ({
+  page,
+}) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ]) {
+    const requests: { method: string; path: string; body: unknown }[] = [];
+    await openTraining(page, width, height, {
+      programs: [
+        coachProgram(undefined, { liftStandings: toApply() }),
+        // Read again after the apply: nothing left to apply.
+        coachProgram(undefined, { liftStandings: [] }),
+      ],
+      requests,
+      extra: {
+        [`POST /api/training/clients/${ID}/lift-weights/apply`]: (route) =>
+          json(route, 200, appliedAnswer(toApply())),
+      },
+    });
+
+    const panel = page.locator('app-program-weights');
+    await expect(panel.getByRole('heading', { name: 'Weights to apply' })).toBeVisible();
+    // Before the program itself: the coach's homework for this client.
+    expect(
+      await page
+        .locator('.program')
+        .evaluate((element) => element.firstElementChild?.tagName.toLowerCase()),
+    ).toBe('app-program-weights');
+    await expect(panel.locator('.standing')).toHaveText([
+      'Last 7 kg × 10, 10, 11 on Tue · every set done · next time 9 kg',
+      'Keep 20 kg · set 1 reached 10 of 12 on Tue',
+    ]);
+    await expect(panel.getByRole('button', { name: /^Apply 9 kg to Goblet Squat/ })).toBeVisible();
+    await expect(
+      panel.getByRole('button', { name: /^Apply 20 kg to Walking Lunge/ }),
+    ).toBeVisible();
+    await axe(page);
+    await expectNoHorizontalOverflow(page);
+
+    await panel.getByRole('button', { name: 'Apply all 2 weights' }).click();
+    await expect(page.getByRole('status').filter({ hasText: '2 weights applied.' })).toHaveText(
+      '2 weights applied. Maya sees each on its workout.',
+    );
+    await expect(panel).toHaveCount(0);
+    await expect(page.locator('#program-title')).toBeFocused();
+    const applies = requests.filter((request) => request.path.endsWith('/lift-weights/apply'));
+    expect(applies).toHaveLength(1);
+    expect(applies[0].body).toEqual({
+      idempotencyKey: expect.any(String),
+      lifts: [
+        {
+          exercisePrescriptionId: 'ex-3',
+          sets: [1, 2, 3].map((n) => ({
+            setPrescriptionId: `step-${n}`,
+            currentWeight: 7,
+            weight: 9,
+          })),
+        },
+        {
+          exercisePrescriptionId: 'ex-4',
+          sets: [{ setPrescriptionId: 'step-1', currentWeight: 25, weight: 20 }],
+        },
+      ],
+    });
+  }
+});
+
+test('the weights to apply follow dark mode and read right to left (N6c)', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await useRtl(page);
+  await openTraining(page, 390, 844, {
+    programs: [coachProgram(undefined, { liftStandings: toApply() })],
+  });
+  const panel = page.locator('app-program-weights');
+  await expect(panel.getByRole('heading', { name: 'Weights to apply' })).toBeVisible();
+  await axe(page);
+  await expectNoHorizontalOverflow(page);
+});
+
+test.describe('an apply the server refused (N6c)', () => {
+  // The browser logs the 409 the page was deliberately given; nothing else may be logged.
+  test.use({ allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/training\//] } });
+
+  test('a session sheet applies one lift’s weight and says so, and a conflict asks to read again (N6c)', async ({
+    page,
+  }) => {
+    const step = {
+      repetitionsMinimum: 10,
+      repetitionsMaximum: 10,
+      loadStrategy: 'LastTimeStep',
+      loadUnit: 'Kilogram',
+      directLoad: 7,
+      prescribedLoad: 7,
+      percentageWorkingMax: null,
+      loadStep: 2,
+      targetRpe: null,
+    };
+    const [week] = blockDetail.weeks;
+    const [lowerB] = week.sessions;
+    const withGoblet = (liftStandings: unknown[]) => ({
+      ...blockDetail,
+      weeks: [
+        {
+          ...week,
+          sessions: [
+            {
+              ...lowerB,
+              exercises: [
+                ...lowerB.exercises,
+                {
+                  id: 'ex-3',
+                  exerciseName: 'Goblet Squat',
+                  coachNotes: null,
+                  sets: [step, step, step],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      liftStandings,
+    });
+    const reads = [withGoblet([standing('ex-3', 'goblet-squat', goblet)]), withGoblet([])];
+    let refuse = true;
+    await openTraining(page, 1440, 900, {
+      extra: {
+        [`GET /api/training/mesocycles/${BLOCK}`]: (route) =>
+          json(route, 200, reads.length > 1 ? reads.shift() : reads[0]),
+        [`POST /api/training/clients/${ID}/lift-weights/apply`]: (route) => {
+          if (refuse) {
+            refuse = false;
+            return json(route, 409, {
+              code: 'lift_standing_changed',
+              message:
+                'Where this lift stands changed since it was read. Read it again, then apply.',
+            });
+          }
+          return json(route, 200, appliedAnswer([standing('ex-3', 'goblet-squat', goblet)]));
+        },
+      },
+    });
+
+    await page.locator('.week.current button.session').nth(2).click();
+    const sheet = page.getByRole('dialog', { name: 'Lower B' });
+    const apply = sheet.getByRole('button', { name: 'Apply 9 kg to Goblet Squat, Lower B today' });
+    await expect(apply).toHaveText('Apply 9 kg');
+
+    // First the server says the lift changed: the sheet says so, under the lift, and reads it again.
+    reads.unshift(withGoblet([standing('ex-3', 'goblet-squat', goblet)]));
+    await apply.click();
+    await expect(sheet.getByRole('alert')).toHaveText(
+      'Where a lift stands changed since this was read. It has been read again: check it, then apply.',
+    );
+
+    await sheet.getByRole('button', { name: 'Apply 9 kg to Goblet Squat, Lower B today' }).click();
+    const status = sheet.locator('.applied');
+    await expect(status).toHaveText(
+      'Goblet Squat is now 9 kg today. Maya sees it on that workout.',
+    );
+    await expect(status).toBeFocused();
+    await expect(sheet.locator('.apply button')).toHaveCount(0);
+    await axe(page);
+  });
+});
+
 test('an exercise’s demo opens over the session sheet, as Maya was given it (P4)', async ({
   page,
 }) => {

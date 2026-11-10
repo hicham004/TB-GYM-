@@ -1,0 +1,16 @@
+// Why the coach set a lift's weight (notes plan N6c): under its "Last time", on the night colour, the lead
+// in the accent every coach brand keeps readable there, the rest as muted as the unit note.
+.weight-note {
+  color: #c7d6cc;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  margin: 0 0 0.75rem;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+
+  strong {
+    color: var(--tb-accent-bright, #d9ed94);
+    font-weight: 600;
+  }
+}

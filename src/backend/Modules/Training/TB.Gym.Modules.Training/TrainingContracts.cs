@@ -206,6 +206,16 @@ public interface ITrainingApplicationService
         Guid clientProfileId,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Applies the weights where the client's lifts stand names (notes plan N6c, STR-020): for each lift, the sets
+    /// <c>LastTimeStep</c> v1 moves in its coming session, exactly as the coach read them, else a conflict that asks
+    /// for a fresh read. One request per client, a lift or "Apply all"; the coach applies, never the app or the client.
+    /// </summary>
+    Task<TrainingCommandResult> ApplyLiftWeightsAsync(
+        Guid clientProfileId,
+        ApplyLiftWeightsRequest request,
+        CancellationToken cancellationToken);
+
     Task<ClientWorkoutHistoryPage> GetMyWorkoutHistoryAsync(int skip, CancellationToken cancellationToken);
 
     /// <summary>
@@ -960,7 +970,68 @@ public sealed record ClientExerciseView(
     string? CoachNotes,
     IReadOnlyList<Guid> MediaAssetIds,
     PreviousExercisePerformanceView? PreviousPerformance,
-    IReadOnlyList<ClientSetView> Sets);
+    IReadOnlyList<ClientSetView> Sets,
+    ClientWeightNoteView? WeightNote = null);
+
+/// <summary>
+/// Why the coach set this lift's weight (notes plan N6c, STR-020): the latest weight a coach applied from where the
+/// lift stood, on a workout still to do or running, while every set it set still holds that weight. Only the
+/// client's own numbers: who applied it and when stay on the coach's reads.
+/// </summary>
+/// <param name="Move"><c>StepUp</c> when a set went up by its step; <c>SameAsLastTime</c> when last time's weight was kept.</param>
+/// <param name="Increases">Each stepped set's rise over last time, in set order; empty when last time's weight was kept.</param>
+/// <param name="LastTimeDay">The day of the workout the rule read as last time, in the program's calendar.</param>
+/// <param name="WorkingSets">Last time's working sets of the lift (never its warm-ups).</param>
+/// <param name="RepetitionsAsked">The reps each of those sets asked, when they all asked the same.</param>
+/// <param name="Reason">Why last time's weight was kept (STR-019's hold); null on a step up.</param>
+/// <param name="ExertionDisplay">How the coach wrote the set's effort, RPE or RIR, for a reason that names one.</param>
+public sealed record ClientWeightNoteView(
+    SetStandingMove Move,
+    IReadOnlyList<decimal> Increases,
+    TrainingLoadUnit Unit,
+    DateOnly LastTimeDay,
+    int WorkingSets,
+    int? RepetitionsAsked,
+    LiftStandingReasonDetail? Reason,
+    ExertionDisplayPreference ExertionDisplay);
+
+/// <summary>
+/// The weights a coach applies for a client (notes plan N6c, STR-020): per lift, the sets its standing moves, each
+/// with the weight it had and the weight it goes to, as the coach's read gave them. The key makes a retry safe.
+/// </summary>
+public sealed record ApplyLiftWeightsRequest(IReadOnlyList<LiftWeightRequest> Lifts, Guid IdempotencyKey);
+
+/// <param name="ExercisePrescriptionId">The writing of the lift in its coming session (<c>LiftStandingView</c>).</param>
+public sealed record LiftWeightRequest(Guid ExercisePrescriptionId, IReadOnlyList<SetWeightRequest> Sets);
+
+/// <param name="CurrentWeight">The set's weight as the coach read it; null when the client picks.</param>
+/// <param name="Weight">The weight the standing names for the set.</param>
+public sealed record SetWeightRequest(Guid SetPrescriptionId, decimal? CurrentWeight, decimal Weight);
+
+/// <summary>What an apply wrote, lift by lift (the first answer again on a retry with the same key).</summary>
+public sealed record LiftWeightsAppliedView(Guid ClientProfileId, IReadOnlyList<AppliedLiftWeightView> Lifts);
+
+public sealed record AppliedLiftWeightView(
+    Guid ApplicationId,
+    Guid MesocycleId,
+    Guid SessionId,
+    string SessionName,
+    DateOnly SessionDate,
+    Guid ExercisePrescriptionId,
+    Guid ExerciseId,
+    string ExerciseName,
+    IReadOnlyList<AppliedLiftSetView> Sets,
+    DateTimeOffset AppliedAtUtc);
+
+/// <param name="WeightBefore">The set's weight before; null when the client picked it.</param>
+public sealed record AppliedLiftSetView(
+    Guid SetPrescriptionId,
+    int SetNumber,
+    SetStandingMove Move,
+    decimal? WeightBefore,
+    decimal WeightAfter,
+    TrainingLoadUnit Unit,
+    decimal Step);
 
 public sealed record ExerciseAlternativeOptionView(Guid ExerciseId, string Name);
 
@@ -1318,7 +1389,8 @@ public sealed record TrainingCommandResult(
     string? Code = null,
     string? Message = null,
     ProgramDraftSaveView? Draft = null,
-    FinishedProgramsVisibilityView? FinishedPrograms = null);
+    FinishedProgramsVisibilityView? FinishedPrograms = null,
+    LiftWeightsAppliedView? LiftWeights = null);
 
 public enum TrainingCommandStatus
 {

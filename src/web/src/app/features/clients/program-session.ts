@@ -4,17 +4,23 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   Injector,
   input,
   LOCALE_ID,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
-import type { SavedSessionView, TrainingMesocycleView } from '../../core/api/generated';
+import type {
+  LiftStandingView,
+  SavedSessionView,
+  TrainingMesocycleView,
+} from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -37,6 +43,7 @@ import {
   type WeekColumn,
 } from './client-program.models';
 import { programWriteError } from './client-program-forms.models';
+import { applyError, applyLabel, applyName, canApply } from './lift-weights';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
@@ -73,12 +80,20 @@ import { ClientWorkspaceContext } from './client-workspace.context';
             [workoutId]="workoutId"
             [clientName]="firstName()"
             [canReply]="!isFormer()"
+            [apply]="canApplyHere() ? apply() : null"
+            (applied)="workoutApplied($event)"
           />
         </section>
       }
 
       <section aria-labelledby="prescribed-title">
         <h3 id="prescribed-title" i18n>Prescribed</h3>
+        <p #appliedLine class="applied" role="status" tabindex="-1" dir="auto">
+          {{ appliedNote() }}
+        </p>
+        @if (applyProblem(); as problem) {
+          <p class="apply-problem" role="alert" tabindex="-1" dir="auto">{{ problem }}</p>
+        }
         @switch (load()) {
           @case ('loading') {
             <app-skeleton [label]="loadingLabel" [lines]="3" />
@@ -108,8 +123,8 @@ import { ClientWorkspaceContext } from './client-workspace.context';
                     }
                   </ul>
                   @if (standings().get(exercise.id); as standing) {
-                    <p class="standing" [attr.data-standing]="standing.outcome">
-                      @for (part of standing.parts; track $index) {
+                    <p class="standing" [attr.data-standing]="standing.line.outcome">
+                      @for (part of standing.line.parts; track $index) {
                         @if (!$first) {
                           {{ separator }}
                         }
@@ -120,6 +135,24 @@ import { ClientWorkspaceContext } from './client-workspace.context';
                         }
                       }
                     </p>
+                    @if (standing.applies && canApplyHere()) {
+                      <div class="apply">
+                        <button
+                          appButton
+                          type="button"
+                          variant="outlined"
+                          [loading]="applying() === exercise.id"
+                          [attr.aria-label]="standing.name"
+                          (click)="applyWeight(exercise.id, standing.view)"
+                        >
+                          @if (applying() === exercise.id) {
+                            <ng-container i18n>Applying…</ng-container>
+                          } @else {
+                            {{ standing.label }}
+                          }
+                        </button>
+                      </div>
+                    }
                   }
                   @if (exercise.notes) {
                     <p class="exercise-note" dir="auto">{{ exercise.notes }}</p>
@@ -289,6 +322,26 @@ import { ClientWorkspaceContext } from './client-workspace.context';
       font-weight: 600;
     }
 
+    .apply {
+      margin-block-start: 0.5rem;
+    }
+
+    .applied:empty {
+      display: none;
+    }
+
+    .applied {
+      color: var(--tb-ink);
+      font-size: 0.875rem;
+      margin-block-end: 0.5rem;
+    }
+
+    .apply-problem {
+      color: var(--tb-danger);
+      font-size: 0.875rem;
+      margin-block-end: 0.5rem;
+    }
+
     .problem {
       align-items: center;
       display: flex;
@@ -322,6 +375,8 @@ export class ProgramSession {
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly injector = inject(Injector);
   private readonly summary = viewChild(FormSummary);
+  private readonly appliedLine = viewChild<ElementRef<HTMLElement>>('appliedLine');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly block = input.required<BlockCard>();
   readonly week = input.required<WeekColumn>();
@@ -332,6 +387,11 @@ export class ProgramSession {
   readonly today = input.required<string>();
   /** True when the session was swapped, so the page reloads the program. */
   readonly closed = output<boolean>();
+  /**
+   * The page's apply (N6c), which writes and reads the program behind the sheet even if the sheet is closed
+   * before the answer comes, and gives back what to say; null where nothing may be applied.
+   */
+  readonly apply = input<((views: readonly LiftStandingView[]) => Promise<string>) | null>(null);
 
   protected readonly loadingLabel = $localize`Loading the workout…`;
   protected readonly savedLabel = $localize`Saved workout`;
@@ -369,20 +429,42 @@ export class ProgramSession {
   });
 
   protected readonly separator = ' · ';
+  protected readonly applying = signal<string | null>(null);
+  protected readonly appliedNote = signal('');
+  protected readonly applyProblem = signal<string | null>(null);
+
+  /**
+   * Never on a former client's record (ADR 0027). A finished program's logged workout still offers it: an answer
+   * only ever names an open program's coming session, which the server judges again.
+   */
+  protected readonly canApplyHere = computed(() => this.apply() !== null && !this.isFormer());
 
   /**
    * Where each lift with a step stands, on its coming session only (STR-019): the server answers for the
    * lift's next session not started, so a later session of the same lift says nothing yet.
    */
   protected readonly standings = computed(() => {
-    const found = new Map<string, StandingLine>();
+    const found = new Map<
+      string,
+      { line: StandingLine; view: LiftStandingView; applies: boolean; label: string; name: string }
+    >();
     const standings = this.view()?.liftStandings;
     for (const exercise of this.detail()?.exercises ?? []) {
       const standing = standingFor(standings, exercise.id);
-      if (standing) found.set(exercise.id, standingLine(standing, this.locale));
+      if (standing) {
+        found.set(exercise.id, {
+          line: standingLine(standing, this.locale),
+          view: standing,
+          applies: canApply(standing),
+          label: applyLabel(standing, this.locale),
+          name: applyName(standing, this.locale),
+        });
+      }
     }
     return found;
   });
+
+  private readonly blockId = computed(() => this.block().id);
 
   /** Still to come and never started, in a program that is still open: the server's conditions. */
   protected readonly canSwap = computed(
@@ -393,16 +475,19 @@ export class ProgramSession {
   );
 
   constructor() {
-    // Reading the program's id inside `reload` is what makes this run again for another program.
+    // Another program, not the page reading this one again (as it does after an apply): its id, by value.
     effect(() => {
       this.scope.epoch();
-      void this.reload();
+      this.blockId();
+      untracked(() => void this.reload());
     });
   }
 
-  protected reload(): Promise<void> {
+  /** Reads the program again; a quiet read keeps what is on screen until the new one is in (after an apply). */
+  protected reload(quiet = false): Promise<void> {
     return this.scope.run('load', async (owner) => {
-      this.load.set('loading');
+      // Untracked: the effect that reads the program for another one must not run again on every read.
+      if (!quiet || untracked(this.view) === null) this.load.set('loading');
       try {
         this.view.set(
           await owner.wait(firstValueFrom(this.api.getTrainingMesocycle(this.block().id))),
@@ -412,6 +497,44 @@ export class ProgramSession {
         if (owner.current) this.load.set('error');
       }
     });
+  }
+
+  /**
+   * Applies where one lift stands to this coming workout (N6c, STR-020): the server judges it again and writes only
+   * what it still says; on a conflict the sheet reads the program again so the line is the latest.
+   */
+  protected async applyWeight(id: string, view: LiftStandingView): Promise<void> {
+    if (this.applying() !== null) return;
+    this.applying.set(id);
+    this.applyProblem.set(null);
+    this.appliedNote.set('');
+    try {
+      const notice = await this.apply()!([view]);
+      this.appliedNote.set(notice);
+      await this.reload(true);
+      // The button goes with the weight it applied: the sheet says what changed where the coach is.
+      this.focusAfterRender(() => this.appliedLine()?.nativeElement);
+    } catch (error) {
+      this.applyProblem.set(applyError(error, this.firstName()));
+      await this.reload(true);
+      // The read may take the lift's line away: the refusal, at the top of Prescribed, keeps the coach's place.
+      this.focusAfterRender(() =>
+        this.host.nativeElement.querySelector<HTMLElement>('.apply-problem'),
+      );
+    } finally {
+      this.applying.set(null);
+    }
+  }
+
+  /** A weight applied from the logged workout above: said here, where focus goes, and the prescription read again. */
+  protected async workoutApplied(notice: string): Promise<void> {
+    this.appliedNote.set(notice);
+    await this.reload(true);
+    this.focusAfterRender(() => this.appliedLine()?.nativeElement);
+  }
+
+  private focusAfterRender(target: () => HTMLElement | null | undefined): void {
+    afterNextRender(() => target()?.focus(), { injector: this.injector });
   }
 
   /** The saved sessions are read the first time the swap is opened, not for every session looked at. */

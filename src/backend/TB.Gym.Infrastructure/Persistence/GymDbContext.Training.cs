@@ -619,6 +619,45 @@ public sealed partial class GymDbContext
             });
             ConfigureTenantEntity(entity);
         });
+
+        // Applied weights (notes plan N6c, STR-020): one row per lift and apply, append-only. Sets and sessions are
+        // named by id with no foreign key, since Edit weeks replaces a changed session's rows.
+        builder.Entity<LiftWeightApplication>(entity =>
+        {
+            entity.ToTable("LiftWeightApplications", "training");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.SessionName).HasMaxLength(160).IsRequired();
+            entity.Property(item => item.SessionDate).HasColumnType("date");
+            entity.Property(item => item.ExerciseName).HasMaxLength(160).IsRequired();
+            entity.Property(item => item.RuleKey).HasMaxLength(80).IsRequired();
+            entity.Property(item => item.Outcome).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.ReasonKind).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.LastTimeDay).HasColumnType("date");
+            entity.Property(item => item.JudgedOn).HasColumnType("date");
+            entity.Property(item => item.RequestFingerprint).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(item => item.StandingJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(item => item.AppliedSetsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(item => new { item.TenantId, item.IdempotencyKey, item.ExercisePrescriptionId })
+                .IsUnique()
+                .HasDatabaseName(DatabaseConstraintNames.OneLiftWeightApplicationPerKeyAndLift);
+            entity.HasIndex(item => new { item.TenantId, item.ExercisePrescriptionId, item.CreatedAtUtc });
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.CreatedAtUtc });
+            entity.HasOne<TrainingMesocycle>()
+                .WithMany()
+                .HasForeignKey(item => new { item.TenantId, item.MesocycleId })
+                .HasPrincipalKey(item => new { item.TenantId, item.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_LiftWeightApplications_Fingerprint",
+                    "\"RequestFingerprint\" ~ '^[0-9a-f]{64}$'");
+                table.HasCheckConstraint(
+                    "CK_LiftWeightApplications_Counts",
+                    "\"Occurrence\" >= 1 AND \"SetCount\" >= 1 AND \"SetCount\" <= 20 AND \"RuleVersion\" >= 1");
+            });
+            ConfigureTenantEntity(entity);
+        });
     }
 
     private static void ConfigureTemplateSetProperties(

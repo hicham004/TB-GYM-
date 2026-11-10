@@ -1680,6 +1680,14 @@ reads carry the answers as `LiftStandingView`, on `CoachClientProgramView`, `Tra
 `CoachWorkoutDetailResult`. The client's reads share `ClientWorkoutView` with the coach's workout read and
 never carry them, and nothing is written.
 
+Notes plan N6c adds applying a weight (STR-020, ADR 0040). `POST /api/training/clients/{clientProfileId}/
+lift-weights/apply` reads the answers again, writes through `TrainingMesocycle.ApplyLiftWeights` (the set's own
+weight, the rule's key and version in its calculation fields), so the program's version moves on, and records
+each lift in `training."LiftWeightApplications"`: append-only, its sets and sessions named by id with no
+foreign key, one row per idempotency key and lift. The client's reads (`/me/today`, `/me/upcoming`, and the
+coach's workout read, which shares the view) build `ClientExerciseView.WeightNote` from a writing's latest
+record in one query, made only when a set of the read carries the rule's key.
+
 Critique B19 adds `training."ClientProgramVisibilities"`: one row per client once a coach has chosen
 "Can see finished programs" (TRN-031), no row meaning the default, so the migration moves no data. It is
 Training's, not a column on `clients."ClientProfiles"`, so the client's record and its version stay out of

@@ -1,7 +1,7 @@
 # ADR 0040: Last time + step
 
 Status: accepted, 2026-11-10 (notes plan N6a; decisions 21 and 22 of 5 Nov 2026, with 20 and the rest of 22
-decided on 7 Nov); amended 2026-11-10 (notes plan N6b); N6c will amend it
+decided on 7 Nov); amended 2026-11-10 (notes plan N6b, then N6c)
 
 ## Context
 
@@ -29,8 +29,8 @@ Decision 20 (7 Nov): the step only when every set reached its reps.
    it is), Edit weeks, and the workout's snapshot at start, so a started workout keeps the choice and the step
    it began with.
 3. The coach applies, never the app or the client (decision 21). N6a never adds the step: N6b says where each
-   lift stands, by a named, versioned rule (STR-019, below), and N6c will let the coach apply it; until then the
-   coach changes the weight with Edit weeks.
+   lift stands, by a named, versioned rule (STR-019, below), and the coach applies it (STR-020, below) or types
+   another weight with Edit weeks.
 4. Reps first (decision 22): the player starts a step set's reps box empty and asks for the reps before ✓. It is
    a nudge only: the server still records a set logged without reps, and N6b's rule never counts it (STR-019).
 
@@ -72,7 +72,30 @@ steps by its own number. A set whose match gave nothing to step from or keep (no
 typed) carries on its latest log that stood within the 14 days, else keeps its own; a set with no match keeps
 its own. The coach's program read (TRN-022), mesocycle read and logged workout read carry the answers while the
 coach's read is open (TRN-023), never the client's reads. N6b writes nothing, no table and no migration: the
-coach applies (N6c).
+coach applies (N6c, below).
+
+## Applying a weight (notes plan N6c)
+
+The coach applies an answer (STR-020), one lift or "Apply all" for a client, with
+`POST /api/training/clients/{clientProfileId}/lift-weights/apply`: per lift, the sets the answer moves (a step
+up, or last time's weight kept on a set at another weight) with the weights the coach read. The server reads
+the answer again and writes only while it still says exactly that, else 409 `lift_standing_changed`; so a
+coach never applies what they did not read, and nothing is worked out on the way. Why the coach and not a
+button for the client or the app at the start of a workout stays decision 21: each apply is the coach's
+weekly reading of the logged sets.
+
+- The weight is written where a typed starting weight is, on the set itself (`DirectLoad`, and the
+  prescribed load beside it), with the rule's key and version and why in words in the set's calculation
+  fields, so Edit weeks, Build next block and the workout's snapshot carry it as they carry a typed weight,
+  and the step stays. A dedicated route on the training maxes' pattern, rather than Edit weeks' whole-grid
+  preview and apply, keeps the request to what the coach read and binds a retry to it.
+- Each lift's apply leaves a row in `training."LiftWeightApplications"`, append-only: the rule and its
+  version, the answer it read (last time's logged sets included), each set's weight before and after, who and
+  when, and the idempotency key with the whole request's fingerprint. Sets and sessions are named by id with
+  no foreign key, since Edit weeks replaces a changed session's rows; the row names its program.
+- The client's line ("Up 2 kg · all 3 × 10 done on Tue") is built from that row on the client's reads of a
+  workout still to do or running, while each set it wrote still holds that weight, and names nothing of the
+  coach's.
 
 ## Consequences
 
@@ -85,6 +108,9 @@ coach applies (N6c).
 - The API's set shapes (`SetPrescriptionRequest`, `SetPrescriptionView`) carry `LoadStep`, and the client's set
   view (`ClientSetView`) the choice and the step; the web's API client is regenerated.
 
+- A second migration, `LiftWeightApplications` (notes plan N6c), adds that table, its indexes (one row per
+  key and lift; by lift and by client in time) and its append-only trigger.
+
 ## Migration and recovery
 
 Nothing is backfilled: the new columns are nullable, and the append-only and history triggers forbid rewriting
@@ -93,3 +119,5 @@ function, drops the new columns and checks and narrows the two load-strategy che
 exists the old checks would refuse it and a started workout would lose its step, so Down stops first with a
 plain message ("Some sets use Last time + step; roll forward instead of reverting this migration.") and, as
 ADR 0036 says of the chart, a rollback is a forward fix.
+N6c's migration does the same once any weight was applied ("Some weights were applied from Last time + step;
+roll forward instead of reverting this migration."), since dropping the table would lose that history.

@@ -46,12 +46,19 @@
             </div>
           </section>
         } @else if (card(); as block) {
+          @if (weightsToApply().length > 0) {
+            <app-program-weights
+              [standings]="weightsToApply()"
+              [firstName]="firstName()"
+              [apply]="applyFromPanel"
+            />
+          }
           <div class="top">
             <section class="panel hero" aria-labelledby="program-title">
               <div class="hero-main">
                 <div class="hero-copy">
                   <p class="eyebrow">{{ block.eyebrow }}</p>
-                  <h2 id="program-title" dir="auto">{{ block.name }}</h2>
+                  <h2 id="program-title" tabindex="-1" dir="auto">{{ block.name }}</h2>
                   <ul class="facts">
                     @for (fact of block.facts; track fact.text) {
                       <li [class.warm]="fact.warm" dir="auto">{{ fact.text }}</li>
@@ -359,6 +366,7 @@
         [firstName]="firstName()"
         [today]="today()"
         (closed)="sheet.close($event)"
+        [apply]="applyFromSheet"
       />
     }
   }

@@ -178,6 +178,9 @@ internal sealed partial class TrainingApplicationService
             .Select(alternative => alternative.ExerciseId).Append(item.ActualExerciseId)).Distinct().ToArray();
         var names = await dbContext.Exercises.AsNoTracking().Where(item => exerciseIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, item => item.Name, cancellationToken);
+        // A running workout's applied weights say why (N6c, STR-020), in one query for every workout, or none.
+        var weightNotes = await ReadWeightNotesAsync(
+            executions.Values.SelectMany(execution => WeightNoteCandidates(execution)).ToArray(), cancellationToken);
         var details = new List<DatedWorkoutView>();
         foreach (var id in workoutExecutionIds)
         {
@@ -190,7 +193,7 @@ internal sealed partial class TrainingApplicationService
             var previous = await LoadPreviousPerformancesAsync(
                 execution.ClientProfileId, execution.ScheduledDateSnapshot, exerciseIds, cancellationToken);
             details.Add(new(execution.ScheduledDateSnapshot, timeZones[execution.MesocycleId],
-                ToClientWorkout(execution, notes.Take(WorkoutNotesPageSize).ToArray(), names, previous),
+                ToClientWorkout(execution, notes.Take(WorkoutNotesPageSize).ToArray(), names, previous, weightNotes),
                 notes.Count > WorkoutNotesPageSize));
         }
         return details;

@@ -2,11 +2,13 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type { Observable } from 'rxjs';
 import type {
+  ApplyLiftWeightsRequest,
   ApplyProgramEditRequest,
   ApplyTrainingMaxesRequest,
   CoachClientProgramView,
   EstimateRpeChartMaxRequest,
   FinishedProgramsVisibilityView,
+  LiftWeightsAppliedView,
   PreviewProgramEditRequest,
   PreviousProgramMaxesView,
   PreviewTrainingMaxesRequest,
@@ -31,6 +33,20 @@ export class ClientProgramApi {
   /** Every program block of the client, newest first, with the state of each session (TRN-022). */
   getProgram(clientId: string): Observable<CoachClientProgramView> {
     return this.http.get<CoachClientProgramView>(`/api/training/clients/${clientId}/program`);
+  }
+
+  /**
+   * Applies the weights where the client's lifts stand names (N6c, STR-020): per lift the sets it moves, with the
+   * weights the coach read; a conflict means the answer changed since, and the page reads it again.
+   */
+  applyLiftWeights(
+    clientId: string,
+    request: ApplyLiftWeightsRequest,
+  ): Observable<LiftWeightsAppliedView> {
+    return this.http.post<LiftWeightsAppliedView>(
+      `/api/training/clients/${clientId}/lift-weights/apply`,
+      request,
+    );
   }
 
   /** "Can see finished programs" (TRN-031), answered with the version the next change sends back. */

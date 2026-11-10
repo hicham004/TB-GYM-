@@ -1,5 +1,7 @@
 import { formatDate, formatNumber } from '@angular/common';
 import type {
+  ExertionDisplayPreference,
+  LiftStandingReasonDetail,
   LiftStandingView,
   LoggedSet,
   SetStanding,
@@ -32,13 +34,14 @@ const number = (value: Quantity): number | null =>
   value === null || value === undefined || value === '' ? null : Number(value);
 
 /** Weights to the gram, never rounded further (decision 22): "17.5", "22.125". */
-function amount(value: Quantity, locale: string): string {
+export function amount(value: Quantity, locale: string): string {
   return formatNumber(number(value) ?? 0, locale, '1.0-3');
 }
 
-const unitWord = (unit: TrainingLoadUnit | null | undefined) => (unit === 'Pound' ? 'lb' : 'kg');
+export const unitWord = (unit: TrainingLoadUnit | null | undefined) =>
+  unit === 'Pound' ? 'lb' : 'kg';
 
-function weight(
+export function weight(
   value: Quantity,
   unit: TrainingLoadUnit | null | undefined,
   locale: string,
@@ -47,7 +50,7 @@ function weight(
 }
 
 /** Whole days from `from` to `to`, both workspace dates ("2026-11-10"). */
-function daysBetween(from: string, to: string): number {
+export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
@@ -60,7 +63,7 @@ function dayWord(day: string, today: string, locale: string): string {
 }
 
 /** "today", "yesterday", "on Tue" within the week, "on Tue 3 Nov" before it. */
-function onDay(day: string, today: string, locale: string): string {
+export function onDay(day: string, today: string, locale: string): string {
   const ago = daysBetween(day, today);
   return ago === 0 || ago === 1
     ? dayWord(day, today, locale)
@@ -131,21 +134,27 @@ function weights(sets: readonly SetStanding[], locale: string): string | null {
 function setNote(set: SetStanding, since: string, locale: string): string | null {
   const own = set.weight === null ? null : weight(set.weight, set.unit, locale);
   const place = amount(set.setNumber, locale);
+  // Since N6c a coach applies the answer: a set it moves to another weight carries on at it, not "stays".
+  const moves = number(set.weight) !== number(set.currentWeight);
   switch (set.note) {
     case 'NewSet':
       return own === null
         ? $localize`set ${place}:set: is new since ${since}:day:`
         : $localize`set ${place}:set: is new since ${since}:day:, stays at ${own}:weight:`;
     case 'NoWeightLogged':
-      return own === null
-        ? $localize`set ${place}:set: had no weight logged`
+      if (own === null) return $localize`set ${place}:set: had no weight logged`;
+      return moves
+        ? $localize`set ${place}:set: had no weight logged, carries on at ${own}:weight:`
         : $localize`set ${place}:set: had no weight logged, stays at ${own}:weight:`;
     case 'NoRepsTyped':
-      return own === null
-        ? $localize`set ${place}:set: was logged without reps`
+      if (own === null) return $localize`set ${place}:set: was logged without reps`;
+      return moves
+        ? $localize`set ${place}:set: was logged without reps, carries on at ${own}:weight:`
         : $localize`set ${place}:set: was logged without reps, stays at ${own}:weight:`;
     case 'AboveLimit':
-      return $localize`set ${place}:set: stays at ${weight(set.weight, set.unit, locale)}:weight:, as a step would pass ${weight(2000, set.unit, locale)}:limit:`;
+      return moves
+        ? $localize`set ${place}:set: carries on at ${weight(set.weight, set.unit, locale)}:weight:, as a step would pass ${weight(2000, set.unit, locale)}:limit:`
+        : $localize`set ${place}:set: stays at ${weight(set.weight, set.unit, locale)}:weight:, as a step would pass ${weight(2000, set.unit, locale)}:limit:`;
     default:
       return null;
   }
@@ -166,20 +175,30 @@ function holdLead(view: LiftStandingView, locale: string): string {
 }
 
 /** An effort on the scale the coach wrote it in: RPE as stored, RIR as 10 minus RPE (STR-003). */
-function effort(
-  rpe: Quantity,
-  display: LiftStandingView['exertionDisplay'],
-  locale: string,
-): string {
+function effort(rpe: Quantity, display: ExertionDisplayPreference, locale: string): string {
   const value = number(rpe) ?? 0;
   return formatNumber(display === 'Rir' ? 10 - value : value, locale, '1.0-1');
 }
 
-const scale = (display: LiftStandingView['exertionDisplay']) => (display === 'Rir' ? 'RIR' : 'RPE');
+const scale = (display: ExertionDisplayPreference) => (display === 'Rir' ? 'RIR' : 'RPE');
 
 /** The hold's reason, in the coach's words, or null for a hold whose lead says it all. */
 function reasonText(view: LiftStandingView, locale: string): string | null {
   const { reason, judgedOn } = view.standing;
+  return reasonWords(reason, judgedOn, view.exertionDisplay, view.standing.sets[0]?.unit, locale);
+}
+
+/**
+ * A hold's reason from what it names, judged on <judgedOn>: the coach's line here, and the client's line when a
+ * coach applied last time's weight (N6c). Null for a reason a lead says on its own.
+ */
+export function reasonWords(
+  reason: LiftStandingReasonDetail,
+  judgedOn: string,
+  display: ExertionDisplayPreference,
+  unit: TrainingLoadUnit | null | undefined,
+  locale: string,
+): string | null {
   const day = reason.day ?? judgedOn;
   const on = onDay(day, judgedOn, locale);
   const set = reason.setNumber === null ? '' : amount(reason.setNumber, locale);
@@ -201,14 +220,14 @@ function reasonText(view: LiftStandingView, locale: string): string | null {
     case 'RepsShort':
       return $localize`set ${set}:set: reached ${amount(reason.repetitions, locale)}:reps: of ${amount(reason.repetitionsAsked, locale)}:asked: ${on}:day:`;
     case 'HarderThanPlanned': {
-      const rated = effort(reason.rpe, view.exertionDisplay, locale);
-      const target = effort(reason.targetRpe, view.exertionDisplay, locale);
-      return $localize`set ${set}:set: felt harder than planned ${on}:day: (${scale(view.exertionDisplay)}:scale: ${rated}:rated: of ${target}:target:)`;
+      const rated = effort(reason.rpe, display, locale);
+      const target = effort(reason.targetRpe, display, locale);
+      return $localize`set ${set}:set: felt harder than planned ${on}:day: (${scale(display)}:scale: ${rated}:rated: of ${target}:target:)`;
     }
     case 'NoWeightLogged':
       return $localize`set ${set}:set: had no weight logged ${on}:day:`;
     case 'AboveLimit':
-      return $localize`a step would pass ${weight(2000, view.standing.sets[0]?.unit, locale)}:limit:`;
+      return $localize`a step would pass ${weight(2000, unit, locale)}:limit:`;
     default:
       return null;
   }

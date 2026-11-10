@@ -1817,8 +1817,14 @@ limited to the coach's assigned clients.
     time + step set says where it stands under its sets, on its coming session, and under the lift in the
     logged workout it was read from, or the running one a forgotten Finish waits on (notes plan N6b,
     STR-019): "Last 15 kg × 10, 10, 10 on Tue · every set done · next time 17 kg", or a hold and why, "Same
-    weight · set 3 reached 8 of 10 on Tue", what happens next in ink and the rest muted. The client's screens
-    say nothing of it (decision 21: the coach moves it).
+    weight · set 3 reached 8 of 10 on Tue", what happens next in ink and the rest muted. Under it, when the
+    answer moves a weight, an outlined "Apply 17 kg" (notes plan N6c, STR-020): the sheet reads the workout
+    again and says what changed where the coach is ("Goblet Squat is now 9 kg today. Maya sees it on that
+    workout."), and a refusal says why under the lift. The client's screens never show the step itself
+    (decision 21: the coach moves it); the workout a weight was applied to says why (M2).
+  - Weights to apply (notes plan N6c): first on the tab while any lift's answer moves a weight, one row per
+    lift with its name, its workout and day, the line above and its Apply, and "Apply all" for two or more,
+    outlined like every Apply. It goes once nothing is left to apply, and focus moves to the program's title.
   - Manage program: Assign program, Build next block, Edit weeks (P3b), Reschedule, Open every shared week now (or
     Open weeks as they start), Close program and Cancel program. What cannot be done stays in the list
     with its reason: a started program cannot move, Close program waits for every session to be done
@@ -2268,6 +2274,8 @@ limited to the coach's assigned clients.
 - Set rows **start at the target, with last time's numbers beside them** (TRN-029). **One tap ✓** logs
   a set as prescribed, and steppers adjust load and reps. A set whose weight goes up by a step (notes
   plan N6a) starts with its reps empty, and ✓ asks for them first. The unit is chosen once per workout.
+  A weight the coach applied says why under the lift's Last time, outside the sets: "Up 2 kg · all 3 × 10
+  done on Tue", or "Same weight as last time · set 1 reached 11 of 12 on Tue 3 Nov" (notes plan N6c).
 - A **rest timer ring** starts automatically, keeps time while the phone is locked, and keeps the
   screen awake (Wake Lock).
 - Exercise demo media, a note to the coach, and a PR badge with a vibration on Android.

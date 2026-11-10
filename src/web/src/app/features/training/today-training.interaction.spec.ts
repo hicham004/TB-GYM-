@@ -21,6 +21,7 @@ import { button, field, fill, fold, press, query, settle, toggleFold } from '../
 import { personalRecord, programSummary } from '../../../testing/share-card-fixtures';
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { ShareCardMaker } from '../share-cards/share-card-maker';
+import { standingReason, weightNote } from '../../../testing/lift-weight-fixtures';
 import { RestTimer } from './rest-timer';
 import { TodayTraining } from './today-training';
 import { trainingRoutes } from './training.routes';
@@ -1880,5 +1881,107 @@ describe('TodayTraining, a last time + step set', () => {
       expect.objectContaining({ repetitions: null, load: 60 }),
     );
     expect(host.textContent).not.toContain('Type your reps first.');
+  });
+});
+
+/**
+ * Notes plan N6c (STR-020): a weight the coach applied from where the lift stood comes with one line saying why,
+ * under the lift's "Last time" and outside the sets, from the day's own date. The Target line stays as it was.
+ */
+describe('TodayTraining, a weight the coach applied', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+    TestBed.resetTestingModule();
+  });
+
+  /** The lateral raise at 7 kg, last time 5 kg × 12 on Tue 18 Aug; today is Tue 25 Aug. */
+  function appliedDay(changes: Partial<ClientExerciseView> = {}): ClientTrainingDayResult {
+    return day({
+      workouts: [
+        workout({
+          workoutExecutionId: null,
+          status: null,
+          executionVersion: null,
+          exercises: [
+            exercise({
+              prescribedExerciseName: 'Lateral raise',
+              actualExerciseName: 'Lateral raise',
+              sets: [
+                set({
+                  performanceId: null,
+                  prescribedRepetitionsMinimum: 12,
+                  prescribedRepetitionsMaximum: 12,
+                  prescribedLoad: 7,
+                  loadStrategy: 'LastTimeStep',
+                  loadStep: 2,
+                }),
+              ],
+              weightNote: weightNote({
+                increases: [2],
+                lastTimeDay: '2026-08-18',
+                workingSets: 1,
+                repetitionsAsked: 12,
+              }),
+              ...changes,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('says why the weight went up, under Last time and outside the sets', async () => {
+    const { host } = await render({}, appliedDay());
+
+    const note = query(host, '.weight-note');
+    expect(textOf(note)).toBe('Up 2 kg · 1 × 12 done on Tue 18 Aug');
+    expect(textOf(note.querySelector('strong'))).toBe('Up 2 kg');
+    expect(note.closest('.set-card')).toBeNull();
+    // The Target line keeps the client's own words (decision 21).
+    expect(textOf(query(host, '.prescription'))).toContain('Target: 12 reps · 7 kg');
+    expect(textOf(query(host, '.prescription'))).not.toMatch(/Up|last time|\+/i);
+  });
+
+  it('says why last time’s weight was kept', async () => {
+    const { host } = await render(
+      {},
+      appliedDay({
+        weightNote: weightNote({
+          move: 'SameAsLastTime',
+          increases: [],
+          lastTimeDay: '2026-08-18',
+          workingSets: 1,
+          repetitionsAsked: 12,
+          reason: standingReason({
+            kind: 'RepsShort',
+            day: '2026-08-18',
+            setNumber: 1,
+            repetitions: 11,
+            repetitionsAsked: 12,
+          }),
+        }),
+      }),
+    );
+
+    expect(textOf(query(host, '.weight-note'))).toBe(
+      'Same weight as last time · set 1 reached 11 of 12 on Tue 18 Aug',
+    );
+  });
+
+  it('says nothing on a swap, nor without a weight the coach applied', async () => {
+    const swapped = await render(
+      {},
+      appliedDay({
+        wasSubstituted: true,
+        actualExerciseId: 'exercise-9',
+        actualExerciseName: 'Cable raise',
+      }),
+    );
+    expect(swapped.host.querySelector('.weight-note')).toBeNull();
+    TestBed.resetTestingModule();
+
+    const plain = await render({}, appliedDay({ weightNote: null }));
+    expect(plain.host.querySelector('.weight-note')).toBeNull();
   });
 });

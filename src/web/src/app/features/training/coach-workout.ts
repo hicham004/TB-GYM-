@@ -2,12 +2,16 @@ import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
+  afterNextRender,
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
+  Injector,
   input,
   LOCALE_ID,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -20,7 +24,8 @@ import { FormSummary } from '../../ui/form-summary';
 import { Skeleton } from '../../ui/skeleton';
 import { StatusLabel } from '../../ui/status-label';
 import { firstValueFrom } from 'rxjs';
-import type { ClientSetView, WorkoutNoteView } from '../../core/api/generated';
+import type { ClientSetView, LiftStandingView, WorkoutNoteView } from '../../core/api/generated';
+import { applyError, applyLabel, applyName, canApply } from '../clients/lift-weights';
 import {
   standingBelongsTo,
   standingLine,
@@ -57,6 +62,17 @@ export class CoachWorkout {
   readonly clientName = input('');
   /** False for a former client's record, which is read-only (ADR 0027); the server refuses either way. */
   readonly canReply = input(true);
+  /**
+   * The page's apply (N6c), given by the session sheet for a current client's record; null where nothing may be
+   * applied. It resolves with what to say once the page has read the program again.
+   */
+  readonly apply = input<((views: readonly LiftStandingView[]) => Promise<string>) | null>(null);
+  /** A lift's weight was applied from here: the sheet says so and reads its prescription again. */
+  readonly applied = output<string>();
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly applying = signal<string | null>(null);
+  protected readonly applyProblem = signal<string | null>(null);
   protected readonly result = signal<CoachWorkoutDetail | null>(null);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -96,7 +112,10 @@ export class CoachWorkout {
    */
   protected readonly standings = computed(() => {
     const result = this.result();
-    const found = new Map<string, StandingLine>();
+    const found = new Map<
+      string,
+      { line: StandingLine; view: LiftStandingView; applies: boolean; label: string; name: string }
+    >();
     const detail = result?.detail;
     if (!detail) return found;
     for (const [id, standing] of standingsByExercise(
@@ -104,11 +123,42 @@ export class CoachWorkout {
       result.liftStandings,
     )) {
       if (standingBelongsTo(standing, detail.workout)) {
-        found.set(id, standingLine(standing, this.locale));
+        found.set(id, {
+          line: standingLine(standing, this.locale),
+          view: standing,
+          applies: canApply(standing),
+          label: applyLabel(standing, this.locale),
+          name: applyName(standing, this.locale),
+        });
       }
     }
     return found;
   });
+
+  /**
+   * Applies where a lift done here stands to its next workout (N6c, STR-020); the server judges it again and
+   * writes only what it still says. Either way this read is taken again, so the line is the latest.
+   */
+  protected async applyWeight(id: string, view: LiftStandingView): Promise<void> {
+    if (this.applying() !== null) return;
+    this.applying.set(id);
+    this.applyProblem.set(null);
+    try {
+      const notice = await this.apply()!([view]);
+      // Read again before the button can be pressed again: it goes with the weight it applied.
+      await this.load();
+      this.applied.emit(notice);
+    } catch (error) {
+      this.applyProblem.set(applyError(error, this.clientName()));
+      await this.load();
+      afterNextRender(
+        () => this.host.nativeElement.querySelector<HTMLElement>('.apply-problem')?.focus(),
+        { injector: this.injector },
+      );
+    } finally {
+      this.applying.set(null);
+    }
+  }
 
   protected target(set: ClientSetView): string {
     return setTargetText(set, this.locale);

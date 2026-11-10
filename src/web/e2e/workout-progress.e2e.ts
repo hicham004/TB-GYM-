@@ -562,4 +562,51 @@ test.describe('Workout player', () => {
     await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
     await accessible(page);
   });
+
+  // Notes plan N6c, STR-020: the coach applied 2 kg on the raise after every set of 12 was done, so the workout
+  // says why under Last time; the Target line stays the client's own.
+  for (const width of [390, 1440]) {
+    test(`A weight the coach applied says why at ${width}px (N6c)`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      const applied = {
+        ...stepWorkout,
+        exercises: [
+          {
+            ...stepWorkout.exercises[0],
+            weightNote: {
+              move: 'StepUp',
+              increases: [2],
+              unit: 'Kilogram',
+              lastTimeDay: '2026-09-23',
+              workingSets: 1,
+              repetitionsAsked: 12,
+              reason: null,
+              exertionDisplay: 'Rpe',
+            },
+          },
+        ],
+      };
+      await session(page, {
+        'GET /api/training/me/today': (route) =>
+          json(route, 200, {
+            isAllowed: true,
+            accessReason: 'Granted',
+            localDate: '2026-09-30',
+            workouts: [applied],
+          }),
+        'GET /api/training/me/upcoming': (route) => json(route, 200, nothingUnfinished),
+      });
+      await page.clock.install({ time: new Date('2026-09-30T08:20:00Z') });
+      await page.goto('/training/today');
+      await expect(page.getByRole('heading', { name: 'Lateral raise' })).toBeVisible();
+      const note = page.locator('.weight-note');
+      await expect(note).toHaveText('Up 2 kg · 1 × 12 done on Wed 23 Sep');
+      await expect(note.locator('strong')).toHaveText('Up 2 kg');
+      await expect(page.locator('.prescription')).not.toContainText(/Up 2|last time|\+/i);
+      await waitForFonts(page);
+      await accessible(page);
+      await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+      await accessible(page);
+    });
+  }
 });

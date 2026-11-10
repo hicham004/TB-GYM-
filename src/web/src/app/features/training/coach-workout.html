@@ -16,6 +16,9 @@
         <h3 dir="auto">{{ detail.workout.name }}</h3>
         <p class="when">{{ detail.date | date: 'EEE d MMM' }} · <span i18n>Read only</span></p>
       </header>
+      @if (applyProblem(); as problem) {
+        <p class="apply-problem" role="alert" tabindex="-1" dir="auto">{{ problem }}</p>
+      }
       @if (detail.workout.coachNotes) {
         <p class="plan-note" dir="auto">{{ detail.workout.coachNotes }}</p>
       }
@@ -65,8 +68,8 @@
             }
           </ol>
           @if (standings().get(exercise.prescriptionId); as standing) {
-            <p class="standing" [attr.data-standing]="standing.outcome">
-              @for (part of standing.parts; track $index) {
+            <p class="standing" [attr.data-standing]="standing.line.outcome">
+              @for (part of standing.line.parts; track $index) {
                 @if (!$first) {
                   {{ separator }}
                 }
@@ -77,6 +80,24 @@
                 }
               }
             </p>
+            @if (standing.applies && apply()) {
+              <div class="apply">
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  [loading]="applying() === exercise.prescriptionId"
+                  [attr.aria-label]="standing.name"
+                  (click)="applyWeight(exercise.prescriptionId, standing.view)"
+                >
+                  @if (applying() === exercise.prescriptionId) {
+                    <ng-container i18n>Applying…</ng-container>
+                  } @else {
+                    {{ standing.label }}
+                  }
+                </button>
+              </div>
+            }
           }
         </section>
       }

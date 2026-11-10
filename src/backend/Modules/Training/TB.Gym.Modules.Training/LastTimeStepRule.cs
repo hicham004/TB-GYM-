@@ -12,6 +12,9 @@ public static class LastTimeStepRule
     public const string Key = "LastTimeStep";
     public const int Version = 1;
 
+    /// <summary>The version as a set's calculation keeps it beside <see cref="Key"/> once a coach applies it (N6c).</summary>
+    public const string VersionName = "1";
+
     /// <summary>Line (b): last time is within this many days of today, its day counted in the program's calendar.</summary>
     public const int LookbackDays = 14;
 
@@ -178,6 +181,49 @@ public static class LastTimeStepRule
         int? named = note == SetStandingNote.NewSet ? null : sets.First(item => item.Note == note).SetNumber;
         return new LiftStanding(LiftStandingOutcome.Hold, Reason(kind, writing.Day, setNumber: named), lastTime,
             sets, today);
+    }
+
+    /// <summary>
+    /// What applying an answer writes (notes plan N6c, STR-020): each set the answer moves to a weight it does not
+    /// have yet, last time's weight plus its step or last time's weight kept (line d). A set that keeps its own
+    /// weight, or already has the answer's, is left alone, so a hold that keeps every set's own weight applies
+    /// nothing and applying twice writes nothing the second time. A weight of 0 (a set carried on from a log of
+    /// 0 kg) is no weight to apply, so that set keeps its own.
+    /// </summary>
+    public static IReadOnlyList<SetStanding> SetsToApply(LiftStanding standing)
+    {
+        ArgumentNullException.ThrowIfNull(standing);
+        return standing.Sets
+            .Where(set => (set.Move is SetStandingMove.StepUp or SetStandingMove.SameAsLastTime) &&
+                          set.Weight is { } weight && weight > 0m && weight != set.CurrentWeight)
+            .OrderBy(set => set.SetNumber)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Why an applied set holds its weight, kept on the set beside the rule's key and version (STR-020): the weight
+    /// the answer started from and what it did with it. Plain words for the record; screens say it their own way.
+    /// </summary>
+    public static string Explain(LiftStanding standing, SetStanding set)
+    {
+        ArgumentNullException.ThrowIfNull(standing);
+        ArgumentNullException.ThrowIfNull(set);
+        var unit = set.Unit == TrainingLoadUnit.Pound ? "lb" : "kg";
+        var day = standing.LastTime?.Day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        string Weight(decimal value) =>
+            $"{value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} {unit}";
+        var weight = set.Weight ?? throw new ArgumentException("An applied set names its weight.", nameof(set));
+        return set switch
+        {
+            { Move: SetStandingMove.StepUp } =>
+                $"{Weight(weight - set.Step)} logged on {day} plus the {Weight(set.Step)} step ({Key} v{Version}), applied by the coach.",
+            { Note: SetStandingNote.AboveLimit } =>
+                $"{Weight(weight)} logged on {day}, kept as a step would pass {Weight(MaximumWeight)} ({Key} v{Version}), applied by the coach.",
+            { Note: SetStandingNote.None } =>
+                $"{Weight(weight)} logged on {day}, kept ({Key} v{Version}), applied by the coach.",
+            _ =>
+                $"{Weight(weight)}, the set's latest log that stood, carried on ({Key} v{Version}), applied by the coach.",
+        };
     }
 
     /// <summary>

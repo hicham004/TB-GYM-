@@ -182,6 +182,34 @@ export type AllergenCode =
   | 'Lupin'
   | 'Molluscs';
 
+export type AppliedLiftSetView = {
+  setPrescriptionId: string;
+  setNumber: number | string;
+  move: SetStandingMove;
+  weightBefore: null | number | string;
+  weightAfter: number | string;
+  unit: TrainingLoadUnit;
+  step: number | string;
+};
+
+export type AppliedLiftWeightView = {
+  applicationId: string;
+  mesocycleId: string;
+  sessionId: string;
+  sessionName: string;
+  sessionDate: string;
+  exercisePrescriptionId: string;
+  exerciseId: string;
+  exerciseName: string;
+  sets: Array<AppliedLiftSetView>;
+  appliedAtUtc: string;
+};
+
+export type ApplyLiftWeightsRequest = {
+  lifts: Array<LiftWeightRequest>;
+  idempotencyKey: string;
+};
+
 export type ApplyProgramEditRequest = {
   mesocycleVersion: number | string;
   weeks: Array<ProgramEditWeekRequest>;
@@ -774,6 +802,7 @@ export type ClientExerciseView = {
   mediaAssetIds: Array<string>;
   previousPerformance: null | PreviousExercisePerformanceView;
   sets: Array<ClientSetView>;
+  weightNote?: null | ClientWeightNoteView;
 };
 
 export type ClientNutritionDayView = {
@@ -1124,6 +1153,17 @@ export type ClientTrainingWeekView = {
   localDate: string;
   weekStart: string;
   days: Array<ClientTrainingWeekDayView>;
+};
+
+export type ClientWeightNoteView = {
+  move: SetStandingMove;
+  increases: Array<number | string>;
+  unit: TrainingLoadUnit;
+  lastTimeDay: string;
+  workingSets: number | string;
+  repetitionsAsked: null | number | string;
+  reason: null | LiftStandingReasonDetail;
+  exertionDisplay: ExertionDisplayPreference;
 };
 
 export type ClientWorkoutHistoryItemView = {
@@ -2598,6 +2638,16 @@ export type LiftStandingView = {
   occurrence: number | string;
   exertionDisplay: ExertionDisplayPreference;
   standing: LiftStanding;
+};
+
+export type LiftWeightRequest = {
+  exercisePrescriptionId: string;
+  sets: Array<SetWeightRequest>;
+};
+
+export type LiftWeightsAppliedView = {
+  clientProfileId: string;
+  lifts: Array<AppliedLiftWeightView>;
 };
 
 export type LoadUnit = 'Kilogram' | 'Pound';
@@ -4228,6 +4278,12 @@ export type SetStandingNote = 'None' | 'NewSet' | 'NoWeightLogged' | 'AboveLimit
 export type SetWeekPublishedRequest = {
   isPublished: boolean;
   version: number | string;
+};
+
+export type SetWeightRequest = {
+  setPrescriptionId: string;
+  currentWeight: null | number | string;
+  weight: number | string;
 };
 
 export type StartingWeightCorrectionView = {
@@ -8713,6 +8769,45 @@ export type GetClientTrainingProgramResponses = {
 
 export type GetClientTrainingProgramResponse =
   GetClientTrainingProgramResponses[keyof GetClientTrainingProgramResponses];
+
+export type ApplyLiftWeightsData = {
+  body: ApplyLiftWeightsRequest;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/training/clients/{clientProfileId}/lift-weights/apply';
+};
+
+export type ApplyLiftWeightsErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ApplyLiftWeightsError = ApplyLiftWeightsErrors[keyof ApplyLiftWeightsErrors];
+
+export type ApplyLiftWeightsResponses = {
+  /**
+   * OK
+   */
+  200: LiftWeightsAppliedView;
+};
+
+export type ApplyLiftWeightsResponse = ApplyLiftWeightsResponses[keyof ApplyLiftWeightsResponses];
 
 export type GetPreviousProgramMaxesData = {
   body?: never;

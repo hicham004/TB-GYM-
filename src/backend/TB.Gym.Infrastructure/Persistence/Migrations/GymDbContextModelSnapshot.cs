@@ -10539,6 +10539,137 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Training.LiftWeightApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppliedSetsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ExerciseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExerciseName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<Guid>("ExercisePrescriptionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("JudgedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("LastTimeDay")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("LastTimeWorkoutExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MesocycleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Occurrence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ReasonKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("RuleKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("RuleVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("SessionDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("SessionName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<int>("SetCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StandingJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TrainingSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "MesocycleId");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "CreatedAtUtc");
+
+                    b.HasIndex("TenantId", "ExercisePrescriptionId", "CreatedAtUtc");
+
+                    b.HasIndex("TenantId", "IdempotencyKey", "ExercisePrescriptionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_LiftWeightApplications_OnePerKeyAndLift");
+
+                    b.ToTable("LiftWeightApplications", "training", t =>
+                        {
+                            t.HasCheckConstraint("CK_LiftWeightApplications_Counts", "\"Occurrence\" >= 1 AND \"SetCount\" >= 1 AND \"SetCount\" <= 20 AND \"RuleVersion\" >= 1");
+
+                            t.HasCheckConstraint("CK_LiftWeightApplications_Fingerprint", "\"RequestFingerprint\" ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Training.MesocycleLifecycleEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -14281,6 +14412,16 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasOne("TB.Gym.Modules.Media.MediaAsset", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "MediaAssetId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Training.LiftWeightApplication", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Training.TrainingMesocycle", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MesocycleId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

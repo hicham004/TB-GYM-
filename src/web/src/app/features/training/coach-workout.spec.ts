@@ -7,6 +7,7 @@ import { ApiClient } from '../../core/api/api-client';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { formSummary, press, settle } from '../../../testing/dom';
+import { liftStanding } from '../../../testing/lift-weight-fixtures';
 import type { CoachWorkoutDetail } from './training-read.models';
 import { CoachWorkout } from './coach-workout';
 
@@ -502,6 +503,107 @@ describe('CoachWorkout', () => {
     expect(host.querySelector('.standing')?.getAttribute('data-standing')).toBe('Hold');
   });
 
+  it('applies where a lift done here stands from under its line, and reads the workout again (N6c)', async () => {
+    const detail = workoutDetail(null);
+    const exercises = detail.detail!.workout.exercises;
+    exercises.push({
+      ...exercises[0],
+      prescriptionId: 'prescription-2',
+      prescribedExerciseId: 'leg-curl',
+      prescribedExerciseName: 'Seated Leg Curl',
+      actualExerciseId: 'leg-curl',
+      actualExerciseName: 'Seated Leg Curl',
+      wasSubstituted: false,
+      coachNotes: null,
+    });
+    // Every set done at 15 kg in this workout: 17 kg on the coming Lower A, from 15 kg.
+    const coming = liftStanding(
+      { lastTime: { workoutExecutionId: 'workout-1', day: '2026-11-05', sets: [] } },
+      { exerciseId: 'leg-curl', exercisePrescriptionId: 'coming-prescription' },
+    );
+    detail.liftStandings = [coming];
+    const read = vi.fn(() => of(detail));
+    const notice = 'Seated Leg Curl is now 17 kg on Thu 12 Nov. Maya sees it on that workout.';
+    const apply = vi.fn(() => Promise.resolve(notice));
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: read } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    fixture.componentRef.setInput('clientName', 'Maya');
+    const applied: string[] = [];
+    fixture.componentInstance.applied.subscribe((said) => applied.push(said));
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+
+    // Not offered unless the sheet hands it the page's apply: an open record of a current client.
+    expect(host.querySelector('.apply')).toBeNull();
+    fixture.componentRef.setInput('apply', apply);
+    await settle(fixture);
+    const button = host.querySelector<HTMLButtonElement>('.apply button')!;
+    expect(button.textContent?.trim()).toBe('Apply 17 kg');
+    expect(button.getAttribute('aria-label')).toBe(
+      'Apply 17 kg to Seated Leg Curl, Lower A on Thu 12 Nov',
+    );
+
+    button.click();
+    await settle(fixture);
+
+    expect(apply).toHaveBeenCalledWith([coming]);
+    // The workout is read again before the sheet is told, so the button is never live on what was applied.
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(applied).toEqual([notice]);
+  });
+
+  it('says why an apply from the logged workout was refused, under the lift, where focus goes', async () => {
+    const detail = workoutDetail(null);
+    detail.detail!.workout.exercises[0] = {
+      ...detail.detail!.workout.exercises[0],
+      actualExerciseId: 'exercise-1',
+      actualExerciseName: 'Back squat',
+      wasSubstituted: false,
+    };
+    detail.liftStandings = [
+      liftStanding(
+        { lastTime: { workoutExecutionId: 'workout-1', day: '2026-11-05', sets: [] } },
+        { exerciseId: 'exercise-1', exerciseName: 'Back squat', exercisePrescriptionId: 'coming' },
+      ),
+    ];
+    const refused = new HttpErrorResponse({ status: 403, error: { code: 'workspace_read_only' } });
+    await TestBed.configureTestingModule({
+      imports: [CoachWorkout],
+      providers: [
+        { provide: ApiClient, useValue: { getCoachWorkoutDetail: vi.fn(() => of(detail)) } },
+        { provide: TenantStore, useValue: { selectedTenantId: signal('tenant-1') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CoachWorkout);
+    fixture.componentRef.setInput('clientId', 'client-1');
+    fixture.componentRef.setInput('workoutId', 'workout-1');
+    fixture.componentRef.setInput(
+      'apply',
+      vi.fn(() => Promise.reject(refused)),
+    );
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+    document.body.append(host);
+
+    host.querySelector<HTMLButtonElement>('.apply button')!.click();
+    await settle(fixture);
+
+    const problem = host.querySelector<HTMLElement>('.apply-problem')!;
+    expect(problem.textContent?.trim()).toBe(
+      'Your coaching space is read-only until its TB Gym bill is paid. You can still view everything.',
+    );
+    expect(problem.getAttribute('role')).toBe('alert');
+    expect(document.activeElement).toBe(problem);
+    host.remove();
+  });
   it('says nothing under a lift on an older workout than the one the answer read', async () => {
     const detail = workoutDetail(null);
     const exercises = detail.detail!.workout.exercises;

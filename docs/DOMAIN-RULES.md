@@ -879,9 +879,9 @@ draft keeps it unchecked (TRN-024), Publish checks it, assignment copies it, and
 snapshots the choice and the step (TRN-012), so a started workout keeps the step it began with. The
 builder's copies (TRN-025) and Build next block (TRN-027) move its starting weight by the weight step, as
 they move a typed weight, and copy the set's own step as it is; Edit weeks (TRN-028) keeps a session sent
-as stored, and a changed step set is neither worked out from a max nor rounded. Nothing adds the step yet,
-and nothing will on its own: STR-019 now says where each lift stands (notes plan N6b), and N6c is to let
-the coach apply the step; until then the coach changes the weight with Edit weeks. The player starts the
+as stored, and a changed step set is neither worked out from a max nor rounded. Nothing adds the step on
+its own: STR-019 says where each lift stands (notes plan N6b), and the coach applies it (STR-020, notes
+plan N6c) or types another weight with Edit weeks. The player starts the
 set's reps box empty and asks for the reps before ✓ (TRN-029), while the server still records a set logged
 without reps, which STR-019 never counts. Database checks hold the shape, on the sets and on the workout's
 snapshot.
@@ -1113,7 +1113,31 @@ and says so; a set with no match last time keeps its own (i); a step past 2,000 
 where no set can step holds. Every answer names the rule and its version and the reason (with the workout
 of a (b) or (g) hold), and last time's sets whenever a finished workout was read. The coach's program read
 (TRN-022), mesocycle read and logged workout read carry the answers, only while the coach's read is open
-(TRN-023); the client's reads never do. Nothing is written: the coach applies (N6c).
+(TRN-023); the client's reads never do. Nothing is written: the coach applies it (STR-020).
+
+**STR-020** Applying a weight (`LastTimeStep` v1 applied, notes plan N6c; decision 21 of 5 Nov 2026, ADR
+0040). The coach applies where a lift stands (STR-019), never the app or the client: one lift, or every lift
+of a client at once ("Apply all"), from the client's Training tab, a session sheet or a logged workout. An
+apply names, per writing of a lift in its coming session, the sets the answer moves to a weight they do not
+have yet: last time's weight plus the step, or last time's weight kept on a set at another weight (a hold of
+line (a) or (c), or a set carried on, line (d), so a new program's starting weight carries on, decision 22),
+each with the weight it had and the weight it goes to as the coach read them; a hold that keeps each set's
+own weight applies nothing, and a weight of 0 is no weight to apply. The server judges each lift again and
+writes only while its answer still says exactly that and each set still holds the weight the coach read,
+else it answers 409 `lift_standing_changed` and the coach reads it again; nothing is worked out, rounded or
+converted on the way. The weight becomes the set's own, as a typed starting weight is
+(TRN-032), so Edit weeks, Build next block and the workout's snapshot carry it, and the set names the rule,
+its version and why in words; the step stays. Only a session still open (TRN-028's line) takes one, and the
+program's version moves on, so a start, an Edit weeks sitting or another apply read before it conflicts.
+Each lift leaves an append-only record: the rule and its version, the answer as read with last time's logged
+sets, each set's weight before and after, who applied it and when, and the idempotency key bound to the
+whole request (a retry answers with the first result, another request under the key conflicts). The
+client's workout of that session then says why under the lift's Last time, while every set it wrote still
+holds that weight and the lift is done as written: "Up 2 kg · all 3 × 10 done on Tue", or "Same weight as
+last time · set 1 reached 11 of 12 on Tue 3 Nov"; never who applied it, and typing another weight still
+wins (TRN-029). Applying is a coach's training write: their own clients only (ADR 0026), a released client
+refused (ADR 0027), closed with the coach's training read (TRN-023, 403), and refused while the workspace is
+read-only for an unpaid bill (PBL-005).
 
 ## 6. Nutrition, recipes, and calorie targets
 

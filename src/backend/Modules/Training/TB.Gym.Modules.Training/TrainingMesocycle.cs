@@ -316,6 +316,56 @@ public sealed class TrainingMesocycle : TenantEntity
     }
 
     /// <summary>
+    /// Stores the weights a coach applied from where each lift stood (notes plan N6c, STR-020): only on "Last time +
+    /// step" sets of sessions still open (not started, not before <paramref name="today"/>, TRN-028's line), each in
+    /// its set's unit, never worked out from a max, rounded or converted. The step itself stays as it is. Returns the
+    /// sessions and sets it changed; the program's version moves on, so a start, an edit or another apply that read
+    /// it before conflicts.
+    /// </summary>
+    public (int Sessions, int Sets) ApplyLiftWeights(
+        IReadOnlyDictionary<Guid, AppliedLiftWeight> weights,
+        DateOnly today)
+    {
+        EnsureNonTerminal();
+        ArgumentNullException.ThrowIfNull(weights);
+        if (weights.Count == 0)
+        {
+            throw new ArgumentException("Applying a weight needs at least one set.", nameof(weights));
+        }
+
+        var sessions = new HashSet<Guid>();
+        var applied = 0;
+        foreach (var session in weeks.SelectMany(item => item.Sessions))
+        {
+            foreach (var set in session.Exercises.SelectMany(item => item.Sets))
+            {
+                if (!weights.TryGetValue(set.Id, out var weight))
+                {
+                    continue;
+                }
+
+                if (!ProgramEditRules.IsOpen(session, today))
+                {
+                    throw new InvalidOperationException(
+                        "That workout has started or its day has passed, so its weights stay as they are.");
+                }
+
+                set.ApplyLiftWeight(weight);
+                sessions.Add(session.Id);
+                applied++;
+            }
+        }
+
+        if (applied != weights.Count)
+        {
+            throw new ArgumentException("Every applied set must belong to this mesocycle.", nameof(weights));
+        }
+
+        RegisterMutation();
+        return (sessions.Count, applied);
+    }
+
+    /// <summary>
     /// Carries out a planned edit of the weeks (TRN-028): open sessions are replaced, added, moved or taken out,
     /// and weeks after the last one that has started or passed are added, moved or removed. Anything that has
     /// started, finished or passed is refused whoever built the plan, so that history is never rewritten.
@@ -918,6 +968,53 @@ public sealed class SetPrescription : TenantEntity
         CalculationStrategyKey = TrainingText.Required(calculation.StrategyKey, 80, nameof(calculation));
         CalculationStrategyVersion = TrainingText.Required(calculation.StrategyVersion, 40, nameof(calculation));
         CalculationExplanation = TrainingText.Required(calculation.Explanation, 1_000, nameof(calculation));
+    }
+
+    /// <summary>
+    /// Stores a weight the coach applied on a "Last time + step" set (N6c, STR-020) as the set's own weight, the way
+    /// a typed starting weight is kept (TRN-032), so Edit weeks, Build next block and the workout's snapshot carry it
+    /// on; the calculation fields name <see cref="LastTimeStepRule"/> instead of the coach's starting weight. The step
+    /// stays; the weight is never rounded or converted (decision 22).
+    /// </summary>
+    internal void ApplyLiftWeight(AppliedLiftWeight applied)
+    {
+        ArgumentNullException.ThrowIfNull(applied);
+        if (LoadStrategy != TrainingLoadStrategy.LastTimeStep)
+        {
+            throw new InvalidOperationException("Only a last time + step set takes an applied weight.");
+        }
+
+        if (applied.Unit != LoadUnit)
+        {
+            throw new ArgumentException(
+                "An applied weight keeps its set's unit; kilograms and pounds are never converted.",
+                nameof(applied));
+        }
+
+        // What the coach read is what changes: a set another apply or edit moved meanwhile is read again first.
+        if ((PrescribedLoad ?? DirectLoad) != applied.From)
+        {
+            throw new InvalidOperationException(
+                "This set's weight changed since it was read. Read it again, then apply.");
+        }
+
+        // Judged to the gram, as the database keeps a weight (numeric(8,3)), so nothing rounds it to 0 on the way.
+        if (applied.Weight <= 0m ||
+            applied.Weight > LastTimeStepRule.MaximumWeight ||
+            decimal.Round(applied.Weight, 3, MidpointRounding.AwayFromZero) != applied.Weight)
+        {
+            throw new ArgumentException(
+                "An applied weight is more than 0 and at most 2,000, to three decimals.",
+                nameof(applied));
+        }
+
+        DirectLoad = applied.Weight;
+        UnroundedRecommendedLoad = applied.Weight;
+        PrescribedLoad = applied.Weight;
+        WorkingMaxSnapshotId = null;
+        CalculationStrategyKey = LastTimeStepRule.Key;
+        CalculationStrategyVersion = LastTimeStepRule.VersionName;
+        CalculationExplanation = TrainingText.Required(applied.Explanation, 1_000, nameof(applied));
     }
 }
 

@@ -20,6 +20,7 @@ import { ApiClient } from '../../core/api/api-client';
 import type {
   CoachClientProgramView,
   FeatureAccessReason,
+  LiftStandingView,
   TrainingMesocycleView,
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
@@ -67,6 +68,8 @@ import { type FirstMaxes, maxesKey, ProgramMaxes } from './program-maxes';
 import { ProgramMaxesUpdate } from './program-maxes-update';
 import { ProgramNextBlock } from './program-next-block';
 import { ProgramSession } from './program-session';
+import { ProgramWeights } from './program-weights';
+import { applyError, appliedNotice, canApply, LiftWeightApplier } from './lift-weights';
 
 /**
  * A client's Training (C3): the program as a timeline, weeks side by side with their sessions, the
@@ -94,6 +97,7 @@ import { ProgramSession } from './program-session';
     ProgramRename,
     ProgramReschedule,
     ProgramSession,
+    ProgramWeights,
     RouterLink,
     Skeleton,
     StatusPill,
@@ -113,6 +117,8 @@ export class ClientProgram {
   private readonly sheets = inject(UiSheet);
   private readonly dialogs = inject(UiDialog);
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly applier = new LiftWeightApplier();
   private readonly locale = inject(LOCALE_ID);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private loadedKey: string | null = null;
@@ -157,6 +163,14 @@ export class ClientProgram {
   private readonly query = toSignal(this.route.queryParamMap, { requireSync: true });
 
   protected readonly firstName = computed(() => this.context.profile()?.firstName ?? '');
+
+  /**
+   * Every lift whose standing moves a weight in its next workout (N6c, STR-020), from the program read: the
+   * coach's weekly homework for this client. A former client's record is read-only (ADR 0027), so none.
+   */
+  protected readonly weightsToApply = computed(() =>
+    this.context.isFormer() ? [] : (this.read()?.liftStandings ?? []).filter(canApply),
+  );
   /** The label of every week's share box; each box also names its week for assistive technology. */
   protected readonly shareText = computed(() => $localize`Shared with ${this.firstName()}:name:`);
   protected readonly emptyDescription = computed(() => {
@@ -521,6 +535,56 @@ export class ClientProgram {
     ref.closed.subscribe((changed) => {
       if (changed) this.done(notice());
     });
+  }
+
+  /**
+   * The panel's apply (N6c): the page writes, says what happened in its notice or its alert (both outlive the
+   * panel, which goes once nothing is left), reads the program again, and keeps the coach where they were: on the
+   * panel while it lists more, else on the program's title.
+   */
+  protected readonly applyFromPanel = async (views: readonly LiftStandingView[]): Promise<void> => {
+    try {
+      await this.applyAndRead(views);
+    } catch (error) {
+      this.context.notice.set(null);
+      this.context.error.set(applyError(error, this.firstName()));
+      await this.load();
+    }
+    afterNextRender(
+      () => {
+        const root = this.host.nativeElement;
+        (
+          root.querySelector<HTMLElement>('#weights-title') ??
+          root.querySelector<HTMLElement>('#program-title')
+        )?.focus();
+      },
+      { injector: this.injector },
+    );
+  };
+
+  /**
+   * A session sheet's apply: the page writes and reads the program behind the sheet, whether or not the sheet is
+   * still open when the answer comes; the sheet says what happened where the coach is.
+   */
+  protected readonly applyFromSheet = async (
+    views: readonly LiftStandingView[],
+  ): Promise<string> => {
+    try {
+      return await this.applyAndRead(views);
+    } catch (error) {
+      void this.load();
+      throw error;
+    }
+  };
+
+  private async applyAndRead(views: readonly LiftStandingView[]): Promise<string> {
+    const applied = await this.applier.apply(this.context.clientId(), views);
+    const notice = appliedNotice(applied, views, this.firstName(), this.locale);
+    this.context.error.set(null);
+    this.context.notice.set(notice);
+    this.changes.update((count) => count + 1);
+    await this.load();
+    return notice;
   }
 
   /** A change was made: say so, and read the program and the strength history again. */
