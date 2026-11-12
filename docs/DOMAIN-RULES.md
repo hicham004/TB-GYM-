@@ -44,7 +44,8 @@ server's local clock as a business calendar.
 
 **CLI-001** A person has one global login identity and may have separate tenant memberships
 and client profiles under multiple coaches. An email match links only through a verified
-invitation; it must never expose one coach's profile to another coach.
+invitation, or through the person's own signed-in sign-up into the house (CLI-024); it must never
+expose one coach's profile to another coach.
 
 **CLI-002** A tenant is a coach workspace. Owner and Coach can manage clients. Client can
 access only their own permitted tenant data. Platform Admin is a separate global role.
@@ -107,7 +108,11 @@ platform document once per person, a workspace one in each space joined. Registr
 acceptance are refused (409 `legal_acceptance_required`) until every document in force for the person is
 named, and the acceptances are recorded in the same transaction as the account or membership; joins and
 publishes are serialized by one advisory lock, so nobody joins on a version replaced in between. Members
-who joined before a version was published are not asked yet.
+who joined before a version was published are not asked yet. The consumer terms (notes plan N9a1, ADR 0041)
+are a fourth kind, asked only of a trainee signing up into the house (CLI-024) and of nobody else: no owner,
+coach or invited client is shown, asked or allowed to name them, and outside the house's clients the
+document reads as one that does not exist. A trainee is not asked the health intake consent at sign-up,
+since their health is asked only on Max (decision 33). No wording of it is in the repository.
 
 **CLI-011** The owner invites coaches by email; accepting creates an active Coach membership (or
 reactivates a removed coach's). Only the owner manages coach invitations and removes coaches, and a
@@ -154,9 +159,10 @@ kept (SYS-007, ADR 0009), a coach reading a client's progress starts in kilogram
 unchanged (the workout player asks for its own unit). Values are `Kilogram` or `Pound`, enforced by
 a database check.
 
-**CLI-018** Coach attention v8 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13, v7 in notes plan N10a, v8 in notes plan N6d) is what Coach Today asks a
+**CLI-018** Coach attention v9 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13, v7 in notes plan N10a, v8 in notes plan N6d, v9 in notes plan N9a1) is what Coach Today asks a
 coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
-their own, the Owner all) and never a former client. Each signal is read only while the client's
+their own, the Owner all) and never a former client. A self-directed trainee of the house (v9, CLI-026) raises
+none of the kinds below, whatever their signals; their status is their plan's own. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
 check-ins never appear; a weigh-in follows Progress and needs only an unblocked relationship. Ranked
 most urgent first: a submitted check-in not reviewed (several rank by the oldest and also name the newest,
@@ -260,6 +266,70 @@ staff; the server decides every line. Keeping (CLI-008's retention): a taken-dow
 `CoachCertificates:KeepMonthsAfterTakenDown` whole months after its own take-down (1 to 120; the plan's example, 12,
 until the lawyer sets it), then a daily Worker sweep erases it as an erasure on request does, with the reason
 `KeepingPeriod`, no person and no request day.
+
+**CLI-022** The house (decisions 24 and 25, 5 Nov 2026; notes plan N9a1, ADR 0041). At most one coaching space is
+marked as the house, TB Gym's own space, the one a person signs up into with no invitation. It is an ordinary
+workspace: its trainees are client profiles under the same tenant filter, write guard and feature access as any
+coach's clients. Only the `platform-admin house set <slug or id>` and `house clear` commands write the mark; a
+unique index refuses a second one, and the database refuses to clear it while the house holds a sign-up or a
+self-directed trainee. Marking a space for the first time opens nothing; a space cleared and marked again keeps
+the settings it was given before (CLI-023's rows are never deleted), and the command says whether sign-up is open.
+
+**CLI-023** The house's settings are data the platform admin enters in the app (`/api/platform-admin/house`), never
+a constant, a seed or a document. Each change is one append-only row with who made it and when, numbered per
+setting, the highest in force; a change names the number its page read, so two admins never overwrite each other,
+and saving what already stands records nothing. Each setting starts empty, and an empty one closes what it governs.
+The first two: new sign-ups a week (0 to 10,000; empty or 0 keeps sign-up closed) and the age that may sign up (18
+to 100, never under 18 since the platform is adults only; empty keeps sign-up closed). The rows are the house's
+alone: a trigger refuses one for any other workspace.
+
+**CLI-024** Trainee sign-up v1 (`TraineeSignUp`; decisions 24, 25 and 34). `POST /api/auth/register/trainee` is
+public and lands in the house alone, whatever the request carries. It is closed (409 `trainee_sign_up_closed`,
+nothing stored) while no space is the house or either of CLI-023's two settings is empty; `GET` on the same address
+tells the public page open, full for the week or closed, and for a closed sign-up nothing else. It keeps Talk to
+us's guards (WEB-002): antiforgery, a honeypot answered exactly as a sign-up that worked and kept nowhere, and a
+server-signed stamp of its own purpose refused inside three seconds and after a day; and a limit of its own,
+twenty an hour by source address. The age is checked on the house's day before any account is stored (the birthday
+itself is old enough; 409 `trainee_sign_up_age_not_met`), and nothing of a refused request is kept. The week is the
+house's calendar week in its own time, and its places are the sign-ups confirmed in it: a sign-up still waiting
+for its email holds none, so made-up addresses never fill a week. A full week takes no new form (409
+`trainee_sign_up_full`, with the day sign-up opens again; no waitlist), and the count and the place it allows are
+read and written under one lock, so the week's last place is given once. A new person gets an unconfirmed account,
+the acceptance of every document in force for a trainee (CLI-010) and a sign-up row holding the name and date of
+birth they typed, in one transaction, then the coach sign-up's confirmation email. The membership and the client
+profile are created when that email is confirmed, in the confirmation's transaction, which is when the place is
+taken: until then the house's staff see nobody and nothing can be attached to the person. A confirmation into a
+week that has filled, or a sign-up closed since, still confirms the email and leaves the sign-up waiting; the
+person then joins with the form while signed in, once there is room. The profile is self-directed (CLI-026) and
+names the house's Coach who joined first, else its Owner (ADR 0026); its coach history starts with the reason
+`SignUp`. An email that already has an account signs in first (409 `existing_account_sign_in_required`) and then
+joins at once with only the new membership and profile, as an invitation does; a current client of another coach
+joins the same way and neither space learns of the other (CLI-001). Someone who left the house may sign up again
+and gets a new profile beside the ended one (CLI-016), once in a house week (409 `trainee_sign_up_once_a_week`);
+someone whose coaching the house ended, or who left while it had blocked their access, may not (409
+`trainee_sign_up_not_available`): coming back is then the house's invitation to give, so no block is undone by
+leaving (CLI-009). A former member of the house's team is refused too (409 `trainee_former_staff`). A self-directed
+trainee's intake keeps to the house's age.
+
+**CLI-025** A house sign-up whose email is never confirmed is removed by the Worker after
+`TraineeSignUps:RemoveUnconfirmedAfterDays` days (2 by default, 1 to 90; housekeeping, not a house setting; a
+confirmation link works for one day and nothing sends a second, so the person signs up again afterwards): the
+sign-up row goes with the name and date of birth it held, and the never-confirmed account is emptied, with no
+name, an address under a reserved domain no mail reaches, no password and every link spent, so the email can sign
+up afresh. The emptied account row stays, because the confirmation mail's history and any legal acceptance it
+recorded are append-only and name it. A sign-up whose email was confirmed while the week was full, and whose owner
+never came back for a place, is dropped the same way with its account left as it is. The sweep touches nothing
+else: no coach's account, no confirmed trainee. A confirmation, a signed-in join and the sweep take the sign-up's
+row lock first, so whichever comes first wins. It logs counts only.
+
+**CLI-026** A self-directed trainee is a client of the house who trains as their own coach (decision 25): the mark
+is on the profile, set at sign-up, and a trigger refuses it in any other workspace. They raise nothing on Coach
+Today, the client list or their own page (CLI-018 v9), Today's activity feed and "Ended, not renewed" leave them
+out, their workout notes and their leaving reach no staff inbox, and a departing coach's hand-over tells them
+nothing; a money ask still reaches the staff (SUB-014). They stay on Clients, where their row says so: the Owner
+sees every one, and the Coach those whose record names them (CLI-013), which is every trainee confirmed after the
+Coach joined the house's team (decision 33; the Coach therefore joins before sign-up is opened). The trainee's own
+profile read says so too, so their screens name the coaching space, not a coach.
 
 ## 3. Products, enrollments, payments, programs, and access
 
@@ -2672,7 +2742,9 @@ Approved on 2026-08-20 and recorded under `docs/adr/`:
 2. One global account may participate in multiple independent workspaces. Every client
    profile and every coaching fact remains isolated per workspace.
 3. Coach owners self-register and receive an owned workspace. Clients are invite-only in
-   Phase 1. Email confirmation is required.
+   Phase 1. Email confirmation is required. Amended 2026-11-12 (ADR 0041, decisions 24 and 25):
+   one space, the house, also takes people who sign up with no invitation (CLI-022 to CLI-026),
+   closed until the owner opens it; every coach's space stays invite-only.
 4. Client-editable and coach-only fields follow ADR 0004. Account email changes require a
    separate verification flow.
 5. Lebanon launches first with English source text, localization-ready UI, configurable
@@ -2682,7 +2754,8 @@ Approved on 2026-08-20 and recorded under `docs/adr/`:
    out in English, recorded as English, until Arabic wording is written; a kind with no wording at
    all is still a dead letter (NOT-003).
 6. Phase 1 is adults-only. Email delivery is implemented first; WhatsApp remains behind a
-   future provider integration.
+   future provider integration. The house's sign-up asks an age the owner sets, 18 or more
+   (CLI-023, CLI-024); the sentence a form shows about it is the lawyer's.
 7. Platform support has no implicit tenant-data access. Any future support access is
    explicit, time-limited, and audited.
 

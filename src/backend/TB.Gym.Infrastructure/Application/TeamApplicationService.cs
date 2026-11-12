@@ -183,7 +183,9 @@ internal sealed class TeamApplicationService(
                         null,
                         now);
                     dbContext.ClientCoachAssignments.Add(entry);
-                    if (client.UserId is { } clientUserId && activeClientUserIds.Contains(clientUserId))
+                    // A self-directed trainee has no coach to lose (CLI-026): their record moves like any other
+                    // and they are told nothing about it.
+                    if (client.UserId is { } clientUserId && activeClientUserIds.Contains(clientUserId) && !client.IsSelfDirected)
                     {
                         WorkspaceRelationshipNotices.CoachDeparted(
                             dbContext,

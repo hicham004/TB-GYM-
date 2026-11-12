@@ -328,6 +328,11 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertStatusAsync(
             await anonymous.PostAsync($"/api/platform-admin/included-client-grants/{Guid.NewGuid()}/revoke", null),
             HttpStatusCode.Unauthorized);
+        // The house and its settings (notes plan N9a1) too.
+        await AssertStatusAsync(await anonymous.GetAsync("/api/platform-admin/house"), HttpStatusCode.Unauthorized);
+        await AssertStatusAsync(
+            await anonymous.PutAsJsonAsync("/api/platform-admin/house/settings/SignUpsPerWeek", new { value = "5", expectedVersion = 0 }),
+            HttpStatusCode.Unauthorized);
 
         using var owner = CreateClient();
         var workspaceId = await RegisterCoachAsync(owner, "authz-owner@example.test", "Authz Owner", "Authz Gym");
@@ -377,6 +382,10 @@ public sealed partial class Phase3TrainingWorkflowTests
                 HttpStatusCode.Forbidden);
             await AssertStatusAsync(
                 await caller.PostAsync($"/api/platform-admin/included-client-grants/{Guid.NewGuid()}/revoke", null),
+                HttpStatusCode.Forbidden);
+            await AssertStatusAsync(await caller.GetAsync("/api/platform-admin/house"), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PutAsJsonAsync("/api/platform-admin/house/settings/SignUpsPerWeek", new { value = "5", expectedVersion = 0 }),
                 HttpStatusCode.Forbidden);
         }
 

@@ -59,6 +59,9 @@ internal static class WorkerProgram
         // The certificate record's keeping period (notes plan N4b): once a day, every taken-down line past it is
         // erased, its words gone and its dates kept.
         builder.Services.AddHostedService<CoachCertificateKeepingWorker>();
+        // The house's sign-ups (notes plan N9a1): once an hour, each one whose email was never confirmed within
+        // the configured days is removed and its account emptied.
+        builder.Services.AddHostedService<TraineeSignUpSweepWorker>();
         return builder;
     }
 }

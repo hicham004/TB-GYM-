@@ -86,6 +86,37 @@ public static class WorkerDependencyInjection
         services.AddWebsite(configuration);
         services.AddPlatformBilling(configuration);
         services.AddCoachCertificates(configuration);
+        services.AddTraineeSignUps(configuration);
+        return services;
+    }
+
+    /// <summary>
+    /// The housekeeping of the house's sign-ups (CLI-025, notes plan N9a1): how long one may wait for its email
+    /// to be confirmed, and the sweep that removes those that waited longer. Composed in both roots: the Worker
+    /// runs the sweep, and tests drive it through the API. A setting outside its range stops either host at
+    /// start, naming the setting and never quoting it.
+    /// </summary>
+    internal static IServiceCollection AddTraineeSignUps(this IServiceCollection services, IConfiguration configuration)
+    {
+        var settings = new TraineeSignUpOptions();
+        try
+        {
+            configuration.GetSection(TraineeSignUpOptions.SectionName).Bind(settings);
+        }
+        catch (InvalidOperationException)
+        {
+            // The binder's own refusal quotes the value it could not read; this one names the settings alone.
+            throw new InvalidOperationException(
+                $"{TraineeSignUpOptions.SectionName}:RemoveUnconfirmedAfterDays and {TraineeSignUpOptions.SectionName}:SweepIntervalSeconds must be whole numbers, and {TraineeSignUpOptions.SectionName}:SweepEnabled true or false.");
+        }
+
+        services.AddOptions<TraineeSignUpOptions>()
+            .Bind(configuration.GetSection(TraineeSignUpOptions.SectionName))
+            .Validate(
+                options => options.Validate() is null,
+                settings.Validate() ?? $"{TraineeSignUpOptions.SectionName} is not a valid trainee sign-up configuration.")
+            .ValidateOnStart();
+        services.TryAddScoped<ITraineeSignUpSweep, TraineeSignUpSweep>();
         return services;
     }
 

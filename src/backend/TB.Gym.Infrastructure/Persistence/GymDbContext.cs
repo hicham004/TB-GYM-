@@ -336,6 +336,7 @@ public sealed partial class GymDbContext(
         ConfigureIdentity(builder);
         ConfigureTenancy(builder);
         ConfigureClients(builder);
+        ConfigureHouse(builder);
         ConfigureInvitations(builder);
         ConfigureActionMail(builder);
         ConfigureProgress(builder);
@@ -503,6 +504,8 @@ public sealed partial class GymDbContext(
                 .HasMaxLength(32)
                 .HasDefaultValue(ClientOnboardingStatus.NotStarted)
                 .HasSentinel((ClientOnboardingStatus)0);
+            // Self-directed is the house's alone (CLI-026); a trigger refuses the mark in any other workspace.
+            entity.Property(client => client.IsSelfDirected).HasDefaultValue(false);
             // One current profile per person and address. An ended profile no longer counts, so a
             // former client invited back gets a new one beside it (ADR 0027).
             entity.HasIndex(client => new { client.TenantId, client.NormalizedEmail })
@@ -595,7 +598,7 @@ public sealed partial class GymDbContext(
                 // the coach of the entry before it.
                 table.HasCheckConstraint(
                     "CK_ClientCoachAssignments_Chain",
-                    "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration')) OR " +
+                    "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration', 'SignUp')) OR " +
                     "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved', 'Released', 'CoachResigned', 'ClientLeft'))");
             });
             ConfigureAuditable(entity);
@@ -1084,6 +1087,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<PlatformInvoiceVoid>("Invoice voids are append-only.");
         RejectAppendOnlyMutations<PlatformPayment>("Platform payments are append-only.");
         RejectAppendOnlyMutations<FoundingTerms>("Founding badge terms are immutable; publish a new version.");
+        RejectAppendOnlyMutations<HouseSettingChange>("House setting changes are append-only; record a new change.");
         if (ChangeTracker.Entries<MembershipStatusChange>().Any(item => item.State != EntityState.Unchanged))
         {
             throw new InvalidOperationException("Membership history is written by the database, never by the application.");

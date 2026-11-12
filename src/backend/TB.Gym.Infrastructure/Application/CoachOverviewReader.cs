@@ -129,7 +129,8 @@ internal sealed class CoachOverviewReader(
                 CoachAttentionPolicy.Rank(Items(state)),
                 last?.Title,
                 lastCheckIns.TryGetValue(state.Client.Id, out var sentAtUtc) ? sentAtUtc : null,
-                state.Signals.SessionsLeft);
+                state.Signals.SessionsLeft,
+                state.Client.IsSelfDirected);
         }).ToArray();
         return new ClientOverviewView(
             today,
@@ -241,7 +242,8 @@ internal sealed class CoachOverviewReader(
                 client.IsCoachBlocked,
                 client.OnboardingStatus,
                 client.BirthDate,
-                client.Version))
+                client.Version,
+                client.IsSelfDirected))
             .ToListAsync(cancellationToken);
         var access = await featureAccessService.EvaluateManyAsync(
             tenantContext.TenantId,
@@ -399,8 +401,10 @@ internal sealed class CoachOverviewReader(
             // A plan booked after it and waiting for payment is named to record its payment instead of renewing.
             // Beside a coaching plan that ran out a pack names neither (SES-010), unless the coaching plan is too old
             // to list and no pack is left: a client between packs still shows for the one that just ended.
+            // A self-directed trainee raises nothing on Today (CLI-026): no line here either. A pass of the house
+            // is asked for by the trainee, never chased by its staff.
             EndedNotRenewed? notRenewed = null;
-            if (endedFrom is not null && CoachAttentionPolicy.IsLapsed(decisions))
+            if (endedFrom is not null && !client.IsSelfDirected && CoachAttentionPolicy.IsLapsed(decisions))
             {
                 var beside = coachingPlanRanOut.Contains(client.Id);
                 var ranOut = plans[client.Id].Where(item => item.Ended).ToArray();
@@ -439,7 +443,8 @@ internal sealed class CoachOverviewReader(
                 late.Length,
                 lastPack is null ? null : paidPacks.Sum(item => item.SessionsLeft),
                 lastPack?.EndDateExclusive.AddDays(-1),
-                toApply.Length);
+                toApply.Length,
+                client.IsSelfDirected);
             return new ClientState(
                 client,
                 joinedOn,
@@ -995,8 +1000,10 @@ internal sealed class CoachOverviewReader(
         CancellationToken cancellationToken)
     {
         var limit = CoachAttentionPolicy.ActivityLimit;
-        var training = scope.Allowed(CoachingFeature.Training);
-        var checkIns = scope.Allowed(CoachingFeature.CheckIns);
+        // What a self-directed trainee logs is theirs alone (CLI-026): the house's feed would otherwise fill
+        // with the workouts of people nobody coaches.
+        var training = scope.Coached(scope.Allowed(CoachingFeature.Training));
+        var checkIns = scope.Coached(scope.Allowed(CoachingFeature.CheckIns));
         var items = new List<CoachActivityItemView>();
 
         if (training.Length > 0)
@@ -1379,6 +1386,9 @@ internal sealed class CoachOverviewReader(
                 .Where(client => Access[client.Id].Any(decision => decision.Feature == feature && decision.IsAllowed))
                 .Select(client => client.Id)];
 
+        /// <summary>Those of <paramref name="clientIds"/> somebody coaches: every client but a self-directed trainee (CLI-026).</summary>
+        public Guid[] Coached(Guid[] clientIds) => [.. clientIds.Where(id => !byId[id].IsSelfDirected)];
+
         /// <summary>Clients whose progress the coach may read: any relationship that is not blocked.</summary>
         public Guid[] Unblocked => [.. Clients.Where(client => !client.IsCoachBlocked).Select(client => client.Id)];
 
@@ -1403,7 +1413,8 @@ internal sealed class CoachOverviewReader(
         bool IsCoachBlocked,
         ClientOnboardingStatus OnboardingStatus,
         DateOnly? BirthDate,
-        uint Version)
+        uint Version,
+        bool IsSelfDirected)
     {
         public CoachClientRef Ref => new(
             Id,

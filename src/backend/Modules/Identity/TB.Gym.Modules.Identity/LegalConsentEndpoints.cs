@@ -40,7 +40,7 @@ public static class LegalConsentEndpoints
                 ? Results.Ok(await service.ListToAcceptAsync(audience, cancellationToken))
                 : Results.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    ["audience"] = ["Ask for an owner, a coach or a client."],
+                    ["audience"] = ["Ask for an owner, a coach, a client or a trainee."],
                 }))
             .AllowAnonymous()
             .WithName("ListLegalDocumentsToAccept")

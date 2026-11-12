@@ -266,12 +266,18 @@ public sealed class LegalConsentAcceptance : AuditableEntity
     public static string KeyFor(Guid? tenantId) => tenantId?.ToString("N") ?? "platform";
 }
 
-/// <summary>Who joins: a new owner registering their coaching space, a coach joining a team, or a client.</summary>
+/// <summary>
+/// Who joins: a new owner registering their coaching space, a coach joining a team, a client a coach invited, or a
+/// trainee signing up into the house with no invitation.
+/// </summary>
 public enum LegalAudience
 {
     Owner = 1,
     Coach = 2,
     Client = 3,
+
+    /// <summary>Someone signing up into the house, TB Gym's own coaching space (CLI-024).</summary>
+    Trainee = 4,
 }
 
 /// <summary>What the acceptance rule reads of a version in force: never its text.</summary>
@@ -284,8 +290,10 @@ public sealed record CurrentLegalDocument(
 /// <summary>
 /// What a person must accept to join (CLI-010): one current version of each document kind and context
 /// that applies to them. Terms of Service and the Privacy Policy apply to everyone; the health intake
-/// consent to clients, whose health their coach reads. A platform document is accepted once per person;
-/// a workspace document once per coaching space joined.
+/// consent to clients, whose health their coach reads; the consumer terms to trainees signing up into the
+/// house, and to nobody else. A trainee's health is asked only on Max (decision 33), so the health intake
+/// consent is not theirs at sign-up. A platform document is accepted once per person; a workspace document
+/// once per coaching space joined.
 /// </summary>
 public static class LegalAcceptanceRule
 {
@@ -293,6 +301,7 @@ public static class LegalAcceptanceRule
     {
         LegalDocumentKind.TermsOfService or LegalDocumentKind.PrivacyPolicy => true,
         LegalDocumentKind.HealthIntakeConsent => audience == LegalAudience.Client,
+        LegalDocumentKind.ConsumerTerms => audience == LegalAudience.Trainee,
         _ => false,
     };
 
@@ -355,6 +364,12 @@ public enum LegalDocumentKind
     TermsOfService = 1,
     PrivacyPolicy = 2,
     HealthIntakeConsent = 3,
+
+    /// <summary>
+    /// The terms between TB Gym and a trainee of the house (ADR 0041): asked only at a house sign-up, published by
+    /// the platform admin from the lawyer's text, and never seeded.
+    /// </summary>
+    ConsumerTerms = 4,
 }
 
 public enum LegalConsentContext

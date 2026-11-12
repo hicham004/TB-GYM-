@@ -58,6 +58,12 @@ public static class RateLimitPolicies
     /// without an account, partitioned by source address with an allowance sized for a person.
     /// </summary>
     public const string PublicContact = "PublicContact";
+
+    /// <summary>
+    /// The house's sign-up with no invitation (CLI-024): a public route that stores an account, partitioned by
+    /// source address with an allowance of its own, tighter than <see cref="PublicAuthentication"/>'s.
+    /// </summary>
+    public const string TraineeSignUp = "TraineeSignUp";
 }
 
 public static class TenantHeaders

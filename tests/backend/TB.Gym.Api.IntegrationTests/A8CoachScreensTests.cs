@@ -27,7 +27,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         var asked = today.Attention.Single();
         Assert.AreEqual((CoachAttentionKind.NoPlan, ritaId, (DateOnly?)today.Today, (Guid?)null),
             (asked.Kind, asked.Client.ClientProfileId, asked.Date, asked.SubjectId));
-        Assert.AreEqual((CoachAttentionPolicy.Key, 8), (today.AttentionRuleKey, today.AttentionRuleVersion));
+        // Version 9 since the notes plan's N9a1: a self-directed trainee of the house raises nothing (CLI-026).
+        Assert.AreEqual((CoachAttentionPolicy.Key, 9), (today.AttentionRuleKey, today.AttentionRuleVersion));
         var row = await A8RowAsync(coach, ritaId);
         Assert.AreEqual(
             (ClientOverviewStatus.NeedsAttention, ClientPlanState.None, ClientOnboardingStatus.NotStarted, true),

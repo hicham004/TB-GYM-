@@ -78,11 +78,17 @@ describe('the platform admin’s legal documents', () => {
       'Terms of Service',
       'Privacy Policy',
       'Health intake consent',
+      'Consumer terms',
     ]);
     expect(groups[0].current.map((version) => version.id)).toEqual(['terms-2']);
     expect(groups[0].earlier.map((version) => version.id)).toEqual(['terms-1']);
     expect(groups[1].current).toEqual([]);
     expect(groups[2].audience).toBe('Asked of clients when they accept an invitation.');
+    // The consumer terms are listed last, with nothing published until the lawyer's text exists (N9a1).
+    expect(groups[3].current).toEqual([]);
+    expect(groups[3].audience).toBe(
+      'Asked of people who sign up to train with TB Gym, with no invitation.',
+    );
   });
 
   it('says when a version was in force and how often it was accepted', () => {
@@ -109,6 +115,8 @@ describe('the platform admin’s legal documents', () => {
     });
     expect(defaultContext('PrivacyPolicy')).toBe('Platform');
     expect(defaultContext('HealthIntakeConsent')).toBe('Workspace');
+    // Asked in TB Gym's own space alone, so accepted once per person like the Terms (notes plan N9a1).
+    expect(defaultContext('ConsumerTerms')).toBe('Platform');
   });
 
   it('refuses each field the server would, and a name this document already has', () => {

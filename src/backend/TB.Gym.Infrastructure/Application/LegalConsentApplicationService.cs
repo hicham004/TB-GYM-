@@ -106,6 +106,15 @@ internal sealed class LegalConsentApplicationService(
                 item.PublishedAtUtc,
             })
             .ToListAsync(cancellationToken);
+        // The consumer terms are the house's alone (ADR 0041): anyone else is neither shown nor asked them.
+        if (documents.Any(document => document.Kind == LegalDocumentKind.ConsumerTerms))
+        {
+            var houseId = await HouseClientOfAsync(userId, cancellationToken);
+            documents.RemoveAll(document =>
+                document.Kind == LegalDocumentKind.ConsumerTerms &&
+                (houseId is null || (document.Context == LegalConsentContext.Workspace && workspaceId != houseId)));
+        }
+
         var acceptances = await dbContext.LegalConsentAcceptances
             .AsNoTracking()
             .Where(item =>
@@ -152,6 +161,18 @@ internal sealed class LegalConsentApplicationService(
         if (document is null)
         {
             return new LegalConsentCommandResult(LegalConsentCommandStatus.NotFound);
+        }
+
+        // The consumer terms are accepted by a client of the house, in the house (ADR 0041); for anyone else
+        // the document answers like one that does not exist.
+        if (document.Kind == LegalDocumentKind.ConsumerTerms)
+        {
+            var houseId = await HouseClientOfAsync(userId, cancellationToken);
+            if (houseId is null ||
+                (document.Context == LegalConsentContext.Workspace && request.TenantId != houseId))
+            {
+                return new LegalConsentCommandResult(LegalConsentCommandStatus.NotFound);
+            }
         }
 
         if (document.Context == LegalConsentContext.Workspace)
@@ -217,6 +238,18 @@ internal sealed class LegalConsentApplicationService(
                 : Success(concurrent);
         }
     }
+
+    /// <summary>The house's id when the person is one of its clients today; null for everyone else.</summary>
+    private async Task<Guid?> HouseClientOfAsync(Guid userId, CancellationToken cancellationToken) =>
+        await (
+            from membership in dbContext.TenantMemberships.AsNoTracking()
+            join tenant in dbContext.Tenants.AsNoTracking() on membership.TenantId equals tenant.Id
+            where membership.UserId == userId &&
+                  membership.Role == TenantRole.Client &&
+                  membership.Status == MembershipStatus.Active &&
+                  tenant.IsHouse
+            select (Guid?)tenant.Id)
+            .SingleOrDefaultAsync(cancellationToken);
 
     private static LegalConsentCommandResult Success(LegalConsentAcceptance acceptance) =>
         new(

@@ -17,6 +17,17 @@ public interface IAccountActionMailScheduler
 }
 
 /// <summary>
+/// Confirms an account's email with the link's token. Infrastructure composes it, because one thing a confirmation
+/// completes lives outside this module: a sign-up into the house becomes a membership and a client profile in the
+/// same transaction (CLI-024), so the two never part.
+/// </summary>
+public interface IEmailConfirmationService
+{
+    /// <returns>False for an unknown account or a code that is wrong, spent by a changed stamp or expired.</returns>
+    Task<bool> ConfirmAsync(Guid userId, string token, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// One request for one action email.
 /// </summary>
 /// <param name="SubjectUserId">
@@ -105,6 +116,9 @@ public static class AccountActionMailSources
 {
     /// <summary>A coach registered and their address needs confirming.</summary>
     public const string CoachRegistration = "coach-registration";
+
+    /// <summary>A person signed up into the house and their address needs confirming.</summary>
+    public const string TraineeSignUp = "trainee-sign-up";
 
     /// <summary>Somebody used the public password-recovery form.</summary>
     public const string PublicPasswordRecovery = "public-password-recovery";

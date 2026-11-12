@@ -484,6 +484,11 @@ export type ChangeEnrollmentStatusRequest = {
   version: number | string;
 };
 
+export type ChangeHouseSettingRequest = {
+  value: null | string;
+  expectedVersion: number | string;
+};
+
 export type ChangePasswordRequest = {
   currentPassword: string;
   newPassword: string;
@@ -745,7 +750,8 @@ export type ClientCoachAssignmentReason =
   | 'Migration'
   | 'Released'
   | 'CoachResigned'
-  | 'ClientLeft';
+  | 'ClientLeft'
+  | 'SignUp';
 
 export type ClientCoachAssignmentView = {
   id: string;
@@ -876,6 +882,7 @@ export type ClientOverviewRow = {
   lastActivityTitle: null | string;
   lastCheckInSentAtUtc: null | string;
   sessionsLeft?: null | number | string;
+  selfDirected?: boolean;
 };
 
 export type ClientOverviewStatus =
@@ -1049,6 +1056,7 @@ export type ClientSelfProfile = {
   onboardingStatus: ClientOnboardingStatus;
   onboardingCompletedAtUtc: null | string;
   version: number | string;
+  selfDirected?: boolean;
 };
 
 export type ClientSessionState = 'Completed' | 'InProgress' | 'Missed' | 'Today' | 'Upcoming';
@@ -2477,6 +2485,40 @@ export type GrantIncludedClientsRequest = {
   note: string;
 };
 
+export type HouseAdminView = {
+  house: null | HouseWorkspaceView;
+  settings: Array<HouseSettingView>;
+  signUp: null | HouseSignUpView;
+};
+
+export type HouseSetting = 'SignUpsPerWeek' | 'MinimumSignUpAge';
+
+export type HouseSettingView = {
+  setting: HouseSetting;
+  value: null | string;
+  version: number | string;
+  changedAtUtc?: null | string;
+  changedByUserId?: null | string;
+  changedByName?: null | string;
+};
+
+export type HouseSignUpView = {
+  status: TraineeSignUpStatus;
+  weekStartsOn: string;
+  weekEndsOnExclusive: string;
+  signUpsThisWeek: number | string;
+  waitingForConfirmation: number | string;
+};
+
+export type HouseWorkspaceView = {
+  tenantId: string;
+  name: string;
+  slug: string;
+  timeZoneId: string;
+  weekStartsOn: DayOfWeek;
+  currentDate: string;
+};
+
 export type HttpValidationProblemDetails = {
   type?: null | string;
   title?: null | string;
@@ -2546,7 +2588,7 @@ export type LeaveWorkspaceRequest = {
   version: number | string;
 };
 
-export type LegalAudience = 'Owner' | 'Coach' | 'Client';
+export type LegalAudience = 'Owner' | 'Coach' | 'Client' | 'Trainee';
 
 export type LegalConsentAcceptanceView = {
   id: string;
@@ -2573,7 +2615,8 @@ export type LegalDocumentAdminView = {
   acceptanceCount: number | string;
 };
 
-export type LegalDocumentKind = 'TermsOfService' | 'PrivacyPolicy' | 'HealthIntakeConsent';
+export type LegalDocumentKind =
+  'TermsOfService' | 'PrivacyPolicy' | 'HealthIntakeConsent' | 'ConsumerTerms';
 
 export type LegalDocumentText = {
   id: string;
@@ -4016,6 +4059,17 @@ export type RegisterExternalMediaRequest = {
   externalMediaId: string;
 };
 
+export type RegisterTraineeRequest = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  birthDate: null | string;
+  password?: null | string;
+  formStamp?: null | string;
+  website?: null | string;
+  legalDocumentIds?: null | Array<string>;
+};
+
 export type ReleaseClientRequest = {
   reason: string;
   version: number | string;
@@ -4451,6 +4505,27 @@ export type ThemeModeRequest = {
 export type TodayTrainingCoverageView = {
   activeBlock: null | ActiveTrainingBlockView;
   nextBlockStartDate: null | string;
+};
+
+export type TraineeCallerSignUp = 'Waiting' | 'Joined';
+
+export type TraineeRegistrationResponse = {
+  email: string;
+  developmentConfirmationUrl: null | string;
+  emailAvailable: boolean;
+  joined: boolean;
+};
+
+export type TraineeSignUpStatus = 'Closed' | 'Full' | 'Open';
+
+export type TraineeSignUpStatusView = {
+  status: TraineeSignUpStatus;
+  workspaceName?: null | string;
+  timeZoneId?: null | string;
+  minimumAge?: null | number | string;
+  opensAgainOn?: null | string;
+  formStamp?: null | string;
+  callerSignUp?: null | TraineeCallerSignUp;
 };
 
 export type TrainingLoadRoundingMode = 'Nearest' | 'Down' | 'Up';
@@ -5115,6 +5190,59 @@ export type ResignFromTeamResponses = {
 };
 
 export type ResignFromTeamResponse = ResignFromTeamResponses[keyof ResignFromTeamResponses];
+
+export type GetTraineeSignUpData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/auth/register/trainee';
+};
+
+export type GetTraineeSignUpResponses = {
+  /**
+   * OK
+   */
+  200: TraineeSignUpStatusView;
+};
+
+export type GetTraineeSignUpResponse = GetTraineeSignUpResponses[keyof GetTraineeSignUpResponses];
+
+export type RegisterTraineeData = {
+  body: RegisterTraineeRequest;
+  path?: never;
+  query?: never;
+  url: '/api/auth/register/trainee';
+};
+
+export type RegisterTraineeErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Forbidden
+   */
+  403: ProblemDetails;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RegisterTraineeError = RegisterTraineeErrors[keyof RegisterTraineeErrors];
+
+export type RegisterTraineeResponses = {
+  /**
+   * OK
+   */
+  200: TraineeRegistrationResponse;
+  /**
+   * Accepted
+   */
+  202: TraineeRegistrationResponse;
+};
+
+export type RegisterTraineeResponse = RegisterTraineeResponses[keyof RegisterTraineeResponses];
 
 export type GetPublicClientInvitationData = {
   body?: never;
@@ -6290,6 +6418,58 @@ export type RemoveTeamCoachResponses = {
 };
 
 export type RemoveTeamCoachResponse = RemoveTeamCoachResponses[keyof RemoveTeamCoachResponses];
+
+export type GetHouseData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/house';
+};
+
+export type GetHouseResponses = {
+  /**
+   * OK
+   */
+  200: HouseAdminView;
+};
+
+export type GetHouseResponse = GetHouseResponses[keyof GetHouseResponses];
+
+export type ChangeHouseSettingData = {
+  body: ChangeHouseSettingRequest;
+  path: {
+    setting: HouseSetting;
+  };
+  query?: never;
+  url: '/api/platform-admin/house/settings/{setting}';
+};
+
+export type ChangeHouseSettingErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type ChangeHouseSettingError = ChangeHouseSettingErrors[keyof ChangeHouseSettingErrors];
+
+export type ChangeHouseSettingResponses = {
+  /**
+   * OK
+   */
+  200: HouseSettingView;
+};
+
+export type ChangeHouseSettingResponse =
+  ChangeHouseSettingResponses[keyof ChangeHouseSettingResponses];
 
 export type ListClientInvitationsData = {
   body?: never;

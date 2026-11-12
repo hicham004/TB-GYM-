@@ -80,6 +80,14 @@ public sealed class ClientProfile : TenantEntity
 
     public bool IsCoachBlocked { get; private set; }
 
+    /// <summary>
+    /// A trainee who signed up into the house with no invitation and trains as their own coach (CLI-026, ADR 0041).
+    /// The record still names a member of the house's staff, as every client's does (ADR 0026), but nobody coaches
+    /// this person: they raise nothing on Coach Today and their notes and leaving reach no staff inbox. A database
+    /// trigger refuses the mark anywhere but in the house.
+    /// </summary>
+    public bool IsSelfDirected { get; private set; }
+
     public ClientOnboardingStatus OnboardingStatus { get; private set; }
 
     public DateTimeOffset? OnboardingCompletedAtUtc { get; private set; }
@@ -124,6 +132,33 @@ public sealed class ClientProfile : TenantEntity
             normalizedEmail,
             NormalizeOptional(phoneNumber, 32, nameof(phoneNumber)),
             birthDate);
+    }
+
+    /// <summary>
+    /// The profile of someone who signed up into the house (CLI-024): self-directed from its first day, with the
+    /// name and date of birth they typed. Whether they are old enough was decided before this, against the house's
+    /// own age.
+    /// </summary>
+    public static ClientProfile CreateForHouseSignUp(
+        Guid tenantId,
+        Guid userId,
+        Guid assignedCoachUserId,
+        string firstName,
+        string lastName,
+        string email,
+        DateOnly? birthDate)
+    {
+        var profile = CreateForAcceptedInvitation(
+            tenantId,
+            userId,
+            assignedCoachUserId,
+            firstName,
+            lastName,
+            email,
+            phoneNumber: null,
+            birthDate);
+        profile.IsSelfDirected = true;
+        return profile;
     }
 
     public IReadOnlyList<string> UpdateIntake(ClientIntakeInput input, DateOnly tenantToday)
@@ -535,6 +570,9 @@ public enum ClientChangeSource
     Client = 2,
     Coach = 3,
     OnboardingCompletion = 4,
+
+    /// <summary>The person signed up into the house with no invitation (CLI-024).</summary>
+    SignUp = 5,
 }
 
 public enum ClientRelationshipEventType

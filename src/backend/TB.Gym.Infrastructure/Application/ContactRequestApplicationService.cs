@@ -112,10 +112,36 @@ internal sealed class ContactFormStampService(IDataProtectionProvider dataProtec
 
     private readonly IDataProtector protector = dataProtection.CreateProtector(Purpose);
 
-    public string Issue(DateTimeOffset now) =>
+    public string Issue(DateTimeOffset now) => FormStamps.Issue(protector, now);
+
+    public ContactFormStampCheck Check(string? stamp, DateTimeOffset now) => FormStamps.Check(protector, stamp, now);
+
+    /// <summary>For the development stamp in tests: the clock the service measures against.</summary>
+    internal DateTimeOffset Now => clock.UtcNow;
+}
+
+/// <summary>
+/// The house's sign-up form carries the same kind of stamp as Talk to us (WEB-002, CLI-024), protected for a
+/// purpose of its own, so a stamp handed out for one form is refused by the other.
+/// </summary>
+internal sealed class TraineeSignUpStamps(IDataProtectionProvider dataProtection)
+{
+    private const string Purpose = "TB.Gym.Tenancy.TraineeSignUp.v1";
+
+    private readonly IDataProtector protector = dataProtection.CreateProtector(Purpose);
+
+    public string Issue(DateTimeOffset now) => FormStamps.Issue(protector, now);
+
+    public ContactFormStampCheck Check(string? stamp, DateTimeOffset now) => FormStamps.Check(protector, stamp, now);
+}
+
+/// <summary>The one stamp rule both public forms keep: at least three seconds old, at most a day (WEB-002).</summary>
+internal static class FormStamps
+{
+    public static string Issue(IDataProtector protector, DateTimeOffset now) =>
         protector.Protect(now.UtcTicks.ToString(CultureInfo.InvariantCulture));
 
-    public ContactFormStampCheck Check(string? stamp, DateTimeOffset now)
+    public static ContactFormStampCheck Check(IDataProtector protector, string? stamp, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(stamp) || stamp.Length > 512)
         {
@@ -147,9 +173,6 @@ internal sealed class ContactFormStampService(IDataProtectionProvider dataProtec
             ? ContactFormStampCheck.TooFast
             : ContactFormStampCheck.Valid;
     }
-
-    /// <summary>For the development stamp in tests: the clock the service measures against.</summary>
-    internal DateTimeOffset Now => clock.UtcNow;
 }
 
 /// <summary>What the homepage may know of the deployment's settings, and nothing more.</summary>

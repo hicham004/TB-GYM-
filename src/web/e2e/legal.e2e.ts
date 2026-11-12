@@ -105,6 +105,15 @@ for (const width of [1440, 390]) {
       await expect(page.locator('[data-version="terms-2"] .quiet')).toHaveText(
         'Once per person · In force since Thu 1 Oct · Accepted 3 times',
       );
+      // The consumer terms come last (notes plan N9a1): asked only where someone signs up to train with
+      // TB Gym itself, and published by nobody until the lawyer's text exists.
+      const consumer = page.locator('[data-legal-kind="ConsumerTerms"]');
+      await expect(consumer.getByRole('heading', { level: 2 })).toHaveText('Consumer terms');
+      await expect(consumer.locator('.panel-head .quiet')).toHaveText(
+        'Asked of people who sign up to train with TB Gym, with no invitation.',
+      );
+      await expect(consumer.locator('[data-unpublished]')).toBeVisible();
+      await expect(page.locator('[data-legal-kind]')).toHaveCount(4);
       await waitForFonts(page);
       await axe(page);
       await expectNoHorizontalOverflow(page);

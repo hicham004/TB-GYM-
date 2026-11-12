@@ -3,10 +3,11 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Modules.Clients;
 
 /// <summary>
-/// Coach attention v8 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
+/// Coach attention v9 (CLI-018; v1 in R3.1, v2 in P4c added maxes to review, v3 in audit A8 a new client with no
 /// plan, v4 in critique B4a an overdue check-in and the plan's own status, v5 in critique B10c packs running out, v6
 /// in critique B13 a coaching plan that ran out reads as ended beside a running pack, SES-010, v7 in the notes plan's
-/// N10a removed maxes to review on the owner's word, 7 Nov 2026, v8 in the notes plan's N6d weights to apply):
+/// N10a removed maxes to review on the owner's word, 7 Nov 2026, v8 in the notes plan's N6d weights to apply, v9 in
+/// the notes plan's N9a1 a self-directed trainee of the house raises nothing, decision 25):
 /// which of a client's signals ask the coach to act, how the queue is ranked, the one status the client list shows
 /// and the plan's status beside it.
 /// The signals arrive already gated by the client's plan, so this rule only weighs them; what makes a check-in
@@ -16,7 +17,7 @@ namespace TB.Gym.Modules.Clients;
 public static class CoachAttentionPolicy
 {
     public const string Key = "CoachAttention";
-    public const int Version = 8;
+    public const int Version = 9;
 
     /// <summary>
     /// A running plan whose last covered day falls within this many days, today counted, is ending soon: a last
@@ -79,6 +80,13 @@ public static class CoachAttentionPolicy
         DateOnly today)
     {
         var flags = new List<CoachAttentionKind>();
+        // A self-directed trainee is their own coach (CLI-026): whatever their signals say, nothing asks the
+        // house's staff to act. Their status is then their plan's own.
+        if (signals.SelfDirected)
+        {
+            return flags;
+        }
+
         if (signals.CheckInsToReview > 0)
         {
             flags.Add(CoachAttentionKind.CheckInToReview);
@@ -282,6 +290,9 @@ public static class CoachAttentionPolicy
 /// Lifts whose coming workout has a weight for the coach to apply (STR-020: what LastTimeStep v1's answer writes),
 /// one per writing, read only while training is in the plan (notes plan N6d).
 /// </param>
+/// <param name="SelfDirected">
+/// The client signed up into the house and trains as their own coach (CLI-026): no signal of theirs raises a kind.
+/// </param>
 public sealed record ClientAttentionSignals(
     int CheckInsToReview,
     long UnreadMessages,
@@ -294,4 +305,5 @@ public sealed record ClientAttentionSignals(
     int CheckInsOverdue = 0,
     int? SessionsLeft = null,
     DateOnly? SessionsLastDay = null,
-    int WeightsToApply = 0);
+    int WeightsToApply = 0,
+    bool SelfDirected = false);

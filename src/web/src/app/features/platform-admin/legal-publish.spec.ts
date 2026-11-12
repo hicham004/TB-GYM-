@@ -116,7 +116,7 @@ describe('LegalPublish', () => {
     expect(host.textContent).not.toContain('Arabic');
     expect(host.querySelectorAll('app-segmented-control')).toHaveLength(1);
     expect(textOf(host.querySelector('[data-audience]'))).toBe(
-      'Asked of everyone who creates a coaching space or accepts an invitation.',
+      'Asked of everyone who creates a coaching space, accepts an invitation or signs up to train with TB Gym.',
     );
     expect(textOf(host.querySelector('[data-replaces]'))).toBe(
       'This replaces version 2026-10 (In force since 1 Oct 2025, accepted 2 times). People who join from now on are asked to accept this version; nobody who joined before is asked again yet.',
@@ -208,6 +208,30 @@ describe('LegalPublish', () => {
     await settle(terms.fixture);
     expect(textOf(terms.host.querySelector('[data-replaces]'))).toContain(
       'This replaces version 2026-10',
+    );
+  });
+
+  /** Notes plan N9a1: the consumer terms are asked only at a sign-up into TB Gym's own space, once per person. */
+  it('offers the consumer terms, accepted once per person', async () => {
+    const sheet = await render();
+    const { fixture, host, api } = sheet;
+
+    await chooseOption(fixture, host, 'Document', 'Consumer terms');
+    expect(field(host, 'Once per person').checked).toBe(true);
+    expect(textOf(host.querySelector('[data-audience]'))).toBe(
+      'Asked of people who sign up to train with TB Gym, with no invitation.',
+    );
+    expect(textOf(host.querySelector('[data-replaces]'))).toBe(
+      'Nothing of this kind is in force yet. People who join from now on are asked to accept this version.',
+    );
+    await fillVersion(sheet);
+    await publish(sheet);
+    expect(api.publishLegalDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'ConsumerTerms',
+        context: 'Platform',
+        replacesVersionId: null,
+      }),
     );
   });
 

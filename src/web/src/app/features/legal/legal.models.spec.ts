@@ -40,15 +40,22 @@ describe('legal documents on screen', () => {
     expect(legalKindName('TermsOfService')).toBe('Terms of Service');
     expect(legalKindName('PrivacyPolicy')).toBe('Privacy Policy');
     expect(legalKindName('HealthIntakeConsent')).toBe('Health intake consent');
+    expect(legalKindName('ConsumerTerms')).toBe('Consumer terms');
     expect(legalContextName('Platform')).toBe('Once per person');
     expect(legalContextName('Workspace')).toBe('In each coaching space they join');
     expect(legalContextClause('Platform')).toBe('once per person');
     expect(legalContextClause('Workspace')).toBe('in each coaching space they join');
+    // Terms and Privacy are everyone's, a trainee who signs up included (notes plan N9a1).
     expect(legalAudienceLine('TermsOfService')).toBe(
-      'Asked of everyone who creates a coaching space or accepts an invitation.',
+      'Asked of everyone who creates a coaching space, accepts an invitation or signs up to train with TB Gym.',
     );
+    expect(legalAudienceLine('PrivacyPolicy')).toBe(legalAudienceLine('TermsOfService'));
     expect(legalAudienceLine('HealthIntakeConsent')).toBe(
       'Asked of clients when they accept an invitation.',
+    );
+    // The consumer terms are asked only where someone signs up to train with TB Gym itself.
+    expect(legalAudienceLine('ConsumerTerms')).toBe(
+      'Asked of people who sign up to train with TB Gym, with no invitation.',
     );
   });
 

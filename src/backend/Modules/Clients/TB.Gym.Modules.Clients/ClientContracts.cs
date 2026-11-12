@@ -155,6 +155,10 @@ public sealed record OwnCoachView(string Name, bool FoundingCoach, IReadOnlyList
 /// </summary>
 public sealed record OwnCoachLineView(string Text, string What, DateOnly ShownOn);
 
+/// <param name="SelfDirected">
+/// The person signed up into the house and trains as their own coach (CLI-026): their screens name the coaching
+/// space, not a coach.
+/// </param>
 public sealed record ClientSelfProfile(
     Guid Id,
     string FirstName,
@@ -176,7 +180,8 @@ public sealed record ClientSelfProfile(
     string? PreviousInjuries,
     ClientOnboardingStatus OnboardingStatus,
     DateTimeOffset? OnboardingCompletedAtUtc,
-    uint Version);
+    uint Version,
+    bool SelfDirected = false);
 
 public sealed record UpdateClientIntakeRequest(
     string FirstName,

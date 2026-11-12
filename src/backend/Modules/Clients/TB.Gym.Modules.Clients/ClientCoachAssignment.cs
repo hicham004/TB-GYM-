@@ -8,8 +8,8 @@ namespace TB.Gym.Modules.Clients;
 /// </summary>
 /// <remarks>
 /// Entries are numbered 1, 2, 3… per client. Entry 1 is where the client started (their invitation,
-/// or the migration that gave existing clients to the owner); every later entry names the coach it
-/// replaced. The actor is the audit <c>CreatedByUserId</c>, which is empty for the migration. A
+/// their own sign-up into the house, or the migration that gave existing clients to the owner); every
+/// later entry names the coach it replaced. The actor is the audit <c>CreatedByUserId</c>, which is empty for the migration. A
 /// database trigger refuses any update or delete, and another refuses a coach change on the profile
 /// that has no matching newest entry.
 /// </remarks>
@@ -70,6 +70,28 @@ public sealed class ClientCoachAssignment : TenantEntity
             coachUserId,
             null,
             ClientCoachAssignmentReason.Invitation,
+            null,
+            assignedAtUtc);
+    }
+
+    /// <summary>
+    /// The first entry of someone who signed up into the house (CLI-024): the member of the house's staff their
+    /// record names. No invitation came before it, so the history does not say one did.
+    /// </summary>
+    public static ClientCoachAssignment ForSignUp(
+        Guid tenantId,
+        Guid clientProfileId,
+        Guid coachUserId,
+        DateTimeOffset assignedAtUtc)
+    {
+        RequireIds(clientProfileId, coachUserId);
+        return new ClientCoachAssignment(
+            tenantId,
+            clientProfileId,
+            1,
+            coachUserId,
+            null,
+            ClientCoachAssignmentReason.SignUp,
             null,
             assignedAtUtc);
     }
@@ -162,4 +184,7 @@ public enum ClientCoachAssignmentReason
 
     /// <summary>The client left the workspace and moved to the owner as the record's keeper.</summary>
     ClientLeft = 7,
+
+    /// <summary>The person signed up into the house with no invitation and started with that member of its staff.</summary>
+    SignUp = 8,
 }

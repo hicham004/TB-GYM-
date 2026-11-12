@@ -162,11 +162,12 @@ public sealed class B13PlanBesideAPackDomainTests
         Assert.IsFalse(CoachingPlanRunOut.HasPack([Decision(CoachingFeature.Training, FeatureAccessReason.Granted, Plan, PlanEnd)]));
     }
 
-    // B13 moved the rule to its sixth version; the notes plan's N10a, removing maxes to review, to its seventh; and
-    // N6d, adding weights to apply, to its eighth.
+    // B13 moved the rule to its sixth version; the notes plan's N10a, removing maxes to review, to its seventh;
+    // N6d, adding weights to apply, to its eighth; and the notes plan's N9a1, where a self-directed trainee of the
+    // house raises nothing, to its ninth.
     [TestMethod]
-    public void TheAttentionRuleMovedToItsEighthVersion() =>
-        Assert.AreEqual(("CoachAttention", 8), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
+    public void TheAttentionRuleMovedToItsNinthVersion() =>
+        Assert.AreEqual(("CoachAttention", 9), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
 
     private static readonly Guid TenantId = Guid.Parse("10000000-0000-0000-0000-0000000000b1");
     private static readonly Guid ClientId = Guid.Parse("20000000-0000-0000-0000-0000000000b1");

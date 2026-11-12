@@ -88,13 +88,14 @@ public sealed class A8CoachScreensDomainTests
     }
 
     [TestMethod]
-    public void TheAttentionRuleIsVersionEight()
+    public void TheAttentionRuleIsVersionNine()
     {
         // Version 3 came with audit A8's new client with no plan, version 4 with critique B4a's overdue check-in,
         // version 5 with critique B10c's sessions running out, version 6 with critique B13's plan beside a pack,
-        // version 7 with the notes plan's N10a, which removed maxes to review on the owner's word, and version 8 with
-        // the notes plan's N6d, which added weights to apply.
-        Assert.AreEqual(("CoachAttention", 8), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
+        // version 7 with the notes plan's N10a, which removed maxes to review on the owner's word, version 8 with
+        // the notes plan's N6d, which added weights to apply, and version 9 with the notes plan's N9a1: a
+        // self-directed trainee of the house raises nothing.
+        Assert.AreEqual(("CoachAttention", 9), (CoachAttentionPolicy.Key, CoachAttentionPolicy.Version));
     }
 
     private static ClientAttentionSignals Quiet() => new(0, 0, null, null, false, 0, false);

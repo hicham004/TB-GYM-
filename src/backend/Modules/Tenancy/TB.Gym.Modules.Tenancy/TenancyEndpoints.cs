@@ -151,6 +151,7 @@ public static class TenancyEndpoints
         .RequireRateLimiting(RateLimitPolicies.RoutineWrite);
 
         endpoints.MapTeamEndpoints();
+        endpoints.MapHouseEndpoints();
         return endpoints;
     }
 }

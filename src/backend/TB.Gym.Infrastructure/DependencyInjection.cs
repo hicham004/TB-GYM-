@@ -171,6 +171,14 @@ public static class DependencyInjection
         services.AddScoped<CoachClientScope>();
         services.AddScoped<ITenantMembershipStore, TenantMembershipStore>();
         services.AddScoped<IWorkspaceApplicationService, WorkspaceApplicationService>();
+        // The house (ADR 0041): sign-up with no invitation, what an email's confirmation completes for it, and
+        // the platform admin's settings. The sweep of sign-ups never confirmed is composed in both roots.
+        services.AddSingleton<TraineeSignUpStamps>();
+        services.AddScoped<TraineeSignUpService>();
+        services.AddScoped<ITraineeSignUpService>(provider => provider.GetRequiredService<TraineeSignUpService>());
+        services.AddScoped<IEmailConfirmationService, EmailConfirmationService>();
+        services.AddScoped<IHouseAdminService, HouseAdminService>();
+        services.AddTraineeSignUps(configuration);
         services.AddScoped<ITeamApplicationService, TeamApplicationService>();
         services.AddScoped<IInvitationApplicationService, InvitationApplicationService>();
         services.AddScoped<IClientProfileApplicationService, ClientProfileApplicationService>();
@@ -432,6 +440,20 @@ public static class DependencyInjection
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 5,
+                        Window = TimeSpan.FromHours(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    }));
+            // The house's sign-up (CLI-024) stores an account for anybody who passes its guards, so it has an
+            // allowance of its own by source address: twenty an hour, far inside public authentication's
+            // thirty a minute, which it therefore keeps as well. A gym's shared connection signs several
+            // people up in an hour; a script gets no further than that.
+            options.AddPolicy(RateLimitPolicies.TraineeSignUp, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 20,
                         Window = TimeSpan.FromHours(1),
                         QueueLimit = 0,
                         AutoReplenishment = true,

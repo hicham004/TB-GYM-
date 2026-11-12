@@ -16,6 +16,11 @@ relationship.
   registration automatically creates their owned workspace.
 - Clients do not publicly self-register in Phase 1. A client enters through a tenant-scoped,
   expiring, revocable invitation sent by an Owner or Coach.
+- **Amended by ADR 0041 (2026-11-12, notes plan N9a1, decisions 24, 25 and 34).** One coaching space,
+  the house, takes people with no invitation: a public sign-up into it alone, closed until the owner
+  opens it. A coach's space is still joined only by invitation. The rule below stands there too: an
+  email that already has an account signs in first and then gains only the membership and the profile,
+  and neither space learns of the other.
 - Invitation tokens use cryptographically secure random values. Only a one-way token hash is
   stored, and every send has a durable record.
 - **Clarified by Phase 6B-3C (ADR 0021).** "Resending rotates the token" was written when the only

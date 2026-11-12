@@ -117,6 +117,15 @@ web container after changing any of the three. Write the privacy note yourself; 
   `CoachCertificates:KeepMonthsAfterTakenDown` months (12, the plan's example, until the lawyer names the
   period; 1 to 120, or neither process starts). To change it, put the months in
   `TB_GYM_CERTIFICATE_KEEP_MONTHS` in `.env`, then `tb up -d api worker` (CLI-021).
+- **The house** (trainees without a coach, ADR 0041): nothing opens by being deployed. Register TB Gym's
+  own coaching space as a coach does, then mark it with
+  `tb exec api dotnet TB.Gym.Api.dll platform-admin house set <the space's slug>` (`platform-admin house`
+  says which space is marked; `house clear` takes the mark away while the house holds nobody). Sign-up stays
+  closed until the platform admin fills the house's two settings in the app, new sign-ups a week and the
+  age that may sign up. Before filling them, have the house's Coach accept their team invitation: a
+  trainee's record names the Coach who had joined when their email was confirmed, else the Owner, and the
+  Owner moves an earlier trainee to the Coach one at a time. The Worker removes a sign-up whose email was never confirmed after
+  `TraineeSignUps:RemoveUnconfirmedAfterDays` days (2; 1 to 90, or neither process starts) (CLI-022 to CLI-025).
 
 ## Before launch: a test copy on Render
 

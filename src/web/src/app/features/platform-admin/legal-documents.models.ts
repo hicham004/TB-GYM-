@@ -109,7 +109,10 @@ export interface LegalPublishStart {
   readonly context: LegalContext;
 }
 
-/** Terms and Privacy are accepted once per person; a health consent in each coaching space. */
+/**
+ * Terms and Privacy are accepted once per person; a health consent in each coaching space. The consumer terms
+ * are asked in one space only, TB Gym's own, so they too are a person's to accept once.
+ */
 export function defaultContext(kind: LegalKind): LegalContext {
   return kind === 'HealthIntakeConsent' ? 'Workspace' : 'Platform';
 }

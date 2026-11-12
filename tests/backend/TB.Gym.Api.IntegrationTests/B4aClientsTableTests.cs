@@ -74,7 +74,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             (nourItem.Count, nourItem.Date, nourItem.SubjectId, nourItem.CanMessage));
         var nourPage = await ReadSliceAsync<ClientProfileOverviewView>(owner, R33bOverviewUrl(nourId));
         CollectionAssert.AreEqual(nourRow.Attention.ToArray(), nourPage.Attention.Select(item => item.Kind).ToArray());
-        Assert.AreEqual((CoachAttentionPolicy.Key, 8), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
+        // Version 9 since the notes plan's N9a1: a self-directed trainee of the house raises nothing (CLI-026).
+        Assert.AreEqual((CoachAttentionPolicy.Key, 9), (nourPage.AttentionRuleKey, nourPage.AttentionRuleVersion));
 
         // Once the owner and Maya have a chat, Remind opens it. A draft is not sent; sending takes the item away
         // and puts the check-in to review in its place.

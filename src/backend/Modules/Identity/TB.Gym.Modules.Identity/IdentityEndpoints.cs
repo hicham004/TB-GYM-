@@ -265,15 +265,10 @@ public static class IdentityEndpoints
         ConfirmEmailRequest request,
         HttpContext context,
         IAntiforgery antiforgery,
-        UserManager<ApplicationUser> userManager)
+        IEmailConfirmationService confirmation,
+        CancellationToken cancellationToken)
     {
         await antiforgery.ValidateRequestAsync(context);
-        var user = await userManager.FindByIdAsync(request.UserId.ToString());
-        if (user is null)
-        {
-            return InvalidConfirmationLink();
-        }
-
         var token = DecodeToken(request.Code);
         if (token is null)
         {
@@ -283,8 +278,11 @@ public static class IdentityEndpoints
         // Only the link itself is judged. A confirmed account once answered 204 to any code, which told
         // a caller holding its id that it was confirmed (audit SEC-9). The real link tapped again still
         // answers 204: confirming changes no security stamp, so its token stays valid for its day.
-        var result = await userManager.ConfirmEmailAsync(user, token);
-        return result.Succeeded ? Results.NoContent() : InvalidConfirmationLink();
+        // An unknown account answers like a wrong code. What a confirmation completes besides the account,
+        // a sign-up into the house (CLI-024), is done with it or not at all.
+        return await confirmation.ConfirmAsync(request.UserId, token, cancellationToken)
+            ? Results.NoContent()
+            : InvalidConfirmationLink();
     }
 
     /// <summary>

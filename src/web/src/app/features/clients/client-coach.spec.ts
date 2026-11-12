@@ -257,6 +257,35 @@ describe('ClientCoach', () => {
     );
   });
 
+  /** Notes plan N9a1: a trainee of TB Gym's own space signed up with no invitation, and the history says so. */
+  it('says a trainee who signed up signed up, where an invited client joined', async () => {
+    const signedUp: ClientCoachAssignmentView = {
+      id: 'a-1',
+      sequence: 1,
+      coachUserId: 'u-1',
+      coachName: 'Olivia Owner',
+      previousCoachUserId: null,
+      previousCoachName: null,
+      reason: 'SignUp',
+      note: null,
+      assignedAtUtc: '2026-11-12T08:00:00Z',
+      assignedByUserId: null,
+    };
+    const { fixture, host } = await render([owner, coach], 'owner-1', () => of([signedUp]));
+
+    press(host, 'Reassign coach');
+    await settle(fixture);
+
+    const dialog = host.querySelector<HTMLElement>('dialog')!;
+    await toggleFold(fixture, dialog, 'Coach history (1)');
+    const row = (
+      host.querySelector<HTMLElement>('dialog [data-coach-history] li')?.textContent ?? ''
+    )
+      .replace(/\s+/g, ' ')
+      .trim();
+    expect(row).toMatch(/^Olivia Owner Since (Thu 12 Nov|12 Nov 2026) · signed up$/);
+  });
+
   it('keeps the dialog usable when the coach history cannot be read', async () => {
     const { fixture, host } = await render([owner, coach], 'owner-1', () =>
       throwError(() => new Error('offline')),

@@ -46,9 +46,11 @@ public sealed partial class Phase3TrainingWorkflowTests
         var page = await ReadSliceAsync<ClientProfileOverviewView>(coach, R33bOverviewUrl(scenario.ClientId));
         Assert.AreEqual(ClientOverviewStatus.OnTrack, page.Status);
         Assert.AreEqual(item, page.Attention.Single());
-        Assert.AreEqual((CoachAttentionPolicy.Key, 8), (page.AttentionRuleKey, page.AttentionRuleVersion));
+        // Version 9 since the notes plan's N9a1 (a self-directed trainee of the house raises nothing, CLI-026); the
+        // weights to apply are weighed as version 8 weighed them.
+        Assert.AreEqual((CoachAttentionPolicy.Key, 9), (page.AttentionRuleKey, page.AttentionRuleVersion));
         var todayView = await ReadSliceAsync<CoachTodayView>(coach, CoachTodayUrl);
-        Assert.AreEqual((CoachAttentionPolicy.Key, 8), (todayView.AttentionRuleKey, todayView.AttentionRuleVersion));
+        Assert.AreEqual((CoachAttentionPolicy.Key, 9), (todayView.AttentionRuleKey, todayView.AttentionRuleVersion));
 
         // Applied, nothing is left to apply, and the line goes from all three; nothing on Today applies anything.
         await N6cApplyOkAsync(coach, scenario.ClientId, N6cRequestFor(standing));

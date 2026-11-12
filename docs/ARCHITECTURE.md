@@ -62,7 +62,7 @@ into additional projects only when that produces a measurable boundary benefit.
 | Module           | Owns                                                                                                                                                                                     |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Identity         | Global account, credential, lockout, platform roles, sessions, legal consent; coach certificate lines, its one tenant-owned record (CLI-021, ADR 0039) |
-| Tenancy          | Coach workspace, membership, tenant role, tenant lifecycle                                                                                                                               |
+| Tenancy          | Coach workspace, membership, tenant role, tenant lifecycle; the house: its mark on one workspace, its settings and the sign-ups into it (CLI-022 to CLI-025, ADR 0041)                  |
 | Clients          | Tenant-specific profile, onboarding/intake, relationship block state/history                                                                                                             |
 | Invitations      | Invite lifecycle, prefilled fields, acceptance and account linking                                                                                                                       |
 | Subscriptions    | Products, immutable offers, enrollments, entitlement coverage, payments, renewal, session packs and their ledger                                                                         |
@@ -404,9 +404,9 @@ Legal document versions are global identity records, while a workspace consent a
 contextual. Listing current documents accepts an optional workspace context, verifies active
 membership, and never treats acceptance in Workspace A as acceptance in Workspace B. The platform admin
 publishes and withdraws versions under `/api/platform-admin/legal-documents` (audit A16a); anyone reads one
-at `GET /api/legal/documents/{id}` and what a new owner, coach or client must accept at
-`GET /api/legal/documents/to-accept`. Registration (Tenancy) and an invitation's acceptance (Invitations)
-carry the ticked version ids and check them through `LegalAcceptanceGate` in Infrastructure, inside their
+at `GET /api/legal/documents/{id}` and what a new owner, coach, client or house trainee must accept at
+`GET /api/legal/documents/to-accept`. Registration and the house's sign-up (Tenancy) and an invitation's acceptance
+(Invitations) carry the ticked version ids and check them through `LegalAcceptanceGate` in Infrastructure, inside their
 own transaction, so neither module references Identity. The gate holds a transaction advisory lock shared
 from the check to the join's commit, and publishing and withdrawing hold it alone, so a join never checks
 documents a publish is about to replace.
@@ -424,6 +424,20 @@ their current coach's shown lines with `GET /api/client-profile/me/coach`, compo
 Clients references no other module. The Worker's daily keeping sweep (`CoachCertificates:KeepMonthsAfterTakenDown`,
 refused at start outside 1 to 120 months) finds due lines past the filter and erases each space's in a scope of
 its own after `SetTenant`, logging counts only.
+
+The house (ADR 0041, notes plan N9a1) is one workspace with `IsHouse` set, by the `platform-admin house` command
+alone. Tenancy owns the mark, the settings (`tenancy."HouseSettingChanges"`, append-only, the platform admin's under
+`/api/platform-admin/house`) and the sign-ups (`tenancy."TraineeSignUps"`); both tables are tenant-owned, so a
+coaching space never reads them, and triggers keep their rows and the self-directed mark in the house alone. The
+public routes carry no workspace: `TraineeSignUpService` in Infrastructure, beside `RegisterCoachAsync`, finds the
+house itself and sets it as the request's tenant before it writes, whatever header a request carries. It composes
+Identity's account, legal gate (audience `Trainee`, the consumer terms) and confirmation mail, Clients' profile and
+the Website's form stamp under a purpose of its own, so Tenancy references none of them. A new account's sign-up
+stores the account and one sign-up row; `IEmailConfirmationService` (Identity's port, composed in Infrastructure)
+confirms the email and creates the membership and the self-directed profile in one transaction, taking the
+sign-up's row lock first. The Worker's hourly sweep (`TraineeSignUps:RemoveUnconfirmedAfterDays`, refused at start
+outside 1 to 90 days) takes the same lock first, deletes a sign-up never confirmed and empties its account, logging
+counts only.
 
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.
@@ -839,6 +853,9 @@ the rows grow with a client's history only for a lift whose step sets were given
 those days (BEB-2; notes plan section 3). Today's busiest case costs 32 (`B4bTodayQueryPin`, 29 before), the list 26
 (23 before), and a client's page 24 in R33b's and R35b's scenarios (training, no step lift) and 26 with a step lift
 coming.
+Notes plan N9a1 (Coach attention v9) adds no read: the profile's self-directed mark comes with the clients already
+read, the rule raises nothing for it, and Today's feed and Ended, not renewed leave such a client out in memory, so
+every pin above stands.
 
 Critique B10d adds the This month page's one read, `GET /api/coach-month` (`ICoachMonthService` in Clients,
 `CoachMonthReader` in Infrastructure), again with no schema change. Month numbers v2 (`MonthNumbersPolicy` in

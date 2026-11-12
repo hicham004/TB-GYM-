@@ -301,7 +301,8 @@ internal sealed class ClientProfileApplicationService(
                     }
                 }
 
-                if (!releasedByOwner)
+                // A self-directed trainee's leaving tells no staff inbox (CLI-026); the history above keeps it.
+                if (!releasedByOwner && !profile.IsSelfDirected)
                 {
                     var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
                     foreach (var staffUserId in new[] { ownerUserId, previousCoachUserId }.Distinct())
@@ -648,6 +649,11 @@ internal sealed class ClientProfileApplicationService(
         try
         {
             var tenantToday = await GetTenantTodayAsync(cancellationToken);
+            if (await HouseAgeRefusalAsync(profile, request.BirthDate, tenantToday, cancellationToken) is { } refusal)
+            {
+                return Invalid("intake", refusal);
+            }
+
             dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Version;
             var changedFields = profile.UpdateIntake(request.ToInput(), tenantToday);
             if (changedFields.Count > 0)
@@ -731,6 +737,11 @@ internal sealed class ClientProfileApplicationService(
                 }
             }
 
+            if (await HouseAgeRefusalAsync(profile, request.Intake.BirthDate, tenantToday, cancellationToken) is { } refusal)
+            {
+                return Invalid("onboarding", refusal);
+            }
+
             dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Intake.Version;
             var changedFields = profile.CompleteOnboarding(
                 request.Intake.ToInput(),
@@ -788,6 +799,30 @@ internal sealed class ClientProfileApplicationService(
         {
             return new ClientCommandResult(ClientCommandStatus.Conflict);
         }
+    }
+
+    /// <summary>
+    /// A self-directed trainee's date of birth keeps to the age the house asked at sign-up (CLI-024): an intake
+    /// that changes it to a younger one is refused, in the house's own words. Null for anyone else, and for an
+    /// unchanged or emptied date, which the profile's own rule weighs.
+    /// </summary>
+    private async Task<string?> HouseAgeRefusalAsync(
+        ClientProfile profile,
+        DateOnly? birthDate,
+        DateOnly tenantToday,
+        CancellationToken cancellationToken)
+    {
+        if (!profile.IsSelfDirected || birthDate is not { } typed || typed == profile.BirthDate)
+        {
+            return null;
+        }
+
+        return await HouseReader.MinimumSignUpAgeAsync(dbContext, profile.TenantId, cancellationToken) is { } minimumAge &&
+               TraineeSignUpRule.CheckBirthDate(typed, minimumAge, tenantToday) == TraineeBirthDateCheck.TooYoung
+            ? string.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"This coaching space is open to people aged {minimumAge} or older.")
+            : null;
     }
 
     private Task<ClientProfile?> FindSelfAsync(CancellationToken cancellationToken) =>
@@ -929,5 +964,6 @@ internal sealed class ClientProfileApplicationService(
             client.PreviousInjuries,
             client.OnboardingStatus,
             client.OnboardingCompletedAtUtc,
-            client.Version);
+            client.Version,
+            client.IsSelfDirected);
 }

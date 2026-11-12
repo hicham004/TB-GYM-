@@ -50,6 +50,9 @@ function reasonWords(reason: ClientCoachAssignmentReason, previous: string | nul
   switch (reason) {
     case 'Invitation':
       return $localize`joined`;
+    // A trainee of TB Gym's own space signed up with no invitation (notes plan N9a1).
+    case 'SignUp':
+      return $localize`signed up`;
     case 'Reassigned':
       return previous ? $localize`moved from ${previous}:coach:` : $localize`moved by you`;
     case 'CoachRemoved':

@@ -23,6 +23,7 @@ export const LEGAL_KINDS: readonly LegalKind[] = [
   'TermsOfService',
   'PrivacyPolicy',
   'HealthIntakeConsent',
+  'ConsumerTerms',
 ];
 
 /**
@@ -40,6 +41,8 @@ export function legalKindName(kind: LegalKind): string {
       return $localize`Privacy Policy`;
     case 'HealthIntakeConsent':
       return $localize`Health intake consent`;
+    case 'ConsumerTerms':
+      return $localize`Consumer terms`;
   }
 }
 
@@ -61,11 +64,20 @@ export function legalContextClause(context: LegalContext): string {
     : $localize`once per person`;
 }
 
-/** Who is asked to accept a document, as the server's rule (LegalAcceptanceRule) decides it. */
+/**
+ * Who is asked to accept a document, as the server's rule (LegalAcceptanceRule) decides it. The consumer terms
+ * are asked only where someone signs up to train with TB Gym itself (notes plan N9a1, ADR 0041).
+ */
 export function legalAudienceLine(kind: LegalKind): string {
-  return kind === 'HealthIntakeConsent'
-    ? $localize`Asked of clients when they accept an invitation.`
-    : $localize`Asked of everyone who creates a coaching space or accepts an invitation.`;
+  switch (kind) {
+    case 'HealthIntakeConsent':
+      return $localize`Asked of clients when they accept an invitation.`;
+    case 'ConsumerTerms':
+      return $localize`Asked of people who sign up to train with TB Gym, with no invitation.`;
+    case 'TermsOfService':
+    case 'PrivacyPolicy':
+      return $localize`Asked of everyone who creates a coaching space, accepts an invitation or signs up to train with TB Gym.`;
+  }
 }
 
 /**

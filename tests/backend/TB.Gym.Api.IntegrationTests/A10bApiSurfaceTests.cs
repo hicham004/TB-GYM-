@@ -22,6 +22,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         RateLimitPolicies.MediaUpload,
         RateLimitPolicies.PublicAuthentication,
         RateLimitPolicies.PublicContact,
+        // The house's sign-up form has a limit of its own (notes plan N9a1, CLI-024).
+        RateLimitPolicies.TraineeSignUp,
         RateLimitPolicies.ProviderWebhook,
     ];
 

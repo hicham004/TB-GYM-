@@ -52,7 +52,8 @@ if (DemoWorkspaceCommand.IsInvocation(args) && builder.Environment.IsDevelopment
 var app = builder.Build();
 
 // `platform-admin grant|revoke|list` runs against this deployment's database and exits without
-// serving anything: the only way the global platform-admin role is ever granted (ADR 0028).
+// serving anything: the only way the global platform-admin role is ever granted (ADR 0028), and with
+// `platform-admin house` the only way a coaching space is marked as the house (ADR 0041).
 if (PlatformAdminCommand.IsInvocation(args))
 {
     return await PlatformAdminCommand.RunAsync(app.Services, args, Console.Out);

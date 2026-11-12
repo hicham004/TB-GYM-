@@ -373,6 +373,9 @@ public sealed record CoachPlanEndedView(
 /// What is left on the client's packs paid for and not over (SES-008), read only while sessions are in today's plan:
 /// null with no pack running, as for a paused, blocked or unpaid one.
 /// </param>
+/// <param name="SelfDirected">
+/// The client signed up into the house and trains as their own coach (CLI-026), which is why the row raises nothing.
+/// </param>
 public sealed record ClientOverviewRow(
     CoachClientRef Client,
     string? Goals,
@@ -395,7 +398,8 @@ public sealed record ClientOverviewRow(
     IReadOnlyList<CoachAttentionItemView> AttentionItems,
     string? LastActivityTitle,
     DateTimeOffset? LastCheckInSentAtUtc,
-    int? SessionsLeft = null);
+    int? SessionsLeft = null,
+    bool SelfDirected = false);
 
 /// <summary>
 /// One enrollment as a client's row sums it up (critique B4a): its name, what it includes, its length as it was

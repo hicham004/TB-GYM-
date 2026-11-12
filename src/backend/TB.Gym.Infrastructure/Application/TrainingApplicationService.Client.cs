@@ -606,11 +606,18 @@ internal sealed partial class TrainingApplicationService
     {
         var client = await dbContext.ClientProfiles.AsNoTracking()
             .Where(item => item.Id == execution.ClientProfileId)
-            .Select(item => new { item.UserId, item.AssignedCoachUserId })
+            .Select(item => new { item.UserId, item.AssignedCoachUserId, item.IsSelfDirected })
             .SingleOrDefaultAsync(cancellationToken);
         var fromCoach = note.AuthorRole == WorkoutNoteAuthorRole.Coach;
         if (client is null || (fromCoach ? client.UserId : client.AssignedCoachUserId) is not { } recipient ||
             recipient == note.AuthorUserId)
+        {
+            return;
+        }
+
+        // A self-directed trainee's note is their own record (CLI-026): nobody coaches them, so it reaches no
+        // staff inbox. A note the house's staff write still reaches the trainee.
+        if (!fromCoach && client.IsSelfDirected)
         {
             return;
         }
