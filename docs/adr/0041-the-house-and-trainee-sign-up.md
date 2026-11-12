@@ -63,7 +63,10 @@ their notes, their leaving and a coach's departure reach no inbox; both partners
 - The public read tells a closed sign-up apart from nothing else: not whether a house exists, nor its name.
 - A coach's space never reads the house's rows, and database triggers keep the house's rows, and the
   self-directed mark, in the house alone; the mark cannot be cleared while the house holds anyone.
-- N9a2 builds the screens on these routes; N9b1 starts Free at the same confirmation step.
+- N9a2 built the screens on these routes: `/train` and `/train/sign-up` for a visitor or someone signed in,
+  the platform admin's House page (`/admin/house`), and a self-directed trainee's Today and Me, which read
+  the trainee's own profile first and never ask for the staff member the record names. N9b1 starts Free at
+  the same confirmation step.
 
 ## Migration and recovery
 

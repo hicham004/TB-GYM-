@@ -17,7 +17,23 @@
       </h1>
     </div>
     <div class="today-actions">
-      @if (coachName(); as coach) {
+      @if (selfDirected()) {
+        <!-- A trainee of TB Gym's own space coaches themselves (CLI-026, notes plan N9a2): the space
+             stands where a coach would, with TB Gym's mark, and nothing to write to. -->
+        <div class="today-coach today-coach--self" data-self-directed>
+          @if (brand.logoUrl(); as logo) {
+            <span class="today-logo" aria-hidden="true">
+              <img [src]="logo" alt="" width="48" height="48" (error)="brand.logoFailed()" />
+            </span>
+          } @else {
+            <app-avatar initials="TB" presentation="mobile-account" />
+          }
+          <span class="tb-visually-hidden" i18n>Self-directed · {{ brand.name() }}</span>
+          <span class="today-self" aria-hidden="true"
+            ><span i18n>Self-directed</span><bdi>{{ brand.name() }}</bdi></span
+          >
+        </div>
+      } @else if (coachName(); as coach) {
         <div class="today-coach">
           <!-- The coach's logo, once they have one, stands where their initials were (R3.5a). -->
           @if (brand.logoUrl(); as logo) {
@@ -315,12 +331,25 @@
               }
             }
             @case ('nothing-assigned') {
-              <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
-                Nothing assigned yet
-              </h2>
-              <p i18n>Your coach will put your program here.</p>
-              @if (canMessage()) {
-                <a class="text-link" routerLink="/messages" i18n>Message your coach</a>
+              @if (selfDirected()) {
+                <!-- Until a trainee can start a workout of their own (notes plan N9b3). -->
+                <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+                  No workouts yet
+                </h2>
+                <p data-self-directed i18n>Your workouts will start here.</p>
+              } @else if (selfUnknown()) {
+                <!-- The profile could not say whether a coach is there: a line true for anyone. -->
+                <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+                  No workouts yet
+                </h2>
+              } @else {
+                <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+                  Nothing assigned yet
+                </h2>
+                <p i18n>Your coach will put your program here.</p>
+                @if (canMessage()) {
+                  <a class="text-link" routerLink="/messages" i18n>Message your coach</a>
+                }
               }
             }
             @case ('access-closed') {

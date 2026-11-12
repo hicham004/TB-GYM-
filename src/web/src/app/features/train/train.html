@@ -1,0 +1,130 @@
+<app-auth-frame wide forTrainees [embedded]="signedIn()">
+  @switch (state()) {
+    @case ('loading') {
+      <p class="auth-muted" role="status" i18n>Checking sign-up…</p>
+    }
+    @case ('failed') {
+      <p class="auth-eyebrow" i18n>TB Gym</p>
+      <h1 class="auth-title" i18n>Train with <em>TB Gym.</em></h1>
+      <div class="auth-stack">
+        <p class="auth-message auth-message--error" role="alert" i18n>
+          This page couldn’t load. Check your connection and try again.
+        </p>
+        <button
+          appButton
+          type="button"
+          size="touch"
+          class="auth-submit"
+          [loading]="reading()"
+          (click)="load()"
+          i18n
+        >
+          Try again
+        </button>
+      </div>
+    }
+    @case ('ready') {
+      @if (signUp(); as view) {
+        <!-- While closed the server names no house, so neither does the page (N9a1). -->
+        <p class="auth-eyebrow">
+          @if (view.status !== 'Closed' && view.workspaceName) {
+            <bdi>{{ view.workspaceName }}</bdi>
+          } @else {
+            <ng-container i18n>TB Gym</ng-container>
+          }
+        </p>
+        <h1 class="auth-title" i18n>Train with <em>TB Gym.</em></h1>
+        @if (view.status === 'Closed') {
+          <div class="auth-stack" data-closed>
+            <p class="auth-message auth-message--notice" i18n>Sign-up is closed right now.</p>
+            <p class="auth-muted" i18n>
+              If a coach invited you, open the link in their email instead.
+            </p>
+            @if (!signedIn()) {
+              <p class="auth-alt">
+                <span i18n>Already have an account?</span>
+                <a class="auth-link" routerLink="/auth/sign-in" i18n>Sign in</a>
+              </p>
+            }
+          </div>
+        } @else {
+          <p class="auth-lead" i18n>
+            Train on your own, with no coach. Pick exercises, log your workouts and keep your
+            history.
+          </p>
+          <div class="auth-stack" [attr.data-status]="view.status">
+            @if (view.caller === 'Joined') {
+              <p class="auth-message auth-message--success" i18n>
+                You’re already training with TB Gym.
+              </p>
+              <a
+                appButton
+                size="touch"
+                class="auth-submit"
+                href="/"
+                (click)="openToday($event)"
+                i18n
+                >Open Today</a
+              >
+            } @else if (view.status === 'Full') {
+              <p class="auth-message auth-message--notice" data-full>{{ full() }}</p>
+              @if (view.caller === 'Waiting') {
+                <p data-waiting i18n>
+                  Your email is confirmed and your sign-up is waiting for a place. Come back then to
+                  finish it.
+                </p>
+              } @else if (!signedIn()) {
+                <p class="auth-alt">
+                  <span i18n>Already have an account?</span>
+                  <a
+                    class="auth-link"
+                    routerLink="/auth/sign-in"
+                    [queryParams]="{ returnUrl: '/train' }"
+                    i18n
+                    >Sign in</a
+                  >
+                </p>
+              }
+            } @else if (view.caller === 'Waiting') {
+              <p class="auth-message auth-message--success" data-waiting i18n>
+                Your email is confirmed, and a place is open now.
+              </p>
+              <a appButton size="touch" class="auth-submit" routerLink="/train/sign-up" i18n
+                >Finish signing up</a
+              >
+            } @else if (signedIn()) {
+              <a appButton size="touch" class="auth-submit" routerLink="/train/sign-up" i18n
+                >Sign up with this account</a
+              >
+            } @else {
+              <a appButton size="touch" class="auth-submit" routerLink="/train/sign-up" i18n
+                >Create your account</a
+              >
+              <p class="auth-alt">
+                <span i18n>Already have an account?</span>
+                <a
+                  class="auth-link"
+                  routerLink="/auth/sign-in"
+                  [queryParams]="{ returnUrl: '/train' }"
+                  i18n
+                  >Sign in</a
+                >
+              </p>
+            }
+            <div class="auth-notes">
+              @if (clock(); as time) {
+                <p class="auth-hint" data-clock>{{ time.line }}</p>
+                @if (time.abroad) {
+                  <p class="auth-hint" data-abroad>{{ time.abroad }}</p>
+                }
+              }
+              @if (!signedIn()) {
+                <p class="auth-hint" i18n>Creating an account is free.</p>
+              }
+            </div>
+          </div>
+        }
+      }
+    }
+  }
+</app-auth-frame>

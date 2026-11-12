@@ -36,6 +36,7 @@ internal sealed partial class DemoWorkspaceGenerator
     private readonly DemoTimeline timeline;
     private readonly string password;
     private readonly DemoPeople people;
+    private readonly bool buildHouse;
     private readonly CancellationToken cancellationToken;
 
     private readonly Dictionary<string, Guid> staffUserIds = [];
@@ -55,12 +56,14 @@ internal sealed partial class DemoWorkspaceGenerator
         DemoClock clock,
         string password,
         DemoPeople people,
+        bool buildHouse,
         CancellationToken cancellationToken)
     {
         this.services = services;
         this.clock = clock;
         this.password = password;
         this.people = people;
+        this.buildHouse = buildHouse;
         this.cancellationToken = cancellationToken;
         calendar = new DemoCalendar(DateTimeOffset.UtcNow, TimeZoneId);
         clock.Rewind(calendar.At(WorkspaceCreatedDay, 9, 0));
@@ -70,6 +73,11 @@ internal sealed partial class DemoWorkspaceGenerator
 
     public async Task<DemoWorkspaceTally> GenerateAsync(TextWriter output)
     {
+        if (buildHouse)
+        {
+            PlanHouse();
+        }
+
         PlanWorkspace();
         foreach (var client in people.Clients)
         {
@@ -493,4 +501,7 @@ internal sealed class DemoWorkspaceTally
     public int Notifications { get; set; }
 
     public int SessionsHeld { get; set; }
+
+    /// <summary>Whether TB Gym's own coaching space was built this time (notes plan N9a2).</summary>
+    public bool House { get; set; }
 }

@@ -1,0 +1,105 @@
+// The platform admin's House page (notes plan N9a2). Brand v2 tokens only, so it follows light and dark.
+@use '../../ui/page';
+
+.back {
+  align-items: center;
+  align-self: flex-start;
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-accent-ink);
+  display: inline-flex;
+  font-weight: 600;
+  gap: 0.25rem;
+  min-block-size: 2.5rem;
+  padding-inline: 0.25rem 0.5rem;
+  text-decoration: none;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
+
+.back:focus-visible,
+.space-link:focus-visible {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+
+:host-context([dir='rtl']) .back app-icon {
+  transform: scaleX(-1);
+}
+
+.terms {
+  display: grid;
+  gap: 0.625rem 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  margin: 0;
+
+  dt {
+    color: var(--tb-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  dd {
+    color: var(--tb-ink);
+    margin: 0.125rem 0 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.space-link {
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-accent-ink);
+  font-weight: 600;
+}
+
+.status-line {
+  color: var(--tb-ink);
+  margin: 0;
+}
+
+.tiles {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.settings li {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  padding-block: 0.875rem;
+}
+
+.setting {
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 0;
+
+  strong {
+    color: var(--tb-ink);
+    font-weight: 600;
+  }
+}
+
+.value {
+  color: var(--tb-ink);
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.value.empty {
+  color: var(--tb-muted);
+}
+
+.command {
+  background: var(--tb-surface-2);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+  padding: 0.75rem 1rem;
+}

@@ -591,8 +591,11 @@ describe('App', () => {
     expect(host.querySelector('.workspace-picker')).toBeNull();
   });
 
-  /** A platform admin with no workspace reaches the admin's pages from that bar (notes plan N4a). */
-  it('links the platform admin’s pages from the member top bar, Coaches last', async () => {
+  /**
+   * A platform admin with no workspace reaches the admin's pages from that bar (notes plan N4a), the
+   * House last, after Coaches (N9a2).
+   */
+  it('links the platform admin’s pages from the member top bar, Coaches then House last', async () => {
     const admin = await render({ signedIn: true, memberships: [], roles: ['PlatformAdmin'] });
 
     const links = Array.from(
@@ -604,6 +607,7 @@ describe('App', () => {
       ['Platform billing', '/admin/billing'],
       ['Legal documents', '/admin/legal'],
       ['Coaches', '/admin/coaches'],
+      ['House', '/admin/house'],
     ]);
     TestBed.resetTestingModule();
 

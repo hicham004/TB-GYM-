@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -13,8 +13,9 @@ import {
 
 /**
  * The legal documents (audit INV-3, CLI-010) in a real browser: the platform admin's page and its Publish
- * a version sheet, a version as anyone reads it, and the Legal documents block of registration and an
- * invitation. Every answer is a test-only mock, and every document text a placeholder, not legal wording.
+ * a version sheet, a version as anyone reads it, and the Legal documents block of registration, of TB Gym's
+ * own sign-up and of an invitation. Every answer is a test-only mock, and every document text a
+ * placeholder, not legal wording.
  */
 const ADMIN = { ...SIGNED_IN_USER, displayName: 'Hicham Haddad', roles: ['PlatformAdmin'] };
 const NOW = '2026-10-22T09:00:00Z';
@@ -48,6 +49,46 @@ function toAccept(id: string, kind: string, context = 'Platform') {
     contentUri: `/legal/${id}`,
     publishedAtUtc: '2026-10-01T09:00:00Z',
   };
+}
+
+/**
+ * TB Gym's own sign-up (notes plan N9a2), open, and its form answered as a new account's; `sent` collects
+ * the bodies.
+ */
+function traineeSignUp(sent: unknown[]): Record<string, (route: Route) => Promise<void>> {
+  return {
+    'GET /api/auth/register/trainee': (route) =>
+      json(route, 200, {
+        status: 'Open',
+        workspaceName: 'TB Gym coaching space',
+        timeZoneId: 'Asia/Beirut',
+        minimumAge: 19,
+        opensAgainOn: null,
+        formStamp: 'e2e-form-stamp',
+        callerSignUp: null,
+      }),
+    'POST /api/auth/register/trainee': (route) => {
+      sent.push(route.request().postDataJSON());
+      return json(route, 202, {
+        email: 'trainee@example.test',
+        developmentConfirmationUrl: null,
+        emailAvailable: true,
+        joined: false,
+      });
+    },
+  };
+}
+
+/** The trainee form, filled but for its boxes. */
+async function fillTraineeForm(page: Page): Promise<void> {
+  await page.getByLabel('First name').fill('Legal');
+  await page.getByLabel('Last name').fill('Trainee');
+  await page.getByLabel('Email').fill('trainee@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('Legal-Pass-2026!x');
+  await page.getByLabel('Confirm password').fill('Legal-Pass-2026!x');
+  await page.getByLabel('Day', { exact: true }).fill('27');
+  await page.getByLabel('Month', { exact: true }).fill('3');
+  await page.getByLabel('Year', { exact: true }).fill('1995');
 }
 
 const TEXT = [
@@ -244,6 +285,84 @@ for (const width of [1440, 390]) {
       expect(sent).toEqual([
         expect.objectContaining({ legalDocumentIds: ['terms-2', 'privacy-2'] }),
       ]);
+    });
+
+    test('the trainee sign-up asks for the documents in force for a trainee and sends the ticked ones', async ({
+      page,
+    }) => {
+      const audiences: (string | null)[] = [];
+      const sent: unknown[] = [];
+      await mockSignedOut(page, {
+        ...traineeSignUp(sent),
+        'GET /api/legal/documents/to-accept': (route) => {
+          audiences.push(new URL(route.request().url()).searchParams.get('audience'));
+          return json(route, 200, [
+            toAccept('terms-2', 'TermsOfService'),
+            toAccept('privacy-2', 'PrivacyPolicy'),
+            toAccept('consumer-1', 'ConsumerTerms'),
+          ]);
+        },
+      });
+      await page.goto('/train/sign-up');
+      const block = page.locator('fieldset[data-legal]');
+      await expect(block.locator('[data-legal-document]')).toHaveCount(3);
+      expect(
+        await block
+          .locator('[data-legal-document]')
+          .evaluateAll((items) => items.map((item) => item.getAttribute('data-legal-document'))),
+      ).toEqual(['TermsOfService', 'PrivacyPolicy', 'ConsumerTerms']);
+      expect(audiences).toEqual(['Trainee']);
+      await expect(
+        block.getByRole('link', { name: /^Read the Consumer terms \(version 2026-11\)/ }),
+      ).toHaveAttribute('href', '/legal/consumer-1');
+      await fillTraineeForm(page);
+      await page.getByRole('button', { name: 'Create account' }).click();
+
+      const summary = page.locator('#train-summary');
+      await expect(summary).toContainText('Tick the box for the Terms of Service.');
+      await expect(summary).toContainText('Tick the box for the Privacy Policy.');
+      await expect(summary).toContainText('Tick the box for the Consumer terms.');
+      await expect(summary).toBeFocused();
+      await expect(
+        page.getByLabel('Placeholder sentence for the ConsumerTerms, not legal wording.'),
+      ).toHaveAttribute('aria-invalid', 'true');
+      expect(sent).toEqual([]);
+      await waitForFonts(page);
+      await axe(page);
+      await expectNoHorizontalOverflow(page);
+      await block.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: test.info().outputPath(`legal-trainee-${width}.png`) });
+
+      for (const box of await block.locator('input[type="checkbox"]').all()) await box.check();
+      await page.getByRole('button', { name: 'Create account' }).click();
+      await expect(page.getByText('Check your email')).toBeVisible();
+      expect(sent).toEqual([
+        expect.objectContaining({ legalDocumentIds: ['terms-2', 'privacy-2', 'consumer-1'] }),
+      ]);
+    });
+
+    test('the trainee sign-up asks no box while nothing is published for a trainee, and sends none', async ({
+      page,
+    }) => {
+      const audiences: (string | null)[] = [];
+      const sent: unknown[] = [];
+      await mockSignedOut(page, {
+        ...traineeSignUp(sent),
+        'GET /api/legal/documents/to-accept': (route) => {
+          audiences.push(new URL(route.request().url()).searchParams.get('audience'));
+          return json(route, 200, []);
+        },
+      });
+      await page.goto('/train/sign-up');
+      // The form shows once the documents are read.
+      await expect(page.getByLabel('First name')).toBeVisible();
+      expect(audiences).toEqual(['Trainee']);
+      await expect(page.locator('fieldset[data-legal]')).toHaveCount(0);
+      await fillTraineeForm(page);
+      await page.getByRole('button', { name: 'Create account' }).click();
+
+      await expect(page.getByText('Check your email')).toBeVisible();
+      expect(sent).toEqual([expect.objectContaining({ legalDocumentIds: [] })]);
     });
 
     test.describe('an invitation', () => {

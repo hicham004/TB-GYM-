@@ -207,7 +207,7 @@ describe('CoachShell', () => {
     expect(host.querySelector('#account-menu')).toBeNull();
   });
 
-  it('lists the platform admin’s pages in the account menu, Coaches last, only for the admin', async () => {
+  it('lists the platform admin’s pages in the account menu, Coaches then House last, only for the admin', async () => {
     const admin = await render({ roles: ['PlatformAdmin'] });
     admin.host.querySelector<HTMLButtonElement>('.account-button')!.click();
     await settle(admin.fixture);
@@ -219,6 +219,7 @@ describe('CoachShell', () => {
       ['Platform billing', '/admin/billing'],
       ['Legal documents', '/admin/legal'],
       ['Coaches', '/admin/coaches'],
+      ['House', '/admin/house'],
     ]);
     TestBed.resetTestingModule();
 
@@ -383,6 +384,7 @@ describe('CoachShell', () => {
         'Platform billing',
         'Legal documents',
         'Coaches',
+        'House',
         'Sign out',
       ]);
       // The admin's rows are the menu's own, not the group's.

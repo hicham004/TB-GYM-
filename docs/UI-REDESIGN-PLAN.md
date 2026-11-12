@@ -2491,6 +2491,12 @@ limited to the coach's assigned clients.
   six rows' links and the clients strip's Sign in are not drawn; every link within the page stays
   on `/about`. That address says noindex, counts nothing and loads no analytics script for someone
   signed in; the sign-up page counts one visit for a visitor, as What changed does.
+- Notes plan N9a2 (decision 25, 12 Nov 2026): TB Gym's own sign-up for people with no coach, `/train`
+  and its form `/train/sign-up`, in the signed-out frame and TB Gym's colours, open to a visitor and to
+  someone signed in (who signs up with their own account, inside their shell). It says what the server
+  says: open, full for the week ("It opens again on Monday.") or closed, naming no house while closed;
+  it asks search engines to leave it out while closed (the form page always) and counts nothing. The
+  homepage's facts line reads "Clients join by invitation from their coach." with no link to `/train`.
 
 ---
 
@@ -2579,7 +2585,10 @@ Built in R0.1 as `.\scripts\demo-workspace.ps1` (`demo-workspace` on the API, De
 walks a clock through the past and does every step through the real application services, so the
 data obeys every business rule. Sign-ins are `karim@` (owner), `lea@` and `omar@` (coaches) at
 `atlas.example`, and clients as `first.last@mail.example`, all with the password `AtlasDemo-2026!`.
-Maya Fakhoury is the client with a workout waiting today.
+Maya Fakhoury is the client with a workout waiting today. Beside either cast it builds TB Gym's own
+coaching space, marked as the house (notes plan N9a2), with `nadim@` (owner) and `joelle@` (coach) at
+`tbgym.example`; its settings stay empty, so its sign-up is closed until a platform admin fills them on
+the House page.
 
 ---
 

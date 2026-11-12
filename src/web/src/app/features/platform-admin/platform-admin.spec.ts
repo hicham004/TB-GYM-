@@ -865,15 +865,17 @@ describe('Platform billing', () => {
     expect(document.activeElement).toBe(host.querySelector('[data-change-terms]'));
   });
 
-  it('reaches the legal documents and the coaches from its top actions', async () => {
+  it('reaches the legal documents, the coaches and the house from its top actions, House last', async () => {
     const { host } = await render();
 
     const actions = Array.from(host.querySelectorAll<HTMLAnchorElement>('.top-actions a'));
     expect(actions.map((link) => [textOf(link), link.getAttribute('href')])).toEqual([
       ['Legal documents', '/admin/legal'],
       ['Coaches', '/admin/coaches'],
+      ['House', '/admin/house'],
     ]);
     expect(host.querySelector('a[data-coaches]')?.classList).toContain('tb-button--text');
+    expect(host.querySelector('a[data-house]')?.classList).toContain('tb-button--text');
   });
 
   it('knows the platform admin role', () => {

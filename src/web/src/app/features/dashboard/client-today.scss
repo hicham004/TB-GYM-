@@ -102,6 +102,22 @@ h1:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+// A self-directed trainee's chip: "Self-directed" over TB Gym's space, each line cut short if it must;
+// a little wider than a coach's name, so "TB Gym coaching space" fits whole.
+.today-coach--self {
+  max-inline-size: 15rem;
+}
+
+.today-self {
+  display: grid;
+  line-height: 1.25;
+
+  bdi {
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 @media (max-width: 560px) {
   .today-coach span:last-child {
     display: none;

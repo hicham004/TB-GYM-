@@ -516,9 +516,16 @@ for (const { who, admin, width, height, text } of SHORT_WINDOWS) {
       /Dark mode/,
       'TB Gym website',
       'What changed',
-      ...(admin ? ['Platform billing', 'Legal documents', 'Coaches'] : []),
+      ...(admin ? ['Platform billing', 'Legal documents', 'Coaches', 'House'] : []),
       'Sign out',
     ]);
+    // TB Gym's own coaching space comes last among the admin's pages (notes plan N9a2).
+    if (admin) {
+      await expect(menu.getByRole('link', { name: 'House', exact: true })).toHaveAttribute(
+        'href',
+        '/admin/house',
+      );
+    }
     await expectNoHorizontalOverflow(page);
 
     // Where Sign out is: as the menu opens, with the page scrolled to its end, and with the panel

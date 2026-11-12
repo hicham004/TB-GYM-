@@ -20,8 +20,10 @@ import { BrowserBar } from '../../core/theme/browser-bar';
  * as a CSS background inside that media query so a phone never downloads it. Presentation only:
  * every route keeps its own guards, and the app shell draws no top bar for signed-out visitors.
  *
- * `embedded` is for the one route a signed-in person can also reach (an invitation): the app's own
- * shell is already on screen, so the frame drops its wordmark and photo and keeps just the column.
+ * `embedded` is for the routes a signed-in person can also reach (an invitation, and TB Gym's own
+ * sign-up at `/train`): the app's own shell is already on screen, so the frame drops its wordmark and
+ * photo and keeps just the column. `forTrainees` (TB Gym's own sign-up) keeps the photo and its line but drops
+ * the summary written for coaches, which names meals, check-ins and messages a trainee on Free does not get.
  */
 @Component({
   selector: 'app-auth-frame',
@@ -43,9 +45,11 @@ import { BrowserBar } from '../../core/theme/browser-bar';
         <div class="auth__panel">
           <div class="auth__scene">
             <p class="auth__tagline" i18n>The work behind <em>every win.</em></p>
-            <p class="auth__summary" i18n>
-              Training, meals, check-ins and messages for every client, in one place.
-            </p>
+            @if (!forTrainees()) {
+              <p class="auth__summary" i18n>
+                Training, meals, check-ins and messages for every client, in one place.
+              </p>
+            }
           </div>
         </div>
       }
@@ -58,6 +62,7 @@ export class AuthFrame {
   /** A wider column, for registration's paired fields. */
   readonly wide = input(false, { transform: booleanAttribute });
   readonly embedded = input(false, { transform: booleanAttribute });
+  readonly forTrainees = input(false, { transform: booleanAttribute });
 
   constructor() {
     // The page is always light, so the browser's bar is too, whatever the device's scheme (UIQ-9);

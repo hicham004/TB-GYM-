@@ -11,11 +11,23 @@ import {
 } from './support';
 
 /**
- * The signed-out screens: sign-in, coach registration, forgot and reset password, email confirmation
- * and invitation acceptance, which share `app-auth-frame`. Every API answer is a test-only mock;
- * the screens' own guards and form logic run unchanged. Pixel baselines for sign-in and registration
- * live in `existing-routes.e2e.ts`.
+ * The signed-out screens: sign-in, coach registration, forgot and reset password, email confirmation,
+ * invitation acceptance and TB Gym's own sign-up at `/train`, which share `app-auth-frame`. Every API
+ * answer is a test-only mock; the screens' own guards and form logic run unchanged. Pixel baselines for
+ * sign-in and registration live in `existing-routes.e2e.ts`; `/train` has its own checks in
+ * `train.e2e.ts`.
  */
+
+/** TB Gym's own sign-up while it is open (notes plan N9a2). */
+const TRAIN_STATUS = {
+  status: 'Open',
+  workspaceName: 'TB Gym coaching space',
+  timeZoneId: 'Asia/Beirut',
+  minimumAge: 19,
+  opensAgainOn: null,
+  formStamp: 'e2e-form-stamp',
+  callerSignUp: null,
+};
 
 const INVITATION = {
   kind: 'Client',
@@ -141,6 +153,33 @@ const SCREENS: {
       await page.getByLabel('Confirm password', { exact: true }).fill('correct-horse-battery');
       await page.getByRole('button', { name: 'Create account and join' }).click();
       await expect(page.getByRole('alert')).toContainText('could not be accepted');
+    },
+  },
+  {
+    name: 'train',
+    open: async (page) => {
+      await signedOutWith(page, 'GET', '/api/auth/register/trainee', 200, TRAIN_STATUS);
+      await page.goto('/train');
+    },
+    // The page has no form: its error state is a read that fails, here on a reload.
+    fail: async (page) => {
+      await page.route('**/api/auth/register/trainee', (route) =>
+        json(route, 500, { title: 'Internal Server Error' }),
+      );
+      await page.reload();
+      await expect(page.getByRole('alert')).toContainText('This page couldn’t load.');
+      await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+    },
+  },
+  {
+    name: 'trainee sign-up',
+    open: async (page) => {
+      await signedOutWith(page, 'GET', '/api/auth/register/trainee', 200, TRAIN_STATUS);
+      await page.goto('/train/sign-up');
+    },
+    fail: async (page) => {
+      await page.getByRole('button', { name: 'Create account' }).click();
+      await expect(page.getByRole('alert')).toContainText("Your account can't be created yet");
     },
   },
 ];
@@ -361,9 +400,17 @@ test('under a dark scheme the signed-out screens keep their light page and a lig
   page,
 }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
-  await mockSignedOut(page);
+  await mockSignedOut(page, {
+    'GET /api/auth/register/trainee': (route) => json(route, 200, TRAIN_STATUS),
+  });
   const darkSchemeBar = page.locator('meta[name="theme-color"][media*="dark"]');
-  for (const path of ['/auth/sign-in', '/auth/register', '/auth/forgot-password']) {
+  for (const path of [
+    '/auth/sign-in',
+    '/auth/register',
+    '/train',
+    '/train/sign-up',
+    '/auth/forgot-password',
+  ]) {
     await page.goto(path);
     await ready(page);
     await expect(page.locator('main')).toHaveAttribute('data-mode', 'light');

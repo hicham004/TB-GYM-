@@ -67,6 +67,16 @@ export const routes: Routes = [
       import('./features/legal/legal-document').then((module) => module.LegalDocument),
   },
   {
+    // TB Gym's own sign-up for people with no coach (notes plan N9a2, ADR 0041): where it stands, and the
+    // form. It opens for a visitor and for someone signed in, who signs up with their own account, so it
+    // waits for the session's answer; drawn in TB Gym's colours, never rendered ahead of time.
+    path: 'train',
+    canActivate: [sessionKnownGuard],
+    data: HOUSE_BRAND,
+    loadChildren: () =>
+      import('./features/train/train.routes').then((module) => module.trainRoutes),
+  },
+  {
     path: '',
     pathMatch: 'full',
     canActivate: [authGuard],
@@ -302,6 +312,18 @@ export const routes: Routes = [
     title: $localize`Coaches | TB Gym`,
     loadComponent: () =>
       import('./features/platform-admin/platform-coaches').then((module) => module.PlatformCoaches),
+  },
+  {
+    // TB Gym's own coaching space (notes plan N9a2, ADR 0041): which space is the house, where its sign-up
+    // stands this week, and the settings the platform admin enters. Its Change sheet asks before Browser
+    // Back drops what was typed, as Legal documents' does.
+    path: 'admin/house',
+    canActivate: [authGuard, platformAdminGuard],
+    canDeactivate: [confirmSheetLeave],
+    data: { ...HOUSE_BRAND, ...REDESIGNED },
+    title: $localize`House | TB Gym`,
+    loadComponent: () =>
+      import('./features/platform-admin/platform-house').then((module) => module.PlatformHouse),
   },
   {
     path: 'admin/billing/:tenantId',

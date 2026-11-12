@@ -11,6 +11,7 @@ import {
   type AnswerSet,
 } from '../src/testing/checkin-review-fixtures';
 import { coachTodayView } from '../src/testing/coach-today-fixtures';
+import { finishedProfile } from '../src/testing/intake-fixtures';
 import { historyPage, programView } from '../src/testing/training-program-fixtures';
 import {
   expect,
@@ -130,6 +131,8 @@ for (const preset of PRESETS) {
         ],
         extra: {
           'GET /api/client-access/me': (route) => json(route, 200, []),
+          // Me reads the client's own profile first (notes plan N9a2).
+          'GET /api/client-profile/me': (route) => json(route, 200, finishedProfile()),
           'GET /api/client-profile/me/coach': (route) =>
             json(route, 200, { name: 'Hicham Haddad' }),
         },
@@ -215,6 +218,8 @@ async function mockClient(page: Page): Promise<void> {
     user: MAYA_USER,
     extra: {
       'GET /api/client-access/me': (route: Route) => json(route, 200, GRANTED),
+      // Today reads the client's own profile first (notes plan N9a2).
+      'GET /api/client-profile/me': (route: Route) => json(route, 200, finishedProfile()),
       'GET /api/client-profile/me/coach': (route: Route) =>
         json(route, 200, { name: 'Lea Haddad' }),
       'GET /api/client-renewal/me': (route: Route) =>

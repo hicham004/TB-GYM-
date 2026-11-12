@@ -289,10 +289,58 @@ public sealed class DemoWorkspaceTests
             ("Personal Training", "10 sessions", 10, 6, 4),
             (mayaPack.Name, mayaPack.OptionLabel, mayaPack.Sessions!.Count, mayaPack.Sessions.Left, mayaPack.Sessions.Sessions.Count));
 
+        // TB Gym's own coaching space beside it (notes plan N9a2): marked as the house, with its owner and its coach,
+        // nobody signed up and no setting written, so its sign-up is closed.
+        Assert.Contains($"{DemoWorkspaceCast.HouseName} is the house", output.ToString());
+        Assert.Contains(DemoWorkspaceCast.HouseCoach.Email, output.ToString());
+        Guid houseId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GymDbContext>();
+            var house = await db.Tenants.SingleAsync(item => item.IsHouse);
+            houseId = house.Id;
+            Assert.AreEqual(
+                (DemoWorkspaceCast.HouseName, DemoWorkspaceCast.TimeZoneId, DayOfWeek.Monday),
+                (house.Name, house.TimeZoneId, house.WeekStartsOn));
+            var houseRoles = await db.TenantMemberships.IgnoreQueryFilters()
+                .Where(item => item.TenantId == house.Id && item.Status == MembershipStatus.Active)
+                .GroupBy(item => item.Role)
+                .ToDictionaryAsync(group => group.Key, group => group.Count());
+            Assert.HasCount(2, houseRoles);
+            Assert.AreEqual((1, 1), (houseRoles[TenantRole.Owner], houseRoles[TenantRole.Coach]));
+            Assert.AreEqual(0, await db.ClientProfiles.IgnoreQueryFilters().CountAsync(item => item.TenantId == house.Id));
+            Assert.AreEqual(0, await db.HouseSettingChanges.IgnoreQueryFilters().CountAsync());
+            Assert.AreEqual(0, await db.TraineeSignUps.IgnoreQueryFilters().CountAsync());
+        }
+
+        var signUp = await requests.AsAsync<ITraineeSignUpService, TraineeSignUpStatusView>(
+            DemoActor.Anonymous, service => service.GetStatusAsync(CancellationToken.None));
+        Assert.AreEqual(TraineeSignUpStatus.Closed, signUp.Status);
+
         using var again = new StringWriter();
         Assert.AreEqual(2, await DemoWorkspaceCommand.RunAsync(
             factory.Services, DemoWorkspaceCommand.DefaultPassword, again, demo, CancellationToken.None));
         Assert.Contains("already in this database", again.ToString());
+
+        // The other cast built into the same database leaves the one house as it was. Lynn alone, who has no
+        // program, keeps the second build short.
+        var lynnOnly = DemoWorkspaceCast.Sample.WithClients(
+            [.. DemoWorkspaceCast.Sample.Clients.Where(client => client.Key == "lynn")]);
+        using var second = new StringWriter();
+        Assert.AreEqual(0, await DemoWorkspaceCommand.RunAsync(
+            factory.Services, DemoWorkspaceCommand.DefaultPassword, second, lynnOnly, CancellationToken.None), second.ToString());
+        Assert.Contains("This database already had a house, which is left as it was.", second.ToString());
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GymDbContext>();
+            Assert.AreEqual(houseId, (await db.Tenants.SingleAsync(item => item.IsHouse)).Id);
+            var houseRoles = await db.TenantMemberships.IgnoreQueryFilters()
+                .Where(item => item.TenantId == houseId && item.Status == MembershipStatus.Active)
+                .GroupBy(item => item.Role)
+                .ToDictionaryAsync(group => group.Key, group => group.Count());
+            Assert.AreEqual((2, 1, 1), (houseRoles.Count, houseRoles[TenantRole.Owner], houseRoles[TenantRole.Coach]));
+            Assert.AreEqual(1, await db.Tenants.CountAsync(item => item.Name == lynnOnly.WorkspaceName));
+        }
     }
 
     private static async Task<(Guid TenantId, Guid OwnerId, Guid OmarId, Guid LeaId, Guid MayaId)> PeopleAsync(IServiceProvider services)

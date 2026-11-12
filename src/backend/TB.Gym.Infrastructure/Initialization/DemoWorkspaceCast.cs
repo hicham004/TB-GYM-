@@ -18,6 +18,17 @@ internal static class DemoWorkspaceCast
     /// <summary>The day the owner opens the workspace, before anyone else arrives.</summary>
     public const int WorkspaceCreatedDay = -77;
 
+    /// <summary>
+    /// TB Gym's own coaching space, the house (notes plan N9a2, ADR 0041), built beside either cast and the same
+    /// in both: an owner and a coach of its own, both made up. Its settings stay empty, so its sign-up is closed
+    /// until a platform admin fills them in the app (CLI-023); the demo writes no figure.
+    /// </summary>
+    public const string HouseName = "TB Gym coaching space";
+
+    public static readonly DemoStaff HouseOwner = new("house-owner", "Nadim", "Sfeir", "nadim@tbgym.example");
+
+    public static readonly DemoStaff HouseCoach = new("house-coach", "Joelle", "Rizk", "joelle@tbgym.example");
+
     public static readonly IReadOnlyList<DemoProduct> Products =
     [
         new(

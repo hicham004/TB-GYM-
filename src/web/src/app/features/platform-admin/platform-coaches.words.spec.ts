@@ -74,6 +74,16 @@ describe('The certificate record’s words', () => {
     }
   });
 
+  it('links the House page last, right after Coaches, wherever Coaches is linked (notes plan N9a2)', () => {
+    for (const template of [platformAdmin, coachShell, clientAccount, appShell]) {
+      const links = Array.from(
+        template.matchAll(/routerLink="(\/admin\/[^"]*)"/g),
+        ([, href]) => href,
+      );
+      expect(links.slice(-2)).toEqual(['/admin/coaches', '/admin/house']);
+    }
+  });
+
   it('keeps every sentence the screens build from code free of those words', () => {
     const lines = [
       certificateLine(),

@@ -183,7 +183,8 @@ export const FEATURE_ROWS: readonly FeatureRow[] = [
 /** Proof without a founder: facts about the product as it ships, never a quote or an outcome. */
 export const PRODUCT_FACTS: readonly string[] = [
   $localize`Installs from the browser on iPhone and Android; no app store.`,
-  $localize`Clients join by invitation from their coach, never from a public sign-up.`,
+  // Notes plan N9a2: true of a coach's clients; people with no coach sign up on TB Gym's own page.
+  $localize`Clients join by invitation from their coach.`,
   $localize`Share cards are made on the phone; TB Gym uploads and posts nothing.`,
   $localize`Light or dark, each person's own choice.`,
   $localize`Your colours and logo on every client's phone.`,

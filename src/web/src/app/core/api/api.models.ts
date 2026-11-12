@@ -211,7 +211,10 @@ export interface FormerClient {
   departureKind: ClientDepartureKind;
 }
 
-export type ClientSelfProfile = ClientIntakeProfile;
+/** The client's own profile; `selfDirected` marks a trainee of TB Gym's own space (CLI-026). */
+export interface ClientSelfProfile extends ClientIntakeProfile {
+  selfDirected?: boolean;
+}
 
 export interface ProductCatalog {
   workspaceCurrencyCode: string;

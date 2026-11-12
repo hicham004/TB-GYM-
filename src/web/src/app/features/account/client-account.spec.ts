@@ -1,16 +1,18 @@
 import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { type Observable, of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
-import type { CurrentUser, TenantMembership } from '../../core/api/api.models';
+import type { ClientSelfProfile, CurrentUser, TenantMembership } from '../../core/api/api.models';
 import type { OwnCoachLineView } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { SessionActions } from '../../core/auth/session-actions';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { click, press, settle } from '../../../testing/dom';
+import { finishedProfile } from '../../../testing/intake-fixtures';
+import { HOUSE_NAME } from '../../../testing/platform-admin-fixtures';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
 import { ClientAccount } from './client-account';
 
@@ -23,6 +25,12 @@ const ALPHA = {
 const ATLAS = {
   tenantId: 'tenant-atlas',
   tenantName: 'Atlas Performance',
+  role: 'Client',
+} as TenantMembership;
+/** TB Gym's own space, the house, where a trainee coaches themselves (notes plan N9a2). */
+const HOUSE = {
+  tenantId: 'tenant-house',
+  tenantName: HOUSE_NAME,
   role: 'Client',
 } as TenantMembership;
 
@@ -38,7 +46,14 @@ const MAYA = {
 async function render(
   options: {
     memberships?: TenantMembership[];
+    /** The workspace open now; Atlas Performance unless a test says otherwise. */
+    selected?: string;
     roles?: string[];
+    /**
+     * The client's own profile: a coach's client unless a test says otherwise, or the answer a test
+     * sends itself (notes plan N9a2).
+     */
+    self?: 'trainee' | 'unreadable' | Subject<ClientSelfProfile>;
     coach?: 'Lea Haddad' | 'unreadable';
     /** The server's word on the coach's Founding coach badge (notes plan N3b); left out when undefined. */
     founding?: boolean;
@@ -64,8 +79,15 @@ async function render(
     }),
   };
   const session = { switchWorkspace: vi.fn(), signOut: vi.fn().mockResolvedValue(undefined) };
-  const selectedTenantId = signal('tenant-atlas');
+  const selectedTenantId = signal(options.selected ?? 'tenant-atlas');
   const api = {
+    // Read before the coach's, which a trainee never asks for.
+    getSelfProfile: vi.fn((): Observable<ClientSelfProfile> => {
+      if (options.self instanceof Subject) return options.self;
+      return options.self === 'unreadable'
+        ? throwError(() => new Error('offline'))
+        : of(finishedProfile({ selfDirected: options.self === 'trainee' }));
+    }),
     getOwnCoach: vi.fn(() =>
       options.coach === 'unreadable'
         ? throwError(() => new Error('forbidden'))
@@ -502,11 +524,138 @@ describe('ClientAccount', () => {
     const adminRows = Array.from(admin.host.querySelectorAll('a.row'))
       .map((row) => row.getAttribute('href'))
       .filter((href) => href?.startsWith('/admin/'));
-    expect(adminRows).toEqual(['/admin/billing', '/admin/legal', '/admin/coaches']);
+    expect(adminRows).toEqual(['/admin/billing', '/admin/legal', '/admin/coaches', '/admin/house']);
     TestBed.resetTestingModule();
 
     const client = await render();
     expect(client.host.querySelector('a[href="/admin/coaches"]')).toBeNull();
+  });
+
+  it('links the House last, after Coaches, only for a platform admin (notes plan N9a2)', async () => {
+    const admin = await render({ roles: ['PlatformAdmin'] });
+    const house = admin.host.querySelector<HTMLAnchorElement>('a.row[href="/admin/house"]');
+    expect(house?.querySelector('.row-text')?.textContent?.trim()).toBe('House');
+    expect(house?.querySelector('.row-icon app-icon')?.getAttribute('name')).toBe('user');
+    const rows = Array.from(admin.host.querySelectorAll('a.row'), (row) =>
+      row.getAttribute('href'),
+    );
+    expect(rows.at(-1)).toBe('/admin/house');
+    expect(rows.at(-2)).toBe('/admin/coaches');
+    TestBed.resetTestingModule();
+
+    const client = await render();
+    expect(client.host.querySelector('a[href="/admin/house"]')).toBeNull();
+  });
+
+  describe('a trainee of TB Gym’s own space, who coaches themselves (notes plan N9a2)', () => {
+    const textOf = (element: Element | null | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const inHouse = { self: 'trainee' as const, memberships: [HOUSE], selected: HOUSE.tenantId };
+
+    it('names the space, never a coach, on a card that links nowhere', async () => {
+      const { host, api } = await render(inHouse);
+
+      const card = host.querySelector('.coach')!;
+      expect(card.matches('div.coach[data-self-directed]')).toBe(true);
+      expect(host.querySelectorAll('.coach')).toHaveLength(1);
+      expect(card.querySelector('a, button')).toBeNull();
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+      expect(card.querySelector('app-avatar')?.textContent?.trim()).toBe('TB');
+      expect(textOf(card.querySelector('.coach-label'))).toBe('Self-directed');
+      expect(textOf(card.querySelector('strong'))).toBe(HOUSE_NAME);
+      expect(card.querySelector('strong')?.getAttribute('dir')).toBe('auto');
+      // What a screen reader hears: the avatar is hidden from it.
+      expect(textOf(card.querySelector('.coach-text'))).toBe(`Self-directed · ${HOUSE_NAME}`);
+      expect(card.querySelector('.coach-action')).toBeNull();
+      expect(textOf(card)).not.toMatch(/your coach|message/i);
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+    });
+
+    it('shows no Founding coach badge and no certificate lines, which are a coach’s', async () => {
+      const line: OwnCoachLineView = {
+        text: 'Owns Iron House gym in Hamra, shown to TB Gym on 8 Oct 2026',
+        what: 'Owns Iron House gym in Hamra',
+        shownOn: '2026-10-08',
+      };
+      const { host, api } = await render({ ...inHouse, founding: true, lines: [line] });
+
+      expect(host.querySelector('[data-self-directed]')).not.toBeNull();
+      expect(host.querySelector('app-status-pill')).toBeNull();
+      expect(host.querySelector('.coach-founding, [data-founding-coach]')).toBeNull();
+      expect(host.querySelector('[data-coach-line]')).toBeNull();
+      expect(host.textContent).not.toContain('Founding coach');
+      expect(host.textContent).not.toContain('Iron House');
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+    });
+
+    it('keeps the card’s place while the profile is read, then names the space', async () => {
+      const self = new Subject<ClientSelfProfile>();
+      const { fixture, host, api } = await render({ ...inHouse, self });
+
+      expect(host.querySelector('.coach--waiting')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('.coach:not(.coach--waiting)')).toBeNull();
+
+      self.next(finishedProfile({ selfDirected: true }));
+      self.complete();
+      await settle(fixture);
+
+      expect(host.querySelector('.coach--waiting')).toBeNull();
+      expect(textOf(host.querySelector('[data-self-directed] strong'))).toBe(HOUSE_NAME);
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+    });
+
+    it('draws no card, says nothing and asks for no coach when the profile cannot be read', async () => {
+      const { host, api } = await render({ ...inHouse, self: 'unreadable' });
+
+      expect(host.querySelector('.coach')).toBeNull();
+      expect(alert(host)).toBe('');
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+    });
+
+    it('reads a coach’s client as before: their profile first, then their coach', async () => {
+      const { host, api } = await render();
+
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+      expect(api.getSelfProfile.mock.invocationCallOrder[0]).toBeLessThan(
+        api.getOwnCoach.mock.invocationCallOrder[0],
+      );
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+      expect(host.querySelector('a.coach')?.getAttribute('href')).toBe('/messages');
+      expect(textOf(host.querySelector('a.coach .coach-label'))).toBe('Your coach');
+    });
+
+    it('reads each space again: from the house to a coach’s space and back', async () => {
+      const { fixture, host, api, selectedTenantId } = await render({
+        ...inHouse,
+        memberships: [ATLAS, HOUSE],
+      });
+      expect(textOf(host.querySelector('[data-self-directed] strong'))).toBe(HOUSE_NAME);
+
+      // To the coach's space: the space's card goes at once, and the coach is read there.
+      api.getSelfProfile.mockReturnValue(of(finishedProfile()));
+      selectedTenantId.set(ATLAS.tenantId);
+      fixture.detectChanges();
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+      expect(host.querySelector('.coach--waiting')).not.toBeNull();
+      await settle(fixture);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+      expect(textOf(host.querySelector('a.coach strong'))).toBe('Lea Haddad');
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+
+      // Back to the house: the coach's card goes, and no coach is asked for there.
+      api.getSelfProfile.mockReturnValue(of(finishedProfile({ selfDirected: true })));
+      selectedTenantId.set(HOUSE.tenantId);
+      fixture.detectChanges();
+      expect(host.textContent).not.toContain('Lea Haddad');
+      await settle(fixture);
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(3);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('a.coach')).toBeNull();
+      expect(textOf(host.querySelector('[data-self-directed] strong'))).toBe(HOUSE_NAME);
+      expect(host.textContent).not.toContain('Lea Haddad');
+    });
   });
 });
 

@@ -6,6 +6,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
+import type { ClientSelfProfile } from '../../core/api/api.models';
 import type { ClientTrainingDayResult } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { MessagingRealtimeService } from '../../core/messaging/messaging-realtime.service';
@@ -16,7 +17,9 @@ import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
 import type { UpcomingTraining } from '../training/training-read.models';
 import type { RenewalStatus } from './renewal.models';
 import { press, settle } from '../../../testing/dom';
+import { finishedProfile } from '../../../testing/intake-fixtures';
 import { fakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
+import { HOUSE_NAME } from '../../../testing/platform-admin-fixtures';
 import { day, fakeClientAccess, TODAY, upcoming, workout } from '../../../testing/today-fixtures';
 import { ClientToday } from './client-today';
 import { PLAYER_PRELOAD, REVEAL_CLASS } from './open-moment';
@@ -54,12 +57,20 @@ async function render(
     api?: Record<string, unknown>;
     unread?: number;
     logoUrl?: string | null;
+    /** The selected space's name, as the brand store reads it from the membership. */
+    spaceName?: string;
     providers?: unknown[];
   } = {},
 ) {
-  const brand = { logoUrl: signal(options.logoUrl ?? null), logoFailed: vi.fn() };
+  const brand = {
+    logoUrl: signal(options.logoUrl ?? null),
+    name: signal<string | null>(options.spaceName ?? 'Atlas Performance'),
+    logoFailed: vi.fn(),
+  };
   const tenant = signal<string | null>('tenant-1');
   const api = {
+    // A coach's client unless a test says otherwise; this read comes before the coach's (notes plan N9a2).
+    getSelfProfile: vi.fn(() => of(finishedProfile())),
     getMyTrainingToday: vi.fn(() => of(options.day ?? day([workout()]))),
     getMyTrainingWeek: vi.fn(() =>
       of({
@@ -121,7 +132,14 @@ async function render(
   const fixture = TestBed.createComponent(ClientToday);
   await settle(fixture);
   const host = fixture.nativeElement as HTMLElement;
-  return { fixture, host, api, tenant, read: () => (host.textContent ?? '').replace(/\s+/g, ' ') };
+  return {
+    fixture,
+    host,
+    api,
+    tenant,
+    brand,
+    read: () => (host.textContent ?? '').replace(/\s+/g, ' '),
+  };
 }
 
 describe('ClientToday', () => {
@@ -728,6 +746,212 @@ describe('ClientToday', () => {
 
       expect(read()).toContain('Training is not available');
       expect(read()).toContain('Your coaching plan has ended');
+    });
+  });
+
+  describe('a trainee of TB Gym’s own space, who coaches themselves (notes plan N9a2)', () => {
+    const nothingAssigned = () =>
+      upcoming({ todayCoverage: { activeBlock: null, nextBlockStartDate: null } });
+    /** The house's trainee: their own profile says so, and the space's name is the brand's. */
+    const trainee = (api: Record<string, unknown> = {}) => ({
+      spaceName: HOUSE_NAME,
+      api: { getSelfProfile: vi.fn(() => of(finishedProfile({ selfDirected: true }))), ...api },
+    });
+    const textOf = (element: Element | null | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+    it('names the space where a coach would be, as Self-directed, and never asks for a coach', async () => {
+      const { host, api, read } = await render(trainee());
+
+      const chip = host.querySelector('.today-coach')!;
+      expect(chip.matches('div.today-coach.today-coach--self[data-self-directed]')).toBe(true);
+      expect(host.querySelectorAll('.today-coach')).toHaveLength(1);
+      expect(chip.querySelector('app-avatar')?.textContent?.trim()).toBe('TB');
+      // A screen reader hears it once; the two lines on screen are hidden from it.
+      expect(textOf(chip.querySelector('.tb-visually-hidden'))).toBe(
+        `Self-directed · ${HOUSE_NAME}`,
+      );
+      const shown = chip.querySelector('.today-self')!;
+      expect(shown.getAttribute('aria-hidden')).toBe('true');
+      expect(Array.from(shown.children, (part) => textOf(part))).toEqual([
+        'Self-directed',
+        HOUSE_NAME,
+      ]);
+      expect(shown.lastElementChild?.tagName).toBe('BDI');
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+      expect(read()).not.toContain('Coached by');
+      expect(read()).not.toContain('Hicham Haddad');
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+    });
+
+    it('shows the space’s logo in its chip when the space has one', async () => {
+      const { host } = await render({ ...trainee(), logoUrl: '/api/media/logo-house/content' });
+
+      const chip = host.querySelector('.today-coach[data-self-directed]')!;
+      expect(chip.querySelector('app-avatar')).toBeNull();
+      expect(chip.querySelector('.today-logo')?.getAttribute('aria-hidden')).toBe('true');
+      expect(chip.querySelector('.today-logo img')?.getAttribute('src')).toBe(
+        '/api/media/logo-house/content',
+      );
+      expect(textOf(chip.querySelector('.tb-visually-hidden'))).toBe(
+        `Self-directed · ${HOUSE_NAME}`,
+      );
+    });
+
+    it('says No workouts yet on a day with nothing assigned, with no line about a coach', async () => {
+      const { host, read } = await render({
+        ...trainee(),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('No workouts yet');
+      expect(textOf(host.querySelector('.today-card [data-self-directed]'))).toBe(
+        'Your workouts will start here.',
+      );
+      expect(read()).not.toContain('Nothing assigned yet');
+      expect(read()).not.toContain('Your coach will put your program here.');
+      expect(read()).not.toContain('Message your coach');
+      // Messaging is open in this plan, and still nothing offers to write to a coach.
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+    });
+
+    it('holds a nothing-assigned card until the profile answers, so the coach’s line never shows first', async () => {
+      const self = new Subject<ClientSelfProfile>();
+      const { fixture, host, read } = await render({
+        ...trainee({ getSelfProfile: vi.fn(() => self) }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      expect(host.querySelector('.today-waiting')?.textContent).toContain('Loading your workout…');
+      expect(host.querySelector('#today-training-heading')).toBeNull();
+      expect(read()).not.toContain('Nothing assigned yet');
+      expect(read()).not.toContain('Your coach will put your program here.');
+      expect(host.querySelector('.today-coach--waiting')?.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+
+      self.next(finishedProfile({ selfDirected: true }));
+      self.complete();
+      await settle(fixture);
+
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('No workouts yet');
+      expect(host.querySelector('.today-coach--waiting')).toBeNull();
+      expect(host.querySelector('.today-coach[data-self-directed]')).not.toBeNull();
+    });
+
+    it('draws a scheduled workout at once, without waiting for the profile', async () => {
+      const { host } = await render(trainee({ getSelfProfile: vi.fn(() => new Subject()) }));
+
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Upper Body — Strength B');
+      expect(host.querySelector('.today-coach--waiting')).not.toBeNull();
+    });
+
+    it('draws no chip and never asks for a coach when the profile cannot be read', async () => {
+      const { host, api } = await render(
+        trainee({
+          getSelfProfile: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
+        }),
+      );
+
+      expect(host.querySelector('.today-coach')).toBeNull();
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+      // The rest of Today stands.
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Upper Body — Strength B');
+    });
+
+    it('says only No workouts yet on a day with nothing assigned when the profile cannot be read, until another space reads it', async () => {
+      let profileFails = true;
+      const { fixture, host, api, tenant, brand, read } = await render({
+        ...trainee({
+          getSelfProfile: vi.fn(() =>
+            profileFails
+              ? throwError(() => new HttpErrorResponse({ status: 503 }))
+              : of(finishedProfile()),
+          ),
+        }),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+
+      // It may be a trainee: no line about a coach, and none about their own workouts either.
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('No workouts yet');
+      expect(read()).not.toContain('Nothing assigned yet');
+      expect(read()).not.toContain('Your coach will put your program here.');
+      expect(read()).not.toContain('Your workouts will start here.');
+      // Messaging is open in this plan, and still nothing offers to write to a coach.
+      expect(read()).not.toContain('Message your coach');
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+      expect(api.getOwnCoach).not.toHaveBeenCalled();
+
+      // A coach's space whose profile reads: its client's card is the coach's again.
+      profileFails = false;
+      brand.name.set('Atlas Performance');
+      tenant.set('tenant-2');
+      await settle(fixture);
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(2);
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Nothing assigned yet');
+      expect(read()).toContain('Your coach will put your program here.');
+      expect(textOf(host.querySelector('a[href="/messages"].text-link'))).toBe(
+        'Message your coach',
+      );
+      expect(host.querySelector('.today-coach')?.textContent).toContain('Hicham Haddad');
+    });
+
+    it('leaves a coach’s client as before: their profile is read first, then their coach', async () => {
+      const { host, api, read } = await render({ day: day(), upcoming: nothingAssigned() });
+
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(1);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+      expect(api.getSelfProfile.mock.invocationCallOrder[0]).toBeLessThan(
+        api.getOwnCoach.mock.invocationCallOrder[0],
+      );
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+      const chip = host.querySelector('.today-coach')!;
+      expect(textOf(chip.querySelector('.tb-visually-hidden'))).toBe('Coached by');
+      expect(chip.textContent).toContain('Hicham Haddad');
+      expect(chip.querySelector('app-avatar')?.textContent?.trim()).toBe('HH');
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Nothing assigned yet');
+      expect(read()).toContain('Your coach will put your program here.');
+      expect(textOf(host.querySelector('a[href="/messages"].text-link'))).toBe(
+        'Message your coach',
+      );
+    });
+
+    it('reads each space again as the workspace changes: the house, a coach’s space, then the house', async () => {
+      let inHouse = true;
+      const { fixture, host, api, tenant, brand } = await render(
+        trainee({ getSelfProfile: vi.fn(() => of(finishedProfile({ selfDirected: inHouse }))) }),
+      );
+      expect(host.querySelector('.today-coach[data-self-directed]')).not.toBeNull();
+
+      // To a coach's space: the house's chip goes at once, and the coach is read there.
+      inHouse = false;
+      brand.name.set('Atlas Performance');
+      tenant.set('tenant-2');
+      fixture.detectChanges();
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+      expect(host.querySelector('.today-coach--waiting')).not.toBeNull();
+      await settle(fixture);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('.today-coach')?.textContent).toContain('Hicham Haddad');
+      expect(host.querySelector('[data-self-directed]')).toBeNull();
+
+      // Back to the house: no coach is asked for there, and the coach's name is gone.
+      inHouse = true;
+      brand.name.set(HOUSE_NAME);
+      tenant.set('tenant-1');
+      fixture.detectChanges();
+      expect(host.querySelector('.today-coach')?.textContent ?? '').not.toContain('Hicham Haddad');
+      await settle(fixture);
+      expect(api.getSelfProfile).toHaveBeenCalledTimes(3);
+      expect(api.getOwnCoach).toHaveBeenCalledTimes(1);
+      expect(textOf(host.querySelector('.today-coach[data-self-directed] .today-self bdi'))).toBe(
+        HOUSE_NAME,
+      );
+      expect(host.querySelector('.today-coach')?.textContent).not.toContain('Hicham Haddad');
     });
   });
 });

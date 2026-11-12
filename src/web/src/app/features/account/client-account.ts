@@ -80,6 +80,19 @@ export class ClientAccount {
   protected readonly initialsOf = initialsOf;
   protected readonly signingOut = signal(false);
   protected readonly coachName = signal<string | null>(null);
+  /**
+   * A trainee of TB Gym's own space, who coaches themselves (CLI-026): the card names the space, never
+   * a member of its staff, and offers no Message (notes plan N9a2).
+   */
+  protected readonly selfDirected = signal(false);
+  /** The space's name as the person's own membership carries it. */
+  protected readonly spaceName = computed(
+    () =>
+      this.tenants
+        .memberships()
+        .find((membership) => membership.tenantId === this.tenants.selectedTenantId())
+        ?.tenantName ?? '',
+  );
   /** Whether the server shows the coach's Founding coach badge to this client (N3b). */
   protected readonly coachFounding = signal(false);
   protected readonly foundingCoach = FOUNDING_COACH;
@@ -131,6 +144,7 @@ export class ClientAccount {
     this.scope.onReset(() => {
       this.loadedTenantId = null;
       this.coachName.set(null);
+      this.selfDirected.set(false);
       this.coachFounding.set(false);
       this.coachLines.set([]);
       this.coachLoading.set(false);
@@ -142,6 +156,7 @@ export class ClientAccount {
       this.loadedTenantId = tenantId;
       untracked(() => {
         this.coachName.set(null);
+        this.selfDirected.set(false);
         this.coachFounding.set(false);
         this.coachLines.set([]);
         this.coachLoading.set(tenantId !== null);
@@ -196,10 +211,18 @@ export class ClientAccount {
     }
   }
 
-  /** A coach who cannot be read (a released client has none) leaves the coach line out, never an error. */
+  /**
+   * A coach who cannot be read (a released client has none) leaves the coach line out, never an error.
+   * The client's own profile is read first, so a self-directed trainee's never asks for the coach.
+   */
   private async loadCoach(): Promise<void> {
     return this.scope.run('coach', async (owner) => {
       try {
+        const self = await owner.wait(firstValueFrom(this.api.getSelfProfile()));
+        if (self.selfDirected === true) {
+          if (owner.current) this.selfDirected.set(true);
+          return;
+        }
         const coach = await owner.wait(firstValueFrom(this.api.getOwnCoach()));
         if (owner.current) {
           this.coachName.set(coach.name);

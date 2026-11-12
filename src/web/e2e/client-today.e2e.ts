@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
+import { finishedProfile } from '../src/testing/intake-fixtures';
 import { personFacing } from './axe-target-size';
 import {
   expect,
@@ -309,6 +310,8 @@ async function openToday(
       'GET /api/training/me/today': (route: Route) => json(route, 200, state.day),
       'GET /api/training/me/upcoming': (route: Route) => json(route, 200, state.upcoming),
       'GET /api/training/me/week': (route: Route) => json(route, 200, trainingWeek),
+      // The client's own profile comes first: a coach's client is not self-directed (notes plan N9a2).
+      'GET /api/client-profile/me': (route: Route) => json(route, 200, finishedProfile()),
       'GET /api/client-profile/me/coach': (route: Route) =>
         json(route, 200, { name: 'Hicham Haddad' }),
       'GET /api/nutrition/me/day': (route: Route) => json(route, 200, nutritionDay),
@@ -564,6 +567,130 @@ test('the Me page switches workspace and signs out, and passes the scan', async 
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
+});
+
+/** TB Gym's own coaching space, whose trainees sign up with no coach (notes plan N9a2). */
+const HOUSE = {
+  tenantId: '00000000-0000-4000-8000-0000000000f1',
+  tenantName: 'TB Gym coaching space',
+  tenantSlug: 'tb-gym-coaching-space',
+  role: 'Client',
+};
+
+/**
+ * Today for a trainee of the house: Training alone, nothing in it yet, and their own profile says they
+ * coach themselves. Returns the reads of the coach's name, which must never be asked for (CLI-026).
+ */
+async function openTraineeToday(page: Page, width: number, height: number): Promise<string[]> {
+  const coachReads: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/client-profile/me/coach') {
+      coachReads.push(request.url());
+    }
+  });
+  const nothing = STATES['nothing assigned'];
+  await page.setViewportSize({ width, height });
+  await mockSession(page, {
+    memberships: [HOUSE],
+    user: MAYA,
+    extra: {
+      'GET /api/client-access/me': (route: Route) =>
+        json(
+          route,
+          200,
+          FEATURES.map((feature) => ({
+            feature,
+            isAllowed: feature === 'Training',
+            reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
+          })),
+        ),
+      'GET /api/client-profile/me': (route: Route) =>
+        json(route, 200, finishedProfile({ selfDirected: true })),
+      // Answered as for anyone, so only the count can tell it was asked.
+      'GET /api/client-profile/me/coach': (route: Route) =>
+        json(route, 200, { name: 'Lea Haddad' }),
+      'GET /api/training/me/today': (route: Route) => json(route, 200, nothing.day),
+      'GET /api/training/me/upcoming': (route: Route) => json(route, 200, nothing.upcoming),
+      'GET /api/training/me/week': (route: Route) =>
+        json(route, 200, {
+          ...trainingWeek,
+          days: trainingWeek.days.map((one) => ({ ...one, scheduled: 0, completed: 0 })),
+        }),
+      'GET /api/client-renewal/me': (route: Route) => json(route, 200, planRunning),
+      'GET /api/messaging/conversations': (route: Route) =>
+        json(route, 200, {
+          items: [],
+          hasMore: false,
+          nextBeforeActivityAtUtc: null,
+          nextBeforeConversationId: null,
+        }),
+    },
+  });
+  await page.goto('/');
+  await expect(page.locator('app-client-tabs')).toBeVisible();
+  await expect(page.locator('#today-training-heading')).toHaveText('No workouts yet');
+  await expect(page.locator('.row-skeleton')).toHaveCount(0);
+  await waitForFonts(page);
+  return coachReads;
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a self-directed trainee’s Today shows TB Gym’s space where a coach would be, never asks for a coach, and offers no Messages`, async ({
+    page,
+  }) => {
+    const coachReads = await openTraineeToday(page, width, height);
+
+    const chip = page.locator('.today-coach[data-self-directed]');
+    await expect(chip.locator('app-avatar')).toHaveText('TB');
+    await expect(chip.locator('.tb-visually-hidden')).toHaveText(
+      'Self-directed · TB Gym coaching space',
+    );
+    // On a phone the chip is the mark alone, as a coach's is; wider, its two lines show.
+    const lines = chip.locator('.today-self');
+    if (width === 390) {
+      await expect(lines).toBeHidden();
+    } else {
+      await expect(lines.locator('span')).toHaveText('Self-directed');
+      await expect(lines.locator('bdi')).toHaveText('TB Gym coaching space');
+      // An ellipsis keeps the whole name in the text but cuts what is seen; the chip's width keeps it whole.
+      const name = await lines
+        .locator('bdi')
+        .evaluate((bdi) => ({ seen: bdi.clientWidth, whole: bdi.scrollWidth }));
+      expect(name.seen, 'the space’s name takes no room').toBeGreaterThan(0);
+      expect(name.whole, 'the space’s name is cut short').toBeLessThanOrEqual(name.seen + 1);
+    }
+    await expect(page.locator('.today-coach:not([data-self-directed])')).toHaveCount(0);
+    await expect(page.locator('p[data-self-directed]')).toHaveText(
+      'Your workouts will start here.',
+    );
+    await expect(page.getByText('Your coach will put your program here.')).toHaveCount(0);
+    await expect(page.getByText('Message your coach')).toHaveCount(0);
+    await expect(page.locator('a[href="/messages"]')).toHaveCount(0);
+    expect(coachReads).toEqual([]);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9a2-today-trainee-${width}.png`),
+      fullPage: true,
+    });
+  });
+}
+
+test('a coach’s client with nothing assigned still reads that their coach will put the program here', async ({
+  page,
+}) => {
+  await openToday(page, { state: 'nothing assigned' });
+
+  await expect(page.getByText('Your coach will put your program here.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Message your coach' })).toHaveAttribute(
+    'href',
+    '/messages',
+  );
+  await expect(page.locator('[data-self-directed]')).toHaveCount(0);
+  await expect(page.locator('.today-coach .tb-visually-hidden')).toHaveText('Coached by');
 });
 
 test('personal mode persists when the account screen reloads', async ({ page }) => {

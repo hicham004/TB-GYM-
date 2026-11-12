@@ -1,0 +1,13 @@
+// TB Gym's own sign-up (notes plan N9a2); the rest comes from features/auth/auth.scss.
+
+// The honeypot: off the page for a person, never reached by Tab; a script that fills it is kept nowhere.
+.train-nope {
+  inset-inline-start: -10000px;
+  position: absolute;
+}
+
+// "Sign up using rana@example.com": the address may be long, so it wraps anywhere.
+.train-account {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

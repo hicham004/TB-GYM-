@@ -25,6 +25,10 @@ namespace TB.Gym.Infrastructure.Initialization;
 /// the day it runs, so rebuild it (drop the development database and run it again) before a demo.
 /// <c>--cast sample</c> builds the same people as a first-name cast in "Oakline Strength", for the
 /// pictures on the public homepage (UI plan R6.2d); the owner's own demo keeps its names.
+/// <para>
+/// Beside either cast it builds TB Gym's own coaching space, marked as the house with its settings empty, so
+/// its sign-up stays closed (notes plan N9a2); a database that already has a house keeps it as it is.
+/// </para>
 /// </remarks>
 public static class DemoWorkspaceCommand
 {
@@ -86,9 +90,11 @@ public static class DemoWorkspaceCommand
             return 2;
         }
 
+        bool buildHouse;
         await using (var scope = services.CreateAsyncScope())
         {
-            await scope.ServiceProvider.GetRequiredService<GymDbContext>().Database.MigrateAsync(cancellationToken);
+            var dbContext = scope.ServiceProvider.GetRequiredService<GymDbContext>();
+            await dbContext.Database.MigrateAsync(cancellationToken);
             var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             if (await users.FindByEmailAsync(people.Owner.Email) is not null)
             {
@@ -97,13 +103,18 @@ public static class DemoWorkspaceCommand
                     "To rebuild it with today's dates, drop the development database and run this again.");
                 return 2;
             }
+
+            // The other cast built into the same database already made the house; there is only ever one.
+            buildHouse = !await dbContext.Tenants.AnyAsync(tenant => tenant.IsHouse, cancellationToken) &&
+                await users.FindByEmailAsync(DemoWorkspaceCast.HouseOwner.Email) is null;
         }
 
         await output.WriteLineAsync($"Building {people.WorkspaceName}. This takes a minute or two.");
         DemoWorkspaceTally tally;
         try
         {
-            tally = await new DemoWorkspaceGenerator(services, clock, password, people, cancellationToken).GenerateAsync(output);
+            tally = await new DemoWorkspaceGenerator(services, clock, password, people, buildHouse, cancellationToken)
+                .GenerateAsync(output);
         }
         catch (DemoStepFailedException exception)
         {
@@ -142,6 +153,19 @@ public static class DemoWorkspaceCommand
         if (people.Clients.SingleOrDefault(client => client.IsHero) is { } hero)
         {
             await output.WriteLineAsync($"  Client  {hero.Email} (has a workout today); every client's address is made the same way");
+        }
+
+        await output.WriteLineAsync();
+        if (tally.House)
+        {
+            await output.WriteLineAsync(
+                $"{DemoWorkspaceCast.HouseName} is the house; its sign-up stays closed until a platform admin fills its settings:");
+            await output.WriteLineAsync($"  Owner   {DemoWorkspaceCast.HouseOwner.Email}");
+            await output.WriteLineAsync($"  Coach   {DemoWorkspaceCast.HouseCoach.Email}");
+        }
+        else
+        {
+            await output.WriteLineAsync("This database already had a house, which is left as it was.");
         }
     }
 }

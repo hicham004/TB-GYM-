@@ -34,6 +34,8 @@ export function newProfile(overrides: Partial<ClientSelfProfile> = {}): ClientSe
     onboardingStatus: 'NotStarted',
     onboardingCompletedAtUtc: null,
     version: 4,
+    // A coach's client; a trainee of TB Gym's own space reads `selfDirected: true` (notes plan N9a2).
+    selfDirected: false,
     ...overrides,
   };
 }
@@ -71,10 +73,15 @@ export function finishedProfile(overrides: Partial<ClientSelfProfile> = {}): Cli
   });
 }
 
-/** What the coach reads: the same answers plus what only a coach holds. */
+/**
+ * What the coach reads: the same answers plus what only a coach holds. `selfDirected` is the client's own
+ * read's alone, so it is left out, as the server leaves it out.
+ */
 export function coachView(profile: ClientIntakeProfile = finishedProfile()): CoachClientDetails {
+  const answers: ClientSelfProfile = { ...profile };
+  delete answers.selfDirected;
   return {
-    ...profile,
+    ...answers,
     userId: 'user-rana',
     coachNotes: null,
     isCoachBlocked: false,

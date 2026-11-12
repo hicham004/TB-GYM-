@@ -103,6 +103,13 @@ export class ClientToday {
   protected readonly day = signal<ClientTrainingDayResult | null>(null);
   protected readonly week = signal<TrainingWeek | null>(null);
   protected readonly coachName = signal<string | null>(null);
+  /**
+   * A trainee of TB Gym's own space, who coaches themselves (CLI-026): the space stands where a coach
+   * would, and no coach's name is asked for (notes plan N9a2).
+   */
+  protected readonly selfDirected = signal(false);
+  /** The client's own profile could not be read: nobody's coach is named, since it may be a trainee. */
+  protected readonly selfUnknown = signal(false);
   /** The coach's name is on its way: their place in the header is kept, so the heading does not rewrap. */
   protected readonly coachLoading = signal(true);
   /** The day's training has answered once in this workspace; a Retry later keeps the page drawn. */
@@ -152,7 +159,9 @@ export class ClientToday {
     const card = this.card();
     return (
       this.loading() ||
-      (this.renewalLoading() && card?.kind === 'access-closed' && card.reason === 'Expired')
+      (this.renewalLoading() && card?.kind === 'access-closed' && card.reason === 'Expired') ||
+      // Nothing assigned reads differently for a self-directed trainee: it waits for that answer.
+      (this.coachLoading() && card?.kind === 'nothing-assigned')
     );
   });
 
@@ -211,6 +220,8 @@ export class ClientToday {
       this.day.set(null);
       this.week.set(null);
       this.coachName.set(null);
+      this.selfDirected.set(false);
+      this.selfUnknown.set(false);
       this.coachLoading.set(true);
       this.trainingAnswered.set(false);
       this.weekFailed.set(false);
@@ -339,9 +350,23 @@ export class ClientToday {
     });
   }
 
+  /**
+   * The client's own profile first: a self-directed trainee's chip names TB Gym's space, and the coach's
+   * read, which names a member of its staff, is never asked (notes plan N9a2).
+   */
   private async loadCoach(): Promise<void> {
     return this.scope.run('coach', async (owner) => {
       try {
+        const self = await owner
+          .wait(firstValueFrom(this.api.getSelfProfile()))
+          .catch((error: unknown) => {
+            if (owner.current) this.selfUnknown.set(true);
+            throw error;
+          });
+        if (self.selfDirected === true) {
+          if (owner.current) this.selfDirected.set(true);
+          return;
+        }
         const coach = await owner.wait(firstValueFrom(this.api.getOwnCoach()));
         if (owner.current) this.coachName.set(coach.name);
       } catch {
@@ -388,6 +413,8 @@ export class ClientToday {
     this.day.set(null);
     this.week.set(null);
     this.coachName.set(null);
+    this.selfDirected.set(false);
+    this.selfUnknown.set(false);
     this.coachLoading.set(true);
     this.trainingAnswered.set(false);
     this.weekFailed.set(false);

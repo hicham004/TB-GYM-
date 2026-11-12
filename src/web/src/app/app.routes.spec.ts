@@ -1,3 +1,4 @@
+import type { Routes } from '@angular/router';
 import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
@@ -15,6 +16,9 @@ import { Home } from './features/home/home';
 import { NotFound } from './features/not-found/not-found';
 import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
 import { PlatformCoaches } from './features/platform-admin/platform-coaches';
+import { PlatformHouse } from './features/platform-admin/platform-house';
+import { Train } from './features/train/train';
+import { TrainSignUpPage } from './features/train/train-sign-up';
 import { UndeliveredNotices } from './features/workspace/undelivered-notices';
 
 const route = (path: string) => {
@@ -62,6 +66,51 @@ describe('the app routes', () => {
     expect(coaches.data).toEqual({ houseBrand: true, redesigned: true });
     expect(coaches.data).toEqual(route('admin/billing').data);
     expect(await (coaches.loadComponent as () => Promise<unknown>)()).toBe(PlatformCoaches);
+  });
+
+  // Notes plan N9a2: which space is the house and its settings, a platform admin's page like Coaches,
+  // whose Change sheet keeps what was typed through Browser Back, as Legal documents' does.
+  it('opens House to the platform admin alone, as a page of its own whose Change sheet asks before Back drops what was typed', async () => {
+    const house = route('admin/house');
+    expect(house.canActivate).toEqual([authGuard, platformAdminGuard]);
+    expect(house.canDeactivate).toEqual([confirmSheetLeave]);
+    expect(house.canDeactivate).toEqual(route('admin/legal').canDeactivate);
+    expect(house.title).toBe('House | TB Gym');
+    expect(house.data).toEqual({ houseBrand: true, redesigned: true });
+    expect(house.data).toEqual(route('admin/coaches').data);
+    expect(await (house.loadComponent as () => Promise<unknown>)()).toBe(PlatformHouse);
+  });
+
+  // Notes plan N9a2: TB Gym's own sign-up opens for a visitor and for someone signed in alike, so it
+  // only waits for the session's answer; the server decides who may sign up.
+  it('opens TB Gym’s own sign-up at /train to anyone once the session is known, in TB Gym’s colours, drawn in the browser', async () => {
+    const train = route('train');
+    expect(routes.filter((item) => item.path === 'train')).toHaveLength(1);
+    expect(train.canActivate).toEqual([sessionKnownGuard]);
+    expect(train.canMatch).toBeUndefined();
+    expect(train.canActivateChild).toBeUndefined();
+    expect(train.canDeactivate).toBeUndefined();
+    expect(train.data).toEqual({ houseBrand: true });
+
+    const pages = await (train.loadChildren as () => Promise<Routes>)();
+    // The form's title fits a visitor creating an account and someone signing up with theirs alike.
+    expect(pages.map((page) => [page.path, page.title])).toEqual([
+      ['', 'Train with TB Gym'],
+      ['sign-up', 'Sign up | Train with TB Gym'],
+    ]);
+    expect(pages.map((page) => page.canActivate ?? page.canDeactivate ?? null)).toEqual([
+      null,
+      null,
+    ]);
+    expect(await (pages[0].loadComponent as () => Promise<unknown>)()).toBe(Train);
+    expect(await (pages[1].loadComponent as () => Promise<unknown>)()).toBe(TrainSignUpPage);
+
+    // Never rendered ahead of time: no finished HTML of it for nginx to answer with.
+    const rendered = serverRoutes.map((item) => item.path);
+    expect(rendered).not.toContain('train');
+    expect(rendered).not.toContain('train/sign-up');
+    // Before the not-found page, which would answer it otherwise.
+    expect(routes.indexOf(train)).toBeLessThan(routes.findIndex((item) => item.path === '**'));
   });
 
   it('names neither kind of invitation in the title of its link', () => {

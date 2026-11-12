@@ -12,7 +12,18 @@
         <p class="email" dir="auto">{{ email() }}</p>
       </div>
     </div>
-    @if (coachName(); as coach) {
+    @if (selfDirected()) {
+      <!-- A trainee of TB Gym's own space coaches themselves (CLI-026, notes plan N9a2): the space stands
+           where a coach would, with TB Gym's mark, and nothing to write to. -->
+      <div class="coach" data-self-directed>
+        <app-avatar class="coach-face" initials="TB" presentation="message-sender" />
+        <span class="coach-text">
+          <span class="coach-label" i18n>Self-directed</span
+          ><span class="tb-visually-hidden"> · </span>
+          <strong dir="auto">{{ spaceName() }}</strong>
+        </span>
+      </div>
+    } @else if (coachName(); as coach) {
       @if (canMessage()) {
         <a class="coach" [class.coach--lines]="coachLines().length > 0" routerLink="/messages">
           <ng-container
@@ -112,6 +123,15 @@
             <span class="row-icon"><app-icon name="team" /></span>
             <span class="row-text">
               <strong i18n>Coaches</strong>
+            </span>
+            <app-icon name="chevron-right" class="row-chevron" />
+          </a>
+        </li>
+        <li>
+          <a class="row" routerLink="/admin/house">
+            <span class="row-icon"><app-icon name="user" /></span>
+            <span class="row-text">
+              <strong i18n>House</strong>
             </span>
             <app-icon name="chevron-right" class="row-chevron" />
           </a>

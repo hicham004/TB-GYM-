@@ -1,3 +1,4 @@
+import type { HouseAdminView, HouseSettingView } from '../app/core/api/generated';
 import type {
   AdminWorkspace,
   AdminWorkspaceDetail,
@@ -678,3 +679,82 @@ export function certificateLines(overrides: Partial<CertificateLines> = {}): Cer
 /** The server's refusal of a line holding a word TB Gym keeps out (a 400 on the field). */
 export const CERTIFICATE_WORD_REFUSAL =
   "This line holds a word TB Gym keeps out of a coach's line. Write what the proof is: the certificate, the gym, the years.";
+
+// ---------- the house (notes plan N9a2) ----------
+
+export const HOUSE_ID = '30000000-0000-4000-8000-000000000001';
+export const HOUSE_NAME = 'TB Gym coaching space';
+
+/**
+ * One house setting as the server sends it: new sign-ups a week, 23, changed by Samir Aoun at 21:30 UTC on
+ * 8 October, which is already 00:30 on Fri 9 October on the house's Beirut clock. Test figures are this
+ * file's own, never the owners'.
+ */
+export function houseSetting(overrides: Partial<HouseSettingView> = {}): HouseSettingView {
+  return {
+    setting: 'SignUpsPerWeek',
+    value: '23',
+    version: 3,
+    changedAtUtc: '2026-10-08T21:30:00Z',
+    changedByUserId: '40000000-0000-4000-8000-000000000001',
+    changedByName: 'Samir Aoun',
+    ...overrides,
+  };
+}
+
+/**
+ * The house as `GET /api/platform-admin/house` answers on Thu 12 Nov 2026: TB Gym's own space on Beirut's
+ * clock, its week Monday to Sunday, sign-up open with 8 of 23 places taken and 3 waiting, and the youngest
+ * age 19, set that morning.
+ */
+export function houseAdmin(overrides: Partial<HouseAdminView> = {}): HouseAdminView {
+  return {
+    house: {
+      tenantId: HOUSE_ID,
+      name: HOUSE_NAME,
+      slug: 'tb-gym',
+      timeZoneId: 'Asia/Beirut',
+      weekStartsOn: 'Monday',
+      currentDate: '2026-11-12',
+    },
+    settings: [
+      houseSetting(),
+      houseSetting({
+        setting: 'MinimumSignUpAge',
+        value: '19',
+        version: 1,
+        changedAtUtc: '2026-11-12T07:15:00Z',
+      }),
+    ],
+    signUp: {
+      status: 'Open',
+      weekStartsOn: '2026-11-09',
+      weekEndsOnExclusive: '2026-11-16',
+      signUpsThisWeek: 8,
+      waitingForConfirmation: 3,
+    },
+    ...overrides,
+  };
+}
+
+/** The house before anyone filled its settings: each empty at version 0, so sign-up is closed. */
+export function emptyHouse(): HouseAdminView {
+  const house = houseAdmin();
+  return {
+    ...house,
+    settings: house.settings.map(({ setting }) => ({
+      setting,
+      value: null,
+      version: 0,
+      changedAtUtc: null,
+      changedByUserId: null,
+      changedByName: null,
+    })),
+    signUp: { ...house.signUp!, status: 'Closed', signUpsThisWeek: 0, waitingForConfirmation: 0 },
+  };
+}
+
+/** No coaching space is marked as the house yet: what the server answers until the command marks one. */
+export function noHouse(): HouseAdminView {
+  return { house: null, settings: [], signUp: null };
+}

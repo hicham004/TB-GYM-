@@ -104,6 +104,25 @@ describe('HomeWho', () => {
     expect(query(host, '.half--gym').classList).not.toContain('half--plain');
   });
 
+  // Notes plan N9a2: true of a coach's clients, now that people with no coach can sign up with TB Gym
+  // itself; the homepage still offers that sign-up nowhere.
+  it('says clients join by invitation from their coach, promising nothing about a public sign-up and linking nowhere to /train', async () => {
+    for (const inputs of [{}, { signedIn: true }, { page: '/about', signedIn: false }]) {
+      const { host } = await render(null, inputs);
+
+      const facts = Array.from(host.querySelectorAll('.facts__list li')).map((fact) =>
+        fact.textContent?.replace(/\s+/g, ' ').trim(),
+      );
+      expect(facts).toContain('Clients join by invitation from their coach.');
+      expect(host.textContent?.toLowerCase()).not.toContain('public sign-up');
+      const addresses = Array.from(host.querySelectorAll('a')).map((link) =>
+        link.getAttribute('href'),
+      );
+      expect(addresses.filter((address) => address?.startsWith('/train'))).toEqual([]);
+      TestBed.resetTestingModule();
+    }
+  });
+
   it('marks neither half as missing its button for a visitor', async () => {
     const { host } = await render(null);
 

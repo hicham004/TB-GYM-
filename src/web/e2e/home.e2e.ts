@@ -90,6 +90,31 @@ for (const width of [1440, 390]) {
   });
 }
 
+/**
+ * Notes plan N9a2: people with no coach now sign up on TB Gym's own page, so the facts no longer say no
+ * client comes from a public sign-up, and the homepage gains no link to that page, at `/` or at `/about`.
+ */
+test('the facts say clients join by their coach’s invitation, and neither the homepage nor /about links to /train', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openHome(page);
+
+  const fact = page.locator('.facts__list li', { hasText: 'Clients join' });
+  await expect(fact).toHaveText('Clients join by invitation from their coach.');
+  await expect(page.getByText('never from a public sign-up')).toHaveCount(0);
+  await expect(page.locator('a[href^="/train"]')).toHaveCount(0);
+
+  await page.goto('/about');
+  await waitForFonts(page);
+  await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
+  await expect(page.locator('.facts__list li', { hasText: 'Clients join' })).toHaveText(
+    'Clients join by invitation from their coach.',
+  );
+  await expect(page.locator('a[href^="/train"]')).toHaveCount(0);
+});
+
 test('on a wide screen the panel follows the stages as they scroll past, and the header takes the tone under it', async ({
   page,
 }) => {

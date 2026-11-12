@@ -1,0 +1,148 @@
+<div class="page">
+  <a class="back" routerLink="/admin/billing" data-back>
+    <app-icon name="chevron-left" />
+    <span i18n>Platform billing</span>
+  </a>
+  <header class="top">
+    <div class="intro">
+      <h1 #heading tabindex="-1" i18n>House</h1>
+      <p class="lede" i18n>
+        TB Gym’s own coaching space, where people with no coach sign up to train with TB Gym. Each
+        setting starts empty, and sign-up stays closed until they are filled.
+      </p>
+    </div>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="6" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel load-failed">
+        <p role="alert" i18n>The house couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" (click)="load()" i18n>Try again</button>
+      </div>
+    }
+    @default {
+      @if (view()?.house; as house) {
+        <section class="panel" aria-labelledby="house-heading" data-house>
+          <h2 id="house-heading" i18n>The house</h2>
+          <dl class="terms">
+            <div>
+              <dt i18n>Coaching space</dt>
+              <dd>
+                <a class="space-link" [routerLink]="['/admin/billing', house.tenantId]"
+                  ><bdi>{{ house.name }}</bdi></a
+                >
+              </dd>
+            </div>
+            <div>
+              <dt i18n>Clock</dt>
+              <dd>{{ zone() }}</dd>
+            </div>
+            @if (weekStartsOn(); as first) {
+              <div>
+                <dt i18n>Week starts on</dt>
+                <dd>{{ first }}</dd>
+              </div>
+            }
+          </dl>
+          <p class="quiet" i18n>Training days and each week’s sign-ups follow this clock.</p>
+        </section>
+
+        @if (view()?.signUp; as signUp) {
+          <section class="panel" aria-labelledby="sign-up-heading" data-sign-up>
+            <div class="panel-head">
+              <div>
+                <h2 id="sign-up-heading" i18n>Sign-up this week</h2>
+                <p class="quiet">{{ week() }}</p>
+              </div>
+              @if (pill(); as status) {
+                <app-status-pill [label]="status.label" [tone]="status.tone" />
+              }
+            </div>
+            <p class="status-line" data-sign-up-line>{{ line() }}</p>
+            <div class="tiles">
+              <app-stat-tile
+                label="Places taken"
+                i18n-label
+                [value]="signUp.signUpsThisWeek"
+                [context]="places()"
+              />
+              <app-stat-tile
+                label="Waiting"
+                i18n-label
+                [value]="signUp.waitingForConfirmation"
+                context="Email not confirmed yet, or confirmed into a full week"
+                i18n-context
+              />
+            </div>
+          </section>
+        }
+
+        <section class="panel" aria-labelledby="settings-heading" data-settings>
+          <h2 id="settings-heading" i18n>Settings</h2>
+          <ul class="rows settings" role="list">
+            @for (item of rows(); track item.row.setting) {
+              <li [attr.data-setting]="item.row.setting">
+                <div class="setting">
+                  <strong>{{ item.words.label }}</strong>
+                  <span class="value" [class.empty]="item.row.value === null" data-value>{{
+                    item.shown
+                  }}</span>
+                  <p class="quiet" data-changed>{{ item.changed }}</p>
+                </div>
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  (click)="openChange(item.row)"
+                  data-change
+                >
+                  <span i18n>Change</span
+                  ><span class="tb-visually-hidden"> {{ item.words.inSentence }}</span>
+                </button>
+              </li>
+            }
+          </ul>
+        </section>
+      } @else {
+        <section class="panel" aria-labelledby="no-house-heading" data-no-house>
+          <h2 id="no-house-heading" i18n>No coaching space is marked as the house</h2>
+          <p class="quiet" i18n>
+            Sign-up stays closed until one is. Mark one on the server with this command; its
+            settings then appear here, each empty.
+          </p>
+          <code class="command" dir="ltr" translate="no">{{ houseCommand }}</code>
+        </section>
+      }
+    }
+  }
+</div>
+
+<ng-template #changeSheet let-sheet>
+  @if (changeWith(); as opened) {
+    <!-- The house as the sheet opened on it: a read again that finds none keeps the sheet and its answer. -->
+    <app-platform-house-setting
+      [start]="opened.row"
+      [current]="settingNow(opened.row.setting) ?? opened.row"
+      [house]="opened.house"
+      (dirtyChange)="setDirty($event)"
+      (changedMeanwhile)="load()"
+      (closed)="finish(sheet, $event)"
+    />
+  }
+</ng-template>
+
+<ng-template #confirmDialog let-dialog>
+  @if (asking(); as question) {
+    <app-confirm
+      [message]="question.message"
+      [confirmLabel]="question.confirm"
+      [cancelLabel]="question.cancel"
+      (answer)="dialog.close($event)"
+    />
+  }
+</ng-template>

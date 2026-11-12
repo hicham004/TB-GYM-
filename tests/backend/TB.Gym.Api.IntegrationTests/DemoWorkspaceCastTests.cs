@@ -69,6 +69,33 @@ public sealed class DemoWorkspaceCastTests
         Assert.StartsWith("Welcome to Atlas, Maya!", atlas.Clients.Single(client => client.IsHero).Welcome);
     }
 
+    /// <summary>
+    /// Notes plan N9a2: TB Gym's own coaching space is built beside either cast, the same in both, so its two
+    /// made-up people share no name or address with anyone in Atlas or Oakline.
+    /// </summary>
+    [TestMethod]
+    public void TheHouseHasPeopleOfItsOwnBesideEitherCast()
+    {
+        var house = new[] { DemoWorkspaceCast.HouseOwner, DemoWorkspaceCast.HouseCoach };
+        var castAddresses = new[] { DemoWorkspaceCast.Atlas, DemoWorkspaceCast.Sample }
+            .SelectMany(people => new[] { people.Owner }.Concat(people.Coaches).Select(staff => staff.Email)
+                .Concat(people.Clients.Select(client => client.Email))
+                .Concat(people.PendingInvites.Select(invite => invite.Email)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var castFirstNames = new[] { DemoWorkspaceCast.Atlas.Owner }.Concat(DemoWorkspaceCast.Atlas.Coaches)
+            .Select(staff => staff.FirstName)
+            .Concat(DemoWorkspaceCast.Atlas.Clients.Select(client => client.FirstName))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var staff in house)
+        {
+            Assert.IsTrue(MailAddress.TryCreate(staff.Email, out _), $"{staff.Email} is a valid address.");
+            Assert.DoesNotContain(staff.Email, castAddresses, $"{staff.Email} belongs to the house alone.");
+            Assert.DoesNotContain(staff.FirstName, castFirstNames, $"{staff.FirstName} is nobody else's name.");
+        }
+
+        Assert.AreNotEqual(DemoWorkspaceCast.HouseOwner.Email, DemoWorkspaceCast.HouseCoach.Email);
+    }
+
     [TestMethod]
     public void TheCommandChoosesTheCastFromItsArguments()
     {

@@ -1,0 +1,33 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="notice" data-in-force>{{ inForce() }}</p>
+
+  <app-field [label]="words().label" [help]="words().help" [errors]="errorsShown()">
+    <input
+      appControl
+      name="value"
+      type="number"
+      inputmode="numeric"
+      step="1"
+      autocomplete="off"
+      [attr.min]="words().min"
+      [attr.max]="words().max"
+      [value]="typed()"
+      (input)="setTyped($any($event.target))"
+      (blur)="attempt.touch('value')"
+    />
+  </app-field>
+
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(null)" i18n>Not now</button>
+  <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+    @if (busy()) {
+      <ng-container i18n>Saving…</ng-container>
+    } @else {
+      <ng-container i18n>Save</ng-container>
+    }
+  </button>
+</ng-template>

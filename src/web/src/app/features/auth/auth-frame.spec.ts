@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BrowserBar, DARK_BAR_COLOR, LIGHT_BAR_COLOR } from '../../core/theme/browser-bar';
-import { settle } from '../../../testing/dom';
+import { query, settle } from '../../../testing/dom';
 import { AuthFrame } from './auth-frame';
 
 @Component({
@@ -18,6 +18,22 @@ class Host {
   readonly shown = signal(true);
   readonly embedded = signal(false);
 }
+
+/** TB Gym's own sign-up, as `/train` and its form draw the frame (notes plan N9a2). */
+@Component({
+  imports: [AuthFrame],
+  template: `
+    <app-auth-frame wide forTrainees [embedded]="embedded()"
+      ><h1>Train with TB Gym.</h1></app-auth-frame
+    >
+  `,
+})
+class TraineeHost {
+  readonly embedded = signal(false);
+}
+
+const textOf = (element: Element | null | undefined) =>
+  (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
 /** index.html's two bar colours, one per device scheme. */
 function addThemeColors(): void {
@@ -84,5 +100,54 @@ describe('the browser bar over the signed-out pages', () => {
     expect(
       document.querySelector('meta[name="theme-color"][media*="light"]')?.getAttribute('content'),
     ).toBe(LIGHT_BAR_COLOR);
+  });
+});
+
+/**
+ * Notes plan N9a2: the photo panel's summary is written for coaches ("meals, check-ins and messages for
+ * every client"), which a trainee on Free does not get, so TB Gym's own sign-up keeps only the photo
+ * and its tagline.
+ */
+describe('the words over the photo', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function draw<T>(host: new () => T) {
+    await TestBed.configureTestingModule({ providers: [provideRouter([])] }).compileComponents();
+    const fixture = TestBed.createComponent(host);
+    await settle(fixture);
+    return { fixture, element: fixture.nativeElement as HTMLElement };
+  }
+
+  it('say what TB Gym does for coaches beside sign-in: the tagline and the summary', async () => {
+    const { element } = await draw(Host);
+
+    const scene = query(element, '.auth__panel .auth__scene');
+    expect(textOf(scene.querySelector('.auth__tagline'))).toBe('The work behind every win.');
+    expect(textOf(scene.querySelector('.auth__summary'))).toBe(
+      'Training, meals, check-ins and messages for every client, in one place.',
+    );
+  });
+
+  it('keep the photo and its tagline for trainees, without the coaches’ summary', async () => {
+    const { element } = await draw(TraineeHost);
+
+    const scene = query(element, '.auth__panel .auth__scene');
+    expect(textOf(scene.querySelector('.auth__tagline'))).toBe('The work behind every win.');
+    expect(element.querySelector('.auth__summary')).toBeNull();
+    expect(element.textContent).not.toContain('check-ins and messages');
+    // The rest of the frame is drawn as before: the wordmark, the wide column and the page in it.
+    expect(element.querySelector('.auth__header')).not.toBeNull();
+    expect(element.querySelector('.auth--wide')).not.toBeNull();
+    expect(textOf(element.querySelector('.auth__content h1'))).toBe('Train with TB Gym.');
+  });
+
+  it('are not drawn at all for trainees inside the app’s shell, which has no photo', async () => {
+    const { fixture, element } = await draw(TraineeHost);
+    fixture.componentInstance.embedded.set(true);
+    await settle(fixture);
+
+    expect(element.querySelector('.auth__panel')).toBeNull();
+    expect(element.querySelector('.auth--embedded')).not.toBeNull();
+    expect(textOf(element.querySelector('.auth__content h1'))).toBe('Train with TB Gym.');
   });
 });

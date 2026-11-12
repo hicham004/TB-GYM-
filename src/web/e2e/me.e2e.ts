@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page, Route } from '@playwright/test';
+import { finishedProfile } from '../src/testing/intake-fixtures';
 import { personFacing } from './axe-target-size';
 import {
   expect,
@@ -73,6 +74,8 @@ async function mockClient(
                 : 'Granted',
           })),
         ),
+      // The client's own profile comes first: a coach's client is not self-directed (notes plan N9a2).
+      'GET /api/client-profile/me': (route) => json(route, 200, finishedProfile()),
       'GET /api/client-profile/me/coach': (route) =>
         json(route, 200, { name: 'Lea Haddad', foundingCoach: false }),
       ...(options.extra ?? {}),
@@ -1176,6 +1179,92 @@ test.describe('what TB Gym shows about the coach (notes plan N4b)', () => {
       await expect(page.locator('.hero')).toHaveScreenshot(`me-coach-card-${width}-${mode}.png`);
     });
   }
+});
+
+// ---------- a self-directed trainee of TB Gym's own space (notes plan N9a2) ----------
+
+/** TB Gym's own coaching space, whose trainees sign up with no coach. */
+const HOUSE = {
+  ...ATLAS,
+  tenantId: '00000000-0000-4000-8000-0000000000f1',
+  tenantName: 'TB Gym coaching space',
+  tenantSlug: 'tb-gym-coaching-space',
+};
+
+test.describe('a self-directed trainee of TB Gym’s own space (notes plan N9a2)', () => {
+  /** Training alone, as the house gives it, and the trainee's own profile says they coach themselves. */
+  const TRAINEE: Record<string, Handler> = {
+    'GET /api/client-access/me': (route) =>
+      json(
+        route,
+        200,
+        FEATURES.map((feature) => ({
+          feature,
+          isAllowed: feature === 'Training',
+          reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
+        })),
+      ),
+    'GET /api/client-profile/me': (route) =>
+      json(route, 200, finishedProfile({ selfDirected: true })),
+  };
+
+  for (const [width, height, mode] of [
+    [390, 844, 'system'],
+    [1440, 900, 'system'],
+    [390, 844, 'dark'],
+  ] as const) {
+    test(`Me at ${width}px, ${mode}, names TB Gym’s space where a coach would be, as no link, and never asks for a coach`, async ({
+      page,
+    }) => {
+      const coachReads: string[] = [];
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/client-profile/me/coach') {
+          coachReads.push(request.url());
+        }
+      });
+      await openMe(page, {
+        width,
+        height,
+        memberships: [HOUSE],
+        user: { preferredThemeMode: mode },
+        extra: TRAINEE,
+      });
+
+      const card = page.locator('.hero .coach[data-self-directed]');
+      await expect(card.locator('.coach-text')).toHaveText('Self-directed · TB Gym coaching space');
+      await expect(card.locator('.coach-label')).toHaveText('Self-directed');
+      await expect(card.locator('strong')).toHaveText('TB Gym coaching space');
+      await expect(card.locator('app-avatar')).toHaveText('TB');
+      // Nobody's staff stands here: no Message, no badge and no certificate line.
+      await expect(page.locator('a.coach')).toHaveCount(0);
+      await expect(card.locator('.coach-action, app-status-pill, [data-coach-line]')).toHaveCount(
+        0,
+      );
+      await expect(page.locator('a[href="/messages"]')).toHaveCount(0);
+      expect(coachReads).toEqual([]);
+      if (mode === 'dark') await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolationsWhereReached(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9a2-me-trainee-${width}-${mode}.png`),
+        fullPage: true,
+      });
+    });
+  }
+
+  test('Me keeps the trainee’s card inside the page at 200% text', async ({ page }) => {
+    await openMe(page, { memberships: [HOUSE], extra: TRAINEE });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    const card = page.locator('.hero .coach[data-self-directed]');
+    await expect(card.locator('strong')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    // The hero card hides what spills out of it, so the page's own check cannot see a clipped name.
+    const outer = (await card.boundingBox())!;
+    const name = (await card.locator('strong').boundingBox())!;
+    expect(name.x + name.width).toBeLessThanOrEqual(outer.x + outer.width + 0.5);
+    expect(name.y + name.height).toBeLessThanOrEqual(outer.y + outer.height + 0.5);
+  });
 });
 
 // ---------- the website's link is the coach's alone (notes plan N2) ----------
