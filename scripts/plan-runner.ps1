@@ -782,6 +782,13 @@ function Invoke-Chat {
                 Write-Note 'Stopping the chat: its usage limit outlasts it, and it went quiet or ran out of time.'
                 break
             }
+            elseif ($run.Result -and (Get-Field $run.Result 'is_error') -and (Test-Retryable $run) -and ((Get-Date) - $lastOutput).TotalMinutes -gt $script:limitQuietMinutes) {
+                # A turn that failed on a passing error while the chat waits on its own background work: N9b1's
+                # chat failed on "Request timed out" after a network drop and then waited on its test API, which
+                # never exits, until StepHours would have ended the run (2026-11-13). The caller resumes it.
+                Write-Note ('Stopping the chat: its last turn failed ("{0}") and it went quiet.' -f (Get-ShortText (Get-ResultText $run) 120))
+                break
+            }
             elseif ((Get-Date) -gt $deadline) {
                 $run.Stopped = 'it ran past {0} hours' -f $StepHours
                 break
