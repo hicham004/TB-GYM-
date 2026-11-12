@@ -56,6 +56,7 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
       clientsWithActivePlan: 10,
       monthsSinceStart: 2,
       foundingSeatIncludedClients: null,
+      priceGuaranteeMonths: null,
       note: '',
     });
     expect(termsErrors(entry)).toEqual({});
@@ -68,6 +69,7 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
         clientsWithActivePlan: null,
         monthsSinceStart: null,
         foundingSeatIncludedClients: null,
+        priceGuaranteeMonths: null,
         note: 'x'.repeat(501),
       }),
     ).toEqual({
@@ -102,6 +104,30 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
     }
   });
 
+  // Notes plan N8: the months a founding space's prices are held, 0 to 120 or none (an empty box).
+  it('takes the months a founding space’s prices are held from 0 to 120 or none, in the server’s words', () => {
+    const entry = termsEntryFrom(foundingTerms({ priceGuaranteeMonths: 5 }));
+    expect(entry.priceGuaranteeMonths).toBe(5);
+    for (const months of [null, 0, 1, 5, 120]) {
+      expect(termsErrors({ ...entry, priceGuaranteeMonths: months })).toEqual({});
+    }
+    const range = ['Enter a whole number of months from 0 to 120, or none to hold no price.'];
+    for (const months of [-1, 121, 2.5, Number.NaN]) {
+      expect(termsErrors({ ...entry, priceGuaranteeMonths: months })).toEqual({
+        priceGuaranteeMonths: range,
+      });
+    }
+    // Each box is marked on its own: the seat's words stay the seat's, the months' the months'.
+    expect(
+      termsErrors({ ...entry, foundingSeatIncludedClients: 1001, priceGuaranteeMonths: 121 }),
+    ).toEqual({
+      foundingSeatIncludedClients: [
+        'Enter a whole number of clients from 0 to 1000, or none for what the price plan’s seat includes.',
+      ],
+      priceGuaranteeMonths: range,
+    });
+  });
+
   it('says what would change, and publishes against the version it saw', () => {
     const current = foundingTerms({ versionNumber: 3 });
     expect(termsChanges(current, termsEntryFrom(current))).toEqual([]);
@@ -110,6 +136,7 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
         clientsWithActivePlan: 12,
         monthsSinceStart: 2,
         foundingSeatIncludedClients: null,
+        priceGuaranteeMonths: null,
         note: 'Why',
       }),
     ).toEqual([
@@ -121,6 +148,7 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
           clientsWithActivePlan: 12,
           monthsSinceStart: 3,
           foundingSeatIncludedClients: null,
+          priceGuaranteeMonths: null,
           note: '  ',
         },
         current,
@@ -131,6 +159,7 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
       note: null,
       expectedCurrentVersion: 3,
       foundingSeatIncludedClients: null,
+      priceGuaranteeMonths: null,
     });
     expect(
       toPublishTermsRequest(
@@ -138,11 +167,19 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
           clientsWithActivePlan: 12,
           monthsSinceStart: 3,
           foundingSeatIncludedClients: 13,
+          priceGuaranteeMonths: 5,
           note: ' After the talks ',
         },
         current,
-      ).note,
-    ).toBe('After the talks');
+      ),
+    ).toEqual({
+      clientsWithActivePlan: 12,
+      monthsSinceStart: 3,
+      note: 'After the talks',
+      expectedCurrentVersion: 3,
+      foundingSeatIncludedClients: 13,
+      priceGuaranteeMonths: 5,
+    });
   });
 
   it('sends the founding seat’s number as the box holds it, and names it going to none as a change', () => {
@@ -206,6 +243,81 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
       'clientsWithActivePlan',
       'monthsSinceStart',
       'foundingSeatIncludedClients',
+      'priceGuaranteeMonths',
     ]);
+  });
+
+  // Notes plan N8: the guarantee's months, the fourth number, after the founding seat's.
+  it('sends the guarantee’s months as the box holds them, and names them going to none as a change', () => {
+    const label = 'Months a founding space’s prices are held';
+    const current = foundingTerms({ versionNumber: 3, priceGuaranteeMonths: 5 });
+    const kept = termsEntryFrom(current);
+    // The box starts with the version in force's months, so new thresholds alone never drop them.
+    expect(
+      toPublishTermsRequest({ ...kept, clientsWithActivePlan: 12 }, current).priceGuaranteeMonths,
+    ).toBe(5);
+    expect(
+      toPublishTermsRequest({ ...kept, priceGuaranteeMonths: 7 }, current).priceGuaranteeMonths,
+    ).toBe(7);
+    expect(
+      toPublishTermsRequest({ ...kept, priceGuaranteeMonths: 0 }, current).priceGuaranteeMonths,
+      'No months after the last discount is a number, never none.',
+    ).toBe(0);
+    // None is sent as null, with the key in the body: the server refuses a publish that leaves it out.
+    const none = toPublishTermsRequest({ ...kept, priceGuaranteeMonths: null }, current);
+    expect(none.priceGuaranteeMonths).toBeNull();
+    expect(Object.keys(none)).toContain('priceGuaranteeMonths');
+
+    expect(termsChanges(current, { ...kept, priceGuaranteeMonths: 7 })).toEqual([
+      { key: 'priceGuaranteeMonths', label, from: '5', to: '7' },
+    ]);
+    expect(termsChanges(current, { ...kept, priceGuaranteeMonths: null })).toEqual([
+      { key: 'priceGuaranteeMonths', label, from: '5', to: 'None' },
+    ]);
+    expect(
+      termsChanges(foundingTerms(), {
+        ...termsEntryFrom(foundingTerms()),
+        priceGuaranteeMonths: 5,
+      }),
+    ).toEqual([{ key: 'priceGuaranteeMonths', label, from: 'None', to: '5' }]);
+    // None and no months are told apart, both ways.
+    expect(
+      termsChanges(foundingTerms(), {
+        ...termsEntryFrom(foundingTerms()),
+        priceGuaranteeMonths: 0,
+      }),
+    ).toEqual([{ key: 'priceGuaranteeMonths', label, from: 'None', to: '0' }]);
+    expect(
+      termsChanges(foundingTerms({ priceGuaranteeMonths: 0 }), {
+        ...termsEntryFrom(foundingTerms({ priceGuaranteeMonths: 0 })),
+        priceGuaranteeMonths: null,
+      }),
+    ).toEqual([{ key: 'priceGuaranteeMonths', label, from: '0', to: 'None' }]);
+    // In the form's order: the founding seat's number, then the months.
+    expect(
+      termsChanges(current, {
+        ...kept,
+        foundingSeatIncludedClients: 13,
+        priceGuaranteeMonths: 11,
+      }).map((change) => [change.key, change.from, change.to]),
+    ).toEqual([
+      ['foundingSeatIncludedClients', 'None', '13'],
+      ['priceGuaranteeMonths', '5', '11'],
+    ]);
+  });
+
+  it('says in the months’ help what they are counted from, and that they apply to every founding space', () => {
+    const months = termsFields(5).find((field) => field.key === 'priceGuaranteeMonths')!;
+    expect(months.label).toBe('Months a founding space’s prices are held');
+    expect(months.help).toBe(
+      'Counted from a space’s last discount, or from its founding day when it has no discount; until then it keeps the plan version of its founding day. Leave it empty to hold no price. The number in force applies to every founding space, those already founding too.',
+    );
+    expect([months.min, months.max]).toEqual([0, 120]);
+    expect(months.missing, 'An empty box is none, never a missing number.').toBeNull();
+    expect(months.range).toBe(
+      'Enter a whole number of months from 0 to 120, or none to hold no price.',
+    );
+    // The price plan's seat belongs to the seat's help alone.
+    expect(termsFields(null).find((field) => field.key === 'priceGuaranteeMonths')).toEqual(months);
   });
 });

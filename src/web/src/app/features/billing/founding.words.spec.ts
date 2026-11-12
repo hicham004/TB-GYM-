@@ -25,16 +25,21 @@ import {
   termsFields,
 } from '../platform-admin/platform-founding.models';
 import billingPage from './billing.html' with { loader: 'text' };
-import { billLines, includedClientSentences } from './billing.models';
+import { billLines, includedClientSentences, pricesHeldSentence } from './billing.models';
 import {
   adminProgressLine,
   FOUNDING_COACH,
   FOUNDING_COACH_LINE,
   foundingSeatLine,
+  markGuaranteeSentence,
   markSeatSentence,
   markTermsSentence,
   ownerProgressLine,
   ownerTermsSentence,
+  planGuaranteeSentence,
+  planPublishedSentence,
+  priceHoldLine,
+  termsGuaranteeSentence,
   termsSeatSentence,
   termsSentence,
   type FoundingBadge,
@@ -44,8 +49,8 @@ import {
  * The badge's words (notes plan N3b, the plan's section 1): a coach is never called verified,
  * certified, qualified, licensed or approved on a screen. This reads every template the rows added or
  * changed as it is written (N11b's grant sheet and the owner's Billing page too), and the words the
- * screens draw from code, and refuses those words whole, so the badge's own line ("Not a check of
- * qualifications") still passes.
+ * screens draw from code (N8's price guarantee among them), and refuses those words whole, so the
+ * badge's own line ("Not a check of qualifications") still passes.
  */
 const NEVER = /\b(verified|certified|qualified|licensed|approved)\b/i;
 
@@ -120,6 +125,7 @@ describe('The Founding coach badge’s words', () => {
           clientsWithActivePlan: null,
           monthsSinceStart: 99,
           foundingSeatIncludedClients: 1_001,
+          priceGuaranteeMonths: 121,
           note: 'x'.repeat(501),
         }),
       ).flat(),
@@ -167,8 +173,35 @@ describe('The Founding coach badge’s words', () => {
         Object.values(revokeGrantQuestion(clients, 'Sep 1, 2026', 'Nov 30, 2026')),
       ),
       invoiceUsage(invoice({ foundingSeatIncludedClients: 13, foundingTermsVersion: 2 })),
+      // The price guarantee (notes plan N8): the list, the mark sheet, the admin's space page and the
+      // owner's Billing page; the months and days are this test's own.
+      markGuaranteeSentence(null),
+      ...[null, 0, 1, 5].flatMap((months) => [
+        termsGuaranteeSentence(months),
+        markGuaranteeSentence(termsVersion({ priceGuaranteeMonths: months })),
+      ]),
+      priceHoldLine(1, 'Dec 31, 2026'),
+      pricesHeldSentence('2026-12-31', 'en-US') ?? '',
+      // The price plan sheet's line on founding spaces and the toast after publishing: the terms
+      // not read, no months published, none after the last discount, and some.
+      ...[undefined, null, 0, 5].flatMap((months) => [
+        planGuaranteeSentence(months) ?? '',
+        planPublishedSentence(3, months),
+      ]),
     ];
     expect(sentences.length).toBeGreaterThan(40);
+    expect(sentences, 'A held day gives the owner’s sentence, so it is read too.').toContain(
+      'Your prices are held until Dec 31, 2026.',
+    );
+    expect(sentences, 'Both of the plan sheet’s sentences and all three toasts are read.').toEqual(
+      expect.arrayContaining([
+        'No guarantee months are published yet, so founding spaces are billed at the new version too.',
+        'Founding spaces keep their version until their guarantee ends.',
+        'Price plan version 3 is published. Invoices issued from now on use it.',
+        'Price plan version 3 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+        'Price plan version 3 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+      ]),
+    );
     for (const sentence of sentences) expect(sentence).not.toMatch(NEVER);
   });
 });

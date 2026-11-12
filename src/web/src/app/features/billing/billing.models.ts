@@ -148,6 +148,8 @@ export interface WorkspaceBilling {
   foundingSeatIncludedClients: number | null;
   /** The unrevoked grants of extra included clients running or still to come, oldest first. */
   includedClientGrants: readonly OwnerClientGrant[];
+  /** The last day a founding space's prices are held (notes plan N8), while it has not passed; else null. */
+  pricesHeldUntil: string | null;
 }
 
 export interface AdminWorkspace {
@@ -193,6 +195,12 @@ export interface BillingClientGrant {
   revokedAtUtc: string | null;
 }
 
+/** A founding space's price guarantee running today: the plan version it is held at, and its last day. */
+export interface PriceHold {
+  pricePlanVersion: number;
+  lastDay: string;
+}
+
 export interface AdminWorkspaceDetail {
   summary: AdminWorkspace;
   currentMonth: BillingEstimate;
@@ -204,6 +212,8 @@ export interface AdminWorkspaceDetail {
   foundingHistory: FoundingRecord[];
   /** Its grants of extra included clients, newest first, the revoked ones kept. */
   includedClientGrants: BillingClientGrant[];
+  /** The founding price guarantee running today (notes plan N8), or null. */
+  priceHold: PriceHold | null;
 }
 
 export interface PricePlan {
@@ -311,6 +321,7 @@ export function toWorkspaceBilling(value: WorkspaceBillingView): WorkspaceBillin
     discounts: value.discounts.map(toOwnerDiscount),
     foundingSeatIncludedClients: toNullableNumber(value.foundingSeatIncludedClients),
     includedClientGrants: value.includedClientGrants.map(toOwnerClientGrant),
+    pricesHeldUntil: value.pricesHeldUntil,
   };
 }
 
@@ -351,6 +362,12 @@ export function toAdminWorkspaceDetail(value: ContractAdminWorkspaceDetail): Adm
     founding: value.founding ? toAdminFounding(value.founding) : null,
     foundingHistory: value.foundingHistory.map(toFoundingRecord),
     includedClientGrants: value.includedClientGrants.map(toClientGrant),
+    priceHold: value.priceHold
+      ? {
+          pricePlanVersion: toNumber(value.priceHold.pricePlanVersion),
+          lastDay: value.priceHold.lastDay,
+        }
+      : null,
   };
 }
 
@@ -580,6 +597,17 @@ export function includedClientSentences(
     }
   }
   return sentences;
+}
+
+/**
+ * The owner's line on their held prices (notes plan N8): "Your prices are held until Dec 31, 2026.",
+ * after the discount line and what their seat includes. The day is the API's, sent only while it has
+ * not passed; no plan version is named.
+ */
+export function pricesHeldSentence(until: string | null, locale: string): string | null {
+  return until === null
+    ? null
+    : $localize`Your prices are held until ${formatDay(until, locale)}:until:.`;
 }
 
 /** One sentence of the owner's discount line: the name TB Gym's admin typed, and what it gives. */

@@ -31,6 +31,7 @@ import {
   type BillingInvoice,
   type PricePlan,
 } from '../billing/billing.models';
+import { planGuaranteeSentence } from '../billing/founding.models';
 import { PlatformAdminApi } from './platform-admin-api';
 import {
   clientGrantErrors,
@@ -904,9 +905,14 @@ export class PlatformClientGrant {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
-      <p class="muted" i18n>
-        Version {{ current().versionNumber }} is in force. Invoices issued from now on use the new
-        terms; invoices already issued keep theirs.
+      <p class="muted">
+        <ng-container i18n>
+          Version {{ current().versionNumber }} is in force. Invoices issued from now on use the new
+          terms; invoices already issued keep theirs.
+        </ng-container>
+        @if (founding(); as line) {
+          &ngsp;<span data-plan-founding>{{ line }}</span>
+        }
       </p>
 
       <div class="grid">
@@ -1013,10 +1019,17 @@ export class PlatformPlan {
   private readonly injector = inject(Injector);
 
   readonly current = input.required<PricePlan>();
+  /**
+   * The guarantee months of the founding terms in force (notes plan N8): null when none are published,
+   * undefined when the terms could not be read.
+   */
+  readonly guaranteeMonths = input<number | null | undefined>(undefined);
   /** The version that was published, or false when the sheet was closed without publishing. */
   readonly closed = output<PricePlan | false>();
   readonly dirtyChange = output<boolean>();
 
+  /** What the new version means for founding spaces, from the months in force; nothing when unread. */
+  protected readonly founding = computed(() => planGuaranteeSentence(this.guaranteeMonths()));
   protected readonly attempt = new FormAttempt();
   protected readonly formId = modalFormId('platform-plan');
   protected readonly fields = planFields();

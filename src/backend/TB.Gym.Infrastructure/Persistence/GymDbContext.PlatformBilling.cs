@@ -259,6 +259,9 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_FoundingTerms_SeatIncludedClients",
                     $"\"FoundingSeatIncludedClients\" IS NULL OR (\"FoundingSeatIncludedClients\" >= {FoundingSeatPolicy.MinimumIncludedClients} AND \"FoundingSeatIncludedClients\" <= {FoundingSeatPolicy.MaximumIncludedClients})");
+                table.HasCheckConstraint(
+                    "CK_FoundingTerms_PriceGuaranteeMonths",
+                    $"\"PriceGuaranteeMonths\" IS NULL OR (\"PriceGuaranteeMonths\" >= {FoundingPricePolicy.MinimumMonths} AND \"PriceGuaranteeMonths\" <= {FoundingPricePolicy.MaximumMonths})");
             });
         });
 

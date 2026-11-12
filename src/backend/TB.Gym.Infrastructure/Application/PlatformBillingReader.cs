@@ -27,6 +27,8 @@ internal sealed record InvoiceFacts(
 /// <summary>Everything billing knows about one workspace at one instant.</summary>
 /// <param name="Grants">Every extra included clients grant of the space, revoked ones included, oldest first.</param>
 /// <param name="FoundingSeatNow">The open founding status's seat at this instant, before the plan's seat is compared.</param>
+/// <param name="PriceHoldNow">The founding price guarantee running on this instant's UTC day, or null (notes plan N8).</param>
+/// <param name="PlanInUse">The price plan version this month's estimate is priced at: the latest, or the one a held price keeps.</param>
 internal sealed record WorkspaceBillingState(
     BillingWorkspace Workspace,
     DateTimeOffset TrialEndsAtUtc,
@@ -38,7 +40,9 @@ internal sealed record WorkspaceBillingState(
     DateOnly? ReadOnlyFrom,
     DateOnly? OldestUnpaidDueOn,
     IReadOnlyList<IncludedClientGrant> Grants,
-    FoundingSeat? FoundingSeatNow);
+    FoundingSeat? FoundingSeatNow,
+    FoundingPriceHold? PriceHoldNow,
+    PlatformPricePlan PlanInUse);
 
 /// <summary>
 /// The reads and the one calculation path platform billing shares between the owner's page, the admin
@@ -199,50 +203,50 @@ internal static class PlatformBillingReader
         dbContext.FoundingTermsVersions.AsNoTracking().OrderBy(terms => terms.VersionNumber).ToListAsync(cancellationToken);
 
     /// <summary>
-    /// Where a billed window's included clients come from beyond the plan's seats (<c>platform-invoice-v2</c>),
-    /// as of <paramref name="asOf"/>: the founding seat and every unrevoked grant touching the window.
-    /// </summary>
-    public static async Task<IncludedClientSources> IncludedClientSourcesAsync(
-        GymDbContext dbContext,
-        Guid tenantId,
-        UsageWindow window,
-        DateTimeOffset asOf,
-        CancellationToken cancellationToken)
-    {
-        var statuses = await FoundingReader.StatusesAsync(dbContext, tenantId, cancellationToken);
-        var versions = await FoundingTermsVersionsAsync(dbContext, cancellationToken);
-        var grants = await GrantsAsync(dbContext, tenantId, cancellationToken);
-        return IncludedClientSources.For(statuses, versions, grants, window, asOf);
-    }
-
-    /// <summary>
     /// Counts usage and prices it: the one path an invoice or a reissue is built through. The founding seat
     /// and the grants are read over the billed window, as the discount is, as they stand now: the seat takes
     /// the highest number its status had while it ran, up to now (PBL-011).
     /// </summary>
+    /// <param name="plans">Every published price plan version.</param>
+    /// <param name="keptPlan">
+    /// Null for a month's first invoice: it is priced at the latest version, or for a founding space whose
+    /// price is held at the version <see cref="FoundingPricePolicy"/> bills (PBL-012). A reissue passes its
+    /// voided invoice's plan and keeps it.
+    /// </param>
     public static async Task<PlatformInvoice> BuildInvoiceAsync(
         GymDbContext dbContext,
         BillingWorkspace workspace,
         BillingMonth month,
         UsageWindow window,
-        PlatformPricePlan plan,
+        IReadOnlyList<PlatformPricePlan> plans,
+        PlatformPricePlan? keptPlan,
         string referencePrefix,
         DateTimeOffset now,
         Guid? replacesInvoiceId,
         CancellationToken cancellationToken)
     {
         var quantities = await CountAsync(dbContext, workspace, window, cancellationToken);
-        var discount = WorkspaceDiscount.ApplicableTo(
-            await DiscountsAsync(dbContext, workspace.TenantId, cancellationToken),
-            window);
-        var includedClients = await IncludedClientSourcesAsync(dbContext, workspace.TenantId, window, now, cancellationToken);
-        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, quantities, includedClients, discount?.Percent ?? 0m);
+        var discounts = await DiscountsAsync(dbContext, workspace.TenantId, cancellationToken);
+        var discount = WorkspaceDiscount.ApplicableTo(discounts, window);
+        var statuses = await FoundingReader.StatusesAsync(dbContext, workspace.TenantId, cancellationToken);
+        var versions = await FoundingTermsVersionsAsync(dbContext, cancellationToken);
+        var grants = await GrantsAsync(dbContext, workspace.TenantId, cancellationToken);
+        var includedClients = IncludedClientSources.For(statuses, versions, grants, window, now);
+        var percent = discount?.Percent ?? 0m;
+        var priced = keptPlan is null
+            ? FoundingPricePolicy.Price(
+                plans,
+                FoundingPricePolicy.For(statuses, versions, discounts, plans, window),
+                quantities,
+                includedClients,
+                percent)
+            : new PricedUsage(keptPlan, PlatformInvoiceCalculation.Calculate(keptPlan.Terms, quantities, includedClients, percent));
         return PlatformInvoice.Issue(
             workspace.TenantId,
             month,
             window.Start,
-            plan,
-            amounts,
+            priced.Plan,
+            priced.Amounts,
             discount?.Id,
             includedClients,
             InvoiceReference.Create(referencePrefix, month),
@@ -297,7 +301,7 @@ internal static class PlatformBillingReader
         var statuses = await FoundingReader.StatusesAsync(dbContext, workspace.TenantId, cancellationToken);
         var versions = await FoundingTermsVersionsAsync(dbContext, cancellationToken);
         var grants = await GrantsAsync(dbContext, workspace.TenantId, cancellationToken);
-        var estimate = await EstimateAsync(
+        var (estimate, planInUse) = await EstimateAsync(
             dbContext,
             workspace,
             plans,
@@ -323,18 +327,33 @@ internal static class PlatformBillingReader
             unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.ReadOnlyFrom),
             unpaid.Count == 0 ? null : unpaid.Min(item => item.Invoice.DueOn),
             grants,
-            FoundingSeatPolicy.Now(statuses, versions, now));
+            FoundingSeatPolicy.Now(statuses, versions, now),
+            FoundingPricePolicy.On(statuses, versions, discounts, plans, today),
+            planInUse);
     }
+
+    /// <summary>
+    /// What the owner's seat includes now as a founding space: the founding number while it raises the seat of
+    /// the plan this month is priced at, the trial included; null otherwise (PBL-011).
+    /// </summary>
+    public static int? FoundingSeatIncludedClients(WorkspaceBillingState state) =>
+        FoundingSeatPolicy.Raised(state.FoundingSeatNow, state.PlanInUse.IncludedClientsPerSeat);
+
+    /// <summary>The founding price guarantee running today as the admin reads it, or null (PBL-012).</summary>
+    public static FoundingPriceHoldView? PriceHoldView(WorkspaceBillingState state) =>
+        state.PriceHoldNow is { } hold ? new FoundingPriceHoldView(hold.Plan.VersionNumber, hold.LastDay) : null;
 
     public static bool IsUnpaid(InvoiceFacts facts) =>
         facts.Void is null && facts.Payment is null && facts.Invoice.Total > 0m;
 
     /// <summary>
-    /// This month so far, priced with the latest plan. While the whole of it is inside the trial, the
-    /// counts are shown and nothing is charged. The discount, the founding seat and the grants are read over
-    /// the rest of the month, as the invoice will read them over the whole of it.
+    /// This month so far, priced as its invoice will be: with the latest plan, or for a founding space whose
+    /// price is held with the version <see cref="FoundingPricePolicy"/> bills (PBL-012). While the whole of it
+    /// is inside the trial, the counts are shown and nothing is charged. The discount, the founding seat, the
+    /// grants and the held price are read over the rest of the month, as the invoice will read them over the
+    /// whole of it. Returns the estimate and the plan version it used.
     /// </summary>
-    private static async Task<CurrentMonthEstimateView> EstimateAsync(
+    private static async Task<(CurrentMonthEstimateView Estimate, PlatformPricePlan Plan)> EstimateAsync(
         GymDbContext dbContext,
         BillingWorkspace workspace,
         IReadOnlyList<PlatformPricePlan> plans,
@@ -345,13 +364,23 @@ internal static class PlatformBillingReader
         CancellationToken cancellationToken)
     {
         var month = BillingMonth.Containing(now);
-        var plan = plans.MaxBy(item => item.VersionNumber)!;
         var window = TrialPolicy.BillableWindow(month, trialEndsAt, now);
         if (window.IsEmpty)
         {
+            // Nothing is priced yet. The version named is the one the month's invoice would start from: the
+            // held one while a hold touches what is left of the month after the trial, or the whole month.
+            var afterTrial = new UsageWindow(trialEndsAt > month.StartUtc ? trialEndsAt : month.StartUtc, month.EndUtc);
+            var plan = FoundingPricePolicy.Unbilled(
+                plans,
+                FoundingPricePolicy.For(
+                    founding.Statuses,
+                    founding.Versions,
+                    discounts,
+                    plans,
+                    afterTrial.IsEmpty ? new UsageWindow(month.StartUtc, month.EndUtc) : afterTrial));
             var soFar = new UsageWindow(month.StartUtc, now > month.StartUtc ? now : month.StartUtc.AddTicks(1));
             var counted = await CountAsync(dbContext, workspace, soFar, cancellationToken);
-            return new CurrentMonthEstimateView(
+            var inTrial = new CurrentMonthEstimateView(
                 month.Start,
                 month.EndExclusive,
                 soFar.Start,
@@ -375,22 +404,29 @@ internal static class PlatformBillingReader
                     FoundingIncludedClients: 0,
                     GrantedIncludedClients: 0),
                 FoundingTermsVersion: null);
+            return (inTrial, plan);
         }
 
         var quantities = await CountAsync(dbContext, workspace, window, cancellationToken);
         var restOfMonth = new UsageWindow(window.Start, month.EndUtc);
         var discount = WorkspaceDiscount.ApplicableTo(discounts, restOfMonth);
         var includedClients = IncludedClientSources.For(founding.Statuses, founding.Versions, founding.Grants, restOfMonth, now);
-        var amounts = PlatformInvoiceCalculation.Calculate(plan.Terms, quantities, includedClients, discount?.Percent ?? 0m);
-        return new CurrentMonthEstimateView(
+        var priced = FoundingPricePolicy.Price(
+            plans,
+            FoundingPricePolicy.For(founding.Statuses, founding.Versions, discounts, plans, restOfMonth),
+            quantities,
+            includedClients,
+            discount?.Percent ?? 0m);
+        var estimate = new CurrentMonthEstimateView(
             month.Start,
             month.EndExclusive,
             window.Start,
             window.End,
             false,
-            plan.VersionNumber,
-            ToView(amounts, plan.CurrencyCode),
+            priced.Plan.VersionNumber,
+            ToView(priced.Amounts, priced.Plan.CurrencyCode),
             includedClients.FoundingSeat?.TermsVersion);
+        return (estimate, priced.Plan);
     }
 
     public static BillingAmountsView ToView(InvoiceAmounts amounts, string currencyCode) => new(

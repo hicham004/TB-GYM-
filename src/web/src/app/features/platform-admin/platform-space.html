@@ -76,6 +76,9 @@
               · {{ detail.summary.currentDiscountPercent }}% discount in force
             }
           </p>
+          @if (holdLine(); as held) {
+            <p class="quiet" data-price-hold>{{ held }}</p>
+          }
         </section>
 
         <!-- The Founding coach badge (notes plan N3b): every state and number is the server's reading. -->

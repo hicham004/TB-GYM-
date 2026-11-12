@@ -804,12 +804,21 @@ describe('Platform billing sheets: publishing a price plan version', () => {
       ['.what', '.from', '.to'].map((part) => textOf(row.querySelector(part))),
     );
 
+  // The sheet's first paragraph: what a new version means for invoices, then for founding spaces.
+  const INTRO =
+    'Version 2 is in force. Invoices issued from now on use the new terms; invoices already issued keep theirs.';
+  const KEPT = 'Founding spaces keep their version until their guarantee ends.';
+  const NOT_HELD =
+    'No guarantee months are published yet, so founding spaces are billed at the new version too.';
+  const intro = (host: HTMLElement) => textOf(host.querySelector('form > .muted'));
+  const founding = (host: HTMLElement) => host.querySelector('[data-plan-founding]');
+
   it('starts from the version in force and offers the next one only once a term changes', async () => {
     const { host } = await render(PlatformPlan, inputs());
 
-    expect(textOf(host.querySelector('form > .muted'))).toBe(
-      'Version 2 is in force. Invoices issued from now on use the new terms; invoices already issued keep theirs.',
-    );
+    // Without the guarantee's months (the founding terms not read) it says nothing of founding spaces.
+    expect(intro(host)).toBe(INTRO);
+    expect(founding(host)).toBeNull();
     expect(field(host, 'Price per seat').value).toBe('15');
     expect(field(host, 'Clients included with each seat').value).toBe('5');
     expect(field(host, 'Free trial (days)').value).toBe('30');
@@ -819,6 +828,54 @@ describe('Platform billing sheets: publishing a price plan version', () => {
       'Nothing has changed yet. Change a price or a period to publish a new version.',
     );
     expect(button(host, 'Publish version 3').disabled).toBe(true);
+  });
+
+  // Notes plan N8: a new version does not reach a founding space while its guarantee runs, and the
+  // guarantee is the months of the founding terms in force. The months are this test's own.
+  it.each([
+    ['5 months', 5],
+    // No months after the last discount is still a guarantee, unlike none.
+    ['0 months', 0],
+  ])(
+    'says founding spaces keep their version when the terms in force hold prices for %s',
+    async (_, months) => {
+      const { host } = await render(PlatformPlan, { ...inputs(), guaranteeMonths: months });
+
+      expect(textOf(founding(host))).toBe(KEPT);
+      expect(intro(host)).toBe(`${INTRO} ${KEPT}`);
+    },
+  );
+
+  it('says founding spaces are billed at the new version too while no guarantee months are published', async () => {
+    const { host } = await render(PlatformPlan, { ...inputs(), guaranteeMonths: null });
+
+    expect(textOf(founding(host))).toBe(NOT_HELD);
+    expect(intro(host)).toBe(`${INTRO} ${NOT_HELD}`);
+    // The sentence that would be false here is nowhere in the sheet.
+    expect(textOf(host)).not.toContain('keep their version');
+  });
+
+  it('follows the months as the page reads them: nothing, then held, then not held', async () => {
+    const { fixture, host } = await render(PlatformPlan, inputs());
+    expect(founding(host)).toBeNull();
+    fill(host, 'Price per seat', '20');
+    await settle(fixture);
+
+    fixture.componentRef.setInput('guaranteeMonths', 7);
+    await settle(fixture);
+    expect(intro(host)).toBe(`${INTRO} ${KEPT}`);
+    // Terms read while the sheet is open change its words, never what the admin typed.
+    expect(field(host, 'Price per seat').value).toBe('20');
+    expect(changes(host)).toEqual([['Price per seat', '$15.00', '$20.00']]);
+
+    fixture.componentRef.setInput('guaranteeMonths', null);
+    await settle(fixture);
+    expect(intro(host)).toBe(`${INTRO} ${NOT_HELD}`);
+
+    fixture.componentRef.setInput('guaranteeMonths', undefined);
+    await settle(fixture);
+    expect(intro(host)).toBe(INTRO);
+    expect(founding(host)).toBeNull();
   });
 
   it('lists each changed term from the version in force to the new one, as it is typed', async () => {

@@ -85,6 +85,7 @@ function billing(overrides: Partial<WorkspaceBilling> = {}): WorkspaceBilling {
     discounts: [],
     foundingSeatIncludedClients: null,
     includedClientGrants: [],
+    pricesHeldUntil: null,
     ...overrides,
   };
 }
@@ -268,6 +269,10 @@ describe('Settings › Billing', () => {
     expect(
       host.querySelector('[data-included-clients]'),
       'Not founding and no grant: nothing about included clients.',
+    ).toBeNull();
+    expect(
+      host.querySelector('[data-prices-held]'),
+      'No held day in the read: nothing about held prices.',
     ).toBeNull();
 
     host.querySelector<HTMLButtonElement>('[data-invoice="invoice-1"] button')!.click();
@@ -492,6 +497,120 @@ describe('Settings › Billing', () => {
     expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
       'Your free trial runs until Aug 15, 2026. Nothing is charged for it, and your first invoice comes the month after.',
       'As a founding coaching space, your own seat includes 1 client.',
+    ]);
+  });
+
+  // Notes plan N8: the held day is the API's, sent only while it has not passed. The page adds one
+  // sentence, last under the bill's state, and names no plan version; the days are this test's own.
+  it('says until when the prices are held, last: after the discount line and the included clients', async () => {
+    const { host } = await render(() =>
+      of(
+        billing({
+          invoices: [],
+          unpaidTotal: 0,
+          readOnlyFrom: null,
+          discounts: [
+            {
+              name: 'Early coach offer',
+              percent: 35,
+              startsOn: '2026-08-01',
+              lastDay: '2026-10-31',
+              endsOnExclusive: '2026-11-01',
+              startsLater: false,
+            },
+          ],
+          foundingSeatIncludedClients: 13,
+          includedClientGrants: [
+            {
+              clients: 4,
+              startsOn: '2026-08-01',
+              lastDay: '2026-10-31',
+              endsOnExclusive: '2026-11-01',
+              startsLater: false,
+            },
+          ],
+          pricesHeldUntil: '2027-03-31',
+        }),
+      ),
+    );
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'You’re all paid up. An invoice comes on the 1st of each month for the month before.',
+      'Early coach offer: 35% off until Oct 31, 2026, then the normal price.',
+      'As a founding coaching space, your own seat includes 13 clients.',
+      '4 more clients included until Oct 31, 2026.',
+      'Your prices are held until Mar 31, 2027.',
+    ]);
+    const held = host.querySelectorAll('[data-prices-held]');
+    expect(held).toHaveLength(1);
+    expect(held[0].classList.contains('sentence')).toBe(true);
+    expect(host.querySelector('[data-billing-status]')!.lastElementChild).toBe(held[0]);
+  });
+
+  it('says it for a founding space with no discount and no founding seat number, after what is owed', async () => {
+    const { host } = await render(() => of(billing({ pricesHeldUntil: '2027-01-14' })));
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'To pay $44.00',
+      'A new invoice is waiting. Pay it by its due date below. If it is still unpaid on Aug 15, 2026, your coaching space becomes read-only for you and your coaches until it is paid. Your clients keep full use.',
+      'Your prices are held until Jan 14, 2027.',
+    ]);
+    expect(host.querySelector('[data-discount]')).toBeNull();
+    expect(host.querySelector('[data-included-clients]')).toBeNull();
+  });
+
+  it('says during the trial until when the prices are held, after the trial sentence and what follows it', async () => {
+    const { host } = await render(() =>
+      of(
+        billing({
+          status: 'Trial',
+          trialEndsAtUtc: '2026-08-15T09:00:00Z',
+          invoices: [],
+          unpaidTotal: 0,
+          readOnlyFrom: null,
+          currentMonth: { ...billing().currentMonth, inTrial: true },
+          discounts: [
+            {
+              name: 'Early coach offer',
+              percent: 35,
+              startsOn: '2026-08-15',
+              lastDay: '2026-12-14',
+              endsOnExclusive: '2026-12-15',
+              startsLater: true,
+            },
+          ],
+          foundingSeatIncludedClients: 1,
+          pricesHeldUntil: '2027-07-14',
+        }),
+      ),
+    );
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'Your free trial runs until Aug 15, 2026. Nothing is charged for it, and your first invoice comes the month after.',
+      'Early coach offer: 35% off from Aug 15, 2026 until Dec 14, 2026, then the normal price.',
+      'As a founding coaching space, your own seat includes 1 client.',
+      'Your prices are held until Jul 14, 2027.',
+    ]);
+  });
+
+  it('says during the trial until when the prices are held when nothing else follows the trial', async () => {
+    const { host } = await render(() =>
+      of(
+        billing({
+          status: 'Trial',
+          trialEndsAtUtc: '2026-08-15T09:00:00Z',
+          invoices: [],
+          unpaidTotal: 0,
+          readOnlyFrom: null,
+          currentMonth: { ...billing().currentMonth, inTrial: true },
+          pricesHeldUntil: '2027-01-14',
+        }),
+      ),
+    );
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'Your free trial runs until Aug 15, 2026. Nothing is charged for it, and your first invoice comes the month after.',
+      'Your prices are held until Jan 14, 2027.',
     ]);
   });
 

@@ -86,6 +86,7 @@ internal static class FoundingReader
     public static async Task<(AdminFoundingView? Open, IReadOnlyList<FoundingStatusView> History)> ForAdminAsync(
         GymDbContext dbContext,
         BillingWorkspace workspace,
+        WorkspaceBillingState state,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -104,16 +105,18 @@ internal static class FoundingReader
         var terms = await CurrentTermsAsync(dbContext, cancellationToken);
         var reading = await ReadAsync(dbContext, workspace, open, terms, now, cancellationToken);
         return (
-            new AdminFoundingView(ToView(open), ToView(reading), await SeatIncludedClientsAsync(dbContext, open, now, cancellationToken)),
+            new AdminFoundingView(ToView(open), ToView(reading), PlatformBillingReader.FoundingSeatIncludedClients(state)),
             history);
     }
 
     /// <summary>
-    /// What an open status's owner seat includes now (notes plan N11a): the highest founding number it has
-    /// had, when that raises the latest plan's seat; null otherwise, and for an ended status.
+    /// What a status's owner seat includes now (notes plan N11a): the highest founding number an open status
+    /// has had, when that raises the seat of the plan this month is priced at (the held one for a held price,
+    /// notes plan N8); null otherwise, and for an ended status.
     /// </summary>
     public static async Task<int?> SeatIncludedClientsAsync(
         GymDbContext dbContext,
+        BillingWorkspace workspace,
         FoundingStatus status,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -123,12 +126,9 @@ internal static class FoundingReader
             return null;
         }
 
-        var versions = await PlatformBillingReader.FoundingTermsVersionsAsync(dbContext, cancellationToken);
         var plans = await PlatformBillingReader.PlansAsync(dbContext, cancellationToken);
-        var latestPlan = plans.MaxBy(plan => plan.VersionNumber);
-        return latestPlan is null
-            ? null
-            : FoundingSeatPolicy.Raised(FoundingSeatPolicy.Now([status], versions, now), latestPlan.IncludedClientsPerSeat);
+        var state = await PlatformBillingReader.StateAsync(dbContext, workspace, plans, now, cancellationToken);
+        return PlatformBillingReader.FoundingSeatIncludedClients(state);
     }
 
     /// <summary>
@@ -187,7 +187,8 @@ internal static class FoundingReader
         terms.Note,
         terms.PublishedAtUtc,
         isCurrent,
-        terms.FoundingSeatIncludedClients);
+        terms.FoundingSeatIncludedClients,
+        terms.PriceGuaranteeMonths);
 
     public static bool IsUniqueViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
@@ -354,6 +355,12 @@ internal sealed class FoundingAdminService(
             errors[nameof(request.FoundingSeatIncludedClients)] = [FoundingText.TermsSeatIncludedClientsInvalid];
         }
 
+        // The price guarantee's months (notes plan N8), required the same way; null is "none": nothing held.
+        if (!FoundingPricePolicy.IsValidMonths(request.PriceGuaranteeMonths))
+        {
+            errors[nameof(request.PriceGuaranteeMonths)] = [FoundingText.TermsPriceGuaranteeMonthsInvalid];
+        }
+
         var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
         if (note is { Length: > FoundingText.TermsNoteMaxLength })
         {
@@ -375,6 +382,7 @@ internal sealed class FoundingAdminService(
             current + 1,
             terms,
             request.FoundingSeatIncludedClients,
+            request.PriceGuaranteeMonths,
             note,
             RequiredAdmin(),
             clock.UtcNow);
@@ -402,7 +410,7 @@ internal sealed class FoundingAdminService(
         return new AdminFoundingView(
             FoundingReader.ToView(status),
             FoundingReader.ToView(reading),
-            await FoundingReader.SeatIncludedClientsAsync(dbContext, status, now, cancellationToken));
+            await FoundingReader.SeatIncludedClientsAsync(dbContext, workspace, status, now, cancellationToken));
     }
 
     private Guid RequiredAdmin() =>

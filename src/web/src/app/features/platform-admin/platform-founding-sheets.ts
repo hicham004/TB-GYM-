@@ -24,6 +24,7 @@ import { Icon } from '../../ui/icon';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { formatDay } from '../billing/billing.models';
 import {
+  markGuaranteeSentence,
   markSeatSentence,
   markTermsSentence,
   type FoundingTerms,
@@ -91,7 +92,10 @@ export class PlatformFoundingMark {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  /** The terms in force in a sentence, then the discount's place; every number is the server's. */
+  /**
+   * The terms in force in a sentence, then the discount's place and how long the space keeps its plan
+   * version (notes plan N8); every number is the server's.
+   */
   protected readonly notice = computed(() => {
     const terms = this.terms();
     return [
@@ -99,6 +103,7 @@ export class PlatformFoundingMark {
         ? markTermsSentence(terms.clientsWithActivePlan, terms.monthsSinceStart)
         : $localize`The badge is earned under the terms in force.`,
       $localize`The discount is separate: grant it on this page too.`,
+      markGuaranteeSentence(terms),
     ].join(' ');
   });
   /** What marking changes: no access, and the owner's seat while it stays founding (notes plan N11b). */

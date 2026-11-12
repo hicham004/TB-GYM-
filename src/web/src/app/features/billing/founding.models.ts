@@ -57,8 +57,9 @@ export interface AdminFounding {
 }
 
 /**
- * One published version of the founding terms, the newest in force: the badge's two thresholds and
- * the clients a founding space's owner seat includes (notes plan N11a), null for none.
+ * One published version of the founding terms, the newest in force: the badge's two thresholds, the
+ * clients a founding space's owner seat includes (notes plan N11a) and the months its prices are held
+ * after its last discount (notes plan N8), each null for none.
  */
 export interface FoundingTerms {
   id: string;
@@ -69,6 +70,7 @@ export interface FoundingTerms {
   publishedAtUtc: string;
   isCurrent: boolean;
   foundingSeatIncludedClients: number | null;
+  priceGuaranteeMonths: number | null;
 }
 
 /** The badge's name, the same everywhere it shows (the plan's Point 8). */
@@ -115,6 +117,7 @@ export function toFoundingTerms(value: FoundingTermsView): FoundingTerms {
     clientsWithActivePlan: toNumber(value.clientsWithActivePlan),
     monthsSinceStart: toNumber(value.monthsSinceStart),
     foundingSeatIncludedClients: toNullableNumber(value.foundingSeatIncludedClients),
+    priceGuaranteeMonths: toNullableNumber(value.priceGuaranteeMonths),
   };
 }
 
@@ -227,6 +230,63 @@ export function termsSeatSentence(terms: FoundingTerms, planSeat: number | null)
   return clients === null
     ? $localize`A founding space’s owner seat includes what the price plan’s seat includes: no founding number above it is published yet.`
     : $localize`A founding space’s owner seat includes ${clientCount(clients)}:clients:.`;
+}
+
+// ---------- the price guarantee in words (notes plan N8) ----------
+// The months are the server's: the founding terms in force. A founding space keeps the price plan
+// version of its founding day until that many months after its last discount's last day, or after its
+// founding day when it has no discount (PBL-012); with no months published nothing is held.
+
+/** The list's account of the guarantee in the terms in force, about any founding space. */
+export function termsGuaranteeSentence(months: number | null): string {
+  if (months === null) {
+    return $localize`A founding space’s prices are not held: no guarantee months are published yet.`;
+  }
+  return months === 0
+    ? $localize`A founding space keeps its plan version until its last discount ends; with no discount, only for its founding month.`
+    : $localize`A founding space keeps its plan version until ${monthCount(months)}:months: after its last discount ends, or after its founding day when it has none.`;
+}
+
+/** The mark sheet's line on the guarantee, from the terms in force when they could be read. */
+export function markGuaranteeSentence(terms: FoundingTerms | null): string {
+  if (!terms) {
+    return $localize`The space keeps its plan version for as long as the terms in force say.`;
+  }
+  const months = terms.priceGuaranteeMonths;
+  if (months === null) {
+    return $localize`The space’s prices are not held: no guarantee months are published yet.`;
+  }
+  return months === 0
+    ? $localize`The space keeps its plan version until its last discount ends; with no discount, only for its founding month.`
+    : $localize`The space keeps its plan version until ${monthCount(months)}:months: after its last discount ends, or after its founding day when it has none.`;
+}
+
+/**
+ * What a new price plan version means for founding spaces, on the price plan sheet: they keep their
+ * version while the terms in force name guarantee months (0 included: until the last discount ends);
+ * with none published nothing is held, and the sheet says so before the admin publishes. Null when the
+ * terms could not be read (months undefined): the sheet then says nothing of founding spaces.
+ */
+export function planGuaranteeSentence(months: number | null | undefined): string | null {
+  if (months === undefined) return null;
+  return months === null
+    ? $localize`No guarantee months are published yet, so founding spaces are billed at the new version too.`
+    : $localize`Founding spaces keep their version until their guarantee ends.`;
+}
+
+/** The toast after a price plan version is published, with the same account of founding spaces. */
+export function planPublishedSentence(version: number, months: number | null | undefined): string {
+  if (months === undefined) {
+    return $localize`Price plan version ${version}:version: is published. Invoices issued from now on use it.`;
+  }
+  return months === null
+    ? $localize`Price plan version ${version}:version: is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.`
+    : $localize`Price plan version ${version}:version: is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.`;
+}
+
+/** The admin's line under "Where it stands": the version a founding space is held at, and until when. */
+export function priceHoldLine(version: number, until: string): string {
+  return $localize`Prices held at plan version ${version}:version: until ${until}:until:.`;
 }
 
 /** Where a waiting badge stands, for the platform admin, counted right now. */

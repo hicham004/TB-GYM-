@@ -29,6 +29,8 @@ export interface PublishFoundingTerms {
   expectedCurrentVersion: number;
   /** Always sent, null for none: the server refuses a publish that leaves it out (notes plan N11a). */
   foundingSeatIncludedClients: number | null;
+  /** The price guarantee's months, always sent the same way (notes plan N8). */
+  priceGuaranteeMonths: number | null;
 }
 
 /**

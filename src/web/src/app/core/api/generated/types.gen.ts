@@ -111,6 +111,7 @@ export type AdminWorkspaceDetail = {
   founding: null | AdminFoundingView;
   foundingHistory: Array<FoundingStatusView>;
   includedClientGrants: Array<IncludedClientGrantView>;
+  priceHold: null | FoundingPriceHoldView;
 };
 
 export type AdminWorkspaceSummary = {
@@ -2417,6 +2418,11 @@ export type FoundingCheckOutcome = {
   earned: number | string;
 };
 
+export type FoundingPriceHoldView = {
+  pricePlanVersion: number | string;
+  lastDay: string;
+};
+
 export type FoundingStatusView = {
   id: string;
   foundingSince: string;
@@ -2439,6 +2445,7 @@ export type FoundingTermsView = {
   publishedAtUtc: string;
   isCurrent: boolean;
   foundingSeatIncludedClients: null | number | string;
+  priceGuaranteeMonths: null | number | string;
 };
 
 export type GenerateAiMealDraftRequest = {
@@ -3682,6 +3689,7 @@ export type PublishFoundingTermsRequest = {
   note: null | string;
   expectedCurrentVersion: null | number | string;
   foundingSeatIncludedClients: null | number | string;
+  priceGuaranteeMonths: null | number | string;
 };
 
 export type PublishLegalDocumentRequest = {
@@ -4887,6 +4895,7 @@ export type WorkspaceBillingView = {
   discounts: Array<WorkspaceBillingDiscountView>;
   foundingSeatIncludedClients: null | number | string;
   includedClientGrants: Array<WorkspaceBillingIncludedClientGrantView>;
+  pricesHeldUntil: null | string;
 };
 
 export type WorkspaceDetails = {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  AdminWorkspaceDetail,
   AdminWorkspaceSummary,
   BillingAmountsView,
   CurrentMonthEstimateView,
@@ -28,6 +29,7 @@ import {
   invoiceStatusLabel,
   invoiceStatusTone,
   isUnpaid,
+  pricesHeldSentence,
   toAdminWorkspace,
   toAdminWorkspaceDetail,
   toAmounts,
@@ -263,6 +265,41 @@ const OWNER_GRANT_VIEW: WorkspaceBillingIncludedClientGrantView = {
 };
 
 /**
+ * The owner's read of a founding space with a discount, a founding seat, a grant and held prices
+ * (notes plan N8); the days and figures are this test's own.
+ */
+const BILLING_VIEW: WorkspaceBillingView = {
+  status: 'Overdue',
+  trialEndsAtUtc: '2026-07-01T09:00:00Z',
+  currentMonth: ESTIMATE_VIEW,
+  invoices: [invoiceView({ status: 'Overdue', payment: null })],
+  unpaidTotal: '51.71',
+  currencyCode: 'USD',
+  readOnlyFrom: '2026-10-15',
+  paymentInstructions: {
+    whishNumber: null,
+    supportEmail: 'billing@tbgym.example',
+    whatsAppNumber: '+96170123456',
+  },
+  discounts: [OWNER_DISCOUNT_VIEW],
+  foundingSeatIncludedClients: '13',
+  includedClientGrants: [OWNER_GRANT_VIEW],
+  pricesHeldUntil: '2027-06-30',
+};
+
+/** A space's detail as the admin's read sends it, with nothing founding about it yet. */
+const DETAIL_VIEW: AdminWorkspaceDetail = {
+  summary: SUMMARY_VIEW,
+  currentMonth: ESTIMATE_VIEW,
+  invoices: [],
+  discounts: [],
+  founding: null,
+  foundingHistory: [],
+  includedClientGrants: [],
+  priceHold: null,
+};
+
+/**
  * Runs `check` with every `Intl.DateTimeFormat` that names no zone of its own on Los Angeles's clock, west
  * of UTC, where midnight UTC on the 1st is still the last day of the month before. The process's own zone
  * stays as it is (Date's getters, `toLocaleDateString` and Angular's `formatDate` read that one), so this
@@ -341,25 +378,7 @@ describe('platform billing: what the API said, as numbers', () => {
   });
 
   it('reads a workspace’s billing with where to pay, from Whish to the support inbox', () => {
-    const view: WorkspaceBillingView = {
-      status: 'Overdue',
-      trialEndsAtUtc: '2026-07-01T09:00:00Z',
-      currentMonth: ESTIMATE_VIEW,
-      invoices: [invoiceView({ status: 'Overdue', payment: null })],
-      unpaidTotal: '51.71',
-      currencyCode: 'USD',
-      readOnlyFrom: '2026-10-15',
-      paymentInstructions: {
-        whishNumber: null,
-        supportEmail: 'billing@tbgym.example',
-        whatsAppNumber: '+96170123456',
-      },
-      discounts: [OWNER_DISCOUNT_VIEW],
-      foundingSeatIncludedClients: '13',
-      includedClientGrants: [OWNER_GRANT_VIEW],
-    };
-
-    expect(toWorkspaceBilling(view)).toEqual({
+    expect(toWorkspaceBilling(BILLING_VIEW)).toEqual({
       status: 'Overdue',
       trialEndsAtUtc: '2026-07-01T09:00:00Z',
       currentMonth: ESTIMATE,
@@ -373,10 +392,22 @@ describe('platform billing: what the API said, as numbers', () => {
       discounts: [{ ...OWNER_DISCOUNT_VIEW, percent: 15.5 }],
       foundingSeatIncludedClients: 13,
       includedClientGrants: [{ ...OWNER_GRANT_VIEW, clients: 4 }],
+      pricesHeldUntil: '2027-06-30',
     });
     expect(
-      toWorkspaceBilling({ ...view, foundingSeatIncludedClients: null })
+      toWorkspaceBilling({ ...BILLING_VIEW, foundingSeatIncludedClients: null })
         .foundingSeatIncludedClients,
+    ).toBeNull();
+  });
+
+  // Notes plan N8: the day is the API's, sent only while it has not passed; nothing is worked out here.
+  it('reads until when a founding space’s prices are held: the API’s day as it sent it, or none', () => {
+    expect(toWorkspaceBilling(BILLING_VIEW).pricesHeldUntil).toBe('2027-06-30');
+    expect(
+      toWorkspaceBilling({ ...BILLING_VIEW, pricesHeldUntil: '2026-10-09' }).pricesHeldUntil,
+    ).toBe('2026-10-09');
+    expect(
+      toWorkspaceBilling({ ...BILLING_VIEW, pricesHeldUntil: null }).pricesHeldUntil,
     ).toBeNull();
   });
 
@@ -416,6 +447,7 @@ describe('platform billing: what the API said, as numbers', () => {
           GRANT_VIEW,
           { ...GRANT_VIEW, id: 'grant-0', revokedAtUtc: '2026-09-03T08:00:00Z' },
         ],
+        priceHold: null,
       }),
     ).toEqual({
       summary: SUMMARY,
@@ -428,8 +460,31 @@ describe('platform billing: what the API said, as numbers', () => {
         { ...GRANT_VIEW, clients: 7 },
         { ...GRANT_VIEW, id: 'grant-0', clients: 7, revokedAtUtc: '2026-09-03T08:00:00Z' },
       ],
+      priceHold: null,
     });
     expect(toClientGrant(GRANT_VIEW).clients).toBe(7);
+  });
+
+  // Notes plan N8: the guarantee running today, as the admin's read sends it; a count may be a string.
+  it('reads a founding space’s price hold for the platform admin: its plan version as a number, its last day as sent, or none', () => {
+    const founding = { ...SUMMARY_VIEW, isFounding: true };
+
+    expect(
+      toAdminWorkspaceDetail({
+        ...DETAIL_VIEW,
+        summary: founding,
+        priceHold: { pricePlanVersion: '1', lastDay: '2027-04-30' },
+      }).priceHold,
+    ).toEqual({ pricePlanVersion: 1, lastDay: '2027-04-30' });
+    expect(
+      toAdminWorkspaceDetail({
+        ...DETAIL_VIEW,
+        summary: founding,
+        priceHold: { pricePlanVersion: 2, lastDay: '2026-10-09' },
+      }).priceHold,
+    ).toEqual({ pricePlanVersion: 2, lastDay: '2026-10-09' });
+    expect(toAdminWorkspaceDetail({ ...DETAIL_VIEW, summary: founding }).priceHold).toBeNull();
+    expect(toAdminWorkspaceDetail(DETAIL_VIEW).priceHold).toBeNull();
   });
 
   it('reads a founding space for the platform admin: the open status, its badge and the ended ones', () => {
@@ -478,6 +533,7 @@ describe('platform billing: what the API said, as numbers', () => {
       },
       foundingHistory: [ended],
       includedClientGrants: [],
+      priceHold: { pricePlanVersion: '1', lastDay: '2027-04-30' },
     });
 
     expect(detail.summary.isFounding).toBe(true);
@@ -499,6 +555,7 @@ describe('platform billing: what the API said, as numbers', () => {
       foundingSeatIncludedClients: 13,
     });
     expect(detail.foundingHistory).toEqual([ended]);
+    expect(detail.priceHold).toEqual({ pricePlanVersion: 1, lastDay: '2027-04-30' });
   });
 
   it('reads a price plan version with every term as a number', () => {
@@ -811,6 +868,32 @@ describe('platform billing: the owner’s included clients (notes plan N11b)', (
       expect(includedClientSentences(null, [grant(4, winter, true)], 'en-US')).toEqual([
         '4 more clients included from Dec 1, 2026 until Feb 28, 2027.',
       ]),
+    );
+  });
+});
+
+describe('platform billing: the owner’s held prices (notes plan N8)', () => {
+  it('says until when the prices are held, the day in the reader’s medium style and no plan version named', () => {
+    expect(pricesHeldSentence('2026-12-31', 'en-LB')).toBe(
+      'Your prices are held until Dec 31, 2026.',
+    );
+    expect(pricesHeldSentence('2027-05-01', 'en-US')).toBe(
+      'Your prices are held until May 1, 2027.',
+    );
+    expect(pricesHeldSentence('2027-05-01', 'en-GB')).toBe(
+      'Your prices are held until 1 May 2027.',
+    );
+  });
+
+  it('adds nothing for a space whose prices are not held', () => {
+    expect(pricesHeldSentence(null, 'en-LB')).toBeNull();
+  });
+
+  it('reads the day as a UTC day, whatever the device’s clock', () => {
+    onDeviceWestOfUtc(() =>
+      expect(pricesHeldSentence('2027-05-01', 'en-US')).toBe(
+        'Your prices are held until May 1, 2027.',
+      ),
     );
   });
 });

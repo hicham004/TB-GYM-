@@ -71,7 +71,8 @@ public sealed record PricePlanTerms(
 
 /// <summary>
 /// One published, immutable version of the platform's prices (ADR 0028). New invoices use the latest
-/// version; an invoice copies the terms it used, so publishing a new version never changes it. A
+/// version, or for a founding space whose price is held the version <see cref="FoundingPricePolicy"/>
+/// bills (PBL-012); an invoice copies the terms it used, so publishing a new version never changes it. A
 /// database trigger refuses updating or deleting a version.
 /// </summary>
 public sealed class PlatformPricePlan

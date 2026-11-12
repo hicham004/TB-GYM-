@@ -175,7 +175,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(admin);
         var leftOut = await admin.PostAsJsonAsync(
             N3aTermsUrl,
-            new { clientsWithActivePlan = 10, monthsSinceStart = 2, note = "No seat key", expectedCurrentVersion = 1 });
+            new { clientsWithActivePlan = 10, monthsSinceStart = 2, note = "No seat key", expectedCurrentVersion = 1, priceGuaranteeMonths = (int?)null });
         await AssertStatusAsync(leftOut, HttpStatusCode.BadRequest);
         var unread = await RequiredJsonAsync<N11aUnreadable>(leftOut);
         Assert.AreEqual(
@@ -487,6 +487,11 @@ public sealed partial class Phase3TrainingWorkflowTests
             ?? throw new AssertFailedException($"Expected PostgreSQL's refusal, not {thrown}");
         Assert.AreEqual(("55000", N11aRevertRefusal), (refused.SqlState, refused.MessageText));
         Assert.Contains(migration, await context.Database.GetAppliedMigrationsAsync());
+
+        // The revert had already taken back the migration after this one, in a transaction of its own, before this
+        // one refused (the price guarantee's months, notes plan N8, which no terms version here carries). The API
+        // reads the newest model, so it goes back on before the API is asked.
+        await migrator.MigrateAsync();
         Assert.AreEqual(grant, (await N11aDetailAsync(admin, workspaceId)).IncludedClientGrants.Single());
     }
 

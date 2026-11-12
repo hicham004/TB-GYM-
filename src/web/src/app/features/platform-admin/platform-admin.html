@@ -243,7 +243,7 @@
         }
       </section>
 
-      <!-- The founding terms (notes plans N3b, N11b): the badge's and the founding seat's, newest in force. -->
+      <!-- The founding terms (notes plans N3b, N11b, N8): the badge's, the founding seat's and the price guarantee's, newest in force. -->
       <section class="panel" aria-labelledby="badge-terms-heading" data-founding-terms>
         <div class="panel-head">
           <div>
@@ -274,6 +274,7 @@
         @if (currentTerms(); as terms) {
           <p class="badge-terms" data-terms-sentence>{{ termsLine(terms) }}</p>
           <p class="badge-terms" data-terms-seat>{{ seatLine(terms) }}</p>
+          <p class="badge-terms" data-terms-guarantee>{{ guaranteeLine(terms) }}</p>
         } @else if (termsFailed()) {
           <p class="quiet" role="alert" i18n>The badge’s terms couldn’t be loaded.</p>
         } @else if (foundingTerms()) {
@@ -290,6 +291,7 @@
   @if (current(); as plan) {
     <app-platform-plan
       [current]="plan"
+      [guaranteeMonths]="planGuaranteeMonths()"
       (dirtyChange)="setPlanDirty($event)"
       (closed)="sheet.close($event)"
     />

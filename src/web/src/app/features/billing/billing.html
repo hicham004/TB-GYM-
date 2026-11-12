@@ -53,6 +53,9 @@
           @for (line of includedLines(); track $index) {
             <p class="sentence" data-included-clients>{{ line }}</p>
           }
+          @if (heldLine(); as held) {
+            <p class="sentence" data-prices-held>{{ held }}</p>
+          }
         </section>
 
         @if (unpaid().length > 0) {

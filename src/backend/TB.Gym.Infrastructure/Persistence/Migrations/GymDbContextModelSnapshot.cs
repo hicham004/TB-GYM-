@@ -7546,6 +7546,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<int?>("PriceGuaranteeMonths")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("PublishedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -7562,6 +7565,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_FoundingTerms_Clients", "\"ClientsWithActivePlan\" >= 1 AND \"ClientsWithActivePlan\" <= 1000");
 
                             t.HasCheckConstraint("CK_FoundingTerms_Months", "\"MonthsSinceStart\" >= 0 AND \"MonthsSinceStart\" <= 24");
+
+                            t.HasCheckConstraint("CK_FoundingTerms_PriceGuaranteeMonths", "\"PriceGuaranteeMonths\" IS NULL OR (\"PriceGuaranteeMonths\" >= 0 AND \"PriceGuaranteeMonths\" <= 120)");
 
                             t.HasCheckConstraint("CK_FoundingTerms_SeatIncludedClients", "\"FoundingSeatIncludedClients\" IS NULL OR (\"FoundingSeatIncludedClients\" >= 0 AND \"FoundingSeatIncludedClients\" <= 1000)");
 

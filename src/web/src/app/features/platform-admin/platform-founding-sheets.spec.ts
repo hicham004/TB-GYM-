@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
-import { button, chooseDay, chosenDay, fill, press, settle } from '../../../testing/dom';
+import { button, chooseDay, chosenDay, field, fill, press, settle } from '../../../testing/dom';
 import {
   adminFounding,
   foundingTerms,
@@ -82,12 +82,56 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
     it('says what the badge needs under the terms in force, and starts on today', async () => {
       const view = await render(PlatformFoundingMark, inputs);
 
+      // No guarantee months are published in these terms (notes plan N8), and the notice says so.
       expect(textOf(view.host.querySelector('[data-founding-terms-sentence]'))).toBe(
-        'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too.',
+        'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too. The space’s prices are not held: no guarantee months are published yet.',
       );
       expect(await chosenDay(view.fixture, view.host, 'Founding since')).toBe(TODAY);
       expect(textOf(view.host)).not.toMatch(NEVER);
       expect(view.dirty.at(-1)).toBe(false);
+    });
+
+    it('says how long the space keeps its plan version, from the months in the terms in force (N8)', async () => {
+      const notice = (view: { host: HTMLElement }) =>
+        textOf(view.host.querySelector('[data-founding-terms-sentence]'));
+      const badge =
+        'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too.';
+
+      const held = await render(PlatformFoundingMark, {
+        ...inputs,
+        terms: foundingTerms({ priceGuaranteeMonths: 5 }),
+      });
+      expect(notice(held)).toBe(
+        `${badge} The space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.`,
+      );
+      expect(textOf(held.host)).not.toMatch(NEVER);
+      TestBed.resetTestingModule();
+
+      const one = await render(PlatformFoundingMark, {
+        ...inputs,
+        terms: foundingTerms({ priceGuaranteeMonths: 1 }),
+      });
+      expect(notice(one)).toBe(
+        `${badge} The space keeps its plan version until 1 month after its last discount ends, or after its founding day when it has none.`,
+      );
+      TestBed.resetTestingModule();
+
+      // No months after the last discount is a guarantee still: the version is kept while it runs.
+      const none = await render(PlatformFoundingMark, {
+        ...inputs,
+        terms: foundingTerms({ priceGuaranteeMonths: 0 }),
+      });
+      expect(notice(none)).toBe(
+        `${badge} The space keeps its plan version until its last discount ends; with no discount, only for its founding month.`,
+      );
+      TestBed.resetTestingModule();
+
+      // The terms could not be read: no number of theirs is named, the months no more than the badge's.
+      const unread = await render(PlatformFoundingMark, { ...inputs, terms: null });
+      expect(notice(unread)).toBe(
+        'The badge is earned under the terms in force. The discount is separate: grant it on this page too. The space keeps its plan version for as long as the terms in force say.',
+      );
+      expect(textOf(unread.host)).not.toMatch(NEVER);
     });
 
     it('says marking changes no access, and what the owner’s seat includes while founding (N11b)', async () => {
@@ -133,7 +177,7 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
       });
 
       expect(textOf(view.host.querySelector('[data-founding-terms-sentence]'))).toBe(
-        'The badge is earned once 1 of the space’s clients has an active plan (the terms in force). The discount is separate: grant it on this page too.',
+        'The badge is earned once 1 of the space’s clients has an active plan (the terms in force). The discount is separate: grant it on this page too. The space’s prices are not held: no guarantee months are published yet.',
       );
     });
 
@@ -244,8 +288,15 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
       expect(textOf(view.host)).toContain(
         'The badge leaves the coach’s account and their clients’ Me page at once. The discount is not changed: revoke it separately if it should end.',
       );
+      // Notes plan N8: ending the status ends the held prices too, from next month's invoice.
       expect(textOf(view.host)).toContain(
-        'From next month’s invoice, the owner’s seat includes what the price plan’s seat includes, and extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
+        'From next month’s invoice, the owner’s seat includes what the price plan’s seat includes and held prices end: the latest price plan applies.',
+      );
+      expect(textOf(view.host)).toContain(
+        'Extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
+      );
+      expect(textOf(view.host.querySelector('.notice'))).toBe(
+        'The badge leaves the coach’s account and their clients’ Me page at once. The discount is not changed: revoke it separately if it should end. From next month’s invoice, the owner’s seat includes what the price plan’s seat includes and held prices end: the latest price plan applies. Extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
       );
       expect(textOf(view.host)).not.toMatch(NEVER);
     });
@@ -339,6 +390,7 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
         note: 'After the first ten talks',
         expectedCurrentVersion: 1,
         foundingSeatIncludedClients: 13,
+        priceGuaranteeMonths: null,
       });
       expect(view.csrf.refresh.mock.invocationCallOrder[0]).toBeLessThan(
         view.api.publishFoundingTerms.mock.invocationCallOrder[0],
@@ -417,6 +469,7 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
         note: null,
         expectedCurrentVersion: 1,
         foundingSeatIncludedClients: 27,
+        priceGuaranteeMonths: null,
       });
     });
 
@@ -494,6 +547,208 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
       expect(view.api.publishFoundingTerms).toHaveBeenCalledWith(
         expect.objectContaining({ foundingSeatIncludedClients: 27 }),
       );
+    });
+
+    // Notes plan N8: the months a founding space's prices are held, the fourth number of the terms.
+    describe('the months a founding space’s prices are held (notes plan N8)', () => {
+      const MONTHS = 'Months a founding space’s prices are held';
+      const RANGE = 'Enter a whole number of months from 0 to 120, or none to hold no price.';
+      // The version in force holds prices for 5 months, and names a founding seat's number too.
+      const held = {
+        current: foundingTerms({ foundingSeatIncludedClients: 13, priceGuaranteeMonths: 5 }),
+      };
+      const months = (view: { host: HTMLElement }) =>
+        view.host.querySelector<HTMLInputElement>('input[name="priceGuaranteeMonths"]')!;
+      const changes = (view: { host: HTMLElement }) =>
+        Array.from(view.host.querySelectorAll('.changes li')).map((row) =>
+          ['.what', '.from', '.to'].map((part) => textOf(row.querySelector(part))),
+        );
+      /** What the box is described by: its help, or its error once one shows. */
+      const described = (box: HTMLInputElement) =>
+        textOf(document.getElementById(box.getAttribute('aria-describedby') ?? ''));
+
+      it('offers them as a fourth number after the founding seat’s, prefilled, from 0 to 120', async () => {
+        const view = await render(PlatformFoundingTerms, { ...held, planSeatClients: 5 });
+
+        expect(
+          Array.from(view.host.querySelectorAll<HTMLInputElement>('input[type="number"]')).map(
+            (box) => box.name,
+          ),
+        ).toEqual([
+          'clientsWithActivePlan',
+          'monthsSinceStart',
+          'foundingSeatIncludedClients',
+          'priceGuaranteeMonths',
+        ]);
+        const box = months(view);
+        expect(box.value).toBe('5');
+        expect(box.getAttribute('min')).toBe('0');
+        expect(box.getAttribute('max')).toBe('120');
+        expect(box.getAttribute('step')).toBe('1');
+        // The box is the one its label names, and its help says what the months are counted from.
+        expect(field(view.host, MONTHS)).toBe(box);
+        expect(described(box)).toBe(
+          'Counted from a space’s last discount, or from its founding day when it has no discount; until then it keeps the plan version of its founding day. Leave it empty to hold no price. The number in force applies to every founding space, those already founding too.',
+        );
+        expect(changes(view)).toEqual([]);
+        expect(button(view.host, 'Publish version 2').disabled).toBe(true);
+        expect(textOf(view.host)).not.toMatch(NEVER);
+        TestBed.resetTestingModule();
+
+        // No months in force: an empty box, which reads as none.
+        const none = await render(PlatformFoundingTerms, { current: foundingTerms() });
+        expect(months(none).value).toBe('');
+        expect(changes(none)).toEqual([]);
+      });
+
+      it('publishes the months typed, listed in What changes from None, with the other numbers as they were', async () => {
+        const view = await render(PlatformFoundingTerms, inputs);
+
+        fill(view.host, MONTHS, '5');
+        await settle(view.fixture);
+        expect(changes(view)).toEqual([[MONTHS, 'None', '5']]);
+        expect(view.dirty.at(-1)).toBe(true);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+
+        expect(view.api.publishFoundingTerms).toHaveBeenCalledWith({
+          clientsWithActivePlan: 10,
+          monthsSinceStart: 2,
+          note: null,
+          expectedCurrentVersion: 1,
+          foundingSeatIncludedClients: 13,
+          priceGuaranteeMonths: 5,
+        });
+        expect(view.closed).toEqual([PUBLISHED]);
+      });
+
+      it('publishes none when the box is emptied, sent as null, and says so in What changes', async () => {
+        const view = await render(PlatformFoundingTerms, held);
+
+        fill(view.host, MONTHS, '');
+        await settle(view.fixture);
+        expect(changes(view)).toEqual([[MONTHS, '5', 'None']]);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+
+        expect(view.api.publishFoundingTerms).toHaveBeenCalledWith({
+          clientsWithActivePlan: 10,
+          monthsSinceStart: 2,
+          note: null,
+          expectedCurrentVersion: 1,
+          foundingSeatIncludedClients: 13,
+          priceGuaranteeMonths: null,
+        });
+      });
+
+      it('keeps the months in force when only a threshold changes', async () => {
+        const view = await render(PlatformFoundingTerms, held);
+
+        fill(view.host, 'Clients with an active plan', '12');
+        await settle(view.fixture);
+        expect(changes(view)).toEqual([['Clients with an active plan', '10', '12']]);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+
+        expect(view.api.publishFoundingTerms).toHaveBeenCalledWith({
+          clientsWithActivePlan: 12,
+          monthsSinceStart: 2,
+          note: null,
+          expectedCurrentVersion: 1,
+          foundingSeatIncludedClients: 13,
+          priceGuaranteeMonths: 5,
+        });
+      });
+
+      it('takes them from 0 to 120 only, in the server’s words', async () => {
+        const view = await render(PlatformFoundingTerms, held);
+
+        fill(view.host, MONTHS, '121');
+        await settle(view.fixture);
+        expect(changes(view), 'A number that is not valid yet is no change.').toEqual([]);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+
+        expect(view.api.publishFoundingTerms).not.toHaveBeenCalled();
+        expect(described(months(view))).toBe(RANGE);
+        expect(textOf(view.host)).toContain('Check the fields marked above.');
+        expect(months(view).getAttribute('aria-invalid')).toBe('true');
+        expect(document.activeElement?.getAttribute('name')).toBe('priceGuaranteeMonths');
+
+        fill(view.host, MONTHS, '-1');
+        await settle(view.fixture);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+        expect(view.api.publishFoundingTerms).not.toHaveBeenCalled();
+        expect(described(months(view))).toBe(RANGE);
+
+        fill(view.host, MONTHS, '120');
+        await settle(view.fixture);
+        expect(textOf(view.host)).not.toContain(RANGE);
+        expect(months(view).getAttribute('aria-invalid')).toBeNull();
+        expect(changes(view)).toEqual([[MONTHS, '5', '120']]);
+
+        // No months after the last discount is a number of its own, never none.
+        fill(view.host, MONTHS, '0');
+        await settle(view.fixture);
+        expect(changes(view)).toEqual([[MONTHS, '5', '0']]);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+        expect(view.api.publishFoundingTerms).toHaveBeenCalledTimes(1);
+        expect(view.api.publishFoundingTerms).toHaveBeenCalledWith(
+          expect.objectContaining({ priceGuaranteeMonths: 0 }),
+        );
+      });
+
+      it('marks months the browser cannot read, never publishing them as none or at their old value', async () => {
+        const view = await render(PlatformFoundingTerms, held);
+        const box = months(view);
+        // What a browser reports for "7e" in a number box: no number, and bad input.
+        const typed = (valueAsNumber: number, badInput: boolean) => {
+          Object.defineProperty(box, 'valueAsNumber', {
+            configurable: true,
+            get: () => valueAsNumber,
+          });
+          Object.defineProperty(box, 'validity', { configurable: true, get: () => ({ badInput }) });
+          box.dispatchEvent(new Event('input'));
+        };
+
+        // A threshold changes too, so there is something to publish: the months alone hold it back.
+        fill(view.host, 'Clients with an active plan', '12');
+        typed(Number.NaN, true);
+        await settle(view.fixture);
+        expect(changes(view)).toEqual([['Clients with an active plan', '10', '12']]);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+        expect(view.api.publishFoundingTerms).not.toHaveBeenCalled();
+        expect(described(box)).toBe(RANGE);
+        expect(box.getAttribute('aria-invalid')).toBe('true');
+        expect(document.activeElement).toBe(box);
+        // The founding seat's box beside it is not marked for it.
+        expect(
+          view.host
+            .querySelector('input[name="foundingSeatIncludedClients"]')!
+            .getAttribute('aria-invalid'),
+        ).not.toBe('true');
+
+        typed(7, false);
+        await settle(view.fixture);
+        expect(changes(view)).toEqual([
+          ['Clients with an active plan', '10', '12'],
+          [MONTHS, '5', '7'],
+        ]);
+        press(view.host, 'Publish version 2');
+        await settle(view.fixture);
+        expect(view.api.publishFoundingTerms).toHaveBeenCalledTimes(1);
+        expect(view.api.publishFoundingTerms).toHaveBeenCalledWith({
+          clientsWithActivePlan: 12,
+          monthsSinceStart: 2,
+          note: null,
+          expectedCurrentVersion: 1,
+          foundingSeatIncludedClients: 13,
+          priceGuaranteeMonths: 7,
+        });
+      });
     });
 
     it('keeps a stale version’s refusal on screen', async () => {

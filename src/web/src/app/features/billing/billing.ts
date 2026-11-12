@@ -39,6 +39,7 @@ import {
   invoiceStatusLabel,
   invoiceStatusTone,
   isUnpaid,
+  pricesHeldSentence,
   type WorkspaceBilling,
 } from './billing.models';
 
@@ -102,6 +103,10 @@ export class Billing {
         )
       : [];
   });
+  /** Until when a founding space's prices are held, after those lines, during the trial too (N8). */
+  protected readonly heldLine = computed(() =>
+    pricesHeldSentence(this.billing()?.pricesHeldUntil ?? null, this.locale),
+  );
   /**
    * How to ask TB Gym for the payment details while no Whish number is set (audit BILL-2): its
    * support inbox and WhatsApp number, or null when this server has neither.

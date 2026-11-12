@@ -147,6 +147,9 @@ describe('Platform billing: one coaching space', () => {
       'An invoice was due Oct 5, 2026. The space goes read-only on Oct 12, 2026 if it is still unpaid.',
     );
     expect(textOf(hero.querySelector('.quiet'))).toBe('3 seats and 14 clients so far this month');
+    // No price is held for this space (notes plan N8), so nothing says one is.
+    expect(host.querySelector('[data-price-hold]')).toBeNull();
+    expect(textOf(hero)).not.toContain('Prices held');
     expect(host.querySelector<HTMLAnchorElement>('[data-back]')!.getAttribute('href')).toBe(
       '/admin/billing',
     );
@@ -549,7 +552,7 @@ describe('Platform billing: one coaching space', () => {
       const sheet = dialog()!;
       expect(textOf(sheet.querySelector('h2'))).toBe('Mark as founding');
       expect(textOf(sheet.querySelector('[data-founding-terms-sentence]'))).toBe(
-        'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too.',
+        'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too. The space’s prices are not held: no guarantee months are published yet.',
       );
       expect(await chosenDay(view.fixture, sheet, 'Founding since')).toBe(TODAY);
       expect(textOf(sheet)).not.toMatch(NEVER);
@@ -592,7 +595,7 @@ describe('Platform billing: one coaching space', () => {
       await settle(view.fixture);
 
       expect(textOf(dialog()!.querySelector('[data-founding-terms-sentence]'))).toBe(
-        'The badge is earned under the terms in force. The discount is separate: grant it on this page too.',
+        'The badge is earned under the terms in force. The discount is separate: grant it on this page too. The space keeps its plan version for as long as the terms in force say.',
       );
     });
 
@@ -725,8 +728,12 @@ describe('Platform billing: one coaching space', () => {
       expect(textOf(sheet)).toContain(
         'The badge leaves the coach’s account and their clients’ Me page at once. The discount is not changed: revoke it separately if it should end.',
       );
+      // Notes plan N8: the held prices end with the status, from next month's invoice.
       expect(textOf(sheet)).toContain(
-        'From next month’s invoice, the owner’s seat includes what the price plan’s seat includes, and extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
+        'From next month’s invoice, the owner’s seat includes what the price plan’s seat includes and held prices end: the latest price plan applies.',
+      );
+      expect(textOf(sheet)).toContain(
+        'Extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
       );
       expect(textOf(sheet)).not.toMatch(NEVER);
       press(sheet, 'Harm to clients');
@@ -1313,6 +1320,118 @@ describe('Platform billing: one coaching space', () => {
         'Marking changes no access. While the space stays founding, its owner’s seat includes what the terms in force give a founding seat.',
       );
       expect(textOf(dialog()!.querySelector('h2'))).toBe('Mark as founding');
+    });
+  });
+
+  describe('the founding price guarantee (notes plan N8)', () => {
+    const hero = (host: HTMLElement) => host.querySelector('[data-space-status]')!;
+    const hold = (host: HTMLElement) => host.querySelector('[data-price-hold]');
+
+    it('says under Where it stands which plan version a founding space is held at, and until when', async () => {
+      const { host } = await render(() =>
+        atlasDetail({
+          founding: adminFounding('Earned'),
+          priceHold: { pricePlanVersion: 1, lastDay: '2027-04-30' },
+        }),
+      );
+
+      // The day reads as every day on this page does.
+      expect(textOf(hold(host))).toBe('Prices held at plan version 1 until Apr 30, 2027.');
+      // After the sentence and the month's count, which read as they did.
+      const sentence = hero(host).querySelector('.sentence')!;
+      const count = hero(host).querySelector('.quiet')!;
+      expect(textOf(sentence)).toBe(
+        'An invoice was due Oct 5, 2026. The space goes read-only on Oct 12, 2026 if it is still unpaid.',
+      );
+      expect(textOf(count)).toBe('3 seats and 14 clients so far this month');
+      expect(count.previousElementSibling).toBe(sentence);
+      expect(hold(host)!.previousElementSibling).toBe(count);
+      expect(hero(host).lastElementChild).toBe(hold(host));
+      expect(hold(host)!.tagName).toBe('P');
+      expect(hold(host)!.classList).toContain('quiet');
+      // One line, where the space stands: no second pill there, and nothing in the Founding panel.
+      expect(host.querySelectorAll('[data-price-hold]')).toHaveLength(1);
+      expect(hero(host).querySelectorAll('app-status-pill')).toHaveLength(1);
+      expect(host.querySelector('[data-founding] [data-price-hold]')).toBeNull();
+      expect(textOf(host.querySelector('[data-founding]'))).not.toContain('Prices held');
+    });
+
+    it('names the version and the day the server sends, after a discount in force too', async () => {
+      const base = atlasDetail();
+      const { host } = await render(() =>
+        atlasDetail({
+          summary: { ...base.summary, currentDiscountPercent: 35 },
+          founding: adminFounding('Waiting', false, 13),
+          priceHold: { pricePlanVersion: 2, lastDay: '2026-12-31' },
+        }),
+      );
+
+      expect(
+        Array.from(hero(host).querySelectorAll(':scope > p.quiet')).map((line) => textOf(line)),
+      ).toEqual([
+        '3 seats and 14 clients so far this month · 35% discount in force',
+        'Prices held at plan version 2 until Dec 31, 2026.',
+      ]);
+    });
+
+    it('says nothing of held prices while the server sends no hold', async () => {
+      const plain = await render();
+      expect(hold(plain.host)).toBeNull();
+      expect(textOf(plain.host)).not.toContain('Prices held');
+      TestBed.resetTestingModule();
+
+      // A founding space under terms that hold no price, or one whose guarantee is over.
+      const founding = await render(() =>
+        atlasDetail({ founding: adminFounding('Earned'), priceHold: null }),
+      );
+      expect(hold(founding.host)).toBeNull();
+      expect(hero(founding.host).querySelectorAll('.quiet')).toHaveLength(1);
+      TestBed.resetTestingModule();
+
+      const ended = await render(() =>
+        atlasDetail({ foundingHistory: [endedFounding()], priceHold: null }),
+      );
+      expect(hold(ended.host)).toBeNull();
+    });
+
+    it('reads the hold again with the space, never keeping one the server no longer sends', async () => {
+      let detail = atlasDetail({
+        founding: adminFounding('Waiting'),
+        priceHold: { pricePlanVersion: 1, lastDay: '2027-04-30' },
+      });
+      const view = await render(() => detail);
+      expect(textOf(hold(view.host))).toBe('Prices held at plan version 1 until Apr 30, 2027.');
+
+      // A discount granted since moves the last day: the page says what the server reads now.
+      detail = atlasDetail({
+        founding: adminFounding('Waiting'),
+        priceHold: { pricePlanVersion: 1, lastDay: '2027-09-30' },
+      });
+      press(view.host, 'Check now');
+      await settle(view.fixture);
+      expect(view.api.getWorkspace).toHaveBeenCalledTimes(2);
+      expect(textOf(hold(view.host))).toBe('Prices held at plan version 1 until Sep 30, 2027.');
+
+      detail = atlasDetail({ founding: adminFounding('Waiting'), priceHold: null });
+      press(view.host, 'Check now');
+      await settle(view.fixture);
+      expect(view.api.getWorkspace).toHaveBeenCalledTimes(3);
+      expect(hold(view.host)).toBeNull();
+    });
+
+    it('says in the mark sheet how long the space keeps its plan version under the terms in force', async () => {
+      const view = await render(
+        atlasDetail,
+        {},
+        { getFoundingTerms: vi.fn(() => of([foundingTerms({ priceGuaranteeMonths: 5 })])) },
+      );
+
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+
+      expect(textOf(dialog()!.querySelector('[data-founding-terms-sentence]'))).toBe(
+        'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too. The space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.',
+      );
     });
   });
 

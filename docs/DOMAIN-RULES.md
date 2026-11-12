@@ -531,7 +531,8 @@ time is not coverage: a client paused for the whole month is not billable, one p
 is. Pauses come from the append-only enrollment status history.
 
 **PBL-003** Every price, the clients a seat includes, the gym-fee threshold, and the trial, payment and
-grace days come from the latest published price plan version; nothing is a constant in code. An
+grace days come from the latest published price plan version, or, for a founding workspace whose price is
+held, from the version PBL-012 names; nothing is a constant in code. An
 invoice's included clients come from the plan's seats, a founding seat (the founding terms) and the
 admin's grants, under the calculation `platform-invoice-v2` (PBL-011); one issued before keeps
 `platform-invoice-v1`. An invoice snapshots its plan, quantities, the calculation's name and where its
@@ -574,8 +575,9 @@ constant in code). The check runs on the Worker's billing sweep and on the admin
 the badge once with the terms version, the client count and the rule `founding-badge-v1`; it stays
 earned whatever the counts do later, and only an end takes it away. The owner may hide it from their
 clients; a client sees it only while their assigned coach is that owner. It changes no access and no
-discount; on the bill it changes one thing, the clients its owner's seat includes (PBL-011). No word for
-it says a coach's qualifications were checked.
+discount; on the bill it changes two things, the clients its owner's seat includes (PBL-011) and the price
+plan version the workspace is billed at while its price guarantee runs (PBL-012). No word for it says a
+coach's qualifications were checked.
 
 **PBL-010** Discounts (ADR 0028; notes plan N7). The platform admin grants a workspace a percentage off,
 more than 0 and up to 100 to two decimals, for UTC days `[StartsOn, EndsOnExclusive)`, with a note; a
@@ -600,6 +602,23 @@ only revoked once with the revocation kept. `platform-invoice-v2` counts the sea
 and the grants' included clients, then the discount comes off the whole subtotal; the invoice records the
 founding number, its version, the status and the grants it counted, and a reissue counts them again. The
 owner reads what their seat includes now and the grants running or to come, never a note.
+
+**PBL-012** Founding price guarantee (notes plan N8, decision 16). Under the rule `founding-price-v1` a
+founding space keeps the price plan version in force on its founding day, the last one published by the end
+of that UTC day or by the moment it was marked when that comes first, so no version published after the mark
+raises its bill while the guarantee runs. The guarantee's last day
+is the later of the founding day and the last day of the space's last unrevoked discount, plus the months
+the founding terms in force name (0 to 120, or none: nothing is held), in calendar months; the platform
+admin publishes the months in a terms version, never a constant and never seeded, and the months in force
+apply to every founding space. A billed window is held when a status's hold touches it, as a discount
+covers every month it touches: the month the last day falls inside is held whole, the month a status ended
+in is still held, and from the month after the latest version applies, as for every other space; of two
+statuses touching one month, the one marked last holds. While
+held, the invoice and the estimate are worked out at the held version and at the latest and the lower total
+is billed, equal totals keeping the held one; the invoice records the version billed, and a reissue keeps
+its voided invoice's version. The owner reads the guarantee's last day while it has not passed and the
+admin the held version too; what the owner's seat includes is read against the version the month is priced
+at.
 
 ## 4. Program templates and assigned snapshots
 

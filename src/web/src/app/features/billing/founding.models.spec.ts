@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest';
+import type { FoundingTermsView } from '../../core/api/generated';
 import {
   adminProgressLine,
   clientCount,
   currentFoundingTerms,
   foundingSeatLine,
+  markGuaranteeSentence,
   markSeatSentence,
   markTermsSentence,
   monthCount,
   ownerProgressLine,
   ownerTermsSentence,
+  planGuaranteeSentence,
+  planPublishedSentence,
+  priceHoldLine,
   showsFoundingPage,
+  termsGuaranteeSentence,
   termsSeatSentence,
   termsSentence,
   toAdminFounding,
@@ -42,6 +48,7 @@ const terms = (overrides: Partial<FoundingTerms> = {}): FoundingTerms => ({
   publishedAtUtc: '2026-09-01T00:00:00Z',
   isCurrent: true,
   foundingSeatIncludedClients: null,
+  priceGuaranteeMonths: null,
   ...overrides,
 });
 
@@ -78,18 +85,18 @@ describe('The Founding coach badge as the screens read it (notes plan N3b)', () 
   });
 
   it('reads a version of the terms, and finds the one in force', () => {
-    expect(
-      toFoundingTerms({
-        id: 'terms-2',
-        versionNumber: '2',
-        clientsWithActivePlan: '12',
-        monthsSinceStart: '3',
-        note: null,
-        publishedAtUtc: '2026-10-01T00:00:00Z',
-        isCurrent: true,
-        foundingSeatIncludedClients: '13',
-      }),
-    ).toEqual(
+    const view: FoundingTermsView = {
+      id: 'terms-2',
+      versionNumber: '2',
+      clientsWithActivePlan: '12',
+      monthsSinceStart: '3',
+      note: null,
+      publishedAtUtc: '2026-10-01T00:00:00Z',
+      isCurrent: true,
+      foundingSeatIncludedClients: '13',
+      priceGuaranteeMonths: '5',
+    };
+    expect(toFoundingTerms(view)).toEqual(
       terms({
         id: 'terms-2',
         versionNumber: 2,
@@ -97,8 +104,16 @@ describe('The Founding coach badge as the screens read it (notes plan N3b)', () 
         monthsSinceStart: 3,
         publishedAtUtc: '2026-10-01T00:00:00Z',
         foundingSeatIncludedClients: 13,
+        priceGuaranteeMonths: 5,
       }),
     );
+    // Notes plan N8: no months published stays none, and no months after the last discount stays 0,
+    // which is a guarantee (the prices are held while the discounts run), not none.
+    expect(
+      toFoundingTerms({ ...view, priceGuaranteeMonths: null }).priceGuaranteeMonths,
+    ).toBeNull();
+    expect(toFoundingTerms({ ...view, priceGuaranteeMonths: '0' }).priceGuaranteeMonths).toBe(0);
+    expect(toFoundingTerms({ ...view, priceGuaranteeMonths: 11 }).priceGuaranteeMonths).toBe(11);
     const older = terms({ isCurrent: false });
     const newer = terms({ id: 'terms-2', versionNumber: 2, isCurrent: true });
     expect(currentFoundingTerms([older, newer])).toBe(newer);
@@ -178,6 +193,7 @@ describe('The Founding coach badge as the screens read it (notes plan N3b)', () 
       publishedAtUtc: '2026-11-01T00:00:00Z',
       isCurrent: true,
       foundingSeatIncludedClients: seat,
+      priceGuaranteeMonths: null,
     });
     const plan =
       'what the price plan’s seat includes: no founding number above it is published yet.';
@@ -204,6 +220,106 @@ describe('The Founding coach badge as the screens read it (notes plan N3b)', () 
     expect(termsSeatSentence(terms(4), 5)).toBe(`A founding space’s owner seat includes ${plan}`);
     expect(termsSeatSentence(terms(null), null)).toBe(
       `A founding space’s owner seat includes ${plan}`,
+    );
+  });
+
+  // Notes plan N8: the price guarantee in words, from the server's months. None published holds no
+  // price; 0 holds it while the discounts run; the months count from the last discount's last day, or
+  // from the founding day of a space with no discount. The months are this test's own.
+  it('words the price guarantee in the terms in force, for the list', () => {
+    expect(termsGuaranteeSentence(null)).toBe(
+      'A founding space’s prices are not held: no guarantee months are published yet.',
+    );
+    expect(termsGuaranteeSentence(0)).toBe(
+      'A founding space keeps its plan version until its last discount ends; with no discount, only for its founding month.',
+    );
+    expect(termsGuaranteeSentence(1)).toBe(
+      'A founding space keeps its plan version until 1 month after its last discount ends, or after its founding day when it has none.',
+    );
+    expect(termsGuaranteeSentence(5)).toBe(
+      'A founding space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.',
+    );
+  });
+
+  it('words the price guarantee for the mark sheet, about the space being marked', () => {
+    expect(markGuaranteeSentence(null)).toBe(
+      'The space keeps its plan version for as long as the terms in force say.',
+    );
+    expect(markGuaranteeSentence(terms({ priceGuaranteeMonths: null }))).toBe(
+      'The space’s prices are not held: no guarantee months are published yet.',
+    );
+    expect(markGuaranteeSentence(terms({ priceGuaranteeMonths: 0 }))).toBe(
+      'The space keeps its plan version until its last discount ends; with no discount, only for its founding month.',
+    );
+    expect(markGuaranteeSentence(terms({ priceGuaranteeMonths: 1 }))).toBe(
+      'The space keeps its plan version until 1 month after its last discount ends, or after its founding day when it has none.',
+    );
+    expect(markGuaranteeSentence(terms({ priceGuaranteeMonths: 7 }))).toBe(
+      'The space keeps its plan version until 7 months after its last discount ends, or after its founding day when it has none.',
+    );
+    // The months alone decide the sentence: the badge's thresholds and the founding seat change nothing.
+    expect(
+      markGuaranteeSentence(
+        terms({ monthsSinceStart: 0, foundingSeatIncludedClients: 13, priceGuaranteeMonths: 7 }),
+      ),
+    ).toBe(markGuaranteeSentence(terms({ priceGuaranteeMonths: 7 })));
+  });
+
+  // A new price plan version reaches a founding space only when nothing holds its prices: the sheet
+  // may promise "keep their version" only while the terms in force name guarantee months, 0 included.
+  it('words what a new price plan version means for founding spaces, on the price plan sheet', () => {
+    // The terms not read: the sheet says nothing of founding spaces, rather than guess.
+    expect(planGuaranteeSentence(undefined)).toBeNull();
+    expect(planGuaranteeSentence(null)).toBe(
+      'No guarantee months are published yet, so founding spaces are billed at the new version too.',
+    );
+    expect(planGuaranteeSentence(0)).toBe(
+      'Founding spaces keep their version until their guarantee ends.',
+    );
+    expect(planGuaranteeSentence(1)).toBe(
+      'Founding spaces keep their version until their guarantee ends.',
+    );
+    expect(planGuaranteeSentence(11)).toBe(
+      'Founding spaces keep their version until their guarantee ends.',
+    );
+    // With no months published, nothing in the sentence says a version is kept.
+    expect(planGuaranteeSentence(null)).not.toContain('keep');
+  });
+
+  it('words the toast after a price plan version is published, with the same account of founding spaces', () => {
+    expect(planPublishedSentence(3, undefined)).toBe(
+      'Price plan version 3 is published. Invoices issued from now on use it.',
+    );
+    expect(planPublishedSentence(3, null)).toBe(
+      'Price plan version 3 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+    );
+    expect(planPublishedSentence(3, 0)).toBe(
+      'Price plan version 3 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+    );
+    expect(planPublishedSentence(3, 5)).toBe(
+      'Price plan version 3 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+    );
+    // The version is the one published, whatever the months.
+    expect(planPublishedSentence(14, undefined)).toBe(
+      'Price plan version 14 is published. Invoices issued from now on use it.',
+    );
+    expect(planPublishedSentence(14, null)).toBe(
+      'Price plan version 14 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+    );
+    expect(planPublishedSentence(14, 11)).toBe(
+      'Price plan version 14 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+    );
+    for (const months of [undefined, null]) {
+      expect(planPublishedSentence(3, months)).not.toContain('keeps its version');
+    }
+  });
+
+  it('says for the admin which plan version a founding space is held at, and until the day it is given', () => {
+    expect(priceHoldLine(1, 'Dec 31, 2026')).toBe(
+      'Prices held at plan version 1 until Dec 31, 2026.',
+    );
+    expect(priceHoldLine(14, '30 Apr 2027')).toBe(
+      'Prices held at plan version 14 until 30 Apr 2027.',
     );
   });
 

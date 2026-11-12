@@ -371,11 +371,11 @@ public sealed class PlatformBillingDomainTests
         Assert.IsFalse(FoundingSeatPolicy.IsValidIncludedClients(-1));
         Assert.IsFalse(FoundingSeatPolicy.IsValidIncludedClients(1_001));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), -1, null, AdminUserId, LaunchedAt));
+            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), -1, null, null, AdminUserId, LaunchedAt));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
-            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), 1_001, null, AdminUserId, LaunchedAt));
-        Assert.AreEqual(12, FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), 12, null, AdminUserId, LaunchedAt).FoundingSeatIncludedClients);
-        Assert.IsNull(FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), null, null, AdminUserId, LaunchedAt).FoundingSeatIncludedClients);
+            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), 1_001, null, null, AdminUserId, LaunchedAt));
+        Assert.AreEqual(12, FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), 12, null, null, AdminUserId, LaunchedAt).FoundingSeatIncludedClients);
+        Assert.IsNull(FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), null, null, null, AdminUserId, LaunchedAt).FoundingSeatIncludedClients);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             PlatformInvoiceCalculation.Calculate(Placeholder, new InvoiceQuantities(1, 1), Sources(new FoundingSeat(Guid.NewGuid(), 2, 1_001)), 0m));
     }
@@ -404,7 +404,7 @@ public sealed class PlatformBillingDomainTests
         IncludedClientGrant.Grant(TenantId, clients, startsOn, endsOnExclusive, $"Brought a coach ({clients})", AdminUserId, LaunchedAt);
 
     private static FoundingTerms Terms(int version, int? seatIncludedClients, DateTimeOffset publishedAt) =>
-        FoundingTerms.Publish(version, new FoundingBadgeTerms(8, 1), seatIncludedClients, null, AdminUserId, publishedAt);
+        FoundingTerms.Publish(version, new FoundingBadgeTerms(8, 1), seatIncludedClients, null, null, AdminUserId, publishedAt);
 
     private static FoundingStatus Founding(DateOnly foundingSince, DateTimeOffset markedAt) =>
         FoundingStatus.Mark(TenantId, foundingSince, "One of the first coaches", AdminUserId, markedAt);
@@ -412,6 +412,586 @@ public sealed class PlatformBillingDomainTests
     private static UsageWindow Whole(BillingMonth month) => new(month.StartUtc, month.EndUtc);
 
     private static DateTimeOffset At(int month, int day, int hour) => new(2026, month, day, hour, 0, 0, TimeSpan.Zero);
+
+    // ---- founding-price-v1 reference cases (notes plan N8): the founding price guarantee ----
+    // Every figure here is made up: the guarantee's months are the admin's. One seat with 8 clients costs
+    // $21.00 at version 1, the placeholder, and $25.00 at a version 2 that asks $19 a seat.
+
+    [TestMethod]
+    public void AFoundingSpaceIsBilledAtItsFoundingDaysVersionWhileItsGuaranteeRunsAndAtTheLatestAfterIt()
+    {
+        var plans = FirstAndDearer();
+        FoundingStatus[] statuses = [Founding(new DateOnly(2026, 9, 10), At(9, 10, 9))];
+
+        // 45 days off from the founding day: the last is 24 October, and 5 months more end on 24 March 2027.
+        WorkspaceDiscount[] discounts = [Discount(35m, new DateOnly(2026, 9, 10), new DateOnly(2026, 10, 25))];
+        var terms = Guarantee(5);
+        (int Version, decimal Total) Bill(BillingMonth month) => Billed(Whole(month), statuses, terms, discounts, plans);
+
+        Assert.AreEqual(
+            new FoundingPriceHold(statuses[0].Id, plans[0], 2, 5, new DateOnly(2027, 3, 24)),
+            FoundingPricePolicy.For(statuses, terms, discounts, plans, Whole(September)));
+        Assert.AreEqual((1, 13.65m), Bill(September), "35% off version 1's $21.00, not off version 2's $25.00.");
+        Assert.AreEqual((1, 13.65m), Bill(new BillingMonth(2026, 10)), "A rise published while the discount runs never reaches the bill.");
+        foreach (var month in new[] { new BillingMonth(2026, 11), new BillingMonth(2027, 1), new BillingMonth(2027, 3) })
+        {
+            Assert.AreEqual((1, 21.00m), Bill(month), $"{month} is inside the guarantee.");
+        }
+
+        Assert.IsNull(FoundingPricePolicy.For(statuses, terms, discounts, plans, Whole(new BillingMonth(2027, 4))));
+        Assert.AreEqual((2, 25.00m), Bill(new BillingMonth(2027, 4)), "From the month after the last day, the latest version, as for every other space.");
+    }
+
+    [TestMethod]
+    public void TheGuaranteesLastDayCountsCalendarMonthsFromTheLastDiscountDayAndClampsAtAMonthsEnd()
+    {
+        var foundingDay = new DateOnly(2026, 9, 10);
+        DateOnly LastDayAfter(DateOnly lastDiscountDay, int months) =>
+            FoundingPricePolicy.LastDay(foundingDay, [Discount(35m, foundingDay, lastDiscountDay.AddDays(1))], months);
+
+        Assert.AreEqual(new DateOnly(2027, 2, 28), LastDayAfter(new DateOnly(2027, 1, 31), 1), "31 January plus one month is the last day of February.");
+        Assert.AreEqual(new DateOnly(2028, 2, 29), LastDayAfter(new DateOnly(2028, 1, 31), 1), "A leap year's February.");
+        Assert.AreEqual(new DateOnly(2027, 2, 28), LastDayAfter(new DateOnly(2026, 9, 30), 5));
+        Assert.AreEqual(new DateOnly(2027, 8, 31), LastDayAfter(new DateOnly(2027, 1, 31), 7), "Counted from the last discount day, never month by month.");
+        Assert.AreEqual(new DateOnly(2028, 1, 28), LastDayAfter(new DateOnly(2027, 2, 28), 11), "From February's last day to the 28th, not to a month's end.");
+        Assert.AreEqual(new DateOnly(2027, 5, 31), LastDayAfter(new DateOnly(2026, 12, 31), 5), "Across a year.");
+        Assert.AreEqual(new DateOnly(2027, 2, 28), FoundingPricePolicy.LastDay(new DateOnly(2027, 1, 31), [], 1), "The same from a founding day.");
+    }
+
+    [TestMethod]
+    public void TheLastUnrevokedDiscountCountsNotTheLargestAndARevokedOneIsOutOfTheCount()
+    {
+        var plans = FirstAndDearer();
+        var foundingDay = new DateOnly(2026, 9, 10);
+        FoundingStatus[] statuses = [Founding(foundingDay, At(9, 10, 9))];
+        var terms = Guarantee(5);
+        var larger = Discount(35m, foundingDay, new DateOnly(2026, 10, 25));
+        var smallerAndLater = Discount(12.5m, new DateOnly(2026, 10, 25), new DateOnly(2026, 12, 16));
+        var toBeRevoked = Discount(35m, new DateOnly(2026, 12, 16), new DateOnly(2027, 2, 1));
+
+        Assert.AreEqual(new DateOnly(2027, 5, 15), FoundingPricePolicy.LastDay(foundingDay, [larger, smallerAndLater], 5), "5 months from 15 December, the smaller one's last day.");
+        Assert.AreEqual(new DateOnly(2027, 5, 15), FoundingPricePolicy.LastDay(foundingDay, [smallerAndLater, larger], 5), "Whatever their order.");
+        Assert.AreEqual(new DateOnly(2027, 6, 30), FoundingPricePolicy.LastDay(foundingDay, [toBeRevoked, larger, smallerAndLater], 5), "5 months from 31 January.");
+
+        toBeRevoked.Revoke(AdminUserId, At(12, 20, 9));
+
+        WorkspaceDiscount[] discounts = [toBeRevoked, larger, smallerAndLater];
+        Assert.AreEqual(new DateOnly(2027, 5, 15), FoundingPricePolicy.LastDay(foundingDay, discounts, 5), "A revoked discount is out of the count.");
+        Assert.AreEqual((1, 21.00m), Billed(Whole(new BillingMonth(2027, 5)), statuses, terms, discounts, plans));
+        Assert.AreEqual((2, 25.00m), Billed(Whole(new BillingMonth(2027, 6)), statuses, terms, discounts, plans), "June was held only by the discount since revoked.");
+        Assert.AreEqual(new DateOnly(2027, 2, 10), FoundingPricePolicy.LastDay(foundingDay, [toBeRevoked], 5), "With nothing left but a revoked one, from the founding day.");
+
+        // The admin's two steps to end a founding price early: revoke, then grant again to the month's end.
+        var grantedAgain = Discount(35m, new DateOnly(2026, 12, 16), new DateOnly(2027, 1, 1));
+        Assert.AreEqual(new DateOnly(2027, 5, 31), FoundingPricePolicy.LastDay(foundingDay, [.. discounts, grantedAgain], 5), "The guarantee then counts from that end.");
+    }
+
+    [TestMethod]
+    public void TheMonthsComeFromTheFoundingTermsInForceAndTermsThatNameNoneHoldNothing()
+    {
+        var plans = FirstAndDearer();
+        var status = Founding(new DateOnly(2026, 9, 10), At(9, 10, 9));
+        FoundingStatus[] statuses = [status];
+        WorkspaceDiscount[] discounts = [Discount(35m, new DateOnly(2026, 9, 10), new DateOnly(2026, 10, 25))];
+        var today = new DateOnly(2026, 9, 15);
+
+        // Version 1 as the migration seeds it names no months: nothing is held, and the bill is the one before N8.
+        FoundingTerms[] seeded = [Terms(1, null, LaunchedAt.AddDays(-45))];
+        Assert.IsNull(FoundingPricePolicy.For(statuses, seeded, discounts, plans, Whole(September)));
+        Assert.IsNull(FoundingPricePolicy.On(statuses, seeded, discounts, plans, today));
+        Assert.AreEqual((2, 16.25m), Billed(Whole(September), statuses, seeded, discounts, plans));
+        Assert.IsNull(FoundingPricePolicy.For(statuses, [], discounts, plans, Whole(September)), "No terms at all.");
+        Assert.IsNull(FoundingPricePolicy.On(statuses, [], discounts, plans, today));
+
+        // The seat's number is not the guarantee's months.
+        FoundingTerms[] seatOnly = [.. seeded, Terms(2, 12, At(9, 5, 0))];
+        Assert.IsNull(FoundingPricePolicy.For(statuses, seatOnly, discounts, plans, Whole(September)));
+
+        // The latest version's months are the ones in force, higher or lower than the version before.
+        FoundingTerms[] eleven = [.. seeded, Terms(2, null, 11, At(9, 5, 0))];
+        FoundingTerms[] five = [Terms(3, null, 5, At(11, 2, 0)), .. eleven];
+        Assert.AreEqual(
+            new FoundingPriceHold(status.Id, plans[0], 2, 11, new DateOnly(2027, 9, 24)),
+            FoundingPricePolicy.On(statuses, eleven, discounts, plans, today));
+        Assert.AreEqual(
+            new FoundingPriceHold(status.Id, plans[0], 3, 5, new DateOnly(2027, 3, 24)),
+            FoundingPricePolicy.On(statuses, five, discounts, plans, today),
+            "Version 3 is the latest wherever it sits in the list.");
+        Assert.AreEqual(
+            new FoundingPriceHold(status.Id, plans[0], 3, 5, new DateOnly(2027, 3, 24)),
+            FoundingPricePolicy.For(statuses, five, discounts, plans, Whole(September)));
+
+        // A later version that names none holds nothing, for a space already founding too.
+        FoundingTerms[] withdrawn = [.. five, Terms(4, null, null, At(12, 1, 0))];
+        Assert.IsNull(FoundingPricePolicy.For(statuses, withdrawn, discounts, plans, Whole(September)));
+        Assert.IsNull(FoundingPricePolicy.On(statuses, withdrawn, discounts, plans, today));
+        Assert.AreEqual((2, 16.25m), Billed(Whole(September), statuses, withdrawn, discounts, plans));
+    }
+
+    [TestMethod]
+    public void ZeroMonthsHoldThroughTheMonthOfTheLastDiscountDayAndNotTheNext()
+    {
+        var plans = FirstAndDearer();
+        var status = Founding(new DateOnly(2026, 9, 10), At(9, 10, 9));
+        FoundingStatus[] statuses = [status];
+        WorkspaceDiscount[] discounts = [Discount(35m, new DateOnly(2026, 9, 10), new DateOnly(2026, 10, 25))];
+        var terms = Guarantee(0);
+        var october = new BillingMonth(2026, 10);
+
+        Assert.AreEqual(
+            new FoundingPriceHold(status.Id, plans[0], 2, 0, new DateOnly(2026, 10, 24)),
+            FoundingPricePolicy.For(statuses, terms, discounts, plans, Whole(october)));
+        Assert.AreEqual((1, 13.65m), Billed(Whole(September), statuses, terms, discounts, plans));
+        Assert.AreEqual((1, 13.65m), Billed(Whole(october), statuses, terms, discounts, plans), "The discount's last month is still at the founding day's version.");
+        Assert.AreEqual((2, 25.00m), Billed(Whole(new BillingMonth(2026, 11)), statuses, terms, discounts, plans), "Zero months: the first month with nothing off is at the latest.");
+
+        // With no discount, zero months hold the founding day's own month and no more.
+        Assert.AreEqual((1, 21.00m), Billed(Whole(September), statuses, terms, [], plans));
+        Assert.AreEqual((2, 25.00m), Billed(Whole(october), statuses, terms, [], plans));
+        Assert.AreEqual(new DateOnly(2026, 9, 10), FoundingPricePolicy.On(statuses, terms, [], plans, new DateOnly(2026, 9, 10))?.LastDay);
+        Assert.IsNull(FoundingPricePolicy.On(statuses, terms, [], plans, new DateOnly(2026, 9, 11)));
+    }
+
+    [TestMethod]
+    public void TheGuaranteesMonthsAreAWholeNumberFromZeroToOneHundredAndTwentyOrNone()
+    {
+        Assert.IsTrue(FoundingPricePolicy.IsValidMonths(null));
+        Assert.IsTrue(FoundingPricePolicy.IsValidMonths(0));
+        Assert.IsTrue(FoundingPricePolicy.IsValidMonths(120));
+        Assert.IsFalse(FoundingPricePolicy.IsValidMonths(-1));
+        Assert.IsFalse(FoundingPricePolicy.IsValidMonths(121));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), null, -1, null, AdminUserId, LaunchedAt));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            FoundingTerms.Publish(2, new FoundingBadgeTerms(8, 1), null, 121, null, AdminUserId, LaunchedAt));
+        Assert.AreEqual(7, Terms(2, null, 7, LaunchedAt).PriceGuaranteeMonths);
+        Assert.AreEqual(0, Terms(2, null, 0, LaunchedAt).PriceGuaranteeMonths, "Zero months is a number, not none.");
+        Assert.AreEqual(120, Terms(2, null, 120, LaunchedAt).PriceGuaranteeMonths);
+        Assert.IsNull(Terms(2, null, null, LaunchedAt).PriceGuaranteeMonths);
+        Assert.IsNull(Terms(2, 12, LaunchedAt).PriceGuaranteeMonths, "A seat number names no months.");
+        Assert.IsNull(Terms(2, null, 7, LaunchedAt).FoundingSeatIncludedClients, "And months name no seat number.");
+
+        var foundingDay = new DateOnly(2026, 9, 10);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => FoundingPricePolicy.LastDay(foundingDay, [], -1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => FoundingPricePolicy.LastDay(foundingDay, [], 121));
+        Assert.AreEqual(new DateOnly(2036, 9, 10), FoundingPricePolicy.LastDay(foundingDay, [], 120));
+    }
+
+    [TestMethod]
+    public void ASpaceWithNoDiscountOrOneThatEndedBeforeItsFoundingDayIsHeldItsMonthsFromItsFoundingDay()
+    {
+        var plans = FirstAndDearer();
+        var foundingDay = new DateOnly(2026, 9, 10);
+        FoundingStatus[] statuses = [Founding(foundingDay, At(9, 10, 9))];
+        var terms = Guarantee(7);
+        var endedBefore = Discount(35m, new DateOnly(2026, 7, 1), new DateOnly(2026, 8, 15));
+        var endsOnTheFoundingDay = Discount(12.5m, new DateOnly(2026, 8, 15), new DateOnly(2026, 9, 11));
+        var endsTheDayAfter = Discount(12.5m, new DateOnly(2026, 8, 15), new DateOnly(2026, 9, 12));
+
+        Assert.AreEqual(new DateOnly(2027, 4, 10), FoundingPricePolicy.LastDay(foundingDay, [], 7));
+        Assert.AreEqual(new DateOnly(2027, 4, 10), FoundingPricePolicy.LastDay(foundingDay, [endedBefore], 7));
+        Assert.AreEqual(new DateOnly(2027, 4, 10), FoundingPricePolicy.LastDay(foundingDay, [endedBefore, endsOnTheFoundingDay], 7));
+        Assert.AreEqual(new DateOnly(2027, 4, 11), FoundingPricePolicy.LastDay(foundingDay, [endedBefore, endsTheDayAfter], 7), "One day past the founding day, the discount's last day counts.");
+
+        foreach (var discounts in new WorkspaceDiscount[][] { [], [endedBefore] })
+        {
+            Assert.AreEqual(
+                new FoundingPriceHold(statuses[0].Id, plans[0], 2, 7, new DateOnly(2027, 4, 10)),
+                FoundingPricePolicy.On(statuses, terms, discounts, plans, foundingDay));
+            Assert.AreEqual((1, 21.00m), Billed(Whole(September), statuses, terms, discounts, plans));
+            Assert.AreEqual((1, 21.00m), Billed(Whole(new BillingMonth(2027, 4)), statuses, terms, discounts, plans), "Held 7 months from the founding day (answer a).");
+            Assert.AreEqual((2, 25.00m), Billed(Whole(new BillingMonth(2027, 5)), statuses, terms, discounts, plans));
+        }
+    }
+
+    [TestMethod]
+    public void WhileHeldTheLowerTotalIsBilledAndEqualTotalsKeepTheHeldVersion()
+    {
+        var held = Plan(1, 15m, LaunchedAt);
+        var hold = new FoundingPriceHold(Guid.NewGuid(), held, 2, 5, new DateOnly(2027, 3, 24));
+        var eight = new InvoiceQuantities(1, 8);
+        (int Version, decimal Total) Priced(PlatformPricePlan latest, InvoiceQuantities quantities, decimal percent)
+        {
+            var priced = FoundingPricePolicy.Price([held, latest], hold, quantities, IncludedClientSources.None, percent);
+            return (priced.Plan.VersionNumber, priced.Amounts.Total);
+        }
+
+        var dearer = Plan(2, 19m, At(10, 20, 10));
+        Assert.AreEqual((1, 21.00m), Priced(dearer, eight, 0m), "A rise never reaches a held space.");
+        Assert.AreEqual((1, 13.65m), Priced(dearer, eight, 35m));
+
+        var cheaper = Plan(2, 11m, At(10, 20, 10));
+        Assert.AreEqual((2, 17.00m), Priced(cheaper, eight, 0m), "A cut does: the lower total is billed (answer b).");
+        Assert.AreEqual((2, 11.05m), Priced(cheaper, eight, 35m), "Lower before the discount and after it.");
+
+        // $18 a seat and $1 an extra client: dearer with few clients, the same with 8, cheaper with many.
+        var reshaped = PlatformPricePlan.Publish(2, Placeholder with { SeatPrice = 18m, ExtraClientPrice = 1m }, null, AdminUserId, At(10, 20, 10));
+        Assert.AreEqual((1, 15.00m), Priced(reshaped, new InvoiceQuantities(1, 5), 0m));
+        Assert.AreEqual((1, 21.00m), Priced(reshaped, eight, 0m), "Equal totals keep the held version.");
+        Assert.AreEqual((2, 25.00m), Priced(reshaped, new InvoiceQuantities(1, 12), 0m), "$29.00 at version 1: each month is compared on its own counts.");
+
+        // The totals are compared, after the discount: a cent lower before 12.5% off is $18.37 under both.
+        var aCentLess = Plan(2, 14.99m, At(10, 20, 10));
+        Assert.AreEqual((2, 20.99m), Priced(aCentLess, eight, 0m));
+        Assert.AreEqual((1, 18.37m), Priced(aCentLess, eight, 12.5m));
+        Assert.AreEqual((1, 0m), Priced(cheaper, eight, 100m), "Nothing to pay under either: the invoice keeps the held version.");
+
+        // Held at the latest version itself: there is nothing to compare.
+        var alone = FoundingPricePolicy.Price([held], hold, eight, IncludedClientSources.None, 0m);
+        Assert.AreEqual((1, 21.00m), (alone.Plan.VersionNumber, alone.Amounts.Total));
+
+        // The same through a founding status: a cut published while the guarantee runs is billed, and stays after it.
+        PlatformPricePlan[] plans = [held, dearer, Plan(3, 11m, At(11, 5, 10))];
+        FoundingStatus[] statuses = [Founding(new DateOnly(2026, 9, 10), At(9, 10, 9))];
+        WorkspaceDiscount[] discounts = [Discount(35m, new DateOnly(2026, 9, 10), new DateOnly(2026, 10, 25))];
+        Assert.AreEqual((3, 11.05m), Billed(Whole(September), statuses, Guarantee(5), discounts, plans));
+        Assert.AreEqual((3, 17.00m), Billed(Whole(new BillingMonth(2027, 4)), statuses, Guarantee(5), discounts, plans));
+    }
+
+    [TestMethod]
+    public void AnInvoiceRecordsTheVersionItWasBilledAtAndWhatThatVersionsSeatIncludes()
+    {
+        var held = Plan(1, 15m, LaunchedAt);
+
+        // $19 a seat that includes 9 clients: dearer with few clients, cheaper with many.
+        var roomier = PlatformPricePlan.Publish(2, Placeholder with { SeatPrice = 19m, IncludedClientsPerSeat = 9 }, null, AdminUserId, At(10, 20, 10));
+        PlatformPricePlan[] plans = [held, roomier];
+        var status = Founding(new DateOnly(2026, 9, 10), At(9, 10, 9));
+        var october = new BillingMonth(2026, 10);
+        var hold = FoundingPricePolicy.For([status], Guarantee(5), [], plans, Whole(october));
+
+        // The founding seat and a grant count under whichever version is billed: 16 included under both here.
+        var sources = Sources(new FoundingSeat(status.Id, 2, 12), Grant(4, new DateOnly(2026, 9, 1), new DateOnly(2026, 12, 1)));
+        var few = FoundingPricePolicy.Price(plans, hold, new InvoiceQuantities(1, 18), sources, 35m);
+        var heldInvoice = PlatformInvoice.Issue(TenantId, october, october.StartUtc, few.Plan, few.Amounts, null, sources, "TBG-202610-NHAAAA", october.EndUtc);
+        Assert.AreEqual(
+            (1, 15m, 5, 16, 12.35m),
+            (heldInvoice.PricePlanVersion, heldInvoice.PlanSeatPrice, heldInvoice.PlanIncludedClientsPerSeat, heldInvoice.IncludedClients, heldInvoice.Total),
+            "$19.00 less 35% at version 1; version 2 asks $23.00 less 35%.");
+
+        var many = FoundingPricePolicy.Price(plans, hold, new InvoiceQuantities(1, 14), IncludedClientSources.None, 0m);
+        var latestInvoice = PlatformInvoice.Issue(TenantId, october, october.StartUtc, many.Plan, many.Amounts, null, IncludedClientSources.None, "TBG-202610-NHAAAB", october.EndUtc);
+        Assert.AreEqual(
+            (2, 19m, 9, 9, 29.00m),
+            (latestInvoice.PricePlanVersion, latestInvoice.PlanSeatPrice, latestInvoice.PlanIncludedClientsPerSeat, latestInvoice.IncludedClients, latestInvoice.Total),
+            "$33.00 at version 1.");
+
+        // The snapshot must explain the amounts: the cheaper version's amounts are refused under the held version's name.
+        Assert.Throws<InvalidOperationException>(() =>
+            PlatformInvoice.Issue(TenantId, october, october.StartUtc, held, many.Amounts, null, IncludedClientSources.None, "TBG-202610-NHAAAC", october.EndUtc));
+    }
+
+    [TestMethod]
+    public void AnEndedStatusKeepsTheMonthItEndedInAndGivesUpEveryMonthAfter()
+    {
+        var plans = FirstAndDearer();
+        var terms = Guarantee(7);
+        var status = Founding(new DateOnly(2026, 9, 10), At(9, 10, 9));
+        FoundingStatus[] statuses = [status];
+        (int Version, decimal Total) Bill(FoundingStatus founding, BillingMonth month) => Billed(Whole(month), [founding], terms, [], plans);
+
+        // No discount: 7 months from the founding day hold to 10 April 2027.
+        Assert.AreEqual(
+            new FoundingPriceHold(status.Id, plans[0], 2, 7, new DateOnly(2027, 4, 10)),
+            FoundingPricePolicy.On(statuses, terms, [], plans, new DateOnly(2026, 11, 20)));
+        Assert.AreEqual((1, 21.00m), Bill(status, new BillingMonth(2026, 12)));
+
+        status.End("The coach asked", AdminUserId, At(11, 20, 12));
+
+        Assert.AreEqual((1, 21.00m), Bill(status, new BillingMonth(2026, 11)), "Ended on the 20th: November is still held (answer c).");
+        Assert.AreEqual((2, 25.00m), Bill(status, new BillingMonth(2026, 12)), "From the month after the end, the latest version.");
+        Assert.AreEqual((2, 25.00m), Bill(status, new BillingMonth(2027, 4)), "Its months had not run out; the end cut them short.");
+        Assert.IsNull(FoundingPricePolicy.On(statuses, terms, [], plans, new DateOnly(2026, 11, 20)), "From the moment it ended the pages name no hold.");
+        Assert.IsNull(FoundingPricePolicy.On(statuses, terms, [], plans, new DateOnly(2026, 11, 30)), "Though November is still billed at the held version.");
+
+        // Ended exactly as December began: December is not its month.
+        var endedAtAMonthsStart = Founding(new DateOnly(2026, 9, 10), At(9, 10, 9));
+        endedAtAMonthsStart.End("The coach asked", AdminUserId, At(12, 1, 0));
+        Assert.AreEqual((1, 21.00m), Bill(endedAtAMonthsStart, new BillingMonth(2026, 11)));
+        Assert.AreEqual((2, 25.00m), Bill(endedAtAMonthsStart, new BillingMonth(2026, 12)));
+
+        // Ended after its last day: the guarantee had ended by itself, and the later end brings no month back.
+        var endedLate = Founding(new DateOnly(2026, 9, 10), At(9, 10, 9));
+        endedLate.End("Harm to clients", AdminUserId, new DateTimeOffset(2027, 6, 5, 12, 0, 0, TimeSpan.Zero));
+        Assert.AreEqual((1, 21.00m), Bill(endedLate, new BillingMonth(2027, 4)));
+        Assert.AreEqual((2, 25.00m), Bill(endedLate, new BillingMonth(2027, 5)));
+        Assert.AreEqual((2, 25.00m), Bill(endedLate, new BillingMonth(2027, 6)));
+    }
+
+    [TestMethod]
+    public void TheMonthTheGuaranteesLastDayFallsInsideIsHeldWhole()
+    {
+        var plans = FirstAndDearer();
+        var foundingDay = new DateOnly(2026, 9, 10);
+        FoundingStatus[] statuses = [Founding(foundingDay, At(9, 10, 9))];
+        var terms = Guarantee(5);
+        var march = new BillingMonth(2027, 3);
+        var april = new BillingMonth(2027, 4);
+
+        // The last day is 24 March 2027.
+        WorkspaceDiscount[] discounts = [Discount(35m, foundingDay, new DateOnly(2026, 10, 25))];
+        Assert.AreEqual((1, 21.00m), Billed(Whole(march), statuses, terms, discounts, plans), "The week after the 24th is billed at version 1 with the rest of March (answer d).");
+        Assert.AreEqual((2, 25.00m), Billed(Whole(april), statuses, terms, discounts, plans));
+        Assert.IsNull(FoundingPricePolicy.On(statuses, terms, discounts, plans, new DateOnly(2027, 3, 28)), "Read late in March the pages name no hold, and the month is billed held all the same.");
+
+        // A month billed from part-way (its trial ended then) is held while the guarantee touches what is billed,
+        // to the end of the last day, as a discount is; billed only from after it, nothing of the guarantee is left.
+        var fromTheLastEvening = new UsageWindow(new DateTimeOffset(2027, 3, 24, 18, 0, 0, TimeSpan.Zero), march.EndUtc);
+        var fromTheDayAfter = new UsageWindow(new DateTimeOffset(2027, 3, 25, 0, 0, 0, TimeSpan.Zero), march.EndUtc);
+        Assert.AreEqual((1, 21.00m), Billed(fromTheLastEvening, statuses, terms, discounts, plans));
+        Assert.AreEqual((2, 25.00m), Billed(fromTheDayAfter, statuses, terms, discounts, plans));
+
+        // One day inside a month is enough: a last day of 1 March holds March.
+        WorkspaceDiscount[] toTheFirst = [Discount(35m, foundingDay, new DateOnly(2026, 10, 2))];
+        Assert.AreEqual(new DateOnly(2027, 3, 1), FoundingPricePolicy.LastDay(foundingDay, toTheFirst, 5));
+        Assert.AreEqual((1, 21.00m), Billed(Whole(march), statuses, terms, toTheFirst, plans));
+        Assert.AreEqual((2, 25.00m), Billed(Whole(april), statuses, terms, toTheFirst, plans));
+
+        // A last day at a month's end leaves the next month out.
+        WorkspaceDiscount[] toAMonthsEnd = [Discount(35m, foundingDay, new DateOnly(2026, 10, 1))];
+        Assert.AreEqual(new DateOnly(2027, 2, 28), FoundingPricePolicy.LastDay(foundingDay, toAMonthsEnd, 5));
+        Assert.AreEqual((1, 21.00m), Billed(Whole(new BillingMonth(2027, 2)), statuses, terms, toAMonthsEnd, plans));
+        Assert.AreEqual((2, 25.00m), Billed(Whole(march), statuses, terms, toAMonthsEnd, plans));
+    }
+
+    [TestMethod]
+    public void ASpaceThatIsNotFoundingIsBilledAtTheLatestVersionAsBefore()
+    {
+        var plans = FirstAndDearer();
+        WorkspaceDiscount[] discounts = [Discount(35m, new DateOnly(2026, 9, 10), new DateOnly(2026, 10, 25))];
+        var terms = Guarantee(5);
+
+        Assert.IsNull(FoundingPricePolicy.For([], terms, discounts, plans, Whole(September)), "A discount alone holds nothing: only a founding status does.");
+        Assert.IsNull(FoundingPricePolicy.On([], terms, discounts, plans, new DateOnly(2026, 9, 15)));
+        Assert.AreEqual((2, 16.25m), Billed(Whole(September), [], terms, discounts, plans));
+        foreach (var (seats, clients, percent) in new[] { (1, 3, 0m), (1, 9, 0m), (4, 60, 30m) })
+        {
+            var quantities = new InvoiceQuantities(seats, clients);
+            var priced = FoundingPricePolicy.Price(plans, null, quantities, IncludedClientSources.None, percent);
+            Assert.AreSame(plans[1], priced.Plan);
+            Assert.AreEqual(PlatformInvoiceCalculation.Calculate(plans[1].Terms, quantities, IncludedClientSources.None, percent), priced.Amounts);
+        }
+
+        // With the placeholder alone, the amounts platform-invoice-v1 gave.
+        PlatformPricePlan[] placeholderAlone = [plans[0]];
+        foreach (var (seats, clients, percent, total) in new[] { (1, 3, 0m, 15.00m), (1, 9, 0m, 23.00m), (4, 60, 30m, 105.00m) })
+        {
+            var priced = FoundingPricePolicy.Price(placeholderAlone, null, new InvoiceQuantities(seats, clients), IncludedClientSources.None, percent);
+            Assert.AreEqual((1, total), (priced.Plan.VersionNumber, priced.Amounts.Total));
+        }
+    }
+
+    [TestMethod]
+    public void TheHeldVersionIsTheLastOnePublishedByTheMarkOrByTheEndOfTheFoundingUtcDayWhicheverComesFirst()
+    {
+        var foundingDay = new DateOnly(2026, 9, 10);
+        var first = Plan(1, 15m, LaunchedAt);
+        var markedAt = At(9, 10, 9);
+        var markedThatDay = Founding(foundingDay, markedAt);
+        int VersionWith(FoundingStatus status, DateTimeOffset secondPublishedAt) =>
+            FoundingPricePolicy.PlanOn([first, Plan(2, 19m, secondPublishedAt)], status).VersionNumber;
+
+        // Marked at 09:00 on its founding day: what was out by then is the day's, and nothing published after
+        // the mark ever is, so a space told "held at version 1" is never moved to version 2 that evening.
+        Assert.AreEqual(2, VersionWith(markedThatDay, At(9, 10, 8)), "Published earlier that day, before the mark: the day's.");
+        Assert.AreEqual(2, VersionWith(markedThatDay, markedAt), "Published at the instant of the mark: still the day's.");
+        Assert.AreEqual(1, VersionWith(markedThatDay, markedAt.AddTicks(1)), "A tick after the mark: not held.");
+        Assert.AreEqual(1, VersionWith(markedThatDay, At(9, 10, 23)), "Later the same day, after the mark: not held.");
+        Assert.AreEqual(1, VersionWith(markedThatDay, At(9, 11, 8)));
+
+        // A founding day dated back, marked two days later: the end of that UTC day comes first, so a version
+        // published the next day is not the founding day's though it was out before the mark.
+        var nextMidnight = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
+        var datedBack = Founding(foundingDay, At(9, 12, 9));
+        Assert.AreEqual(2, VersionWith(datedBack, At(9, 10, 23)), "Published during the founding day: the day's.");
+        Assert.AreEqual(2, VersionWith(datedBack, nextMidnight.AddTicks(-1)), "To the day's last tick.");
+        Assert.AreEqual(1, VersionWith(datedBack, nextMidnight), "Published as the next day begins: not the founding day's.");
+        Assert.AreEqual(1, VersionWith(datedBack, At(9, 11, 8)), "The next day, before the mark: not the founding day's.");
+
+        // The day is a UTC day: 01:30 on the 11th in Beirut is still the 10th.
+        Assert.AreEqual(2, VersionWith(datedBack, new DateTimeOffset(2026, 9, 11, 1, 30, 0, TimeSpan.FromHours(3))));
+
+        PlatformPricePlan[] four = [Plan(4, 23m, At(9, 11, 8)), first, Plan(3, 17m, At(9, 9, 0)), Plan(2, 19m, At(9, 5, 0))];
+        Assert.AreEqual(3, FoundingPricePolicy.PlanOn(four, datedBack).VersionNumber, "The last of those published by the day's end, wherever it sits in the list.");
+        Assert.AreEqual(3, FoundingPricePolicy.PlanOn(four, markedThatDay).VersionNumber);
+        Assert.AreEqual(
+            1,
+            FoundingPricePolicy.PlanOn(four, Founding(new DateOnly(2026, 8, 15), At(9, 12, 9))).VersionNumber,
+            "A founding day older than every publish takes the first version, whenever it was marked.");
+        Assert.AreEqual(
+            1,
+            FoundingPricePolicy.PlanOn([Plan(2, 19m, At(9, 10, 23)), Plan(1, 15m, At(9, 10, 10))], markedThatDay).VersionNumber,
+            "Marked before any version was out: the first one, not the latest.");
+        Assert.Throws<InvalidOperationException>(() => FoundingPricePolicy.PlanOn([], markedThatDay));
+        Assert.ThrowsExactly<ArgumentNullException>(() => FoundingPricePolicy.PlanOn(four, null!));
+
+        // The bill and the pages carry that same plan. Marked at 09:00, a dearer version out at 23:00 that day
+        // moves neither; out at 08:00, an hour before the mark, it is the one held and billed.
+        var terms = Guarantee(5);
+        FoundingStatus[] statuses = [markedThatDay];
+        var afterTheMark = Plan(2, 19m, At(9, 10, 23));
+        PlatformPricePlan[] publishedAfter = [first, afterTheMark];
+        Assert.AreSame(first, FoundingPricePolicy.For(statuses, terms, [], publishedAfter, Whole(September))?.Plan);
+        Assert.AreSame(first, FoundingPricePolicy.On(statuses, terms, [], publishedAfter, foundingDay)?.Plan);
+        Assert.AreEqual((1, 21.00m), Billed(Whole(September), statuses, terms, [], publishedAfter));
+
+        var beforeTheMark = Plan(2, 19m, At(9, 10, 8));
+        PlatformPricePlan[] publishedBefore = [first, beforeTheMark];
+        Assert.AreSame(beforeTheMark, FoundingPricePolicy.For(statuses, terms, [], publishedBefore, Whole(September))?.Plan);
+        Assert.AreSame(beforeTheMark, FoundingPricePolicy.On(statuses, terms, [], publishedBefore, foundingDay)?.Plan);
+        Assert.AreEqual((2, 25.00m), Billed(Whole(September), statuses, terms, [], publishedBefore));
+    }
+
+    [TestMethod]
+    public void AStatusFoundedAfterTheWindowDoesNotHoldItAndOfTwoTouchingOneWindowTheOneMarkedLastHolds()
+    {
+        // Version 1 from June 2026, version 2 from 15 August, version 3 from 20 October.
+        PlatformPricePlan[] plans = [Plan(1, 15m, At(6, 1, 0)), Plan(2, 17m, At(8, 15, 10)), Plan(3, 19m, At(10, 20, 10))];
+        var terms = Guarantee(7);
+        var july = new BillingMonth(2026, 7);
+        var first = Founding(new DateOnly(2026, 7, 1), At(7, 1, 9));
+
+        Assert.IsNull(FoundingPricePolicy.For([first], terms, [], plans, Whole(new BillingMonth(2026, 6))), "Founded on 1 July: June's bill is not held.");
+        Assert.AreEqual(
+            new FoundingPriceHold(first.Id, plans[0], 2, 7, new DateOnly(2027, 2, 1)),
+            FoundingPricePolicy.For([first], terms, [], plans, Whole(july)));
+        Assert.IsNull(
+            FoundingPricePolicy.For([first], terms, [], plans, new UsageWindow(july.StartUtc.AddDays(14), july.StartUtc.AddDays(14))),
+            "An empty window, even inside the guarantee, is held by nothing.");
+
+        // The founding day's own month is held from that day's midnight, were it the month's last day.
+        var foundedOnTheLastDay = Founding(new DateOnly(2026, 9, 30), At(9, 30, 9));
+        var foundedOnTheNextDay = Founding(new DateOnly(2026, 10, 1), At(10, 1, 9));
+        Assert.AreEqual(2, FoundingPricePolicy.For([foundedOnTheLastDay], terms, [], plans, Whole(September))?.Plan.VersionNumber);
+        Assert.IsNull(FoundingPricePolicy.For([foundedOnTheNextDay], terms, [], plans, Whole(September)));
+
+        // Ended on 8 September and marked again on the 20th: both touch September.
+        first.End("The coach asked", AdminUserId, At(9, 8, 12));
+        var second = Founding(new DateOnly(2026, 9, 20), At(9, 20, 9));
+        var secondHold = new FoundingPriceHold(second.Id, plans[1], 2, 7, new DateOnly(2027, 4, 20));
+        Assert.AreEqual(secondHold, FoundingPricePolicy.For([first, second], terms, [], plans, Whole(September)));
+        Assert.AreEqual(secondHold, FoundingPricePolicy.For([second, first], terms, [], plans, Whole(September)), "Whatever their order.");
+        Assert.AreEqual(secondHold, FoundingPricePolicy.For([first, second], terms, [], plans, Whole(new BillingMonth(2026, 10))));
+        var august = FoundingPricePolicy.For([second, first], terms, [], plans, Whole(new BillingMonth(2026, 8)));
+        Assert.AreEqual(first.Id, august?.FoundingStatusId, "August is the first one's alone.");
+        Assert.AreEqual(1, august?.Plan.VersionNumber);
+        Assert.IsNull(FoundingPricePolicy.On([first, second], terms, [], plans, new DateOnly(2026, 9, 15)), "Between the two the pages name no hold.");
+        Assert.AreEqual(secondHold, FoundingPricePolicy.On([first, second], terms, [], plans, new DateOnly(2026, 9, 25)));
+
+        // Marked last, though founded first: a status dated back holds over the one it replaced.
+        var replaced = Founding(new DateOnly(2026, 8, 20), At(8, 20, 9));
+        replaced.End("Marked from the wrong day", AdminUserId, At(9, 8, 12));
+        var datedBack = Founding(new DateOnly(2026, 7, 1), At(9, 8, 13));
+        var datedBackHold = new FoundingPriceHold(datedBack.Id, plans[0], 2, 7, new DateOnly(2027, 2, 1));
+        Assert.AreEqual(2, FoundingPricePolicy.For([replaced], terms, [], plans, Whole(September))?.Plan.VersionNumber);
+        Assert.AreEqual(datedBackHold, FoundingPricePolicy.For([datedBack, replaced], terms, [], plans, Whole(September)));
+        Assert.AreEqual(datedBackHold, FoundingPricePolicy.For([datedBack], terms, [], plans, Whole(july)), "Held from its founding day, not from the day it was marked.");
+    }
+
+    [TestMethod]
+    public void ThePagesReadTheHoldFromTheFoundingDayThroughTheGuaranteesLastDay()
+    {
+        var plans = FirstAndDearer();
+        var status = Founding(new DateOnly(2026, 9, 10), At(9, 10, 9));
+        FoundingStatus[] statuses = [status];
+        WorkspaceDiscount[] discounts = [Discount(35m, new DateOnly(2026, 9, 10), new DateOnly(2026, 10, 25))];
+        var terms = Guarantee(5);
+        var hold = new FoundingPriceHold(status.Id, plans[0], 2, 5, new DateOnly(2027, 3, 24));
+        FoundingPriceHold? ReadOn(DateOnly today) => FoundingPricePolicy.On(statuses, terms, discounts, plans, today);
+
+        Assert.IsNull(ReadOn(new DateOnly(2026, 9, 9)), "Read on a day before the founding day (a clock that ran back): no hold yet.");
+        Assert.AreEqual(hold, ReadOn(new DateOnly(2026, 9, 10)), "The plan, the terms version, its months and the last day.");
+        Assert.AreEqual(hold, ReadOn(new DateOnly(2026, 10, 1)), "While the discount still runs too, so the owner sees the whole path.");
+        Assert.AreEqual(hold, ReadOn(new DateOnly(2027, 3, 24)), "The last day itself.");
+        Assert.IsNull(ReadOn(new DateOnly(2027, 3, 25)), "The day after, the pages say no more.");
+        Assert.AreEqual(hold, FoundingPricePolicy.For(statuses, terms, discounts, plans, Whole(new BillingMonth(2027, 3))), "March is still billed held.");
+    }
+
+    [TestMethod]
+    public void AMonthStillInsideTheTrialIsShownAtTheHeldVersionWhileAHoldTouchesItAndAtTheLatestOtherwise()
+    {
+        var held = Plan(1, 15m, LaunchedAt);
+        var cheaper = Plan(2, 11m, At(10, 20, 10));
+        PlatformPricePlan[] plans = [held, cheaper];
+        FoundingStatus[] statuses = [Founding(new DateOnly(2026, 9, 10), At(9, 10, 9))];
+
+        // No discount: 5 months from the founding day hold to 10 February 2027.
+        var terms = Guarantee(5);
+        FoundingPriceHold? HoldOn(FoundingStatus[] founding, BillingMonth month) => FoundingPricePolicy.For(founding, terms, [], plans, Whole(month));
+
+        Assert.AreSame(
+            held,
+            FoundingPricePolicy.Unbilled(plans, HoldOn(statuses, September)),
+            "Nothing is charged, so no totals are compared: the held version, even with a cheaper one out.");
+        Assert.AreSame(cheaper, FoundingPricePolicy.Unbilled(plans, HoldOn(statuses, new BillingMonth(2027, 3))), "After the guarantee, the latest.");
+        Assert.AreSame(cheaper, FoundingPricePolicy.Unbilled(plans, HoldOn([], September)), "A space that is not founding: the latest.");
+        Assert.Throws<InvalidOperationException>(() => FoundingPricePolicy.Unbilled([], null));
+        Assert.Throws<InvalidOperationException>(() =>
+            FoundingPricePolicy.Price([], HoldOn(statuses, September), new InvoiceQuantities(1, 8), IncludedClientSources.None, 0m));
+    }
+
+    [TestMethod]
+    public void ADiscountThatRunsToTheCalendarsEndHoldsToTheCalendarsEndWithoutOverflowing()
+    {
+        var plans = FirstAndDearer();
+        var foundingDay = new DateOnly(2026, 9, 10);
+        var status = Founding(foundingDay, At(9, 10, 9));
+        FoundingStatus[] statuses = [status];
+        var terms = Guarantee(5);
+        WorkspaceDiscount[] forGood = [Discount(12.5m, foundingDay, DateOnly.MaxValue)];
+
+        Assert.AreEqual(DateOnly.MaxValue, FoundingPricePolicy.LastDay(foundingDay, forGood, 5));
+        Assert.AreEqual(DateOnly.MaxValue, FoundingPricePolicy.LastDay(foundingDay, forGood, 120));
+        Assert.AreEqual(new DateOnly(9999, 12, 30), FoundingPricePolicy.LastDay(foundingDay, forGood, 0), "The discount's own last day.");
+
+        // The months that still fit are added; one day later they no longer fit, and the answer is the calendar's end.
+        Assert.AreEqual(DateOnly.MaxValue, FoundingPricePolicy.LastDay(new DateOnly(9989, 12, 31), [], 120));
+        Assert.AreEqual(DateOnly.MaxValue, FoundingPricePolicy.LastDay(new DateOnly(9990, 1, 1), [], 120));
+        Assert.AreEqual(new DateOnly(9999, 12, 15), FoundingPricePolicy.LastDay(new DateOnly(9999, 7, 15), [], 5));
+        Assert.AreEqual(DateOnly.MaxValue, FoundingPricePolicy.LastDay(new DateOnly(9999, 8, 15), [], 5));
+
+        var hold = new FoundingPriceHold(status.Id, plans[0], 2, 5, DateOnly.MaxValue);
+        Assert.AreEqual(hold, FoundingPricePolicy.For(statuses, terms, forGood, plans, Whole(new BillingMonth(2027, 4))));
+        Assert.AreEqual(hold, FoundingPricePolicy.For(statuses, terms, forGood, plans, Whole(new BillingMonth(9998, 12))), "The last month there is to bill.");
+        Assert.AreEqual(hold, FoundingPricePolicy.On(statuses, terms, forGood, plans, DateOnly.MaxValue));
+        Assert.AreEqual((1, 18.37m), Billed(Whole(new BillingMonth(2027, 4)), statuses, terms, forGood, plans), "12.5% off version 1's $21.00.");
+    }
+
+    /// <summary>Version 1 is the placeholder; version 2, published on 20 October 2026, asks $19 a seat.</summary>
+    private static PlatformPricePlan[] FirstAndDearer() => [Plan(1, 15m, LaunchedAt), Plan(2, 19m, At(10, 20, 10))];
+
+    private static PlatformPricePlan Plan(int version, decimal seatPrice, DateTimeOffset publishedAt) =>
+        PlatformPricePlan.Publish(version, Placeholder with { SeatPrice = seatPrice }, null, AdminUserId, publishedAt);
+
+    private static WorkspaceDiscount Discount(decimal percent, DateOnly startsOn, DateOnly endsOnExclusive) =>
+        WorkspaceDiscount.Grant(TenantId, percent, startsOn, endsOnExclusive, "Founding coach", AdminUserId, LaunchedAt);
+
+    private static FoundingTerms Terms(int version, int? seatIncludedClients, int? priceGuaranteeMonths, DateTimeOffset publishedAt) =>
+        FoundingTerms.Publish(version, new FoundingBadgeTerms(8, 1), seatIncludedClients, priceGuaranteeMonths, null, AdminUserId, publishedAt);
+
+    /// <summary>The founding terms as an admin leaves them: version 1 as seeded, with no months, then version 2 naming them.</summary>
+    private static FoundingTerms[] Guarantee(int months) =>
+        [Terms(1, null, LaunchedAt.AddDays(-45)), Terms(2, null, months, LaunchedAt.AddDays(-20))];
+
+    /// <summary>
+    /// A window priced as the invoice run prices it, for one seat with 8 clients: the largest discount touching
+    /// it, the hold touching it, then the rule. Answers the version billed and the total.
+    /// </summary>
+    private static (int Version, decimal Total) Billed(
+        UsageWindow window,
+        FoundingStatus[] statuses,
+        FoundingTerms[] terms,
+        WorkspaceDiscount[] discounts,
+        PlatformPricePlan[] plans)
+    {
+        var priced = FoundingPricePolicy.Price(
+            plans,
+            FoundingPricePolicy.For(statuses, terms, discounts, plans, window),
+            new InvoiceQuantities(1, 8),
+            IncludedClientSources.None,
+            WorkspaceDiscount.ApplicableTo(discounts, window)?.Percent ?? 0m);
+        return (priced.Plan.VersionNumber, priced.Amounts.Total);
+    }
 
     // ---- trial ----
 

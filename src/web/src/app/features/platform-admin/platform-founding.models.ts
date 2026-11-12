@@ -60,6 +60,8 @@ export interface TermsEntry {
   monthsSinceStart: number | null;
   /** The clients a founding owner's seat includes (notes plan N11a); null for none. */
   foundingSeatIncludedClients: number | null;
+  /** The months a founding space's prices are held after its last discount (notes plan N8); null for none. */
+  priceGuaranteeMonths: number | null;
   note: string;
 }
 
@@ -89,8 +91,10 @@ function seatHelp(planSeatClients: number | null): string {
 }
 
 /**
- * The badge's two thresholds and the founding seat's clients, in the order the form and the change
- * list show them; the plan's seat, when known, goes in the seat's help.
+ * The badge's two thresholds, the founding seat's clients and the price guarantee's months, in the
+ * order the form and the change list show them; the plan's seat, when known, goes in the seat's help.
+ * Unlike the seat's number, the months in force apply to every founding space, the ones already
+ * founding too (PBL-012), and the box's help says so.
  */
 export function termsFields(planSeatClients: number | null = null): readonly TermsField[] {
   return [
@@ -119,6 +123,15 @@ export function termsFields(planSeatClients: number | null = null): readonly Ter
       missing: null,
       range: $localize`Enter a whole number of clients from 0 to 1000, or none for what the price plan’s seat includes.`,
     },
+    {
+      key: 'priceGuaranteeMonths',
+      label: $localize`Months a founding space’s prices are held`,
+      help: $localize`Counted from a space’s last discount, or from its founding day when it has no discount; until then it keeps the plan version of its founding day. Leave it empty to hold no price. The number in force applies to every founding space, those already founding too.`,
+      min: 0,
+      max: 120,
+      missing: null,
+      range: $localize`Enter a whole number of months from 0 to 120, or none to hold no price.`,
+    },
   ];
 }
 
@@ -127,6 +140,7 @@ export function termsEntryFrom(terms: FoundingTerms): TermsEntry {
     clientsWithActivePlan: terms.clientsWithActivePlan,
     monthsSinceStart: terms.monthsSinceStart,
     foundingSeatIncludedClients: terms.foundingSeatIncludedClients,
+    priceGuaranteeMonths: terms.priceGuaranteeMonths,
     note: '',
   };
 }
@@ -158,7 +172,7 @@ export interface TermsChange {
 
 /**
  * The numbers that differ from the version in force, as words for the admin to check; the founding
- * seat's number going to none is a change too, shown as "None".
+ * seat's number or the guarantee's months going to none is a change too, shown as "None".
  */
 export function termsChanges(current: FoundingTerms, entry: TermsEntry): readonly TermsChange[] {
   const shown = (value: number | null) => (value === null ? $localize`None` : String(value));
@@ -177,8 +191,9 @@ export function termsChanges(current: FoundingTerms, entry: TermsEntry): readonl
 
 /**
  * The next version, against the one the admin saw, so a stale one is refused (409). The founding
- * seat's number is always sent, null for none, as the server requires (notes plan N11a): the box
- * starts with the version in force's, so new thresholds alone never drop it.
+ * seat's number and the guarantee's months are always sent, null for none, as the server requires
+ * (notes plans N11a and N8): each box starts with the version in force's, so new thresholds alone
+ * never drop either.
  */
 export function toPublishTermsRequest(
   entry: TermsEntry,
@@ -190,5 +205,6 @@ export function toPublishTermsRequest(
     note: entry.note.trim() || null,
     expectedCurrentVersion: current.versionNumber,
     foundingSeatIncludedClients: entry.foundingSeatIncludedClients,
+    priceGuaranteeMonths: entry.priceGuaranteeMonths,
   };
 }

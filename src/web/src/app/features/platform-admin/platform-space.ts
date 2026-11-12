@@ -55,6 +55,7 @@ import {
   currentFoundingTerms,
   FOUNDING_COACH,
   foundingSeatLine,
+  priceHoldLine,
   type AdminFounding,
   type FoundingRecord,
   type FoundingTerms,
@@ -179,6 +180,11 @@ export class PlatformSpace {
   protected readonly sentence = computed(() => {
     const summary = this.summary();
     return summary ? statusSentence(summary, this.today, this.locale) : '';
+  });
+  /** A founding space's held prices: the plan version and until when, as the server reads them (N8). */
+  protected readonly holdLine = computed(() => {
+    const hold = this.detail()?.priceHold;
+    return hold ? priceHoldLine(hold.pricePlanVersion, this.day(hold.lastDay)) : null;
   });
   protected readonly next = computed(() => {
     const summary = this.summary();

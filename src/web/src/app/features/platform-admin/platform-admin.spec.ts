@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { fill, press, settle, toggleFold } from '../../../testing/dom';
@@ -15,6 +15,7 @@ import {
   SPACE_IDS,
 } from '../../../testing/platform-admin-fixtures';
 import type { AdminWorkspace, PricePlan } from '../billing/billing.models';
+import type { FoundingTerms } from '../billing/founding.models';
 import { PlatformAdmin } from './platform-admin';
 import { PlatformAdminApi } from './platform-admin-api';
 import { isPlatformAdmin } from './platform-admin.guard';
@@ -90,6 +91,27 @@ const dialog = () => {
 };
 
 const toast = () => textOf(document.querySelector('.tb-toast-host, app-toast-host'));
+
+/** Every toast on screen, each message whole. */
+const toasts = () =>
+  Array.from(document.querySelectorAll('.tb-toast__message')).map((message) => textOf(message));
+
+// The price plan sheet's first paragraph (notes plan N8): what a new version means for invoices,
+// then for founding spaces, from the guarantee months of the founding terms in force.
+const PLAN_INTRO =
+  'Version 2 is in force. Invoices issued from now on use the new terms; invoices already issued keep theirs.';
+const PLAN_KEPT = 'Founding spaces keep their version until their guarantee ends.';
+const PLAN_NOT_HELD =
+  'No guarantee months are published yet, so founding spaces are billed at the new version too.';
+const planIntro = () => textOf(dialog()?.querySelector('form > .muted'));
+
+/** Change the seat price in the open price plan sheet and publish the next version. */
+async function publishVersion3(fixture: Parameters<typeof settle>[0]): Promise<void> {
+  fill(dialog()!, 'Price per seat', '20');
+  await settle(fixture);
+  press(dialog()!, 'Publish version 3');
+  await settle(fixture);
+}
 
 const rowNames = (host: HTMLElement) =>
   Array.from(host.querySelectorAll('.space .name')).map((link) => textOf(link));
@@ -260,7 +282,10 @@ describe('Platform billing', () => {
     await settle(fixture);
     const sheet = dialog()!;
     expect(textOf(sheet.querySelector('h2'))).toBe('Publish a price plan version');
-    expect(textOf(sheet)).toContain('Version 2 is in force.');
+    // Notes plan N8: the terms in force publish no guarantee months, so no founding space is held
+    // and the sheet says so before the admin publishes.
+    expect(planIntro()).toBe(`${PLAN_INTRO} ${PLAN_NOT_HELD}`);
+    expect(textOf(sheet)).not.toContain('keep their version');
     expect(textOf(sheet)).toContain('Nothing has changed yet.');
     expect(
       Array.from(sheet.querySelectorAll('button')).find((b) => textOf(b) === 'Publish version 3')!
@@ -286,8 +311,128 @@ describe('Platform billing', () => {
       expect.objectContaining({ seatPrice: 20, trialDays: 14, expectedCurrentVersion: 2 }),
     );
     expect(dialog()).toBeNull();
-    expect(toast()).toContain('Price plan version 3 is published.');
+    // With no guarantee months the new version reaches founding spaces too, and the toast says so.
+    expect(toasts()).toEqual([
+      'Price plan version 3 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+    ]);
     expect(api.getPricePlans).toHaveBeenCalledTimes(2);
+  });
+
+  // Notes plan N8: a founding space is not moved to the new version while its guarantee runs, and
+  // the guarantee is the months of the founding terms in force. The months are this test's own.
+  it.each([
+    ['5 months', 5],
+    // No months after the last discount is still a guarantee, unlike none.
+    ['0 months', 0],
+  ])(
+    'says in the plan sheet and its toast that a founding space keeps its version when the terms in force hold prices for %s',
+    async (_, months) => {
+      const { fixture, host } = await render(
+        platformSpaces,
+        {},
+        { getFoundingTerms: vi.fn(() => of([foundingTerms({ priceGuaranteeMonths: months })])) },
+      );
+
+      press(host, 'Publish a new version');
+      await settle(fixture);
+      expect(planIntro()).toBe(`${PLAN_INTRO} ${PLAN_KEPT}`);
+
+      await publishVersion3(fixture);
+      expect(dialog()).toBeNull();
+      expect(toasts()).toEqual([
+        'Price plan version 3 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+      ]);
+    },
+  );
+
+  it('says nothing of founding spaces in the plan sheet or its toast when the founding terms cannot be read', async () => {
+    const { fixture, host } = await render(
+      platformSpaces,
+      {},
+      { getFoundingTerms: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))) },
+    );
+
+    press(host, 'Publish a new version');
+    await settle(fixture);
+    expect(planIntro()).toBe(PLAN_INTRO);
+    expect(dialog()!.querySelector('[data-plan-founding]')).toBeNull();
+
+    await publishVersion3(fixture);
+    expect(dialog()).toBeNull();
+    // Neither promise: the page does not know whether a price is held.
+    expect(toasts()).toEqual([
+      'Price plan version 3 is published. Invoices issued from now on use it.',
+    ]);
+  });
+
+  it('reads the guarantee’s months from the terms in force, never from an earlier version', async () => {
+    const { fixture, host } = await render(
+      platformSpaces,
+      {},
+      {
+        getFoundingTerms: vi.fn(() =>
+          of([
+            foundingTerms({ id: 'terms-2', versionNumber: 2, priceGuaranteeMonths: null }),
+            foundingTerms({ isCurrent: false, priceGuaranteeMonths: 7 }),
+          ]),
+        ),
+      },
+    );
+
+    press(host, 'Publish a new version');
+    await settle(fixture);
+    expect(planIntro()).toBe(`${PLAN_INTRO} ${PLAN_NOT_HELD}`);
+
+    await publishVersion3(fixture);
+    expect(toasts()).toEqual([
+      'Price plan version 3 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+    ]);
+  });
+
+  it('says no price is held in the plan sheet and its toast while no founding terms are published at all', async () => {
+    const { fixture, host } = await render(
+      platformSpaces,
+      {},
+      { getFoundingTerms: vi.fn(() => of([])) },
+    );
+
+    press(host, 'Publish a new version');
+    await settle(fixture);
+    expect(planIntro()).toBe(`${PLAN_INTRO} ${PLAN_NOT_HELD}`);
+
+    await publishVersion3(fixture);
+    expect(toasts()).toEqual([
+      'Price plan version 3 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+    ]);
+  });
+
+  it('says what founding spaces keep once the terms are read, in a plan sheet opened before them', async () => {
+    const late = new Subject<FoundingTerms[]>();
+    const read = [foundingTerms({ priceGuaranteeMonths: 7 })];
+    const { fixture, host } = await render(
+      platformSpaces,
+      {},
+      { getFoundingTerms: vi.fn(() => of(read)).mockReturnValueOnce(late) },
+    );
+
+    // The spaces and the plans are there; the founding terms are still on their way.
+    press(host, 'Publish a new version');
+    await settle(fixture);
+    expect(planIntro()).toBe(PLAN_INTRO);
+    fill(dialog()!, 'Price per seat', '20');
+    await settle(fixture);
+
+    late.next(read);
+    late.complete();
+    await settle(fixture);
+    expect(planIntro()).toBe(`${PLAN_INTRO} ${PLAN_KEPT}`);
+    // What was typed stays, and the toast speaks from the months read by then.
+    expect(dialog()!.querySelector<HTMLInputElement>('input[name="seatPrice"]')!.value).toBe('20');
+    press(dialog()!, 'Publish version 3');
+    await settle(fixture);
+    expect(toasts()).toEqual([
+      'Price plan version 3 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+    ]);
   });
 
   it('keeps a refused version on screen with the server’s words', async () => {
@@ -394,7 +539,7 @@ describe('Platform billing', () => {
     expect(host.querySelectorAll('[data-founding]')).toHaveLength(1);
   });
 
-  it('shows the founding terms in force under the price plan: the badge’s and the founding seat’s', async () => {
+  it('shows the founding terms in force under the price plan: the badge’s, the founding seat’s and the guarantee’s', async () => {
     const { host, founding } = await render();
 
     const panel = host.querySelector('[data-founding-terms]')!;
@@ -407,6 +552,16 @@ describe('Platform billing', () => {
     expect(textOf(panel.querySelector('[data-terms-seat]'))).toBe(
       'A founding space’s owner seat includes what the price plan’s seat includes: no founding number above it is published yet.',
     );
+    // Notes plan N8: no guarantee months are published either, so no price is held.
+    expect(textOf(panel.querySelector('[data-terms-guarantee]'))).toBe(
+      'A founding space’s prices are not held: no guarantee months are published yet.',
+    );
+    // One sentence each, in the order of the sheet's numbers.
+    expect(
+      Array.from(panel.querySelectorAll('p.badge-terms')).map((line) =>
+        line.getAttributeNames().find((name) => name.startsWith('data-terms-')),
+      ),
+    ).toEqual(['data-terms-sentence', 'data-terms-seat', 'data-terms-guarantee']);
     expect(founding.getFoundingTerms).toHaveBeenCalledTimes(1);
     // Its own panel after the price plan's, so the plan's version line stays the only one there.
     const panels = Array.from(host.querySelectorAll('section.panel'));
@@ -427,6 +582,50 @@ describe('Platform billing', () => {
     expect(textOf(host.querySelector('[data-founding-terms] [data-terms-seat]'))).toBe(
       'A founding space’s owner seat includes 13 clients.',
     );
+  });
+
+  // Notes plan N8: the months are the terms in force's, read as the server sends them.
+  it('says how long a founding space keeps its plan version under the terms in force', async () => {
+    const guarantee = async (months: number | null) => {
+      const { host } = await render(
+        platformSpaces,
+        {},
+        { getFoundingTerms: vi.fn(() => of([foundingTerms({ priceGuaranteeMonths: months })])) },
+      );
+      const line = textOf(host.querySelector('[data-founding-terms] [data-terms-guarantee]'));
+      TestBed.resetTestingModule();
+      return line;
+    };
+
+    expect(await guarantee(5)).toBe(
+      'A founding space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.',
+    );
+    expect(await guarantee(1)).toBe(
+      'A founding space keeps its plan version until 1 month after its last discount ends, or after its founding day when it has none.',
+    );
+    // No months after the last discount is still a guarantee, unlike none.
+    expect(await guarantee(0)).toBe(
+      'A founding space keeps its plan version until its last discount ends; with no discount, only for its founding month.',
+    );
+    expect(await guarantee(null)).toBe(
+      'A founding space’s prices are not held: no guarantee months are published yet.',
+    );
+  });
+
+  it('says no guarantee while the terms cannot be read or none are published', async () => {
+    const failed = await render(
+      platformSpaces,
+      {},
+      { getFoundingTerms: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))) },
+    );
+    expect(failed.host.querySelector('[data-terms-guarantee]')).toBeNull();
+    TestBed.resetTestingModule();
+
+    const none = await render(platformSpaces, {}, { getFoundingTerms: vi.fn(() => of([])) });
+    expect(textOf(none.host.querySelector('[data-founding-terms]'))).toContain(
+      'No badge terms have been published yet.',
+    );
+    expect(none.host.querySelector('[data-terms-guarantee]')).toBeNull();
   });
 
   it('publishes the badge’s next terms against the version it saw', async () => {
@@ -464,6 +663,7 @@ describe('Platform billing', () => {
       note: null,
       expectedCurrentVersion: 1,
       foundingSeatIncludedClients: null,
+      priceGuaranteeMonths: null,
     });
     expect(csrf.refresh.mock.invocationCallOrder[0]).toBeLessThan(
       founding.publishFoundingTerms.mock.invocationCallOrder[0],
@@ -471,6 +671,75 @@ describe('Platform billing', () => {
     expect(dialog()).toBeNull();
     expect(toast()).toContain('Badge terms version 2 is published.');
     expect(founding.getFoundingTerms).toHaveBeenCalledTimes(2);
+  });
+
+  // Notes plan N8: the guarantee's months are the terms sheet's fourth number, published from here.
+  it('publishes the months a founding space’s prices are held, and says them once read again', async () => {
+    const months = 'Months a founding space’s prices are held';
+    let versions = [foundingTerms()];
+    const { fixture, host, founding } = await render(
+      platformSpaces,
+      {},
+      {
+        getFoundingTerms: vi.fn(() => of(versions)),
+        publishFoundingTerms: vi.fn(() => {
+          const next = foundingTerms({
+            id: 'terms-2',
+            versionNumber: 2,
+            priceGuaranteeMonths: 7,
+            publishedAtUtc: NOW,
+          });
+          versions = [next, foundingTerms({ isCurrent: false })];
+          return of(next);
+        }),
+      },
+    );
+    const line = () => textOf(host.querySelector('[data-founding-terms] [data-terms-guarantee]'));
+    expect(line()).toBe(
+      'A founding space’s prices are not held: no guarantee months are published yet.',
+    );
+
+    press(host, 'Change');
+    await settle(fixture);
+    const sheet = dialog()!;
+    const box = sheet.querySelector<HTMLInputElement>('input[name="priceGuaranteeMonths"]')!;
+    expect(box.value).toBe('');
+    expect(textOf(sheet)).toContain(
+      'The number in force applies to every founding space, those already founding too.',
+    );
+    fill(sheet, months, '7');
+    await settle(fixture);
+    expect(
+      Array.from(sheet.querySelectorAll('.changes li')).map((row) =>
+        ['.what', '.from', '.to'].map((part) => textOf(row.querySelector(part))),
+      ),
+    ).toEqual([[months, 'None', '7']]);
+    press(sheet, 'Publish version 2');
+    await settle(fixture);
+
+    expect(founding.publishFoundingTerms).toHaveBeenCalledWith({
+      clientsWithActivePlan: 10,
+      monthsSinceStart: 2,
+      note: null,
+      expectedCurrentVersion: 1,
+      foundingSeatIncludedClients: null,
+      priceGuaranteeMonths: 7,
+    });
+    expect(dialog()).toBeNull();
+    expect(founding.getFoundingTerms).toHaveBeenCalledTimes(2);
+    expect(textOf(host.querySelector('[data-founding-terms] .panel-head .quiet'))).toBe(
+      'Version 2 · since Oct 9, 2026',
+    );
+    expect(line()).toBe(
+      'A founding space keeps its plan version until 7 months after its last discount ends, or after its founding day when it has none.',
+    );
+
+    // The sheet opened again starts from the months now in force.
+    press(host, 'Change');
+    await settle(fixture);
+    expect(
+      dialog()!.querySelector<HTMLInputElement>('input[name="priceGuaranteeMonths"]')!.value,
+    ).toBe('7');
   });
 
   it('keeps refused terms on screen in the server’s words', async () => {

@@ -32,12 +32,12 @@ public sealed record FoundingBadgeTerms(int ClientsWithActivePlan, int MonthsSin
 }
 
 /// <summary>
-/// One published, immutable version of the founding terms: the Founding coach badge's two thresholds and,
-/// since notes plan N11a, the clients a founding space's owner seat includes. The latest version is in
-/// force; a badge records the version it was earned under, so publishing a new one never changes a badge
-/// already earned, and an invoice records the version its founding seat came from. Version 1 (10 clients,
-/// 2 months, no seat number) is seeded by the migration. A database trigger refuses updating or deleting a
-/// version.
+/// One published, immutable version of the founding terms: the Founding coach badge's two thresholds,
+/// since notes plan N11a the clients a founding space's owner seat includes, and since notes plan N8 the
+/// months of the founding price guarantee. The latest version is in force; a badge records the version it
+/// was earned under, so publishing a new one never changes a badge already earned, and an invoice records
+/// the version its founding seat came from. Version 1 (10 clients, 2 months, no seat number, no guarantee
+/// months) is seeded by the migration. A database trigger refuses updating or deleting a version.
 /// </summary>
 public sealed class FoundingTerms
 {
@@ -60,6 +60,13 @@ public sealed class FoundingTerms
     /// </summary>
     public int? FoundingSeatIncludedClients { get; private set; }
 
+    /// <summary>
+    /// The months a founding space keeps its founding day's prices after its last discount ends (decision
+    /// 16), 0 to 120, or null for none: nothing is then held and every invoice uses the latest price plan.
+    /// Only the admin's publish sets it (<see cref="FoundingPricePolicy"/>).
+    /// </summary>
+    public int? PriceGuaranteeMonths { get; private set; }
+
     public string? Note { get; private set; }
 
     public DateTimeOffset PublishedAtUtc { get; private set; }
@@ -72,6 +79,7 @@ public sealed class FoundingTerms
         int versionNumber,
         FoundingBadgeTerms terms,
         int? foundingSeatIncludedClients,
+        int? priceGuaranteeMonths,
         string? note,
         Guid? publishedByUserId,
         DateTimeOffset now)
@@ -94,12 +102,20 @@ public sealed class FoundingTerms
                 FoundingText.TermsSeatIncludedClientsInvalid);
         }
 
+        if (!FoundingPricePolicy.IsValidMonths(priceGuaranteeMonths))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(priceGuaranteeMonths),
+                FoundingText.TermsPriceGuaranteeMonthsInvalid);
+        }
+
         return new FoundingTerms
         {
             VersionNumber = versionNumber,
             ClientsWithActivePlan = terms.ClientsWithActivePlan,
             MonthsSinceStart = terms.MonthsSinceStart,
             FoundingSeatIncludedClients = foundingSeatIncludedClients,
+            PriceGuaranteeMonths = priceGuaranteeMonths,
             Note = BillingText.Optional(note, FoundingText.TermsNoteMaxLength, nameof(note)),
             PublishedAtUtc = now,
             PublishedByUserId = publishedByUserId,
@@ -127,10 +143,12 @@ public enum FoundingBadgeState
 /// once and survive an end; ending is recorded on the row, once; the owner's hide switch changes while
 /// the status is open. A space may be marked again after an ended status, so the rows are its history.
 /// The status changes no access and no discount: it is separate from <see cref="WorkspaceDiscount"/>. On
-/// the bill it changes one thing only (notes plan N11a, PBL-011): while it runs, the owner's seat includes
-/// the founding terms' number of clients when that raises the plan's seat (<see cref="FoundingSeatPolicy"/>),
-/// and only an open status can be granted extra included clients (<see cref="IncludedClientGrant"/>).
-/// Database triggers are the guarantee.
+/// the bill it changes two things only. While it runs, the owner's seat includes the founding terms' number
+/// of clients when that raises the plan's seat (<see cref="FoundingSeatPolicy"/>, notes plan N11a, PBL-011),
+/// and only an open status can be granted extra included clients (<see cref="IncludedClientGrant"/>). And
+/// the space keeps the price plan version in force on its founding day until its guarantee ends
+/// (<see cref="FoundingPricePolicy"/>, notes plan N8, PBL-012). Database triggers are the guarantee that a
+/// row is never rewritten.
 /// </remarks>
 public sealed class FoundingStatus : TenantEntity
 {
@@ -452,4 +470,8 @@ public static class FoundingText
     public const string GrantRevokedCode = "grant_revoked";
 
     public const string GrantRevoked = "These extra clients were already revoked.";
+
+    // The founding price guarantee (notes plan N8).
+    public const string TermsPriceGuaranteeMonthsInvalid =
+        "Enter a whole number of months from 0 to 120, or none to hold no price.";
 }

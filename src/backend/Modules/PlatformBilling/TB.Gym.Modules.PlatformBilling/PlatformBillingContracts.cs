@@ -182,7 +182,11 @@ public sealed record PlatformInvoiceView(
     int? FoundingTermsVersion,
     int GrantedIncludedClients);
 
-/// <summary>This month so far: usage up to now, priced with the latest plan. An estimate, not an invoice.</summary>
+/// <summary>
+/// This month so far: usage up to now, priced with the latest plan, or for a founding space whose price is
+/// held with the version the invoice would use (<see cref="FoundingPricePolicy"/>, notes plan N8). An estimate,
+/// not an invoice.
+/// </summary>
 /// <param name="FoundingTermsVersion">
 /// The founding terms version whose number the estimate's founding seat took (notes plan N11a); null when no
 /// founding seat counts, and while the whole month so far is inside the trial.
@@ -243,6 +247,10 @@ public sealed record WorkspaceBillingIncludedClientGrantView(
 /// The unrevoked extra included clients grants running or still to come, oldest first. One that has ended
 /// shows only on the invoices it touched.
 /// </param>
+/// <param name="PricesHeldUntil">
+/// The last day of the space's founding price guarantee (notes plan N8), a UTC day, while its founding status
+/// is open and that day has not passed; null otherwise. Until then a newer price plan never raises its bill.
+/// </param>
 public sealed record WorkspaceBillingView(
     WorkspaceBillingStatus Status,
     DateTimeOffset TrialEndsAtUtc,
@@ -254,7 +262,8 @@ public sealed record WorkspaceBillingView(
     PaymentInstructionsView PaymentInstructions,
     IReadOnlyList<WorkspaceBillingDiscountView> Discounts,
     int? FoundingSeatIncludedClients,
-    IReadOnlyList<WorkspaceBillingIncludedClientGrantView> IncludedClientGrants);
+    IReadOnlyList<WorkspaceBillingIncludedClientGrantView> IncludedClientGrants,
+    DateOnly? PricesHeldUntil);
 
 /// <param name="FoundingCoach">
 /// For the owner of a founding space, <see cref="FoundingBadgeState.Waiting"/> or
@@ -314,6 +323,7 @@ public sealed record IncludedClientGrantView(
 /// <param name="Founding">The open founding status with its live reading, or null.</param>
 /// <param name="FoundingHistory">The ended founding statuses, newest first.</param>
 /// <param name="IncludedClientGrants">Every extra included clients grant, newest first, the revoked ones kept.</param>
+/// <param name="PriceHold">The founding price guarantee running today (notes plan N8), or null.</param>
 public sealed record AdminWorkspaceDetail(
     AdminWorkspaceSummary Summary,
     CurrentMonthEstimateView CurrentMonth,
@@ -321,7 +331,15 @@ public sealed record AdminWorkspaceDetail(
     IReadOnlyList<WorkspaceDiscountView> Discounts,
     AdminFoundingView? Founding,
     IReadOnlyList<FoundingStatusView> FoundingHistory,
-    IReadOnlyList<IncludedClientGrantView> IncludedClientGrants);
+    IReadOnlyList<IncludedClientGrantView> IncludedClientGrants,
+    FoundingPriceHoldView? PriceHold);
+
+/// <summary>
+/// A founding space's price guarantee as it stands today (<see cref="FoundingPricePolicy"/>, notes plan N8):
+/// the price plan version it is held at, the one in force on its founding day, and the guarantee's last day,
+/// a UTC day. While it runs the space is billed at that version, or at the latest when that totals less.
+/// </summary>
+public sealed record FoundingPriceHoldView(int PricePlanVersion, DateOnly LastDay);
 
 /// <summary>
 /// A space's Founding coach badge on today's UTC day (<see cref="FoundingBadgePolicy"/>), with the terms
@@ -368,6 +386,10 @@ public sealed record AdminFoundingView(
 /// The clients a founding space's owner seat includes under this version (notes plan N11a), or null for none:
 /// the plan's seat.
 /// </param>
+/// <param name="PriceGuaranteeMonths">
+/// The months a founding space keeps its founding day's prices after its last discount ends under this
+/// version (notes plan N8), or null for none: nothing is held.
+/// </param>
 public sealed record FoundingTermsView(
     Guid Id,
     int VersionNumber,
@@ -376,7 +398,8 @@ public sealed record FoundingTermsView(
     string? Note,
     DateTimeOffset PublishedAtUtc,
     bool IsCurrent,
-    int? FoundingSeatIncludedClients);
+    int? FoundingSeatIncludedClients,
+    int? PriceGuaranteeMonths);
 
 /// <param name="FoundingSince">A UTC day, today or earlier.</param>
 public sealed record MarkFoundingRequest(DateOnly? FoundingSince, string Note);
@@ -394,12 +417,18 @@ public sealed record EndFoundingRequest(string Reason);
 /// reader (400) and publishes nothing, never read as none: a page or a call that predates the number cannot
 /// drop every founding seat from the next invoice.
 /// </param>
+/// <param name="PriceGuaranteeMonths">
+/// The months of the founding price guarantee (notes plan N8), 0 to 120, or null on purpose for none: nothing
+/// is held. Required like the seat's number, for the same reason: a call that predates it cannot end every
+/// founding space's held prices by leaving it out.
+/// </param>
 public sealed record PublishFoundingTermsRequest(
     int? ClientsWithActivePlan,
     int? MonthsSinceStart,
     string? Note,
     int? ExpectedCurrentVersion,
-    [property: JsonRequired] int? FoundingSeatIncludedClients);
+    [property: JsonRequired] int? FoundingSeatIncludedClients,
+    [property: JsonRequired] int? PriceGuaranteeMonths);
 
 /// <param name="Hidden">Required: true hides the badge from the owner's clients, false shows it.</param>
 public sealed record SetFoundingBadgeVisibilityRequest(bool? Hidden);

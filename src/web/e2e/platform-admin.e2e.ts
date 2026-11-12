@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
   adminFounding,
   amounts,
@@ -66,6 +66,7 @@ async function openAdmin(
   width: number,
   dark = false,
   start: AdminWorkspaceDetail = atlasDetail(),
+  inForce: FoundingTerms = foundingTerms(),
 ) {
   await page.clock.setFixedTime(new Date(NOW));
   await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
@@ -87,7 +88,7 @@ async function openAdmin(
   let spaces: AdminWorkspace[] = platformSpaces();
   let detail: AdminWorkspaceDetail = start;
   let plans: PricePlan[] = pricePlans();
-  let terms: FoundingTerms[] = [foundingTerms()];
+  let terms: FoundingTerms[] = [inForce];
   // The list follows the space's page as the server would (notes plan N3b).
   const sync = () => {
     detail = {
@@ -228,6 +229,7 @@ async function openAdmin(
           note: string | null;
           expectedCurrentVersion: number;
           foundingSeatIncludedClients: number | null;
+          priceGuaranteeMonths: number | null;
         };
         writes.terms.push(body);
         const next = foundingTerms({
@@ -238,6 +240,7 @@ async function openAdmin(
           note: body.note,
           publishedAtUtc: NOW,
           foundingSeatIncludedClients: body.foundingSeatIncludedClients,
+          priceGuaranteeMonths: body.priceGuaranteeMonths,
         });
         terms = [next, ...terms.map((item) => ({ ...item, isCurrent: false }))];
         return json(route, 200, next);
@@ -589,6 +592,11 @@ test('publishing a price plan version shows what changes and asks before losing 
   const writes = await openAdmin(page, '/admin/billing', 1440);
   await page.getByRole('button', { name: 'Publish a new version' }).click();
   const sheet = page.getByRole('dialog');
+  // N8: the terms in force publish no guarantee months, so a new version reaches founding spaces
+  // too, and the sheet says so before the admin publishes.
+  await expect(sheet.locator('form > .muted')).toHaveText(
+    'Version 2 is in force. Invoices issued from now on use the new terms; invoices already issued keep theirs. No guarantee months are published yet, so founding spaces are billed at the new version too.',
+  );
   await expect(sheet.getByText('Nothing has changed yet.')).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Publish version 3' })).toBeDisabled();
 
@@ -610,7 +618,9 @@ test('publishing a price plan version shows what changes and asks before losing 
   expect(writes.plan).toEqual([
     expect.objectContaining({ seatPrice: 20, trialDays: 14, expectedCurrentVersion: 2 }),
   ]);
-  await expect(page.getByText('Price plan version 3 is published.')).toBeVisible();
+  await expect(page.locator('.tb-toast__message')).toHaveText(
+    'Price plan version 3 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+  );
   await expect(page.locator('[data-price-plan] .panel-head .quiet')).toContainText('Version 3');
 });
 
@@ -683,8 +693,9 @@ for (const width of [390, 1440]) {
     await founding.getByRole('button', { name: 'Mark as founding' }).click();
     const mark = page.getByRole('dialog');
     await expect(mark.getByRole('heading', { name: 'Mark as founding' })).toBeVisible();
+    // Its third sentence is N8's: the terms in force here publish no guarantee months.
     await expect(mark.locator('[data-founding-terms-sentence]')).toHaveText(
-      'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too.',
+      'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too. The space’s prices are not held: no guarantee months are published yet.',
     );
     await expect(mark.getByRole('button', { name: /Founding since/ })).toContainText('Oct 9, 2026');
     // An earlier day, through the calendar; a pasted link as the note must wrap, not widen the page.
@@ -731,8 +742,9 @@ for (const width of [390, 1440]) {
 
     await founding.getByRole('button', { name: 'End founding status' }).click();
     const end = page.getByRole('dialog');
-    await expect(end).toContainText(
-      'The badge leaves the coach’s account and their clients’ Me page at once.',
+    // N8: the held prices end with the status, from the next month's invoice.
+    await expect(end.locator('.notice')).toHaveText(
+      'The badge leaves the coach’s account and their clients’ Me page at once. The discount is not changed: revoke it separately if it should end. From next month’s invoice, the owner’s seat includes what the price plan’s seat includes and held prices end: the latest price plan applies. Extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
     );
     await end.getByRole('button', { name: 'Misrepresented qualifications' }).click();
     await expect(end.getByLabel('Why?')).toHaveValue('Misrepresented qualifications');
@@ -788,6 +800,7 @@ for (const width of [390, 1440]) {
         note: null,
         expectedCurrentVersion: 1,
         foundingSeatIncludedClients: null,
+        priceGuaranteeMonths: null,
       },
     ]);
     await expect(panel.locator('.panel-head .quiet')).toHaveText('Version 2 · since Oct 9, 2026');
@@ -945,6 +958,7 @@ for (const width of [390, 1440]) {
           note: null,
           expectedCurrentVersion: 1,
           foundingSeatIncludedClients: 13,
+          priceGuaranteeMonths: null,
         },
       ]);
       await expect(panel.locator('[data-terms-seat]')).toHaveText(
@@ -1075,4 +1089,386 @@ test.describe('a stale version of the badge’s terms', () => {
     expect(writes.terms).toEqual([]);
     await axe(page);
   });
+});
+
+// ---------- the founding price guarantee (notes plan N8) ----------
+
+// What the server reads for Atlas held at the plan version of its founding day: founding since 15
+// September under version 1, its 30% running to 30 November, and 5 guarantee months in the terms in
+// force. The months are this test's own, never the owners'.
+const HELD = { pricePlanVersion: 1, lastDay: '2027-04-30' };
+const GUARANTEE_BOX = 'Months a founding space’s prices are held';
+
+for (const width of [390, 1440]) {
+  for (const dark of [false, true]) {
+    const mode = dark ? 'dark' : 'light';
+
+    test(`a founding space’s page says which plan version its prices are held at and until when, at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      await openAdmin(
+        page,
+        `/admin/billing/${SPACE_IDS.atlas}`,
+        width,
+        dark,
+        atlasDetail({ founding: adminFounding('Waiting', false, 13), priceHold: HELD }),
+        foundingTerms({ priceGuaranteeMonths: 5 }),
+      );
+      await expect(
+        page.getByRole('heading', { name: 'Atlas Performance', level: 1 }),
+      ).toBeVisible();
+
+      // Under Where it stands, after its sentence and this month's count; a UTC day in every zone.
+      const stands = page.locator('[data-space-status]');
+      await expect(stands.locator('.quiet')).toHaveText([
+        '3 seats and 14 clients so far this month',
+        'Prices held at plan version 1 until Apr 30, 2027.',
+      ]);
+      await expect(stands.locator('p').last()).toHaveAttribute('data-price-hold', '');
+      // Where it stands keeps its one pill, and this month's note names the same version.
+      await expect(stands.locator('app-status-pill')).toHaveText('Overdue');
+      await expect(page.getByText('An estimate at plan version 1.')).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: `test-results/n8-space-held-${width}-${mode}.png`,
+        fullPage: true,
+      });
+    });
+  }
+
+  test(`the founding terms take the months a founding space’s prices are held at ${width}px`, async ({
+    page,
+  }) => {
+    const writes = await openAdmin(page, '/admin/billing', width);
+    const panel = page.locator('[data-founding-terms]');
+    await expect(panel.getByRole('heading', { name: 'Founding terms' })).toBeVisible();
+    // After the badge's sentence and the seat's: nothing is held until months are published.
+    await expect(panel.locator('.badge-terms').last()).toHaveAttribute('data-terms-guarantee', '');
+    await expect(panel.locator('[data-terms-guarantee]')).toHaveText(
+      'A founding space’s prices are not held: no guarantee months are published yet.',
+    );
+
+    await panel.getByRole('button', { name: 'Change', exact: true }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByRole('heading', { name: 'Change the badge’s terms' })).toBeVisible();
+    // The fourth number, after the badge's two and the founding seat's.
+    await expect(sheet.locator('input[type="number"]')).toHaveCount(4);
+    const months = sheet.getByLabel(GUARANTEE_BOX);
+    await expect(sheet.locator('input[type="number"]').last()).toHaveAttribute(
+      'name',
+      'priceGuaranteeMonths',
+    );
+    await expect(months).toHaveValue('');
+    await expect(months).toHaveAttribute('min', '0');
+    await expect(months).toHaveAttribute('max', '120');
+    await expect(months).toHaveAccessibleDescription(
+      'Counted from a space’s last discount, or from its founding day when it has no discount; until then it keeps the plan version of its founding day. Leave it empty to hold no price. The number in force applies to every founding space, those already founding too.',
+    );
+    await expect(sheet.getByRole('button', { name: 'Publish version 2' })).toBeDisabled();
+    await months.fill('5');
+    await expect(sheet.locator('.changes li')).toHaveCount(1);
+    await expect(sheet.locator('.changes li .what')).toHaveText(GUARANTEE_BOX);
+    await expect(sheet.locator('.changes li .from')).toHaveText('None');
+    await expect(sheet.locator('.changes li .to')).toHaveText('5');
+    // On a phone the change list is under the fold of the sheet: the still shows the box with it.
+    await sheet.locator('.changes').scrollIntoViewIfNeeded();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n8-terms-${width}.png` });
+
+    await sheet.getByRole('button', { name: 'Publish version 2' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(writes.terms).toEqual([
+      {
+        clientsWithActivePlan: 10,
+        monthsSinceStart: 2,
+        note: null,
+        expectedCurrentVersion: 1,
+        foundingSeatIncludedClients: null,
+        priceGuaranteeMonths: 5,
+      },
+    ]);
+    await expect(panel.locator('.panel-head .quiet')).toHaveText('Version 2 · since Oct 9, 2026');
+    await expect(panel.locator('[data-terms-guarantee]')).toHaveText(
+      'A founding space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.',
+    );
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n8-overview-${width}.png`, fullPage: true });
+
+    // The box now starts with the months in force, so new thresholds alone never drop them.
+    await panel.getByRole('button', { name: 'Change', exact: true }).click();
+    await expect(page.getByRole('dialog').getByLabel(GUARANTEE_BOX)).toHaveValue('5');
+  });
+
+  test(`the mark sheet says how long the space keeps its plan version under the terms in force at ${width}px`, async ({
+    page,
+  }) => {
+    await openAdmin(
+      page,
+      `/admin/billing/${SPACE_IDS.atlas}`,
+      width,
+      false,
+      atlasDetail(),
+      foundingTerms({ priceGuaranteeMonths: 5 }),
+    );
+    await page.locator('[data-founding]').getByRole('button', { name: 'Mark as founding' }).click();
+    const mark = page.getByRole('dialog');
+    await expect(mark.getByRole('heading', { name: 'Mark as founding' })).toBeVisible();
+    await expect(mark.locator('[data-founding-terms-sentence]')).toHaveText(
+      'The badge is earned once 10 of the space’s clients have an active plan and the space is 2 months old (the terms in force). The discount is separate: grant it on this page too. The space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.',
+    );
+    await mark.locator('[data-founding-terms-sentence]').scrollIntoViewIfNeeded();
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n8-mark-${width}.png` });
+  });
+}
+
+// The price plan sheet's first paragraph: what a new version means for invoices, then for founding
+// spaces. It may say they keep their version only while the terms in force name guarantee months.
+const PLAN_INTRO =
+  'Version 2 is in force. Invoices issued from now on use the new terms; invoices already issued keep theirs.';
+const PLAN_KEPT = 'Founding spaces keep their version until their guarantee ends.';
+const PLAN_NOT_HELD =
+  'No guarantee months are published yet, so founding spaces are billed at the new version too.';
+
+/**
+ * Every line of the sheet's first paragraph stays between the edges of the sheet's form, and the
+ * whole paragraph shows at once unless the text is too large for that (`whole` false).
+ */
+async function expectIntroWrapsInside(sheet: Locator, whole = true): Promise<number> {
+  const intro = sheet.locator('form > .muted');
+  await intro.scrollIntoViewIfNeeded();
+  if (whole) await expect(intro).toBeInViewport({ ratio: 0.99 });
+  const box = await intro.evaluate((paragraph) => {
+    const form = paragraph.closest('form')!;
+    const edges = form.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const lines = Array.from(range.getClientRects()).filter((line) => line.width > 0);
+    return {
+      left: edges.left,
+      right: edges.right,
+      scrollWidth: form.scrollWidth,
+      clientWidth: form.clientWidth,
+      lines: lines.map((line) => ({ left: line.left, right: line.right, top: line.top })),
+    };
+  });
+  expect(box.scrollWidth, 'the sheet scrolls sideways').toBeLessThanOrEqual(box.clientWidth);
+  expect(box.lines.length).toBeGreaterThan(0);
+  for (const line of box.lines) {
+    expect(line.left, 'a line starts before the sheet').toBeGreaterThanOrEqual(box.left - 0.5);
+    expect(line.right, 'a line runs past the sheet').toBeLessThanOrEqual(box.right + 0.5);
+  }
+  return new Set(box.lines.map((line) => Math.round(line.top))).size;
+}
+
+for (const width of [390, 1440]) {
+  test(`the price plan sheet says founding spaces are billed at the new version too while no guarantee months are published, at ${width}px`, async ({
+    page,
+  }) => {
+    const writes = await openAdmin(page, '/admin/billing', width);
+    await expect(page.locator('[data-founding-terms] [data-terms-guarantee]')).toHaveText(
+      'A founding space’s prices are not held: no guarantee months are published yet.',
+    );
+    await page.getByRole('button', { name: 'Publish a new version' }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(
+      sheet.getByRole('heading', { name: 'Publish a price plan version' }),
+    ).toBeVisible();
+    await expect(sheet.locator('form > .muted')).toHaveText(`${PLAN_INTRO} ${PLAN_NOT_HELD}`);
+    await expect(sheet.locator('[data-plan-founding]')).toHaveText(PLAN_NOT_HELD);
+    // The sentence that would be false here is nowhere in the sheet.
+    await expect(sheet).not.toContainText('keep their version');
+    // On a phone the paragraph wraps over several lines, each inside the sheet.
+    const lines = await expectIntroWrapsInside(sheet);
+    if (width === 390) expect(lines).toBeGreaterThan(2);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n8-plan-${width}.png` });
+
+    await sheet.getByLabel('Price per seat').fill('20');
+    await sheet.getByRole('button', { name: 'Publish version 3' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(writes.plan).toEqual([
+      expect.objectContaining({ seatPrice: 20, expectedCurrentVersion: 2 }),
+    ]);
+    const toast = page.locator('.tb-toast__message');
+    await expect(toast).toHaveText(
+      'Price plan version 3 is published. Invoices issued from now on use it, founding spaces’ too: no guarantee months are published.',
+    );
+    await expect(toast).toBeInViewport({ ratio: 0.99 });
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+
+  test(`the price plan sheet says founding spaces keep their version while the terms in force hold prices, at ${width}px`, async ({
+    page,
+  }) => {
+    const writes = await openAdmin(
+      page,
+      '/admin/billing',
+      width,
+      false,
+      atlasDetail(),
+      foundingTerms({ priceGuaranteeMonths: 5 }),
+    );
+    await expect(page.locator('[data-founding-terms] [data-terms-guarantee]')).toHaveText(
+      'A founding space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.',
+    );
+    await page.getByRole('button', { name: 'Publish a new version' }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.locator('form > .muted')).toHaveText(`${PLAN_INTRO} ${PLAN_KEPT}`);
+    await expect(sheet.locator('[data-plan-founding]')).toHaveText(PLAN_KEPT);
+    await expectIntroWrapsInside(sheet);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n8-plan-kept-${width}.png` });
+
+    await sheet.getByLabel('Price per seat').fill('20');
+    await sheet.getByRole('button', { name: 'Publish version 3' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(writes.plan).toEqual([
+      expect.objectContaining({ seatPrice: 20, expectedCurrentVersion: 2 }),
+    ]);
+    const toast = page.locator('.tb-toast__message');
+    await expect(toast).toHaveText(
+      'Price plan version 3 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+    );
+    await expect(toast).toBeInViewport({ ratio: 0.99 });
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+}
+
+test('the price plan sheet’s line on founding spaces follows the months published while the page is open', async ({
+  page,
+}) => {
+  await openAdmin(page, '/admin/billing', 1440);
+  const panel = page.locator('[data-founding-terms]');
+  await panel.getByRole('button', { name: 'Change', exact: true }).click();
+  const terms = page.getByRole('dialog');
+  await terms.getByLabel(GUARANTEE_BOX).fill('0');
+  await terms.getByRole('button', { name: 'Publish version 2' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // No months after the last discount is still a guarantee, unlike none.
+  await expect(panel.locator('[data-terms-guarantee]')).toHaveText(
+    'A founding space keeps its plan version until its last discount ends; with no discount, only for its founding month.',
+  );
+
+  await page.getByRole('button', { name: 'Publish a new version' }).click();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet.locator('form > .muted')).toHaveText(`${PLAN_INTRO} ${PLAN_KEPT}`);
+  await sheet.getByLabel('Price per seat').fill('20');
+  await sheet.getByRole('button', { name: 'Publish version 3' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // The terms' own toast may still be up: the plan's is the one that names the price plan.
+  await expect(
+    page.locator('.tb-toast__message').filter({ hasText: 'Price plan version 3' }),
+  ).toHaveText(
+    'Price plan version 3 is published. Invoices issued from now on use it; a founding space keeps its version until its guarantee ends.',
+  );
+});
+
+test('the price plan sheet reflows at 200% text with its line on founding spaces', async ({
+  page,
+}) => {
+  await openAdmin(page, '/admin/billing', 390);
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await page.getByRole('button', { name: 'Publish a new version' }).click();
+  const sheet = page.getByRole('dialog');
+  const founding = sheet.locator('[data-plan-founding]');
+  await expect(founding).toHaveText(PLAN_NOT_HELD);
+  // Too tall to show whole on a phone at this size: it wraps inside the sheet and scrolls with it.
+  await expectIntroWrapsInside(sheet, false);
+  await expectNoHorizontalOverflow(page);
+  await founding.scrollIntoViewIfNeeded();
+  await expect(founding).toBeInViewport({ ratio: 0.99 });
+  await page.screenshot({ path: 'test-results/n8-plan-200.png' });
+});
+
+test.describe('when the founding terms cannot be read', () => {
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [/status of 500 .*\/api\/platform-admin\/founding-terms/],
+    },
+  });
+
+  test('the price plan sheet and its toast say nothing of founding spaces', async ({ page }) => {
+    await openAdmin(page, '/admin/billing', 1440);
+    // A route added later is asked first: from the next load on, the terms' read fails.
+    await page.route('**/api/platform-admin/founding-terms', (route) =>
+      route.request().method() === 'GET'
+        ? json(route, 500, { code: 'unexpected', message: 'Something went wrong.' })
+        : route.fallback(),
+    );
+    await page.reload();
+    await waitForFonts(page);
+    await expect(overviewHeading(page)).toBeVisible();
+    await expect(page.locator('[data-founding-terms]').getByRole('alert')).toHaveText(
+      'The badge’s terms couldn’t be loaded.',
+    );
+
+    await page.getByRole('button', { name: 'Publish a new version' }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.locator('form > .muted')).toHaveText(PLAN_INTRO);
+    await expect(sheet.locator('[data-plan-founding]')).toHaveCount(0);
+    await axe(page);
+
+    await sheet.getByLabel('Price per seat').fill('20');
+    await sheet.getByRole('button', { name: 'Publish version 3' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    // Neither promise: the page does not know whether a price is held.
+    await expect(page.locator('.tb-toast__message')).toHaveText(
+      'Price plan version 3 is published. Invoices issued from now on use it.',
+    );
+  });
+});
+
+test('a space whose prices are not held says nothing of it under Where it stands', async ({
+  page,
+}) => {
+  await openAdmin(page, `/admin/billing/${SPACE_IDS.atlas}`, 390);
+
+  await expect(page.locator('[data-space-status] .quiet')).toHaveText([
+    '3 seats and 14 clients so far this month',
+  ]);
+  await expect(page.locator('[data-price-hold]')).toHaveCount(0);
+});
+
+test('the held prices’ line and the guarantee’s months reflow at 200% text', async ({ page }) => {
+  await openAdmin(
+    page,
+    `/admin/billing/${SPACE_IDS.atlas}`,
+    390,
+    false,
+    atlasDetail({ founding: adminFounding('Waiting', false, 13), priceHold: HELD }),
+    foundingTerms({ priceGuaranteeMonths: 5 }),
+  );
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  const held = page.locator('[data-price-hold]');
+  await expect(held).toHaveText('Prices held at plan version 1 until Apr 30, 2027.');
+  await expectNoHorizontalOverflow(page);
+  await held.scrollIntoViewIfNeeded();
+  await expect(held).toBeInViewport({ ratio: 0.99 });
+  await page.screenshot({ path: 'test-results/n8-space-held-200.png' });
+
+  await page.goto('/admin/billing');
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  const panel = page.locator('[data-founding-terms]');
+  await expect(panel.locator('[data-terms-guarantee]')).toHaveText(
+    'A founding space keeps its plan version until 5 months after its last discount ends, or after its founding day when it has none.',
+  );
+  await expectNoHorizontalOverflow(page);
+  await panel.locator('[data-terms-guarantee]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'test-results/n8-overview-200.png' });
+
+  await panel.getByRole('button', { name: 'Change', exact: true }).click();
+  const months = page.getByRole('dialog').getByLabel(GUARANTEE_BOX);
+  await expect(months).toHaveValue('5');
+  await months.scrollIntoViewIfNeeded();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/n8-terms-200.png' });
 });

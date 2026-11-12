@@ -2271,6 +2271,15 @@ limited to the coach's assigned clients.
   month by default, a day off a month's edge marked on its field); its Founding panel, mark and end sheets say
   what the owner's seat includes; the list's panel is **Founding terms**, its sheet with a third number, the
   clients a founding owner's seat includes (empty for none). A space neither founding nor granted is unchanged.
+- Built in notes plan N8 (PBL-012): **Billing**'s hero says last, during the trial too, "Your prices are held
+  until Dec 31, 2026." while a founding space's price guarantee runs, naming no plan version. The platform
+  admin's space page says under Where it stands "Prices held at plan version 1 until Dec 31, 2026."; the list's
+  Founding terms panel gains a line on how long a founding space keeps its plan version, its sheet a fourth
+  number, "Months a founding space’s prices are held" (empty for none), the price plan sheet and its toast
+  "Founding spaces keep their version until their guarantee ends." while months are published and "No guarantee
+  months are published yet, so founding spaces are billed at the new version too." while none are, and the mark
+  and end sheets say what a founding space keeps and that held prices end with the status from the next month.
+  A space that is not founding is unchanged.
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an

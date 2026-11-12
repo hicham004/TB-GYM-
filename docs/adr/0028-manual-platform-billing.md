@@ -27,8 +27,9 @@ Business rules, decided by the product owner on 2026-09-24:
   (`platform-invoice-v2`, PBL-011); the discount still comes off the whole subtotal.
 - **Every number is a placeholder in a versioned, immutable price plan** (seat price, included
   clients, extra-client price, gym fee and its seat threshold, trial days, payment days, grace days).
-  The platform admin publishes a new version; new invoices use the latest one. An invoice snapshots its
-  plan and quantities, so a new version never changes it.
+  The platform admin publishes a new version; new invoices use the latest one (since N8, a founding space
+  whose price is held keeps its founding day's version, below). An invoice snapshots its plan and
+  quantities, so a new version never changes it.
 - **New workspaces get a free trial** (30 days in the seeded plan). Issued invoices are immutable; a
   correction voids and reissues, keeping both. Due after the plan's payment days (7). Emails go to the
   owner through the notice queue: invoice issued, due soon (2 days before), overdue.
@@ -125,3 +126,16 @@ Chosen by the implementer, to confirm:
   `uuid[]` frozen with the row); `CK_Invoices_Quantities` checks the v2 sum, and a v1 invoice holds neither. The
   columns came with constant defaults, so no issued invoice was rewritten. The admin grants and revokes under the
   platform-admin policy with `SensitiveWrite`; the read-only allow-list is unchanged.
+- Amended 2026-11-12 (notes plan N8, decision 16, PBL-012): a founding space keeps the price plan version in
+  force on its founding day (read at the end of that UTC day, or at the mark when that comes first, so it never
+  moves afterwards) until its price guarantee ends, under the named rule `founding-price-v1`. The founding
+  terms gain `PriceGuaranteeMonths` (nullable, 0 to 120, checked; none is seeded, so nothing is held until the admin
+  publishes it, and its key is required on a publish like the founding seat's). The guarantee's last day is the
+  later of the founding day and the last unrevoked discount's last day plus those months; the month it falls
+  inside is held whole, and an ended status holds the month it ended in and no later one. The monthly run and the
+  estimate ask the rule for the version, work the month out at the held version and at the latest, and bill the
+  lower total, equal totals keeping the held one; the invoice records the version billed as before, with no new
+  column, and a reissue still keeps its voided invoice's version. `GET /api/billing` carries the guarantee's last
+  day while it has not passed and the admin's space detail the held version too. No route was added, so the
+  read-only allow-list and the rate-limit table are unchanged. The migration refuses to revert once months are
+  published.

@@ -311,6 +311,7 @@ export function atlasDetail(overrides: Partial<AdminWorkspaceDetail> = {}): Admi
     founding: null,
     foundingHistory: [],
     includedClientGrants: [],
+    priceHold: null,
     ...overrides,
   };
 }
@@ -407,6 +408,7 @@ export function foundingTerms(overrides: Partial<FoundingTerms> = {}): FoundingT
     publishedAtUtc: '2026-09-01T00:00:00Z',
     isCurrent: true,
     foundingSeatIncludedClients: null,
+    priceGuaranteeMonths: null,
     ...overrides,
   };
 }

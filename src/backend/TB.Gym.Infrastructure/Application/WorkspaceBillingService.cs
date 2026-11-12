@@ -26,7 +26,6 @@ internal sealed class WorkspaceBillingService(
         var workspace = (await PlatformBillingReader.WorkspacesAsync(dbContext, tenantContext.TenantId, cancellationToken)).Single();
         var state = await PlatformBillingReader.StateAsync(dbContext, workspace, plans, now, cancellationToken);
         var today = PaymentSchedule.Today(now);
-        var latestPlan = plans.MaxBy(plan => plan.VersionNumber)!;
         return new WorkspaceBillingView(
             state.Status,
             state.TrialEndsAtUtc,
@@ -41,9 +40,11 @@ internal sealed class WorkspaceBillingService(
                 email.Value.UsesProviderAdapter ? Configured(email.Value.Provider.ReplyToAddress) : null,
                 Configured(website.Value.WhatsAppNumber)),
             WorkspaceDiscount.RunningOrToCome(state.Discounts, today).Select(discount => ToOwnerView(discount, today)).ToList(),
-            // What the owner's seat includes now, during the trial too, against the plan new bills use.
-            FoundingSeatPolicy.Raised(state.FoundingSeatNow, latestPlan.IncludedClientsPerSeat),
-            IncludedClientGrant.RunningOrToCome(state.Grants, today).Select(grant => ToOwnerView(grant, today)).ToList());
+            // What the owner's seat includes now, during the trial too, against the plan this month is priced at.
+            PlatformBillingReader.FoundingSeatIncludedClients(state),
+            IncludedClientGrant.RunningOrToCome(state.Grants, today).Select(grant => ToOwnerView(grant, today)).ToList(),
+            // The guarantee's last day alone: the owner's page names no plan version (notes plan N8).
+            state.PriceHoldNow?.LastDay);
     }
 
     private static string? Configured(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

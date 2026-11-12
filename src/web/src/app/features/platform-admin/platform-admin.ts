@@ -40,6 +40,8 @@ import {
 } from '../billing/billing.models';
 import {
   currentFoundingTerms,
+  planPublishedSentence,
+  termsGuaranteeSentence,
   termsSeatSentence,
   termsSentence,
   type FoundingTerms,
@@ -169,6 +171,13 @@ export class PlatformAdmin {
   protected readonly current = computed(() => this.plans().find((plan) => plan.isCurrent) ?? null);
   protected readonly currentTerms = computed(() =>
     currentFoundingTerms(this.foundingTerms() ?? []),
+  );
+  /**
+   * The guarantee months in force, for the price plan sheet and its toast (notes plan N8): null when
+   * none are published, undefined while the terms are not read.
+   */
+  protected readonly planGuaranteeMonths = computed(() =>
+    this.foundingTerms() === null ? undefined : (this.currentTerms()?.priceGuaranteeMonths ?? null),
   );
   protected readonly earlier = computed(() => this.plans().filter((plan) => !plan.isCurrent));
   protected readonly summary = computed(() => summarize(this.spaces(), this.today));
@@ -348,7 +357,7 @@ export class PlatformAdmin {
       if (this.openSheet === sheet) this.openSheet = null;
       if (published) {
         this.toast.show(
-          $localize`Price plan version ${published.versionNumber}:version: is published. Invoices issued from now on use it.`,
+          planPublishedSentence(published.versionNumber, this.planGuaranteeMonths()),
           { tone: 'success' },
         );
       }
@@ -379,6 +388,11 @@ export class PlatformAdmin {
   /** What a founding owner's seat includes under the terms in force, beside the plan's (N11b). */
   protected seatLine(terms: FoundingTerms): string {
     return termsSeatSentence(terms, this.current()?.includedClientsPerSeat ?? null);
+  }
+
+  /** How long a founding space keeps its plan version under the terms in force (N8). */
+  protected guaranteeLine(terms: FoundingTerms): string {
+    return termsGuaranteeSentence(terms.priceGuaranteeMonths);
   }
 
   /** Read them again: once the terms are there, Change takes the focus the button had. */

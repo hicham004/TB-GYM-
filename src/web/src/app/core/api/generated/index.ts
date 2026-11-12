@@ -646,6 +646,7 @@ export type {
   FoundingBadgeState,
   FoundingBadgeView,
   FoundingCheckOutcome,
+  FoundingPriceHoldView,
   FoundingStatusView,
   FoundingTermsView,
   GenerateAiMealDraftData,

@@ -54,7 +54,7 @@ internal sealed class PlatformBillingAdminService(
         var now = clock.UtcNow;
         var plans = await PlatformBillingReader.PlansAsync(dbContext, cancellationToken);
         var state = await PlatformBillingReader.StateAsync(dbContext, workspace, plans, now, cancellationToken);
-        var (founding, foundingHistory) = await FoundingReader.ForAdminAsync(dbContext, workspace, now, cancellationToken);
+        var (founding, foundingHistory) = await FoundingReader.ForAdminAsync(dbContext, workspace, state, now, cancellationToken);
         var today = PaymentSchedule.Today(now);
         return new AdminWorkspaceDetail(
             Summary(state, now, founding is not null, founding?.Status.EarnedOn),
@@ -68,7 +68,8 @@ internal sealed class PlatformBillingAdminService(
                 .ThenByDescending(item => item.GrantedAtUtc)
                 .ThenByDescending(item => item.Id)
                 .Select(PlatformBillingReader.ToView)
-                .ToList());
+                .ToList(),
+            PlatformBillingReader.PriceHoldView(state));
     }
 
     public async Task<IReadOnlyList<PricePlanView>> ListPricePlansAsync(CancellationToken cancellationToken)
@@ -255,7 +256,8 @@ internal sealed class PlatformBillingAdminService(
             PlatformInvoice? reissued = null;
             if (request.Reissue)
             {
-                // A correction recounts usage and discount now, at the voided invoice's own prices.
+                // A correction recounts usage and discount now, at the voided invoice's own prices: its plan
+                // version is kept, whatever a founding space's held price would choose today (PBL-012).
                 var plan = await dbContext.PlatformPricePlans.AsNoTracking()
                     .SingleAsync(item => item.Id == invoice.PricePlanId, cancellationToken);
                 var workspace = (await PlatformBillingReader.WorkspacesAsync(dbContext, invoice.TenantId, cancellationToken)).Single();
@@ -264,6 +266,7 @@ internal sealed class PlatformBillingAdminService(
                     workspace,
                     invoice.Period,
                     new UsageWindow(invoice.UsageFromUtc, invoice.Period.EndUtc),
+                    [plan],
                     plan,
                     options.Value.ReferencePrefix,
                     now,

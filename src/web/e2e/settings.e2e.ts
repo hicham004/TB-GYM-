@@ -208,6 +208,8 @@ const BILLING = {
   // A plain space: not founding, no extra clients (notes plan N11b adds nothing to its page).
   foundingSeatIncludedClients: null,
   includedClientGrants: [],
+  // Its prices are not held (notes plan N8): the server sends a day only to a founding space.
+  pricesHeldUntil: null,
 };
 
 /**
@@ -256,6 +258,13 @@ const FOUNDING_BILLING = {
     },
   ],
 };
+
+/**
+ * The same founding space with its prices held (notes plan N8): the server sends the hold's last
+ * day while it has not passed, here 5 months after its last discount's last day. A read of its own,
+ * so N11b's page above keeps its five sentences. The months are this test's own, never the owners'.
+ */
+const HELD_BILLING = { ...FOUNDING_BILLING, pricesHeldUntil: '2027-06-30' };
 
 const PREFERENCES = {
   inAppEnabled: true,
@@ -602,6 +611,87 @@ test('a plain space’s Billing says nothing of included clients', async ({ page
 
   await expect(page.locator('[data-billing-status] [data-discount]')).toHaveCount(1);
   await expect(page.locator('[data-included-clients]')).toHaveCount(0);
+});
+
+// ---------- held prices (notes plan N8) ----------
+
+for (const width of [390, 1440]) {
+  for (const dark of [false, true]) {
+    const mode = dark ? 'dark' : 'light';
+    test(`a founding space’s Billing says until when its prices are held, at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      await open(page, '/billing', 'Billing', {
+        width,
+        dark,
+        extra: { 'GET /api/billing': (route) => json(route, 200, HELD_BILLING) },
+      });
+
+      // The hero's last sentence, after the discount line and what the seat includes, in a UTC day
+      // in every zone; no plan version is named to the owner.
+      const hero = page.locator('[data-billing-status]');
+      await expect(hero.locator('.sentence')).toHaveText([
+        /^A new invoice is waiting\./,
+        'Early coach offer: 20% off until Oct 31, 2026, then 10% off until Jan 31, 2027, then the normal price.',
+        'As a founding coaching space, your own seat includes 13 clients.',
+        '4 more clients included until Oct 31, 2026.',
+        '7 more clients included from Dec 1, 2026 until Feb 28, 2027.',
+        'Your prices are held until Jun 30, 2027.',
+      ]);
+      await expect(hero.locator('p').last()).toHaveAttribute('data-prices-held', '');
+      await expect(page.locator('main')).not.toContainText(/plan version/i);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: `test-results/n8-billing-held-${width}-${mode}.png`,
+        fullPage: true,
+      });
+    });
+  }
+}
+
+test('a founding space’s held prices read with 200% text at 390px', async ({ page }) => {
+  await open(page, '/billing', 'Billing', {
+    width: 390,
+    extra: { 'GET /api/billing': (route) => json(route, 200, HELD_BILLING) },
+  });
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  const held = page.locator('[data-prices-held]');
+  await expect(held).toHaveText('Your prices are held until Jun 30, 2027.');
+  await expectNoHorizontalOverflow(page);
+  // Below the fold at this size: the whole sentence comes into view, wrapped and not cut off.
+  await held.scrollIntoViewIfNeeded();
+  await expect(held).toBeInViewport({ ratio: 0.99 });
+  expect(await held.evaluate((line) => line.scrollWidth <= line.clientWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/n8-billing-held-200-390.png' });
+});
+
+test('a founding space with no discount and no grant still reads until when its prices are held', async ({
+  page,
+}) => {
+  await open(page, '/billing', 'Billing', {
+    width: 390,
+    extra: {
+      'GET /api/billing': (route) =>
+        json(route, 200, { ...BILLING, discounts: [], pricesHeldUntil: '2027-02-15' }),
+    },
+  });
+
+  await expect(page.locator('[data-billing-status] .sentence')).toHaveText([
+    /^A new invoice is waiting\./,
+    'Your prices are held until Feb 15, 2027.',
+  ]);
+});
+
+test('a space whose prices are not held says nothing of it on Billing', async ({ page }) => {
+  // A founding space under terms with no guarantee months: the server sends no day.
+  await open(page, '/billing', 'Billing', {
+    width: 390,
+    extra: { 'GET /api/billing': (route) => json(route, 200, FOUNDING_BILLING) },
+  });
+
+  await expect(page.locator('[data-included-clients]')).toHaveCount(3);
+  await expect(page.locator('[data-prices-held]')).toHaveCount(0);
 });
 
 test('a coach’s Settings are their own account’s pages, and Billing stays the owner’s', async ({
