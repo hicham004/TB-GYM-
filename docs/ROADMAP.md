@@ -1135,6 +1135,14 @@ Work follows this order; anything outside it needs the user's approval first.
   and the rows in section 0 of `docs/CRITIQUE-FIXES-2026-10.md` come next, in their order, one session each
   (cloud or local). Its B10 rows add session packs, the next commercial slice: a sixth coaching feature
   (ADR 0038, SES-001 to SES-009), and the This month page (SUB-018).
+- Trainees without a coach (approved by the owner 2026-11-12, outside this track's order): TB Gym's own
+  coaching space, "the house", where a person signs up with no invitation. Free is an exercise pool and
+  workouts of one's own; Pro+ sells the trainer partner's programs and Max is TB Gym coaching the trainee.
+  Rows N9a1 to N9c5 in section 0 of `docs/NOTES-PLAN-2026-11.md` come next, in their order, one chat each.
+  Everything is built switched off: sign-up, asks for a paid plan and Max each open only when the owner
+  fills the setting that governs it, and no trainee pays before the company's Whish account exists. Its
+  N9d rows change every coaching space: an owner sees the business side of another coach's client and no
+  longer the private side (C8 in `docs/CONCERNS-BRIEF.md`, decided 2026-10-14).
 - Step 5 (later), Whish automation: payments through the Whish wallet. In-app client payments
   only after a Whish agreement and legal review.
 - Suggested follow-up, not scheduled (owner, 2026-10-13): show the client what their coach changed
