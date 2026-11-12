@@ -821,7 +821,7 @@ function Test-Retryable($Run) {
     if ((Get-Field $Run.RateLimit 'status') -eq 'rejected') { return $true }
     if ($null -eq $Run.Result) { return $false }
     if (-not (Get-Field $Run.Result 'is_error')) { return $false }
-    return (Get-ResultText $Run) -match '(?i)usage limit|limit reached|hit your limit|resets|overloaded|rate.?limit|\b(429|500|502|503|504|529)\b|timed? ?out|ECONN'
+    return (Get-ResultText $Run) -match '(?i)usage limit|limit reached|hit your limit|reached your [\w .-]*limit|resets|overloaded|rate.?limit|\b(429|500|502|503|504|529)\b|timed? ?out|ECONN'
 }
 
 # The epoch second the chat's usage window resets, when its last rate-limit event or result says.
@@ -861,6 +861,9 @@ function Test-LongLimit($Run, [int]$Delay) {
     $type = [string](Get-Field $Run.RateLimit 'rateLimitType')
     if ((Get-Field $Run.RateLimit 'status') -eq 'rejected' -and $type -match '(?i)seven|week') { return $true }
     $text = Get-ResultText $Run
+    # "You've reached your Fable limit. Switch to another model" (2026-11-12): one model's allowance, which
+    # another model can carry on from.
+    if ($text -match '(?i)switch to another model') { return $true }
     return ($text -match '(?i)limit') -and ($text -match '(?i)week|seven.?day|7.?day')
 }
 
