@@ -62,9 +62,18 @@ public sealed partial class WebsiteBoundaryTests
 
         // Quoted: nginx reads an unquoted {1,64} in a regex as a block opener.
         Assert.Contains("location ~ \"^/stats/(pa-", nginx, StringComparison.Ordinal, "nginx does not proxy Plausible's site script.");
+        var script = Block(nginx, "location ~ \"^/stats/(pa-");
         var events = Block(nginx, "location = /stats/event {");
         Assert.Contains("https://plausible.io/api/event", events, StringComparison.Ordinal);
         Assert.Contains("X-Forwarded-For $proxy_add_x_forwarded_for", events, StringComparison.Ordinal);
+        // The browser sends this origin's cookies with every request, the sign-in cookie among them
+        // (someone signed in can have the script in their page): neither path passes one on to
+        // plausible.io, and none it sets comes back. nginx sends no header whose value is empty.
+        foreach (var (name, block) in new[] { ("the site script", script), ("the events", events) })
+        {
+            Assert.Contains("proxy_set_header Cookie \"\";", block, StringComparison.Ordinal, $"The proxy for {name} passes the browser's cookies to plausible.io.");
+            Assert.Contains("proxy_hide_header Set-Cookie;", block, StringComparison.Ordinal, $"The proxy for {name} lets plausible.io set a cookie on this origin.");
+        }
         // The policy that keeps every script and connection on this origin: as R6.2g left it, with the
         // socket held to this host too since audit A13a (WEB-14), which 'self' covers.
         Assert.Contains(
