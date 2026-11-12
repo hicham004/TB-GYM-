@@ -1,0 +1,88 @@
+<form [id]="formId" class="body" (submit)="$event.preventDefault(); submit()" novalidate>
+  <p class="about">
+    <span class="who"
+      ><span dir="auto">{{ spaceName() }}</span></span
+    >&ngsp;
+    <span class="muted" i18n
+      >Adds its clients to the included clients of the invoice of each month it covers, on top of
+      the seats’ and a founding seat’s. Two grants in one month add up.</span
+    >
+  </p>
+
+  <app-field [label]="clientsLabel" [errors]="shows('clients') ? errors()['clients'] : null">
+    <input
+      appControl
+      name="clients"
+      type="number"
+      inputmode="numeric"
+      min="1"
+      max="1000"
+      step="1"
+      autocomplete="off"
+      [value]="clients() ?? ''"
+      (input)="setClients($any($event.target).valueAsNumber)"
+      (blur)="attempt.touch('clients')"
+    />
+  </app-field>
+
+  <app-date-field
+    [label]="fromLabel"
+    [help]="fromHelp"
+    [errors]="shows('startsOn') ? errors()['startsOn'] : null"
+    [(value)]="startsOn"
+    [min]="earliest"
+    [today]="today()"
+    (touched)="attempt.touch('startsOn')"
+  />
+  <app-date-field
+    [label]="throughLabel"
+    [help]="throughHelp"
+    [errors]="shows('lastDay') ? errors()['lastDay'] : null"
+    [(value)]="lastDay"
+    [min]="startsOn() || null"
+    [today]="today()"
+    (touched)="attempt.touch('lastDay')"
+  />
+  <div class="presets" role="group" [attr.aria-label]="presetsLabel">
+    <span class="caption" i18n>Run it for</span>
+    @for (preset of presets; track preset.months) {
+      <button appButton type="button" variant="outlined" (click)="applyPreset(preset.months)">
+        {{ preset.label }}
+      </button>
+    }
+  </div>
+
+  <app-field
+    [label]="noteLabel"
+    [help]="noteHelp"
+    [errors]="shows('note') ? errors()['note'] : null"
+  >
+    <input
+      appControl
+      name="note"
+      autocomplete="off"
+      maxlength="200"
+      dir="auto"
+      [value]="note()"
+      (input)="note.set($any($event.target).value)"
+      (blur)="attempt.touch('note')"
+    />
+  </app-field>
+
+  @if (attempt.wasTried() && problemCount() > 0) {
+    <p class="problem-text" role="alert" i18n>Check the fields marked above.</p>
+  }
+  @if (error(); as message) {
+    <p class="problem-text" role="alert">{{ message }}</p>
+  }
+</form>
+<ng-template appModalFooter>
+  <button appButton type="button" variant="text" (click)="closed.emit(false)" i18n>Not now</button>
+  <button appButton type="submit" [attr.form]="formId" [loading]="busy()">
+    @if (busy()) {
+      <ng-container i18n>Granting…</ng-container>
+    } @else {
+      <ng-container i18n>Grant clients</ng-container>
+    }
+  </button>
+</ng-template>

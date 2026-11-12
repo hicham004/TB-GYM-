@@ -1,4 +1,4 @@
-import { addDays, addMonths, isIsoDate, toIso, type IsoDate } from '../../ui/calendar';
+import { addDays, addMonths, isIsoDate, monthStart, toIso, type IsoDate } from '../../ui/calendar';
 import { formatBillingDay } from '../billing/billing-access';
 import {
   formatMoney,
@@ -202,20 +202,24 @@ export function paymentTermDays(invoice: BillingInvoice): number {
   return daysBetween(dayOf(invoice.issuedAtUtc), invoice.dueOn);
 }
 
-export function isActiveDiscount(discount: BillingDiscount): boolean {
+/** The days and revocation a discount and a grant of extra clients (notes plan N11b) share. */
+export type GrantedDays = Pick<BillingDiscount, 'startsOn' | 'endsOnExclusive' | 'revokedAtUtc'>;
+
+export function isActiveDiscount(discount: GrantedDays): boolean {
   return discount.revokedAtUtc === null;
 }
 
 export type DiscountState = 'running' | 'upcoming' | 'ended' | 'revoked';
 
-export function discountState(discount: BillingDiscount, today: IsoDate): DiscountState {
+/** Where a discount or a grant of extra clients stands on a UTC day. */
+export function discountState(discount: GrantedDays, today: IsoDate): DiscountState {
   if (!isActiveDiscount(discount)) return 'revoked';
   if (discount.startsOn > today) return 'upcoming';
   return discount.endsOnExclusive > today ? 'running' : 'ended';
 }
 
-/** The last day a discount covers, from its half-open end. */
-export function discountLastDay(discount: BillingDiscount): IsoDate {
+/** The last day a discount or a grant covers, from its half-open end. */
+export function discountLastDay(discount: GrantedDays): IsoDate {
   return addDays(discount.endsOnExclusive, -1);
 }
 
@@ -273,7 +277,10 @@ export function invoiceWhen(invoice: BillingInvoice, locale: string): string {
   }
 }
 
-/** What the invoice counted, as the admin checks it against the space. */
+/**
+ * What the invoice counted, as the admin checks it against the space: its plan version, the founding
+ * terms version when a founding seat counted (notes plan N11b), its seats and clients.
+ */
 export function invoiceUsage(invoice: BillingInvoice): string {
   const seats =
     invoice.amounts.seats === 1
@@ -283,7 +290,9 @@ export function invoiceUsage(invoice: BillingInvoice): string {
     invoice.amounts.billableClients === 1
       ? $localize`1 client`
       : $localize`${invoice.amounts.billableClients}:clients: clients`;
-  return $localize`Plan version ${invoice.pricePlanVersion}:version: · ${seats}:seats: · ${clients}:clients:`;
+  return invoice.foundingTermsVersion === null
+    ? $localize`Plan version ${invoice.pricePlanVersion}:version: · ${seats}:seats: · ${clients}:clients:`
+    : $localize`Plan version ${invoice.pricePlanVersion}:version: · founding terms v${invoice.foundingTermsVersion}:terms: · ${seats}:seats: · ${clients}:clients:`;
 }
 
 // ---------- recording a payment ----------
@@ -403,6 +412,96 @@ export function discountErrors(
         $localize`That overlaps the ${clash.percent}:percent:% discount from ${formatBillingDay(clash.startsOn, locale)}:from: to ${formatBillingDay(addDays(clash.endsOnExclusive, -1), locale)}:to:. Revoke it first.`,
       ];
     }
+  }
+  return errors;
+}
+
+// ---------- granting extra included clients (notes plan N11b) ----------
+
+/** The earliest first day the server takes for a grant. */
+export const GRANT_EARLIEST_DAY: IsoDate = '2000-01-01';
+
+export interface ClientGrantEntry {
+  clients: number | null;
+  startsOn: string;
+  lastDay: string;
+  note: string;
+}
+
+/** The 1st of the month after today's: a grant's first day by default, so one grant is one invoice. */
+export function nextMonthStart(today: IsoDate): IsoDate {
+  return addMonths(monthStart(today), 1);
+}
+
+/** The last day of a grant of `months` whole calendar months, from its first day's month. */
+export function grantLastDay(startsOn: IsoDate, months: number): IsoDate {
+  return lastDayAfterMonths(monthStart(startsOn), months);
+}
+
+/** How many whole calendar months a grant from `startsOn` to `lastDay` covers; null off a month's edge. */
+export function grantMonths(startsOn: string, lastDay: string): number | null {
+  if (!isIsoDate(startsOn) || !isIsoDate(lastDay) || lastDay < startsOn) return null;
+  const end = discountEndExclusive(lastDay);
+  if (startsOn !== monthStart(startsOn) || end !== monthStart(end)) return null;
+  const months = (day: string) => Number(day.slice(0, 4)) * 12 + Number(day.slice(5, 7));
+  return months(end) - months(startsOn);
+}
+
+/** The question before a grant of extra clients is revoked: its words, its title and its two answers. */
+export function revokeGrantQuestion(
+  clients: number,
+  from: string,
+  to: string,
+): { message: string; confirm: string; cancel: string; title: string } {
+  return clients === 1
+    ? {
+        message: $localize`Revoke this extra client (${from}:from: to ${to}:to:)? Invoices already issued keep it; invoices from now on will not have it.`,
+        confirm: $localize`Revoke client`,
+        cancel: $localize`Keep it`,
+        title: $localize`Revoke this extra client?`,
+      }
+    : {
+        message: $localize`Revoke these ${clients}:clients: extra clients (${from}:from: to ${to}:to:)? Invoices already issued keep them; invoices from now on will not have them.`,
+        confirm: $localize`Revoke clients`,
+        cancel: $localize`Keep them`,
+        title: $localize`Revoke these extra clients?`,
+      };
+}
+
+/**
+ * What is wrong with a grant before it is sent, field by field, in the server's own words: a grant is
+ * whole UTC calendar months, so a day off a month's edge is marked on its field. The server refuses
+ * the same, and decides whether the space may have one.
+ */
+export function clientGrantErrors(entry: ClientGrantEntry): Record<string, string[]> {
+  const errors: Record<string, string[]> = {};
+  const clients = entry.clients;
+  if (clients === null || !Number.isInteger(clients) || clients < 1 || clients > 1_000) {
+    errors['clients'] = [$localize`Enter a whole number of clients from 1 to 1000.`];
+  }
+  if (!isIsoDate(entry.startsOn)) {
+    errors['startsOn'] = [$localize`Choose the first day.`];
+  } else if (entry.startsOn !== monthStart(entry.startsOn)) {
+    errors['startsOn'] = [
+      $localize`Start on the first day of a month: extra clients are granted for whole months.`,
+    ];
+  } else if (entry.startsOn < GRANT_EARLIEST_DAY) {
+    errors['startsOn'] = [$localize`Start on the first day of a month from January 2000.`];
+  }
+  if (!isIsoDate(entry.lastDay)) {
+    errors['lastDay'] = [$localize`Choose the last day.`];
+  } else if (isIsoDate(entry.startsOn) && entry.lastDay < entry.startsOn) {
+    errors['lastDay'] = [$localize`The last day cannot be before the first.`];
+  } else if (
+    discountEndExclusive(entry.lastDay) !== monthStart(discountEndExclusive(entry.lastDay))
+  ) {
+    errors['lastDay'] = [
+      $localize`End on the last day of a month: extra clients are granted for whole months.`,
+    ];
+  }
+  const note = entry.note.trim();
+  if (note === '' || note.length > 200) {
+    errors['note'] = [$localize`Say what the extra clients are for, in up to 200 characters.`];
   }
   return errors;
 }

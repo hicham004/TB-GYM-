@@ -5,7 +5,7 @@
   </p>
 
   <div class="grid">
-    @for (field of fields; track field.key) {
+    @for (field of fields(); track field.key) {
       <app-field
         [label]="field.label"
         [help]="field.help"
@@ -21,7 +21,7 @@
           [attr.min]="field.min"
           [attr.max]="field.max"
           [value]="entry()[field.key] ?? ''"
-          (input)="setNumber(field.key, $any($event.target).valueAsNumber)"
+          (input)="setNumber(field, $any($event.target))"
           (blur)="attempt.touch(field.key)"
         />
       </app-field>

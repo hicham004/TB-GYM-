@@ -107,6 +107,7 @@
               <ng-container i18n>Founding since {{ day(open.status.foundingSince) }}</ng-container>
               · <span dir="auto">{{ open.status.note }}</span>
             </p>
+            <p class="quiet" data-founding-seat>{{ seatLine(open) }}</p>
             @if (open.badge.state === 'Waiting') {
               <p class="quiet" data-founding-progress>{{ progress(open.badge) }}</p>
               <p class="quiet" i18n>TB Gym checks this on its own; Check now looks at once.</p>
@@ -190,6 +191,9 @@
                   />
                   <p class="inv-detail">{{ invoiceWhen(invoice) }} · {{ invoiceUsage(invoice) }}</p>
                   <div class="inv-notes">
+                    @if (includedNote(invoice); as included) {
+                      <p class="inv-note" data-invoice-included>{{ included }}</p>
+                    }
                     @if (invoice.payment; as payment) {
                       <p class="inv-note" dir="auto">
                         <ng-container i18n>Reference</ng-container>&ngsp;
@@ -330,6 +334,64 @@
             </ul>
           }
         </section>
+
+        <!-- Extra included clients (notes plan N11b): only on a space that is founding or has grants. -->
+        @if (showsGrants()) {
+          <section class="panel" aria-labelledby="grants-heading" data-client-grants>
+            <div class="panel-head">
+              <h2 id="grants-heading" #grantsHeading tabindex="-1" i18n>Extra included clients</h2>
+              @if (founding()) {
+                <button
+                  appButton
+                  type="button"
+                  variant="outlined"
+                  (click)="grantClients()"
+                  data-grant-clients
+                  i18n
+                >
+                  Grant extra clients
+                </button>
+              }
+            </div>
+            @if (grants().length === 0) {
+              <p class="quiet" data-no-client-grants i18n>
+                No extra clients. A grant adds its clients to the invoice of each month it covers.
+              </p>
+            } @else {
+              <ul class="rows" role="list">
+                @for (entry of grants(); track entry.grant.id) {
+                  <li class="discount-row" [attr.data-client-grant]="entry.grant.id">
+                    <strong class="percent">{{ clientCount(entry.grant.clients) }}</strong>
+                    <div class="discount-main">
+                      <span i18n>{{ day(entry.grant.startsOn) }} to {{ day(entry.last) }}</span>
+                      <span class="quiet"
+                        ><span dir="auto">{{ entry.grant.note }}</span></span
+                      >
+                    </div>
+                    <app-status-pill
+                      [label]="discountStateLabel(entry.state)"
+                      [tone]="discountTone(entry.state)"
+                    />
+                    @if (entry.state === 'running' || entry.state === 'upcoming') {
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        [loading]="busy() === entry.grant.id"
+                        (click)="revokeClientGrant(entry.grant)"
+                      >
+                        <ng-container i18n>Revoke</ng-container>
+                        <span class="tb-visually-hidden">
+                          {{ clientCount(entry.grant.clients) }} {{ entry.grant.note }}</span
+                        >
+                      </button>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+        }
       }
     }
   }
@@ -371,6 +433,18 @@
   }
 </ng-template>
 
+<ng-template #clientGrantSheet let-sheet>
+  @if (summary(); as space) {
+    <app-platform-client-grant
+      [tenantId]="space.tenantId"
+      [spaceName]="space.name"
+      [today]="today"
+      (dirtyChange)="setDirty($event)"
+      (closed)="sheet.close($event)"
+    />
+  }
+</ng-template>
+
 <ng-template #markSheet let-sheet>
   @if (summary(); as space) {
     <app-platform-founding-mark
@@ -378,6 +452,7 @@
       [spaceName]="space.name"
       [today]="today"
       [terms]="markTerms()"
+      [planSeatClients]="markPlanSeat()"
       (dirtyChange)="setDirty($event)"
       (closed)="sheet.close($event)"
     />

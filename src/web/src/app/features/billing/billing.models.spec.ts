@@ -3,11 +3,13 @@ import type {
   AdminWorkspaceSummary,
   BillingAmountsView,
   CurrentMonthEstimateView,
+  IncludedClientGrantView,
   PlatformInvoiceStatus,
   PlatformInvoiceView,
   PlatformPaymentView,
   PricePlanView,
   WorkspaceBillingDiscountView,
+  WorkspaceBillingIncludedClientGrantView,
   WorkspaceBillingStatus,
   WorkspaceBillingView,
   WorkspaceDiscountView,
@@ -21,6 +23,7 @@ import {
   formatDay,
   formatMoney,
   formatMonth,
+  includedClientSentences,
   invoicePrices,
   invoiceStatusLabel,
   invoiceStatusTone,
@@ -28,13 +31,16 @@ import {
   toAdminWorkspace,
   toAdminWorkspaceDetail,
   toAmounts,
+  toClientGrant,
   toDiscount,
   toEstimate,
   toInvoice,
+  toOwnerClientGrant,
   toOwnerDiscount,
   toPayment,
   toPricePlan,
   toWorkspaceBilling,
+  type OwnerClientGrant,
   type OwnerDiscount,
 } from './billing.models';
 
@@ -73,6 +79,9 @@ const AMOUNTS = {
   discountAmount: 7.39,
   total: 51.71,
   currencyCode: 'USD',
+  seatIncludedClients: 15,
+  foundingIncludedClients: 0,
+  grantedIncludedClients: 0,
 };
 
 const PAYMENT_VIEW: PlatformPaymentView = {
@@ -134,6 +143,9 @@ const INVOICE = {
   planExtraClientPrice: 2.05,
   planGymFee: 10,
   planGymFeeMinimumSeats: 2,
+  foundingSeatIncludedClients: null,
+  foundingTermsVersion: null,
+  grantedIncludedClients: 0,
   amounts: AMOUNTS,
   status: 'Paid',
   locksWorkspace: false,
@@ -230,6 +242,26 @@ const OWNER_DISCOUNT_VIEW: WorkspaceBillingDiscountView = {
   startsLater: false,
 };
 
+/** A grant of extra included clients as the admin's detail sends it (notes plan N11a). */
+const GRANT_VIEW: IncludedClientGrantView = {
+  id: 'grant-1',
+  clients: '7',
+  startsOn: '2026-09-01',
+  endsOnExclusive: '2026-12-01',
+  note: 'Brought Karim Haddad',
+  grantedAtUtc: '2026-09-02T08:00:00Z',
+  revokedAtUtc: null,
+};
+
+/** What the owner's read sends of a grant: never its note. */
+const OWNER_GRANT_VIEW: WorkspaceBillingIncludedClientGrantView = {
+  clients: '4',
+  startsOn: '2026-12-01',
+  lastDay: '2027-02-28',
+  endsOnExclusive: '2027-03-01',
+  startsLater: true,
+};
+
 /**
  * Runs `check` with every `Intl.DateTimeFormat` that names no zone of its own on Los Angeles's clock, west
  * of UTC, where midnight UTC on the 1st is still the last day of the month before. The process's own zone
@@ -275,6 +307,35 @@ describe('platform billing: what the API said, as numbers', () => {
     expect(toInvoice(invoiceView({ status: 'Open', payment: null })).payment).toBeNull();
   });
 
+  it('reads where an invoice’s included clients came from: the founding seat, its terms and the grants', () => {
+    const read = toInvoice(
+      invoiceView({
+        calculationName: 'platform-invoice-v2',
+        foundingSeatIncludedClients: '13',
+        foundingTermsVersion: '2',
+        grantedIncludedClients: '6',
+        amounts: {
+          ...AMOUNTS_VIEW,
+          includedClients: '29',
+          seatIncludedClients: '15',
+          foundingIncludedClients: '8',
+          grantedIncludedClients: '6',
+        },
+      }),
+    );
+
+    expect(read.foundingSeatIncludedClients).toBe(13);
+    expect(read.foundingTermsVersion).toBe(2);
+    expect(read.grantedIncludedClients).toBe(6);
+    expect(read.amounts).toEqual({
+      ...AMOUNTS,
+      includedClients: 29,
+      seatIncludedClients: 15,
+      foundingIncludedClients: 8,
+      grantedIncludedClients: 6,
+    });
+  });
+
   it('reads the month so far with its plan version and amounts', () => {
     expect(toEstimate(ESTIMATE_VIEW)).toEqual(ESTIMATE);
   });
@@ -294,8 +355,8 @@ describe('platform billing: what the API said, as numbers', () => {
         whatsAppNumber: '+96170123456',
       },
       discounts: [OWNER_DISCOUNT_VIEW],
-      foundingSeatIncludedClients: null,
-      includedClientGrants: [],
+      foundingSeatIncludedClients: '13',
+      includedClientGrants: [OWNER_GRANT_VIEW],
     };
 
     expect(toWorkspaceBilling(view)).toEqual({
@@ -310,6 +371,22 @@ describe('platform billing: what the API said, as numbers', () => {
       supportEmail: 'billing@tbgym.example',
       whatsAppNumber: '+96170123456',
       discounts: [{ ...OWNER_DISCOUNT_VIEW, percent: 15.5 }],
+      foundingSeatIncludedClients: 13,
+      includedClientGrants: [{ ...OWNER_GRANT_VIEW, clients: 4 }],
+    });
+    expect(
+      toWorkspaceBilling({ ...view, foundingSeatIncludedClients: null })
+        .foundingSeatIncludedClients,
+    ).toBeNull();
+  });
+
+  it('reads a grant the owner is shown, its clients as a number and its days as the API sent them', () => {
+    expect(toOwnerClientGrant(OWNER_GRANT_VIEW)).toEqual({
+      clients: 4,
+      startsOn: '2026-12-01',
+      lastDay: '2027-02-28',
+      endsOnExclusive: '2027-03-01',
+      startsLater: true,
     });
   });
 
@@ -335,7 +412,10 @@ describe('platform billing: what the API said, as numbers', () => {
         discounts: [DISCOUNT_VIEW],
         founding: null,
         foundingHistory: [],
-        includedClientGrants: [],
+        includedClientGrants: [
+          GRANT_VIEW,
+          { ...GRANT_VIEW, id: 'grant-0', revokedAtUtc: '2026-09-03T08:00:00Z' },
+        ],
       }),
     ).toEqual({
       summary: SUMMARY,
@@ -344,7 +424,12 @@ describe('platform billing: what the API said, as numbers', () => {
       discounts: [{ ...DISCOUNT_VIEW, percent: 12.5 }],
       founding: null,
       foundingHistory: [],
+      includedClientGrants: [
+        { ...GRANT_VIEW, clients: 7 },
+        { ...GRANT_VIEW, id: 'grant-0', clients: 7, revokedAtUtc: '2026-09-03T08:00:00Z' },
+      ],
     });
+    expect(toClientGrant(GRANT_VIEW).clients).toBe(7);
   });
 
   it('reads a founding space for the platform admin: the open status, its badge and the ended ones', () => {
@@ -389,7 +474,7 @@ describe('platform billing: what the API said, as numbers', () => {
           endedOn: null,
           hidden: true,
         },
-        foundingSeatIncludedClients: null,
+        foundingSeatIncludedClients: '13',
       },
       foundingHistory: [ended],
       includedClientGrants: [],
@@ -411,6 +496,7 @@ describe('platform billing: what the API said, as numbers', () => {
         endedOn: null,
         hidden: true,
       },
+      foundingSeatIncludedClients: 13,
     });
     expect(detail.foundingHistory).toEqual([ended]);
   });
@@ -599,6 +685,133 @@ describe('platform billing: a bill line by line', () => {
       { label: 'Seats: 1 × $12.00', amount: '$12.00' },
       { label: 'Clients with a plan: 5, 5 included with your seats', amount: '$0.00' },
     ]);
+  });
+
+  // Notes plan N11b: where the included clients came from, each part only above zero; the figures
+  // are this test's own, and every one is the API's (seat + founding + granted = included).
+  it('says where the included clients came from when a founding seat counted', () => {
+    const founding = amounts({
+      seats: 1,
+      billableClients: 9,
+      includedClients: 13,
+      seatIncludedClients: 5,
+      foundingIncludedClients: 8,
+      seatAmount: 15,
+      gymFeeAmount: 0,
+      subtotal: 15,
+      total: 15,
+    });
+
+    expect(billLines(founding, 'en-US')[1]).toEqual({
+      label: 'Clients with a plan: 9, 13 included: 5 with your seats, 8 more as a founding space',
+      amount: '$0.00',
+    });
+  });
+
+  it('says where the included clients came from when a grant counted, with the extra ones at their price', () => {
+    const granted = invoice({
+      planExtraClientPrice: 2,
+      amounts: amounts({
+        seats: 3,
+        billableClients: 26,
+        includedClients: 22,
+        extraClients: 4,
+        extraClientAmount: 8,
+        seatIncludedClients: 15,
+        grantedIncludedClients: 7,
+      }),
+    });
+
+    expect(billLines(granted.amounts, 'en-US', invoicePrices(granted))[1]).toEqual({
+      label:
+        'Clients with a plan: 26, 22 included: 15 with your seats, 7 more granted, 4 more × $2.00',
+      amount: '$8.00',
+    });
+  });
+
+  it('names all three sources when a founding seat and a grant both counted, and drops a seat part of none', () => {
+    expect(
+      billLines(
+        amounts({
+          includedClients: 34,
+          seatIncludedClients: 15,
+          foundingIncludedClients: 8,
+          grantedIncludedClients: 11,
+        }),
+        'en-US',
+      )[1].label,
+    ).toBe(
+      'Clients with a plan: 14, 34 included: 15 with your seats, 8 more as a founding space, 11 more granted',
+    );
+    // A plan whose seat includes no clients: the founding seat's alone.
+    expect(
+      billLines(
+        amounts({ includedClients: 13, seatIncludedClients: 0, foundingIncludedClients: 13 }),
+        'en-US',
+      )[1].label,
+    ).toBe('Clients with a plan: 14, 13 included: 13 more as a founding space');
+  });
+
+  it('keeps a plain bill’s clients line as it was when neither a founding seat nor a grant counted', () => {
+    expect(billLines(amounts(), 'en-US')[1].label).toBe(
+      'Clients with a plan: 14, 15 included with your seats',
+    );
+  });
+});
+
+describe('platform billing: the owner’s included clients (notes plan N11b)', () => {
+  /** A grant as the owner's read sends it; the figures are this test's own. */
+  function grant(
+    clients: number,
+    days: Pick<OwnerClientGrant, 'startsOn' | 'lastDay' | 'endsOnExclusive'>,
+    startsLater = false,
+  ): OwnerClientGrant {
+    return { clients, startsLater, ...days };
+  }
+  const autumn = { startsOn: '2026-09-01', lastDay: '2026-11-30', endsOnExclusive: '2026-12-01' };
+  const winter = { startsOn: '2026-12-01', lastDay: '2027-02-28', endsOnExclusive: '2027-03-01' };
+
+  it('adds nothing for a space that is not founding and has no grant', () => {
+    expect(includedClientSentences(null, [], 'en-US')).toEqual([]);
+  });
+
+  it('says what a founding seat includes, one client or many', () => {
+    expect(includedClientSentences(13, [], 'en-US')).toEqual([
+      'As a founding coaching space, your own seat includes 13 clients.',
+    ]);
+    expect(includedClientSentences(1, [], 'en-US')).toEqual([
+      'As a founding coaching space, your own seat includes 1 client.',
+    ]);
+  });
+
+  it('says how many more clients a running grant includes and until when', () => {
+    expect(includedClientSentences(null, [grant(7, autumn)], 'en-US')).toEqual([
+      '7 more clients included until Nov 30, 2026.',
+    ]);
+  });
+
+  it('says from when a grant still to come starts', () => {
+    expect(includedClientSentences(null, [grant(1, winter, true)], 'en-US')).toEqual([
+      '1 more client included from Dec 1, 2026 until Feb 28, 2027.',
+    ]);
+  });
+
+  it('gives each grant its own sentence after the founding seat’s, in the API’s order', () => {
+    expect(
+      includedClientSentences(13, [grant(7, autumn), grant(4, winter, true)], 'en-US'),
+    ).toEqual([
+      'As a founding coaching space, your own seat includes 13 clients.',
+      '7 more clients included until Nov 30, 2026.',
+      '4 more clients included from Dec 1, 2026 until Feb 28, 2027.',
+    ]);
+  });
+
+  it('reads every day as a UTC day, whatever the device’s clock', () => {
+    onDeviceWestOfUtc(() =>
+      expect(includedClientSentences(null, [grant(4, winter, true)], 'en-US')).toEqual([
+        '4 more clients included from Dec 1, 2026 until Feb 28, 2027.',
+      ]),
+    );
   });
 });
 

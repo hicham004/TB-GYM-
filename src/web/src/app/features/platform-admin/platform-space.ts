@@ -35,21 +35,26 @@ import {
   billingStatusLabel,
   billingStatusTone,
   billLines,
+  clientsLine,
   formatDay,
   formatMoney,
   formatMonth,
+  includedSources,
   invoicePrices,
   invoiceStatusLabel,
   invoiceStatusTone,
   isUnpaid,
   type AdminWorkspaceDetail,
+  type BillingClientGrant,
   type BillingDiscount,
   type BillingInvoice,
 } from '../billing/billing.models';
 import {
   adminProgressLine,
+  clientCount,
   currentFoundingTerms,
   FOUNDING_COACH,
+  foundingSeatLine,
   type AdminFounding,
   type FoundingRecord,
   type FoundingTerms,
@@ -63,21 +68,28 @@ import {
   invoiceUsage,
   invoiceWhen,
   nextLine,
+  revokeGrantQuestion,
   sortInvoices,
   statusSentence,
   utcToday,
   type DiscountState,
 } from './platform-admin.models';
-import { PlatformDiscount, PlatformPayment, PlatformVoid } from './platform-sheets';
+import {
+  PlatformClientGrant,
+  PlatformDiscount,
+  PlatformPayment,
+  PlatformVoid,
+} from './platform-sheets';
 
-type SheetKind = 'payment' | 'void' | 'discount' | 'mark' | 'end';
+type SheetKind = 'payment' | 'void' | 'discount' | 'grant-clients' | 'mark' | 'end';
 
 /**
  * One coaching space in platform billing (R5.2b, ADR 0028): where it stands, whether it is a founding
- * space (notes plan N3b), this month so far, its invoices with the two things an admin does to an
- * unpaid one, and its discounts. Everything the admin changes is a sheet; the API works out every
- * amount, reads the Founding coach badge and refuses what is not allowed, and a paid or voided
- * invoice is never altered, nor an ended founding status.
+ * space (notes plan N3b) and what its owner's seat includes then (N11b), this month so far, its
+ * invoices with the two things an admin does to an unpaid one, its discounts, and the extra included
+ * clients granted to a founding space (N11b). Everything the admin changes is a sheet; the API works
+ * out every amount, reads the Founding coach badge and refuses what is not allowed, and a paid or
+ * voided invoice is never altered, nor an ended founding status.
  */
 @Component({
   selector: 'app-platform-space',
@@ -86,6 +98,7 @@ type SheetKind = 'payment' | 'void' | 'discount' | 'mark' | 'end';
     Button,
     EmptyState,
     Icon,
+    PlatformClientGrant,
     PlatformDiscount,
     PlatformFoundingEnd,
     PlatformFoundingMark,
@@ -111,9 +124,11 @@ export class PlatformSpace {
   private readonly injector = inject(Injector);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly foundingHeading = viewChild<ElementRef<HTMLElement>>('foundingHeading');
+  private readonly grantsHeading = viewChild<ElementRef<HTMLElement>>('grantsHeading');
   private readonly paymentSheet = viewChild.required<TemplateRef<unknown>>('paymentSheet');
   private readonly voidSheet = viewChild.required<TemplateRef<unknown>>('voidSheet');
   private readonly discountSheet = viewChild.required<TemplateRef<unknown>>('discountSheet');
+  private readonly clientGrantSheet = viewChild.required<TemplateRef<unknown>>('clientGrantSheet');
   private readonly markSheet = viewChild.required<TemplateRef<unknown>>('markSheet');
   private readonly endSheet = viewChild.required<TemplateRef<unknown>>('endSheet');
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
@@ -143,6 +158,8 @@ export class PlatformSpace {
   protected readonly busy = signal<string | null>(null);
   /** The terms in force when the mark sheet opened, for its sentence; null when unreadable. */
   protected readonly markTerms = signal<FoundingTerms | null>(null);
+  /** The clients the price plan in force includes with a seat, for the same; null when unreadable. */
+  protected readonly markPlanSeat = signal<number | null>(null);
   /** The open founding status the end sheet is about. */
   protected readonly ending = signal<FoundingRecord | null>(null);
 
@@ -188,6 +205,18 @@ export class PlatformSpace {
       last: discountLastDay(discount),
     })),
   );
+  /** Extra included clients, newest first as the server sends them, revoked ones kept (N11b). */
+  protected readonly grants = computed(() =>
+    (this.detail()?.includedClientGrants ?? []).map((grant) => ({
+      grant,
+      state: discountState(grant, this.today),
+      last: discountLastDay(grant),
+    })),
+  );
+  /** A space never founding and never granted shows no panel, so it looks as it did before. */
+  protected readonly showsGrants = computed(
+    () => this.founding() !== null || this.grants().length > 0,
+  );
 
   protected readonly statusLabel = billingStatusLabel;
   protected readonly statusTone = billingStatusTone;
@@ -198,6 +227,19 @@ export class PlatformSpace {
   protected readonly invoiceUsage = invoiceUsage;
   protected readonly invoiceLines = (invoice: BillingInvoice) =>
     billLines(invoice.amounts, this.locale, invoicePrices(invoice));
+  protected readonly clientCount = clientCount;
+  protected readonly seatLine = (open: AdminFounding) =>
+    foundingSeatLine(open.foundingSeatIncludedClients);
+
+  /**
+   * The invoice's clients line as its owner reads it, when a founding seat or a grant counted, so the
+   * admin sees where its included clients came from; null for a plain invoice, which shows as before.
+   */
+  protected includedNote(invoice: BillingInvoice): string | null {
+    return includedSources(invoice.amounts) === null
+      ? null
+      : clientsLine(invoice.amounts, this.locale, invoicePrices(invoice));
+  }
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
@@ -334,17 +376,64 @@ export class PlatformSpace {
     }
   }
 
+  // ---------- extra included clients (notes plan N11b) ----------
+
+  protected grantClients(): void {
+    this.open('grant-clients', $localize`Grant extra clients`, (done) => {
+      if (done) this.toast.show($localize`Extra clients granted.`, { tone: 'success' });
+    });
+  }
+
+  protected async revokeClientGrant(grant: BillingClientGrant): Promise<void> {
+    if (this.busy()) return;
+    // The row's Revoke goes once the grant is revoked; the panel's heading then takes its focus.
+    const trigger = document.activeElement;
+    const question = revokeGrantQuestion(
+      grant.clients,
+      this.day(grant.startsOn),
+      this.day(discountLastDay(grant)),
+    );
+    const yes = await this.ask(question.message, question.confirm, question.cancel, question.title);
+    if (!yes) return;
+    this.busy.set(grant.id);
+    try {
+      await this.csrf.refresh();
+      await firstValueFrom(this.api.revokeIncludedClientGrant(grant.id));
+      this.toast.show($localize`Extra clients revoked.`, { tone: 'success' });
+    } catch (error) {
+      this.toast.show(apiErrorMessage(error, $localize`The extra clients could not be revoked.`), {
+        tone: 'error',
+      });
+    } finally {
+      this.busy.set(null);
+      await this.load();
+      this.refocus(trigger, this.grantsHeading);
+    }
+  }
+
   // ---------- the founding status (notes plan N3b, PBL-009) ----------
 
-  /** Reads the terms in force for the sheet's sentence, then opens it; it opens without them too. */
+  /**
+   * Reads the terms in force and the price plan's seat for the sheet's sentences, then opens it; it
+   * opens without them too.
+   */
   protected async markFounding(): Promise<void> {
     if (this.busy()) return;
     this.busy.set('founding-mark');
     let terms: FoundingTerms | null = null;
+    let planSeat: number | null = null;
     try {
-      terms = currentFoundingTerms(await firstValueFrom(this.foundingApi.getFoundingTerms()));
+      // Either read may fail: the sheet then says less, and the server still decides.
+      [terms, planSeat] = await Promise.all([
+        firstValueFrom(this.foundingApi.getFoundingTerms())
+          .then(currentFoundingTerms)
+          .catch(() => null),
+        firstValueFrom(this.api.getPricePlans())
+          .then((plans) => plans.find((plan) => plan.isCurrent)?.includedClientsPerSeat ?? null)
+          .catch(() => null),
+      ]);
     } catch {
-      // The sheet then names the terms in force without their numbers; the server still decides.
+      // Neither read rejects; a call that throws before reading leaves both unknown.
     } finally {
       this.busy.set(null);
     }
@@ -352,6 +441,7 @@ export class PlatformSpace {
     // what they typed, which this one must not close without asking.
     if (this.destroyed || this.openSheet) return;
     this.markTerms.set(terms);
+    this.markPlanSeat.set(planSeat);
     this.open('mark', $localize`Mark as founding`, (done) => {
       if (done) this.toast.show($localize`Marked as founding.`, { tone: 'success' });
     });
@@ -414,6 +504,7 @@ export class PlatformSpace {
       payment: this.paymentSheet(),
       void: this.voidSheet(),
       discount: this.discountSheet(),
+      'grant-clients': this.clientGrantSheet(),
       mark: this.markSheet(),
       end: this.endSheet(),
     };
@@ -440,6 +531,25 @@ export class PlatformSpace {
         if (kind === 'mark' || kind === 'end') this.keepFocus();
       });
     });
+  }
+
+  /**
+   * When the button that had focus is gone after a read and the focus fell to the page, `heading`
+   * takes it; focus the admin moved meanwhile, into a sheet opened during the read say, stays.
+   */
+  private refocus(
+    trigger: Element | null,
+    heading: () => ElementRef<HTMLElement> | undefined,
+  ): void {
+    if (this.destroyed || !(trigger instanceof HTMLElement) || trigger === document.body) return;
+    afterNextRender(
+      () => {
+        const active = document.activeElement;
+        if (trigger.isConnected || (active && active !== document.body)) return;
+        heading()?.nativeElement.focus({ preventScroll: true });
+      },
+      { injector: this.injector },
+    );
   }
 
   /** When the button that had focus went with the reading it served, the panel's heading takes it. */

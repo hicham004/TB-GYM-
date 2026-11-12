@@ -25,6 +25,9 @@ function amounts(overrides: Partial<BillingAmounts> = {}): BillingAmounts {
     discountAmount: 0,
     total: 44,
     currencyCode: 'USD',
+    seatIncludedClients: 10,
+    foundingIncludedClients: 0,
+    grantedIncludedClients: 0,
     ...overrides,
   };
 }
@@ -45,6 +48,9 @@ function invoice(overrides: Partial<BillingInvoice> = {}): BillingInvoice {
     planExtraClientPrice: 2,
     planGymFee: 10,
     planGymFeeMinimumSeats: 2,
+    foundingSeatIncludedClients: null,
+    foundingTermsVersion: null,
+    grantedIncludedClients: 0,
     amounts: amounts(),
     status: 'Open',
     locksWorkspace: false,
@@ -77,6 +83,8 @@ function billing(overrides: Partial<WorkspaceBilling> = {}): WorkspaceBilling {
     supportEmail: null,
     whatsAppNumber: null,
     discounts: [],
+    foundingSeatIncludedClients: null,
+    includedClientGrants: [],
     ...overrides,
   };
 }
@@ -257,6 +265,10 @@ describe('Settings › Billing', () => {
       'Dates here are UTC days, the one clock TB Gym bills every coaching space by, so a day here can start a few hours before or after your own midnight.',
     );
     expect(host.querySelector('[data-discount]'), 'No discount, no discount line.').toBeNull();
+    expect(
+      host.querySelector('[data-included-clients]'),
+      'Not founding and no grant: nothing about included clients.',
+    ).toBeNull();
 
     host.querySelector<HTMLButtonElement>('[data-invoice="invoice-1"] button')!.click();
     await settle(fixture);
@@ -385,6 +397,101 @@ describe('Settings › Billing', () => {
     expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
       'Your free trial runs until Aug 15, 2026. Nothing is charged for it, and your first invoice comes the month after.',
       'Early coach offer: 35% off from Aug 15, 2026 until Dec 14, 2026, then the normal price.',
+    ]);
+  });
+
+  it('says what a founding seat includes and each grant until when, after the discount line, and where an invoice’s included clients came from', async () => {
+    const counted = invoice({
+      status: 'Paid',
+      payment: PAYMENT,
+      foundingSeatIncludedClients: 13,
+      foundingTermsVersion: 2,
+      grantedIncludedClients: 6,
+      amounts: amounts({
+        billableClients: 30,
+        includedClients: 24,
+        extraClients: 6,
+        extraClientAmount: 12,
+        subtotal: 52,
+        total: 52,
+        seatIncludedClients: 10,
+        foundingIncludedClients: 8,
+        grantedIncludedClients: 6,
+      }),
+    });
+    const { fixture, host } = await render(() =>
+      of(
+        billing({
+          invoices: [counted],
+          unpaidTotal: 0,
+          readOnlyFrom: null,
+          discounts: [
+            {
+              name: 'Early coach offer',
+              percent: 35,
+              startsOn: '2026-08-01',
+              lastDay: '2026-10-31',
+              endsOnExclusive: '2026-11-01',
+              startsLater: false,
+            },
+          ],
+          foundingSeatIncludedClients: 13,
+          includedClientGrants: [
+            {
+              clients: 4,
+              startsOn: '2026-08-01',
+              lastDay: '2026-10-31',
+              endsOnExclusive: '2026-11-01',
+              startsLater: false,
+            },
+            {
+              clients: 1,
+              startsOn: '2026-12-01',
+              lastDay: '2027-02-28',
+              endsOnExclusive: '2027-03-01',
+              startsLater: true,
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'You’re all paid up. An invoice comes on the 1st of each month for the month before.',
+      'Early coach offer: 35% off until Oct 31, 2026, then the normal price.',
+      'As a founding coaching space, your own seat includes 13 clients.',
+      '4 more clients included until Oct 31, 2026.',
+      '1 more client included from Dec 1, 2026 until Feb 28, 2027.',
+    ]);
+
+    host.querySelector<HTMLButtonElement>('[data-invoice="invoice-1"] button')!.click();
+    await settle(fixture);
+    expect(Array.from(sheet()!.querySelectorAll('.lines > div')).map(line)).toEqual([
+      'Seats: 2 × $15.00 $30.00',
+      'Clients with a plan: 30, 24 included: 10 with your seats, 8 more as a founding space, 6 more granted, 6 more × $2.00 $12.00',
+      'Gym fee, from 2 seats $10.00',
+      'Total $52.00',
+    ]);
+  });
+
+  it('says during the trial what the founding seat includes, after the trial sentence', async () => {
+    const { host } = await render(() =>
+      of(
+        billing({
+          status: 'Trial',
+          trialEndsAtUtc: '2026-08-15T09:00:00Z',
+          invoices: [],
+          unpaidTotal: 0,
+          readOnlyFrom: null,
+          currentMonth: { ...billing().currentMonth, inTrial: true },
+          foundingSeatIncludedClients: 1,
+        }),
+      ),
+    );
+
+    expect(Array.from(host.querySelectorAll('[data-billing-status] p')).map(textOf)).toEqual([
+      'Your free trial runs until Aug 15, 2026. Nothing is charged for it, and your first invoice comes the month after.',
+      'As a founding coaching space, your own seat includes 1 client.',
     ]);
   });
 

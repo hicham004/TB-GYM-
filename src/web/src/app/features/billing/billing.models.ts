@@ -8,8 +8,10 @@ import type {
   PlatformInvoiceStatus,
   PlatformInvoiceView,
   PlatformPaymentView,
+  IncludedClientGrantView,
   PricePlanView,
   WorkspaceBillingDiscountView,
+  WorkspaceBillingIncludedClientGrantView,
   WorkspaceBillingStatus,
   WorkspaceBillingView,
   WorkspaceDiscountView,
@@ -17,6 +19,7 @@ import type {
 import {
   toAdminFounding,
   toFoundingRecord,
+  toNullableNumber,
   type AdminFounding,
   type FoundingRecord,
 } from './founding.models';
@@ -41,6 +44,13 @@ export interface BillingAmounts {
   discountAmount: number;
   total: number;
   currencyCode: string;
+  /**
+   * Where the included clients came from (notes plan N11a), adding up to `includedClients`: the
+   * seats', what a founding seat adds over the plan's seat, and the grants' extra clients.
+   */
+  seatIncludedClients: number;
+  foundingIncludedClients: number;
+  grantedIncludedClients: number;
 }
 
 export interface BillingPayment {
@@ -68,6 +78,11 @@ export interface BillingInvoice {
   planExtraClientPrice: number;
   planGymFee: number;
   planGymFeeMinimumSeats: number;
+  /** The founding seat's number and its terms version this invoice counted; null when none applied. */
+  foundingSeatIncludedClients: number | null;
+  foundingTermsVersion: number | null;
+  /** The extra clients of the grants it counted; 0 when none. */
+  grantedIncludedClients: number;
   amounts: BillingAmounts;
   status: InvoiceStatus;
   locksWorkspace: boolean;
@@ -101,6 +116,19 @@ export interface OwnerDiscount {
   readonly startsLater: boolean;
 }
 
+/**
+ * Extra included clients TB Gym granted, as the owner's Billing page names them (notes plan N11b):
+ * how many and the grant's UTC days, all the API's; never the admin's note.
+ */
+export interface OwnerClientGrant {
+  readonly clients: number;
+  readonly startsOn: string;
+  readonly lastDay: string;
+  readonly endsOnExclusive: string;
+  /** It has not begun on the server's day. */
+  readonly startsLater: boolean;
+}
+
 export interface WorkspaceBilling {
   status: BillingStatus;
   trialEndsAtUtc: string;
@@ -116,6 +144,10 @@ export interface WorkspaceBilling {
   whatsAppNumber: string | null;
   /** The unrevoked discounts running or still to come, oldest first; an ended one is only on its invoices. */
   discounts: readonly OwnerDiscount[];
+  /** What the owner's own seat includes as a founding space, when above the plan's seat; else null. */
+  foundingSeatIncludedClients: number | null;
+  /** The unrevoked grants of extra included clients running or still to come, oldest first. */
+  includedClientGrants: readonly OwnerClientGrant[];
 }
 
 export interface AdminWorkspace {
@@ -149,6 +181,18 @@ export interface BillingDiscount {
   revokedAtUtc: string | null;
 }
 
+/** Extra included clients granted to a founding space for whole UTC months (notes plan N11a). */
+export interface BillingClientGrant {
+  id: string;
+  clients: number;
+  startsOn: string;
+  endsOnExclusive: string;
+  /** What it is for: TB Gym's admin alone reads it. */
+  note: string;
+  grantedAtUtc: string;
+  revokedAtUtc: string | null;
+}
+
 export interface AdminWorkspaceDetail {
   summary: AdminWorkspace;
   currentMonth: BillingEstimate;
@@ -158,6 +202,8 @@ export interface AdminWorkspaceDetail {
   founding: AdminFounding | null;
   /** The ended founding statuses, kept as history. */
   foundingHistory: FoundingRecord[];
+  /** Its grants of extra included clients, newest first, the revoked ones kept. */
+  includedClientGrants: BillingClientGrant[];
 }
 
 export interface PricePlan {
@@ -191,6 +237,9 @@ export function toAmounts(value: BillingAmountsView): BillingAmounts {
     discountAmount: toNumber(value.discountAmount),
     total: toNumber(value.total),
     currencyCode: value.currencyCode,
+    seatIncludedClients: toNumber(value.seatIncludedClients),
+    foundingIncludedClients: toNumber(value.foundingIncludedClients),
+    grantedIncludedClients: toNumber(value.grantedIncludedClients),
   };
 }
 
@@ -222,6 +271,9 @@ export function toInvoice(value: PlatformInvoiceView): BillingInvoice {
     planExtraClientPrice: toNumber(value.planExtraClientPrice),
     planGymFee: toNumber(value.planGymFee),
     planGymFeeMinimumSeats: toNumber(value.planGymFeeMinimumSeats),
+    foundingSeatIncludedClients: toNullableNumber(value.foundingSeatIncludedClients),
+    foundingTermsVersion: toNullableNumber(value.foundingTermsVersion),
+    grantedIncludedClients: toNumber(value.grantedIncludedClients),
     amounts: toAmounts(value.amounts),
     status: value.status,
     locksWorkspace: value.locksWorkspace,
@@ -257,11 +309,19 @@ export function toWorkspaceBilling(value: WorkspaceBillingView): WorkspaceBillin
     supportEmail: value.paymentInstructions.supportEmail,
     whatsAppNumber: value.paymentInstructions.whatsAppNumber,
     discounts: value.discounts.map(toOwnerDiscount),
+    foundingSeatIncludedClients: toNullableNumber(value.foundingSeatIncludedClients),
+    includedClientGrants: value.includedClientGrants.map(toOwnerClientGrant),
   };
 }
 
 export function toOwnerDiscount(value: WorkspaceBillingDiscountView): OwnerDiscount {
   return { ...value, percent: toNumber(value.percent) };
+}
+
+export function toOwnerClientGrant(
+  value: WorkspaceBillingIncludedClientGrantView,
+): OwnerClientGrant {
+  return { ...value, clients: toNumber(value.clients) };
 }
 
 export function toAdminWorkspace(value: ContractAdminWorkspaceSummary): AdminWorkspace {
@@ -278,6 +338,10 @@ export function toDiscount(value: WorkspaceDiscountView): BillingDiscount {
   return { ...value, percent: toNumber(value.percent) };
 }
 
+export function toClientGrant(value: IncludedClientGrantView): BillingClientGrant {
+  return { ...value, clients: toNumber(value.clients) };
+}
+
 export function toAdminWorkspaceDetail(value: ContractAdminWorkspaceDetail): AdminWorkspaceDetail {
   return {
     summary: toAdminWorkspace(value.summary),
@@ -286,6 +350,7 @@ export function toAdminWorkspaceDetail(value: ContractAdminWorkspaceDetail): Adm
     discounts: value.discounts.map(toDiscount),
     founding: value.founding ? toAdminFounding(value.founding) : null,
     foundingHistory: value.foundingHistory.map(toFoundingRecord),
+    includedClientGrants: value.includedClientGrants.map(toClientGrant),
   };
 }
 
@@ -415,13 +480,7 @@ export function billLines(
           : $localize`${amounts.seats}:seats: seats`,
       amount: money(amounts.seatAmount),
     },
-    {
-      label:
-        amounts.extraClients > 0 && prices
-          ? $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included with your seats, ${amounts.extraClients}:extra: more × ${money(prices.extraClientPrice)}:price:`
-          : $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included with your seats`,
-      amount: money(amounts.extraClientAmount),
-    },
+    { label: clientsLine(amounts, locale, prices), amount: money(amounts.extraClientAmount) },
   ];
   if (amounts.gymFeeAmount > 0) {
     lines.push({
@@ -439,6 +498,88 @@ export function billLines(
     });
   }
   return lines;
+}
+
+/**
+ * A bill's clients line: those with a plan, the clients its seats include and, with an invoice's own
+ * prices, the extra ones at their price. When a founding seat or a grant counted (notes plan N11b) it
+ * says where the included clients came from; a plain bill reads as it always has.
+ */
+export function clientsLine(
+  amounts: BillingAmounts,
+  locale: string,
+  prices: BillPrices | null = null,
+): string {
+  const money = (value: number) => formatMoney(value, amounts.currencyCode, locale);
+  const sources = includedSources(amounts);
+  if (sources) {
+    return amounts.extraClients > 0 && prices
+      ? $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included: ${sources}:sources:, ${amounts.extraClients}:extra: more × ${money(prices.extraClientPrice)}:price:`
+      : $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included: ${sources}:sources:`;
+  }
+  return amounts.extraClients > 0 && prices
+    ? $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included with your seats, ${amounts.extraClients}:extra: more × ${money(prices.extraClientPrice)}:price:`
+    : $localize`Clients with a plan: ${amounts.billableClients}:clients:, ${amounts.includedClients}:included: included with your seats`;
+}
+
+/**
+ * Where a bill's included clients came from, each part only above zero: "15 with your seats, 12 more
+ * as a founding space, 4 more granted". Null when the seats' alone counted, so a plain bill is
+ * unchanged. Every number is the API's, which adds them up to the included clients.
+ */
+export function includedSources(amounts: BillingAmounts): string | null {
+  if (amounts.foundingIncludedClients <= 0 && amounts.grantedIncludedClients <= 0) return null;
+  const parts: string[] = [];
+  if (amounts.seatIncludedClients > 0) {
+    parts.push($localize`${amounts.seatIncludedClients}:seats: with your seats`);
+  }
+  if (amounts.foundingIncludedClients > 0) {
+    parts.push($localize`${amounts.foundingIncludedClients}:founding: more as a founding space`);
+  }
+  if (amounts.grantedIncludedClients > 0) {
+    parts.push($localize`${amounts.grantedIncludedClients}:granted: more granted`);
+  }
+  return parts.join($localize`, `);
+}
+
+/**
+ * What the owner's seat includes as a founding space and each grant of extra included clients, one
+ * sentence each (notes plan N11b): "As a founding coaching space, your own seat includes 25
+ * clients." and "4 more clients included until Dec 31, 2026."; a grant still to come says from when.
+ * Every number and day is the API's, which sends only what is running or to come; nothing is counted
+ * here.
+ */
+export function includedClientSentences(
+  foundingSeat: number | null,
+  grants: readonly OwnerClientGrant[],
+  locale: string,
+): readonly string[] {
+  const sentences: string[] = [];
+  if (foundingSeat !== null) {
+    sentences.push(
+      foundingSeat === 1
+        ? $localize`As a founding coaching space, your own seat includes 1 client.`
+        : $localize`As a founding coaching space, your own seat includes ${foundingSeat}:clients: clients.`,
+    );
+  }
+  for (const grant of grants) {
+    const until = formatDay(grant.lastDay, locale);
+    if (grant.startsLater) {
+      const from = formatDay(grant.startsOn, locale);
+      sentences.push(
+        grant.clients === 1
+          ? $localize`1 more client included from ${from}:from: until ${until}:until:.`
+          : $localize`${grant.clients}:clients: more clients included from ${from}:from: until ${until}:until:.`,
+      );
+    } else {
+      sentences.push(
+        grant.clients === 1
+          ? $localize`1 more client included until ${until}:until:.`
+          : $localize`${grant.clients}:clients: more clients included until ${until}:until:.`,
+      );
+    }
+  }
+  return sentences;
 }
 
 /** One sentence of the owner's discount line: the name TB Gym's admin typed, and what it gives. */

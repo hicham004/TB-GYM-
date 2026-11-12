@@ -50,6 +50,9 @@
               >: {{ line.terms }}
             </p>
           }
+          @for (line of includedLines(); track $index) {
+            <p class="sentence" data-included-clients>{{ line }}</p>
+          }
         </section>
 
         @if (unpaid().length > 0) {

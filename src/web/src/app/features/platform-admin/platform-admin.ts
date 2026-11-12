@@ -40,6 +40,7 @@ import {
 } from '../billing/billing.models';
 import {
   currentFoundingTerms,
+  termsSeatSentence,
   termsSentence,
   type FoundingTerms,
 } from '../billing/founding.models';
@@ -373,6 +374,11 @@ export class PlatformAdmin {
 
   protected termsLine(terms: FoundingTerms): string {
     return termsSentence(terms.clientsWithActivePlan, terms.monthsSinceStart);
+  }
+
+  /** What a founding owner's seat includes under the terms in force, beside the plan's (N11b). */
+  protected seatLine(terms: FoundingTerms): string {
+    return termsSeatSentence(terms, this.current()?.includedClientsPerSeat ?? null);
   }
 
   /** Read them again: once the terms are there, Change takes the focus the button had. */

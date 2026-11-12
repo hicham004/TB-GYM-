@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  amounts,
   atlasDetail,
+  clientGrant,
   discount,
   invoice,
   plan,
@@ -10,6 +12,7 @@ import {
   TODAY,
 } from '../../../testing/platform-admin-fixtures';
 import {
+  clientGrantErrors,
   daysBetween,
   discountEndExclusive,
   discountErrors,
@@ -17,12 +20,16 @@ import {
   discountState,
   filterCounts,
   foldText,
+  GRANT_EARLIEST_DAY,
+  grantLastDay,
+  grantMonths,
   invoiceUsage,
   invoiceWhen,
   lastDayAfterMonths,
   matchesFilter,
   matchesQuery,
   nextLine,
+  nextMonthStart,
   owedText,
   paymentErrors,
   paymentTermDays,
@@ -31,6 +38,7 @@ import {
   planErrors,
   planSummaryLine,
   planTermRows,
+  revokeGrantQuestion,
   seatsAndClients,
   sortInvoices,
   sortSpaces,
@@ -217,6 +225,16 @@ describe('platform billing: one coaching space', () => {
     expect(discountLastDay(discount())).toBe('2026-11-30');
   });
 
+  it('reads a grant of extra clients the way it reads a discount: its state and its last day (N11b)', () => {
+    expect(discountState(clientGrant(), TODAY)).toBe('running');
+    expect(discountState(clientGrant({ startsOn: '2026-11-01' }), TODAY)).toBe('upcoming');
+    expect(discountState(clientGrant({ endsOnExclusive: '2026-10-01' }), TODAY)).toBe('ended');
+    expect(discountState(clientGrant({ revokedAtUtc: '2026-09-03T09:00:00Z' }), TODAY)).toBe(
+      'revoked',
+    );
+    expect(discountLastDay(clientGrant())).toBe('2026-11-30');
+  });
+
   it('writes where a space stands in full sentences', () => {
     const sentence = (id: string) => statusSentence(byId(id), TODAY, LOCALE);
 
@@ -257,6 +275,17 @@ describe('platform billing: one coaching space', () => {
     );
     expect(when({ status: 'NothingToPay' })).toBe('Nothing to pay');
     expect(invoiceUsage(invoice())).toBe('Plan version 1 · 3 seats · 14 clients');
+    // Notes plan N11b: an invoice that counted a founding seat names the terms version it used.
+    expect(
+      invoiceUsage(
+        invoice({
+          pricePlanVersion: 2,
+          foundingSeatIncludedClients: 13,
+          foundingTermsVersion: 3,
+          amounts: amounts({ seats: 1, billableClients: 1 }),
+        }),
+      ),
+    ).toBe('Plan version 2 · founding terms v3 · 1 seat · 1 client');
   });
 });
 
@@ -368,6 +397,91 @@ describe('platform billing: granting a discount', () => {
     expect(lastDayAfterMonths('2026-10-09', 3)).toBe('2027-01-08');
     expect(lastDayAfterMonths('2026-10-01', 12)).toBe('2027-09-30');
     expect(lastDayAfterMonths('2026-01-31', 1)).toBe('2026-02-27');
+  });
+});
+
+describe('platform billing: granting extra included clients (notes plan N11b)', () => {
+  const entry = {
+    clients: 7,
+    startsOn: '2026-11-01',
+    lastDay: '2027-01-31',
+    note: 'Brought Karim Haddad',
+  };
+
+  it('starts next month alone, so one grant is one invoice, and counts presets in whole months', () => {
+    expect(nextMonthStart(TODAY)).toBe('2026-11-01');
+    expect(nextMonthStart('2026-12-31')).toBe('2027-01-01');
+    expect(grantLastDay('2026-11-01', 1)).toBe('2026-11-30');
+    expect(grantLastDay('2026-11-01', 3)).toBe('2027-01-31');
+    expect(grantLastDay('2027-01-01', 2)).toBe('2027-02-28');
+    // From a day off the month's edge, the preset still lands on a month's last day.
+    expect(grantLastDay('2027-01-31', 1)).toBe('2027-01-31');
+    expect(grantLastDay('2026-11-15', 2)).toBe('2026-12-31');
+  });
+
+  it('takes whole clients from 1 to 1000, whole calendar months and a reason, in the server’s words', () => {
+    expect(clientGrantErrors(entry)).toEqual({});
+    expect(clientGrantErrors({ ...entry, clients: 1000, lastDay: '2026-11-30' })).toEqual({});
+    for (const clients of [null, 0, 1001, 2.5]) {
+      expect(clientGrantErrors({ ...entry, clients })).toEqual({
+        clients: ['Enter a whole number of clients from 1 to 1000.'],
+      });
+    }
+    expect(clientGrantErrors({ ...entry, note: ' ' })).toEqual({
+      note: ['Say what the extra clients are for, in up to 200 characters.'],
+    });
+    expect(clientGrantErrors({ ...entry, note: 'x'.repeat(201) })).toEqual({
+      note: ['Say what the extra clients are for, in up to 200 characters.'],
+    });
+  });
+
+  it('counts a grant’s whole calendar months, or none off a month’s edge', () => {
+    expect(grantMonths('2026-11-01', '2026-11-30')).toBe(1);
+    expect(grantMonths('2026-11-01', '2027-01-31')).toBe(3);
+    expect(grantMonths('2026-12-01', '2027-02-28')).toBe(3);
+    expect(grantMonths('2026-11-15', '2026-11-30')).toBeNull();
+    expect(grantMonths('2026-11-01', '2026-11-29')).toBeNull();
+    expect(grantMonths('2026-11-01', '2026-10-31')).toBeNull();
+    expect(grantMonths('', '2026-11-30')).toBeNull();
+  });
+
+  it('asks before revoking in the singular for one client, and in the row’s words for more', () => {
+    expect(revokeGrantQuestion(7, 'Sep 1, 2026', 'Nov 30, 2026')).toEqual({
+      message:
+        'Revoke these 7 extra clients (Sep 1, 2026 to Nov 30, 2026)? Invoices already issued keep them; invoices from now on will not have them.',
+      confirm: 'Revoke clients',
+      cancel: 'Keep them',
+      title: 'Revoke these extra clients?',
+    });
+    expect(revokeGrantQuestion(1, 'Sep 1, 2026', 'Nov 30, 2026')).toEqual({
+      message:
+        'Revoke this extra client (Sep 1, 2026 to Nov 30, 2026)? Invoices already issued keep it; invoices from now on will not have it.',
+      confirm: 'Revoke client',
+      cancel: 'Keep it',
+      title: 'Revoke this extra client?',
+    });
+  });
+
+  it('marks a day off a month’s edge on its own field', () => {
+    expect(clientGrantErrors({ ...entry, startsOn: '2026-11-15' })).toEqual({
+      startsOn: ['Start on the first day of a month: extra clients are granted for whole months.'],
+    });
+    expect(clientGrantErrors({ ...entry, lastDay: '2027-01-30' })).toEqual({
+      lastDay: ['End on the last day of a month: extra clients are granted for whole months.'],
+    });
+    expect(clientGrantErrors({ ...entry, lastDay: '2026-10-31' })).toEqual({
+      lastDay: ['The last day cannot be before the first.'],
+    });
+    expect(clientGrantErrors({ ...entry, startsOn: '', lastDay: '' })).toEqual({
+      startsOn: ['Choose the first day.'],
+      lastDay: ['Choose the last day.'],
+    });
+    expect(
+      clientGrantErrors({ ...entry, startsOn: '1999-12-01', lastDay: '1999-12-31' }),
+      `The server takes nothing before ${GRANT_EARLIEST_DAY}.`,
+    ).toEqual({
+      startsOn: ['Start on the first day of a month from January 2000.'],
+    });
   });
 });
 

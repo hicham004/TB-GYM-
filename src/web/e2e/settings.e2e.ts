@@ -99,6 +99,10 @@ function amounts(total: number, overrides: Record<string, number> = {}) {
     discountAmount: 0,
     total,
     currencyCode: 'USD',
+    // Where the included clients came from (notes plan N11a): the seats' alone, a plain space.
+    seatIncludedClients: 15,
+    foundingIncludedClients: 0,
+    grantedIncludedClients: 0,
     ...overrides,
   };
 }
@@ -120,6 +124,9 @@ function invoice(id: string, month: string, status: string, extra: Record<string
     planExtraClientPrice: 2,
     planGymFee: 0,
     planGymFeeMinimumSeats: 5,
+    foundingSeatIncludedClients: null,
+    foundingTermsVersion: null,
+    grantedIncludedClients: 0,
     amounts: amounts(55),
     status,
     locksWorkspace: false,
@@ -142,6 +149,7 @@ const BILLING = {
     usageToUtc: '2026-10-09T00:00:00Z',
     inTrial: false,
     pricePlanVersion: 1,
+    foundingTermsVersion: null,
     amounts: amounts(44, {
       discountPercent: 20,
       discountAmount: 11,
@@ -193,6 +201,56 @@ const BILLING = {
       startsOn: '2026-11-01',
       lastDay: '2027-01-31',
       endsOnExclusive: '2027-02-01',
+      startsLater: true,
+    },
+  ],
+  // A plain space: not founding, no extra clients (notes plan N11b adds nothing to its page).
+  foundingSeatIncludedClients: null,
+  includedClientGrants: [],
+};
+
+/**
+ * A founding space's bill (notes plan N11b): its owner's seat includes 13 clients, a grant of 4 more
+ * runs until October's end and one of 7 more comes from December, and September's invoice counted
+ * the founding seat and a grant. The figures are this test's own, never the owners' offer.
+ */
+const FOUNDING_BILLING = {
+  ...BILLING,
+  invoices: [
+    invoice('inv-sep', '09', 'Open', {
+      calculationName: 'platform-invoice-v2',
+      foundingSeatIncludedClients: 13,
+      foundingTermsVersion: 2,
+      grantedIncludedClients: 4,
+      amounts: amounts(55, {
+        billableClients: 28,
+        includedClients: 27,
+        extraClients: 1,
+        extraClientAmount: 2,
+        seatIncludedClients: 15,
+        foundingIncludedClients: 8,
+        grantedIncludedClients: 4,
+        subtotal: 47,
+        total: 47,
+      }),
+    }),
+    ...BILLING.invoices.slice(1),
+  ],
+  unpaidTotal: 47,
+  foundingSeatIncludedClients: 13,
+  includedClientGrants: [
+    {
+      clients: 4,
+      startsOn: '2026-08-01',
+      lastDay: '2026-10-31',
+      endsOnExclusive: '2026-11-01',
+      startsLater: false,
+    },
+    {
+      clients: 7,
+      startsOn: '2026-12-01',
+      lastDay: '2027-02-28',
+      endsOnExclusive: '2027-03-01',
       startsLater: true,
     },
   ],
@@ -429,6 +487,66 @@ test('Billing opens an invoice in a sheet with its lines and payment', async ({ 
   await expectNoHorizontalOverflow(page);
   await axe(page);
   await page.screenshot({ path: 'test-results/r52a-billing-invoice-390.png' });
+});
+
+for (const width of [390, 1440]) {
+  for (const dark of [false, true]) {
+    const mode = dark ? 'dark' : 'light';
+    test(`a founding space’s Billing says what its seat includes and each grant until when, at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      await open(page, '/billing', 'Billing', {
+        width,
+        dark,
+        extra: { 'GET /api/billing': (route) => json(route, 200, FOUNDING_BILLING) },
+      });
+
+      // After the discount line, one sentence for the founding seat and one per grant, in UTC days.
+      await expect(page.locator('[data-billing-status] .sentence')).toHaveText([
+        /^A new invoice is waiting\./,
+        'Early coach offer: 20% off until Oct 31, 2026, then 10% off until Jan 31, 2027, then the normal price.',
+        'As a founding coaching space, your own seat includes 13 clients.',
+        '4 more clients included until Oct 31, 2026.',
+        '7 more clients included from Dec 1, 2026 until Feb 28, 2027.',
+      ]);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: `test-results/n11b-billing-founding-${width}-${mode}.png`,
+        fullPage: true,
+      });
+
+      // The invoice says where its included clients came from.
+      await page.locator('[data-invoice="inv-sep"] button').click();
+      const sheet = page.getByRole('dialog');
+      await expect(sheet.getByRole('heading', { name: 'September 2026 invoice' })).toBeVisible();
+      await expect(sheet.locator('.lines > div').nth(1)).toHaveText(
+        /Clients with a plan: 28, 27 included: 15 with your seats, 8 more as a founding space, 4 more granted, 1 more × \$2\.00\s*\$2\.00/,
+      );
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({ path: `test-results/n11b-billing-invoice-${width}-${mode}.png` });
+    });
+  }
+
+  test(`a founding space’s Billing reads with 200% text at ${width}px`, async ({ page }) => {
+    await open(page, '/billing', 'Billing', {
+      width,
+      extra: { 'GET /api/billing': (route) => json(route, 200, FOUNDING_BILLING) },
+    });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await expect(page.locator('[data-included-clients]')).toHaveCount(3);
+    await expectNoHorizontalOverflow(page);
+    await page.locator('[data-included-clients]').first().scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/n11b-billing-founding-200-${width}.png` });
+  });
+}
+
+test('a plain space’s Billing says nothing of included clients', async ({ page }) => {
+  await open(page, '/billing', 'Billing', { width: 390 });
+
+  await expect(page.locator('[data-billing-status] [data-discount]')).toHaveCount(1);
+  await expect(page.locator('[data-included-clients]')).toHaveCount(0);
 });
 
 test('a coach’s Settings are their own account’s pages, and Billing stays the owner’s', async ({

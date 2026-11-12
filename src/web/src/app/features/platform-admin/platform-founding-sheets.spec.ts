@@ -90,6 +90,42 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
       expect(view.dirty.at(-1)).toBe(false);
     });
 
+    it('says marking changes no access, and what the owner’s seat includes while founding (N11b)', async () => {
+      const seat = (view: { host: HTMLElement }) =>
+        textOf(view.host.querySelector('[data-founding-seat-sentence]'));
+      const raised = await render(PlatformFoundingMark, {
+        ...inputs,
+        terms: foundingTerms({ foundingSeatIncludedClients: 13 }),
+        planSeatClients: 5,
+      });
+      expect(textOf(raised.host.querySelector('.about'))).toBe(
+        'Atlas Performance The space’s owner holds the badge once it is earned. Marking changes no access. While the space stays founding, its owner’s seat includes 13 clients (the terms in force).',
+      );
+      expect(textOf(raised.host)).not.toContain('no invoice');
+      TestBed.resetTestingModule();
+
+      const none = await render(PlatformFoundingMark, { ...inputs, planSeatClients: 5 });
+      expect(seat(none)).toBe(
+        'Marking changes no access. While the space stays founding, its owner’s seat includes what the price plan’s seat includes: no founding number above it is published yet.',
+      );
+      TestBed.resetTestingModule();
+
+      // A number at or below the plan's seat is not above it: the larger applies.
+      const below = await render(PlatformFoundingMark, {
+        ...inputs,
+        terms: foundingTerms({ foundingSeatIncludedClients: 5 }),
+        planSeatClients: 5,
+      });
+      expect(seat(below)).toBe(seat(none));
+      TestBed.resetTestingModule();
+
+      const unread = await render(PlatformFoundingMark, { ...inputs, terms: null });
+      expect(seat(unread)).toBe(
+        'Marking changes no access. While the space stays founding, its owner’s seat includes what the terms in force give a founding seat.',
+      );
+      expect(textOf(unread.host)).not.toMatch(NEVER);
+    });
+
     it('words a lighter version of the terms for one client and no months', async () => {
       const view = await render(PlatformFoundingMark, {
         ...inputs,
@@ -207,6 +243,9 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
       expect(textOf(view.host)).toContain('Kept on record. Only TB Gym’s admin sees it.');
       expect(textOf(view.host)).toContain(
         'The badge leaves the coach’s account and their clients’ Me page at once. The discount is not changed: revoke it separately if it should end.',
+      );
+      expect(textOf(view.host)).toContain(
+        'From next month’s invoice, the owner’s seat includes what the price plan’s seat includes, and extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
       );
       expect(textOf(view.host)).not.toMatch(NEVER);
     });
@@ -329,6 +368,132 @@ describe('The platform admin’s founding sheets (notes plan N3b)', () => {
       await settle(view.fixture);
       expect(textOf(view.host)).toContain('Enter a whole number from 1 to 1000.');
       expect(textOf(view.host)).toContain('Enter a whole number from 0 to 24.');
+    });
+
+    it('offers the founding seat’s clients as a third number, prefilled, beside the plan’s seat', async () => {
+      const view = await render(PlatformFoundingTerms, { ...inputs, planSeatClients: 5 });
+
+      const seat = view.host.querySelector<HTMLInputElement>(
+        'input[name="foundingSeatIncludedClients"]',
+      )!;
+      expect(seat.value).toBe('13');
+      expect(seat.getAttribute('min')).toBe('0');
+      expect(seat.getAttribute('max')).toBe('1000');
+      expect(textOf(view.host)).toContain('Clients a founding owner’s seat includes');
+      expect(textOf(view.host)).toContain(
+        'The price plan’s seat includes 5 clients; the larger applies. Leave it empty for none; a space already founding keeps the highest number it has had.',
+      );
+      expect(view.host.querySelectorAll('.changes li')).toHaveLength(0);
+      TestBed.resetTestingModule();
+
+      // No number in force: an empty box, and the help without the plan's when it is unknown.
+      const none = await render(PlatformFoundingTerms, { current: foundingTerms() });
+      expect(
+        none.host.querySelector<HTMLInputElement>('input[name="foundingSeatIncludedClients"]')!
+          .value,
+      ).toBe('');
+      expect(textOf(none.host)).toContain(
+        'The price plan’s seat applies when it includes more. Leave it empty for none; a space already founding keeps the highest number it has had.',
+      );
+    });
+
+    it('publishes a new founding number, listed in What changes, with the thresholds as they were', async () => {
+      const view = await render(PlatformFoundingTerms, { ...inputs, planSeatClients: 5 });
+
+      fill(view.host, 'Clients a founding owner’s seat includes', '27');
+      await settle(view.fixture);
+      expect(
+        Array.from(view.host.querySelectorAll('.changes li')).map((row) =>
+          ['.what', '.from', '.to'].map((part) => textOf(row.querySelector(part))),
+        ),
+      ).toEqual([['Clients a founding owner’s seat includes', '13', '27']]);
+      expect(view.dirty.at(-1)).toBe(true);
+      press(view.host, 'Publish version 2');
+      await settle(view.fixture);
+
+      expect(view.api.publishFoundingTerms).toHaveBeenCalledWith({
+        clientsWithActivePlan: 10,
+        monthsSinceStart: 2,
+        note: null,
+        expectedCurrentVersion: 1,
+        foundingSeatIncludedClients: 27,
+      });
+    });
+
+    it('publishes none when the box is emptied, and says so in What changes', async () => {
+      const view = await render(PlatformFoundingTerms, inputs);
+
+      fill(view.host, 'Clients a founding owner’s seat includes', '');
+      await settle(view.fixture);
+      expect(
+        Array.from(view.host.querySelectorAll('.changes li')).map((row) =>
+          ['.what', '.from', '.to'].map((part) => textOf(row.querySelector(part))),
+        ),
+      ).toEqual([['Clients a founding owner’s seat includes', '13', 'None']]);
+      press(view.host, 'Publish version 2');
+      await settle(view.fixture);
+
+      expect(view.api.publishFoundingTerms).toHaveBeenCalledWith(
+        expect.objectContaining({ foundingSeatIncludedClients: null }),
+      );
+    });
+
+    it('takes the founding number from 0 to 1000 only, in the server’s words', async () => {
+      const view = await render(PlatformFoundingTerms, inputs);
+
+      fill(view.host, 'Clients a founding owner’s seat includes', '1001');
+      await settle(view.fixture);
+      press(view.host, 'Publish version 2');
+      await settle(view.fixture);
+
+      expect(view.api.publishFoundingTerms).not.toHaveBeenCalled();
+      expect(textOf(view.host)).toContain(
+        'Enter a whole number of clients from 0 to 1000, or none for what the price plan’s seat includes.',
+      );
+      expect(document.activeElement?.getAttribute('name')).toBe('foundingSeatIncludedClients');
+
+      fill(view.host, 'Clients a founding owner’s seat includes', '0');
+      await settle(view.fixture);
+      press(view.host, 'Publish version 2');
+      await settle(view.fixture);
+      expect(view.api.publishFoundingTerms).toHaveBeenCalledWith(
+        expect.objectContaining({ foundingSeatIncludedClients: 0 }),
+      );
+    });
+
+    it('marks a founding seat the browser cannot read, never publishing it as none', async () => {
+      const view = await render(PlatformFoundingTerms, inputs);
+      const seat = view.host.querySelector<HTMLInputElement>(
+        'input[name="foundingSeatIncludedClients"]',
+      )!;
+      // What a browser reports for "13e" in a number box: no number, and bad input.
+      const typed = (valueAsNumber: number, badInput: boolean) => {
+        Object.defineProperty(seat, 'valueAsNumber', {
+          configurable: true,
+          get: () => valueAsNumber,
+        });
+        Object.defineProperty(seat, 'validity', { configurable: true, get: () => ({ badInput }) });
+        seat.dispatchEvent(new Event('input'));
+      };
+
+      typed(Number.NaN, true);
+      await settle(view.fixture);
+      expect(view.host.querySelectorAll('.changes li')).toHaveLength(0);
+      press(view.host, 'Publish version 2');
+      await settle(view.fixture);
+      expect(view.api.publishFoundingTerms).not.toHaveBeenCalled();
+      expect(textOf(view.host)).toContain(
+        'Enter a whole number of clients from 0 to 1000, or none for what the price plan’s seat includes.',
+      );
+      expect(seat.getAttribute('aria-invalid')).toBe('true');
+
+      typed(27, false);
+      await settle(view.fixture);
+      press(view.host, 'Publish version 2');
+      await settle(view.fixture);
+      expect(view.api.publishFoundingTerms).toHaveBeenCalledWith(
+        expect.objectContaining({ foundingSeatIncludedClients: 27 }),
+      );
     });
 
     it('keeps a stale version’s refusal on screen', async () => {

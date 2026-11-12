@@ -2,12 +2,15 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import {
   adminFounding,
+  amounts,
   atlasDetail,
+  clientGrant,
   endedFounding,
   foundingBadge,
   foundingRecord,
   foundingTerms,
   gymRequests,
+  invoice,
   NOW,
   plan,
   platformSpaces,
@@ -18,6 +21,7 @@ import {
 import type {
   AdminWorkspace,
   AdminWorkspaceDetail,
+  BillingClientGrant,
   PricePlan,
 } from '../src/app/features/billing/billing.models';
 import type { FoundingTerms } from '../src/app/features/billing/founding.models';
@@ -52,6 +56,8 @@ interface Writes {
   check: unknown[];
   end: unknown[];
   terms: unknown[];
+  grant: unknown[];
+  revokeGrant: string[];
 }
 
 async function openAdmin(
@@ -75,6 +81,8 @@ async function openAdmin(
     check: [],
     end: [],
     terms: [],
+    grant: [],
+    revokeGrant: [],
   };
   let spaces: AdminWorkspace[] = platformSpaces();
   let detail: AdminWorkspaceDetail = start;
@@ -91,6 +99,28 @@ async function openAdmin(
       },
     };
     spaces = spaces.map((item) => (item.tenantId === SPACE_IDS.atlas ? detail.summary : item));
+  };
+  // What a founding owner's seat includes now, as N11a's API reads it: the number in force when it
+  // is above the price plan's seat, else none.
+  const seatInForce = () => {
+    const seat = terms.find((item) => item.isCurrent)?.foundingSeatIncludedClients ?? null;
+    const planSeat = plans.find((item) => item.isCurrent)?.includedClientsPerSeat ?? 0;
+    return seat !== null && seat > planSeat ? seat : null;
+  };
+  // Extra included clients (notes plan N11b), answered as N11a's API does: revoked once, kept.
+  const revokeGrant = (id: string) => (route: Parameters<typeof json>[0]) => {
+    writes.revokeGrant.push(id);
+    detail = {
+      ...detail,
+      includedClientGrants: detail.includedClientGrants.map((item) =>
+        item.id === id ? { ...item, revokedAtUtc: NOW } : item,
+      ),
+    };
+    return json(
+      route,
+      200,
+      detail.includedClientGrants.find((item) => item.id === id),
+    );
   };
   await mockSession(page, {
     user: ADMIN,
@@ -146,6 +176,31 @@ async function openAdmin(
         writes.revoke.push(route.request().postDataJSON());
         return json(route, 200, {});
       },
+      [`POST /api/platform-admin/workspaces/${SPACE_IDS.atlas}/included-client-grants`]: (
+        route,
+      ) => {
+        const body = route.request().postDataJSON() as Omit<
+          BillingClientGrant,
+          'id' | 'grantedAtUtc' | 'revokedAtUtc'
+        >;
+        writes.grant.push(body);
+        const grant: BillingClientGrant = {
+          ...body,
+          id: 'grant-new',
+          grantedAtUtc: NOW,
+          revokedAtUtc: null,
+        };
+        // Latest first day first, as N11a's API lists them, the revoked ones kept.
+        detail = {
+          ...detail,
+          includedClientGrants: [grant, ...detail.includedClientGrants].sort((a, b) =>
+            b.startsOn.localeCompare(a.startsOn),
+          ),
+        };
+        return json(route, 200, grant);
+      },
+      'POST /api/platform-admin/included-client-grants/grant-1/revoke': revokeGrant('grant-1'),
+      'POST /api/platform-admin/included-client-grants/grant-new/revoke': revokeGrant('grant-new'),
       'POST /api/platform-admin/price-plans': (route) => {
         const body = route.request().postDataJSON() as { seatPrice: number };
         writes.plan.push(body);
@@ -199,6 +254,7 @@ async function openAdmin(
               markedAtUtc: NOW,
             }),
             badge: foundingBadge({ foundingSince: body.foundingSince }),
+            foundingSeatIncludedClients: seatInForce(),
           },
         };
         sync();
@@ -224,6 +280,7 @@ async function openAdmin(
                 monthsSinceStart: null,
                 earnedOn: TODAY,
               },
+              foundingSeatIncludedClients: open.foundingSeatIncludedClients,
             },
           };
           sync();
@@ -246,6 +303,7 @@ async function openAdmin(
         return json(route, 200, {
           status: detail.foundingHistory[0],
           badge: { ...open.badge, state: 'Ended', endedOn: TODAY },
+          foundingSeatIncludedClients: null,
         });
       },
     },
@@ -704,7 +762,7 @@ for (const width of [390, 1440]) {
     ]);
     await expect(page.locator('.space [data-founding]')).toHaveCount(1);
     const panel = page.locator('[data-founding-terms]');
-    await expect(panel.getByRole('heading', { name: 'Founding coach badge' })).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'Founding terms' })).toBeVisible();
     await expect(panel.locator('.panel-head .quiet')).toHaveText('Version 1 · since Sep 1, 2026');
     await expect(panel.locator('[data-terms-sentence]')).toHaveText(
       'Earned once 10 of a founding space’s clients have an active plan and the space is 2 months old.',
@@ -769,6 +827,201 @@ for (const width of [390, 1440]) {
     await page.screenshot({ path: `test-results/n3b-overview-dark-${width}.png`, fullPage: true });
   });
 }
+
+// ---------- included clients (notes plan N11b) ----------
+
+for (const width of [390, 1440]) {
+  for (const dark of [false, true]) {
+    const mode = dark ? 'dark' : 'light';
+
+    test(`a founding space grants extra clients, lists them and revokes one at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      const writes = await openAdmin(
+        page,
+        `/admin/billing/${SPACE_IDS.atlas}`,
+        width,
+        dark,
+        atlasDetail({
+          founding: adminFounding('Waiting', false, 13),
+          includedClientGrants: [clientGrant()],
+        }),
+      );
+      await expect(page.locator('[data-founding] [data-founding-seat]')).toHaveText(
+        'Its owner’s seat includes 13 clients while it stays founding.',
+      );
+      const grants = page.locator('[data-client-grants]');
+      await expect(grants.getByRole('heading', { name: 'Extra included clients' })).toBeVisible();
+      await expect(grants.locator('[data-client-grant="grant-1"]')).toContainText('7 clients');
+      await expect(grants.locator('[data-client-grant="grant-1"]')).toContainText(
+        'Sep 1, 2026 to Nov 30, 2026',
+      );
+      await expect(grants.locator('[data-client-grant] app-status-pill')).toHaveText([
+        'Running now',
+      ]);
+
+      await grants.getByRole('button', { name: 'Grant extra clients' }).click();
+      const sheet = page.getByRole('dialog');
+      await expect(sheet.getByRole('heading', { name: 'Grant extra clients' })).toBeVisible();
+      // Next month alone by default, so one grant is one invoice.
+      await expect(sheet.getByRole('button', { name: /First day/ })).toContainText('Nov 1, 2026');
+      await expect(sheet.getByRole('button', { name: /Last day/ })).toContainText('Nov 30, 2026');
+      await expect(sheet.getByLabel('What it is for')).toHaveAccessibleDescription(
+        'Only TB Gym’s admin sees it. Say which coach was brought.',
+      );
+      await sheet.getByLabel('Clients').fill('4');
+      await sheet.getByLabel('What it is for').fill('Brought Lea Khoury');
+      await sheet.getByRole('button', { name: '3 months' }).click();
+      await expect(sheet.getByRole('button', { name: /Last day/ })).toContainText('Jan 31, 2027');
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({ path: `test-results/n11b-grant-${width}-${mode}.png` });
+      await sheet.getByRole('button', { name: 'Grant clients' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByText('Extra clients granted.')).toBeVisible();
+      expect(writes.grant).toEqual([
+        {
+          clients: 4,
+          startsOn: '2026-11-01',
+          endsOnExclusive: '2027-02-01',
+          note: 'Brought Lea Khoury',
+        },
+      ]);
+      await expect(grants.locator('[data-client-grant] app-status-pill')).toHaveText([
+        'Starts later',
+        'Running now',
+      ]);
+
+      await grants.getByRole('button', { name: 'Revoke 7 clients Brought Karim Haddad' }).click();
+      const confirm = page.getByRole('dialog');
+      await expect(confirm).toContainText(
+        'Revoke these 7 extra clients (Sep 1, 2026 to Nov 30, 2026)? Invoices already issued keep them; invoices from now on will not have them.',
+      );
+      await confirm.getByRole('button', { name: 'Revoke clients' }).click();
+      await expect(page.getByText('Extra clients revoked.')).toBeVisible();
+      expect(writes.revokeGrant).toEqual(['grant-1']);
+      await expect(grants.locator('[data-client-grant] app-status-pill')).toHaveText([
+        'Starts later',
+        'Revoked',
+      ]);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: `test-results/n11b-space-${width}-${mode}.png`,
+        fullPage: true,
+      });
+    });
+
+    test(`the founding terms take the founding seat’s clients at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      const writes = await openAdmin(page, '/admin/billing', width, dark);
+      const panel = page.locator('[data-founding-terms]');
+      await expect(panel.getByRole('heading', { name: 'Founding terms' })).toBeVisible();
+      await expect(panel.locator('[data-terms-seat]')).toHaveText(
+        'A founding space’s owner seat includes what the price plan’s seat includes: no founding number above it is published yet.',
+      );
+
+      await panel.getByRole('button', { name: 'Change', exact: true }).click();
+      const sheet = page.getByRole('dialog');
+      const seat = sheet.getByLabel('Clients a founding owner’s seat includes');
+      await expect(seat).toHaveValue('');
+      await expect(seat).toHaveAccessibleDescription(
+        'The price plan’s seat includes 5 clients; the larger applies. Leave it empty for none; a space already founding keeps the highest number it has had.',
+      );
+      await seat.fill('13');
+      await expect(sheet.locator('.changes li')).toHaveCount(1);
+      await expect(sheet.locator('.changes li')).toContainText('None');
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({ path: `test-results/n11b-terms-${width}-${mode}.png` });
+
+      await sheet.getByRole('button', { name: 'Publish version 2' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      expect(writes.terms).toEqual([
+        {
+          clientsWithActivePlan: 10,
+          monthsSinceStart: 2,
+          note: null,
+          expectedCurrentVersion: 1,
+          foundingSeatIncludedClients: 13,
+        },
+      ]);
+      await expect(panel.locator('[data-terms-seat]')).toHaveText(
+        'A founding space’s owner seat includes 13 clients.',
+      );
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: `test-results/n11b-overview-${width}-${mode}.png`,
+        fullPage: true,
+      });
+    });
+  }
+}
+
+test('an invoice that counted a founding seat and a grant says where its included clients came from', async ({
+  page,
+}) => {
+  const base = atlasDetail();
+  await openAdmin(
+    page,
+    `/admin/billing/${SPACE_IDS.atlas}`,
+    1440,
+    false,
+    atlasDetail({
+      founding: adminFounding('Earned', false, 13),
+      includedClientGrants: [clientGrant()],
+      invoices: [
+        invoice({
+          foundingSeatIncludedClients: 13,
+          foundingTermsVersion: 2,
+          grantedIncludedClients: 7,
+          amounts: amounts({
+            includedClients: 30,
+            seatIncludedClients: 15,
+            foundingIncludedClients: 8,
+            grantedIncludedClients: 7,
+          }),
+        }),
+        ...base.invoices.slice(1),
+      ],
+    }),
+  );
+
+  const sept = page.locator('[data-invoice="invoice-sep"]');
+  await expect(sept.locator('.inv-detail')).toContainText('Plan version 1 · founding terms v2');
+  await expect(sept.locator('[data-invoice-included]')).toHaveText(
+    'Clients with a plan: 14, 30 included: 15 with your seats, 8 more as a founding space, 7 more granted',
+  );
+  await expect(page.locator('[data-invoice="invoice-aug"] [data-invoice-included]')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/n11b-space-invoice-1440.png', fullPage: true });
+});
+
+test('the grants panel and the grant sheet reflow at 200% text', async ({ page }) => {
+  await openAdmin(
+    page,
+    `/admin/billing/${SPACE_IDS.atlas}`,
+    390,
+    false,
+    atlasDetail({
+      founding: adminFounding('Waiting', false, 13),
+      includedClientGrants: [clientGrant(), clientGrant({ id: 'grant-0', revokedAtUtc: NOW })],
+    }),
+  );
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expect(page.locator('[data-client-grant]')).toHaveCount(2);
+  await expectNoHorizontalOverflow(page);
+  await page.locator('[data-client-grants]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'test-results/n11b-space-200.png', fullPage: true });
+
+  await page.getByRole('button', { name: 'Grant extra clients' }).click();
+  await expect(page.getByRole('dialog').getByLabel('Clients')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/n11b-grant-200.png' });
+});
 
 test('the founding panel and the badge’s terms reflow at 200% text', async ({ page }) => {
   await openAdmin(

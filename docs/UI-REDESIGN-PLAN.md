@@ -2257,6 +2257,16 @@ limited to the coach's assigned clients.
   price."; stretches in a row at one rate read as one, one still to come says from when, a gap starts a new
   sentence, and an ended or revoked one shows only on its invoices. The platform admin's Grant a discount sheet
   says under What it is for "The owner sees this as the discount’s name."
+- Built in notes plan N11b (PBL-011): **Billing**'s hero says, after the discount line and during the trial too,
+  "As a founding coaching space, your own seat includes 13 clients." and one sentence per grant of extra clients
+  ("4 more clients included until Dec 31, 2026.", from when for one still to come); a bill's clients line says
+  where its included clients came from once a founding seat or a grant counted ("30 included: 15 with your
+  seats, 8 more as a founding space, 7 more granted"), a plain bill's word for word as before. The platform
+  admin's space page gains **Extra included clients** after Discounts on a founding space or one with grants
+  (rows like the discounts', Revoke after asking, and a Grant extra clients sheet of whole calendar months, next
+  month by default, a day off a month's edge marked on its field); its Founding panel, mark and end sheets say
+  what the owner's seat includes; the list's panel is **Founding terms**, its sheet with a third number, the
+  clients a founding owner's seat includes (empty for none). A space neither founding nor granted is unchanged.
 
 **C10. Exercise library**
 - A grid/list toggle with media thumbnails, filter chips instead of three dropdowns plus an

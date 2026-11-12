@@ -2,6 +2,7 @@ import type {
   AdminWorkspace,
   AdminWorkspaceDetail,
   BillingAmounts,
+  BillingClientGrant,
   BillingDiscount,
   BillingInvoice,
   PricePlan,
@@ -52,6 +53,10 @@ export function amounts(overrides: Partial<BillingAmounts> = {}): BillingAmounts
     discountAmount: 0,
     total: 55,
     currencyCode: 'USD',
+    // Where the included clients came from (notes plan N11a): the seats' alone, a plain space.
+    seatIncludedClients: 15,
+    foundingIncludedClients: 0,
+    grantedIncludedClients: 0,
     ...overrides,
   };
 }
@@ -175,6 +180,9 @@ export function invoice(overrides: Partial<BillingInvoice> = {}): BillingInvoice
     planExtraClientPrice: 2,
     planGymFee: 10,
     planGymFeeMinimumSeats: 2,
+    foundingSeatIncludedClients: null,
+    foundingTermsVersion: null,
+    grantedIncludedClients: 0,
     amounts: amounts(),
     status: 'Overdue',
     locksWorkspace: false,
@@ -195,6 +203,23 @@ export function discount(overrides: Partial<BillingDiscount> = {}): BillingDisco
     endsOnExclusive: '2026-12-01',
     note: 'Founding coach',
     grantedAtUtc: '2026-09-01T08:00:00Z',
+    revokedAtUtc: null,
+    ...overrides,
+  };
+}
+
+/**
+ * Extra included clients (notes plan N11a): 7 clients for September to November, running on TODAY.
+ * Test figures are this file's own, never the owners' offer.
+ */
+export function clientGrant(overrides: Partial<BillingClientGrant> = {}): BillingClientGrant {
+  return {
+    id: 'grant-1',
+    clients: 7,
+    startsOn: '2026-09-01',
+    endsOnExclusive: '2026-12-01',
+    note: 'Brought Karim Haddad',
+    grantedAtUtc: '2026-09-02T08:00:00Z',
     revokedAtUtc: null,
     ...overrides,
   };
@@ -285,6 +310,7 @@ export function atlasDetail(overrides: Partial<AdminWorkspaceDetail> = {}): Admi
     ],
     founding: null,
     foundingHistory: [],
+    includedClientGrants: [],
     ...overrides,
   };
 }
@@ -325,17 +351,23 @@ export function foundingRecord(overrides: Partial<FoundingRecord> = {}): Foundin
   };
 }
 
-/** Atlas's open founding status as waiting, or as earned on 3 October with 11 clients. */
+/**
+ * Atlas's open founding status as waiting, or as earned on 3 October with 11 clients; its owner's
+ * seat includes `seat` clients while it stays founding (notes plan N11a), none by default.
+ */
 export function adminFounding(
   state: 'Waiting' | 'Earned' = 'Waiting',
   hidden = false,
+  seat: number | null = null,
 ): AdminFounding {
   return state === 'Waiting'
     ? {
         status: foundingRecord({ badgeHidden: hidden }),
         badge: foundingBadge({ hidden }),
+        foundingSeatIncludedClients: seat,
       }
     : {
+        foundingSeatIncludedClients: seat,
         status: foundingRecord({
           earnedOn: '2026-10-03',
           earnedUnderTermsVersion: 1,

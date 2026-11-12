@@ -26,7 +26,13 @@ import {
   TODAY,
 } from '../../../testing/platform-admin-fixtures';
 import { PlatformAdminApi } from './platform-admin-api';
-import { PlatformDiscount, PlatformPayment, PlatformPlan, PlatformVoid } from './platform-sheets';
+import {
+  PlatformClientGrant,
+  PlatformDiscount,
+  PlatformPayment,
+  PlatformPlan,
+  PlatformVoid,
+} from './platform-sheets';
 
 type Api = { [K in keyof PlatformAdminApi]: ReturnType<typeof vi.fn> };
 
@@ -55,6 +61,8 @@ async function render<T extends SheetOutputs>(
     voidInvoice: vi.fn(() => of({})),
     grantDiscount: vi.fn(() => of({})),
     revokeDiscount: vi.fn(),
+    grantIncludedClients: vi.fn(() => of({})),
+    revokeIncludedClientGrant: vi.fn(),
     getLegalDocuments: vi.fn(),
     publishLegalDocument: vi.fn(),
     withdrawLegalDocument: vi.fn(),
@@ -588,6 +596,206 @@ describe('Platform billing sheets: granting a discount', () => {
   });
 });
 
+describe('Platform billing sheets: granting extra included clients (notes plan N11b)', () => {
+  const inputs = () => ({
+    tenantId: SPACE_IDS.atlas,
+    spaceName: 'Atlas Performance',
+    today: TODAY,
+  });
+
+  it('starts on next month alone, says what a grant does, and asks for the clients and what it is for', async () => {
+    const { fixture, host, api, closed, dirty } = await render(PlatformClientGrant, inputs());
+
+    expect(textOf(host.querySelector('.about'))).toBe(
+      'Atlas Performance Adds its clients to the included clients of the invoice of each month it covers, on top of the seats’ and a founding seat’s. Two grants in one month add up.',
+    );
+    // Next month alone by default, so one grant is one invoice.
+    expect(await chosenDay(fixture, host, 'First day')).toBe('2026-11-01');
+    expect(await chosenDay(fixture, host, 'Last day')).toBe('2026-11-30');
+    expect(description(dayButton(host, 'First day'))).toBe('The 1st of a month.');
+    expect(description(dayButton(host, 'Last day'))).toBe(
+      'A month’s last day. The grant covers this day too.',
+    );
+    expect(description(field(host, 'What it is for'))).toBe(
+      'Only TB Gym’s admin sees it. Say which coach was brought.',
+    );
+    expect(dirty.at(-1), 'The defaults alone are nothing typed.').toBe(false);
+
+    press(host, 'Grant clients');
+    await settle(fixture);
+    expect(api.grantIncludedClients).not.toHaveBeenCalled();
+    const clients = field(host, 'Clients');
+    expect(clients.getAttribute('aria-invalid')).toBe('true');
+    expect(description(clients)).toBe('Enter a whole number of clients from 1 to 1000.');
+    expect(description(field(host, 'What it is for'))).toBe(
+      'Say what the extra clients are for, in up to 200 characters.',
+    );
+    expect(dayButton(host, 'First day').getAttribute('aria-invalid')).toBeNull();
+    expect(dayButton(host, 'Last day').getAttribute('aria-invalid')).toBeNull();
+    expect(announced(host)).toBe('Check the fields marked above.');
+    expect(document.activeElement).toBe(clients);
+    expect(closed).toEqual([]);
+    // The plan's section 1: no coach is called checked, in any word the sheet shows.
+    expect(textOf(host)).not.toMatch(/\b(verified|certified|qualified|licensed|approved)\b/i);
+  });
+
+  it('sets the last day by whole calendar months, from the first day’s month', async () => {
+    const { fixture, host } = await render(PlatformClientGrant, inputs());
+    expect(query(host, '.presets[role="group"]').getAttribute('aria-label')).toBe(
+      'Choose the last day by length',
+    );
+
+    press(host, '3 months');
+    await settle(fixture);
+    expect(shownDay(host, 'Last day')).toBe('Sun, Jan 31, 2027');
+
+    press(host, '2 months');
+    await settle(fixture);
+    expect(shownDay(host, 'Last day')).toBe('Thu, Dec 31, 2026');
+
+    press(host, 'One month');
+    await settle(fixture);
+    expect(shownDay(host, 'Last day')).toBe('Mon, Nov 30, 2026');
+
+    await chooseDay(fixture, host, 'First day', '2027-01-01');
+    press(host, '2 months');
+    await settle(fixture);
+    expect(shownDay(host, 'Last day')).toBe('Sun, Feb 28, 2027');
+  });
+
+  it('moves the last day with a new first day, keeping the whole months chosen', async () => {
+    const { fixture, host, api } = await render(PlatformClientGrant, inputs());
+
+    // An earlier first day never stretches the grant: one month from it, as the default was.
+    await chooseDay(fixture, host, 'First day', '2026-09-01');
+    expect(shownDay(host, 'Last day')).toBe('Wed, Sep 30, 2026');
+
+    press(host, '3 months');
+    await settle(fixture);
+    expect(shownDay(host, 'Last day')).toBe('Mon, Nov 30, 2026');
+    await chooseDay(fixture, host, 'First day', '2026-12-01');
+    expect(shownDay(host, 'Last day')).toBe('Sun, Feb 28, 2027');
+
+    fill(host, 'Clients', '4');
+    fill(host, 'What it is for', 'Brought Karim Haddad');
+    await settle(fixture);
+    press(host, 'Grant clients');
+    await settle(fixture);
+    expect(api.grantIncludedClients).toHaveBeenCalledExactlyOnceWith(
+      SPACE_IDS.atlas,
+      4,
+      '2026-12-01',
+      '2027-03-01',
+      'Brought Karim Haddad',
+    );
+  });
+
+  it('marks a first day off a month’s edge on its field, before asking the server', async () => {
+    const { fixture, host, api } = await render(PlatformClientGrant, inputs());
+
+    fill(host, 'Clients', '4');
+    fill(host, 'What it is for', 'Brought Karim Haddad');
+    await chooseDay(fixture, host, 'First day', '2026-11-15');
+    const first = dayButton(host, 'First day');
+    expect(first.getAttribute('aria-invalid')).toBe('true');
+    expect(description(first)).toBe(
+      'Start on the first day of a month: extra clients are granted for whole months.',
+    );
+
+    press(host, 'Grant clients');
+    await settle(fixture);
+    expect(api.grantIncludedClients).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(first);
+  });
+
+  it('marks a last day off a month’s edge on its field', async () => {
+    const { fixture, host, api } = await render(PlatformClientGrant, inputs());
+
+    fill(host, 'Clients', '4');
+    fill(host, 'What it is for', 'Brought Karim Haddad');
+    await chooseDay(fixture, host, 'Last day', '2026-12-30');
+    const last = dayButton(host, 'Last day');
+    expect(last.getAttribute('aria-invalid')).toBe('true');
+    expect(description(last)).toBe(
+      'End on the last day of a month: extra clients are granted for whole months.',
+    );
+    press(host, 'Grant clients');
+    await settle(fixture);
+    expect(api.grantIncludedClients).not.toHaveBeenCalled();
+  });
+
+  it('grants the clients from the first day up to the day after the last, with the note trimmed', async () => {
+    const { fixture, host, api, csrf, closed } = await render(PlatformClientGrant, inputs());
+
+    fill(host, 'Clients', '7');
+    fill(host, 'What it is for', '  Brought Karim Haddad  ');
+    press(host, '3 months');
+    await settle(fixture);
+    press(host, 'Grant clients');
+    await settle(fixture);
+
+    expect(api.grantIncludedClients).toHaveBeenCalledExactlyOnceWith(
+      SPACE_IDS.atlas,
+      7,
+      '2026-11-01',
+      '2027-02-01',
+      'Brought Karim Haddad',
+    );
+    expect(csrf.refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      api.grantIncludedClients.mock.invocationCallOrder[0],
+    );
+    expect(closed).toEqual([true]);
+  });
+
+  it('keeps the entry with the server’s words when the server refuses', async () => {
+    const { fixture, host, closed } = await render(PlatformClientGrant, inputs(), {
+      grantIncludedClients: vi.fn(() =>
+        throwError(() =>
+          refusal(
+            'space_not_founding',
+            'Only a founding coaching space is granted extra included clients. Mark the space as founding first.',
+          ),
+        ),
+      ),
+    });
+
+    fill(host, 'Clients', '7');
+    fill(host, 'What it is for', 'Brought Karim Haddad');
+    await settle(fixture);
+    press(host, 'Grant clients');
+    await settle(fixture);
+
+    expect(announced(host)).toBe(
+      'Only a founding coaching space is granted extra included clients. Mark the space as founding first.',
+    );
+    expect(field(host, 'Clients').value).toBe('7');
+    expect(field(host, 'What it is for').value).toBe('Brought Karim Haddad');
+    expect(closed).toEqual([]);
+  });
+
+  it('closes on Not now without granting, and tells the page once something is entered', async () => {
+    const { fixture, host, api, closed, dirty } = await render(PlatformClientGrant, inputs());
+    expect(dirty.at(-1)).toBe(false);
+
+    press(host, '3 months');
+    await settle(fixture);
+    expect(dirty.at(-1), 'A last day other than the default is typed work.').toBe(true);
+
+    press(host, 'One month');
+    await settle(fixture);
+    expect(dirty.at(-1)).toBe(false);
+
+    fill(host, 'Clients', '4');
+    await settle(fixture);
+    expect(dirty.at(-1)).toBe(true);
+
+    press(host, 'Not now');
+    await settle(fixture);
+    expect(closed).toEqual([false]);
+    expect(api.grantIncludedClients).not.toHaveBeenCalled();
+  });
+});
+
 describe('Platform billing sheets: publishing a price plan version', () => {
   const inputs = () => ({ current: plan() });
 
@@ -737,7 +945,7 @@ describe('Platform billing sheets: a fresh antiforgery token before every write'
     string,
     Type<SheetOutputs>,
     () => Record<string, unknown>,
-    'recordPayment' | 'voidInvoice' | 'grantDiscount' | 'publishPricePlan',
+    'recordPayment' | 'voidInvoice' | 'grantDiscount' | 'grantIncludedClients' | 'publishPricePlan',
     (host: HTMLElement) => void,
     string,
   ][] = [
@@ -773,6 +981,17 @@ describe('Platform billing sheets: a fresh antiforgery token before every write'
         press(host, '3 months');
       },
       'Grant discount',
+    ],
+    [
+      'extra included clients',
+      PlatformClientGrant,
+      () => ({ tenantId: SPACE_IDS.atlas, spaceName: 'Atlas Performance', today: TODAY }),
+      'grantIncludedClients',
+      (host) => {
+        fill(host, 'Clients', '7');
+        fill(host, 'What it is for', 'Brought Karim Haddad');
+      },
+      'Grant clients',
     ],
     [
       'a price plan',

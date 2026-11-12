@@ -1,5 +1,5 @@
 import { isIsoDate, type IsoDate } from '../../ui/calendar';
-import type { FoundingTerms } from '../billing/founding.models';
+import { clientCount, type FoundingTerms } from '../billing/founding.models';
 import type { PublishFoundingTerms } from './platform-founding-api';
 
 /**
@@ -53,11 +53,13 @@ export function endErrors(entry: { reason: string }): Record<string, string[]> {
     : {};
 }
 
-// ---------- publishing the badge's terms ----------
+// ---------- publishing the founding terms ----------
 
 export interface TermsEntry {
   clientsWithActivePlan: number | null;
   monthsSinceStart: number | null;
+  /** The clients a founding owner's seat includes (notes plan N11a); null for none. */
+  foundingSeatIncludedClients: number | null;
   note: string;
 }
 
@@ -69,12 +71,28 @@ export interface TermsField {
   readonly help: string;
   readonly min: number;
   readonly max: number;
-  /** What the server says when the number is missing. */
-  readonly missing: string;
+  /** What the server says when the number is missing; null when an empty box means none. */
+  readonly missing: string | null;
+  /** What the server says when the number is out of range, where it says more than the range. */
+  readonly range?: string;
 }
 
-/** The two thresholds, in the order the form and the change list show them. */
-export function termsFields(): readonly TermsField[] {
+/**
+ * The founding seat's help (notes plan N11b): the price plan's seat beside it, since the larger
+ * applies (PBL-011), what an empty box sends, and that a space already founding keeps the highest
+ * number it has had (N11a), so a lower number takes no clients from it.
+ */
+function seatHelp(planSeatClients: number | null): string {
+  return planSeatClients === null
+    ? $localize`The price plan’s seat applies when it includes more. Leave it empty for none; a space already founding keeps the highest number it has had.`
+    : $localize`The price plan’s seat includes ${clientCount(planSeatClients)}:clients:; the larger applies. Leave it empty for none; a space already founding keeps the highest number it has had.`;
+}
+
+/**
+ * The badge's two thresholds and the founding seat's clients, in the order the form and the change
+ * list show them; the plan's seat, when known, goes in the seat's help.
+ */
+export function termsFields(planSeatClients: number | null = null): readonly TermsField[] {
   return [
     {
       key: 'clientsWithActivePlan',
@@ -92,6 +110,15 @@ export function termsFields(): readonly TermsField[] {
       max: 24,
       missing: $localize`Enter how many whole months since the space started earn the badge.`,
     },
+    {
+      key: 'foundingSeatIncludedClients',
+      label: $localize`Clients a founding owner’s seat includes`,
+      help: seatHelp(planSeatClients),
+      min: 0,
+      max: 1_000,
+      missing: null,
+      range: $localize`Enter a whole number of clients from 0 to 1000, or none for what the price plan’s seat includes.`,
+    },
   ];
 }
 
@@ -99,6 +126,7 @@ export function termsEntryFrom(terms: FoundingTerms): TermsEntry {
   return {
     clientsWithActivePlan: terms.clientsWithActivePlan,
     monthsSinceStart: terms.monthsSinceStart,
+    foundingSeatIncludedClients: terms.foundingSeatIncludedClients,
     note: '',
   };
 }
@@ -107,11 +135,11 @@ export function termsErrors(entry: TermsEntry): Record<string, string[]> {
   const errors: Record<string, string[]> = {};
   for (const field of termsFields()) {
     const value = entry[field.key];
-    if (value === null || !Number.isFinite(value)) {
-      errors[field.key] = [field.missing];
+    if (value === null) {
+      if (field.missing !== null) errors[field.key] = [field.missing];
     } else if (!Number.isInteger(value) || value < field.min || value > field.max) {
       errors[field.key] = [
-        $localize`Enter a whole number from ${field.min}:min: to ${field.max}:max:.`,
+        field.range ?? $localize`Enter a whole number from ${field.min}:min: to ${field.max}:max:.`,
       ];
     }
   }
@@ -128,21 +156,29 @@ export interface TermsChange {
   readonly to: string;
 }
 
-/** The thresholds that differ from the version in force, as words for the admin to check. */
+/**
+ * The numbers that differ from the version in force, as words for the admin to check; the founding
+ * seat's number going to none is a change too, shown as "None".
+ */
 export function termsChanges(current: FoundingTerms, entry: TermsEntry): readonly TermsChange[] {
+  const shown = (value: number | null) => (value === null ? $localize`None` : String(value));
   return termsFields()
-    .filter((field) => entry[field.key] !== null && entry[field.key] !== current[field.key])
+    .filter((field) => {
+      const value = entry[field.key];
+      return (value !== null || field.missing === null) && value !== current[field.key];
+    })
     .map((field) => ({
       key: field.key,
       label: field.label,
-      from: String(current[field.key]),
-      to: String(entry[field.key]),
+      from: shown(current[field.key]),
+      to: shown(entry[field.key]),
     }));
 }
 
 /**
  * The next version, against the one the admin saw, so a stale one is refused (409). The founding
- * seat's number is the version in force's, unchanged, so new thresholds never drop it (notes plan N11a).
+ * seat's number is always sent, null for none, as the server requires (notes plan N11a): the box
+ * starts with the version in force's, so new thresholds alone never drop it.
  */
 export function toPublishTermsRequest(
   entry: TermsEntry,
@@ -153,6 +189,6 @@ export function toPublishTermsRequest(
     monthsSinceStart: entry.monthsSinceStart ?? 0,
     note: entry.note.trim() || null,
     expectedCurrentVersion: current.versionNumber,
-    foundingSeatIncludedClients: current.foundingSeatIncludedClients,
+    foundingSeatIncludedClients: entry.foundingSeatIncludedClients,
   };
 }

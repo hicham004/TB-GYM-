@@ -34,6 +34,7 @@ import {
   formatDay,
   formatMoney,
   formatMonth,
+  includedClientSentences,
   invoicePrices,
   invoiceStatusLabel,
   invoiceStatusTone,
@@ -87,6 +88,20 @@ export class Billing {
   protected readonly discountLines = computed(() =>
     discountSentences(this.billing()?.discounts ?? [], this.locale),
   );
+  /**
+   * What the owner's seat includes as a founding space and each grant of extra clients until when,
+   * after the discount line, during the trial too (notes plan N11b).
+   */
+  protected readonly includedLines = computed(() => {
+    const billing = this.billing();
+    return billing
+      ? includedClientSentences(
+          billing.foundingSeatIncludedClients,
+          billing.includedClientGrants,
+          this.locale,
+        )
+      : [];
+  });
   /**
    * How to ask TB Gym for the payment details while no Whish number is set (audit BILL-2): its
    * support inbox and WhatsApp number, or null when this server has neither.

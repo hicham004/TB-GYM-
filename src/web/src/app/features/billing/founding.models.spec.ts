@@ -3,12 +3,16 @@ import {
   adminProgressLine,
   clientCount,
   currentFoundingTerms,
+  foundingSeatLine,
+  markSeatSentence,
   markTermsSentence,
   monthCount,
   ownerProgressLine,
   ownerTermsSentence,
   showsFoundingPage,
+  termsSeatSentence,
   termsSentence,
+  toAdminFounding,
   toFoundingBadge,
   toFoundingTerms,
   type FoundingBadge,
@@ -160,5 +164,81 @@ describe('The Founding coach badge as the screens read it (notes plan N3b)', () 
     expect(adminProgressLine(waiting({ monthsNeeded: 0 }))).toBe(
       'Badge: 7 of 10 clients with an active plan right now.',
     );
+  });
+
+  // Notes plan N11b: the founding seat in words, from the server's number; the larger of it and the
+  // price plan's seat applies (PBL-011), so a number at or below the plan's reads as the plan's seat.
+  it('words what a founding owner’s seat includes, for the space page, the mark sheet and the list', () => {
+    const terms = (seat: number | null): FoundingTerms => ({
+      id: 'terms-2',
+      versionNumber: 2,
+      clientsWithActivePlan: 10,
+      monthsSinceStart: 2,
+      note: null,
+      publishedAtUtc: '2026-11-01T00:00:00Z',
+      isCurrent: true,
+      foundingSeatIncludedClients: seat,
+    });
+    const plan =
+      'what the price plan’s seat includes: no founding number above it is published yet.';
+
+    expect(foundingSeatLine(13)).toBe(
+      'Its owner’s seat includes 13 clients while it stays founding.',
+    );
+    expect(foundingSeatLine(1)).toBe('Its owner’s seat includes 1 client while it stays founding.');
+    expect(foundingSeatLine(null)).toBe(`Its owner’s seat includes ${plan}`);
+
+    const marking =
+      'Marking changes no access. While the space stays founding, its owner’s seat includes';
+    expect(markSeatSentence(terms(13), 5)).toBe(`${marking} 13 clients (the terms in force).`);
+    expect(markSeatSentence(terms(13), null)).toBe(`${marking} 13 clients (the terms in force).`);
+    expect(markSeatSentence(terms(5), 5)).toBe(`${marking} ${plan}`);
+    expect(markSeatSentence(terms(null), 5)).toBe(`${marking} ${plan}`);
+    expect(markSeatSentence(null, 5)).toBe(
+      `${marking} what the terms in force give a founding seat.`,
+    );
+
+    expect(termsSeatSentence(terms(13), 5)).toBe(
+      'A founding space’s owner seat includes 13 clients.',
+    );
+    expect(termsSeatSentence(terms(4), 5)).toBe(`A founding space’s owner seat includes ${plan}`);
+    expect(termsSeatSentence(terms(null), null)).toBe(
+      `A founding space’s owner seat includes ${plan}`,
+    );
+  });
+
+  it('reads the admin’s founding view with what its owner’s seat includes, or none', () => {
+    const view = {
+      status: {
+        id: 'founding-1',
+        foundingSince: '2026-09-15',
+        note: 'One of the first coaches',
+        markedAtUtc: '2026-09-15T10:00:00Z',
+        earnedOn: null,
+        earnedUnderTermsVersion: null,
+        earnedClientCount: null,
+        badgeHidden: false,
+        endedAtUtc: null,
+        endReason: null,
+      },
+      badge: {
+        state: 'Waiting' as const,
+        foundingSince: '2026-09-15',
+        clientsWithActivePlan: '7',
+        clientsNeeded: '10',
+        monthsSinceStart: '1',
+        monthsNeeded: '2',
+        termsVersion: '2',
+        earnedOn: null,
+        endedOn: null,
+        hidden: false,
+      },
+    };
+    expect(
+      toAdminFounding({ ...view, foundingSeatIncludedClients: '13' }).foundingSeatIncludedClients,
+    ).toBe(13);
+    expect(
+      toAdminFounding({ ...view, foundingSeatIncludedClients: null }).foundingSeatIncludedClients,
+    ).toBeNull();
   });
 });

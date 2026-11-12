@@ -18,6 +18,7 @@ import { apiErrorMessage } from '../../core/api/api-error';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { CsrfService } from '../../core/security/csrf.service';
 import { Button } from '../../ui/button';
+import { isIsoDate } from '../../ui/calendar';
 import { Checkbox } from '../../ui/checkbox';
 import { DateField } from '../../ui/date-field';
 import { Control, Field } from '../../ui/field';
@@ -32,9 +33,14 @@ import {
 } from '../billing/billing.models';
 import { PlatformAdminApi } from './platform-admin-api';
 import {
+  clientGrantErrors,
   discountEndExclusive,
   discountErrors,
+  GRANT_EARLIEST_DAY,
+  grantLastDay,
+  grantMonths,
   lastDayAfterMonths,
+  nextMonthStart,
   paymentErrors,
   planChanges,
   planEntryFrom,
@@ -47,8 +53,9 @@ import {
 } from './platform-admin.models';
 
 /**
- * The four writes of platform billing, each in a sheet (R5.2b, ADR 0028): record a payment, void an
- * invoice, grant a discount and publish a price plan version. They ask only for what the server
+ * The writes of platform billing, each in a sheet (R5.2b, ADR 0028): record a payment, void an
+ * invoice, grant a discount, grant a founding space extra included clients (notes plan N11b) and
+ * publish a price plan version. They ask only for what the server
  * needs, say in a sentence what will happen, keep a refusal on screen in the server's own words
  * instead of closing and losing the entry, and tell the page when they hold typed work so closing
  * asks first. The server decides every amount and date; nothing is added up here.
@@ -750,6 +757,138 @@ export class PlatformDiscount {
     } catch (error) {
       this.error.set(
         apiErrorMessage(error, $localize`The discount could not be granted. Try again.`),
+      );
+    } finally {
+      this.busy.set(false);
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+
+/**
+ * Extra included clients for a founding space (notes plan N11b, decision 17): how many, for whole UTC
+ * calendar months, and what for. Next month alone by default, so one grant is one invoice; a day off
+ * a month's edge is marked on its field, and the server refuses it too, as it refuses a space that is
+ * not founding. Its template is a file of its own, so the words test reads it.
+ */
+@Component({
+  selector: 'app-platform-client-grant',
+  imports: [Button, Control, DateField, Field, ModalFooter],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './platform-client-grant.html',
+  styles: SHEET_STYLES + PRESET_STYLES,
+})
+export class PlatformClientGrant {
+  private readonly api = inject(PlatformAdminApi);
+  private readonly csrf = inject(CsrfService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+
+  readonly tenantId = input.required<string>();
+  readonly spaceName = input.required<string>();
+  /** Today in UTC: the month after it is the grant's month by default. */
+  readonly today = input.required<string>();
+  /** True when the clients were granted. */
+  readonly closed = output<boolean>();
+  readonly dirtyChange = output<boolean>();
+
+  protected readonly attempt = new FormAttempt();
+  protected readonly formId = modalFormId('platform-client-grant');
+  protected readonly earliest = GRANT_EARLIEST_DAY;
+  protected readonly clientsLabel = $localize`Clients`;
+  protected readonly fromLabel = $localize`First day`;
+  protected readonly fromHelp = $localize`The 1st of a month.`;
+  protected readonly throughLabel = $localize`Last day`;
+  protected readonly throughHelp = $localize`A month’s last day. The grant covers this day too.`;
+  protected readonly noteLabel = $localize`What it is for`;
+  protected readonly noteHelp = $localize`Only TB Gym’s admin sees it. Say which coach was brought.`;
+  protected readonly presetsLabel = $localize`Choose the last day by length`;
+  protected readonly presets = [
+    { months: 1, label: $localize`One month` },
+    { months: 2, label: $localize`2 months` },
+    { months: 3, label: $localize`3 months` },
+  ];
+
+  private readonly firstDefault = computed(() => nextMonthStart(this.today()));
+  private readonly lastDefault = computed(() => grantLastDay(this.firstDefault(), 1));
+  protected readonly clients = signal<number | null>(null);
+  protected readonly startsOn = linkedSignal(() => this.firstDefault());
+  /**
+   * The last day follows the first: a new first day keeps the whole months the grant had (one month
+   * when it was off a month's edge), so moving the first day never stretches a grant unseen.
+   */
+  protected readonly lastDay = linkedSignal<string, string>({
+    source: this.startsOn,
+    computation: (start, previous) => {
+      if (!isIsoDate(start)) return previous?.value ?? this.lastDefault();
+      const months = previous ? (grantMonths(previous.source, previous.value) ?? 1) : 1;
+      return grantLastDay(start, months);
+    },
+  });
+  protected readonly note = signal('');
+  protected readonly busy = signal(false);
+  protected readonly error = signal<string | null>(null);
+
+  protected readonly errors = computed(() =>
+    clientGrantErrors({
+      clients: this.clients(),
+      startsOn: this.startsOn(),
+      lastDay: this.lastDay(),
+      note: this.note(),
+    }),
+  );
+  protected readonly problemCount = computed(() => Object.keys(this.errors()).length);
+
+  constructor() {
+    effect(() =>
+      this.dirtyChange.emit(
+        this.clients() !== null ||
+          this.startsOn() !== this.firstDefault() ||
+          this.lastDay() !== this.lastDefault() ||
+          this.note().trim() !== '',
+      ),
+    );
+  }
+
+  protected setClients(value: number): void {
+    this.clients.set(Number.isFinite(value) ? value : null);
+  }
+
+  /** Whole calendar months from the first day's month, so a preset always lands on a month's end. */
+  protected applyPreset(months: number): void {
+    this.lastDay.set(grantLastDay(this.startsOn() || this.firstDefault(), months));
+    this.attempt.touch('lastDay');
+  }
+
+  protected shows(field: string): boolean {
+    return this.attempt.shows(field, this.errors()[field] ?? []);
+  }
+
+  protected async submit(): Promise<void> {
+    if (this.busy()) return;
+    if (this.problemCount() > 0) {
+      this.attempt.attempt();
+      focusFirstProblem(this.host, this.injector);
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      await this.csrf.refresh();
+      await firstValueFrom(
+        this.api.grantIncludedClients(
+          this.tenantId(),
+          this.clients() ?? 0,
+          this.startsOn(),
+          discountEndExclusive(this.lastDay()),
+          this.note().trim(),
+        ),
+      );
+      this.closed.emit(true);
+    } catch (error) {
+      this.error.set(
+        apiErrorMessage(error, $localize`The extra clients could not be granted. Try again.`),
       );
     } finally {
       this.busy.set(false);

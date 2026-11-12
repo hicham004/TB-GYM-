@@ -2,8 +2,10 @@
 // head, the pill row and the quiet lines; this one adds the actions and the ended statuses. Brand v2
 // tokens only, in a sheet of its own so the page's stylesheet stays inside its budget.
 
-// A landing place when the button that had focus goes with the reading it served.
-.founding h2:focus {
+// A landing place when the button that had focus goes with the reading it served: the Founding
+// panel's, and the extra included clients' after a revoke (notes plan N11b).
+.founding h2:focus,
+[data-client-grants] h2:focus {
   outline: none;
 }
 

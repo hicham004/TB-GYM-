@@ -8,6 +8,7 @@ import {
   termsChanges,
   termsEntryFrom,
   termsErrors,
+  termsFields,
   toPublishTermsRequest,
 } from './platform-founding.models';
 
@@ -51,14 +52,24 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
 
   it('takes the badge’s terms as whole numbers in the server’s ranges, never a missing one as 0', () => {
     const entry = termsEntryFrom(foundingTerms());
-    expect(entry).toEqual({ clientsWithActivePlan: 10, monthsSinceStart: 2, note: '' });
+    expect(entry).toEqual({
+      clientsWithActivePlan: 10,
+      monthsSinceStart: 2,
+      foundingSeatIncludedClients: null,
+      note: '',
+    });
     expect(termsErrors(entry)).toEqual({});
     expect(termsErrors({ ...entry, clientsWithActivePlan: 1, monthsSinceStart: 0 })).toEqual({});
     expect(termsErrors({ ...entry, clientsWithActivePlan: 1000, monthsSinceStart: 24 })).toEqual(
       {},
     );
     expect(
-      termsErrors({ clientsWithActivePlan: null, monthsSinceStart: null, note: 'x'.repeat(501) }),
+      termsErrors({
+        clientsWithActivePlan: null,
+        monthsSinceStart: null,
+        foundingSeatIncludedClients: null,
+        note: 'x'.repeat(501),
+      }),
     ).toEqual({
       clientsWithActivePlan: ['Enter how many clients with an active plan earn the badge.'],
       monthsSinceStart: ['Enter how many whole months since the space started earn the badge.'],
@@ -74,17 +85,44 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
     });
   });
 
+  // Notes plan N11b: the founding seat's number, 0 to 1,000 or none (an empty box), in the server's words.
+  it('takes the founding seat’s clients from 0 to 1000 or none, and marks a box it could not read', () => {
+    const entry = termsEntryFrom(foundingTerms({ foundingSeatIncludedClients: 13 }));
+    expect(entry.foundingSeatIncludedClients).toBe(13);
+    for (const clients of [null, 0, 13, 1000]) {
+      expect(termsErrors({ ...entry, foundingSeatIncludedClients: clients })).toEqual({});
+    }
+    const range = [
+      'Enter a whole number of clients from 0 to 1000, or none for what the price plan’s seat includes.',
+    ];
+    for (const clients of [-1, 1001, 2.5, Number.NaN]) {
+      expect(termsErrors({ ...entry, foundingSeatIncludedClients: clients })).toEqual({
+        foundingSeatIncludedClients: range,
+      });
+    }
+  });
+
   it('says what would change, and publishes against the version it saw', () => {
     const current = foundingTerms({ versionNumber: 3 });
     expect(termsChanges(current, termsEntryFrom(current))).toEqual([]);
     expect(
-      termsChanges(current, { clientsWithActivePlan: 12, monthsSinceStart: 2, note: 'Why' }),
+      termsChanges(current, {
+        clientsWithActivePlan: 12,
+        monthsSinceStart: 2,
+        foundingSeatIncludedClients: null,
+        note: 'Why',
+      }),
     ).toEqual([
       { key: 'clientsWithActivePlan', label: 'Clients with an active plan', from: '10', to: '12' },
     ]);
     expect(
       toPublishTermsRequest(
-        { clientsWithActivePlan: 12, monthsSinceStart: 3, note: '  ' },
+        {
+          clientsWithActivePlan: 12,
+          monthsSinceStart: 3,
+          foundingSeatIncludedClients: null,
+          note: '  ',
+        },
         current,
       ),
     ).toEqual({
@@ -94,18 +132,80 @@ describe('What the founding sheets check before they send (notes plan N3b)', () 
       expectedCurrentVersion: 3,
       foundingSeatIncludedClients: null,
     });
-    // The founding seat's number goes as the version in force has it, so new thresholds never drop it.
     expect(
       toPublishTermsRequest(
-        { clientsWithActivePlan: 12, monthsSinceStart: 3, note: '' },
-        foundingTerms({ versionNumber: 3, foundingSeatIncludedClients: 13 }),
-      ).foundingSeatIncludedClients,
-    ).toBe(13);
-    expect(
-      toPublishTermsRequest(
-        { clientsWithActivePlan: 12, monthsSinceStart: 3, note: ' After the talks ' },
+        {
+          clientsWithActivePlan: 12,
+          monthsSinceStart: 3,
+          foundingSeatIncludedClients: 13,
+          note: ' After the talks ',
+        },
         current,
       ).note,
     ).toBe('After the talks');
+  });
+
+  it('sends the founding seat’s number as the box holds it, and names it going to none as a change', () => {
+    const current = foundingTerms({ versionNumber: 3, foundingSeatIncludedClients: 13 });
+    const kept = termsEntryFrom(current);
+    // The box starts with the version in force's number, so new thresholds alone never drop it.
+    expect(
+      toPublishTermsRequest({ ...kept, clientsWithActivePlan: 12 }, current)
+        .foundingSeatIncludedClients,
+    ).toBe(13);
+    expect(
+      toPublishTermsRequest({ ...kept, foundingSeatIncludedClients: 27 }, current)
+        .foundingSeatIncludedClients,
+    ).toBe(27);
+    expect(
+      toPublishTermsRequest({ ...kept, foundingSeatIncludedClients: null }, current)
+        .foundingSeatIncludedClients,
+    ).toBeNull();
+    expect(termsChanges(current, { ...kept, foundingSeatIncludedClients: 27 })).toEqual([
+      {
+        key: 'foundingSeatIncludedClients',
+        label: 'Clients a founding owner’s seat includes',
+        from: '13',
+        to: '27',
+      },
+    ]);
+    expect(termsChanges(current, { ...kept, foundingSeatIncludedClients: null })).toEqual([
+      {
+        key: 'foundingSeatIncludedClients',
+        label: 'Clients a founding owner’s seat includes',
+        from: '13',
+        to: 'None',
+      },
+    ]);
+    expect(
+      termsChanges(foundingTerms(), {
+        ...termsEntryFrom(foundingTerms()),
+        foundingSeatIncludedClients: 13,
+      }),
+    ).toEqual([
+      {
+        key: 'foundingSeatIncludedClients',
+        label: 'Clients a founding owner’s seat includes',
+        from: 'None',
+        to: '13',
+      },
+    ]);
+  });
+
+  it('puts the price plan’s seat in the founding seat’s help, since the larger applies', () => {
+    const seat = (plan: number | null) =>
+      termsFields(plan).find((field) => field.key === 'foundingSeatIncludedClients')!;
+    expect(seat(5).help).toBe(
+      'The price plan’s seat includes 5 clients; the larger applies. Leave it empty for none; a space already founding keeps the highest number it has had.',
+    );
+    expect(seat(null).help).toBe(
+      'The price plan’s seat applies when it includes more. Leave it empty for none; a space already founding keeps the highest number it has had.',
+    );
+    expect(seat(5).missing, 'An empty box is none, never a missing number.').toBeNull();
+    expect(termsFields().map((field) => field.key)).toEqual([
+      'clientsWithActivePlan',
+      'monthsSinceStart',
+      'foundingSeatIncludedClients',
+    ]);
   });
 });

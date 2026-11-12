@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import clientAccount from '../account/client-account.html' with { loader: 'text' };
 import accountFounding from '../account/account-founding.html' with { loader: 'text' };
+import clientGrant from '../platform-admin/platform-client-grant.html' with { loader: 'text' };
 import foundingEnd from '../platform-admin/platform-founding-end.html' with { loader: 'text' };
 import foundingMark from '../platform-admin/platform-founding-mark.html' with { loader: 'text' };
 import foundingTerms from '../platform-admin/platform-founding-terms.html' with { loader: 'text' };
 import platformAdmin from '../platform-admin/platform-admin.html' with { loader: 'text' };
 import platformSpace from '../platform-admin/platform-space.html' with { loader: 'text' };
+import {
+  amounts,
+  foundingTerms as termsVersion,
+  invoice,
+} from '../../../testing/platform-admin-fixtures';
+import {
+  clientGrantErrors,
+  invoiceUsage,
+  revokeGrantQuestion,
+} from '../platform-admin/platform-admin.models';
 import {
   endErrors,
   endPresets,
@@ -13,33 +24,41 @@ import {
   termsErrors,
   termsFields,
 } from '../platform-admin/platform-founding.models';
+import billingPage from './billing.html' with { loader: 'text' };
+import { billLines, includedClientSentences } from './billing.models';
 import {
   adminProgressLine,
   FOUNDING_COACH,
   FOUNDING_COACH_LINE,
+  foundingSeatLine,
+  markSeatSentence,
   markTermsSentence,
   ownerProgressLine,
   ownerTermsSentence,
+  termsSeatSentence,
   termsSentence,
   type FoundingBadge,
 } from './founding.models';
 
 /**
  * The badge's words (notes plan N3b, the plan's section 1): a coach is never called verified,
- * certified, qualified, licensed or approved on a screen. This reads every template the row added or
- * changed as it is written, and the words the screens draw from code, and refuses those words whole,
- * so the badge's own line ("Not a check of qualifications") still passes.
+ * certified, qualified, licensed or approved on a screen. This reads every template the rows added or
+ * changed as it is written (N11b's grant sheet and the owner's Billing page too), and the words the
+ * screens draw from code, and refuses those words whole, so the badge's own line ("Not a check of
+ * qualifications") still passes.
  */
 const NEVER = /\b(verified|certified|qualified|licensed|approved)\b/i;
 
 const TEMPLATES: Record<string, string> = {
   'platform-space.html': platformSpace,
   'platform-admin.html': platformAdmin,
+  'platform-client-grant.html': clientGrant,
   'platform-founding-mark.html': foundingMark,
   'platform-founding-end.html': foundingEnd,
   'platform-founding-terms.html': foundingTerms,
   'account-founding.html': accountFounding,
   'client-account.html': clientAccount,
+  'billing.html': billingPage,
 };
 
 const badge = (overrides: Partial<FoundingBadge> = {}): FoundingBadge => ({
@@ -84,16 +103,72 @@ describe('The Founding coach badge’s words', () => {
       adminProgressLine(badge()),
       adminProgressLine(badge({ monthsNeeded: 0 })),
       ...endPresets(),
-      ...termsFields().flatMap((field) => [field.label, field.help, field.missing]),
+      ...[null, 5].flatMap((plan) =>
+        termsFields(plan).flatMap((field) => [
+          field.label,
+          field.help,
+          field.missing ?? '',
+          field.range ?? '',
+        ]),
+      ),
       ...Object.values(markErrors({ foundingSince: '', note: '' }, '2026-10-09')).flat(),
       ...Object.values(markErrors({ foundingSince: '2026-10-10', note: '' }, '2026-10-09')).flat(),
       ...Object.values(markErrors({ foundingSince: '1999-12-31', note: 'x' }, '2026-10-09')).flat(),
       ...Object.values(endErrors({ reason: '' })).flat(),
       ...Object.values(
-        termsErrors({ clientsWithActivePlan: null, monthsSinceStart: 99, note: 'x'.repeat(501) }),
+        termsErrors({
+          clientsWithActivePlan: null,
+          monthsSinceStart: 99,
+          foundingSeatIncludedClients: 1_001,
+          note: 'x'.repeat(501),
+        }),
       ).flat(),
+      // The founding seat and extra included clients (notes plan N11b).
+      foundingSeatLine(null),
+      foundingSeatLine(13),
+      markSeatSentence(null, null),
+      ...[null, 13].flatMap((seat) =>
+        [null, 5, 20].flatMap((plan) => [
+          markSeatSentence(termsVersion({ foundingSeatIncludedClients: seat }), plan),
+          termsSeatSentence(termsVersion({ foundingSeatIncludedClients: seat }), plan),
+        ]),
+      ),
+      ...includedClientSentences(
+        13,
+        [
+          {
+            clients: 7,
+            startsOn: '2026-09-01',
+            lastDay: '2026-11-30',
+            endsOnExclusive: '2026-12-01',
+            startsLater: false,
+          },
+          {
+            clients: 1,
+            startsOn: '2026-12-01',
+            lastDay: '2027-02-28',
+            endsOnExclusive: '2027-03-01',
+            startsLater: true,
+          },
+        ],
+        'en-US',
+      ),
+      ...billLines(
+        amounts({ includedClients: 34, foundingIncludedClients: 8, grantedIncludedClients: 11 }),
+        'en-US',
+      ).map((line) => line.label),
+      ...Object.values(
+        clientGrantErrors({ clients: 0, startsOn: '2026-11-15', lastDay: '2026-12-30', note: '' }),
+      ).flat(),
+      ...Object.values(
+        clientGrantErrors({ clients: null, startsOn: '', lastDay: '', note: 'x'.repeat(201) }),
+      ).flat(),
+      ...[1, 7].flatMap((clients) =>
+        Object.values(revokeGrantQuestion(clients, 'Sep 1, 2026', 'Nov 30, 2026')),
+      ),
+      invoiceUsage(invoice({ foundingSeatIncludedClients: 13, foundingTermsVersion: 2 })),
     ];
-    expect(sentences.length).toBeGreaterThan(20);
+    expect(sentences.length).toBeGreaterThan(40);
     for (const sentence of sentences) expect(sentence).not.toMatch(NEVER);
   });
 });

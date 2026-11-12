@@ -49,6 +49,11 @@ export interface FoundingRecord {
 export interface AdminFounding {
   status: FoundingRecord;
   badge: FoundingBadge;
+  /**
+   * What its owner's seat includes while the status stays open (notes plan N11a): the founding
+   * number in force when it is above the price plan's seat, else null.
+   */
+  foundingSeatIncludedClients: number | null;
 }
 
 /**
@@ -72,7 +77,7 @@ export const FOUNDING_COACH = $localize`Founding coach`;
 /** The one line that always goes with the badge, so nobody reads it as a check of a coach. */
 export const FOUNDING_COACH_LINE = $localize`One of the first coaches on TB Gym. Not a check of qualifications`;
 
-function toNullableNumber(value: number | string | null): number | null {
+export function toNullableNumber(value: number | string | null): number | null {
   return value === null ? null : toNumber(value);
 }
 
@@ -96,7 +101,11 @@ export function toFoundingRecord(value: FoundingStatusView): FoundingRecord {
 }
 
 export function toAdminFounding(value: AdminFoundingView): AdminFounding {
-  return { status: toFoundingRecord(value.status), badge: toFoundingBadge(value.badge) };
+  return {
+    status: toFoundingRecord(value.status),
+    badge: toFoundingBadge(value.badge),
+    foundingSeatIncludedClients: toNullableNumber(value.foundingSeatIncludedClients),
+  };
 }
 
 export function toFoundingTerms(value: FoundingTermsView): FoundingTerms {
@@ -179,6 +188,45 @@ export function ownerProgressLine(badge: FoundingBadge): string {
   return badge.monthsNeeded === 0
     ? $localize`So far: ${clients}:clients:.`
     : $localize`So far: ${clients}:clients:, ${badge.monthsSinceStart ?? 0}:have: of ${monthCount(badge.monthsNeeded)}:needed:.`;
+}
+
+// ---------- the founding seat in words (notes plan N11b) ----------
+// The number is the server's: the founding terms in force, or what a space's open status holds. A
+// founding seat includes the larger of it and the price plan's seat (PBL-011), so a number at or below
+// the plan's reads as the plan's seat, as the server reads it by sending none.
+
+/** The founding number when it is above the plan's seat, or when the plan's is unknown; else null. */
+function raisedSeat(founding: number | null, planSeat: number | null): number | null {
+  return founding !== null && (planSeat === null || founding > planSeat) ? founding : null;
+}
+
+/** The admin's Founding panel: what the space's owner seat includes while it stays founding. */
+export function foundingSeatLine(clients: number | null): string {
+  return clients === null
+    ? $localize`Its owner’s seat includes what the price plan’s seat includes: no founding number above it is published yet.`
+    : $localize`Its owner’s seat includes ${clientCount(clients)}:clients: while it stays founding.`;
+}
+
+/**
+ * The mark sheet's line: marking changes no access, and what the owner's seat includes while the
+ * space stays founding, from the terms in force and the price plan's seat when they could be read.
+ */
+export function markSeatSentence(terms: FoundingTerms | null, planSeat: number | null): string {
+  if (!terms) {
+    return $localize`Marking changes no access. While the space stays founding, its owner’s seat includes what the terms in force give a founding seat.`;
+  }
+  const clients = raisedSeat(terms.foundingSeatIncludedClients, planSeat);
+  return clients === null
+    ? $localize`Marking changes no access. While the space stays founding, its owner’s seat includes what the price plan’s seat includes: no founding number above it is published yet.`
+    : $localize`Marking changes no access. While the space stays founding, its owner’s seat includes ${clientCount(clients)}:clients: (the terms in force).`;
+}
+
+/** The list's account of the founding seat in the terms in force, about any founding space. */
+export function termsSeatSentence(terms: FoundingTerms, planSeat: number | null): string {
+  const clients = raisedSeat(terms.foundingSeatIncludedClients, planSeat);
+  return clients === null
+    ? $localize`A founding space’s owner seat includes what the price plan’s seat includes: no founding number above it is published yet.`
+    : $localize`A founding space’s owner seat includes ${clientCount(clients)}:clients:.`;
 }
 
 /** Where a waiting badge stands, for the platform admin, counted right now. */

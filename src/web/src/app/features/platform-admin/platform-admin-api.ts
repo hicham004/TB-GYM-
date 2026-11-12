@@ -6,6 +6,7 @@ import type {
   AdminWorkspaceSummary,
   ContactKind,
   ContactRequestAdminView,
+  GrantIncludedClientsRequest,
   InvoiceRunOutcome,
   LegalDocumentAdminView,
   PricePlanView,
@@ -156,6 +157,25 @@ export class PlatformAdminApi {
 
   revokeDiscount(discountId: string): Observable<unknown> {
     return this.http.post(`/api/platform-admin/discounts/${discountId}/revoke`, null);
+  }
+
+  /** Extra included clients for a founding space, for whole UTC months (notes plan N11a). */
+  grantIncludedClients(
+    tenantId: string,
+    clients: number,
+    startsOn: string,
+    endsOnExclusive: string,
+    note: string,
+  ): Observable<unknown> {
+    const body: GrantIncludedClientsRequest = { clients, startsOn, endsOnExclusive, note };
+    return this.http.post(
+      `/api/platform-admin/workspaces/${tenantId}/included-client-grants`,
+      body,
+    );
+  }
+
+  revokeIncludedClientGrant(grantId: string): Observable<unknown> {
+    return this.http.post(`/api/platform-admin/included-client-grants/${grantId}/revoke`, null);
   }
 
   /** Every version of the legal documents, in force or replaced, with how often each was accepted. */

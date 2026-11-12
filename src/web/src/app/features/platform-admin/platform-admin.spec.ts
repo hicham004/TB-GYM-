@@ -50,6 +50,8 @@ async function render(
     voidInvoice: vi.fn(),
     grantDiscount: vi.fn(),
     revokeDiscount: vi.fn(),
+    grantIncludedClients: vi.fn(),
+    revokeIncludedClientGrant: vi.fn(),
     getLegalDocuments: vi.fn(),
     publishLegalDocument: vi.fn(),
     withdrawLegalDocument: vi.fn(),
@@ -392,20 +394,38 @@ describe('Platform billing', () => {
     expect(host.querySelectorAll('[data-founding]')).toHaveLength(1);
   });
 
-  it('shows the badge’s terms in force under the price plan', async () => {
+  it('shows the founding terms in force under the price plan: the badge’s and the founding seat’s', async () => {
     const { host, founding } = await render();
 
     const panel = host.querySelector('[data-founding-terms]')!;
-    expect(textOf(panel.querySelector('h2'))).toBe('Founding coach badge');
+    expect(textOf(panel.querySelector('h2'))).toBe('Founding terms');
     expect(textOf(panel.querySelector('.panel-head .quiet'))).toBe('Version 1 · since Sep 1, 2026');
     expect(textOf(panel.querySelector('[data-terms-sentence]'))).toBe(
       'Earned once 10 of a founding space’s clients have an active plan and the space is 2 months old.',
+    );
+    // Notes plan N11b: no founding number is published, so the price plan's seat applies.
+    expect(textOf(panel.querySelector('[data-terms-seat]'))).toBe(
+      'A founding space’s owner seat includes what the price plan’s seat includes: no founding number above it is published yet.',
     );
     expect(founding.getFoundingTerms).toHaveBeenCalledTimes(1);
     // Its own panel after the price plan's, so the plan's version line stays the only one there.
     const panels = Array.from(host.querySelectorAll('section.panel'));
     expect(panels.indexOf(panel)).toBe(
       panels.indexOf(host.querySelector('[data-price-plan]')!) + 1,
+    );
+  });
+
+  it('says what a founding owner’s seat includes when the terms in force name a number above the plan’s', async () => {
+    const { host } = await render(
+      platformSpaces,
+      {},
+      {
+        getFoundingTerms: vi.fn(() => of([foundingTerms({ foundingSeatIncludedClients: 13 })])),
+      },
+    );
+
+    expect(textOf(host.querySelector('[data-founding-terms] [data-terms-seat]'))).toBe(
+      'A founding space’s owner seat includes 13 clients.',
     );
   });
 
@@ -418,6 +438,10 @@ describe('Platform billing', () => {
     expect(textOf(sheet.querySelector('h2'))).toBe('Change the badge’s terms');
     expect(textOf(sheet)).toContain('Version 1 is in force.');
     expect(textOf(sheet)).toContain('Nothing has changed yet.');
+    // The founding seat's help names the price plan in force's seat (notes plan N11b).
+    expect(textOf(sheet)).toContain(
+      'The price plan’s seat includes 5 clients; the larger applies.',
+    );
     expect(
       Array.from(sheet.querySelectorAll('button')).find((b) => textOf(b) === 'Publish version 2')!
         .disabled,

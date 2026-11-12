@@ -23,7 +23,11 @@ import { Control, Field } from '../../ui/field';
 import { Icon } from '../../ui/icon';
 import { ModalFooter, modalFormId } from '../../ui/modal-footer';
 import { formatDay } from '../billing/billing.models';
-import { markTermsSentence, type FoundingTerms } from '../billing/founding.models';
+import {
+  markSeatSentence,
+  markTermsSentence,
+  type FoundingTerms,
+} from '../billing/founding.models';
 import { PlatformFoundingApi } from './platform-founding-api';
 import {
   endErrors,
@@ -35,6 +39,7 @@ import {
   termsErrors,
   termsFields,
   toPublishTermsRequest,
+  type TermsField,
   type TermsKey,
 } from './platform-founding.models';
 import { CHANGES_STYLES, focusFirstProblem, PRESET_STYLES, SHEET_STYLES } from './platform-sheets';
@@ -67,6 +72,8 @@ export class PlatformFoundingMark {
   readonly today = input.required<string>();
   /** The terms in force, for the sentence; null when they could not be read. */
   readonly terms = input<FoundingTerms | null>(null);
+  /** The clients the price plan in force includes with a seat (notes plan N11b); null when unknown. */
+  readonly planSeatClients = input<number | null>(null);
   /** True when the space was marked. */
   readonly closed = output<boolean>();
   readonly dirtyChange = output<boolean>();
@@ -94,6 +101,10 @@ export class PlatformFoundingMark {
       $localize`The discount is separate: grant it on this page too.`,
     ].join(' ');
   });
+  /** What marking changes: no access, and the owner's seat while it stays founding (notes plan N11b). */
+  protected readonly seatSentence = computed(() =>
+    markSeatSentence(this.terms(), this.planSeatClients()),
+  );
   protected readonly errors = computed(() =>
     markErrors({ foundingSince: this.foundingSince(), note: this.note() }, this.today()),
   );
@@ -235,18 +246,28 @@ export class PlatformFoundingTerms {
   private readonly injector = inject(Injector);
 
   readonly current = input.required<FoundingTerms>();
+  /** The clients the price plan in force includes with a seat, for the founding seat's help. */
+  readonly planSeatClients = input<number | null>(null);
   /** The version that was published, or false when the sheet was closed without publishing. */
   readonly closed = output<FoundingTerms | false>();
   readonly dirtyChange = output<boolean>();
 
   protected readonly attempt = new FormAttempt();
   protected readonly formId = modalFormId('platform-founding-terms');
-  protected readonly fields = termsFields();
+  protected readonly fields = computed(() => termsFields(this.planSeatClients()));
   protected readonly entry = linkedSignal(() => termsEntryFrom(this.current()));
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly errors = computed(() => termsErrors(this.entry()));
+  /** Boxes the browser could not read: marked, never sent as none (the founding seat's, N11b). */
+  private readonly unreadable = signal<ReadonlySet<TermsKey>>(new Set());
+  protected readonly errors = computed(() => {
+    const errors = termsErrors(this.entry());
+    for (const field of termsFields()) {
+      if (this.unreadable().has(field.key) && field.range) errors[field.key] = [field.range];
+    }
+    return errors;
+  });
   protected readonly problemCount = computed(() => Object.keys(this.errors()).length);
   /** What differs from the version in force, leaving out a number that is not valid yet. */
   protected readonly changes = computed(() =>
@@ -261,8 +282,26 @@ export class PlatformFoundingTerms {
     );
   }
 
-  protected setNumber(key: TermsKey, value: number): void {
-    this.entry.update((entry) => ({ ...entry, [key]: Number.isFinite(value) ? value : null }));
+  /**
+   * An empty box is none for the founding seat's number, which allows it (notes plan N11b); a box the
+   * browser cannot read is never none, so it is marked rather than published as none.
+   */
+  protected setNumber(field: TermsField, box: HTMLInputElement): void {
+    const value = box.valueAsNumber;
+    // A box that allows none and that the browser cannot read keeps its entry as it was, so what
+    // was typed stays in sight under its error instead of being cleared and sent as none.
+    const unreadable = !Number.isFinite(value) && field.missing === null && box.validity.badInput;
+    this.unreadable.update((keys) => {
+      const next = new Set(keys);
+      if (unreadable) next.add(field.key);
+      else next.delete(field.key);
+      return next;
+    });
+    if (unreadable) return;
+    this.entry.update((entry) => ({
+      ...entry,
+      [field.key]: Number.isFinite(value) ? value : null,
+    }));
   }
 
   protected setNote(note: string): void {

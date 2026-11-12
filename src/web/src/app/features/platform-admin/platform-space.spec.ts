@@ -5,13 +5,17 @@ import { of, Subject, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CsrfService } from '../../core/security/csrf.service';
 import { UiSheet } from '../../ui/sheet';
-import { chosenDay, fill, press, settle } from '../../../testing/dom';
+import { button, chosenDay, fill, press, settle } from '../../../testing/dom';
 import {
   adminFounding,
+  amounts,
   atlasDetail,
+  clientGrant,
   endedFounding,
   foundingTerms,
+  invoice,
   NOW,
+  plan,
   SPACE_IDS,
   TODAY,
 } from '../../../testing/platform-admin-fixtures';
@@ -39,6 +43,8 @@ async function render(
     voidInvoice: vi.fn(() => of({})),
     grantDiscount: vi.fn(() => of({})),
     revokeDiscount: vi.fn(() => of({})),
+    grantIncludedClients: vi.fn(() => of({})),
+    revokeIncludedClientGrant: vi.fn(() => of({})),
     getLegalDocuments: vi.fn(),
     publishLegalDocument: vi.fn(),
     withdrawLegalDocument: vi.fn(),
@@ -719,6 +725,9 @@ describe('Platform billing: one coaching space', () => {
       expect(textOf(sheet)).toContain(
         'The badge leaves the coach’s account and their clients’ Me page at once. The discount is not changed: revoke it separately if it should end.',
       );
+      expect(textOf(sheet)).toContain(
+        'From next month’s invoice, the owner’s seat includes what the price plan’s seat includes, and extra clients already granted stay until you revoke them. To take only the badge away, the coach can hide it.',
+      );
       expect(textOf(sheet)).not.toMatch(NEVER);
       press(sheet, 'Harm to clients');
       await settle(view.fixture);
@@ -936,6 +945,374 @@ describe('Platform billing: one coaching space', () => {
       expect(textOf(founding.querySelector('[data-founding-history] .history-end'))).toBe(
         'Ended Aug 20, 2026: The coach asked to leave the founding group',
       );
+    });
+  });
+
+  describe('extra included clients and the founding seat (notes plan N11b)', () => {
+    const grants = (host: HTMLElement) => host.querySelector('[data-client-grants]');
+    const seat = (host: HTMLElement) =>
+      textOf(host.querySelector('[data-founding] [data-founding-seat]'));
+
+    it('adds nothing to a space never founding and never granted, so it looks as it did', async () => {
+      const { host } = await render();
+
+      expect(grants(host)).toBeNull();
+      expect(host.querySelector('[data-founding-seat]')).toBeNull();
+      expect(host.querySelector('[data-invoice-included]')).toBeNull();
+      expect(textOf(host)).not.toContain('Extra included clients');
+    });
+
+    it('shows a founding space an empty panel after Discounts, and what its owner’s seat includes', async () => {
+      const { host } = await render(() =>
+        atlasDetail({ founding: adminFounding('Waiting', false, 13) }),
+      );
+
+      const panel = grants(host)!;
+      expect(textOf(panel.querySelector('h2'))).toBe('Extra included clients');
+      expect(textOf(panel.querySelector('[data-no-client-grants]'))).toBe(
+        'No extra clients. A grant adds its clients to the invoice of each month it covers.',
+      );
+      expect(panel.querySelector('[data-grant-clients]')).not.toBeNull();
+      const sections = Array.from(host.querySelectorAll('section.panel'));
+      const discounts = host.querySelector('#discounts-heading')!.closest('section')!;
+      expect(sections.indexOf(panel as HTMLElement)).toBe(sections.indexOf(discounts) + 1);
+      expect(seat(host)).toBe('Its owner’s seat includes 13 clients while it stays founding.');
+    });
+
+    it('says the price plan’s seat applies while no founding number above it is published', async () => {
+      const { host } = await render(() => atlasDetail({ founding: adminFounding('Earned') }));
+
+      expect(seat(host)).toBe(
+        'Its owner’s seat includes what the price plan’s seat includes: no founding number above it is published yet.',
+      );
+    });
+
+    it('lists each grant with its clients, days, note and state, and revokes one after asking', async () => {
+      const view = await render(() =>
+        atlasDetail({
+          founding: adminFounding(),
+          includedClientGrants: [
+            clientGrant(),
+            clientGrant({
+              id: 'grant-0',
+              clients: 1,
+              note: 'Brought Lea Khoury',
+              revokedAtUtc: '2026-09-03T09:00:00Z',
+            }),
+          ],
+        }),
+      );
+
+      const rows = Array.from(view.host.querySelectorAll('[data-client-grant]'));
+      expect(rows.map((row) => row.getAttribute('data-client-grant'))).toEqual([
+        'grant-1',
+        'grant-0',
+      ]);
+      expect(textOf(rows[0].querySelector('.percent'))).toBe('7 clients');
+      expect(textOf(rows[0])).toContain('Sep 1, 2026 to Nov 30, 2026');
+      expect(textOf(rows[0])).toContain('Brought Karim Haddad');
+      expect(textOf(rows[0].querySelector('app-status-pill'))).toBe('Running now');
+      expect(textOf(rows[1].querySelector('.percent'))).toBe('1 client');
+      expect(textOf(rows[1].querySelector('app-status-pill'))).toBe('Revoked');
+      expect(rows[1].querySelector('button')).toBeNull();
+      // A grant row is not a discount row: the discounts' list stays as it was.
+      expect(view.host.querySelectorAll('[data-discount]')).toHaveLength(2);
+
+      press(view.host, 'Revoke 7 clients Brought Karim Haddad');
+      await settle(view.fixture);
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Revoke these extra clients?');
+      expect(textOf(dialog()!)).not.toMatch(
+        /\b(verified|certified|qualified|licensed|approved)\b/i,
+      );
+      expect(textOf(dialog()!)).toContain(
+        'Revoke these 7 extra clients (Sep 1, 2026 to Nov 30, 2026)? Invoices already issued keep them; invoices from now on will not have them.',
+      );
+      press(dialog()!, 'Keep them');
+      await settle(view.fixture);
+      expect(view.api.revokeIncludedClientGrant).not.toHaveBeenCalled();
+
+      press(view.host, 'Revoke 7 clients Brought Karim Haddad');
+      await settle(view.fixture);
+      press(dialog()!, 'Revoke clients');
+      await settle(view.fixture);
+      expect(view.api.revokeIncludedClientGrant).toHaveBeenCalledWith('grant-1');
+      expect(view.csrf.refresh.mock.invocationCallOrder.at(-1)).toBeLessThan(
+        view.api.revokeIncludedClientGrant.mock.invocationCallOrder[0],
+      );
+      expect(toast()).toContain('Extra clients revoked.');
+      expect(view.api.getWorkspace).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives the panel’s heading the focus once the revoked row’s Revoke is gone', async () => {
+      let detail = atlasDetail({
+        founding: adminFounding(),
+        includedClientGrants: [clientGrant()],
+      });
+      const view = await render(() => detail, {
+        revokeIncludedClientGrant: vi.fn(() => {
+          detail = atlasDetail({
+            founding: adminFounding(),
+            includedClientGrants: [clientGrant({ revokedAtUtc: NOW })],
+          });
+          return of({});
+        }),
+      });
+
+      const revoke = button(view.host, 'Revoke 7 clients Brought Karim Haddad');
+      revoke.focus();
+      revoke.click();
+      await settle(view.fixture);
+      press(dialog()!, 'Revoke clients');
+      await settle(view.fixture);
+
+      expect(view.host.querySelector('[data-client-grant] button')).toBeNull();
+      expect(document.activeElement).toBe(view.host.querySelector('#grants-heading'));
+    });
+
+    it('leaves the focus where the admin moved it while the space was read again', async () => {
+      const revoked = atlasDetail({
+        founding: adminFounding(),
+        includedClientGrants: [clientGrant({ revokedAtUtc: NOW })],
+      });
+      const reread = new Subject<AdminWorkspaceDetail>();
+      let reads = 0;
+      const view = await render(atlasDetail, {
+        getWorkspace: vi.fn(() =>
+          ++reads === 1
+            ? of(atlasDetail({ founding: adminFounding(), includedClientGrants: [clientGrant()] }))
+            : reread,
+        ),
+      });
+
+      const revoke = button(view.host, 'Revoke 7 clients Brought Karim Haddad');
+      revoke.focus();
+      revoke.click();
+      await settle(view.fixture);
+      press(dialog()!, 'Revoke clients');
+      await settle(view.fixture);
+      // The read is still out: the admin opens Grant extra clients and starts typing.
+      press(view.host, 'Grant extra clients');
+      await settle(view.fixture);
+      const clients = dialog()!.querySelector<HTMLInputElement>('input[name="clients"]')!;
+      clients.focus();
+
+      reread.next(revoked);
+      reread.complete();
+      await settle(view.fixture);
+      expect(view.host.querySelector('[data-client-grant] button')).toBeNull();
+      expect(document.activeElement).toBe(clients);
+    });
+
+    it('says a refused revoke in the server’s words and reads the space again', async () => {
+      const view = await render(
+        () =>
+          atlasDetail({
+            founding: adminFounding(),
+            includedClientGrants: [clientGrant({ clients: 1 })],
+          }),
+        {
+          revokeIncludedClientGrant: vi.fn(() =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 409,
+                  error: {
+                    code: 'grant_revoked',
+                    message: 'These extra clients were already revoked.',
+                  },
+                }),
+            ),
+          ),
+        },
+      );
+
+      press(view.host, 'Revoke 1 client Brought Karim Haddad');
+      await settle(view.fixture);
+      // One client reads in the singular throughout: the title, the question and both answers.
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Revoke this extra client?');
+      expect(textOf(dialog()!)).toContain(
+        'Revoke this extra client (Sep 1, 2026 to Nov 30, 2026)? Invoices already issued keep it; invoices from now on will not have it.',
+      );
+      expect(button(dialog()!, 'Keep it')).toBeTruthy();
+      press(dialog()!, 'Revoke client');
+      await settle(view.fixture);
+      expect(toast()).toContain('These extra clients were already revoked.');
+      expect(view.api.getWorkspace).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the grants of a space whose founding status ended, with Revoke and without Grant', async () => {
+      const { host } = await render(() =>
+        atlasDetail({
+          founding: null,
+          foundingHistory: [endedFounding()],
+          includedClientGrants: [
+            clientGrant({ startsOn: '2026-11-01', endsOnExclusive: '2027-02-01' }),
+          ],
+        }),
+      );
+
+      const panel = grants(host)!;
+      expect(panel).not.toBeNull();
+      expect(panel.querySelector('[data-grant-clients]')).toBeNull();
+      expect(textOf(panel.querySelector('app-status-pill'))).toBe('Starts later');
+      expect(textOf(panel.querySelector('button'))).toBe('Revoke 7 clients Brought Karim Haddad');
+      expect(host.querySelector('[data-founding-seat]')).toBeNull();
+    });
+
+    it('grants extra clients for next month alone by default, then reads the space again', async () => {
+      const view = await render(() => atlasDetail({ founding: adminFounding() }));
+
+      press(view.host, 'Grant extra clients');
+      await settle(view.fixture);
+      const sheet = dialog()!;
+      expect(textOf(sheet.querySelector('h2'))).toBe('Grant extra clients');
+      expect(await chosenDay(view.fixture, sheet, 'First day')).toBe('2026-11-01');
+      expect(await chosenDay(view.fixture, sheet, 'Last day')).toBe('2026-11-30');
+      fill(sheet, 'Clients', '7');
+      fill(sheet, 'What it is for', 'Brought Karim Haddad');
+      press(sheet, 'Grant clients');
+      await settle(view.fixture);
+
+      expect(view.api.grantIncludedClients).toHaveBeenCalledWith(
+        SPACE_IDS.atlas,
+        7,
+        '2026-11-01',
+        '2026-12-01',
+        'Brought Karim Haddad',
+      );
+      expect(dialog()).toBeNull();
+      expect(toast()).toContain('Extra clients granted.');
+      expect(view.api.getWorkspace).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks before discarding a grant typed but not sent', async () => {
+      const view = await render(() => atlasDetail({ founding: adminFounding() }));
+
+      press(view.host, 'Grant extra clients');
+      await settle(view.fixture);
+      fill(dialog()!, 'Clients', '7');
+      await settle(view.fixture);
+      dialog()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+      await settle(view.fixture);
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Discard what you typed?');
+      press(dialog()!, 'Keep editing');
+      await settle(view.fixture);
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Grant extra clients');
+      expect(view.api.grantIncludedClients).not.toHaveBeenCalled();
+    });
+
+    it('names the founding terms an invoice used and where its included clients came from', async () => {
+      const counted = invoice({
+        foundingSeatIncludedClients: 13,
+        foundingTermsVersion: 2,
+        grantedIncludedClients: 7,
+        amounts: amounts({
+          includedClients: 30,
+          seatIncludedClients: 15,
+          foundingIncludedClients: 8,
+          grantedIncludedClients: 7,
+        }),
+      });
+      const base = atlasDetail();
+      const { host } = await render(() =>
+        atlasDetail({
+          founding: adminFounding('Waiting', false, 13),
+          invoices: [counted, ...base.invoices.slice(1)],
+          currentMonth: {
+            ...base.currentMonth,
+            amounts: amounts({
+              includedClients: 22,
+              seatIncludedClients: 15,
+              grantedIncludedClients: 7,
+            }),
+          },
+        }),
+      );
+
+      const sept = invoiceRow(host, 'invoice-sep');
+      expect(textOf(sept.querySelector('.inv-detail'))).toBe(
+        'Was due Oct 8, 2026, read-only from Oct 15, 2026 · Plan version 1 · founding terms v2 · 3 seats · 14 clients',
+      );
+      expect(textOf(sept.querySelector('[data-invoice-included]'))).toBe(
+        'Clients with a plan: 14, 30 included: 15 with your seats, 8 more as a founding space, 7 more granted',
+      );
+      // A plain invoice of the same space shows as before.
+      expect(invoiceRow(host, 'invoice-aug').querySelector('[data-invoice-included]')).toBeNull();
+      expect(
+        Array.from(host.querySelectorAll('[data-current-month] .lines > div')).map((line) =>
+          textOf(line.querySelector('dt')),
+        )[1],
+      ).toBe('Clients with a plan: 14, 22 included: 15 with your seats, 7 more granted');
+    });
+
+    it('says in the mark sheet what the owner’s seat includes under the terms in force, beside the plan’s', async () => {
+      const sentence = () => textOf(dialog()!.querySelector('[data-founding-seat-sentence]'));
+      const mark = async (seatClients: number | null, planSeat: number | null) => {
+        const view = await render(
+          atlasDetail,
+          {
+            getPricePlans: vi.fn(() =>
+              planSeat === null
+                ? throwError(() => new HttpErrorResponse({ status: 500 }))
+                : of([plan({ includedClientsPerSeat: planSeat })]),
+            ),
+          },
+          {
+            getFoundingTerms: vi.fn(() =>
+              of([foundingTerms({ foundingSeatIncludedClients: seatClients })]),
+            ),
+          },
+        );
+        press(view.host, 'Mark as founding');
+        await settle(view.fixture);
+        return view;
+      };
+
+      const raised = await mark(13, 5);
+      expect(raised.api.getPricePlans).toHaveBeenCalledTimes(1);
+      expect(textOf(dialog()!.querySelector('.about'))).toContain(
+        'The space’s owner holds the badge once it is earned. Marking changes no access.',
+      );
+      expect(sentence()).toBe(
+        'Marking changes no access. While the space stays founding, its owner’s seat includes 13 clients (the terms in force).',
+      );
+      document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+      TestBed.resetTestingModule();
+
+      await mark(13, 20);
+      expect(sentence()).toBe(
+        'Marking changes no access. While the space stays founding, its owner’s seat includes what the price plan’s seat includes: no founding number above it is published yet.',
+      );
+      document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+      TestBed.resetTestingModule();
+
+      // The plan could not be read: the number in force is named as published.
+      await mark(13, null);
+      expect(sentence()).toBe(
+        'Marking changes no access. While the space stays founding, its owner’s seat includes 13 clients (the terms in force).',
+      );
+      document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+      TestBed.resetTestingModule();
+
+      await mark(null, 5);
+      expect(sentence()).toBe(
+        'Marking changes no access. While the space stays founding, its owner’s seat includes what the price plan’s seat includes: no founding number above it is published yet.',
+      );
+    });
+
+    it('marks a space even when neither the terms nor the plan can be read', async () => {
+      const view = await render(
+        atlasDetail,
+        { getPricePlans: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))) },
+        { getFoundingTerms: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))) },
+      );
+
+      press(view.host, 'Mark as founding');
+      await settle(view.fixture);
+      expect(textOf(dialog()!.querySelector('[data-founding-seat-sentence]'))).toBe(
+        'Marking changes no access. While the space stays founding, its owner’s seat includes what the terms in force give a founding seat.',
+      );
+      expect(textOf(dialog()!.querySelector('h2'))).toBe('Mark as founding');
     });
   });
 
