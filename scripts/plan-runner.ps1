@@ -16,8 +16,10 @@ runs the section 0 table of docs/UI-REDESIGN-PLAN.md, which the owner marked com
 
 Each step is a new `claude -p` chat on -Model at -Effort: Fable 5.2 at extra-high effort since
 2026-11-12 (the owner's word; Opus 5.5 at max effort before), unless -RowModels names another
-model for its row (the owner put R6.2 on Fable on 2026-10-11). It gets the plan's opening in
-$planPrompts plus the unattended-run rules in $sharedRules below. The owner decided on
+model for its row (the owner put R6.2 on Fable on 2026-10-11). A chat on -FallbackModel runs at
+-FallbackEffort: Opus 5.5 at max effort once Fable's weekly limit is used up (the owner,
+2026-11-12). It gets the plan's opening in $planPrompts plus the unattended-run rules in
+$sharedRules below. The owner decided on
 2026-10-11, and again for the audit on 2026-10-19, that such a chat commits its own step once
 every check AGENTS.md asks for is green. A chat never pushes: a deny rule blocks git push.
 The runner itself pushes the branch after each step that ends Done (the owner, 2026-10-29),
@@ -59,6 +61,7 @@ to one fix chat, and the check runs once more after it. -FinalCheck runs only th
 .\scripts\plan-runner.ps1 -WaitForIdle  # wait until other chats are finished, then run
 .\scripts\plan-runner.ps1 -WaitForIdle -NoNewStepAfter 08:00   # a night run that leaves the morning free
 .\scripts\plan-runner.ps1 -WaitForIdle -ResumeSession <id>     # carry on with the step a limit stopped
+.\scripts\plan-runner.ps1 -WaitForIdle -Force   # the first step does not wait for other chats to be quiet
 .\scripts\plan-runner.ps1 -FinalCheck   # the full backend suite and Vitest now, a fix chat if they fail
 #>
 [CmdletBinding()]
@@ -83,6 +86,10 @@ param(
     # After a weekly limit the chat carries on with this model, and so do later rows until that
     # limit resets (the owner, 2026-10-12). An empty string stops the runner instead.
     [string]$FallbackModel = 'claude-opus-5-5',
+    # The effort of a chat on -FallbackModel (the owner, 2026-11-12: Opus 5.5 at max effort once
+    # Fable's weekly limit is used up).
+    [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
+    [string]$FallbackEffort = 'max',
     # A weekly limit no other model can take over from: wait for its reset, or stop the run.
     [ValidateSet('wait', 'stop')]
     [string]$OnWeeklyLimit = 'wait',
@@ -93,6 +100,7 @@ param(
     [switch]$SelfTest,
     # Only the final check: the full backend suite and Vitest on the current commit, a fix chat if they fail.
     [switch]$FinalCheck,
+    # The first step does not wait for other chats to be quiet; changed tracked files still block it.
     [switch]$Force
 )
 
@@ -488,11 +496,17 @@ function Get-RowModel([string]$RowId) {
     return $chosen
 }
 
+# A chat on the fallback model runs at -FallbackEffort, every other chat at -Effort.
+function Get-ChatEffort([string]$ChatModel) {
+    if ($FallbackModel -and $ChatModel -eq $FallbackModel -and $ChatModel -ne $model) { return $FallbackEffort }
+    return $effort
+}
+
 function Get-RowModelText {
     $pairs = @($RowModels.Keys | Sort-Object | ForEach-Object { '{0} on {1}' -f $_, $RowModels[$_] })
     $text = 'every row on {0}' -f $model
     if ($pairs.Count -gt 0) { $text = '{0}; every other row on {1}' -f ($pairs -join ', '), $model }
-    if ($FallbackModel) { $text += '; after a weekly limit, {0}' -f $FallbackModel }
+    if ($FallbackModel) { $text += '; after a weekly limit, {0} at {1} effort' -f $FallbackModel, $FallbackEffort }
     return $text
 }
 
@@ -699,7 +713,8 @@ function Invoke-Chat {
         [string[]]$ExtraArgs = @(),
         [string[]]$ExtraDeny = @()
     )
-    $argList = @('-p', '--model', $ChatModel, '--effort', $effort,
+    $chatEffort = Get-ChatEffort $ChatModel
+    $argList = @('-p', '--model', $ChatModel, '--effort', $chatEffort,
         '--permission-mode', 'bypassPermissions', '--permission-prompts', 'none',
         '--output-format', 'stream-json', '--verbose', '--name', ('"{0}"' -f $Name))
     if ($ResumeId) { $argList += @('--resume', $ResumeId) }
@@ -724,7 +739,7 @@ function Invoke-Chat {
     $startInfo.RedirectStandardError = $true
     $startInfo.StandardOutputEncoding = $utf8
     $startInfo.StandardErrorEncoding = $utf8
-    $startInfo.EnvironmentVariables['CLAUDE_CODE_EFFORT_LEVEL'] = $effort
+    $startInfo.EnvironmentVariables['CLAUDE_CODE_EFFORT_LEVEL'] = $chatEffort
     $startInfo.EnvironmentVariables['CLAUDE_CODE_SUBAGENT_MODEL'] = $ChatModel
     # Print mode stops background tasks 10 minutes after the chat's last turn and exits; a chat that ends its
     # turn to wait for its own workflow lost N3b that way (2026-11-06). $StepHours is the limit instead.
@@ -925,9 +940,9 @@ function Invoke-Step($Row, [string]$ResumeId = '', [string]$FirstPrompt = '') {
     $prompt = $firstText
     if ($ResumeId) {
         $prompt = $stoppedResumePrompt -f $Row.Id
-        Write-Note ('Resuming chat {0} for {1} ({2}, effort {3}). Log: {4}' -f $ResumeId, $Row.Id, $stepModel, $effort, $log)
+        Write-Note ('Resuming chat {0} for {1} ({2}, effort {3}). Log: {4}' -f $ResumeId, $Row.Id, $stepModel, (Get-ChatEffort $stepModel), $log)
     }
-    else { Write-Note ('Starting {0} in a new chat ({1}, effort {2}). Log: {3}' -f $Row.Id, $stepModel, $effort, $log) }
+    else { Write-Note ('Starting {0} in a new chat ({1}, effort {2}). Log: {3}' -f $Row.Id, $stepModel, (Get-ChatEffort $stepModel), $log) }
 
     $run = Invoke-Chat -Prompt $prompt -Name $name -WorkDir $repositoryRoot -LogPath $log -ChatModel $stepModel -ResumeId $ResumeId
     $fallbackNotes = New-Object System.Collections.Generic.List[string]
@@ -947,7 +962,7 @@ function Invoke-Step($Row, [string]$ResumeId = '', [string]$FirstPrompt = '') {
             # A used-up weekly window resets days later: carry on with the fallback model, or stop.
             if ($FallbackModel -and $stepModel -ne $FallbackModel) {
                 $script:exhaustedUntil[$stepModel] = (Get-Date).AddSeconds([Math]::Max($delay, 24 * 3600))
-                $note = '{0} hit a limit that resets {1} ("{2}"); the chat carries on with {3}, and so do later rows until then' -f $stepModel, $resetText, $reason, $FallbackModel
+                $note = '{0} hit a limit that resets {1} ("{2}"); the chat carries on with {3} at {4} effort, and so do later rows until then' -f $stepModel, $resetText, $reason, $FallbackModel, $FallbackEffort
                 Write-Note $note
                 $fallbackNotes.Add($note)
                 $stepModel = $FallbackModel
@@ -1301,7 +1316,7 @@ function Show-DryRun {
     foreach ($chat in @(Get-RecentChats)) {
         Write-Note ('Active in the last {0} min: "{1}" ({2}), {3} min ago' -f $IdleMinutes, $chat.Title, $chat.Id, $chat.Minutes)
     }
-    $blocker = Get-StartBlocker $true ([bool]$ResumeSession)
+    $blocker = Get-StartBlocker (-not $Force) ([bool]$ResumeSession)
     if ($blocker) { Write-Note ('Would not start now: ' + $blocker) }
     else { Write-Note 'Nothing blocks a start now.' }
     $row = Get-NextRow

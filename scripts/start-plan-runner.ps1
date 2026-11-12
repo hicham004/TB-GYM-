@@ -7,7 +7,8 @@ Registers (or replaces) a scheduled task that runs the plan runner in its own Po
 under the current user with no time limit, then starts it. The runner builds the plan's Open rows
 (by default the notes plan, -Plan notes, since 2026-11-05; -Plan motion, -Plan critique, -Plan audit
 and -Plan ui are finished) one fresh
-chat at a time (on -Model at -Effort: Fable 5.2 at extra-high effort, the owner's word of 2026-11-12)
+chat at a time (on -Model at -Effort: Fable 5.2 at extra-high effort, the owner's word of 2026-11-12;
+once its weekly limit is used up, Opus 5.5 at -FallbackEffort, max, the owner's word that afternoon)
 until every row is Done or waits for the owner, pushing each row that ends Done
 (-NoPush keeps commits local) and waiting out a used-up weekly limit (-OnWeeklyLimit stop ends the
 run instead), the owner's choices of 2026-10-29. It stops early at the first gate, Optional row or
@@ -19,6 +20,7 @@ the lid open). Windows asks for nothing: the task runs as you, already signed in
 
 .EXAMPLE
 .\scripts\start-plan-runner.ps1                 # every Open row (up to 40 steps), after other chats are 20 min quiet
+.\scripts\start-plan-runner.ps1 -Now            # the same, starting at once
 .\scripts\start-plan-runner.ps1 -MaxSteps 2 -NoNewStepAfter 08:00
 .\scripts\start-plan-runner.ps1 -ResumeSession <id>   # first carry on with the chat a weekly limit stopped
 .\scripts\start-plan-runner.ps1 -Status         # task state and the last log lines
@@ -40,6 +42,11 @@ param(
     [string]$Model = 'claude-fable-5-2',
     [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
     [string]$Effort = 'xhigh',
+    # The effort of a chat that carries on with Opus 5.5 after -Model's weekly limit (the owner, 2026-11-12).
+    [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
+    [string]$FallbackEffort = 'max',
+    # The first step starts at once instead of after 20 quiet minutes of other chats (the owner, 2026-11-12).
+    [switch]$Now,
     [ValidateSet('wait', 'stop')]
     [string]$OnWeeklyLimit = 'wait',
     [switch]$NoPush,
@@ -94,10 +101,11 @@ if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Aut
 if (Test-Path $stopFile) { Remove-Item $stopFile -Force }
 
 Write-Host '--- what the runner would do now ---'
-& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter -ResumeSession $ResumeSession -OnWeeklyLimit $OnWeeklyLimit -StepHours $StepHours -Model $Model -Effort $Effort -NoPush:$NoPush
+& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter -ResumeSession $ResumeSession -OnWeeklyLimit $OnWeeklyLimit -StepHours $StepHours -Model $Model -Effort $Effort -FallbackEffort $FallbackEffort -Force:$Now -NoPush:$NoPush
 
-$arguments = '-NoExit -ExecutionPolicy Bypass -File "{0}" -Plan {1} -WaitForIdle -MaxSteps {2} -OnWeeklyLimit {3} -StepHours {4} -Model {5} -Effort {6}' -f $runner, $Plan, $MaxSteps, $OnWeeklyLimit, $StepHours, $Model, $Effort
+$arguments = '-NoExit -ExecutionPolicy Bypass -File "{0}" -Plan {1} -WaitForIdle -MaxSteps {2} -OnWeeklyLimit {3} -StepHours {4} -Model {5} -Effort {6} -FallbackEffort {7}' -f $runner, $Plan, $MaxSteps, $OnWeeklyLimit, $StepHours, $Model, $Effort, $FallbackEffort
 if ($NoPush) { $arguments += ' -NoPush' }
+if ($Now) { $arguments += ' -Force' }
 if ($NoNewStepAfter) { $arguments += ' -NoNewStepAfter {0}' -f $NoNewStepAfter }
 if ($ResumeSession) { $arguments += ' -ResumeSession {0}' -f $ResumeSession }
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $root
