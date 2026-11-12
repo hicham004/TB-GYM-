@@ -7,7 +7,8 @@ Registers (or replaces) a scheduled task that runs the plan runner in its own Po
 under the current user with no time limit, then starts it. The runner builds the plan's Open rows
 (by default the notes plan, -Plan notes, since 2026-11-05; -Plan motion, -Plan critique, -Plan audit
 and -Plan ui are finished) one fresh
-chat at a time until every row is Done or waits for the owner, pushing each row that ends Done
+chat at a time (on -Model at -Effort: Fable 5.2 at extra-high effort, the owner's word of 2026-11-12)
+until every row is Done or waits for the owner, pushing each row that ends Done
 (-NoPush keeps commits local) and waiting out a used-up weekly limit (-OnWeeklyLimit stop ends the
 run instead), the owner's choices of 2026-10-29. It stops early at the first gate, Optional row or
 step that does not end Done, or, when given -NoNewStepAfter, before a step that would start after
@@ -35,6 +36,10 @@ param(
     # The session id of the chat a limit stopped (runner.log names it); its work is still in the tree.
     [string]$ResumeSession = '',
     [int]$MaxSteps = 40,
+    # Every chat's model and effort (the owner, 2026-11-12: Fable 5.2 at extra-high effort).
+    [string]$Model = 'claude-fable-5-2',
+    [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
+    [string]$Effort = 'xhigh',
     [ValidateSet('wait', 'stop')]
     [string]$OnWeeklyLimit = 'wait',
     [switch]$NoPush,
@@ -89,9 +94,9 @@ if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Aut
 if (Test-Path $stopFile) { Remove-Item $stopFile -Force }
 
 Write-Host '--- what the runner would do now ---'
-& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter -ResumeSession $ResumeSession -OnWeeklyLimit $OnWeeklyLimit -StepHours $StepHours -NoPush:$NoPush
+& $runner -DryRun -Plan $Plan -NoNewStepAfter $NoNewStepAfter -ResumeSession $ResumeSession -OnWeeklyLimit $OnWeeklyLimit -StepHours $StepHours -Model $Model -Effort $Effort -NoPush:$NoPush
 
-$arguments = '-NoExit -ExecutionPolicy Bypass -File "{0}" -Plan {1} -WaitForIdle -MaxSteps {2} -OnWeeklyLimit {3} -StepHours {4}' -f $runner, $Plan, $MaxSteps, $OnWeeklyLimit, $StepHours
+$arguments = '-NoExit -ExecutionPolicy Bypass -File "{0}" -Plan {1} -WaitForIdle -MaxSteps {2} -OnWeeklyLimit {3} -StepHours {4} -Model {5} -Effort {6}' -f $runner, $Plan, $MaxSteps, $OnWeeklyLimit, $StepHours, $Model, $Effort
 if ($NoPush) { $arguments += ' -NoPush' }
 if ($NoNewStepAfter) { $arguments += ' -NoNewStepAfter {0}' -f $NoNewStepAfter }
 if ($ResumeSession) { $arguments += ' -ResumeSession {0}' -f $ResumeSession }

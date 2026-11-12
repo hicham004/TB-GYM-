@@ -14,7 +14,8 @@ the fix batches in section 0 of docs/FULL-AUDIT-2026-10.md, all Done on 2026-10-
 runs the section 0 table of docs/UI-REDESIGN-PLAN.md, which the owner marked complete on
 2026-10-13.
 
-Each step is a new `claude -p` chat at max effort, on Opus unless -RowModels names another
+Each step is a new `claude -p` chat on -Model at -Effort: Fable 5.2 at extra-high effort since
+2026-11-12 (the owner's word; Opus 5.5 at max effort before), unless -RowModels names another
 model for its row (the owner put R6.2 on Fable on 2026-10-11). It gets the plan's opening in
 $planPrompts plus the unattended-run rules in $sharedRules below. The owner decided on
 2026-10-11, and again for the audit on 2026-10-19, that such a chat commits its own step once
@@ -72,7 +73,12 @@ param(
     [double]$StepHours = 8,
     [int]$IdleMinutes = 20,
     [int]$MaxLimitWaits = 12,
-    # Row id pattern (-like) to model; a row matching none runs on $model below.
+    # Every chat's model and effort (the owner, 2026-11-12: Fable 5.2 at extra-high effort; Opus 5.5 at
+    # max before). The rest of the script reads them as $model and $effort.
+    [string]$Model = 'claude-fable-5-2',
+    [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
+    [string]$Effort = 'xhigh',
+    # Row id pattern (-like) to model; a row matching none runs on -Model.
     [hashtable]$RowModels = @{ 'R6.2*' = 'claude-fable-5-1'; 'W*' = 'claude-fable-5-1' },
     # After a weekly limit the chat carries on with this model, and so do later rows until that
     # limit resets (the owner, 2026-10-12). An empty string stops the runner instead.
@@ -100,8 +106,6 @@ $logDir = Join-Path $repositoryRoot 'artifacts\plan-runner'
 $stopFile = Join-Path $logDir 'STOP'
 $lockFile = Join-Path $logDir 'runner.lock'
 $summaryPath = Join-Path $logDir 'summary.md'
-$model = 'claude-opus-5-5'
-$effort = 'max'
 # Models whose weekly limit is used up, with when to try them again; their rows run on $FallbackModel.
 $script:exhaustedUntil = @{}
 # Set when a push needs the owner (commits on origin that the branch lacks, or an origin not on GitHub).

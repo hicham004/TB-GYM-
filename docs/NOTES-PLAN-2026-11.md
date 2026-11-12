@@ -45,7 +45,8 @@ its own waits for the owner in section 3.
 ## 1. How a row is built
 
 **Where.** On this laptop, by the plan runner: `.\scripts\start-plan-runner.ps1 -Plan notes`, one fresh chat per Open
-row on Opus 5.5 at max effort, with ultracode on: the chat orchestrates its understanding of the area, the build and an
+row on Fable 5.2 at extra-high effort since 12 November (the owner's word that day; Opus 5.5 at max effort before),
+with ultracode on: the chat orchestrates its understanding of the area, the build and an
 adversarial review of its own diff with the Workflow tool (the owner's word of 5 November), within the owner's limits of
 10 November: at most four readers, and one review of at most four lenses with one skeptic a finding, two on security,
 tenancy or money (the review's agents had been half of every row's tokens). A chat builds the first Open row in section
