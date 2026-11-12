@@ -37,10 +37,11 @@ export const ANALYTICS_SCRIPT_PATH = '/stats/';
 export const ANALYTICS_EVENT_ENDPOINT = '/stats/event';
 
 /**
- * The website's own pages, the only addresses ever counted (notes plan N1, DOMAIN-RULES WEB-003): the
- * homepage and What changed. Each counts itself for a visitor who is not signed in (`pageview`).
+ * The website's own pages, the only addresses ever counted (notes plan N1 and N2, DOMAIN-RULES
+ * WEB-003): the homepage, What changed and the sign-up page. Each counts itself for a visitor who is
+ * not signed in (`pageview`). The homepage's address inside the app, `/about`, is not one of them.
  */
-export const COUNTED_PAGES: readonly string[] = ['/', '/changelog'];
+export const COUNTED_PAGES: readonly string[] = ['/', '/changelog', '/auth/register'];
 
 /** The tags Plausible reads from an address to say where a visitor came from: the only query kept. */
 const CAMPAIGN_TAGS: readonly string[] = [
@@ -99,7 +100,7 @@ export function keepPageCounts(payload: PlausiblePayload, origin: string): Plaus
  * so the page connects to nothing else; no cookie is read or set. Nothing happens until the
  * deployment names the site's script (`Website:Analytics:Script`), and never at build time.
  *
- * The script counts nothing on its own: a page view is counted only when one of the website's two
+ * The script counts nothing on its own: a page view is counted only when one of the website's own
  * pages asks for it (`pageview`), so the pages of the app, which a visitor who signs in opens in
  * the same tab, are never counted, and `keepPageCounts` refuses anything else as a second guard.
  */
@@ -144,9 +145,10 @@ export class WebsiteAnalytics {
   }
 
   /**
-   * One count of the page now open, which the page asks for once per opening: the homepage and What
-   * changed, for a visitor. It carries the page's address, so a call queued before the script lands
-   * (or with no script named, kept and never sent) counts the page it was made on.
+   * One count of the page now open, which the page asks for once per opening: the homepage, What
+   * changed and the sign-up page, for a visitor. It carries the page's address, so a call queued
+   * before the script lands (or with no script named, kept and never sent) counts the page it was
+   * made on.
    *
    * It keeps the two rules the script's own counting had: a page opened out of sight (a tab opened
    * behind, the browser's prerender) counts once it is first shown, and not at all if it closes

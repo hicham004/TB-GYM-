@@ -6,6 +6,7 @@ import {
   expectNoHorizontalOverflow,
   json,
   mockSession,
+  NO_WEBSITE_SETTINGS,
   OWNER_MEMBERSHIP,
   SIGNED_IN_USER,
   test,
@@ -435,6 +436,60 @@ test('Name and region asks before its changes are left behind', async ({ page })
   await page.getByRole('dialog').getByRole('button', { name: 'Leave without saving' }).click();
   await expect(page.getByRole('heading', { name: 'Billing', level: 1 })).toBeVisible();
 });
+
+// Notes plan N2: the account menu's link to the website is a navigation like any other, so typed
+// work is asked about before the page is left for /about.
+for (const width of [1440, 390]) {
+  test(`Name and region asks before the account menu’s TB Gym website link leaves its changes behind at ${width}px`, async ({
+    page,
+  }) => {
+    await open(page, '/workspace', 'Name and region', {
+      width,
+      extra: {
+        // What the homepage reads at /about.
+        'GET /api/website/settings': (route) => json(route, 200, NO_WEBSITE_SETTINGS),
+        'GET /api/website/contact-form': (route) => json(route, 200, { stamp: 'e2e-stamp' }),
+      },
+    });
+    const name = page.getByLabel('Coaching space name');
+    const account = page.locator('.account-button');
+    const menu = page.locator('#account-menu');
+    const ask = page.getByRole('dialog');
+
+    await name.fill('Atlas Strength');
+    await account.click();
+    await menu.getByRole('link', { name: 'TB Gym website' }).click();
+    await expect(ask.getByRole('heading', { name: 'Leave without saving?' })).toBeVisible();
+    // Nothing has moved yet: the page and the shell around it are still there, the menu is closed.
+    await expect(page).toHaveURL(/\/workspace$/);
+    await expect(page.locator('app-coach-shell')).toBeVisible();
+    await expect(page.locator('header.topbar')).toBeVisible();
+    await expect(menu).toHaveCount(0);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n2-space-leave-for-website-${width}.png` });
+
+    await ask.getByRole('button', { name: 'Stay' }).click();
+    await expect(ask).toHaveCount(0);
+    await expect(page).toHaveURL(/\/workspace$/);
+    await expect(page.getByRole('heading', { name: 'Name and region', level: 1 })).toBeVisible();
+    await expect(name).toHaveValue('Atlas Strength');
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    await expect(menu).toHaveCount(0);
+    await expect(account).toHaveAttribute('aria-expanded', 'false');
+    await expect(account).toBeFocused();
+    await expect(page.locator('app-coach-shell')).toBeVisible();
+    await expect(page.locator('app-home-header')).toHaveCount(0);
+
+    await account.click();
+    await menu.getByRole('link', { name: 'TB Gym website' }).click();
+    await ask.getByRole('button', { name: 'Leave without saving' }).click();
+    await expect(page).toHaveURL(/\/about$/);
+    await expect(page.getByRole('heading', { level: 1, name: /Coach both/ })).toBeVisible();
+    await expect(page.locator('app-coach-shell')).toHaveCount(0);
+    await expect(page.locator('.topbar')).toHaveCount(0);
+    await expect(ask).toHaveCount(0);
+  });
+}
 
 test('Team invites a coach from a sheet that passes axe', async ({ page }) => {
   const invites: unknown[] = [];

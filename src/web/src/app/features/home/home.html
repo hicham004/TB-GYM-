@@ -1,12 +1,17 @@
 <div class="home tb-theme" [class.home--live]="live()">
-  <a class="skip-link" href="#home-content" i18n>Skip to content</a>
-  <app-home-header [under]="headerTone()" [current]="section()" />
+  <a class="skip-link" [attr.href]="skipTo" i18n>Skip to content</a>
+  <app-home-header
+    [under]="headerTone()"
+    [current]="section()"
+    [page]="page"
+    [signedIn]="signedIn()"
+  />
   <div id="home-content" tabindex="-1">
-    <app-home-hero />
+    <app-home-hero [page]="page" [signedIn]="signedIn()" />
     <app-home-week />
-    <app-home-rows />
-    <app-home-who />
+    <app-home-rows [signedIn]="signedIn()" />
+    <app-home-who [page]="page" [signedIn]="signedIn()" />
     <app-home-talk />
-    <app-home-finale />
+    <app-home-finale [page]="page" [signedIn]="signedIn()" />
   </div>
 </div>

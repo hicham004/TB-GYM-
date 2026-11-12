@@ -2,15 +2,19 @@ import { signal, type DestroyRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { query, settle } from '../../../testing/dom';
+import { TEST_PLACEHOLDERS } from '../../../testing/placeholder-fixtures';
 import { ApiClient } from '../../core/api/api-client';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { WebsiteAnalytics } from '../../core/website/website-analytics';
 import { WebsiteSettingsStore } from '../../core/website/website-settings';
 import { Home } from './home';
+import { FEATURE_ROWS } from './home-content';
 import { HomeMotion, type HomeMotionState, type HomeMotionTargets } from './home-motion';
-import { HOME_PLACEHOLDERS } from './home-placeholder';
+import { HOME_PLACEHOLDERS, type PlaceholderSet } from './home-placeholder';
 import { HomeRows } from './home-rows';
 import { HomeWeek } from './home-week';
 
@@ -72,17 +76,27 @@ function fakeMotion() {
   };
 }
 
-async function render() {
+/** Who opens the page, and on which build: the private pre-launch one is the one with stand-ins. */
+interface Opening {
+  readonly signedIn?: boolean;
+  readonly placeholders?: PlaceholderSet | null;
+}
+
+/** The page's doubles, and the session's answer: `user` is who is signed in, nobody by default. */
+function setUp(opening: Opening = {}) {
   const motion = fakeMotion();
   const closed = vi.fn();
   // The count's end comes with the page's own DestroyRef: the double notes when that page closes.
   const analytics = { pageview: vi.fn((page: DestroyRef) => void page.onDestroy(closed)) };
+  const user = signal<object | null>(opening.signedIn ? { id: 'me' } : null);
   TestBed.configureTestingModule({
     providers: [
-      provideRouter([]),
-      { provide: HOME_PLACEHOLDERS, useValue: null },
+      // The address the page has inside the app (notes plan N2), on the same component.
+      provideRouter([{ path: 'about', component: Home }]),
+      { provide: HOME_PLACEHOLDERS, useValue: opening.placeholders ?? null },
       { provide: ApiClient, useValue: {} },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: AuthStore, useValue: { user } },
       {
         provide: WebsiteSettingsStore,
         useValue: { whatsAppLink: signal(null), load: vi.fn(() => Promise.resolve()) },
@@ -93,20 +107,58 @@ async function render() {
   TestBed.overrideComponent(Home, {
     set: { providers: [{ provide: HomeMotion, useValue: motion }] },
   });
+  return { motion, analytics, closed, user };
+}
+
+/** The homepage at its own address, `/`, which only a visitor reaches. */
+async function render(opening: Opening = {}) {
+  const doubles = setUp(opening);
   const fixture = TestBed.createComponent(Home);
-  const startedBeforeRender = motion.start.mock.calls.length;
-  const countedBeforeRender = analytics.pageview.mock.calls.length;
+  const startedBeforeRender = doubles.motion.start.mock.calls.length;
+  const countedBeforeRender = doubles.analytics.pageview.mock.calls.length;
   await settle(fixture);
   return {
     fixture,
     host: fixture.nativeElement as HTMLElement,
-    motion,
+    ...doubles,
     startedBeforeRender,
-    analytics,
     countedBeforeRender,
-    closed,
   };
 }
+
+/**
+ * The same page inside the app, at `/about` (notes plan N2), opened by the router as the app opens
+ * it. The test router keeps its own address, so the browser's is set beside it, as the count reads it.
+ */
+async function renderAbout(opening: Opening = {}) {
+  const doubles = setUp(opening);
+  history.replaceState(null, '', '/about');
+  const harness = await RouterTestingHarness.create();
+  await harness.navigateByUrl('/about', Home);
+  await settle(harness.fixture);
+  return { fixture: harness.fixture, host: harness.routeNativeElement as HTMLElement, ...doubles };
+}
+
+/** The robots tags in the document, which say whether search engines may show the address. */
+const robots = () => Array.from(document.head.querySelectorAll('meta[name="robots"]'));
+
+/** Every link of the page with an address, in reading order: its words and where it leads. */
+const links = (host: HTMLElement) =>
+  Array.from(host.querySelectorAll('a[href]')).map((link) => ({
+    words: (link.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    href: link.getAttribute('href') ?? '',
+  }));
+
+const hrefs = (host: HTMLElement) => links(host).map((link) => link.href);
+
+const BACK_TO_TODAY = { words: 'Back to Today', href: '/' };
+const SIGN_IN = { words: 'Sign in', href: '/auth/sign-in' };
+const START = { words: 'Start your coaching space', href: '/auth/register' };
+/**
+ * The links to sign-up a visitor meets: Start your coaching space in the phone menu, the hero, the
+ * coach's half and the finale, and the quiet link under each feature row.
+ */
+const SIGN_UP_LINKS = 4 + FEATURE_ROWS.length;
 
 /** What the header shows: the tone it takes and the section its links mark. */
 function header(host: HTMLElement) {
@@ -147,6 +199,7 @@ describe('Home', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     history.replaceState(null, '', '/');
+    for (const tag of robots()) tag.remove();
   });
 
   it('counts the visit once it is drawn in the browser, at the homepage’s address, until the page closes', async () => {
@@ -296,5 +349,191 @@ describe('Home', () => {
     expect(frames.size).toBe(0);
     runFrames();
     expect(headerReads()).toBe(reads);
+  });
+
+  // The same page inside the app, at /about (notes plan N2).
+
+  it('counts nothing inside the app at /about, for a visitor or for someone signed in', async () => {
+    const visitor = await renderAbout();
+    expect(visitor.analytics.pageview).not.toHaveBeenCalled();
+    await settle(visitor.fixture);
+    expect(visitor.analytics.pageview).not.toHaveBeenCalled();
+    // The page did come alive there: only the count is left out.
+    expect(query(visitor.host, '.home').classList).toContain('home--live');
+    expect(visitor.motion.start).toHaveBeenCalledTimes(1);
+    TestBed.resetTestingModule();
+
+    const signedIn = await renderAbout({ signedIn: true });
+    expect(signedIn.analytics.pageview).not.toHaveBeenCalled();
+  });
+
+  it('at /about asks search engines not to show that address while the page is there, and no longer once it has gone', async () => {
+    const { fixture } = await renderAbout();
+
+    expect(robots().map((tag) => tag.getAttribute('content'))).toEqual(['noindex']);
+
+    fixture.destroy();
+    expect(robots()).toHaveLength(0);
+  });
+
+  it('at its own address carries no robots tag, so search engines may show the homepage', async () => {
+    const { fixture } = await render();
+    expect(robots()).toHaveLength(0);
+
+    fixture.destroy();
+    expect(robots()).toHaveLength(0);
+  });
+
+  it.each(['noindex', 'noindex, nofollow'])(
+    'at /about leaves a robots tag the document already has (%s): no second one, and it stays when the page goes',
+    async (content) => {
+      const own = document.createElement('meta');
+      own.setAttribute('name', 'robots');
+      own.setAttribute('content', content);
+      document.head.append(own);
+      const { fixture } = await renderAbout();
+
+      expect(robots()).toHaveLength(1);
+      expect(robots()[0]).toBe(own);
+      expect(own.getAttribute('content')).toBe(content);
+
+      fixture.destroy();
+      expect(robots()).toHaveLength(1);
+      expect(robots()[0]).toBe(own);
+      expect(own.getAttribute('content')).toBe(content);
+    },
+  );
+
+  it('on the private build adds no tag of its own at /about: the header’s says it on every page and stays when the page goes', async () => {
+    const { fixture } = await renderAbout({ placeholders: TEST_PLACEHOLDERS });
+
+    expect(robots().map((tag) => tag.getAttribute('content'))).toEqual(['noindex, nofollow']);
+
+    fixture.destroy();
+    expect(robots().map((tag) => tag.getAttribute('content'))).toEqual(['noindex, nofollow']);
+  });
+
+  it('at /about sends the skip link to the content on that address', async () => {
+    const { host } = await renderAbout();
+
+    const skip = query<HTMLAnchorElement>(host, '.home > a.skip-link');
+    expect(skip.textContent?.trim()).toBe('Skip to content');
+    // A bare fragment would resolve against the base address, which is the homepage's own.
+    expect(skip.getAttribute('href')).toBe('/about#home-content');
+    expect(host.querySelector('.home')?.firstElementChild).toBe(skip);
+    expect(query(host, '#home-content').getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('at /about, signed in, leads back to Today, offers no sign-up or sign-in, and keeps every other link on /about', async () => {
+    const { host } = await renderAbout({ signedIn: true });
+
+    // The header's, the phone menu's and the foot's: the only links that leave for Today.
+    expect(links(host).filter((link) => link.href === '/')).toEqual([
+      BACK_TO_TODAY,
+      BACK_TO_TODAY,
+      BACK_TO_TODAY,
+    ]);
+    expect(host.querySelector('[href="/auth/register"]')).toBeNull();
+    expect(host.querySelector('[href="/auth/sign-in"]')).toBeNull();
+    expect(host.textContent).not.toContain('Start your coaching space');
+    expect(host.textContent).not.toContain('Sign in');
+    expect(query(host, '.clients').textContent?.trim()).toBe(
+      'Here as a client? Your coach sends the invitation.',
+    );
+    expect(hrefs(host).filter((href) => href.startsWith('/#'))).toEqual([]);
+    // Everything else stays on the page, but What changed, a page of its own.
+    expect(hrefs(host).filter((href) => href !== '/' && href !== '/changelog')).toEqual([
+      '/about#home-content',
+      // The wordmark, the three section links, and the three again in the phone menu.
+      '/about',
+      '/about#week',
+      '/about#inside',
+      '/about#for-gyms',
+      '/about#week',
+      '/about#inside',
+      '/about#for-gyms',
+      // Talk to us: the hero's, the gyms' half's and the finale's.
+      '/about#talk',
+      '/about#talk',
+      '/about#talk',
+    ]);
+    // The form those three lead to is on the page.
+    expect(host.querySelector('#talk form')).not.toBeNull();
+  });
+
+  it('at /about a visitor still gets Sign in and Start your coaching space, with the page’s links on /about', async () => {
+    const { host } = await renderAbout();
+
+    const all = links(host);
+    // The header's, the phone menu's, the clients' strip's and the foot's.
+    expect(all.filter((link) => link.href === '/auth/sign-in')).toEqual([
+      SIGN_IN,
+      SIGN_IN,
+      SIGN_IN,
+      SIGN_IN,
+    ]);
+    // The phone menu's, the hero's, the coach's half's and the finale's, besides the six rows' links.
+    const signUp = all.filter((link) => link.href === '/auth/register');
+    expect(signUp.filter((link) => link.words === START.words)).toEqual([
+      START,
+      START,
+      START,
+      START,
+    ]);
+    expect(signUp).toHaveLength(SIGN_UP_LINKS);
+    expect(host.textContent).not.toContain('Back to Today');
+    expect(hrefs(host).filter((href) => href === '/' || href.startsWith('/#'))).toEqual([]);
+    expect(hrefs(host).filter((href) => href.startsWith('/about'))).toEqual([
+      '/about#home-content',
+      '/about',
+      '/about#week',
+      '/about#inside',
+      '/about#for-gyms',
+      '/about#week',
+      '/about#inside',
+      '/about#for-gyms',
+      '/about#talk',
+      '/about#talk',
+      '/about#talk',
+    ]);
+  });
+
+  it('at its own address keeps every link on the homepage’s address, and none on /about', async () => {
+    const { host } = await render();
+
+    expect(hrefs(host).filter((href) => href.startsWith('/about'))).toEqual([]);
+    expect(hrefs(host).filter((href) => href === '/' || /^\/?#/.test(href))).toEqual([
+      '#home-content',
+      '/',
+      '/#week',
+      '/#inside',
+      '/#for-gyms',
+      '/#week',
+      '/#inside',
+      '/#for-gyms',
+      '/#talk',
+      '/#talk',
+      '/#talk',
+    ]);
+    expect(links(host).filter((link) => link.href === '/auth/register')).toHaveLength(
+      SIGN_UP_LINKS,
+    );
+    expect(host.textContent).not.toContain('Back to Today');
+  });
+
+  it('at /about swaps the sign-up and Sign in for Back to Today the moment someone is signed in', async () => {
+    const { fixture, host, user } = await renderAbout();
+    expect(host.querySelectorAll('[href="/auth/register"]')).toHaveLength(SIGN_UP_LINKS);
+
+    user.set({ id: 'me' });
+    await settle(fixture);
+
+    expect(host.querySelector('[href="/auth/register"]')).toBeNull();
+    expect(host.querySelector('[href="/auth/sign-in"]')).toBeNull();
+    expect(links(host).filter((link) => link.href === '/')).toEqual([
+      BACK_TO_TODAY,
+      BACK_TO_TODAY,
+      BACK_TO_TODAY,
+    ]);
   });
 });

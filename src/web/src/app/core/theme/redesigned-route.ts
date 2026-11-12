@@ -1,4 +1,4 @@
-import { ActivatedRouteSnapshot, Data } from '@angular/router';
+import { ActivatedRouteSnapshot, Data, PRIMARY_OUTLET, Router } from '@angular/router';
 
 /**
  * Route data for a screen rebuilt on brand v2: it follows the person's light or dark mode. Every
@@ -42,4 +42,35 @@ export function wantsFullScreen(root: ActivatedRouteSnapshot): boolean {
     if (route.data['fullScreen'] === true) return true;
   }
   return false;
+}
+
+/**
+ * Route data for the website's own page opened inside the app (`/about`, notes plan N2): it fills the
+ * window as a visitor sees it, in TB Gym's colours, with no sidebar, top bar or tabs around it,
+ * whoever is signed in. Its own header leads back.
+ */
+export const WEBSITE_PAGE: Data = { websitePage: true, houseBrand: true };
+
+/** Whether the route is the website's own page, which draws no shell around itself. */
+export function isWebsitePage(root: ActivatedRouteSnapshot): boolean {
+  for (let route: ActivatedRouteSnapshot | null = root; route; route = route.firstChild) {
+    if (route.data['websitePage'] === true) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether the address the app starts at is the website's own page, asked before the router has
+ * recognised anything: the app draws its launch screen in its first moment, and there it must not
+ * draw the frame of a shell that will not come. A hint for that one picture, read from the routes'
+ * own data; from the first navigation's end on, the route decides (`isWebsitePage`).
+ */
+export function startsOnWebsitePage(router: Router, address: string): boolean {
+  const segments = router.parseUrl(address).root.children[PRIMARY_OUTLET]?.segments ?? [];
+  return (
+    segments.length === 1 &&
+    router.config.some(
+      (route) => route.path === segments[0].path && route.data?.['websitePage'] === true,
+    )
+  );
 }

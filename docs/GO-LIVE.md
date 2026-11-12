@@ -98,8 +98,9 @@ For visitor counts without cookies or a banner, open a Plausible account (plausi
 trial), add the site under its domain, and copy the file name of the site's script from Site
 settings > Site installation (it looks like `pa-AbC123.js`) into `TB_GYM_ANALYTICS_SCRIPT`; the
 script and its events pass through this domain, so nothing third-party loads. The numbers are people
-on the website's two pages, the homepage and What changed, none of them signed in: no page of the
-app is counted, and the outbound-link, file and form tracking Plausible ticks for a new site stay off
+on the website's three pages, the homepage, What changed and the sign-up page, none of them signed
+in: no page of the app is counted, the script is not loaded for someone signed in, no cookie is
+passed on to Plausible, and the outbound-link, file and form tracking Plausible ticks for a new site stay off
 in the browser. Restart the API and the
 web container after changing any of the three. Write the privacy note yourself; the code holds none.
 

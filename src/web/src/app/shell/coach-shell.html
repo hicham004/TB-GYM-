@@ -167,6 +167,25 @@
                   <app-theme-switch-art [night]="theme.dark()" />
                 </button>
               </li>
+              <!-- TB Gym's own pages (notes plan N2): the homepage inside the app, which leads back
+                   with Back to Today, and What changed, which stays inside this shell. Owners and
+                   coaches alone have this shell, so clients are never sent there. -->
+              <li class="menu-group">
+                <p class="menu-heading" id="website-menu-heading" i18n translate="no">TB Gym</p>
+                <ul class="menu-list" aria-labelledby="website-menu-heading">
+                  <li>
+                    <!-- One span, so the row's two words do not spread to its two ends. -->
+                    <a class="menu-item" routerLink="/about" (click)="closeForLink()"
+                      ><span i18n><span translate="no">TB Gym</span> website</span></a
+                    >
+                  </li>
+                  <li>
+                    <a class="menu-item" routerLink="/changelog" (click)="closeForLink()" i18n
+                      >What changed</a
+                    >
+                  </li>
+                </ul>
+              </li>
               <!-- A global role, not a workspace one (ADR 0028). Presentation only; the API decides. -->
               @if (auth.user()?.roles?.includes('PlatformAdmin')) {
                 <li>

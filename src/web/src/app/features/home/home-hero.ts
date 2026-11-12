@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { WINDOWS } from './home-pictures';
 import { HomePhone } from './home-phone';
@@ -23,4 +23,10 @@ export class HomeHero {
   readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   protected readonly window = WINDOWS.todayDark;
   protected readonly placeholders = inject(HOME_PLACEHOLDERS);
+
+  /** The page's own address, which the Talk-to-us link stays on (`/about` inside the app). */
+  readonly page = input('/');
+
+  /** Someone is signed in: no sign-up is offered (notes plan N2). */
+  readonly signedIn = input(false);
 }

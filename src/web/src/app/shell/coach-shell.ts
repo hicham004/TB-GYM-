@@ -219,6 +219,17 @@ export class CoachShell {
     }
   }
 
+  /**
+   * A press on one of the menu's links to TB Gym's own pages (notes plan N2): the menu closes at
+   * once and focus goes back to its button. A page that asks before it is left then returns focus
+   * there after "Stay", where the link itself would be gone; and a press on the page already open,
+   * which navigates nowhere, still closes the menu.
+   */
+  protected closeForLink(): void {
+    this.openMenu.set(null);
+    this.accountButton()?.nativeElement.focus();
+  }
+
   protected requestSignOut(): void {
     this.closeEverything();
     this.signOut.emit();

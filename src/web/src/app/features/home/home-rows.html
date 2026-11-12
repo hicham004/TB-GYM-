@@ -16,10 +16,12 @@
         <p class="row__eyebrow">{{ row.eyebrow }}</p>
         <h3 class="row__title" [id]="'row-' + row.id" #rowTitle>{{ row.title }}</h3>
         <p class="row__body">{{ row.body }}</p>
-        <a class="row__link" routerLink="/auth/register">
-          <span>{{ row.link }}</span
-          ><span class="quiet__mark" aria-hidden="true">→</span>
-        </a>
+        @if (!signedIn()) {
+          <a class="row__link" routerLink="/auth/register">
+            <span>{{ row.link }}</span
+            ><span class="quiet__mark" aria-hidden="true">→</span>
+          </a>
+        }
       </div>
       <figure class="pair" [style.--window-width.px]="row.window.width">
         <app-home-window
@@ -42,9 +44,13 @@
 
 <aside class="clients" aria-label="For clients" i18n-aria-label>
   <div class="clients__inner">
-    <p i18n>
-      Here as a client? Your coach sends the invitation. Already joined?
-      <a routerLink="/auth/sign-in">Sign in</a>.
-    </p>
+    @if (signedIn()) {
+      <p i18n>Here as a client? Your coach sends the invitation.</p>
+    } @else {
+      <p i18n>
+        Here as a client? Your coach sends the invitation. Already joined?
+        <a routerLink="/auth/sign-in">Sign in</a>.
+      </p>
+    }
   </div>
 </aside>

@@ -2841,8 +2841,12 @@ out, waiting or dead-lettered, newest first, on the admin page (`GET /api/platfo
 (none until the owner has an account). Analytics loads from this origin alone, through nginx, writes
 no cookie, needs no banner and leaves the CSP as it is; the privacy wording that accompanies it is the
 owner's, never generated. The build-time render of the homepage asks for neither. It counts the
-website's own two pages alone, the homepage and What changed, once each time a visitor who is not
+website's own three pages alone, the homepage, What changed and the sign-up page (the last since
+notes plan N2, the owners' word of 7 Nov 2026), once each time a visitor who is not
 signed in opens one or the browser brings one back from its cache (a page opened out of sight counts
 when first shown), with the page's path and campaign tags alone (notes plan N1): the script counts
 nothing on its own, the browser drops every other event, and a page's time on page ends as it closes,
-so nothing is ever sent from the app.
+so nothing is ever sent from the app. The homepage's address inside the app, `/about` (notes plan
+N2), is open to someone signed in, is never counted and asks search engines not to show it; the
+analytics script is loaded for a visitor alone, and nginx passes none of the browser's cookies on to
+Plausible and none of Plausible's back.

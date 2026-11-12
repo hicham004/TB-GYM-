@@ -1,22 +1,22 @@
-@if (shell() === 'coach') {
+@if (chrome() === 'coach') {
   <!-- Owners and coaches: sidebar and top bar from the design system, placed on this component's
        grid beside the one <main> below. Workspace and sign-out requests come back here, so both
        shells share one switching path and one sign-out sequence. The skip link comes first, so a
        keyboard reaches the page without walking the sidebar and the top bar (audit WEB-13). -->
   <a class="skip-link" href="#main-content" (click)="skipToContent($event)" i18n>Skip to content</a>
   <app-coach-shell (workspaceSelected)="switchWorkspace($event)" (signOut)="logout()" />
-} @else if (shell() === 'client') {
+} @else if (chrome() === 'client') {
   <!-- Clients have no top bar: Today's header holds Notifications and Me, and the Me page holds
        workspace switching and sign-out. -->
   <a class="skip-link" href="#main-content" (click)="skipToContent($event)" i18n>Skip to content</a>
 } @else if (launching()) {
-  @if (launchShell === 'coach') {
+  @if (launchShell() === 'coach') {
     <!-- The coach shell this device last drew, empty, while the session answers: the page arrives in
          its place rather than after a blank screen (audit UIQ-5). The client's tabs follow <main>. -->
     <div class="frame-sidebar tb-theme" aria-hidden="true"></div>
     <div class="frame-topbar tb-theme" aria-hidden="true"></div>
   }
-  @if (launchShell) {
+  @if (launchShell()) {
     <span class="tb-visually-hidden" role="status" i18n
       >Loading <span translate="no">TB Gym</span>…</span
     >
@@ -27,7 +27,7 @@
       <span class="tb-visually-hidden" i18n>Loading <span translate="no">TB Gym</span>…</span>
     </div>
   }
-} @else if (shell() === 'member') {
+} @else if (chrome() === 'member') {
   <!-- An account with no workspace keeps the existing top bar, light like the pages it serves.
        Signed-out pages (the homepage, sign-in and the rest of /auth, invitations) draw their own
        header. A later wait, such as signing in, draws nothing over the page: the sign-in button
@@ -77,13 +77,13 @@
   #main
   id="main-content"
   [attr.data-mode]="launching() ? null : contentMode()"
-  [attr.tabindex]="shell() === 'client' || shell() === 'coach' ? -1 : null"
+  [attr.tabindex]="chrome() === 'client' || chrome() === 'coach' ? -1 : null"
   [class.app-main]="frame() === 'member' || frame() === 'client'"
   [class.client-main]="frame() === 'client'"
-  [class.full-screen]="shell() === 'client' && fullScreen()"
+  [class.full-screen]="chrome() === 'client' && fullScreen()"
   [class.coach-main]="frame() === 'coach'"
 >
-  @if (shell() === 'coach') {
+  @if (chrome() === 'coach') {
     <!-- Deferred: nothing about the first paint depends on it, and it keeps the shell's bundle small. -->
     @defer (on idle) {
       <app-billing-banner />
@@ -91,11 +91,11 @@
   }
   <router-outlet />
 </main>
-@if (shell() === 'client' && !fullScreen()) {
+@if (chrome() === 'client' && !fullScreen()) {
   <!-- After <main>, so the tabs come last in reading and focus order (339:2140). The workout player
        fills the screen and leads back with its own ×. -->
   <app-client-tabs />
-} @else if (launching() && launchShell === 'client') {
+} @else if (launching() && launchShell() === 'client') {
   <!-- The client's tabs, empty, while the session answers (audit UIQ-5). -->
   <div class="frame-tabs" aria-hidden="true"></div>
 }

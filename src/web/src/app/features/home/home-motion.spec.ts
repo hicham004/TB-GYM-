@@ -607,6 +607,31 @@ describe('the motion below the week, in the page', () => {
     ]);
   });
 
+  // Notes plan N2: someone signed in at /about is offered no sign-up. The rows have no link and the
+  // finale keeps the pill's holder, hidden and empty, so the closing line and the light still move.
+  it('still finds the finale and each row’s words on the page of someone signed in', () => {
+    const page = belowPage();
+    for (const link of page.querySelectorAll('.row__link, .finale__start')) link.remove();
+    page.querySelector('.finale__magnet')!.setAttribute('hidden', '');
+
+    const below = findBelow(page);
+
+    expect(below.rows).toHaveLength(2);
+    expect(below.rows[0].words.map((word) => word.className)).toEqual([
+      'row__eyebrow',
+      'row__body',
+    ]);
+    expect(below.finale).not.toBeNull();
+    expect(below.finale?.magnet).toBe(page.querySelector('.finale__magnet'));
+    expect(below.finale?.after.map((element) => element.className)).toEqual([
+      'finale__eyebrow',
+      'finale__talk',
+    ]);
+    // Without the holder the finale would not move at all: that is why it stays in the page.
+    page.querySelector('.finale__magnet')!.remove();
+    expect(findBelow(page).finale).toBeNull();
+  });
+
   it('finds nothing to move on a page without those parts', () => {
     expect(findBelow(document.createElement('div'))).toEqual({
       rows: [],

@@ -138,6 +138,14 @@
   transition: opacity 450ms ease;
 }
 
+// Someone signed in is offered no sign-up (notes plan N2), so the coach's half has no button. Side by
+// side, its screen keeps the line of the other half's: a button's height lower (the pill's 48 px).
+@media (min-width: $wide) {
+  .half--plain .half__shot {
+    margin-block-start: 100px;
+  }
+}
+
 // The screen whole, at its own size until the half is narrower, lifted off the night by a shadow
 // that follows its rounded corners.
 .half__window {

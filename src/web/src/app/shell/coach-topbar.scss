@@ -158,8 +158,12 @@
   inset-inline-start: calc(-1 * var(--space-8));
 }
 
+// Never taller than the window under the bar: on a short window (a phone on its side, large text) its
+// rows scroll, so Sign out, the last of them, stays in reach.
 .account-panel {
   inset-inline-end: 0;
+  max-block-size: calc(100dvh - var(--tb-topbar-block-size, 64px) - var(--space-8));
+  overflow-y: auto;
 }
 
 .menu-heading,
@@ -192,6 +196,12 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+// TB Gym's own pages: a headed group, ruled off from the person's own rows above and the way out below.
+.menu-group {
+  border-block: 1px solid var(--color-border-subtle);
+  padding-block: var(--space-4);
 }
 
 .menu-item {

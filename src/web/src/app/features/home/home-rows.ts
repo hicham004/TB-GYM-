@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, viewChildren } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, viewChildren } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FEATURE_ROWS } from './home-content';
 import { HomePhone } from './home-phone';
@@ -20,6 +20,12 @@ import { HomeWindow } from './home-window';
 })
 export class HomeRows {
   protected readonly rows = FEATURE_ROWS;
+
+  /**
+   * Someone is signed in: the rows' links, which all lead to sign-up, and the strip's Sign in are
+   * not offered (notes plan N2).
+   */
+  readonly signedIn = input(false);
 
   private readonly introTitle = viewChildren<ElementRef<HTMLElement>>('introTitle');
   private readonly rowTitles = viewChildren<ElementRef<HTMLElement>>('rowTitle');

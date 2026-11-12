@@ -19,15 +19,21 @@
     <p class="who__eyebrow" i18n>Who it's for</p>
     <h2 id="who-title" class="who__title" i18n>Built for one coach. Ready for a whole floor.</h2>
     <div class="who__halves">
-      <article class="half half--coach" aria-labelledby="who-coaches">
+      <article
+        class="half half--coach"
+        [class.half--plain]="signedIn()"
+        aria-labelledby="who-coaches"
+      >
         <h3 id="who-coaches" i18n>For independent coaches</h3>
         <p i18n>
           Your programs and meal plans, your brand on their phone, every client's week in one place.
           Start alone; add a second coach when you need one.
         </p>
-        <a class="half__button half__button--forest" routerLink="/auth/register" i18n
-          >Start your coaching space</a
-        >
+        @if (!signedIn()) {
+          <a class="half__button half__button--forest" routerLink="/auth/register" i18n
+            >Start your coaching space</a
+          >
+        }
         <div class="half__shot">
           <app-home-window
             class="half__window"
@@ -45,7 +51,7 @@
           Every coach on your floor with their own clients, one owner's view of the whole space, one
           bill. We set it up with you.
         </p>
-        <a class="half__button half__button--hair" routerLink="/" fragment="talk" i18n
+        <a class="half__button half__button--hair" [routerLink]="page()" fragment="talk" i18n
           >Talk to us about your gym</a
         >
         <div class="half__shot" [class.half__shot--photo]="placeholders">

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, LOCALE_ID } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, LOCALE_ID } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { lastChange } from './home-last-change';
 
@@ -17,4 +17,10 @@ import { lastChange } from './home-last-change';
 })
 export class HomeFinale {
   protected readonly lastChange = lastChange(inject(LOCALE_ID));
+
+  /** The page's own address, which the Talk-to-us link stays on (`/about` inside the app). */
+  readonly page = input('/');
+
+  /** Someone is signed in: no sign-up is offered, and the foot leads back to Today (notes plan N2). */
+  readonly signedIn = input(false);
 }

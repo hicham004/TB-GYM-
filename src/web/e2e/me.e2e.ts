@@ -7,6 +7,7 @@ import {
   json,
   mockSession,
   mockSignedOut,
+  NO_WEBSITE_SETTINGS,
   SIGNED_IN_USER,
   test,
   waitForFonts,
@@ -1175,4 +1176,151 @@ test.describe('what TB Gym shows about the coach (notes plan N4b)', () => {
       await expect(page.locator('.hero')).toHaveScreenshot(`me-coach-card-${width}-${mode}.png`);
     });
   }
+});
+
+// ---------- the website's link is the coach's alone (notes plan N2) ----------
+
+test.describe('TB Gym’s website from a client’s side (notes plan N2)', () => {
+  const TODAY = '2026-09-20';
+
+  /**
+   * What the homepage reads at /about, and a client's Today with training alone and nothing
+   * assigned, which is where Back to Today leads.
+   */
+  const WEBSITE_AND_TODAY: Record<string, Handler> = {
+    'GET /api/website/settings': (route) => json(route, 200, NO_WEBSITE_SETTINGS),
+    'GET /api/website/contact-form': (route) => json(route, 200, { stamp: 'e2e-stamp' }),
+    'GET /api/client-access/me': (route) =>
+      json(
+        route,
+        200,
+        FEATURES.map((feature) => ({
+          feature,
+          isAllowed: feature === 'Training',
+          reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
+        })),
+      ),
+    'GET /api/training/me/today': (route) =>
+      json(route, 200, {
+        isAllowed: true,
+        accessReason: 'Granted',
+        localDate: TODAY,
+        workouts: [],
+      }),
+    'GET /api/training/me/upcoming': (route) =>
+      json(route, 200, {
+        isAllowed: true,
+        accessReason: 'Granted',
+        localDate: TODAY,
+        timeZoneId: 'Asia/Beirut',
+        hasAssignedProgram: false,
+        hasVisibleSessions: true,
+        searchThrough: '2026-12-19',
+        nextSession: null,
+        unfinishedWorkouts: [],
+        nextSkip: null,
+        todayCoverage: { activeBlock: null, nextBlockStartDate: null },
+      }),
+    'GET /api/training/me/week': (route) =>
+      json(route, 200, {
+        isAllowed: true,
+        accessReason: 'Granted',
+        localDate: TODAY,
+        weekStart: '2026-09-14',
+        days: ['14', '15', '16', '17', '18', '19', '20'].map((date) => ({
+          date: `2026-09-${date}`,
+          scheduled: 0,
+          completed: 0,
+        })),
+      }),
+    'GET /api/client-renewal/me': (route) =>
+      json(route, 200, {
+        planEnded: false,
+        endedOn: null,
+        coachName: null,
+        lastRequest: null,
+        canAsk: false,
+      }),
+    'GET /api/client-plan/me': (route) =>
+      json(route, 200, { today: TODAY, plans: [], coachName: 'Lea Haddad' }),
+    // Today looks for the coach's newest message.
+    'GET /api/messaging/conversations': (route) =>
+      json(route, 200, {
+        items: [],
+        hasMore: false,
+        nextBeforeActivityAtUtc: null,
+        nextBeforeConversationId: null,
+      }),
+  };
+
+  for (const [width, height] of [
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    test(`a client’s Me at ${width}px has no link to TB Gym’s website or to What changed`, async ({
+      page,
+    }) => {
+      await openMe(page, { width, height });
+
+      await expect(page.getByRole('link', { name: /Password and security/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+      await expect(page.getByRole('link', { name: /TB Gym website/ })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: /What changed/ })).toHaveCount(0);
+      await expect(page.getByText('TB Gym website')).toHaveCount(0);
+      await expect(page.getByText('What changed')).toHaveCount(0);
+      await expect(page.locator('a[href="/about"]')).toHaveCount(0);
+      await expect(page.locator('a[href="/changelog"]')).toHaveCount(0);
+      // Nor do the client's tabs: the tabs are there, and the page holds no such address.
+      await expect(page.locator('app-client-tabs')).toBeVisible();
+      await expect(page.locator('#website-menu-heading')).toHaveCount(0);
+    });
+  }
+
+  test('a client who types /about at 390px sees the homepage without the tabs, and Back to Today in its menu returns to Today with them', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockClient(page, { extra: WEBSITE_AND_TODAY });
+    await page.goto('/about');
+    await waitForFonts(page);
+
+    await expect(page.getByRole('heading', { level: 1, name: /Coach both/ })).toBeVisible();
+    await expect(page).toHaveURL('/about');
+    // The page fills the window as a visitor sees it: no tabs under it, no bar over it.
+    await expect(page.locator('app-client-tabs')).toHaveCount(0);
+    await expect(page.locator('.frame-tabs')).toHaveCount(0);
+    await expect(page.locator('.topbar')).toHaveCount(0);
+    // Signed in, the page offers no sign-up and no sign-in.
+    await expect(page.locator('a[href="/auth/register"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/auth/sign-in"]')).toHaveCount(0);
+    await expect(page.getByText('Start your coaching space')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+
+    // In the installed app there is no browser Back: this row is the way out.
+    const header = page.locator('app-home-header');
+    await header.getByRole('button', { name: 'Menu' }).click();
+    await expect(page.locator('#home-menu a')).toHaveText([
+      'The week',
+      "What's inside",
+      'For gyms',
+      'Back to Today',
+    ]);
+    const back = page.locator('#home-menu').getByRole('link', { name: 'Back to Today' });
+    await expect(back).toBeVisible();
+    await expect(back).toBeInViewport({ ratio: 1 });
+    await expect(back).toHaveAttribute('href', '/');
+    await page.screenshot({ path: 'test-results/n2-client-about-menu-390.png' });
+    await back.click();
+
+    await expect(page).toHaveURL('/');
+    await expect(page).toHaveTitle('Today | TB Gym');
+    await expect(page.locator('app-client-tabs')).toBeVisible();
+    await expect(page.locator('app-client-tabs a[aria-current="page"]')).toHaveAttribute(
+      'href',
+      '/',
+    );
+    await expect(page.locator('#today-training-heading')).toHaveText('Nothing assigned yet');
+    await expect(page.locator('app-home-header')).toHaveCount(0);
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  });
 });

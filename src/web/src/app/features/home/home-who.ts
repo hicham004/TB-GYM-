@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   inject,
+  input,
   LOCALE_ID,
   viewChild,
 } from '@angular/core';
@@ -36,6 +37,12 @@ export class HomeWho {
   protected readonly builderNarrow = WINDOWS.builderNarrow;
   protected readonly teamNarrow = WINDOWS.teamNarrow;
   protected readonly placeholders = inject(HOME_PLACEHOLDERS);
+
+  /** The page's own address, which the Talk-to-us link stays on (`/about` inside the app). */
+  readonly page = input('/');
+
+  /** Someone is signed in: no sign-up is offered (notes plan N2). */
+  readonly signedIn = input(false);
 
   private readonly bandRef = viewChild.required<ElementRef<HTMLElement>>('band');
 

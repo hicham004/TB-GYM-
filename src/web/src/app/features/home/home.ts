@@ -3,18 +3,23 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   ElementRef,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
+import { Meta } from '@angular/platform-browser';
+import { ActivatedRoute } from '@angular/router';
+import { AuthStore } from '../../core/auth/auth.store';
 import { WebsiteAnalytics } from '../../core/website/website-analytics';
 import { preloadHomeFaces } from './home-faces';
 import { HomeFinale } from './home-finale';
 import { HomeHeader, type HeaderTone, type HomeSection } from './home-header';
 import { HomeHero } from './home-hero';
 import { HomeMotion } from './home-motion';
+import { HOME_PLACEHOLDERS } from './home-placeholder';
 import { HomeRows } from './home-rows';
 import { HomeTalk } from './home-talk';
 import { HomeWeek } from './home-week';
@@ -26,6 +31,10 @@ import { HomeWho } from './home-who';
  * rendered at build time (R6.2a), so everything here is in the HTML Google and link previews read;
  * only the motion (`HomeMotion`, on a wide screen), the header's tone and section mark, the
  * website's settings (the WhatsApp link, analytics) and the visit's one count wait for the browser.
+ *
+ * The same page opens inside the app at `/about` (notes plan N2), for someone signed in too: there
+ * it leads back to Today where it offers signing in, offers no sign-up, keeps its links on its own
+ * address, asks search engines not to show that address, and counts nothing.
  */
 @Component({
   selector: 'app-home',
@@ -46,6 +55,21 @@ export class Home {
   private readonly week = viewChild.required(HomeWeek);
   private readonly rows = viewChild.required(HomeRows);
   private readonly who = viewChild.required(HomeWho);
+  private readonly auth = inject(AuthStore);
+
+  /**
+   * The page's own address: the homepage's, or `/about` inside the app. Every link within the page
+   * leads to it, so a section link never leaves the page for Today.
+   */
+  protected readonly page = `/${inject(ActivatedRoute)
+    .snapshot.url.map((part) => part.path)
+    .join('/')}`;
+
+  /** A plain fragment would resolve against `<base href="/">`, which is this page at `/` alone. */
+  protected readonly skipTo = this.page === '/' ? '#home-content' : `${this.page}#home-content`;
+
+  /** Someone is signed in, which only the address inside the app allows: Today is theirs at `/`. */
+  protected readonly signedIn = computed(() => this.auth.user() !== null);
 
   /** What is under the sticky header right now: the hero, the cream body or the dark ending. */
   protected readonly headerTone = signal<HeaderTone>('dark');
@@ -63,6 +87,17 @@ export class Home {
   constructor() {
     preloadHomeFaces();
     this.destroyRef.onDestroy(() => this.motion.stop());
+    // The address inside the app is never for search engines, which show the homepage's own; nginx
+    // says so in a header too. The private pre-launch build already says it on every page, in the
+    // tag its header writes and keeps, so nothing is added there. At its own address the homepage
+    // must carry none.
+    if (this.page !== '/' && !inject(HOME_PLACEHOLDERS)) {
+      const meta = inject(Meta);
+      if (meta.getTag('name="robots"') === null) {
+        const added = meta.addTag({ name: 'robots', content: 'noindex' });
+        this.destroyRef.onDestroy(() => added?.remove());
+      }
+    }
     afterNextRender(() => {
       this.live.set(true);
       // One count per opening (notes plan N1), at the homepage's own address alone, so another

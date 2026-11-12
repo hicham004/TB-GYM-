@@ -11,9 +11,12 @@ import {
   sessionKnownGuard,
   signedOutGuard,
 } from './core/auth/auth.guards';
-import { HOUSE_BRAND, REDESIGNED } from './core/theme/redesigned-route';
+import { HOUSE_BRAND, REDESIGNED, WEBSITE_PAGE } from './core/theme/redesigned-route';
 import { devRoutes } from './dev/dev-routes';
 import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
+
+/** The homepage's title, at its own address and at `/about`. */
+const HOME_TITLE = $localize`TB Gym: coach both sides of the week`;
 
 export const routes: Routes = [
   {
@@ -32,7 +35,19 @@ export const routes: Routes = [
     path: '',
     pathMatch: 'full',
     canMatch: [publicHomeGuard],
-    title: $localize`TB Gym: coach both sides of the week`,
+    title: HOME_TITLE,
+    loadComponent: () => import('./features/home/home').then((module) => module.Home),
+  },
+  {
+    // The website from inside the app (notes plan N2): the homepage again at an address that also
+    // opens for someone signed in, who gets Today at `/`. It waits for the session's answer, so the
+    // page never draws a visitor's header first; no shell is drawn around it (`WEBSITE_PAGE`), it is
+    // not rendered ahead of time, it asks search engines to show the homepage's own address instead,
+    // and it counts no visit.
+    path: 'about',
+    canActivate: [sessionKnownGuard],
+    title: HOME_TITLE,
+    data: WEBSITE_PAGE,
     loadComponent: () => import('./features/home/home').then((module) => module.Home),
   },
   {

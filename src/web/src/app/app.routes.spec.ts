@@ -2,8 +2,16 @@ import { RenderMode } from '@angular/ssr';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
 import { serverRoutes } from './app.routes.server';
-import { authGuard, memberGuard, ownerGuard, sessionKnownGuard } from './core/auth/auth.guards';
+import {
+  authGuard,
+  memberGuard,
+  ownerGuard,
+  publicHomeGuard,
+  sessionKnownGuard,
+} from './core/auth/auth.guards';
 import { confirmBeforeLeaving, confirmSheetLeave } from './core/forms/leave-guard';
+import { REDESIGNED, WEBSITE_PAGE } from './core/theme/redesigned-route';
+import { Home } from './features/home/home';
 import { NotFound } from './features/not-found/not-found';
 import { platformAdminGuard } from './features/platform-admin/platform-admin.guard';
 import { PlatformCoaches } from './features/platform-admin/platform-coaches';
@@ -70,6 +78,47 @@ describe('the app routes', () => {
     expect(await (last.loadComponent as () => Promise<unknown>)()).toBe(NotFound);
     // The homepage's file by name is the homepage, as nginx answers it with the shell.
     expect(route('index.html').redirectTo).toBe('');
+  });
+
+  // Notes plan N2: the website from inside the app. Anyone may open it, signed in or not, so nothing
+  // decides who matches it; it only waits for the session, so it never draws a visitor's header first.
+  it('opens the homepage again at /about to anyone, once the session is known, with no shell around it', async () => {
+    const about = route('about');
+    expect(routes.filter((item) => item.path === 'about')).toHaveLength(1);
+    expect(about.canActivate).toEqual([sessionKnownGuard]);
+    expect(about.canMatch).toBeUndefined();
+    expect(about.canDeactivate).toBeUndefined();
+    expect(about.redirectTo).toBeUndefined();
+    expect(about.data).toEqual(WEBSITE_PAGE);
+    expect(about.data).toEqual({ websitePage: true, houseBrand: true });
+    expect(await (about.loadComponent as () => Promise<unknown>)()).toBe(Home);
+    // The homepage's own title, word for word.
+    const [home] = routes.filter((item) => item.path === '');
+    expect(about.title).toBe('TB Gym: coach both sides of the week');
+    expect(about.title).toBe(home.title);
+    // Drawn in the browser, never ahead of time: no finished HTML of it for nginx to answer with.
+    expect(serverRoutes.map((item) => item.path)).not.toContain('about');
+    // Before the not-found page, which would answer it otherwise.
+    expect(routes.indexOf(about)).toBeLessThan(routes.findIndex((item) => item.path === '**'));
+  });
+
+  it('keeps / as it was: the homepage for a visitor alone, and Today for anyone signed in', async () => {
+    const [home, today, ...others] = routes.filter((item) => item.path === '');
+    expect(others).toEqual([]);
+
+    expect(home.pathMatch).toBe('full');
+    expect(home.canMatch).toEqual([publicHomeGuard]);
+    expect(home.canActivate).toBeUndefined();
+    expect(home.title).toBe('TB Gym: coach both sides of the week');
+    // No mark of the website's page: a visitor has no shell to take away, and / is never noindex.
+    expect(home.data).toBeUndefined();
+    expect(await (home.loadComponent as () => Promise<unknown>)()).toBe(Home);
+
+    expect(today.pathMatch).toBe('full');
+    expect(today.canMatch).toBeUndefined();
+    expect(today.canActivate).toEqual([authGuard]);
+    expect(today.title).toBe('Today | TB Gym');
+    expect(today.data).toEqual(REDESIGNED);
   });
 
   // Audit UIQ-13: sign-in is finished HTML like the homepage and what changed; nothing else is.

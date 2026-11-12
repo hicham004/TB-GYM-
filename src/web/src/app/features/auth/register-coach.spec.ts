@@ -1,11 +1,15 @@
 import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { signal, type DestroyRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type { RegistrationResponse } from '../../core/api/api.models';
+import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
+import { WebsiteAnalytics } from '../../core/website/website-analytics';
+import { WebsiteSettingsStore } from '../../core/website/website-settings';
 import { button, field, fill, press, query, settle, tick } from '../../../testing/dom';
 import { LegalApi } from '../legal/legal-api';
 import type { LegalToAccept } from '../legal/legal.models';
@@ -40,7 +44,25 @@ function legalDocument(id: string, kind: LegalToAccept['kind'], name: string): L
 const TERMS = legalDocument('terms-1', 'TermsOfService', 'Terms of Service');
 const PRIVACY = legalDocument('privacy-1', 'PrivacyPolicy', 'Privacy Policy');
 
-async function render(api: Partial<ApiClient> = {}, legal: Partial<LegalApi> = {}) {
+/**
+ * The page with its session's answer: `user` is who is known when the page opens (nobody, unless a
+ * test says so), and the check resolves at once unless the test holds it until `session.answer`.
+ */
+async function render(
+  api: Partial<ApiClient> = {},
+  legal: Partial<LegalApi> = {},
+  visit: { user?: object | null; holdTheCheck?: boolean } = {},
+) {
+  const userState = signal<object | null>(visit.user ?? null);
+  let answer: () => void = () => undefined;
+  const check = visit.holdTheCheck
+    ? new Promise<void>((resolve) => (answer = resolve))
+    : Promise.resolve();
+  const auth = { user: userState, initialize: vi.fn(() => check) };
+  const settings = { load: vi.fn(() => Promise.resolve()) };
+  const closed = vi.fn();
+  // The count's end comes with the page's own DestroyRef: the double notes when that page closes.
+  const analytics = { pageview: vi.fn((page: DestroyRef) => void page.onDestroy(closed)) };
   await TestBed.configureTestingModule({
     imports: [RegisterCoach],
     providers: [
@@ -52,16 +74,34 @@ async function render(api: Partial<ApiClient> = {}, legal: Partial<LegalApi> = {
       // Nothing is published unless a test says so, as on a server with no document yet.
       { provide: LegalApi, useValue: { toAccept: vi.fn(() => of([])), ...legal } },
       { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      { provide: AuthStore, useValue: auth },
+      { provide: WebsiteSettingsStore, useValue: settings },
+      { provide: WebsiteAnalytics, useValue: analytics },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(RegisterCoach);
   await settle(fixture);
+  const session = {
+    answer: async (who: object | null) => {
+      userState.set(who);
+      answer();
+      await check;
+      if (fixture.componentRef.hostView.destroyed)
+        await new Promise((resolve) => setTimeout(resolve));
+      else await settle(fixture);
+    },
+  };
   return {
     fixture,
     host: fixture.nativeElement as HTMLElement,
     api: TestBed.inject(ApiClient),
     legal: TestBed.inject(LegalApi),
+    auth,
+    settings,
+    analytics,
+    closed,
+    session,
   };
 }
 
@@ -545,5 +585,71 @@ describe('RegisterCoach', () => {
       'The documents to accept couldn’t be loaded. Check your connection, then try again.',
     );
     expect(document.activeElement).toBe(summary);
+  });
+
+  /**
+   * Notes plan N2: the sign-up page counts itself as What changed does, once per opening, for a
+   * visitor alone, and only after the session has answered who is there.
+   */
+  it('for a visitor, reads the website’s settings and counts the visit once, after the session check, until the page closes', async () => {
+    const { fixture, host, auth, settings, analytics, closed } = await render();
+
+    expect(auth.initialize).toHaveBeenCalledTimes(1);
+    expect(settings.load).toHaveBeenCalledTimes(1);
+    expect(analytics.pageview).toHaveBeenCalledTimes(1);
+
+    // Drawing the page again, or typing into it, asks for no second count.
+    fill(host, 'Your name', 'Tarek Bou');
+    await settle(fixture);
+    await settle(fixture);
+    expect(settings.load).toHaveBeenCalledTimes(1);
+    expect(analytics.pageview).toHaveBeenCalledTimes(1);
+
+    // The count was given the page's own life, so it ends when the page goes.
+    expect(closed).not.toHaveBeenCalled();
+    fixture.destroy();
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it('for someone already signed in, reads no settings and counts nothing', async () => {
+    const { auth, settings, analytics } = await render({}, {}, { user: { id: 'me' } });
+
+    expect(auth.initialize).toHaveBeenCalledTimes(1);
+    expect(settings.load).not.toHaveBeenCalled();
+    expect(analytics.pageview).not.toHaveBeenCalled();
+  });
+
+  it('waits for the session’s answer: someone it signs in is not counted, a visitor is', async () => {
+    // After a full load the page is drawn while the check is still on its way, with nobody known.
+    const signedIn = await render({}, {}, { holdTheCheck: true });
+    expect(signedIn.auth.initialize).toHaveBeenCalledTimes(1);
+    expect(signedIn.settings.load).not.toHaveBeenCalled();
+    expect(signedIn.analytics.pageview).not.toHaveBeenCalled();
+    await signedIn.session.answer({ id: 'me' });
+    expect(signedIn.settings.load).not.toHaveBeenCalled();
+    expect(signedIn.analytics.pageview).not.toHaveBeenCalled();
+    TestBed.resetTestingModule();
+
+    const visitor = await render({}, {}, { holdTheCheck: true });
+    expect(visitor.settings.load).not.toHaveBeenCalled();
+    expect(visitor.analytics.pageview).not.toHaveBeenCalled();
+    await visitor.session.answer(null);
+    expect(visitor.settings.load).toHaveBeenCalledTimes(1);
+    expect(visitor.analytics.pageview).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts nothing when the page closed before the session answered', async () => {
+    const { fixture, settings, analytics, closed, session } = await render(
+      {},
+      {},
+      { holdTheCheck: true },
+    );
+
+    fixture.destroy();
+    await session.answer(null);
+
+    expect(settings.load).not.toHaveBeenCalled();
+    expect(analytics.pageview).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
   });
 });

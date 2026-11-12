@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import {
+  afterNextRender,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
   inject,
   LOCALE_ID,
@@ -14,6 +16,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { RegistrationResponse } from '../../core/api/api.models';
+import { AuthStore } from '../../core/auth/auth.store';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import {
   chosenCurrency,
@@ -23,6 +26,8 @@ import {
 } from '../../core/i18n/currencies';
 import { deviceTimeZoneId } from '../../core/i18n/time-zones';
 import { CsrfService } from '../../core/security/csrf.service';
+import { WebsiteAnalytics } from '../../core/website/website-analytics';
+import { WebsiteSettingsStore } from '../../core/website/website-settings';
 import { Button, ButtonLink } from '../../ui/button';
 import { Control, Field } from '../../ui/field';
 import { PasswordReveal } from '../../ui/password-reveal';
@@ -131,6 +136,20 @@ export class RegisterCoach {
 
   constructor() {
     void this.legal.load();
+    // The website's settings, which name the analytics script, and the visit's one count (notes plan
+    // N2: the sign-up page counts as What changed does) are a visitor's alone, decided once the
+    // session has answered. Only the page's path and its campaign tags are ever sent.
+    const auth = inject(AuthStore);
+    const settings = inject(WebsiteSettingsStore);
+    const analytics = inject(WebsiteAnalytics);
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      void auth.initialize().then(() => {
+        if (destroyRef.destroyed || auth.user() !== null) return;
+        void settings.load();
+        analytics.pageview(destroyRef);
+      });
+    });
   }
 
   protected formReasons(): string[] {

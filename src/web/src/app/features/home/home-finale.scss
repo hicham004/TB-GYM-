@@ -72,6 +72,10 @@
   display: inline-flex;
 }
 
+.finale__magnet[hidden] {
+  display: none;
+}
+
 .finale__start {
   @include pill;
   @include pill-lime;

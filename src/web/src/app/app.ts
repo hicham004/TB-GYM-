@@ -1,4 +1,4 @@
-import { DOCUMENT } from '@angular/common';
+import { DOCUMENT, Location } from '@angular/common';
 import {
   Component,
   computed,
@@ -11,12 +11,26 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import {
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  Router,
+  RouterLink,
+  RouterLinkActive,
+  RouterOutlet,
+} from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AuthStore } from './core/auth/auth.store';
 import { SessionActions } from './core/auth/session-actions';
 import { TenantStore } from './core/tenancy/tenant.store';
-import { isRedesigned, wantsFullScreen, wantsHouseBrand } from './core/theme/redesigned-route';
+import {
+  isRedesigned,
+  isWebsitePage,
+  startsOnWebsitePage,
+  wantsFullScreen,
+  wantsHouseBrand,
+} from './core/theme/redesigned-route';
 import { WorkspaceBrandStore } from './core/theme/workspace-brand.store';
 import { BillingBanner } from './features/billing/billing-banner';
 import { ClientTabs } from './shell/client-tabs';
@@ -89,16 +103,44 @@ export class App implements OnInit {
   private readonly launched = signal(false);
   protected readonly launching = computed(() => this.shell() === 'pending' && !this.launched());
 
+  /**
+   * The website's own page (`/about`, notes plan N2) fills the window as a visitor sees it: no shell
+   * is drawn around it, whoever is signed in. An app that starts there knows from its address at
+   * once, so its first picture draws no shell's frame while the session answers. After that the page
+   * the router has settled on says so, when a navigation ends, is refused or fails: the shell stays
+   * around a page that asks before it is left, and comes back if the website's page cannot open.
+   */
+  private readonly websitePage = toSignal(
+    this.router.events.pipe(
+      filter(
+        (event) =>
+          event instanceof NavigationEnd ||
+          event instanceof NavigationCancel ||
+          event instanceof NavigationError,
+      ),
+      map(() => isWebsitePage(this.router.routerState.snapshot.root)),
+    ),
+    { initialValue: startsOnWebsitePage(this.router, inject(Location).path()) },
+  );
+
+  /** What is drawn around the page: the shell of whoever is signed in; none on the website's page. */
+  protected readonly chrome = computed<ShellKind>(() =>
+    this.websitePage() ? 'public' : this.shell(),
+  );
+
   /** The shell this device last drew for a signed-in person, whose frame the launch screen draws. */
-  protected readonly launchShell = this.launchHint.remembered;
+  protected readonly launchShell = computed(() =>
+    this.websitePage() ? null : this.launchHint.remembered,
+  );
   private serifRequested = false;
   /**
    * The layout drawn now: the shell's, or while the app starts, the frame of the one this device
    * remembers, so the shell and the page arrive where their frame was (audit UIQ-5).
    */
-  protected readonly frame = computed<ShellKind>(() =>
-    this.launching() && this.launchShell !== null ? this.launchShell : this.shell(),
-  );
+  protected readonly frame = computed<ShellKind>(() => {
+    const remembered = this.launchShell();
+    return this.launching() && remembered !== null ? remembered : this.chrome();
+  });
 
   private readonly redesigned = toSignal(
     this.router.events.pipe(

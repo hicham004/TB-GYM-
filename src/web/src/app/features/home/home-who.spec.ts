@@ -6,14 +6,29 @@ import { TEST_PLACEHOLDERS } from '../../../testing/placeholder-fixtures';
 import { HOME_PLACEHOLDERS, type PlaceholderSet } from './home-placeholder';
 import { HomeWho } from './home-who';
 
-async function render(placeholders: PlaceholderSet | null) {
+/**
+ * The band as its page draws it. `inputs` are what the homepage passes down inside the app (notes
+ * plan N2); left out, the band is the public website's: its own address, nobody signed in.
+ */
+async function render(
+  placeholders: PlaceholderSet | null,
+  inputs: { page?: string; signedIn?: boolean } = {},
+) {
   TestBed.configureTestingModule({
     providers: [provideRouter([]), { provide: HOME_PLACEHOLDERS, useValue: placeholders }],
   });
   const fixture = TestBed.createComponent(HomeWho);
+  for (const [name, value] of Object.entries(inputs)) fixture.componentRef.setInput(name, value);
   await settle(fixture);
   return { fixture, host: fixture.nativeElement as HTMLElement };
 }
+
+/** A half's buttons as a person meets them: each one's words and where it leads. */
+const buttons = (host: HTMLElement, half: 'coach' | 'gym') =>
+  Array.from(host.querySelectorAll(`.half--${half} .half__button`)).map((link) => [
+    link.textContent?.trim(),
+    link.getAttribute('href'),
+  ]);
 
 describe('HomeWho', () => {
   it('gives each audience a half of the band with a real screen and its own button, with no stand-in on the public build', async () => {
@@ -61,5 +76,50 @@ describe('HomeWho', () => {
     // The photograph comes first and the screen after it, lifted over its lower edge.
     const order = Array.from(shot.children).map((child) => child.className.split(' ')[0]);
     expect(order).toEqual(['half__photo', 'half__window']);
+  });
+
+  it('offers a visitor Start your coaching space in the coach’s half, and Talk to us on the homepage’s own address', async () => {
+    const { host } = await render(null);
+
+    expect(buttons(host, 'coach')).toEqual([['Start your coaching space', '/auth/register']]);
+    expect(buttons(host, 'gym')).toEqual([['Talk to us about your gym', '/#talk']]);
+  });
+
+  it('offers someone signed in no sign-up: the coach’s half keeps its words and its screen', async () => {
+    const { host } = await render(null, { signedIn: true });
+
+    expect(host.querySelector('[href="/auth/register"]')).toBeNull();
+    expect(host.textContent).not.toContain('Start your coaching space');
+    expect(buttons(host, 'coach')).toEqual([]);
+    const coach = query(host, '.half--coach');
+    expect(coach.querySelector('h3')?.textContent).toContain('For independent coaches');
+    expect(coach.querySelector('p')?.textContent).toContain('Start alone; add a second coach');
+    expect(coach.querySelector('.half__shot img')?.getAttribute('src')).toBe(
+      '/images/home/builder-week-1x.webp',
+    );
+    // The gyms' half is as a visitor sees it.
+    expect(buttons(host, 'gym')).toEqual([['Talk to us about your gym', '/#talk']]);
+    // The half without a button says so, and its screen is held in line with the other half's.
+    expect(coach.classList).toContain('half--plain');
+    expect(query(host, '.half--gym').classList).not.toContain('half--plain');
+  });
+
+  it('marks neither half as missing its button for a visitor', async () => {
+    const { host } = await render(null);
+
+    expect(host.querySelector('.half--plain')).toBeNull();
+  });
+
+  it('inside the app at /about keeps Talk to us on that address, signed in or not', async () => {
+    const { fixture, host } = await render(null, { page: '/about', signedIn: true });
+    expect(buttons(host, 'gym')).toEqual([['Talk to us about your gym', '/about#talk']]);
+    expect(buttons(host, 'coach')).toEqual([]);
+
+    // A visitor who typed the address is offered the sign-up as on the homepage.
+    fixture.componentRef.setInput('signedIn', false);
+    await settle(fixture);
+    expect(buttons(host, 'coach')).toEqual([['Start your coaching space', '/auth/register']]);
+    expect(buttons(host, 'gym')).toEqual([['Talk to us about your gym', '/about#talk']]);
+    expect(host.querySelector('[href="/#talk"]')).toBeNull();
   });
 });

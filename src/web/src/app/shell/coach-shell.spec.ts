@@ -1,6 +1,6 @@
 import { ApplicationRef, signal } from '@angular/core';
-import { DeferBlockBehavior, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { type ComponentFixture, DeferBlockBehavior, TestBed } from '@angular/core/testing';
+import { NavigationEnd, provideRouter, Router, type Routes } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clientListView } from '../../testing/client-list-fixtures';
@@ -11,7 +11,7 @@ import { NotificationStore } from '../core/notifications/notification.store';
 import { TenantContext } from '../core/tenancy/tenant-context';
 import { TenantStore } from '../core/tenancy/tenant.store';
 import { WorkspaceBrandStore } from '../core/theme/workspace-brand.store';
-import { button, settle } from '../../testing/dom';
+import { button, query, settle } from '../../testing/dom';
 import { installDialogSupport } from '../../testing/dialog';
 import { CoachShell, TOPBAR_BLOCK_SIZE } from './coach-shell';
 
@@ -53,6 +53,8 @@ async function render(
     unread?: number;
     logoUrl?: string | null;
     roles?: string[];
+    /** Pages of a test's own, beside the shell's. */
+    routes?: Routes;
   } = {},
 ) {
   const memberships = options.memberships ?? [ATLAS];
@@ -79,6 +81,10 @@ async function render(
         { path: 'messages', children: [] },
         { path: 'products', children: [] },
         { path: 'workspace', children: [] },
+        // TB Gym's own pages, which the account menu links (notes plan N2).
+        { path: 'about', children: [] },
+        { path: 'changelog', children: [] },
+        ...(options.routes ?? []),
       ]),
       {
         provide: AuthStore,
@@ -272,6 +278,225 @@ describe('CoachShell', () => {
     await settle(fixture);
 
     expect(host.querySelector('#account-menu')).toBeNull();
+  });
+
+  /**
+   * TB Gym's own pages from inside the app: the homepage at /about, which leads back with Back to
+   * Today, and What changed. The coach shell is an owner's and a coach's alone, so a client's pages
+   * gain nothing.
+   */
+  describe('N2: TB Gym’s own pages in the account menu', () => {
+    const words = (element: Element | null | undefined) =>
+      (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+    async function openAccountMenu(fixture: ComponentFixture<unknown>, host: HTMLElement) {
+      const account = query<HTMLButtonElement>(host, '.account-button');
+      account.click();
+      await settle(fixture);
+      return { account, menu: query<HTMLElement>(host, '#account-menu') };
+    }
+
+    /** The menu's rows from top to bottom, each by the words on it; the group by its heading. */
+    function rows(menu: HTMLElement): string[] {
+      return Array.from(menu.querySelectorAll(':scope > ul.menu-list > li')).map((row) =>
+        words(row.querySelector(':scope > a, :scope > button, :scope > .menu-heading')),
+      );
+    }
+
+    function link(menu: HTMLElement, label: string): HTMLAnchorElement {
+      const found = Array.from(menu.querySelectorAll<HTMLAnchorElement>('a')).filter(
+        (candidate) => words(candidate) === label,
+      );
+      if (found.length !== 1) throw new Error(`${found.length} links read "${label}".`);
+      return found[0];
+    }
+
+    /** The addresses the router has arrived at since now. */
+    function arrivals(): string[] {
+      const ended: string[] = [];
+      TestBed.inject(Router).events.subscribe((event) => {
+        if (event instanceof NavigationEnd) ended.push(event.urlAfterRedirects);
+      });
+      return ended;
+    }
+
+    /** A navigation its page holds never lets settle() return: a few turns and a redraw instead. */
+    async function turns(fixture: ComponentFixture<unknown>): Promise<void> {
+      for (let round = 0; round < 5; round++) {
+        await new Promise((resolve) => setTimeout(resolve));
+        fixture.detectChanges();
+      }
+    }
+
+    for (const { who, membership } of [
+      { who: 'an owner', membership: ATLAS },
+      { who: 'a coach', membership: BEIRUT },
+    ]) {
+      it(`gives ${who} a TB Gym group after Dark mode, with the website and What changed, before Sign out`, async () => {
+        const { fixture, host } = await render({ memberships: [membership] });
+        expect(words(host.querySelector('.identity-role'))).toBe(membership.role);
+        const { menu } = await openAccountMenu(fixture, host);
+
+        expect(rows(menu)).toEqual(['Password and security', 'Dark mode', 'TB Gym', 'Sign out']);
+
+        // A heading and the list it names, as the workspace panel's "Coaching spaces" is.
+        const group = query<HTMLElement>(menu, ':scope > ul.menu-list > li.menu-group');
+        const heading = query<HTMLElement>(group, ':scope > .menu-heading');
+        expect(heading.id).toBe('website-menu-heading');
+        expect(words(heading)).toBe('TB Gym');
+        expect(host.querySelectorAll('#website-menu-heading')).toHaveLength(1);
+        const list = query<HTMLElement>(group, ':scope > ul.menu-list');
+        expect(list.getAttribute('aria-labelledby')).toBe(heading.id);
+
+        // Exactly two rows, each one link.
+        expect(Array.from(list.children).map((row) => row.tagName)).toEqual(['LI', 'LI']);
+        expect(
+          Array.from(list.querySelectorAll('a, button')).map((control) => [
+            control.tagName,
+            words(control),
+            control.getAttribute('href'),
+          ]),
+        ).toEqual([
+          ['A', 'TB Gym website', '/about'],
+          ['A', 'What changed', '/changelog'],
+        ]);
+
+        // What a keyboard walks through, in order.
+        expect(Array.from(menu.querySelectorAll('a, button')).map(words)).toEqual([
+          'Password and security',
+          'Dark mode',
+          'TB Gym website',
+          'What changed',
+          'Sign out',
+        ]);
+      });
+    }
+
+    it('keeps the group between Dark mode and the platform admin’s rows, Sign out still last', async () => {
+      const { fixture, host } = await render({ roles: ['PlatformAdmin'] });
+      const { menu } = await openAccountMenu(fixture, host);
+
+      expect(rows(menu)).toEqual([
+        'Password and security',
+        'Dark mode',
+        'TB Gym',
+        'Platform billing',
+        'Legal documents',
+        'Coaches',
+        'Sign out',
+      ]);
+      // The admin's rows are the menu's own, not the group's.
+      expect(
+        Array.from(menu.querySelectorAll('[aria-labelledby="website-menu-heading"] a')).map(
+          (anchor) => [words(anchor), anchor.getAttribute('href')],
+        ),
+      ).toEqual([
+        ['TB Gym website', '/about'],
+        ['What changed', '/changelog'],
+      ]);
+    });
+
+    for (const { label, address } of [
+      { label: 'TB Gym website', address: '/about' },
+      { label: 'What changed', address: '/changelog' },
+    ]) {
+      it(`closes the menu and puts focus on the account button the moment “${label}” is pressed, then opens ${address}`, async () => {
+        const { fixture, host } = await render();
+        const { account, menu } = await openAccountMenu(fixture, host);
+        const ended = arrivals();
+        expect(document.activeElement).not.toBe(account);
+
+        link(menu, label).click();
+
+        // At once, by the press itself: no page has been reached yet.
+        expect(ended).toEqual([]);
+        expect(document.activeElement).toBe(account);
+        fixture.detectChanges();
+        expect(host.querySelector('#account-menu')).toBeNull();
+        expect(account.getAttribute('aria-expanded')).toBe('false');
+
+        await settle(fixture);
+        expect(ended).toEqual([address]);
+        expect(TestBed.inject(Router).url).toBe(address);
+        expect(host.querySelector('#account-menu')).toBeNull();
+        expect(document.activeElement).toBe(account);
+      });
+    }
+
+    it('closes the menu on a press of the page already open, which goes nowhere', async () => {
+      const { fixture, host } = await render();
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/changelog');
+      await settle(fixture);
+      const { account, menu } = await openAccountMenu(fixture, host);
+      const ended = arrivals();
+
+      link(menu, 'What changed').click();
+      await settle(fixture);
+
+      // No navigation ended to close it, as one closes every menu.
+      expect(ended).toEqual([]);
+      expect(router.url).toBe('/changelog');
+      expect(host.querySelector('#account-menu')).toBeNull();
+      expect(account.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(account);
+    });
+
+    it('leaves the menu closed and focus on its button when the page being left asks first', async () => {
+      let answer!: (leave: boolean) => void;
+      const asked = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+      const { fixture, host } = await render({
+        routes: [{ path: 'editor', canDeactivate: [asked], children: [] }],
+      });
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/editor');
+      await settle(fixture);
+
+      const first = await openAccountMenu(fixture, host);
+      link(first.menu, 'TB Gym website').click();
+      await turns(fixture);
+
+      // The page is asking: the menu is not left open over its question.
+      expect(asked).toHaveBeenCalledTimes(1);
+      expect(router.url).toBe('/editor');
+      expect(host.querySelector('#account-menu')).toBeNull();
+      expect(document.activeElement).toBe(first.account);
+
+      // Stay: the person is where they were, with focus on the button whose link is gone.
+      answer(false);
+      await settle(fixture);
+      expect(router.url).toBe('/editor');
+      expect(host.querySelector('#account-menu')).toBeNull();
+      expect(first.account.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(first.account);
+
+      // Pressed again, then Leave.
+      const second = await openAccountMenu(fixture, host);
+      link(second.menu, 'TB Gym website').click();
+      await turns(fixture);
+      expect(asked).toHaveBeenCalledTimes(2);
+      answer(true);
+      await settle(fixture);
+      expect(router.url).toBe('/about');
+      expect(host.querySelector('#account-menu')).toBeNull();
+    });
+
+    it('closes on Escape from one of the group’s links, back to the account button, going nowhere', async () => {
+      const { fixture, host } = await render();
+      const { account, menu } = await openAccountMenu(fixture, host);
+      const ended = arrivals();
+      const changed = link(menu, 'What changed');
+      changed.focus();
+      expect(document.activeElement).toBe(changed);
+
+      changed.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle(fixture);
+
+      expect(host.querySelector('#account-menu')).toBeNull();
+      expect(account.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(account);
+      expect(ended).toEqual([]);
+    });
   });
 
   it('shows the workspace as plain text when there is only one', async () => {

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
 import { COACH_NOW, emptyCoachTodayView } from '../src/testing/coach-today-fixtures';
 import {
   COACH_MEMBERSHIP,
@@ -7,7 +8,9 @@ import {
   expectNoHorizontalOverflow,
   json,
   mockSession,
+  NO_WEBSITE_SETTINGS,
   OWNER_MEMBERSHIP,
+  SIGNED_IN_USER,
   test,
   useRtl,
   waitForFonts,
@@ -32,8 +35,11 @@ async function openShell(
     height?: number;
     rtl?: boolean;
     memberships?: (typeof OWNER_MEMBERSHIP)[];
+    user?: typeof SIGNED_IN_USER;
     unreadNotifications?: number;
     unreadMessages?: number;
+    /** More answers than the dashboard's, for a test that leaves Today. */
+    extra?: Record<string, (route: Route) => Promise<void> | void>;
   } = {},
 ) {
   // Coach Today greets by the hour, so the clock is pinned for stable screenshots.
@@ -41,9 +47,10 @@ async function openShell(
   await page.setViewportSize({ width: options.width ?? 1440, height: options.height ?? 900 });
   await mockSession(page, {
     memberships: options.memberships,
+    user: options.user,
     unreadNotifications: options.unreadNotifications,
     unreadMessages: options.unreadMessages,
-    extra: DASHBOARD,
+    extra: { ...DASHBOARD, ...(options.extra ?? {}) },
   });
   await page.goto('/');
   await expect(page.locator('app-coach-shell')).toBeVisible();
@@ -323,3 +330,280 @@ test('200% text keeps the shell usable at 1440px and at 390px', async ({ page })
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await expectNoHorizontalOverflow(page);
 });
+
+// ---- TB Gym's own pages in the account menu (notes plan N2) ----
+
+const HEADLINE = /Coach both/;
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
+
+/** What the homepage reads at /about: the website's settings, and the form's stamp once it is in view. */
+const WEBSITE = {
+  'GET /api/website/settings': (route: Route) => json(route, 200, NO_WEBSITE_SETTINGS),
+  'GET /api/website/contact-form': (route: Route) => json(route, 200, { stamp: 'e2e-stamp' }),
+};
+
+const SIZES = [
+  [1440, 900],
+  [390, 844],
+] as const;
+
+async function openAccountMenu(page: Page) {
+  await page.locator('.account-button').click();
+  const menu = page.locator('#account-menu');
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** The panel's left and right edges are inside the window. */
+async function expectPanelInsideWindow(page: Page, width: number) {
+  const box = (await page.locator('#account-menu').boundingBox())!;
+  expect(box.x, 'the panel starts outside the window').toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width, 'the panel runs past the window').toBeLessThanOrEqual(width);
+}
+
+for (const [who, membership] of [
+  ['an owner', OWNER_MEMBERSHIP],
+  ['a coach', COACH_MEMBERSHIP],
+] as const) {
+  for (const [width, height] of SIZES) {
+    test(`${who}’s account menu at ${width}px has the TB Gym group after Dark mode and before Sign out, with no axe violations`, async ({
+      page,
+    }, testInfo) => {
+      await openShell(page, { width, height, memberships: [membership], extra: WEBSITE });
+      const menu = await openAccountMenu(page);
+
+      // Every row and heading of the panel, in reading order.
+      await expect(menu.locator('.menu-item, .menu-heading')).toHaveText([
+        'Password and security',
+        /Dark mode/,
+        'TB Gym',
+        'TB Gym website',
+        'What changed',
+        'Sign out',
+      ]);
+      await expect(menu.locator('#website-menu-heading')).toHaveText('TB Gym');
+      // The heading names the group's own list, which holds the two links and nothing else.
+      const group = menu.getByRole('list', { name: 'TB Gym', exact: true });
+      await expect(group.locator('a, button')).toHaveText(['TB Gym website', 'What changed']);
+      await expect(group.getByRole('link', { name: 'TB Gym website' })).toHaveAttribute(
+        'href',
+        '/about',
+      );
+      await expect(group.getByRole('link', { name: 'What changed' })).toHaveAttribute(
+        'href',
+        '/changelog',
+      );
+      await expect(menu.getByRole('button', { name: 'Sign out' })).toBeInViewport({ ratio: 1 });
+
+      await expectNoHorizontalOverflow(page);
+      await expectPanelInsideWindow(page, width);
+      await page.screenshot({ path: testInfo.outputPath(`n2-account-menu-${width}.png`) });
+      const scan = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+      expect(
+        scan.violations.map((violation) => `${violation.id}: ${violation.nodes.length}`),
+      ).toEqual([]);
+    });
+
+    test(`${who} at ${width}px opens the TB Gym website with no shell around it and comes back with Back to Today`, async ({
+      page,
+    }, testInfo) => {
+      await openShell(page, { width, height, memberships: [membership], extra: WEBSITE });
+      const menu = await openAccountMenu(page);
+      await menu.getByRole('link', { name: 'TB Gym website' }).click();
+
+      await expect(page).toHaveURL('/about');
+      await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
+      // The page fills the window as a visitor sees it: no sidebar, no top bar, no tabs.
+      await expect(page.locator('app-coach-shell')).toHaveCount(0);
+      await expect(page.locator('.sidebar')).toHaveCount(0);
+      await expect(page.locator('.topbar')).toHaveCount(0);
+      await expect(page.locator('app-client-tabs')).toHaveCount(0);
+      await expect(page.locator('#account-menu')).toHaveCount(0);
+      // One tap during a pitch never opens the sign-up form.
+      await expect(page.locator('a[href="/auth/register"]')).toHaveCount(0);
+      await expect(page.getByText('Start your coaching space')).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+      await page.screenshot({ path: testInfo.outputPath(`n2-about-${width}.png`) });
+
+      // The way back stands where a visitor's Sign in does: in the header, or in its menu on a phone.
+      const header = page.locator('app-home-header');
+      let back = header
+        .getByRole('navigation', { name: 'Homepage', exact: true })
+        .getByRole('link', { name: 'Back to Today' });
+      if (width === 390) {
+        await expect(back).toBeHidden();
+        await header.getByRole('button', { name: 'Menu' }).click();
+        back = header.locator('#home-menu').getByRole('link', { name: 'Back to Today' });
+      }
+      await expect(back).toBeVisible();
+      await expect(back).toHaveAttribute('href', '/');
+      await back.click();
+
+      await expect(page).toHaveURL('/');
+      await expect(page.locator('app-coach-shell')).toBeVisible();
+      await expect(page.locator('header.topbar')).toBeVisible();
+      if (width === 1440) {
+        await expect(page.locator('.sidebar a[href="/"]')).toHaveAttribute('aria-current', 'page');
+      }
+      await expect(page.locator('app-home-header')).toHaveCount(0);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toHaveCount(0);
+      await expect(page.locator('#account-menu')).toHaveCount(0);
+    });
+
+    test(`${who} at ${width}px opens What changed from the menu inside the coach shell, and a second press only closes the menu`, async ({
+      page,
+    }) => {
+      await openShell(page, { width, height, memberships: [membership], extra: WEBSITE });
+      const account = page.locator('.account-button');
+      let menu = await openAccountMenu(page);
+      await menu.getByRole('link', { name: 'What changed' }).click();
+
+      await expect(page).toHaveURL('/changelog');
+      const heading = page.getByRole('heading', { level: 1, name: 'What changed' });
+      await expect(heading).toBeVisible();
+      await expect(page.locator('.changelog--embedded')).toBeVisible();
+      // The app's own shell stays around the page, and the website's header stays out of it.
+      await expect(page.locator('app-coach-shell')).toBeVisible();
+      await expect(page.locator('header.topbar')).toBeVisible();
+      await expect(page.locator('app-home-header')).toHaveCount(0);
+      await expect(menu).toHaveCount(0);
+      await expect(account).toHaveAttribute('aria-expanded', 'false');
+      // A new page takes focus to its heading, as every navigation in the app does.
+      await expect(heading).toBeFocused();
+
+      // On the page already open the press navigates nowhere; the menu still closes.
+      menu = await openAccountMenu(page);
+      await menu.getByRole('link', { name: 'What changed' }).click();
+      await expect(menu).toHaveCount(0);
+      await expect(account).toHaveAttribute('aria-expanded', 'false');
+      await expect(account).toBeFocused();
+      await expect(page).toHaveURL('/changelog');
+      await expectNoHorizontalOverflow(page);
+    });
+  }
+}
+
+/**
+ * The menu grew by the TB Gym group, and its panel hangs from a bar that stays in place: on a window
+ * shorter than its rows it scrolls rather than run past the window's foot. The longest menu there is
+ * (the platform admin's) at 200% text, and both menus on a phone held on its side.
+ */
+const SHORT_WINDOWS = [
+  { who: 'a platform admin', admin: true, width: 390, height: 844, text: 200 },
+  { who: 'a platform admin', admin: true, width: 375, height: 667, text: 200 },
+  { who: 'a platform admin', admin: true, width: 844, height: 390, text: 100 },
+  { who: 'an owner', admin: false, width: 844, height: 390, text: 100 },
+  { who: 'an owner', admin: false, width: 667, height: 375, text: 100 },
+];
+
+for (const { who, admin, width, height, text } of SHORT_WINDOWS) {
+  test(`${who}’s account menu at ${width}x${height} and ${text}% text still reaches Sign out`, async ({
+    page,
+  }, testInfo) => {
+    await openShell(page, {
+      width,
+      height,
+      user: { ...SIGNED_IN_USER, roles: admin ? ['PlatformAdmin'] : [] },
+      extra: WEBSITE,
+    });
+    if (text === 200) {
+      await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+    }
+    const menu = await openAccountMenu(page);
+    await expect(menu.locator('.menu-item')).toHaveText([
+      'Password and security',
+      /Dark mode/,
+      'TB Gym website',
+      'What changed',
+      ...(admin ? ['Platform billing', 'Legal documents', 'Coaches'] : []),
+      'Sign out',
+    ]);
+    await expectNoHorizontalOverflow(page);
+
+    // Where Sign out is: as the menu opens, with the page scrolled to its end, and with the panel
+    // scrolled to its end. Reached means its whole box is in the window and nothing lies over it.
+    const reach = await page.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>('#account-menu')!;
+      const row = [...panel.querySelectorAll<HTMLElement>('button.menu-item')].at(-1)!;
+      const scroller = document.scrollingElement!;
+      const where = () => {
+        const box = row.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        const inside = box.top >= 0 && box.bottom <= innerHeight;
+        return {
+          top: Math.round(box.top),
+          bottom: Math.round(box.bottom),
+          reached: inside && hit !== null && row.contains(hit),
+        };
+      };
+      const edges = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return { top: Math.round(box.top), bottom: Math.round(box.bottom) };
+      };
+      const asOpened = where();
+      const measured = {
+        row: row.textContent!.trim(),
+        window: innerHeight,
+        bar: edges(document.querySelector('header.topbar')!),
+        panel: edges(panel),
+        panelOverflow: getComputedStyle(panel).overflowY,
+        panelScrolls: panel.scrollHeight - panel.clientHeight,
+        pageScrolls: scroller.scrollHeight - scroller.clientHeight,
+        asOpened,
+      };
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'instant' });
+      const pageAtItsEnd = { scrolled: Math.round(scroller.scrollTop), ...where() };
+      scroller.scrollTo({ top: 0, behavior: 'instant' });
+      panel.scrollTo({ top: panel.scrollHeight, behavior: 'instant' });
+      const panelAtItsEnd = { scrolled: Math.round(panel.scrollTop), ...where() };
+      panel.scrollTo({ top: 0, behavior: 'instant' });
+      return { ...measured, pageAtItsEnd, panelAtItsEnd };
+    });
+    // Kept beside the still, so the numbers can be read after a run that passes.
+    const name = `n2-menu-${admin ? 'admin' : 'owner'}-${width}x${height}-${text}`;
+    const measurements = testInfo.outputPath(`${name}.json`);
+    writeFileSync(measurements, JSON.stringify(reach, null, 2));
+    await testInfo.attach('Where Sign out is', { path: measurements });
+    await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
+
+    expect(reach.row).toBe('Sign out');
+    await expect(menu).toBeVisible();
+    expect(
+      reach.asOpened.reached || reach.pageAtItsEnd.reached || reach.panelAtItsEnd.reached,
+      `Sign out cannot be reached: ${JSON.stringify(reach)}`,
+    ).toBe(true);
+    // The panel itself ends inside the window, so its last row is never under the window's foot.
+    expect(reach.panel.bottom, JSON.stringify(reach)).toBeLessThanOrEqual(reach.window);
+  });
+}
+
+for (const [width, height] of SIZES) {
+  test(`in RTL at ${width}px the open account menu stays inside the window`, async ({
+    page,
+  }, testInfo) => {
+    await openShell(page, { width, height, rtl: true, extra: WEBSITE });
+    const menu = await openAccountMenu(page);
+
+    await expect(menu.locator('#website-menu-heading')).toBeVisible();
+    await expect(menu.getByRole('link', { name: 'TB Gym website' })).toBeVisible();
+    await expect(menu.getByRole('link', { name: 'What changed' })).toBeVisible();
+    await expect(menu.getByRole('button', { name: 'Sign out' })).toBeInViewport({ ratio: 1 });
+    await expectNoHorizontalOverflow(page);
+    await expectPanelInsideWindow(page, width);
+    // The words of the group's heading and of its rows start on one line, on the right in RTL.
+    const starts = await menu
+      .locator('#website-menu-heading, .menu-group .menu-item')
+      .evaluateAll((items) =>
+        items.map((item) => {
+          const words = document.createRange();
+          words.selectNodeContents(item);
+          return Math.round(words.getBoundingClientRect().right);
+        }),
+      );
+    expect(starts).toHaveLength(3);
+    expect(new Set(starts).size, `the words start at ${starts.join(', ')}`).toBe(1);
+    expect(starts[0]).toBeGreaterThan((await menu.boundingBox())!.x + 128);
+    await page.screenshot({ path: testInfo.outputPath(`n2-account-menu-rtl-${width}.png`) });
+  });
+}

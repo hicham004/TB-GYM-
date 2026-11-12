@@ -32,6 +32,18 @@ function expectSecurityHeaders(response: APIResponse, what: string): void {
   expect(connect, what).toBe("connect-src 'self'");
 }
 
+/**
+ * The X-Robots-Tag values as sent, without the one the test copy adds to every answer
+ * (docker/test-copy/Dockerfile), so the same check reads a deployment and the test copy alike.
+ */
+function robotsTags(response: APIResponse): string[] {
+  return response
+    .headersArray()
+    .filter(({ name }) => name.toLowerCase() === 'x-robots-tag')
+    .map(({ value }) => value)
+    .filter((value) => value !== 'noindex, nofollow');
+}
+
 /** The shell's own script and stylesheet names, which carry their content's hash. */
 async function hashedFiles(request: APIRequestContext): Promise<string[]> {
   const shell = await (await request.get('/clients')).text();
@@ -66,6 +78,32 @@ test('a document is asked for afresh on every visit, whichever document answers'
     expect(await response.text(), what).toMatch(body);
     expectSecurityHeaders(response, what);
   }
+});
+
+test('the homepage inside the app asks not to be indexed, and no other answer does', async ({
+  request,
+}) => {
+  // Notes plan N2: /about is the homepage again, for someone signed in too; the shell answers it
+  // with or without the sign-in cookie, and a search engine is asked to show the homepage alone.
+  const pages: [string, Record<string, string>][] = [
+    ['/about', {}],
+    ['/about', SIGNED_IN],
+    ['/about?utm_source=menu', {}],
+    ['/about/', {}],
+  ];
+  for (const [path, headers] of pages) {
+    const what = `${path}${headers['cookie'] ? ' (signed in)' : ''}`;
+    const response = await request.get(path, { headers });
+    expect(response.status(), what).toBe(200);
+    expect(robotsTags(response), what).toEqual(['noindex']);
+    expect(response.headers()['cache-control'], what).toBe('no-cache');
+    expect(await response.text(), what).toMatch(/<app-root><\/app-root>/);
+    expectSecurityHeaders(response, what);
+  }
+  for (const path of ['/', '/changelog', '/auth/sign-in', '/clients', '/about-us', '/about/us']) {
+    expect(robotsTags(await request.get(path)), path).toEqual([]);
+  }
+  expect(robotsTags(await request.get('/', { headers: SIGNED_IN })), '/ (signed in)').toEqual([]);
 });
 
 test('a file named by its content is kept for a year without asking again', async ({ request }) => {

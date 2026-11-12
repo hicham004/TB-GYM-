@@ -1083,7 +1083,10 @@ by the homepage and what changed alone (`features/home/home-faces.ts`, written i
 the build-time render; `check-prerender.mjs` fails a shell or sign-in that asks for them), and the Arabic
 faces carry a `unicode-range`, so an emoji in a message no longer fetches 72 kB. nginx decides
 `Cache-Control` with one `map` on the file that answers: a document `no-cache`, the hashed scripts and
-stylesheet a year `immutable`, anything else nginx's default (`serve-built.mjs` repeats it); `connect-src`
+stylesheet a year `immutable`, anything else nginx's default (`serve-built.mjs` repeats it); a second
+`map`, on `$request_uri` because `$uri` names the shell by then, sends `X-Robots-Tag: noindex` on `/about`
+alone, from the server block so no location drops the security headers (notes plan N2;
+`serve-built.mjs` repeats it and `e2e/edge/` reads it); `connect-src`
 is `'self'` alone, which covers the same-origin chat socket. `hero-lab.css` sits in the dev lab's folder
 and only the development build copies it. `scripts/edge-proof.ps1` runs `e2e/edge/`
 (`playwright.edge.config.ts`) against a real nginx started from `nginx.conf` and the production output,
@@ -1156,20 +1159,30 @@ lead to it. The form asks `GET /api/website/contact-form` for a server-signed st
 into view (or on the first touch), refreshes the antiforgery token and posts
 `POST /api/website/contact-requests`; sent back inside three seconds it waits out the rest and tries
 once more, and with a stamp the server no longer takes it fetches a fresh one, once. The homepage, and
-What changed for a visitor once the session has answered, ask `GET /api/website/settings` once they
+What changed and the sign-up page for a visitor once the session has answered, ask
+`GET /api/website/settings` once they
 are live (`WebsiteSettingsStore`, browser only): a WhatsApp number becomes a `wa.me` link beside
-the form, and a named Plausible site script makes `WebsiteAnalytics` write Plausible's queue stub
+the form, and for a visitor alone (never for someone signed in, who can open the homepage at `/about`)
+a named Plausible site script makes `WebsiteAnalytics` write Plausible's queue stub
 from the bundle (the CSP allows no inline script) and add one `<script>` from `/stats/`, which
 nginx proxies to plausible.io together with the events endpoint, so the page connects to nothing
-but its own origin and sets no cookie. Since notes plan N1 the script counts nothing on its own
+but its own origin and sets no cookie; both proxies drop the browser's `Cookie` header and the far
+side's `Set-Cookie` (`WebsiteBoundaryTests` pins it), since the sign-in cookie rides every
+same-origin request. Since notes plan N1 the script counts nothing on its own
 (`autoCapturePageviews` and the three tracks a new Plausible site switches on are off in `init`):
-`Home`, at `/` alone, and `Changelog`, for a visitor, each call `WebsiteAnalytics.pageview()` once
+`Home`, at `/` alone, and `Changelog` and the sign-up page (`RegisterCoach`, notes plan N2), for a
+visitor, each call `WebsiteAnalytics.pageview()` once
 per opening, which keeps the script's own two rules (a page opened out of sight counts when first
 shown, and a return from the back/forward cache counts again); `transformRequest` drops any event
-but a page view of those two addresses (`COUNTED_PAGES`) and sends its path and campaign tags alone;
+but a page view of those three addresses (`COUNTED_PAGES`) and sends its path and campaign tags alone;
 and a counted page that closes tells the script of a page the hook drops, which ends its time on
-page (Plausible sends that without the hook). So the numbers are people on the website's two pages,
-nobody signed in. The build-time
+page (Plausible sends that without the hook). So the numbers are people on the website's three pages,
+nobody signed in. Since notes plan N2 the homepage also answers at `/about` (the same `Home`,
+client-rendered, behind `sessionKnownGuard`), for someone signed in too: `WEBSITE_PAGE` in its route
+data makes `App` draw no shell around it and keeps TB Gym's colours, `Home` hands its own address to
+its links so none leaves for Today, shows Back to Today in place of Sign in and no sign-up link to
+someone signed in, adds a `noindex` tag while it is open, counts nothing there, and loads no
+analytics script for someone signed in. The build-time
 render asks for nothing, so the finished HTML holds the form and never the script
 (`check-prerender.mjs` checks both). `e2e/support.ts`'s `mockSignedOut` answers the settings
 with neither configured. Since R6.2j the band, the form and the finale are one dark ending, and the

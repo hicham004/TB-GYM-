@@ -1,12 +1,12 @@
 <header class="header" [attr.data-tone]="tone()" [class.header--open]="menuOpen()">
   <div class="header__inner">
-    <a class="brand" routerLink="/" (click)="close()">
+    <a class="brand" [routerLink]="page()" (click)="close()">
       <span class="brand__disc" aria-hidden="true" dir="ltr">TB<i>.</i></span>
       <span i18n translate="no">TB Gym</span>
     </a>
     <nav class="links" aria-label="Homepage" i18n-aria-label #links>
       <a
-        routerLink="/"
+        [routerLink]="page()"
         fragment="week"
         data-section="week"
         [class.is-current]="current() === 'week'"
@@ -15,7 +15,7 @@
         >The week</a
       >
       <a
-        routerLink="/"
+        [routerLink]="page()"
         fragment="inside"
         data-section="inside"
         [class.is-current]="current() === 'inside'"
@@ -24,7 +24,7 @@
         >What's inside</a
       >
       <a
-        routerLink="/"
+        [routerLink]="page()"
         fragment="for-gyms"
         data-section="for-gyms"
         [class.is-current]="current() === 'for-gyms'"
@@ -34,7 +34,11 @@
       >
       <!-- The line under the section in view, slid there from the last one (R6.2k). -->
       <span class="links__marker" aria-hidden="true" #marker></span>
-      <a class="links__sign" routerLink="/auth/sign-in" i18n>Sign in</a>
+      @if (signedIn()) {
+        <a class="links__sign" routerLink="/" i18n>Back to Today</a>
+      } @else {
+        <a class="links__sign" routerLink="/auth/sign-in" i18n>Sign in</a>
+      }
     </nav>
     <button
       class="menu-button"
@@ -57,12 +61,16 @@
     i18n-aria-label
     [hidden]="!menuOpen()"
   >
-    <a routerLink="/" fragment="week" (click)="close()" i18n>The week</a>
-    <a routerLink="/" fragment="inside" (click)="close()" i18n>What's inside</a>
-    <a routerLink="/" fragment="for-gyms" (click)="close()" i18n>For gyms</a>
-    <a routerLink="/auth/sign-in" (click)="close()" i18n>Sign in</a>
-    <a class="menu__start" routerLink="/auth/register" (click)="close()" i18n
-      >Start your coaching space</a
-    >
+    <a [routerLink]="page()" fragment="week" (click)="close()" i18n>The week</a>
+    <a [routerLink]="page()" fragment="inside" (click)="close()" i18n>What's inside</a>
+    <a [routerLink]="page()" fragment="for-gyms" (click)="close()" i18n>For gyms</a>
+    @if (signedIn()) {
+      <a routerLink="/" (click)="close()" i18n>Back to Today</a>
+    } @else {
+      <a routerLink="/auth/sign-in" (click)="close()" i18n>Sign in</a>
+      <a class="menu__start" routerLink="/auth/register" (click)="close()" i18n
+        >Start your coaching space</a
+      >
+    }
   </nav>
 </header>

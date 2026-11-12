@@ -58,6 +58,14 @@ export function cacheControlFor(file) {
   return null;
 }
 
+/**
+ * nginx.conf's robots map (notes plan N2): the homepage's address inside the app asks a search
+ * engine not to show it, and no other address says anything.
+ */
+export function robotsTagFor(pathname) {
+  return /^\/about\/?$/.test(pathname) ? 'noindex' : null;
+}
+
 /** The content types a build output needs; nginx's own table has them all. */
 export const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -170,6 +178,9 @@ export function createSiteServer(browserDirectory, { extraHeaders = {}, intercep
     const headers = headersFor(file);
     const cacheControl = cacheControlFor(answer.file);
     if (cacheControl !== null) headers['Cache-Control'] = cacheControl;
+    // The private pre-launch server already sends a stronger one on every answer; it stays.
+    const robots = robotsTagFor(url.pathname);
+    if (robots !== null) headers['X-Robots-Tag'] ??= robots;
     response.writeHead(answer.status, headers);
     createReadStream(file).pipe(response);
   });

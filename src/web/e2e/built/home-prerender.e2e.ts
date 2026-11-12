@@ -161,6 +161,98 @@ test('someone signed in gets the shell at all three pre-rendered addresses, howe
   expect(pageText(visitor)).toMatch(HEADLINE);
 });
 
+// Notes plan N2: the homepage's address inside the app. It is never rendered ahead of time, so the
+// cookie chooses nothing there, and a header asks search engines to show the homepage's own address.
+test('/about answers the plain shell with or without the sign-in cookie, and asks search engines to leave it out', async ({
+  request,
+}) => {
+  for (const path of ['/about', '/about/', '/about?utm_source=menu']) {
+    for (const cookie of [null, ...SIGNED_IN_COOKIES]) {
+      const label = `${path} ${cookie ?? 'no cookie'}`;
+      const response = await request.get(path, cookie === null ? {} : { headers: { cookie } });
+      expect(response.status(), label).toBe(200);
+      expect(response.headers()['content-type'], label).toContain('text/html');
+      expect(response.headers()['cache-control'], label).toBe('no-cache');
+      expect(response.headers()['x-robots-tag'], label).toBe('noindex');
+      // The header rides with the security headers, in place of none of them.
+      expect(response.headers()['x-content-type-options'], label).toBe('nosniff');
+      expect(response.headers()['x-frame-options'], label).toBe('DENY');
+      expect(response.headers()['content-security-policy'], label).toContain("script-src 'self'");
+      const html = await response.text();
+      expect(html, label).toContain('<app-root></app-root>');
+      expect(html, label).not.toMatch(/<h1[\s>]/);
+      expect(pageText(html), label).not.toMatch(HEADLINE);
+      // The shell is every address's document, so the tag is the page's to add once it is drawn.
+      expect(html, label).not.toMatch(/<meta name="robots"/);
+    }
+  }
+});
+
+test('no other address carries the robots header: the homepage, what changed, an app screen, a neighbour of /about', async ({
+  request,
+}) => {
+  for (const path of [
+    '/',
+    '/changelog',
+    '/clients',
+    '/auth/sign-in',
+    '/auth/register',
+    '/index.csr.html',
+    '/robots.txt',
+    // Only /about itself, with or without its slash.
+    '/about-us',
+    '/aboutus',
+    '/about/team',
+    '/clients/about',
+  ]) {
+    for (const cookie of [null, SIGNED_IN_COOKIES[0]]) {
+      const label = `${path} ${cookie ?? 'no cookie'}`;
+      const response = await request.get(path, cookie === null ? {} : { headers: { cookie } });
+      expect(response.status(), label).toBe(200);
+      expect(response.headers()['x-robots-tag'], label).toBeUndefined();
+    }
+  }
+});
+
+test('/about opened by a visitor draws the homepage from the shell, with the robots tag and links that stay on the page', async ({
+  page,
+}) => {
+  await mockSignedOut(page);
+  const response = await page.goto('/about');
+  expect(response?.status()).toBe(200);
+  expect(response?.headers()['x-robots-tag']).toBe('noindex');
+  await waitForFonts(page);
+
+  await expect(page.getByRole('heading', { level: 1, name: HEADLINE })).toBeVisible();
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('#week')).toHaveAttribute('data-motion', /running|off/);
+  await expect(page).toHaveURL(/\/about$/);
+  const robots = page.locator('head meta[name="robots"]');
+  await expect(robots).toHaveCount(1);
+  await expect(robots).toHaveAttribute('content', 'noindex');
+  // Every link within the page leads to /about, none to the homepage's own address.
+  await expect(page.locator('a[href^="/#"]')).toHaveCount(0);
+  await expect(page.locator('a.brand')).toHaveAttribute('href', '/about');
+  await expect(page.locator('.skip-link')).toHaveAttribute('href', '/about#home-content');
+  for (const section of ['week', 'inside', 'for-gyms']) {
+    await expect(page.locator(`a[href="/about#${section}"]`)).toHaveCount(2);
+  }
+  await expect(page.locator('a[href="/about#talk"]')).toHaveCount(3);
+  // A visitor is offered what the homepage offers.
+  await expect(page.locator('.links .links__sign')).toHaveAttribute('href', '/auth/sign-in');
+  await expect(page.locator('a[href="/auth/register"]')).toHaveCount(10);
+
+  // A section link stays on the page, and leaving it takes the tag away.
+  await page.locator('.links').getByRole('link', { name: 'For gyms' }).click();
+  await expect(page).toHaveURL(/\/about#for-gyms$/);
+  await expect(page.locator('#for-gyms')).toBeInViewport();
+  await expect(robots).toHaveCount(1);
+  await page.locator('.links .links__sign').click();
+  await expect(page).toHaveURL(/\/auth\/sign-in$/);
+  await expect(page.getByRole('heading', { level: 1, name: /Welcome/ })).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+});
+
 test('robots.txt and the page’s pictures are served as files, not as the shell', async ({
   request,
 }) => {

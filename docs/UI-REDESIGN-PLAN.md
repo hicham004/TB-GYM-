@@ -1441,6 +1441,9 @@ Tokens are theme-ready from R1, so this costs little later.
   on the account. Staff switch light or dark in the account menu (Dark mode, the owner's ask of
   2026-10-24): a sun eclipsed into a moon, the new mode spreading over the page from the switch (a
   view transition, none for less motion). Following the device stays in Settings › Appearance.
+  After Dark mode the menu has a group headed TB Gym (notes plan N2, decision 23): "TB Gym website"
+  opens the homepage inside the app at `/about`, and "What changed" opens `/changelog` inside the
+  coach frame. Owners and coaches alone have this menu, so clients are not sent there.
 - **Safety:**
   - Only validated colour values and a logo through the existing media pipeline (scanned,
     tenant-scoped). No custom CSS or fonts.
@@ -1613,8 +1616,9 @@ Tokens are theme-ready from R1, so this costs little later.
   hero's and finale's quiet links and the gym story's button lead to it), on a new backend module,
   `TB.Gym.Modules.Website` (ADR 0037). `core/website/` holds `WebsiteSettingsStore` (the WhatsApp
   link and the analytics script, asked for once per visit in the browser by the homepage and, for a
-  visitor, the changelog) and `WebsiteAnalytics` (Plausible from this origin, through nginx's
-  `/stats/`, no inline script, counting those two pages alone since notes plan N1). The pre-rendered homepage holds the form and never the script; `check-prerender.mjs`
+  visitor, the changelog and the sign-up page) and `WebsiteAnalytics` (Plausible from this origin,
+  through nginx's `/stats/`, no inline script, for a visitor alone, counting those three pages alone
+  since notes plans N1 and N2). The pre-rendered homepage holds the form and never the script; `check-prerender.mjs`
   and the `built` project check both.
 - **Retire:** the pre-foundation palette and globals in `styles.scss`, the `--accent/--surface`
   legacy variables, and every browser-default button. The migration is finished when a lint check
@@ -2472,6 +2476,12 @@ limited to the coach's assigned clients.
   says that logged sets suggest a max. Its second sentence says Lea reads every weight a changed
   training max moves before it lands, and its coach window, `maxes-dark`, is the Training maxes
   panel as it is now, taken again from the sample demo.
+- Notes plan N2 (decision 23, 7 Nov 2026): the homepage also opens at `/about`, for someone signed
+  in too, filling the window with no sidebar, top bar or tabs. Signed in, "Back to Today" stands
+  where Sign in does (the header, the phone menu, the foot), and "Start your coaching space", the
+  six rows' links and the clients strip's Sign in are not drawn; every link within the page stays
+  on `/about`. That address says noindex, counts nothing and loads no analytics script for someone
+  signed in; the sign-up page counts one visit for a visitor, as What changed does.
 
 ---
 

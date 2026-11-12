@@ -6,10 +6,14 @@
       <p class="finale__eyebrow" i18n>Start</p>
       <h2 id="finale-title" class="finale__title" i18n>Your next client's week starts here.</h2>
       <div class="finale__actions">
-        <span class="finale__magnet">
-          <a class="finale__start" routerLink="/auth/register" i18n>Start your coaching space</a>
+        <!-- The pill's holder stays when the pill is not offered (someone signed in), hidden: the
+             finale's motion is set up around it (home-motion-below). -->
+        <span class="finale__magnet" [hidden]="signedIn()">
+          @if (!signedIn()) {
+            <a class="finale__start" routerLink="/auth/register" i18n>Start your coaching space</a>
+          }
         </span>
-        <a class="finale__talk" routerLink="/" fragment="talk">
+        <a class="finale__talk" [routerLink]="page()" fragment="talk">
           <span i18n>Talk to us about your gym</span
           ><span class="quiet__mark" aria-hidden="true">→</span>
         </a>
@@ -25,7 +29,11 @@
         } @else {
           <a routerLink="/changelog" i18n>What changed</a>
         }
-        <a routerLink="/auth/sign-in" i18n>Sign in</a>
+        @if (signedIn()) {
+          <a routerLink="/" i18n>Back to Today</a>
+        } @else {
+          <a routerLink="/auth/sign-in" i18n>Sign in</a>
+        }
       </nav>
     </footer>
   </div>

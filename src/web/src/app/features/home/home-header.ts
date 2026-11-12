@@ -29,8 +29,9 @@ export type HomeSection = 'week' | 'inside' | 'for-gyms';
 
 /**
  * The website's header (the homepage and `/changelog`): the wordmark, three section links, Sign
- * in. It sticks to the top and takes the tone of the section under it: cream text over the dark
- * hero and the dark ending, ink over the cream body. On a wide screen a line under its links marks
+ * in, or Back to Today for someone signed in (the homepage inside the app, `/about`). It sticks to
+ * the top and takes the tone of the section under it: cream text over the dark hero and the dark
+ * ending, ink over the cream body. On a wide screen a line under its links marks
  * the part of the page in view and slides from link to link (R6.2k), ink over cream and lime over
  * the night; with less motion it moves without sliding. On a phone the section links sit behind a
  * Menu button, a disclosure the keyboard closes with Escape.
@@ -50,6 +51,15 @@ export class HomeHeader {
 
   /** The part of the page in view, which the links mark; none over the hero and the finale. */
   readonly current = input<HomeSection | null>(null);
+
+  /**
+   * The homepage's address, where the wordmark and the section links lead: its own, or `/about` when
+   * the page is open inside the app (notes plan N2), so that there they stay on the page.
+   */
+  readonly page = input('/');
+
+  /** Someone is signed in: Back to Today stands where Sign in does, and no sign-up is offered. */
+  readonly signedIn = input(false);
 
   protected readonly menuOpen = signal(false);
 
