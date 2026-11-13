@@ -2656,6 +2656,16 @@ the house opens nothing of it. Nothing else changed: a coach's client opens exer
 a workout of theirs that holds it (ADR 0011). A workout of one's own (TRN-033) holds no demo of its own: it lists its
 exercises' pool demos, which open by this grant while the exercise is in use.
 
+**MED-018** An exercise demo plays like a GIF (notes plan N9b4, C20's fourth slice). An uploaded MP4 or WebM plays
+muted, looping and inline with no controls in the house's pool, an exercise's page there, the trainee's picker and
+every client's workout player, and muted and looping with the browser's controls in the coach's demo sheet and the
+player's bigger view; a picture stays a picture and a link opens on its site (MED-016). A clip asks for its grant
+only once it is near the screen, through the grant every demo uses (MED-004, MED-005: the batch route, six a request,
+never a public address; no poster or rendition is made, PRG-008), keeps at most 96 live in a visit, each a cookie,
+before it waits for a press, and stops off the screen. One pause holds for every clip, and a person who asked for
+reduced motion or less data gets its first frame with a play control. A clip that outlives its 30-minute grant asks
+a fresh one once when its bytes are refused.
+
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
 cannot leak one coach's private library into another tenant.
@@ -2690,7 +2700,10 @@ coach's library is (LIB-003) and filtered by equipment, movement, muscle and typ
 equipment, movement, muscles, instructions and the demos that open now (MED-017), never the staff's tags, swaps or
 notes. Only the request's own workspace counts: a coach's workspace has no pool (404), so a coach's client still reads
 no library. With Training locked the read says why, as the Training reads do, and lists nothing. Nobody writes to the
-pool through it: the library's routes stay the staff's.
+pool through it: the library's routes stay the staff's. On screen (notes plan N9b4) a self-directed trainee browses it at
+`/training/pool` (a search, a muscle and the equipment, kept in the address) and opens an exercise's page with its
+demo, its facts and its instructions, where "Start a workout" (or "Add to your workout" while one is unfinished) adds
+it to a workout of one's own with one empty set (TRN-033); the server answers every refusal.
 
 ## 9. Theme and gamification
 

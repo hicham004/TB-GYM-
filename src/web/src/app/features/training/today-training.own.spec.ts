@@ -9,6 +9,7 @@ import type {
   ClientTrainingDayResult,
   ClientTrainingUpcomingView,
   ClientWorkoutView,
+  MediaAccessView,
   OwnWorkoutSetView,
   OwnWorkoutView,
   PreviousExercisePerformanceView,
@@ -1512,6 +1513,84 @@ describe('TodayTraining, a workout of one’s own (notes plan N9b3, TRN-033)', (
       );
       expect(api.getMyTrainingToday).toHaveBeenCalledTimes(1);
       expect(textOf(query(host, 'app-empty-state h2'))).toBe('No workout in progress');
+    });
+  });
+
+  describe('its exercise’s demo (notes plan N9b4)', () => {
+    afterEach(() => {
+      document.body.replaceChildren();
+      TestBed.resetTestingModule();
+      // After the player is gone, so the clip letting go of its video still meets the stubs.
+      vi.restoreAllMocks();
+    });
+
+    /** An uploaded clip's grant: the same-origin address its cookie opens (MED-004, MED-017). */
+    const clipGrant = (assetId: string): MediaAccessView => ({
+      assetId,
+      kind: 'Video',
+      source: 'Upload',
+      contentType: 'video/webm',
+      url: `/api/media/${assetId}/content`,
+      expiresAtUtc: '2026-11-13T08:00:00Z',
+      downloadAllowed: false,
+    });
+
+    /** Goblet squat with its demo, which the workout reads from TB Gym's pool as it is now. */
+    function withDemo(): OwnWorkoutView {
+      return gobletWorkout({
+        exercises: [
+          ownExerciseView({ previousPerformance: LAST_TIME, mediaAssetIds: ['m-goblet-video'] }),
+        ],
+      });
+    }
+
+    it('plays it under the exercise’s name and before its sets, as a coach’s client’s plays', async () => {
+      // jsdom's <video> neither loads nor plays (`play()` answers undefined): it answers as a browser does.
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(() => Promise.resolve());
+      vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+      vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
+      const batch = vi.fn((ids: readonly string[]) => of({ items: ids.map(clipGrant) }));
+      const { fixture, host, refresh } = await render({
+        today: ownDay(withDemo()),
+        api: { createMediaAccessBatch: batch },
+      });
+
+      const clip = query<HTMLElement>(host, '.workout-exercise app-demo-clip.exercise-clip');
+      expect(query(host, '.workout-exercise header.exercise-heading').nextElementSibling).toBe(
+        clip,
+      );
+      expect(
+        clip.compareDocumentPosition(setCards(host)[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // Nothing is asked for before it is seen; jsdom never sees it, so it waits for a press.
+      expect(batch).not.toHaveBeenCalled();
+
+      press(host, 'Play the demo');
+      await settle(fixture);
+
+      expect(batch).toHaveBeenCalledExactlyOnceWith(['m-goblet-video']);
+      expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(batch.mock.invocationCallOrder[0]);
+      const video = query<HTMLVideoElement>(clip, 'video');
+      expect(video.getAttribute('src')).toBe('/api/media/m-goblet-video/content');
+      expect(video.muted).toBe(true);
+      expect(video.loop).toBe(true);
+      expect(video.playsInline).toBe(true);
+      expect(video.hasAttribute('controls')).toBe(false);
+      expect(video.getAttribute('aria-label')).toBe('How to do Goblet squat');
+      expect(play).toHaveBeenCalled();
+      // Its own pause, for a loop that plays by itself (WCAG 2.2.2); Watch demo opens it bigger.
+      expect(query(clip, 'button[data-clip-toggle]')).toBeTruthy();
+      expect(button(host, 'Watch demo 1').disabled).toBe(false);
+    });
+
+    it('draws none for an exercise without a demo', async () => {
+      const { host } = await render();
+
+      expect(shown(host)).toEqual(['EXERCISE 1 OF 1', 'Goblet squat']);
+      expect(host.querySelector('app-demo-clip')).toBeNull();
+      expect(host.textContent).not.toContain('Watch demo');
     });
   });
 });

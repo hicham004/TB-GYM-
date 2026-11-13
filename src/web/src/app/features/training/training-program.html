@@ -251,19 +251,30 @@
         description="Start a workout, pick exercises from TB Gym’s pool and log each set. Your finished workouts are below."
         i18n-description
       >
-        <button
-          appButton
-          type="button"
-          size="touch"
-          empty-state-action
-          data-start-own
-          [loading]="startingOwn() === 'new'"
-          [disabled]="startingOwn() !== null && startingOwn() !== 'new'"
-          (click)="startOwn(null)"
-          i18n
-        >
-          Start a workout
-        </button>
+        <div class="own-actions" empty-state-action>
+          <button
+            appButton
+            type="button"
+            size="touch"
+            data-start-own
+            [loading]="startingOwn() === 'new'"
+            [disabled]="startingOwn() !== null && startingOwn() !== 'new'"
+            (click)="startOwn(null)"
+            i18n
+          >
+            Start a workout
+          </button>
+          <!-- The pool's page: each exercise's demo, and a workout started with it (notes plan N9b4). -->
+          <a
+            appButton
+            variant="outlined"
+            size="touch"
+            routerLink="/training/pool"
+            data-browse-pool
+            i18n
+            >Browse exercises</a
+          >
+        </div>
       </app-empty-state>
       @if (ownProblem(); as problem) {
         @if (problem.from === 'new') {

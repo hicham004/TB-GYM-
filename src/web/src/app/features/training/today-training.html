@@ -258,6 +258,17 @@
                       }
                     </div>
                   </header>
+                  <!-- Its demo plays like a GIF under its name (notes plan N9b4): muted, looping, small,
+                       with its own pause. Watch demo below opens it bigger, with the browser's controls.
+                       None after a swap: a workout's demos stay the prescribed exercise's, so a clip
+                       there would loop that movement under the swapped-in name; Watch demo stays. -->
+                  @if (shownDemos().length && !exercise.wasSubstituted) {
+                    <app-demo-clip
+                      class="exercise-clip"
+                      [demos]="shownDemos()"
+                      [exerciseName]="exercise.actualExerciseName"
+                    />
+                  }
                   @if (exercise.coachNotes) {
                     <p class="coach-note" dir="auto">{{ exercise.coachNotes }}</p>
                   }
@@ -873,7 +884,18 @@
     } @else if (media.kind === 'Image') {
       <img [src]="media.url" alt="Exercise demonstration" i18n-alt />
     } @else {
-      <video [src]="media.url" controls controlsList="nodownload"></video>
+      <!-- Plays as the clips do (notes plan N9b4): muted, looping and inline, by itself unless they are
+           paused. Its controls stay, for the sound, a pause and the whole screen. -->
+      <video
+        muted
+        loop
+        playsinline
+        [muted]="true"
+        [autoplay]="!clips.paused()"
+        [src]="media.url"
+        controls
+        controlsList="nodownload"
+      ></video>
     }
   </div>
 }

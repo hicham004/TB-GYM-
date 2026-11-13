@@ -1,0 +1,141 @@
+<div class="exercise-page tb-theme">
+  <!-- Back to the pool with the search and filters it was opened from. -->
+  <a class="back" routerLink="/training/pool" queryParamsHandling="preserve">
+    <app-icon name="chevron-right" class="back-icon" />
+    <span i18n>Exercises</span>
+  </a>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="panel pad" aria-busy="true">
+        <app-skeleton [label]="loadingLabel" [lines]="4" />
+      </div>
+    }
+    @case ('error') {
+      <div class="panel pad load-failed">
+        <p role="alert" i18n>The exercise couldn’t be loaded.</p>
+        <button appButton type="button" variant="outlined" size="touch" (click)="load()" i18n>
+          Try again
+        </button>
+      </div>
+    }
+    @case ('gone') {
+      <app-empty-state
+        class="panel"
+        [headingLevel]="1"
+        heading="This exercise isn’t in the pool"
+        i18n-heading
+        description="It may have been taken out of TB Gym’s pool, or the pool isn’t open to you."
+        i18n-description
+        data-pool-gone
+      >
+        <a
+          appButton
+          empty-state-action
+          variant="outlined"
+          size="touch"
+          routerLink="/training/pool"
+          i18n
+          >All exercises</a
+        >
+      </app-empty-state>
+    }
+    @case ('closed') {
+      <app-empty-state
+        class="panel"
+        [headingLevel]="1"
+        heading="The pool is closed for now"
+        i18n-heading
+        [description]="closedWords()"
+        data-pool-closed
+      />
+    }
+    @default {
+      @if (exercise(); as current) {
+        <h1 tabindex="-1" dir="auto">{{ current.name }}</h1>
+
+        @if (demos().length > 0) {
+          <div class="demo-area">
+            <app-demo-clip class="clip" [demos]="demos()" [exerciseName]="current.name" />
+            @if (demoIds().length > 1) {
+              <!-- Every demo, links included, one at a time in a sheet. -->
+              <app-exercise-demo
+                class="all-demos"
+                touch
+                [assetIds]="demoIds()"
+                [exerciseName]="current.name"
+                ><span i18n>See all {{ demoIds().length }} demos</span></app-exercise-demo
+              >
+            }
+          </div>
+        }
+
+        @if (offer(); as offered) {
+          <!-- The one main action, for a trainee of TB Gym's own space alone (notes plan N9b3). -->
+          <div class="offer">
+            <button
+              appButton
+              type="button"
+              size="touch"
+              class="start"
+              data-pool-start
+              [loading]="working()"
+              [attr.aria-describedby]="offered === 'add' ? 'pool-add-note' : null"
+              (click)="startWithIt()"
+            >
+              @if (offered === 'add') {
+                <ng-container i18n>Add to your workout</ng-container>
+              } @else {
+                <!-- Which exercise, for a screen reader; a sighted person reads it above. -->
+                <ng-container i18n
+                  >Start a workout<span class="tb-visually-hidden">
+                    with <bdi>{{ current.name }}</bdi></span
+                  ></ng-container
+                >
+              }
+            </button>
+            @if (offered === 'add') {
+              <p class="note" id="pool-add-note" i18n>
+                It goes into the workout you haven’t finished.
+              </p>
+            }
+            @if (problem(); as shown) {
+              <div class="problem-box">
+                <p class="problem" role="alert">{{ shown.text }}</p>
+                @if (shown.carryOn; as carry) {
+                  <a
+                    appButton
+                    variant="outlined"
+                    size="touch"
+                    routerLink="/training/today"
+                    [queryParams]="carry.sessionId ? { sessionId: carry.sessionId } : null"
+                    data-carry-on
+                    i18n
+                    >Carry on</a
+                  >
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <dl class="facts">
+          @for (fact of facts(); track fact.key) {
+            <div class="fact" [attr.data-fact]="fact.key">
+              <dt>{{ fact.term }}</dt>
+              <dd dir="auto">{{ fact.value }}</dd>
+            </div>
+          }
+        </dl>
+
+        @if (instructions(); as steps) {
+          <section class="how" aria-labelledby="pool-how-heading">
+            <h2 id="pool-how-heading" i18n>How to do it</h2>
+            <!-- The house's own words, as typed: kept as text, its line breaks kept. -->
+            <p class="instructions" dir="auto">{{ steps }}</p>
+          </section>
+        }
+      }
+    }
+  }
+</div>

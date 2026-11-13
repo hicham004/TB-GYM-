@@ -161,6 +161,53 @@ describe('UiMenu', () => {
     expect(button.classList).toContain('selected');
   });
 
+  it('draws a 44 px chip with 44 px choices for a client’s thumb when asked (notes plan N9b4)', async () => {
+    const view = await render((host) => {
+      host.variant.set('chip');
+      host.size.set('touch');
+    });
+    const button = trigger(view.element);
+
+    expect(button.classList).toContain('chip');
+    expect(button.classList).toContain('chip-touch');
+    expect(getComputedStyle(button).minBlockSize).toBe('2.75rem');
+    // A long choice wraps inside the chip on a phone at 200% text, never past the screen's edge.
+    expect(getComputedStyle(button).maxInlineSize).toBe('100%');
+
+    await open(view);
+    expect(list(view.element)?.classList).toContain('panel-touch');
+    expect(items(view.element).map((choice) => getComputedStyle(choice).minBlockSize)).toEqual([
+      '2.75rem',
+      '2.75rem',
+      '2.75rem',
+      '2.75rem',
+    ]);
+  });
+
+  it('keeps a chip and its choices at their own size without touch', async () => {
+    const view = await render((host) => host.variant.set('chip'));
+    const button = trigger(view.element);
+
+    expect(button.classList).not.toContain('chip-touch');
+    expect(getComputedStyle(button).minBlockSize).toBe('2.5rem');
+    expect(getComputedStyle(button).maxInlineSize).not.toBe('100%');
+    await open(view);
+    expect(list(view.element)?.classList).not.toContain('panel-touch');
+    expect(getComputedStyle(items(view.element)[0]).minBlockSize).toBe('2.5rem');
+  });
+
+  it('makes touch an icon button’s size alone, never a chip’s', async () => {
+    const view = await render((host) => {
+      host.icon.set('more');
+      host.size.set('touch');
+    });
+
+    expect(trigger(view.element).classList).not.toContain('chip-touch');
+    await open(view);
+    expect(list(view.element)?.classList).not.toContain('panel-touch');
+    expect(getComputedStyle(items(view.element)[0]).minBlockSize).toBe('2.5rem');
+  });
+
   it('opens with focus on the first choice; the arrows wrap round, Home and End go to either end', async () => {
     const view = await render();
     await open(view);

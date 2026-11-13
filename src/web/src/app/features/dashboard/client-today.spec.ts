@@ -165,6 +165,37 @@ const trainee = (api: Record<string, unknown> = {}) => ({
 const textOf = (element: Element | null | undefined) =>
   (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
+/**
+ * The focus rings the page's styles give `element` once it has keyboard focus, in the order the styles
+ * hold them, the last one drawn over the rest: jsdom matches no :focus-visible, so each such rule is
+ * matched without it.
+ */
+function focusRings(element: Element): string[] {
+  const focused = ':focus-visible';
+  const matches = (selector: string) => {
+    try {
+      return element.matches(selector);
+    } catch {
+      return false;
+    }
+  };
+  const rings: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (!('selectorText' in rule)) continue;
+      const { selectorText, style } = rule as CSSStyleRule;
+      const matched = selectorText
+        .split(',')
+        .map((selector) => selector.trim())
+        .filter((selector) => selector.endsWith(focused))
+        .some((selector) => matches(selector.slice(0, -focused.length)));
+      const ring = style.getPropertyValue('outline-color') || style.getPropertyValue('outline');
+      if (matched && ring) rings.push(ring);
+    }
+  }
+  return rings;
+}
+
 describe('ClientToday', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -1012,6 +1043,72 @@ describe('ClientToday', () => {
       // Messaging is open in this plan, and still nothing offers to write to a coach.
       expect(host.querySelector('a[href="/messages"]')).toBeNull();
       expect(api.getOwnCoach).not.toHaveBeenCalled();
+    });
+
+    it('links TB Gym’s pool under Start a workout, as a plain link that never grows into the player (notes plan N9b4)', async () => {
+      const { host } = await render({ ...trainee(), day: day(), upcoming: nothingAssigned() });
+
+      const section = card(host);
+      const browse = section.querySelector<HTMLAnchorElement>('a[data-browse-pool]')!;
+      expect(textOf(browse)).toBe('Browse exercises');
+      expect(browse.getAttribute('href')).toBe('/training/pool');
+      // The card's own link look, never its one action, which grows into the player (W7).
+      expect(browse.classList).toContain('text-link');
+      expect(browse.classList).not.toContain('today-action');
+      expect(section.querySelectorAll('.today-action')).toHaveLength(1);
+      const start = section.querySelector('button[data-start-own]')!;
+      expect(start.compareDocumentPosition(browse) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    /**
+     * The plain card's accent ring is the brand in light mode, the hero's own background: on the hero
+     * the ring takes its ink, white on brand in either mode (the coach's navigation's ring on brand).
+     */
+    it('draws Browse exercises’ focus ring in the hero’s ink, and leaves a plain card’s ring as it was', async () => {
+      const { host } = await render({ ...trainee(), day: day(), upcoming: nothingAssigned() });
+      const browse = host.querySelector('a[data-browse-pool]')!;
+      expect(browse.closest('.today-card')?.classList).toContain('today-card--hero');
+      expect(focusRings(browse).at(-1)).toBe('var(--tb-on-brand)');
+      TestBed.resetTestingModule();
+
+      const coached = await render({ day: day(), upcoming: nothingAssigned() });
+      const message = coached.host.querySelector('a[href="/messages"].text-link')!;
+      expect(message.closest('.today-card')?.classList).not.toContain('today-card--hero');
+      expect(focusRings(message).at(-1)).toBe('var(--focus-ring-width) solid var(--color-accent)');
+      expect(focusRings(message)).not.toContain('var(--tb-on-brand)');
+    });
+
+    it('links the pool to nobody else: not a coach’s client, not beside a workout to carry on, not with Training closed', async () => {
+      const coached = await render({ day: day(), upcoming: nothingAssigned() });
+      expect(textOf(coached.host.querySelector('#today-training-heading'))).toBe(
+        'Nothing assigned yet',
+      );
+      expect(coached.host.querySelector('[data-browse-pool]')).toBeNull();
+      TestBed.resetTestingModule();
+
+      const carrying = await render({
+        ...trainee(),
+        day: dayWithOwn(ownWorkout()),
+        upcoming: nothingAssigned(),
+      });
+      expect(textOf(carrying.host.querySelector('a.today-action'))).toBe('Carry on');
+      expect(carrying.host.querySelector('[data-browse-pool]')).toBeNull();
+      TestBed.resetTestingModule();
+
+      const closed = await render({
+        ...trainee(),
+        day: day([], false, 'NoEntitlement'),
+        upcoming: nothingAssigned(),
+        // A trainee's plan is Training alone: with it out of the plan, nothing else is in it either.
+        access: fakeClientAccess({
+          Training: 'NoEntitlement',
+          Nutrition: 'NoEntitlement',
+          CheckIns: 'NoEntitlement',
+          Messaging: 'NoEntitlement',
+        }),
+      });
+      expect(textOf(closed.host.querySelector('#today-training-heading'))).toBe('No workouts yet');
+      expect(closed.host.querySelector('[data-browse-pool]')).toBeNull();
     });
 
     it('starts it with the token refreshed first, then opens the player on the new workout', async () => {

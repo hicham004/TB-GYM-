@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type { MediaAccessView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
-import { settle } from '../../../testing/dom';
+import { query, settle } from '../../../testing/dom';
+import { fakeMotion, type FakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
+import { DemoClips } from './demo-clips';
 import { ExerciseDemo } from './exercise-demo';
 
 function access(assetId: string, overrides: Partial<MediaAccessView> = {}): MediaAccessView {
@@ -20,10 +22,15 @@ function access(assetId: string, overrides: Partial<MediaAccessView> = {}): Medi
   };
 }
 
+/**
+ * The demo button for `assetIds`. Motion is the fake's when given; without one jsdom reads as reduced
+ * motion, so the demo clips start paused (notes plan N9b4).
+ */
 async function render(
   assetIds: string[],
   compact = false,
   grant = vi.fn((id: string) => of(access(id))),
+  motion?: FakeMotion,
 ) {
   const refresh = vi.fn().mockResolvedValue(undefined);
   await TestBed.configureTestingModule({
@@ -31,6 +38,7 @@ async function render(
     providers: [
       { provide: ApiClient, useValue: { createMediaAccess: grant } },
       { provide: CsrfService, useValue: { refresh } },
+      ...(motion ? [provideFakeMotion(motion)] : []),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(ExerciseDemo);
@@ -91,6 +99,52 @@ describe('ExerciseDemo', () => {
     expect(video.getAttribute('aria-label')).toBe('How to do Back squat');
   });
 
+  it('plays an uploaded video like a GIF while the clips play: muted, looping, inline, its controls kept (notes plan N9b4)', async () => {
+    const { fixture, host } = await render(
+      ['squat-video'],
+      true,
+      undefined,
+      fakeMotion({ allowed: true }),
+    );
+
+    host.querySelector('button')!.click();
+    await settle(fixture);
+
+    const video = query<HTMLVideoElement>(sheet(), 'video');
+    // The property, which mutes it; the attribute alone, written after the element is made, does not.
+    expect(video.muted).toBe(true);
+    expect(video.hasAttribute('muted')).toBe(true);
+    expect(video.loop).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(video.autoplay).toBe(true);
+    // A coach may still turn the sound on, pause or go full screen.
+    expect(video.controls).toBe(true);
+    expect(video.getAttribute('controlsList')).toBe('nodownload');
+    expect(video.getAttribute('aria-label')).toBe('How to do Back squat');
+
+    // The clips paused elsewhere (a list's Pause demos): the sheet's video waits for its play control.
+    TestBed.inject(DemoClips).pause();
+    await settle(fixture);
+    expect(video.autoplay).toBe(false);
+    expect(video.muted).toBe(true);
+    expect(video.controls).toBe(true);
+  });
+
+  it('waits for its play control under reduced motion, still muted and looping', async () => {
+    const { fixture, host } = await render(['squat-video'], true);
+
+    host.querySelector('button')!.click();
+    await settle(fixture);
+
+    const video = query<HTMLVideoElement>(sheet(), 'video');
+    expect(video.autoplay).toBe(false);
+    expect(video.hasAttribute('autoplay')).toBe(false);
+    expect(video.muted).toBe(true);
+    expect(video.loop).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(video.controls).toBe(true);
+  });
+
   it('takes a thumb’s size when asked, as on the trainee’s picker (notes plan N9b3)', async () => {
     const { fixture, host } = await render(['squat-video'], true);
     const button = host.querySelector<HTMLButtonElement>('button.demo')!;
@@ -102,6 +156,46 @@ describe('ExerciseDemo', () => {
     expect(button.classList.contains('touch')).toBe(true);
     expect(button.classList.contains('compact')).toBe(true);
     expect(button.getAttribute('aria-label')).toBe('Watch the Back squat demo');
+  });
+
+  /** "See all {n} demos" on a pool exercise's page opens this sheet on a phone (notes plan N9b4). */
+  it('gives its sheet’s controls a thumb’s size when asked, and keeps a coach’s sheet as it was', async () => {
+    const grant = vi.fn((id: string) =>
+      of(
+        id === 'squat-link'
+          ? access(id, {
+              source: 'ExternalEmbed',
+              contentType: null,
+              url: 'https://www.youtube-nocookie.com/embed/aclHkVaku9U',
+              externalProvider: 'YouTube',
+              watchUrl: 'https://www.youtube.com/watch?v=aclHkVaku9U',
+            })
+          : access(id),
+      ),
+    );
+    const sizes = async (touch: boolean) => {
+      const { fixture, host } = await render(['squat-video', 'squat-link'], false, grant);
+      fixture.componentRef.setInput('touch', touch ? '' : false);
+      await settle(fixture);
+      host.querySelector<HTMLButtonElement>('button.demo')!.click();
+      await settle(fixture);
+      const picks = Array.from(sheet().querySelectorAll<HTMLButtonElement>('.pick-one'));
+      const heights = picks.map((pick) => getComputedStyle(pick).minBlockSize);
+      picks[1].click();
+      await settle(fixture);
+      const link = query<HTMLAnchorElement>(sheet(), 'a[data-watch-external]');
+      const touchLink = link.classList.contains('tb-button--touch');
+      document.body
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((node) => node.replaceChildren());
+      TestBed.resetTestingModule();
+      return { heights, touchLink };
+    };
+
+    // Demo 1 and Demo 2 at 44 px, and Watch on YouTube at the kit's touch size.
+    expect(await sizes(true)).toEqual({ heights: ['2.75rem', '2.75rem'], touchLink: true });
+    // A coach's screens leave touch unset: the sheet keeps its pointer sizes.
+    expect(await sizes(false)).toEqual({ heights: ['2.25rem', '2.25rem'], touchLink: false });
   });
 
   it('switches between several demos, a picture among them', async () => {

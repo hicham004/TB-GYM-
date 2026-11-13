@@ -49,5 +49,23 @@ export const trainingRoutes: Routes = [
     data: { ...FULL_SCREEN, ...REDESIGNED },
     loadComponent: () => import('./today-training').then((module) => module.TodayTraining),
   },
+  {
+    // TB Gym's exercise pool for a client of the house (notes plan N9b4, LIB-006): browsed, searched and
+    // filtered, each exercise with its demo playing; the server answers 404 in any other space. It
+    // follows the person's mode, under the tab bar (Training stays the tab in use).
+    path: 'pool',
+    canActivate: [clientGuard],
+    title: $localize`Exercises | TB Gym`,
+    data: REDESIGNED,
+    loadComponent: () => import('./exercise-pool').then((module) => module.ExercisePool),
+  },
+  {
+    // One exercise of the pool: its demo, what it works and how it is done, and a workout started with it.
+    path: 'pool/:exerciseId',
+    canActivate: [clientGuard],
+    title: $localize`Exercise | TB Gym`,
+    data: REDESIGNED,
+    loadComponent: () => import('./pool-exercise').then((module) => module.PoolExercise),
+  },
   { path: '', redirectTo: 'programs', pathMatch: 'full' },
 ];

@@ -160,6 +160,12 @@
   outline-offset: var(--focus-separation-gap);
 }
 
+// On the hero's brand gradient the accent ring vanishes in light mode, where the accent is the brand:
+// the ring takes the hero's own ink, white on brand in either mode, as the coach's navigation does.
+.today-card.today-card--hero .text-link:focus-visible {
+  outline-color: var(--tb-on-brand);
+}
+
 .today-card [role='alert'] {
   color: var(--color-text-primary);
   font-size: var(--text-body-size);

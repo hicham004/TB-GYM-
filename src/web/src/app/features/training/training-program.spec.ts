@@ -695,6 +695,53 @@ describe('TrainingProgram', () => {
       expect(getSelfProfile).toHaveBeenCalledTimes(1);
     });
 
+    it('offers TB Gym’s pool beside Start a workout, outlined, so Start stays the one filled action (notes plan N9b4)', async () => {
+      const { host, textOf } = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: trainee(),
+      });
+
+      const empty = host.querySelector('app-empty-state')!;
+      const browse = empty.querySelector<HTMLAnchorElement>('a[data-browse-pool]')!;
+      expect(textOf(browse)).toBe('Browse exercises');
+      expect(browse.getAttribute('href')).toBe('/training/pool');
+      expect(browse.classList).toContain('tb-button--outlined');
+      expect(browse.classList).toContain('tb-button--touch');
+      // Side by side, or one under the other, spaced by Training's own styles.
+      const actions = empty.querySelector<HTMLElement>('.own-actions')!;
+      expect(Array.from(actions.children).map((action) => textOf(action))).toEqual([
+        'Start a workout',
+        'Browse exercises',
+      ]);
+      expect(getComputedStyle(actions).display).toBe('flex');
+      expect(getComputedStyle(actions).flexWrap).toBe('wrap');
+      expect(empty.querySelector('button[data-start-own]')?.classList).toContain(
+        'tb-button--filled',
+      );
+    });
+
+    it('offers the pool to nobody else: not beside a program, not a coach’s client, not when the profile is unread', async () => {
+      const running = await render({ getSelfProfile: trainee() });
+      expect(running.host.querySelector('.hero')).not.toBeNull();
+      expect(running.host.querySelector('[data-browse-pool]')).toBeNull();
+      TestBed.resetTestingModule();
+
+      const coached = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: vi.fn(() => of(finishedProfile({ selfDirected: false }))),
+      });
+      expect(coached.read()).toContain('Nothing assigned yet');
+      expect(coached.host.querySelector('[data-browse-pool]')).toBeNull();
+      TestBed.resetTestingModule();
+
+      const unknown = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 503 }))),
+      });
+      expect(unknown.read()).toContain('No workouts yet');
+      expect(unknown.host.querySelector('[data-browse-pool]')).toBeNull();
+    });
+
     it('offers to start from each finished workout, their own and a program’s alike', async () => {
       const { host, ownApi, settle, textOf } = await render({
         getMyTrainingProgram: noProgram(),

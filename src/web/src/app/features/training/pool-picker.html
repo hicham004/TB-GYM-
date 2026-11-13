@@ -1,18 +1,24 @@
 <!-- The search stays in reach while the list scrolls, and a refused press is said there, in view. -->
 <div class="top">
-  <div class="search" role="search">
-    <app-icon name="search" />
-    <input
-      type="search"
-      [value]="list.filter()"
-      (input)="typed($any($event.target).value)"
-      placeholder="Search by name"
-      i18n-placeholder
-      autocomplete="off"
-      aria-label="Search exercises"
-      i18n-aria-label
-      enterkeyhint="search"
-    />
+  <div class="find">
+    <div class="search" role="search">
+      <app-icon name="search" />
+      <input
+        type="search"
+        [value]="list.filter()"
+        (input)="typed($any($event.target).value)"
+        placeholder="Search by name"
+        i18n-placeholder
+        autocomplete="off"
+        aria-label="Search exercises"
+        i18n-aria-label
+        enterkeyhint="search"
+      />
+    </div>
+    <!-- The rows' thumbnails have no button of their own: one pause holds for them all (N9b4). -->
+    @if (looping()) {
+      <app-demo-clips-toggle />
+    }
   </div>
   @if (problem(); as text) {
     <p class="problem" role="alert">{{ text }}</p>
@@ -82,12 +88,25 @@
             <span class="add" aria-hidden="true"><app-icon name="plus" /></span>
           }
         </button>
-        <app-exercise-demo
-          [assetIds]="row.demos"
-          [exerciseName]="row.exercise.name"
-          compact
-          touch
-        />
+        <!-- Beside the row's button, never inside it: an upload loops there as a square thumbnail
+             (notes plan N9b4), a link keeps its button, which opens it on its site. -->
+        <div class="demo-slot">
+          @if (row.shown === 'VideoLink') {
+            <app-exercise-demo
+              [assetIds]="row.ids"
+              [exerciseName]="row.exercise.name"
+              compact
+              touch
+            />
+          } @else if (row.shown) {
+            <app-demo-clip
+              decorative
+              class="row-clip"
+              [demos]="row.demos"
+              [exerciseName]="row.exercise.name"
+            />
+          }
+        </div>
       </li>
     }
   </ul>

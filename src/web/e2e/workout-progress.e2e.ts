@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 import type {
+  MediaAccessView,
   OwnWorkoutExerciseView,
   OwnWorkoutSetView,
   OwnWorkoutView,
@@ -8,6 +9,20 @@ import type {
   RecordSetActualRequest,
 } from '../src/app/core/api/generated';
 import { finishedProfile } from '../src/testing/intake-fixtures';
+import {
+  type BatchAsks,
+  clipGrant,
+  clipState,
+  demoHandlers,
+  expectClipProperties,
+  expectLoops,
+  expectPlaying,
+  expectStill,
+  linkGrant,
+  pictureGrant,
+  recordClip,
+  watchMedia,
+} from './demo-clip-support';
 import { expect, json, mockSession, SIGNED_IN_USER, test, waitForFonts } from './support';
 import { docsPicture } from './docs-pictures';
 
@@ -344,6 +359,90 @@ const nothingUnfinished = {
   todayCoverage: null,
 };
 
+/**
+ * Notes plan N9b4: an exercise's uploaded video plays like a GIF, muted, looping and inline, where a
+ * client trains. Nothing is committed (the repo is public): each worker records its own one-second
+ * WebM before the checks that need it, and they serve it from the grant's own address.
+ */
+let clip: Buffer;
+/** The coach gave Maya's back squat an uploaded clip; the r22 pictures keep `workout` as it was. */
+const SQUAT_CLIP = 'clip-squat';
+const clipWorkout = {
+  ...workout,
+  exercises: [{ ...workoutExercise('Back squat', 'squat'), mediaAssetIds: [SQUAT_CLIP] }],
+};
+
+/** The shown exercise's clip, right under its name: a workout names its demos by id alone. */
+function exerciseClip(page: Page): Locator {
+  return page.locator(
+    'section.workout-exercise > header.exercise-heading + app-demo-clip.exercise-clip',
+  );
+}
+
+/** A video that waits for its own play: it loads its first data, and never starts by itself. */
+async function expectWaitsForPlay(video: Locator): Promise<void> {
+  await expect(video).toHaveJSProperty('autoplay', false);
+  await expect
+    .poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState))
+    .toBeGreaterThanOrEqual(1);
+  await expect(video).toHaveJSProperty('paused', true);
+  expect((await clipState(video)).played, 'it has not played by itself').toBe(0);
+}
+
+/**
+ * Maya's player on the workout with the clip, motion as the test set it. Records each batch grant's
+ * ids, the antiforgery reads and media requests in the order the page made them, and how many of those
+ * came before the player read its workout (`settled`): the session's own token read at start-up is
+ * among them, and the clip, drawn from that read's answer, asks for nothing before it.
+ */
+async function openClipWorkout(
+  page: Page,
+): Promise<{ batches: BatchAsks; reads: string[]; settled: number }> {
+  const batches: BatchAsks = [];
+  const reads: string[] = [];
+  let settled = -1;
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/auth/csrf' || path.startsWith('/api/media/')) {
+      reads.push(`${request.method()} ${path}`);
+    } else if (path === '/api/training/me/today' && settled < 0) {
+      settled = reads.length;
+    }
+  });
+  await session(page, {
+    'GET /api/training/me/today': (route) =>
+      json(route, 200, {
+        isAllowed: true,
+        accessReason: 'Granted',
+        localDate: '2026-09-30',
+        workouts: [clipWorkout],
+      }),
+    'GET /api/training/me/upcoming': (route) => json(route, 200, nothingUnfinished),
+    // The batch grant for the clip, its bytes, and its own grant for Watch demo 1.
+    ...demoHandlers(clip, [clipGrant(SQUAT_CLIP)], batches),
+  });
+  await page.clock.install({ time: new Date('2026-09-30T08:30:00Z') });
+  await page.goto('/training/today');
+  await expect(page.getByRole('heading', { level: 2, name: 'Back squat' })).toBeVisible();
+  expect(settled, 'the player read its workout').toBeGreaterThanOrEqual(0);
+  return { batches, reads, settled };
+}
+
+/**
+ * Whether every batch grant came after an antiforgery read of the page's own, made once the player had
+ * read its workout: the session's start-up read alone never counts (a grant sent with a stale token is
+ * the 400 a write meets right after signing in).
+ */
+function freshTokenBeforeEachBatch(reads: readonly string[], settled: number): boolean {
+  const batches = reads.flatMap((read, index) =>
+    read === 'POST /api/media/access' ? [index] : [],
+  );
+  return (
+    batches.length > 0 &&
+    batches.every((batch) => reads.slice(settled, batch).includes('GET /api/auth/csrf'))
+  );
+}
+
 test.describe('Workout player', () => {
   // Fast-forwarding the page clock through a rest skips a minute in which the realtime hub sends
   // nothing, so SignalR logs its server timeout and reconnects, as it does after a phone was locked.
@@ -617,6 +716,136 @@ test.describe('Workout player', () => {
       await accessible(page);
     });
   }
+
+  // Notes plan N9b4, C20's fourth slice: the demo the coach uploaded plays like a GIF under the
+  // exercise's name, muted, looping and inline, with a pause of its own (WCAG 2.2.2); Watch demo
+  // still opens it bigger, with the browser's controls.
+  test.describe('with a clip the coach uploaded (N9b4)', () => {
+    test.beforeAll(async ({ browser }) => {
+      clip ??= await recordClip(browser);
+    });
+
+    for (const width of [390, 1440]) {
+      test(`at ${width}px the clip loops under the exercise’s name, muted, and its own button pauses it`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+        // Motion allowed, as on most phones: the clips read it once, as the page starts.
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        const { batches, reads, settled } = await openClipWorkout(page);
+
+        const shown = exerciseClip(page);
+        const video = shown.locator('video');
+        await expect(shown).toHaveAttribute('data-clip-state', 'ready');
+        await expect(video).toHaveAttribute('src', `/api/media/${SQUAT_CLIP}/content`);
+        await expect(video).toHaveAttribute('aria-label', 'How to do Back squat');
+        await expectClipProperties(video);
+        await expectPlaying(video);
+        await expectLoops(video);
+        // One batch grant for it, right after an antiforgery read of its own (made once the player had
+        // read its workout, never the session's start-up read), then its bytes; nothing else.
+        expect(batches).toEqual([[SQUAT_CLIP]]);
+        expect(freshTokenBeforeEachBatch(reads, settled), reads.join(', ')).toBe(true);
+        const batch = reads.indexOf('POST /api/media/access');
+        expect(reads[batch - 1], reads.join(', ')).toBe('GET /api/auth/csrf');
+        expect(reads.slice(batch + 1)).not.toEqual([]);
+        expect(new Set(reads.slice(batch + 1))).toEqual(
+          new Set([`GET /api/media/${SQUAT_CLIP}/content`]),
+        );
+        await waitForFonts(page);
+        await accessible(page);
+
+        // Watch demo 1 still opens it bigger, muted and looping too, with the browser's controls for
+        // the sound and the whole screen; it starts by itself while the clips play.
+        await page.getByRole('button', { name: 'Watch demo 1' }).click();
+        const overlay = page.getByRole('dialog', { name: 'Exercise demo' });
+        const bigger = overlay.locator('video');
+        await expect(bigger).toHaveAttribute('src', `/api/media/${SQUAT_CLIP}/content`);
+        await expectClipProperties(bigger, { controls: true });
+        await expect(bigger).toHaveJSProperty('autoplay', true);
+        await expectPlaying(bigger);
+        expect(reads).toContain(`POST /api/media/${SQUAT_CLIP}/access`);
+        await overlay.getByRole('button', { name: 'Close media' }).click();
+        await expect(overlay).toHaveCount(0);
+
+        // The clip's own button pauses it and says what it does next; the bigger view then waits too.
+        const toggle = shown.locator('[data-clip-toggle]');
+        await expect(toggle).toHaveAccessibleName('Pause the demo');
+        await toggle.click();
+        await expect(video).toHaveJSProperty('paused', true);
+        await expect(toggle).toHaveAccessibleName('Play the demo');
+        await expect(toggle).toBeFocused();
+        await page.getByRole('button', { name: 'Watch demo 1' }).click();
+        await expectClipProperties(bigger, { controls: true });
+        await expectWaitsForPlay(bigger);
+        await overlay.getByRole('button', { name: 'Close media' }).click();
+        await expect(overlay).toHaveCount(0);
+        await expect(video).toHaveJSProperty('paused', true);
+        await toggle.click();
+        await expectPlaying(video);
+        await expect(toggle).toHaveAccessibleName('Pause the demo');
+        expect(batches, 'its grant is kept, never asked again').toEqual([[SQUAT_CLIP]]);
+
+        // At 200% text the clip stays small at the start of the line, its button inside it.
+        await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+        expect
+          .soft(
+            await pastTheEdge(
+              page,
+              '.exercise-heading, .exercise-clip, .exercise-clip video, .exercise-clip button, .exercise-actions button',
+            ),
+          )
+          .toEqual([]);
+        const clipBox = await shown.boundingBox();
+        const toggleBox = await toggle.boundingBox();
+        expect(clipBox && toggleBox, 'the clip and its button are drawn').toBeTruthy();
+        expect(toggleBox!.x).toBeGreaterThanOrEqual(clipBox!.x - 1);
+        expect(toggleBox!.y).toBeGreaterThanOrEqual(clipBox!.y - 1);
+        expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(
+          clipBox!.x + clipBox!.width + 1,
+        );
+        expect(toggleBox!.y + toggleBox!.height).toBeLessThanOrEqual(
+          clipBox!.y + clipBox!.height + 1,
+        );
+        await accessible(page);
+      });
+    }
+
+    test('under reduced motion the clip is a still on its first frame, and a press plays it', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      // The project's reduced motion stays on: the clip loads when seen, but never starts by itself.
+      const { batches, reads, settled } = await openClipWorkout(page);
+
+      const shown = exerciseClip(page);
+      const video = shown.locator('video');
+      await expect(shown).toHaveAttribute('data-clip-state', 'ready');
+      await expectClipProperties(video);
+      await expectStill(video);
+      expect(batches).toEqual([[SQUAT_CLIP]]);
+      expect(freshTokenBeforeEachBatch(reads, settled), reads.join(', ')).toBe(true);
+      const toggle = shown.locator('[data-clip-toggle]');
+      await expect(toggle).toHaveAccessibleName('Play the demo');
+      await accessible(page);
+
+      // The bigger view starts as the clips do: it waits for a press of its own.
+      await page.getByRole('button', { name: 'Watch demo 1' }).click();
+      const overlay = page.getByRole('dialog', { name: 'Exercise demo' });
+      const bigger = overlay.locator('video');
+      await expectClipProperties(bigger, { controls: true });
+      await expectWaitsForPlay(bigger);
+      await overlay.getByRole('button', { name: 'Close media' }).click();
+      await expect(overlay).toHaveCount(0);
+      await expectStill(video);
+
+      await toggle.click();
+      await expectPlaying(video);
+      await expect(toggle).toHaveAccessibleName('Pause the demo');
+      await expectLoops(video);
+      await accessible(page);
+    });
+  });
 });
 
 // Notes plan N9b3, TRN-033: a trainee of TB Gym's own space logs a workout of their own in the player.
@@ -712,6 +941,51 @@ const noProgram = {
   todayCoverage: { activeBlock: null, nextBlockStartDate: null },
 };
 
+/** N9b4: an uploaded picture, a YouTube link and an uploaded clip among TB Gym's exercises. */
+const BENCH_PICTURE = 'picture-bench';
+const LUNGE_CLIP = 'clip-lunge';
+const WALKING_LUNGE = poolExercise('lunge', 'Walking lunge', 'Bodyweight', 'Locomotion', 'Glutes', [
+  { mediaAssetId: LUNGE_CLIP, kind: 'Video' },
+]);
+/**
+ * TB Gym's pool with a demo of each kind, in name order: the picture first, then the link, then enough
+ * exercises with none that the clip's row, last, starts below a phone's fold in the picker.
+ */
+const CLIP_POOL = [
+  poolExercise('bench', 'Dumbbell bench press', 'Dumbbell', 'HorizontalPush', 'Chest', [
+    { mediaAssetId: BENCH_PICTURE, kind: 'Picture' },
+  ]),
+  POOL[0],
+  ...[
+    'Hip thrust',
+    'Kettlebell swing',
+    'Lat pulldown',
+    'Leg press',
+    'Nordic curl',
+    'Overhead press',
+    'Pull-up',
+    'Push-up',
+    'Romanian deadlift',
+  ].map((name) =>
+    poolExercise(name.toLowerCase().replace(/\W+/g, '-'), name, 'Bodyweight', 'Other', 'FullBody'),
+  ),
+  POOL[1],
+  poolExercise('side-plank', 'Side plank', 'None', 'Other', 'Abdominals'),
+  WALKING_LUNGE,
+];
+/** Each demo's grant as the server gives it: a clip and a picture are uploads, a link opens on YouTube. */
+function poolGrants(pool: readonly PoolExerciseView[]): MediaAccessView[] {
+  return pool.flatMap((exercise) =>
+    exercise.demos.map(({ mediaAssetId, kind }) =>
+      kind === 'Video'
+        ? clipGrant(mediaAssetId)
+        : kind === 'Picture'
+          ? pictureGrant(mediaAssetId)
+          : linkGrant(mediaAssetId),
+    ),
+  );
+}
+
 /**
  * N9b2's routes for one workout of one's own, as the server answers them: every change answers the
  * whole workout on its next version, Today's read carries it while it runs, and the pool is searched by
@@ -719,8 +993,18 @@ const noProgram = {
  * reads. `refuseNextAdd` makes the next exercise added meet a stale version, as when another phone
  * changed the workout first; `holdNextAdd` keeps the next one unanswered until it is let go, as on a
  * slow phone. An exercise added again is a second row with ids of its own (`perf-goblet-2`).
+ *
+ * The pool's demos are granted as the server grants them (N9b4): a workout names its exercise's demos
+ * by id alone, so the player's clip asks the batch grant for them, which answers an upload and never a
+ * link; `grantAsks` records each batch's ids. `pool` replaces TB Gym's two exercises, and `clip` is the
+ * recorded WebM an uploaded video's bytes are (a pool with no video needs none).
  */
-function ownServer(start: OwnWorkoutView | null = null) {
+function ownServer(
+  start: OwnWorkoutView | null = null,
+  options: { pool?: readonly PoolExerciseView[]; clip?: Buffer } = {},
+) {
+  const pool = options.pool ?? POOL;
+  const grantAsks: BatchAsks = [];
   let workout = start;
   let todayReads = 0;
   let refuseNextAdd = false;
@@ -750,7 +1034,9 @@ function ownServer(start: OwnWorkoutView | null = null) {
     workout = next;
     return json(route, 200, next);
   };
-  const handlers: Record<string, (route: Route) => Promise<void>> = {
+  const handlers: Record<string, (route: Route) => Promise<void> | void> = {
+    // A pool with no uploaded video serves no clip, so no bytes stand for one.
+    ...demoHandlers(options.clip ?? Buffer.alloc(0), poolGrants(pool), grantAsks),
     'GET /api/training/me/today': (route) => {
       todayReads += 1;
       return json(route, 200, {
@@ -766,7 +1052,7 @@ function ownServer(start: OwnWorkoutView | null = null) {
       const asked = new URL(route.request().url()).searchParams;
       poolReads.push(asked.toString());
       const text = (asked.get('query') ?? '').toLowerCase();
-      const found = POOL.filter((exercise) => exercise.name.toLowerCase().includes(text));
+      const found = pool.filter((exercise) => exercise.name.toLowerCase().includes(text));
       const skip = Number(asked.get('skip') ?? 0);
       return json(route, 200, {
         isAllowed: true,
@@ -795,7 +1081,7 @@ function ownServer(start: OwnWorkoutView | null = null) {
         });
       }
       const { exerciseId } = route.request().postDataJSON() as { exerciseId: string };
-      const exercise = POOL.find((item) => item.id === exerciseId)!;
+      const exercise = pool.find((item) => item.id === exerciseId)!;
       const made = (rowsMade.get(exerciseId) ?? 0) + 1;
       rowsMade.set(exerciseId, made);
       const row = made === 1 ? exerciseId : `${exerciseId}-${made}`;
@@ -843,7 +1129,7 @@ function ownServer(start: OwnWorkoutView | null = null) {
     },
   };
   // Each pool exercise's first row and a second, added again.
-  for (const row of POOL.flatMap((exercise) => [exercise.id, `${exercise.id}-2`])) {
+  for (const row of pool.flatMap((exercise) => [exercise.id, `${exercise.id}-2`])) {
     const performanceId = `perf-${row}`;
     handlers[`POST ${OWN_ROUTE}/exercises/${performanceId}/sets`] = (route) => {
       written(route);
@@ -913,6 +1199,7 @@ function ownServer(start: OwnWorkoutView | null = null) {
     handlers,
     writes,
     poolReads,
+    grantAsks,
     todayReads: () => todayReads,
     refuseNextAdd: () => {
       refuseNextAdd = true;
@@ -1417,5 +1704,215 @@ test.describe('A workout of one’s own (N9b3)', () => {
         { version: 3 },
       ]);
     });
+  });
+});
+
+/** The picker's row of the exercise named `name`, found by its button while it is not yet added. */
+function pickerRow(sheet: Locator, name: string): Locator {
+  return sheet
+    .locator('li.row')
+    .filter({ has: sheet.page().locator(`button.pick[aria-label="Add ${name}"]`) });
+}
+
+// Notes plan N9b4, C20's fourth slice: where a trainee trains on their own, an exercise's uploaded video
+// plays like a GIF too, in the player and as a thumbnail in the picker, granted only once it is seen.
+test.describe('Demo clips in a workout of one’s own (N9b4)', () => {
+  test.beforeAll(async ({ browser }) => {
+    clip ??= await recordClip(browser);
+  });
+
+  test('a pool exercise’s uploaded clip loops in the player, and a link’s exercise shows no clip', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const server = ownServer(
+      ownWorkout(
+        [
+          ownExercise(WALKING_LUNGE, 1, [ownSet('lunge', 1)]),
+          ownExercise(POOL[0], 2, [ownSet('goblet', 1)]),
+        ],
+        4,
+      ),
+      { pool: CLIP_POOL, clip },
+    );
+    await traineeSession(page, server.handlers);
+    await page.clock.install({ time: new Date('2026-09-30T08:10:00Z') });
+    await page.goto(`/training/today?sessionId=${OWN}`);
+    await expect(page.getByRole('heading', { level: 2, name: 'Walking lunge' })).toBeVisible();
+
+    // The workout names its demos by id alone, so the player asks the batch grant for them.
+    const shown = exerciseClip(page);
+    const video = shown.locator('video');
+    await expect(shown).toHaveAttribute('data-clip-state', 'ready');
+    await expect(video).toHaveAttribute('src', `/api/media/${LUNGE_CLIP}/content`);
+    await expect(video).toHaveAttribute('aria-label', 'How to do Walking lunge');
+    await expectClipProperties(video);
+    await expectPlaying(video);
+    await expectLoops(video);
+    await expect(shown.locator('[data-clip-toggle]')).toHaveAccessibleName('Pause the demo');
+    expect(server.grantAsks).toEqual([[LUNGE_CLIP]]);
+    await waitForFonts(page);
+    await accessible(page);
+
+    // The goblet squat's demo is a YouTube link, which the batch grant never answers: the clip shows
+    // nothing, and Watch demo 1 stays to open it on YouTube.
+    await page.getByRole('button', { name: /Next exercise/ }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Goblet squat' })).toBeVisible();
+    await expect(exerciseClip(page)).toHaveAttribute('data-clip-state', 'none');
+    await expect(exerciseClip(page)).toBeHidden();
+    expect(server.grantAsks).toEqual([[LUNGE_CLIP], ['media-goblet']]);
+    await expect(page.getByRole('button', { name: 'Watch demo 1' })).toBeVisible();
+    await accessible(page);
+  });
+
+  test('in the picker a clip loops as a square thumbnail once seen, a picture shows, a link keeps its button, and one button pauses them', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const server = ownServer(ownWorkout(), { pool: CLIP_POOL, clip });
+    const media = watchMedia(page);
+    await traineeSession(page, server.handlers);
+    await page.clock.install({ time: new Date('2026-09-30T08:10:00Z') });
+    await page.goto(`/training/today?sessionId=${OWN}`);
+    await expect(page.getByRole('heading', { name: 'No exercises yet' })).toBeVisible();
+    // No exercise, no clip: nothing is granted yet.
+    expect(media).toEqual([]);
+
+    await page.getByRole('button', { name: 'Add an exercise' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Add an exercise' });
+    await expect(sheet.locator('button.pick')).toHaveCount(CLIP_POOL.length);
+    // The picker's read is still the one N9b3 pinned: no filter goes with it.
+    expect(server.poolReads).toEqual(['skip=0&take=50']);
+
+    // A picture stays a picture: a square thumbnail beside its row, hidden from assistive technology
+    // like every thumbnail, since the row's button names the exercise.
+    const picture = pickerRow(sheet, 'Dumbbell bench press').locator('app-demo-clip.row-clip');
+    await expect(picture).toHaveAttribute('data-clip-state', 'ready');
+    await expect(picture).toHaveAttribute('aria-hidden', 'true');
+    const image = picture.locator('img');
+    await expect(image).toHaveAttribute('src', `/api/media/${BENCH_PICTURE}/content`);
+    await expect(image).toHaveAttribute('alt', '');
+    await expect
+      .poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth))
+      .toBeGreaterThan(0);
+
+    // A YouTube link keeps its button, which opens it on YouTube: a list never asks a link's grant.
+    const goblet = pickerRow(sheet, 'Goblet squat');
+    await expect(goblet.getByRole('button', { name: 'Watch the Goblet squat demo' })).toBeVisible();
+    await expect(goblet.locator('app-demo-clip')).toHaveCount(0);
+    // An exercise with no demo shows none.
+    await expect(pickerRow(sheet, 'Seated cable row').locator('.demo-slot > *')).toHaveCount(0);
+
+    // The clip's row is below the fold: nothing is asked for it until it is seen.
+    const thumbnail = pickerRow(sheet, 'Walking lunge').locator('app-demo-clip.row-clip');
+    await expect(thumbnail).toHaveAttribute('data-clip-state', 'waiting');
+    expect(server.grantAsks).toEqual([[BENCH_PICTURE]]);
+    expect(media.filter((request) => request.path.includes(LUNGE_CLIP))).toEqual([]);
+    await thumbnail.scrollIntoViewIfNeeded();
+    await expect(thumbnail).toHaveAttribute('data-clip-state', 'ready');
+    await expect(thumbnail).toHaveAttribute('aria-hidden', 'true');
+    await expect(thumbnail.locator('button')).toHaveCount(0);
+    const video = thumbnail.locator('video');
+    await expect(video).not.toHaveAttribute('aria-label');
+    await expectClipProperties(video);
+    await expectPlaying(video);
+    await expectLoops(video);
+    // Its own batch, once seen, and its bytes after the grant.
+    expect(server.grantAsks).toEqual([[BENCH_PICTURE], [LUNGE_CLIP]]);
+    const granted = media.findIndex((request) => request.assetIds?.includes(LUNGE_CLIP));
+    const bytes = media.findIndex((request) => request.path === `/api/media/${LUNGE_CLIP}/content`);
+    expect(granted).toBeGreaterThanOrEqual(0);
+    expect(bytes).toBeGreaterThan(granted);
+    const box = await thumbnail.boundingBox();
+    expect(box, 'the thumbnail is drawn').not.toBeNull();
+    expect(Math.abs(box!.width - box!.height), 'the thumbnail is square').toBeLessThanOrEqual(1);
+
+    // One button beside the search pauses every thumbnail, and plays them again (WCAG 2.2.2).
+    const pauseAll = sheet.locator('.top .find > app-demo-clips-toggle button');
+    await expect(pauseAll).toHaveText('Pause demos');
+    await pauseAll.click();
+    await expect(video).toHaveJSProperty('paused', true);
+    await expect(pauseAll).toHaveText('Play demos');
+    await expect(pauseAll).toBeFocused();
+    await accessible(page);
+    await pauseAll.click();
+    await expectPlaying(video);
+    await expect(pauseAll).toHaveText('Pause demos');
+
+    // A search sends just the words N9b3 pinned, and the kept grant is not asked again.
+    const search = sheet.getByRole('searchbox', { name: 'Search exercises' });
+    await search.fill('lunge');
+    await expect(sheet.locator('button.pick')).toHaveCount(1);
+    await expect
+      .poll(() => server.poolReads)
+      .toEqual(['skip=0&take=50', 'skip=0&take=50&query=lunge']);
+    await expect(sheet.locator('app-demo-clip.row-clip')).toHaveAttribute(
+      'data-clip-state',
+      'ready',
+    );
+    expect(server.grantAsks).toEqual([[BENCH_PICTURE], [LUNGE_CLIP]]);
+
+    // Added, it loops in the player too, on the grant the picker kept.
+    await sheet.getByRole('button', { name: 'Add Walking lunge', exact: true }).click();
+    await expect(sheet.locator('.mark.added')).toHaveText('Added');
+    await expect.poll(() => server.writes.length).toBe(2);
+    expect(server.writes).toEqual([
+      { route: `POST ${OWN_ROUTE}/exercises`, body: { exerciseId: 'lunge', version: 1 } },
+      { route: `POST ${OWN_ROUTE}/exercises/perf-lunge/sets`, body: { version: 2 } },
+    ]);
+    await sheet.getByRole('button', { name: 'Done' }).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 2, name: 'Walking lunge' })).toBeVisible();
+    const inPlayer = exerciseClip(page).locator('video');
+    await expectClipProperties(inPlayer);
+    await expectPlaying(inPlayer);
+    expect(server.grantAsks).toEqual([[BENCH_PICTURE], [LUNGE_CLIP]]);
+    await accessible(page);
+  });
+
+  test('under reduced motion and at 200% text the picker’s thumbnails are stills that keep their place', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // The project's reduced motion stays on.
+    const server = ownServer(ownWorkout(), { pool: CLIP_POOL, clip });
+    await traineeSession(page, server.handlers);
+    await page.clock.install({ time: new Date('2026-09-30T08:10:00Z') });
+    await page.goto(`/training/today?sessionId=${OWN}`);
+    await expect(page.getByRole('heading', { name: 'No exercises yet' })).toBeVisible();
+    await waitForFonts(page);
+    await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+
+    await page.getByRole('button', { name: 'Add an exercise' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Add an exercise' });
+    await expect(sheet.locator('button.pick')).toHaveCount(CLIP_POOL.length);
+    // Paused from the start for a person who asked for reduced motion: the one button offers to play.
+    const playAll = sheet.locator('.top .find > app-demo-clips-toggle button');
+    await expect(playAll).toHaveText('Play demos');
+    const thumbnail = pickerRow(sheet, 'Walking lunge').locator('app-demo-clip.row-clip');
+    await thumbnail.scrollIntoViewIfNeeded();
+    await expect(thumbnail).toHaveAttribute('data-clip-state', 'ready');
+    const video = thumbnail.locator('video');
+    await expectClipProperties(video);
+    await expectStill(video);
+    expect(server.grantAsks).toEqual([[BENCH_PICTURE], [LUNGE_CLIP]]);
+
+    await page.screenshot({ path: test.info().outputPath('n9b4-picker-200.png') });
+    expect
+      .soft(
+        await pastTheEdge(
+          page,
+          '[role="dialog"], .tb-modal__header, .tb-modal__body, .tb-modal__footer, .tb-modal__footer button, app-pool-picker .find, app-pool-picker .search, app-demo-clips-toggle button, app-pool-picker li, app-pool-picker button.pick, app-pool-picker .name, app-pool-picker .detail, app-pool-picker .demo-slot, app-pool-picker app-demo-clip',
+        ),
+      )
+      .toEqual([]);
+    await accessible(page);
+
+    // A press plays them all.
+    await playAll.click();
+    await expectPlaying(video);
+    await expect(playAll).toHaveText('Pause demos');
   });
 });

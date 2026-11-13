@@ -1,0 +1,187 @@
+<div class="pool tb-theme">
+  <header class="page-head">
+    <p class="kicker" i18n>TB Gym’s pool</p>
+    <h1 #heading tabindex="-1" i18n>Exercises</h1>
+    <p class="lede" i18n>Pick an exercise to see how it’s done, then start a workout with it.</p>
+  </header>
+
+  @switch (state()) {
+    @case ('gone') {
+      <!-- Not TB Gym's own space, or not a client of it: the pool is the house's alone (LIB-006). -->
+      <app-empty-state
+        class="panel"
+        heading="The pool isn’t open here"
+        i18n-heading
+        description="TB Gym’s exercise pool is for people training with TB Gym’s own space."
+        i18n-description
+        data-pool-gone
+      />
+    }
+    @case ('closed') {
+      <app-empty-state
+        class="panel"
+        heading="The pool is closed for now"
+        i18n-heading
+        [description]="closedWords()"
+        data-pool-closed
+      />
+    }
+    @default {
+      @if (!poolEmpty()) {
+        <div class="toolbar">
+          <div class="find" role="search" aria-label="Find exercises" i18n-aria-label>
+            <app-field class="search" [label]="searchLabel" hideLabel>
+              <input
+                #searchBox
+                appControl
+                type="search"
+                name="pool-search"
+                autocomplete="off"
+                enterkeyhint="search"
+                [placeholder]="searchPlaceholder"
+                [value]="searchText()"
+                (input)="typed($any($event.target).value)"
+              />
+            </app-field>
+            <div class="chips" role="group" aria-label="Filters" i18n-aria-label>
+              @for (chip of chips(); track chip.key) {
+                <app-menu
+                  variant="chip"
+                  size="touch"
+                  align="start"
+                  [label]="chip.name"
+                  [selected]="chip.active"
+                  [current]="chip.current"
+                  [items]="chip.items"
+                  (chosen)="setFilter(chip.key, $event)"
+                />
+              }
+              @if (filtered()) {
+                <button
+                  appButton
+                  type="button"
+                  variant="text"
+                  size="touch"
+                  data-clear-filters
+                  (click)="clearFilters()"
+                  i18n
+                >
+                  Clear filters
+                </button>
+              }
+            </div>
+          </div>
+          @if (hasVideo()) {
+            <app-demo-clips-toggle />
+          }
+        </div>
+      }
+
+      <div class="results">
+        <!-- Present from the first draw, so what a search finds is heard when it changes. When
+             nothing matches it is heard alone: the empty state below shows the same words. -->
+        <p class="summary" role="status">
+          <span [class.tb-visually-hidden]="noMatch()">{{ summary() }}</span>
+        </p>
+
+        @switch (state()) {
+          @case ('loading') {
+            <div class="panel pad" aria-busy="true">
+              <app-skeleton [label]="loadingLabel" [lines]="4" />
+            </div>
+          }
+          @case ('error') {
+            <div class="panel pad load-failed">
+              <p role="alert" i18n>The exercises couldn’t be loaded.</p>
+              <button appButton type="button" variant="outlined" size="touch" (click)="load()" i18n>
+                Try again
+              </button>
+            </div>
+          }
+          @default {
+            @if (poolEmpty()) {
+              <app-empty-state
+                class="panel"
+                heading="No exercises yet"
+                i18n-heading
+                description="No exercises are in the pool yet. TB Gym adds them, so check back soon."
+                i18n-description
+                data-pool-empty
+              />
+            } @else if (cards().length === 0) {
+              <app-empty-state
+                class="panel"
+                heading="No exercise matches"
+                i18n-heading
+                description="Try another word, or clear the filters."
+                i18n-description
+                data-pool-no-match
+              >
+                <button
+                  appButton
+                  empty-state-action
+                  type="button"
+                  size="touch"
+                  (click)="clearFilters()"
+                  i18n
+                >
+                  Show all exercises
+                </button>
+              </app-empty-state>
+            } @else {
+              <ul class="exercises" role="list" [attr.aria-busy]="searching() || null">
+                @for (card of cards(); track card.id) {
+                  <li class="exercise" [attr.data-exercise]="card.id">
+                    @if (card.demos.length > 0) {
+                      <!-- A thumbnail: the card's link names it, and the page's one pause stops them all. -->
+                      <app-demo-clip
+                        class="clip"
+                        decorative
+                        [demos]="card.demos"
+                        [exerciseName]="card.name"
+                      />
+                    } @else {
+                      <!-- No demo yet: its letters, so every card keeps the same shape. -->
+                      <span class="letters" aria-hidden="true">{{ card.initials }}</span>
+                    }
+                    <div class="body">
+                      <h2 class="name">
+                        <a
+                          dir="auto"
+                          [routerLink]="['/training/pool', card.id]"
+                          [queryParams]="linkParams()"
+                          >{{ card.name }}</a
+                        >
+                      </h2>
+                      @if (card.detail) {
+                        <p class="detail">{{ card.detail }}</p>
+                      }
+                    </div>
+                  </li>
+                }
+              </ul>
+              @if (hasMore() || moreFailed()) {
+                <div class="more">
+                  @if (moreFailed()) {
+                    <p role="alert" i18n>More exercises couldn’t be loaded. Try again.</p>
+                  }
+                  <button
+                    appButton
+                    type="button"
+                    variant="outlined"
+                    size="touch"
+                    [loading]="loadingMore()"
+                    (click)="more()"
+                    i18n
+                  >
+                    Show more exercises
+                  </button>
+                </div>
+              }
+            }
+          }
+        }
+      </div>
+    }
+  }
+</div>

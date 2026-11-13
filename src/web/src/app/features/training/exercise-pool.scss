@@ -1,0 +1,229 @@
+// TB Gym's exercise pool (notes plan N9b4): Training's page head, then the coach's library's grid of
+// cards, each topped with its demo playing like a GIF. Brand v2 tokens only, so it follows the
+// person's light or dark mode; logical properties only, so it reads right to left too.
+:host {
+  color: var(--tb-ink);
+  container-type: inline-size;
+  display: block;
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.pool {
+  display: grid;
+  gap: var(--space-24);
+  margin-inline: auto;
+  max-inline-size: 72rem;
+}
+h1,
+h2,
+p,
+ul {
+  margin: 0;
+}
+h1:focus {
+  outline: none;
+}
+
+// ---------- the head, as Training's ----------
+
+.page-head {
+  display: grid;
+  gap: var(--space-4);
+}
+.kicker {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+h1 {
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.lede {
+  color: var(--tb-muted);
+  margin-block-start: var(--space-4);
+  max-inline-size: 36rem;
+}
+
+// ---------- search, filters and the one pause ----------
+
+.toolbar {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12) var(--space-16);
+  justify-content: space-between;
+}
+.find {
+  display: flex;
+  flex: 1 1 28rem;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.search {
+  max-inline-size: 26rem;
+}
+// A client's thumb (plan §2 rule 6): the box is 44 px tall, as the picker's is.
+.search input {
+  min-block-size: 2.75rem;
+}
+.chips {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+.results {
+  display: grid;
+  gap: var(--space-12);
+}
+.summary {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+// ---------- the states ----------
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+}
+.pad {
+  padding: 1.25rem;
+}
+.load-failed {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+}
+.load-failed p,
+.more p {
+  color: var(--tb-ink);
+}
+
+// ---------- the cards: the whole card opens the exercise ----------
+
+.exercises {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  list-style: none;
+  padding: 0;
+}
+.exercise {
+  --demo-clip-ratio: 16 / 9;
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.exercise:hover {
+  border-color: var(--tb-line-strong);
+}
+.exercise:has(.name a:focus-visible) {
+  outline: 3px solid var(--tb-focus);
+  outline-offset: 2px;
+}
+// The card's corners are its own; the clip fills the top edge to edge.
+.clip {
+  border-radius: 0;
+}
+// A card with no demo keeps the clip's shape, with the exercise's letters on a quiet tile.
+.letters {
+  align-items: center;
+  aspect-ratio: var(--demo-clip-ratio);
+  background: var(--tb-surface-2);
+  color: var(--tb-muted);
+  display: flex;
+  font-size: 1.5rem;
+  font-weight: 600;
+  justify-content: center;
+  letter-spacing: 0.04em;
+}
+.body {
+  display: grid;
+  gap: var(--space-4);
+  padding: 0.75rem 1rem 0.875rem;
+}
+.name {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.name a {
+  color: inherit;
+  text-decoration: none;
+}
+// Stretched over the card, so the card is the target (plan §2 rule 6), its clip included.
+.name a::after {
+  content: '';
+  inset: 0;
+  position: absolute;
+}
+.name a:hover {
+  text-decoration: underline;
+}
+.name a:focus-visible {
+  outline: none;
+}
+.detail {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.more {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .exercise {
+    transition: border-color var(--tb-duration-fast) var(--tb-ease);
+  }
+}
+
+@media (forced-colors: active) {
+  .exercise {
+    border-color: CanvasText;
+  }
+}
+
+// ---------- a phone: two cards a row, as the coach's library has them; one at 200% text ----------
+
+@container (max-width: 40rem) {
+  .exercises {
+    gap: 0.625rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr));
+  }
+  .exercise {
+    --demo-clip-ratio: 4 / 3;
+  }
+  .body {
+    padding: 0.625rem 0.75rem 0.75rem;
+  }
+  .name {
+    font-size: 0.9375rem;
+  }
+  .detail {
+    font-size: 0.8125rem;
+  }
+}

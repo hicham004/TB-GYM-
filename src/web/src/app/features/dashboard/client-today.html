@@ -444,6 +444,10 @@
                 @if (startProblem(); as problem) {
                   <p class="today-problem" role="alert">{{ problem }}</p>
                 }
+                <!-- The pool's page, a plain link: only the card's action grows into the player (W7). -->
+                <a class="text-link" routerLink="/training/pool" data-browse-pool i18n
+                  >Browse exercises</a
+                >
               } @else if (selfDirected()) {
                 <!-- Training is closed to the trainee: nothing to start, a line true for them. -->
                 <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>

@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import type { OwnWorkoutView } from '../src/app/core/api/generated';
 import { finishedProfile } from '../src/testing/intake-fixtures';
+import { POOL_BENCH_PRESS, POOL_PLANK, poolPage } from '../src/testing/own-workout-fixtures';
 import {
   historyItem,
   historyPage,
@@ -432,6 +433,48 @@ for (const { button, press, body, first } of [
     expect(sent).toEqual([body]);
   });
 }
+
+// Notes plan N9b4: a trainee's Training links to TB Gym's pool; a coach's client's never does.
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a trainee’s Training links to TB Gym’s pool beside Start a workout, and Browse exercises opens it`, async ({
+    page,
+  }) => {
+    const poolReads: string[] = [];
+    await openTraineeTraining(page, width, height, {
+      'GET /api/exercise-pool': (route: Route) => {
+        poolReads.push(new URL(route.request().url()).searchParams.toString());
+        return json(route, 200, poolPage([POOL_BENCH_PRESS, POOL_PLANK]));
+      },
+    });
+
+    const actions = page.locator('.own-actions');
+    await expect(actions.getByRole('button', { name: 'Start a workout' })).toBeVisible();
+    const browse = actions.getByRole('link', { name: 'Browse exercises' });
+    await expect(browse).toHaveAttribute('href', '/training/pool');
+    await expect(browse).toHaveAttribute('data-browse-pool', '');
+    await expect(page.getByRole('link', { name: 'Browse exercises' })).toHaveCount(1);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+
+    await browse.click();
+
+    await expect(page).toHaveURL('/training/pool');
+    await expect(page.getByRole('heading', { level: 1, name: 'Exercises' })).toBeVisible();
+    await expect(page.locator('li.exercise h2')).toHaveText(['Bench press', 'Plank']);
+    expect(poolReads).toEqual(['skip=0&take=50']);
+  });
+}
+
+test('a coach’s client’s Training offers no Browse exercises', async ({ page }) => {
+  await openTraining(page, 390, 844, programView({ program: null }));
+
+  await expect(page.getByRole('heading', { name: 'Nothing assigned yet' })).toBeVisible();
+  await expect(page.locator('[data-browse-pool]')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Browse exercises' })).toHaveCount(0);
+});
 
 test.describe('a start the server refuses', () => {
   test.use({

@@ -53,6 +53,8 @@ import { StatusLabel } from '../../ui/status-label';
 import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareTeaser } from '../share-cards/share-teaser';
 import { PoolPicker } from './pool-picker';
+import { DemoClip } from './demo-clip';
+import { type ClipDemo, DemoClips } from './demo-clips';
 import { externalVideo } from './external-video';
 import { OwnWorkoutApi } from './own-workout-api';
 import {
@@ -120,11 +122,20 @@ function isConflict(error: unknown): error is HttpErrorResponse {
   return error instanceof HttpErrorResponse && error.status === 409;
 }
 
+/** The same demos in the same order: a reload that reads them again changes nothing in the clip. */
+function sameDemos(a: readonly ClipDemo[], b: readonly ClipDemo[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((demo, index) => demo.id === b[index].id && demo.kind === b[index].kind)
+  );
+}
+
 @Component({
   selector: 'app-today-training',
   imports: [
     Button,
     ButtonLink,
+    DemoClip,
     PoolPicker,
     FormsModule,
     DatePipe,
@@ -142,12 +153,13 @@ function isConflict(error: unknown): error is HttpErrorResponse {
     PlatesSheet,
   ],
   templateUrl: './today-training.html',
-  // The set rows, the demo overlay's link panel and a workout of one's own have their own sheets: the
-  // main one sits near the 8 kB style budget.
+  // The set rows, the demo overlay's link panel, the shown exercise's clip and a workout of one's own
+  // have their own sheets: the main one sits near the 8 kB style budget.
   styleUrls: [
     './today-training.scss',
     './today-training-sets.scss',
     './today-training-media.scss',
+    './today-training-clip.scss',
     './today-training-moments.scss',
     './today-training-note.scss',
     './today-training-own.scss',
@@ -166,6 +178,8 @@ export class TodayTraining implements HoldsUnsavedWork {
   private readonly route = inject(ActivatedRoute, { optional: true });
   private readonly locale = inject(LOCALE_ID);
   private readonly motion = inject(Motion);
+  /** The one pause every demo clip follows; the overlay's bigger view starts as the clips do (N9b4). */
+  protected readonly clips = inject(DemoClips);
   private loadedTenantId: string | null = null;
   private contextGeneration = 0;
   private loadGeneration = 0;
@@ -266,6 +280,15 @@ export class TodayTraining implements HoldsUnsavedWork {
   protected readonly activeWorkout = computed(() => this.shownWorkouts()[0] ?? null);
   protected readonly activeExercise = computed(
     () => this.activeWorkout()?.exercises[this.activeExerciseIndex()] ?? null,
+  );
+  /**
+   * The shown exercise's demos as its looping clip reads them (notes plan N9b4): the ids alone, as a
+   * workout's read names them, each one's kind learnt from its grant. The panel drawn is the shown
+   * exercise's, and a reload that reads the same ids keeps this list, so the clip asks nothing again.
+   */
+  protected readonly shownDemos = computed<readonly ClipDemo[]>(
+    () => (this.activeExercise()?.mediaAssetIds ?? []).map((id) => ({ id, kind: null })),
+    { equal: sameDemos },
   );
   /** The exercises already in the workout shown, which the picker marks. */
   protected readonly pickerInWorkout = computed<ReadonlySet<string>>(

@@ -18,6 +18,9 @@ import { Icon } from '../../ui/icon';
 import { ModalFooter } from '../../ui/modal-footer';
 import { LIBRARY_SEARCH_PAUSE, PagedSearch, type SearchPage } from '../../ui/paged-search';
 import { Skeleton } from '../../ui/skeleton';
+import { DemoClip } from './demo-clip';
+import { chosenDemo, type ClipDemo } from './demo-clips';
+import { DemoClipsToggle } from './demo-clips-toggle';
 import { ExerciseDemo } from './exercise-demo';
 import { ExercisePoolApi } from './exercise-pool-api';
 import { ownTrainingClosedWords, poolExerciseDetail } from './own-workout.models';
@@ -27,13 +30,15 @@ const PAGE = 50;
 
 /**
  * The exercise picker of a workout of one's own (notes plan N9b3): TB Gym's exercise pool in name order
- * (LIB-006), searched as the coach's library is, a page at a time, each exercise with its demo as the
- * player shows one (MED-017). A press adds the exercise; the picker stays open for the next. It reads
- * only; the server decides what may be added (TRN-033).
+ * (LIB-006), searched as the coach's library is, a page at a time, each exercise with its demo (MED-017).
+ * An uploaded video loops beside its row like a GIF and a picture stays a picture (notes plan N9b4), as
+ * thumbnails the list's one pause holds; a YouTube or Vimeo link keeps its button, which opens it on
+ * its site. A press adds the exercise; the picker stays open for the next. It reads only; the server
+ * decides what may be added (TRN-033).
  */
 @Component({
   selector: 'app-pool-picker',
-  imports: [Button, ExerciseDemo, Icon, ModalFooter, Skeleton],
+  imports: [Button, DemoClip, DemoClipsToggle, ExerciseDemo, Icon, ModalFooter, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './pool-picker.html',
   styleUrl: './pool-picker.scss',
@@ -84,13 +89,27 @@ export class PoolPicker {
   protected readonly loadingFirst = computed(() => this.first() === null && !this.firstFailed());
   /** Nothing in the pool at all, as opposed to nothing matching a search. */
   protected readonly poolEmpty = computed(() => !this.list.answered() && this.first()?.total === 0);
+  /**
+   * Each exercise with its demos as the pool names them, kinds kept, and the kind of the one its row
+   * shows (the first video, else picture, else link): a clip for an upload, the button for a link.
+   */
   protected readonly rows = computed(() =>
-    this.list.items().map((exercise) => ({
-      exercise,
-      detail: poolExerciseDetail(exercise),
-      demos: exercise.demos.map((demo) => demo.mediaAssetId),
-    })),
+    this.list.items().map((exercise) => {
+      const demos: readonly ClipDemo[] = exercise.demos.map((demo) => ({
+        id: demo.mediaAssetId,
+        kind: demo.kind,
+      }));
+      return {
+        exercise,
+        detail: poolExerciseDetail(exercise),
+        demos,
+        ids: demos.map((demo) => demo.id),
+        shown: chosenDemo(demos)?.kind ?? null,
+      };
+    }),
   );
+  /** A listed row's clip loops: the list then offers the one pause its thumbnails share (WCAG 2.2.2). */
+  protected readonly looping = computed(() => this.rows().some((row) => row.shown === 'Video'));
   protected readonly noMatch = computed(
     () => $localize`No exercise matches “${this.list.filter().trim()}:search:”.`,
   );

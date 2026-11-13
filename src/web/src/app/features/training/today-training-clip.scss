@@ -1,0 +1,8 @@
+// The shown exercise's demo (notes plan N9b4): a small clip under its name, at the start of the line on
+// a phone and on a wide screen alike, so the sets stay close below it. A picture of the movement, not
+// text: under large text on a phone it stays small rather than pushing the sets down. The clip draws its
+// own box and pause.
+.exercise-clip {
+  inline-size: min(100%, 14rem, 60vw);
+  margin-block-end: 1.2rem;
+}

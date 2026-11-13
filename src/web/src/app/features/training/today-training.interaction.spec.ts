@@ -1985,3 +1985,219 @@ describe('TodayTraining, a weight the coach applied', () => {
     expect(plain.host.querySelector('.weight-note')).toBeNull();
   });
 });
+
+/**
+ * Notes plan N9b4: the shown exercise's demo plays like a GIF under its name, muted, looping and small,
+ * with its own pause, for a coach's client as for a trainee. Watch demo still opens it bigger.
+ */
+describe('TodayTraining, the exercise’s demo as a clip', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+    TestBed.resetTestingModule();
+    // After the player is gone, so the clip letting go of its video still meets the stubs.
+    vi.restoreAllMocks();
+  });
+
+  /** jsdom's <video> neither loads nor plays (`play()` answers undefined): it answers as a browser does. */
+  function stubVideo() {
+    return {
+      play: vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(() => Promise.resolve()),
+      pause: vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined),
+      load: vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined),
+    };
+  }
+
+  /** The server's batch grant: a clip or a picture by its id (a workout names its demos by id alone). */
+  const batchGrant = () =>
+    vi.fn((ids: readonly string[]) =>
+      of({
+        items: ids.map((id) => ({
+          assetId: id,
+          kind: id.startsWith('photo') ? ('Image' as const) : ('Video' as const),
+          source: 'Upload' as const,
+          contentType: id.startsWith('photo') ? 'image/jpeg' : 'video/webm',
+          url: `/api/media/${id}/content`,
+          expiresAtUtc: '2026-08-25T11:00:00Z',
+          downloadAllowed: false,
+        })),
+      }),
+    );
+
+  /** Lower A: Back squat with a clip and a picture, then Walking lunge with no demo. */
+  function demoDay(): ClientTrainingDayResult {
+    return day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({ mediaAssetIds: ['clip-squat', 'photo-squat'] }),
+            exercise({
+              prescriptionId: 'prescription-2',
+              performanceId: 'exercise-performance-2',
+              prescribedExerciseId: 'exercise-2',
+              prescribedExerciseName: 'Walking lunge',
+              actualExerciseId: 'exercise-2',
+              actualExerciseName: 'Walking lunge',
+              sets: [set({ prescriptionId: 'prescription-3', performanceId: 'performance-3' })],
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('draws the shown exercise’s demo under its name and before its sets, and none for an exercise without one', async () => {
+    const batch = batchGrant();
+    const { fixture, host } = await render({ createMediaAccessBatch: batch }, demoDay());
+
+    const clip = query<HTMLElement>(host, '.workout-exercise app-demo-clip.exercise-clip');
+    expect(query(host, '.workout-exercise header.exercise-heading').nextElementSibling).toBe(clip);
+    expect(
+      clip.compareDocumentPosition(query(host, '.set-card')) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Not a thumbnail in a list: named for assistive technology, with its own control.
+    expect(clip.getAttribute('aria-hidden')).toBeNull();
+    // Nothing is asked for before it is seen; jsdom never sees it, so it waits for a press.
+    expect(batch).not.toHaveBeenCalled();
+    expect(button(host, 'Play the demo').disabled).toBe(false);
+    // Watch demo stays, one button a demo, for the bigger view with the browser's controls.
+    expect(button(host, 'Watch demo 1').disabled).toBe(false);
+    expect(button(host, 'Watch demo 2').disabled).toBe(false);
+
+    press(host, 'Next exercise →');
+    await settle(fixture);
+
+    expect(textOf(query(host, '.workout-exercise h2'))).toBe('Walking lunge');
+    expect(host.querySelector('app-demo-clip')).toBeNull();
+    expect(host.textContent).not.toContain('Watch demo');
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A swap changes the exercise's name, never its demos: they stay the prescribed one's. A clip would
+   * loop that movement under the swapped-in name, so a swapped exercise shows none; Watch demo stays.
+   */
+  it('draws no clip once the exercise is swapped, and keeps Watch demo for its demos', async () => {
+    stubVideo();
+    const squat = (swapped: boolean) =>
+      day({
+        workouts: [
+          workout({
+            exercises: [
+              exercise({
+                mediaAssetIds: ['clip-squat', 'photo-squat'],
+                modificationPolicy: 'CoachApprovedSwap',
+                alternatives: [{ exerciseId: 'exercise-2', name: 'Goblet squat' }],
+                ...(swapped
+                  ? {
+                      wasSubstituted: true,
+                      actualExerciseId: 'exercise-2',
+                      actualExerciseName: 'Goblet squat',
+                    }
+                  : {}),
+              }),
+            ],
+          }),
+        ],
+      });
+    let swapped = false;
+    const batch = batchGrant();
+    const { fixture, host, api } = await render(
+      { createMediaAccessBatch: batch, getMyTrainingToday: vi.fn(() => of(squat(swapped))) },
+      squat(false),
+    );
+
+    // Not swapped: the prescribed exercise's clip, named for it.
+    const clip = query<HTMLElement>(host, '.workout-exercise app-demo-clip.exercise-clip');
+    press(host, 'Play the demo');
+    await settle(fixture);
+    expect(query(clip, 'video').getAttribute('aria-label')).toBe('How to do Back squat');
+
+    swapped = true;
+    press(host, 'Swap exercise');
+    await settle(fixture);
+    press(menuList(), 'Goblet squat');
+    await settle(fixture);
+
+    expect(api.substituteMyTrainingExercise).toHaveBeenCalledWith(
+      'execution-1',
+      'exercise-performance-1',
+      { exerciseId: 'exercise-2', version: 3 },
+    );
+    expect(textOf(query(host, '.workout-exercise h2'))).toBe('Goblet squat');
+    expect(host.textContent).toContain('Prescribed: Back squat');
+    expect(host.querySelector('app-demo-clip')).toBeNull();
+    expect(host.querySelector('[aria-label="How to do Goblet squat"]')).toBeNull();
+    // The demos the coach gave the prescribed exercise, behind Watch demo as before the clip.
+    expect(button(host, 'Watch demo 1').disabled).toBe(false);
+    expect(button(host, 'Watch demo 2').disabled).toBe(false);
+  });
+
+  it('draws a swapped exercise with no clip from the first read, and an unswapped one with its clip', async () => {
+    const batch = batchGrant();
+    const swappedFirst = day({
+      workouts: [
+        workout({
+          exercises: [
+            exercise({
+              mediaAssetIds: ['clip-squat'],
+              wasSubstituted: true,
+              actualExerciseId: 'exercise-9',
+              actualExerciseName: 'Hack squat',
+            }),
+            exercise({
+              prescriptionId: 'prescription-2',
+              performanceId: 'exercise-performance-2',
+              prescribedExerciseId: 'exercise-2',
+              prescribedExerciseName: 'Walking lunge',
+              actualExerciseId: 'exercise-2',
+              actualExerciseName: 'Walking lunge',
+              mediaAssetIds: ['clip-lunge'],
+              sets: [set({ prescriptionId: 'prescription-3', performanceId: 'performance-3' })],
+            }),
+          ],
+        }),
+      ],
+    });
+    const { fixture, host } = await render({ createMediaAccessBatch: batch }, swappedFirst);
+
+    expect(textOf(query(host, '.workout-exercise h2'))).toBe('Hack squat');
+    expect(host.querySelector('app-demo-clip')).toBeNull();
+    expect(button(host, 'Watch demo 1').disabled).toBe(false);
+
+    press(host, 'Next exercise →');
+    await settle(fixture);
+
+    expect(textOf(query(host, '.workout-exercise h2'))).toBe('Walking lunge');
+    expect(host.querySelector('.workout-exercise app-demo-clip.exercise-clip')).not.toBeNull();
+    expect(button(host, 'Watch demo 1').disabled).toBe(false);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('asks a workout’s demos together on a press, and plays its video muted and looping, with a pause', async () => {
+    const media = stubVideo();
+    const batch = batchGrant();
+    const { fixture, host } = await render({ createMediaAccessBatch: batch }, demoDay());
+    const refresh = vi.mocked(TestBed.inject(CsrfService).refresh);
+    expect(refresh).not.toHaveBeenCalled();
+
+    press(host, 'Play the demo');
+    await settle(fixture);
+
+    // The workout names its demos by id alone: both asked at once, after the antiforgery read.
+    expect(batch).toHaveBeenCalledExactlyOnceWith(['clip-squat', 'photo-squat']);
+    expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(batch.mock.invocationCallOrder[0]);
+    const clip = query<HTMLElement>(host, 'app-demo-clip.exercise-clip');
+    const video = query<HTMLVideoElement>(clip, 'video');
+    expect(video.getAttribute('src')).toBe('/api/media/clip-squat/content');
+    expect(video.muted).toBe(true);
+    expect(video.loop).toBe(true);
+    expect(video.playsInline).toBe(true);
+    // Small and plain: its own pause is the control, not the browser's.
+    expect(video.hasAttribute('controls')).toBe(false);
+    expect(video.getAttribute('aria-label')).toBe('How to do Back squat');
+    expect(media.play).toHaveBeenCalled();
+    expect(query(clip, 'button[data-clip-toggle]')).toBeTruthy();
+  });
+});

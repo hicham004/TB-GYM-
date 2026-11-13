@@ -1,0 +1,173 @@
+// One exercise of TB Gym's pool (notes plan N9b4): My plan's way back, Training's heading, the demo
+// playing, the one main action, then what the exercise works and how it is done. Brand v2 tokens only,
+// so it follows the person's light or dark mode; logical properties only, so it reads right to left.
+:host {
+  color: var(--tb-ink);
+  display: block;
+}
+* {
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.exercise-page {
+  display: grid;
+  gap: var(--space-24);
+  margin-inline: auto;
+  max-inline-size: 44rem;
+}
+h1,
+h2,
+p,
+dl,
+dd {
+  margin: 0;
+}
+h1 {
+  font-size: clamp(1.95rem, 7vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+h1:focus {
+  outline: none;
+}
+
+// A client's way back to the pool, as My plan's to Me.
+.back {
+  align-items: center;
+  color: var(--tb-muted);
+  display: inline-flex;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  gap: var(--space-4);
+  justify-self: start;
+  margin-block-end: calc(-1 * var(--space-12));
+  margin-inline-start: -0.375rem;
+  min-block-size: 2.75rem;
+  padding-inline: 0.375rem;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--tb-ink);
+  }
+
+  &:focus-visible {
+    border-radius: var(--tb-radius-control);
+    outline: 3px solid var(--tb-focus);
+  }
+}
+.back-icon {
+  transform: scaleX(-1);
+}
+:host-context([dir='rtl']) .back-icon {
+  transform: none;
+}
+
+// ---------- the demo, and every demo behind one button ----------
+
+.demo-area {
+  display: grid;
+  gap: var(--space-8);
+  justify-items: start;
+}
+.clip {
+  inline-size: 100%;
+  max-inline-size: 32rem;
+}
+
+// ---------- the one main action ----------
+
+.offer {
+  display: grid;
+  gap: var(--space-8);
+  max-inline-size: 24rem;
+}
+.start {
+  inline-size: 100%;
+  justify-content: center;
+}
+.note {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+}
+.problem-box {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.problem {
+  background: var(--tb-danger-soft);
+  border-radius: var(--tb-radius-control);
+  color: var(--tb-ink);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.75rem;
+}
+
+// ---------- what it needs and works, and how it is done ----------
+
+.facts {
+  display: grid;
+  gap: var(--space-8);
+  // Two a row on a phone, one at 200% text.
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 9rem), 1fr));
+}
+.fact {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card-small);
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.75rem 1rem;
+}
+dt {
+  color: var(--tb-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+dd {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.how {
+  display: grid;
+  gap: var(--space-8);
+}
+.how h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+// The house's words as typed: their line breaks kept, never read as markup.
+.instructions {
+  line-height: 1.55;
+  max-inline-size: 40rem;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+// ---------- the states ----------
+
+.panel {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: var(--tb-radius-card);
+  box-shadow: var(--tb-shadow-card);
+}
+.pad {
+  padding: 1.25rem;
+}
+.load-failed {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+}
+
+@media (forced-colors: active) {
+  .fact {
+    border-color: CanvasText;
+  }
+}

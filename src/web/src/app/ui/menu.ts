@@ -6,6 +6,7 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   ElementRef,
   inject,
@@ -143,6 +144,7 @@ function outOfSight(element: Element): boolean {
           type="button"
           [class]="variant() === 'chip' ? 'chip' : 'tb-button tb-button--outlined'"
           [class.selected]="selected()"
+          [class.chip-touch]="touchChip()"
           [disabled]="disabled()"
           [attr.aria-expanded]="open()"
           [attr.aria-controls]="panelId"
@@ -155,7 +157,7 @@ function outOfSight(element: Element): boolean {
       }
     </div>
     <ng-template #panel>
-      <ul class="panel" [id]="panelId">
+      <ul class="panel" [class.panel-touch]="touchChip()" [id]="panelId">
         @for (item of items(); track item.action) {
           <li>
             @if (item.href) {
@@ -225,6 +227,18 @@ function outOfSight(element: Element): boolean {
       gap: 0.25rem;
       min-block-size: 2.5rem;
       padding: 0.25rem 0.625rem 0.25rem 0.875rem;
+    }
+
+    // A client's thumb (plan §2 rule 6): the chip and the choices it opens are 44 px tall.
+    .chip.chip-touch,
+    .panel-touch .item {
+      min-block-size: 2.75rem;
+    }
+
+    // On a phone at 200% text, a long choice ("Equipment: No equipment") wraps inside the chip.
+    .chip.chip-touch {
+      max-inline-size: 100%;
+      text-align: start;
     }
 
     .chip:hover {
@@ -355,7 +369,10 @@ export class UiMenu {
   readonly align = input<'start' | 'end'>('end');
   /** `chip` draws the button as a filter pill (the exercise library's filters), filled when `selected`. */
   readonly variant = input<'button' | 'chip'>('button');
-  /** `touch` makes an icon button the 44 px a client's thumb needs (plan §2 rule 6, CLIENT-7). */
+  /**
+   * `touch` makes an icon button the 44 px a client's thumb needs (plan §2 rule 6, CLIENT-7), and a
+   * `chip` 44 px tall with the choices of its list (the trainee's exercise pool, notes plan N9b4).
+   */
   readonly size = input<'default' | 'touch'>('default');
   readonly selected = input(false);
   /** The button cannot open the menu, as while the change it offers is still being saved. */
@@ -365,6 +382,9 @@ export class UiMenu {
   /** The `action` of the item chosen, once the menu has closed and focus is back on the button. */
   readonly chosen = output<string>();
   protected readonly open = signal(false);
+  protected readonly touchChip = computed(
+    () => this.variant() === 'chip' && this.size() === 'touch',
+  );
   protected readonly panelId = `tb-menu-${nextId++}`;
   /** The open list's overlay; null while the menu is closed. */
   private overlayRef: OverlayRef | null = null;

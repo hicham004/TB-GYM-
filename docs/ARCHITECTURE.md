@@ -488,7 +488,9 @@ between 60 seconds and 4 hours and defaults to 1800. The default is sized for on
 viewing session because each seek in a paused video issues a fresh Range request carrying the
 same grant; a shorter lifetime interrupts playback without adding protection, since the
 content endpoint reauthorizes membership and entitlement on every request and therefore
-revokes access immediately regardless of the remaining lifetime.
+revokes access immediately regardless of the remaining lifetime. A looping demo (MED-018, notes plan
+N9b4) can outlive one grant, since a workout often lasts longer: when its bytes are refused it asks
+a fresh grant once and loads again, so the lifetime stays as it is.
 
 A YouTube or Vimeo link holds no bytes and needs no grant to be shown: since critique B9 the coach's media
 list (`GET /api/media`) carries its `watchUrl`, built from the stored id on the provider's own host as the
@@ -1164,6 +1166,11 @@ in place of `includeArchived`, and Other's own name (`typeName`, in any case); t
 asks `facets=true` for the counts in use and archived ("Archived (n)") and, in the view asked for, the tags with
 how many carry each and the own type names, whatever the other filters, so a choice never empties its menu
 (LIB-004, LIB-005).
+Notes plan N9b4: the house's pool is the trainee's lazy `/training/pool` and `/training/pool/:exerciseId`, its
+reads in `ExercisePoolApi` outside `ApiClient`. Its looping demos (`DemoClip` over `DemoClips`, MED-018) ask for
+nothing until a clip is near the screen, then grant through the batch route, six a request (each a cookie in the answer, under nginx's 4 KB header
+buffer) after one antiforgery read, keep each grant 20 minutes, hold back past 96 live a visit (each a cookie) until a press, and forget them all
+on a workspace change. The first download was 518.31 kB before and 518.31 kB after.
 
 Audit A14a (TRAIN-5, VER3B-NEW-1, UIQ-19): no screen draws a browser picker.
 - A list to choose from is the kit's `UiSelect` (`ui/select.ts`): its button names the choice and opens the

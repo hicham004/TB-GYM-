@@ -1,4 +1,5 @@
 import type {
+  ExercisePoolExerciseResult,
   ExercisePoolPage,
   OwnWorkoutExerciseView,
   OwnWorkoutSetView,
@@ -62,6 +63,49 @@ export function poolPage(
   total: number = items.length,
 ): ExercisePoolPage {
   return { isAllowed: true, accessReason: 'Granted', total, items };
+}
+
+/** The pool's page and an exercise's page (notes plan N9b4): a demo that is a picture. */
+export const POOL_DUMBBELL_ROW = poolExercise('Dumbbell row', {
+  equipment: 'Dumbbell',
+  movementPattern: 'HorizontalPull',
+  muscles: [{ muscle: 'Back', role: 'Primary' }],
+  demos: [{ mediaAssetId: 'm-row-photo', kind: 'Picture' }],
+});
+/** A demo that is a YouTube video, which opens on YouTube's own page (C18). */
+export const POOL_ROMANIAN_DEADLIFT = poolExercise('Romanian deadlift', {
+  movementPattern: 'Hinge',
+  muscles: [{ muscle: 'Hamstrings', role: 'Primary' }],
+  demos: [{ mediaAssetId: 'm-rdl-link', kind: 'VideoLink' }],
+});
+/**
+ * Everything an exercise's page shows: the house's own type, the muscles it also works, instructions
+ * over two lines, and three demos (a picture first, then a video, then a link).
+ */
+export const POOL_WALKING_LUNGE = poolExercise('Walking lunge', {
+  classification: 'Other',
+  typeName: 'Rehab',
+  equipment: 'None',
+  movementPattern: 'Locomotion',
+  muscles: [
+    { muscle: 'Quadriceps', role: 'Primary' },
+    { muscle: 'Glutes', role: 'Secondary' },
+    { muscle: 'Hamstrings', role: 'Secondary' },
+  ],
+  instructions: 'Step forward and lower the back knee.\nPush through the front heel to stand.',
+  demos: [
+    { mediaAssetId: 'm-lunge-photo', kind: 'Picture' },
+    { mediaAssetId: 'm-lunge-video', kind: 'Video' },
+    { mediaAssetId: 'm-lunge-link', kind: 'VideoLink' },
+  ],
+});
+
+/** One exercise as `GET /api/exercise-pool/{id}` answers it: null when it is not in the pool. */
+export function poolResult(
+  exercise: PoolExerciseView | null,
+  overrides: Partial<ExercisePoolExerciseResult> = {},
+): ExercisePoolExerciseResult {
+  return { isAllowed: true, accessReason: 'Granted', exercise, ...overrides };
 }
 
 export function ownSetView(overrides: Partial<OwnWorkoutSetView> = {}): OwnWorkoutSetView {

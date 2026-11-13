@@ -3,15 +3,17 @@ import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
-import type { ExercisePoolPage } from '../../core/api/generated';
+import type { ExercisePoolPage, MediaAccessView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { LIBRARY_SEARCH_PAUSE } from '../../ui/paged-search';
 import { button, field, fill, press, query, settle } from '../../../testing/dom';
 import { access } from '../../../testing/exercise-fixtures';
+import { fakeMotion, type FakeMotion, provideFakeMotion } from '../../../testing/motion-fake';
 import {
   POOL_BENCH_PRESS,
   POOL_GOBLET_SQUAT,
   POOL_PLANK,
+  poolExercise,
   poolPage,
 } from '../../../testing/own-workout-fixtures';
 import { PoolPicker } from './pool-picker';
@@ -19,26 +21,143 @@ import { ExercisePoolApi } from './exercise-pool-api';
 
 const WHOLE_POOL = [POOL_BENCH_PRESS, POOL_GOBLET_SQUAT, POOL_PLANK];
 
+/** A picture (notes plan N9b4): it stays a picture beside its row. */
+const POOL_PUSH_UP = poolExercise('Push-up', {
+  equipment: 'Bodyweight',
+  movementPattern: 'HorizontalPush',
+  muscles: [{ muscle: 'Chest', role: 'Primary' }],
+  demos: [{ mediaAssetId: 'm-push-up-photo', kind: 'Picture' }],
+});
+/** A YouTube link: it opens on its site, from the demo button. */
+const POOL_DEADLIFT = poolExercise('Romanian deadlift', {
+  movementPattern: 'Hinge',
+  muscles: [{ muscle: 'Hamstrings', role: 'Primary' }],
+  demos: [{ mediaAssetId: 'm-deadlift-link', kind: 'VideoLink' }],
+});
+/** A picture first and a video after it: the row loops the video. */
+const POOL_SWING = poolExercise('Kettlebell swing', {
+  equipment: 'Kettlebell',
+  movementPattern: 'Hinge',
+  muscles: [{ muscle: 'Glutes', role: 'Primary' }],
+  demos: [
+    { mediaAssetId: 'm-swing-photo', kind: 'Picture' },
+    { mediaAssetId: 'm-swing-video', kind: 'Video' },
+  ],
+});
+/** Every kind of demo and none, in name order. */
+const EVERY_DEMO = [
+  POOL_BENCH_PRESS,
+  POOL_GOBLET_SQUAT,
+  POOL_SWING,
+  POOL_PLANK,
+  POOL_PUSH_UP,
+  POOL_DEADLIFT,
+];
+
+/** The server's grant of a demo, by the kind its id names: a picture, a YouTube link or a clip. */
+function grantOf(assetId: string): MediaAccessView {
+  if (assetId.endsWith('-link')) {
+    return access({
+      assetId,
+      kind: 'Video',
+      source: 'ExternalEmbed',
+      contentType: null,
+      url: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+      externalProvider: 'YouTube',
+      watchUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    });
+  }
+  return assetId.endsWith('-photo')
+    ? access({ assetId, url: `/api/media/${assetId}/content` })
+    : access({
+        assetId,
+        kind: 'Video',
+        contentType: 'video/webm',
+        url: `/api/media/${assetId}/content`,
+      });
+}
+
+/** A browser's IntersectionObserver, which jsdom lacks: the test says when a clip comes into view. */
+class IntersectionObserverStub {
+  static instances: IntersectionObserverStub[] = [];
+  readonly observed: Element[] = [];
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    IntersectionObserverStub.instances.push(this);
+  }
+  observe(element: Element): void {
+    this.observed.push(element);
+  }
+  unobserve(): void {
+    // Nothing to let go of.
+  }
+  disconnect(): void {
+    // Nothing to let go of.
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+  /** The element it watches came near the screen. */
+  intersect(target: Element): void {
+    this.callback(
+      [{ isIntersecting: true, target } as unknown as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
+}
+
+/** Installs the observer before the picker draws; `seen` brings one element into view. */
+function stubIntersections() {
+  IntersectionObserverStub.instances = [];
+  vi.stubGlobal('IntersectionObserver', IntersectionObserverStub);
+  return {
+    seen(element: Element): void {
+      const watcher = IntersectionObserverStub.instances.find((observer) =>
+        observer.observed.includes(element),
+      );
+      if (!watcher) throw new Error('Nothing watches that element.');
+      watcher.intersect(element);
+    },
+  };
+}
+
+/** jsdom's <video> neither loads nor plays (`play()` answers undefined): it answers as a browser does. */
+function stubVideo() {
+  return {
+    play: vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve()),
+    pause: vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined),
+    load: vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined),
+  };
+}
+
 interface Options {
   readonly search?: ExercisePoolApi['search'];
   readonly inWorkout?: ReadonlySet<string>;
   /** How many times each exercise was added since the picker opened. */
   readonly added?: ReadonlyMap<string, number>;
+  /** Motion as the fake says; without one jsdom reads as reduced motion, and the clips start paused. */
+  readonly motion?: FakeMotion;
 }
 
 async function render(options: Options = {}) {
   const pool = {
     search: vi.fn<ExercisePoolApi['search']>(options.search ?? (() => of(poolPage(WHOLE_POOL)))),
   };
-  const grant = vi.fn((id: string) => of(access({ assetId: id, kind: 'Video' })));
+  const grant = vi.fn((id: string) => of(grantOf(id)));
+  // The server leaves out of a batch what it does not grant, and every link (MED-005).
+  const batch = vi.fn((ids: readonly string[]) =>
+    of({ items: ids.map(grantOf).filter((view) => view.source === 'Upload') }),
+  );
+  const refresh = vi.fn(() => Promise.resolve());
   TestBed.configureTestingModule({
     imports: [PoolPicker],
     providers: [
       { provide: ExercisePoolApi, useValue: pool },
-      // The demo button asks the server for its grant (MED-017) through the app's client.
-      { provide: ApiClient, useValue: { createMediaAccess: grant } },
-      { provide: CsrfService, useValue: { refresh: vi.fn(() => Promise.resolve()) } },
+      // Demos ask the server for their grants (MED-017) through the app's client: a link's button
+      // one at a time, the thumbnails together once seen (notes plan N9b4).
+      { provide: ApiClient, useValue: { createMediaAccess: grant, createMediaAccessBatch: batch } },
+      { provide: CsrfService, useValue: { refresh } },
       { provide: LIBRARY_SEARCH_PAUSE, useValue: 0 },
+      ...(options.motion ? [provideFakeMotion(options.motion)] : []),
     ],
   });
   const fixture = TestBed.createComponent(PoolPicker);
@@ -49,11 +168,29 @@ async function render(options: Options = {}) {
   fixture.componentInstance.chosen.subscribe(chosen);
   fixture.componentInstance.done.subscribe(done);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, pool, grant, chosen, done };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    pool,
+    grant,
+    batch,
+    refresh,
+    chosen,
+    done,
+  };
 }
 
 const textOf = (element: Element | null | undefined) =>
   (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+/** What sits beside the row named `name`, in the place every row keeps for its demo. */
+function slotOf(host: HTMLElement, name: string): HTMLElement {
+  const row = Array.from(host.querySelectorAll<HTMLElement>('li.row')).find(
+    (item) => textOf(item.querySelector('.name')) === name,
+  );
+  if (!row) throw new Error(`No row is named "${name}".`);
+  return query<HTMLElement>(row, ':scope > .demo-slot');
+}
 
 /** The exercises listed, each as its name and the line under it. */
 function listed(host: HTMLElement): string[][] {
@@ -72,6 +209,9 @@ describe('PoolPicker, TB Gym’s pool for a workout of one’s own (notes plan N
   afterEach(() => {
     document.body.replaceChildren();
     TestBed.resetTestingModule();
+    // After the picker is gone, so the clips letting go of their videos still meet the stubs.
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('lists the pool’s first page in the order the server gives, each with its equipment and main muscle', async () => {
@@ -326,26 +466,135 @@ describe('PoolPicker, TB Gym’s pool for a workout of one’s own (notes plan N
     expect(host.querySelector('.mark.added')).toBeNull();
   });
 
-  it('gives an exercise with a demo its demo button at a thumb’s size, which opens without adding', async () => {
-    const { fixture, host, grant, chosen } = await render();
-    const rows = Array.from(host.querySelectorAll<HTMLElement>('li.row'));
+  describe('the demos beside the rows (notes plan N9b4)', () => {
+    it('shows an uploaded video or a picture as a square thumbnail, hidden from assistive technology, asking nothing until it is seen', async () => {
+      const { host, grant, batch } = await render({
+        search: () => of(poolPage(EVERY_DEMO)),
+      });
 
-    // Bench press and Plank have no demo: their rows show none.
-    expect(rows[0].querySelector('app-exercise-demo button')).toBeNull();
-    expect(rows[2].querySelector('app-exercise-demo button')).toBeNull();
-    const demo = query<HTMLButtonElement>(rows[1], 'app-exercise-demo button');
-    expect(demo.getAttribute('aria-label')).toBe('Watch the Goblet squat demo');
-    expect(demo.classList.contains('compact')).toBe(true);
-    expect(demo.classList.contains('touch')).toBe(true);
-    // Beside the row's button, never inside it.
-    expect(demo.closest('button.pick')).toBeNull();
+      // Every row keeps the demo's place after its button, so the rows line up with a demo or without.
+      const rows = Array.from(host.querySelectorAll<HTMLElement>('li.row'));
+      expect(rows).toHaveLength(6);
+      for (const row of rows) {
+        expect(row.lastElementChild?.classList.contains('demo-slot')).toBe(true);
+        expect(query(row, 'button.pick').nextElementSibling).toBe(row.lastElementChild);
+      }
+      for (const name of ['Goblet squat', 'Kettlebell swing', 'Push-up']) {
+        const clip = query<HTMLElement>(slotOf(host, name), 'app-demo-clip.row-clip');
+        // A thumbnail in a list: the row's button names the exercise, and the clip has no control.
+        expect(clip.getAttribute('aria-hidden')).toBe('true');
+        expect(clip.querySelector('button, a')).toBeNull();
+        expect(clip.closest('button.pick')).toBeNull();
+        expect(slotOf(host, name).querySelector('app-exercise-demo')).toBeNull();
+      }
+      // No demo, nothing drawn; the old demo button stays for the link alone.
+      expect(slotOf(host, 'Bench press').children).toHaveLength(0);
+      expect(slotOf(host, 'Plank').children).toHaveLength(0);
+      expect(slotOf(host, 'Romanian deadlift').querySelector('app-demo-clip')).toBeNull();
+      expect(host.querySelectorAll('app-exercise-demo')).toHaveLength(1);
+      // jsdom never sees a clip come into view, so none asks for its grant.
+      expect(batch).not.toHaveBeenCalled();
+      expect(grant).not.toHaveBeenCalled();
+    });
 
-    demo.click();
-    await settle(fixture);
+    it('keeps the demo button for a YouTube or Vimeo link, at a thumb’s size, which opens it without adding', async () => {
+      const { fixture, host, grant, batch, chosen } = await render({
+        search: () => of(poolPage(EVERY_DEMO)),
+      });
+      const demo = query<HTMLButtonElement>(
+        slotOf(host, 'Romanian deadlift'),
+        'app-exercise-demo button',
+      );
+      expect(demo.getAttribute('aria-label')).toBe('Watch the Romanian deadlift demo');
+      expect(demo.classList.contains('compact')).toBe(true);
+      expect(demo.classList.contains('touch')).toBe(true);
+      // Beside the row's button, never inside it.
+      expect(demo.closest('button.pick')).toBeNull();
 
-    expect(grant).toHaveBeenCalledExactlyOnceWith('m-goblet-video');
-    expect(textOf(document.querySelector('[role="dialog"] h2'))).toBe('Goblet squat');
-    expect(chosen).not.toHaveBeenCalled();
+      demo.click();
+      await settle(fixture);
+
+      expect(grant).toHaveBeenCalledExactlyOnceWith('m-deadlift-link');
+      expect(batch).not.toHaveBeenCalled();
+      const sheet = query<HTMLElement>(document, '[role="dialog"]');
+      expect(textOf(sheet.querySelector('h2'))).toBe('Romanian deadlift');
+      expect(query<HTMLAnchorElement>(sheet, '[data-watch-external]').getAttribute('href')).toBe(
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      );
+      expect(chosen).not.toHaveBeenCalled();
+    });
+
+    it('offers one pause for the looping thumbnails, beside the search, while a video is listed', async () => {
+      const { fixture, host, pool } = await render({
+        search: (asked) => of(poolPage(asked?.query ? [POOL_PUSH_UP, POOL_DEADLIFT] : EVERY_DEMO)),
+        motion: fakeMotion({ allowed: true }),
+      });
+      const find = query<HTMLElement>(host, '.top .find');
+      const toggle = query<HTMLButtonElement>(find, 'button[data-clips-toggle]');
+      // Outside the search landmark and after its box, which stays the first thing in reach.
+      expect(toggle.closest('[role="search"]')).toBeNull();
+      expect(
+        query(find, '.search').compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(textOf(toggle)).toBe('Pause demos');
+
+      press(host, 'Pause demos');
+      await settle(fixture);
+      expect(textOf(query(host, 'button[data-clips-toggle]'))).toBe('Play demos');
+
+      // A picture and a link do not move: no pause is offered for them. The search asks as before.
+      fill(host, 'Search exercises', 'push');
+      await settle(fixture);
+      expect(pool.search).toHaveBeenLastCalledWith({ query: 'push', skip: 0, take: 50 });
+      expect(listed(host).map(([name]) => name)).toEqual(['Push-up', 'Romanian deadlift']);
+      expect(host.querySelector('[data-clips-toggle]')).toBeNull();
+    });
+
+    it('starts the clips paused for a person who asked for reduced motion, and offers to play them', async () => {
+      const { host } = await render();
+
+      // jsdom answers no reduced-motion question, which the app reads as reduced motion.
+      expect(textOf(query(host, '.top button[data-clips-toggle]'))).toBe('Play demos');
+    });
+
+    it('asks a seen thumbnail’s grant with the others’ in one request, for the demo its row shows', async () => {
+      const intersections = stubIntersections();
+      stubVideo();
+      const { fixture, host, batch, refresh } = await render({
+        search: () => of(poolPage(EVERY_DEMO)),
+      });
+      const clips = Array.from(host.querySelectorAll<HTMLElement>('app-demo-clip'));
+      expect(clips).toHaveLength(3);
+      expect(batch).not.toHaveBeenCalled();
+
+      for (const clip of clips) intersections.seen(clip);
+      await settle(fixture);
+
+      // One antiforgery read, then one request for all three, and the swing's video, not its picture.
+      expect(batch).toHaveBeenCalledTimes(1);
+      expect([...batch.mock.calls[0][0]].sort()).toEqual([
+        'm-goblet-video',
+        'm-push-up-photo',
+        'm-swing-video',
+      ]);
+      expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(batch.mock.invocationCallOrder[0]);
+      const goblet = query<HTMLVideoElement>(slotOf(host, 'Goblet squat'), 'video');
+      expect(goblet.getAttribute('src')).toMatch(/^\/api\/media\/m-goblet-video\/content/);
+      expect(goblet.muted).toBe(true);
+      expect(goblet.loop).toBe(true);
+      expect(goblet.hasAttribute('controls')).toBe(false);
+      expect(
+        query<HTMLVideoElement>(slotOf(host, 'Kettlebell swing'), 'video').getAttribute('src'),
+      ).toMatch(/^\/api\/media\/m-swing-video\/content/);
+      const picture = query<HTMLImageElement>(slotOf(host, 'Push-up'), 'img');
+      expect(picture.getAttribute('src')).toBe('/api/media/m-push-up-photo/content');
+      expect(picture.getAttribute('alt')).toBe('');
+      // Still hidden from assistive technology, with no control of its own.
+      for (const clip of clips) {
+        expect(clip.getAttribute('aria-hidden')).toBe('true');
+        expect(clip.querySelector('button')).toBeNull();
+      }
+    });
   });
 
   it('says what the last press did, and the same words again when they are said again', async () => {

@@ -27,6 +27,16 @@ import {
   setView,
   weekView,
 } from '../src/testing/mesocycle-fixtures';
+import {
+  clipGrant,
+  clipState,
+  demoHandlers,
+  expectClipProperties,
+  expectLoops,
+  expectPlaying,
+  recordClip,
+  watchMedia,
+} from './demo-clip-support';
 import { chooseDay, chooseOption } from './kit-controls';
 import {
   expect,
@@ -1184,6 +1194,73 @@ test('an exercise’s demo opens over the session sheet, as Maya was given it (P
   await page.keyboard.press('Escape');
   await expect(demo).toHaveCount(0);
   await expect(sheet).toBeVisible();
+});
+
+// Notes plan N9b4, C20's fourth slice: an uploaded video plays like a GIF in the demo sheet too, muted,
+// looping and inline, with the browser's controls kept so a coach can turn the sound on. It starts by
+// itself only for a person who has not asked for reduced motion, and nothing is asked before the press.
+test.describe('an uploaded video demo over the session sheet (N9b4)', () => {
+  /** A one-second WebM each worker records itself: nothing is committed (the repo is public). */
+  let clip: Buffer;
+  test.beforeAll(async ({ browser }) => {
+    clip = await recordClip(browser);
+  });
+
+  for (const motion of ['no-preference', 'reduce'] as const) {
+    const title =
+      motion === 'reduce'
+        ? 'under reduced motion it is muted and looping with its controls, and waits to be played'
+        : 'it plays by itself, muted, looping and inline, with its controls';
+    test(title, async ({ page }) => {
+      // Mocked checks run with reduced motion; the clips read it once, as the page starts.
+      if (motion === 'no-preference') await page.emulateMedia({ reducedMotion: 'no-preference' });
+      const media = watchMedia(page);
+      await openTraining(page, 390, 844, {
+        // The demo's own grant on the press, and its bytes from the grant's address.
+        extra: demoHandlers(clip, [clipGrant('squat-demo')]),
+      });
+
+      await page.locator('.week.current button.session').nth(2).click();
+      const sheet = page.getByRole('dialog', { name: 'Lower B' });
+      await expect(sheet.getByRole('button', { name: 'Watch demo' })).toHaveCount(1);
+      // The session sheet asks for nothing until the demo is pressed.
+      expect(media).toEqual([]);
+      await sheet.getByRole('button', { name: 'Watch demo' }).click();
+
+      const demo = page.getByRole('dialog', { name: 'Back Squat' });
+      const video = demo.locator('video');
+      await expect(video).toHaveAttribute('src', '/api/media/squat-demo/content');
+      await expect(video).toHaveAttribute('aria-label', 'How to do Back Squat');
+      await expect(video).toHaveAttribute('controlslist', 'nodownload');
+      await expectClipProperties(video, { controls: true });
+      if (motion === 'no-preference') {
+        await expect(video).toHaveJSProperty('autoplay', true);
+        await expectPlaying(video);
+        await expectLoops(video);
+      } else {
+        // It loads its first data, and never starts by itself; the browser's own play is the press.
+        await expect(video).toHaveJSProperty('autoplay', false);
+        await expect
+          .poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState))
+          .toBeGreaterThanOrEqual(1);
+        await expect(video).toHaveJSProperty('paused', true);
+        expect((await clipState(video)).played, 'it has not played by itself').toBe(0);
+      }
+      // The demo's own grant, asked on the press, then its bytes: never the batch.
+      expect(media[0]).toMatchObject({ method: 'POST', path: '/api/media/squat-demo/access' });
+      expect(media.slice(1)).not.toEqual([]);
+      expect(
+        media.slice(1).every((request) => request.path === '/api/media/squat-demo/content'),
+        JSON.stringify(media),
+      ).toBe(true);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+
+      await page.keyboard.press('Escape');
+      await expect(demo).toHaveCount(0);
+      await expect(sheet).toBeVisible();
+    });
+  }
 });
 
 test('Assign program opens from the address, asks for a training max, and sends what was chosen', async ({

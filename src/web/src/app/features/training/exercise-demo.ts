@@ -17,14 +17,17 @@ import { CsrfService } from '../../core/security/csrf.service';
 import { ButtonLink } from '../../ui/button';
 import { Icon } from '../../ui/icon';
 import { UiSheet } from '../../ui/sheet';
+import { DemoClips } from './demo-clips';
 import { externalVideo } from './external-video';
 
 /**
  * "Watch demo" for an exercise on a coach's screen (P4): the builder's grid, a client's session sheet
  * and the exercise library, whose tile is the button (critique B16). Each opening asks the server for a
  * short-lived grant (MED-003, MED-004), so the coach sees the media only while the server still allows
- * it. A YouTube or Vimeo demo opens on its own site, in a new tab, as in the client's workout player
- * (C18).
+ * it. An uploaded video plays like a GIF there (notes plan N9b4): muted, looping and inline, by itself
+ * unless the demo clips are paused (reduced motion, less data, or the person's own pause), with the
+ * browser's controls kept so a coach can turn the sound on. A YouTube or Vimeo demo opens on its own
+ * site, in a new tab, as in the client's workout player (C18).
  */
 @Component({
   selector: 'app-exercise-demo',
@@ -52,7 +55,7 @@ import { externalVideo } from './external-video';
     }
 
     <ng-template #demoSheet>
-      <div class="viewer">
+      <div class="viewer" [class.touch]="touch()">
         @if (assetIds().length > 1) {
           <div class="pick" role="group" [attr.aria-label]="pickLabel()">
             @for (id of assetIds(); track id; let index = $index) {
@@ -82,6 +85,7 @@ import { externalVideo } from './external-video';
                 <a
                   appButton
                   variant="outlined"
+                  [size]="touch() ? 'touch' : 'pointer'"
                   [href]="video.url"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -98,9 +102,13 @@ import { externalVideo } from './external-video';
           } @else {
             <video
               class="media"
+              muted
+              loop
+              playsinline
+              [muted]="true"
+              [autoplay]="!clips.paused()"
               [src]="current.url"
               controls
-              playsinline
               [attr.controlsList]="current.downloadAllowed ? null : 'nodownload'"
               [attr.aria-label]="altText()"
             ></video>
@@ -199,6 +207,12 @@ import { externalVideo } from './external-video';
       padding: 0 0.875rem;
     }
 
+    /* The sheet a trainee opens ("See all {n} demos" on a pool exercise's page, notes plan N9b4) at a
+       client's thumb too (plan §2 rule 6); a coach's sheet keeps its own size. */
+    .viewer.touch .pick-one {
+      min-block-size: 2.75rem;
+    }
+
     .pick-one[aria-pressed='true'] {
       background: var(--tb-brand);
       border-color: var(--tb-brand);
@@ -243,6 +257,8 @@ export class ExerciseDemo {
   private readonly api = inject(ApiClient);
   private readonly csrf = inject(CsrfService);
   private readonly sheets = inject(UiSheet);
+  /** The one pause every demo clip follows: the sheet's video starts by itself only while they play. */
+  protected readonly clips = inject(DemoClips);
   private readonly demoSheet = viewChild.required<TemplateRef<unknown>>('demoSheet');
   private sheetOpen = false;
 
@@ -251,7 +267,7 @@ export class ExerciseDemo {
   readonly exerciseName = input.required<string>();
   /** An icon alone, named for assistive technology, where a row has little room. */
   readonly compact = input(false, { transform: booleanAttribute });
-  /** A client's touch size, 44 px, where the button sits on a phone screen. */
+  /** A client's touch size, 44 px, where the button sits on a phone screen: its sheet's controls too. */
   readonly touch = input(false, { transform: booleanAttribute });
   /** The whole of a tile: the page draws what is inside the button, and the button is named for it. */
   readonly tile = input(false, { transform: booleanAttribute });

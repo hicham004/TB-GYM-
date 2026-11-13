@@ -1,5 +1,13 @@
 // A trainee's own workouts on Training (notes plan N9b3, TRN-033): Start from this workout under a finished
 // one, and a refused start's reason with Carry on beside it.
+
+// Start a workout, then Browse exercises (notes plan N9b4): side by side, or one under the other.
+.own-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  justify-content: center;
+}
 .history-start {
   justify-self: start;
   margin-block-start: var(--space-8);

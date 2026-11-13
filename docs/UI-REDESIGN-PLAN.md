@@ -1361,7 +1361,9 @@ Semantic success, warning, danger and info colours are re-tuned to sit on cream 
   - *Built in docs/MOTION-PLAN-2026-11.md (W1 to W14, from 2026-11-02):* the Web Animations API
     carries the app's everyday layer and its signature moments through `core/motion` (the
     reduced-motion read, the `?motion=off` switch and `tb-motion-off` per row, `countUp`, `ring`,
-    `drawLine`, `rise`, `pop`), with no GSAP in the app; GSAP stays on the homepage. The everyday
+    `drawLine`, `rise`, `pop`), with no GSAP in the app; GSAP stays on the homepage. Exercise demos (notes plan N9b4,
+    MED-018) loop like a GIF, never without a stop: one pause holds for every clip, and a clip starts as its
+    first frame for reduced motion, the switch (`N9b4` in `tb-motion-off` stops the clips alone) or Save-Data. The everyday
     press and page fade live in `_ui.scss`; Playwright runs with reduced motion by default and a
     motion spec opts in. Route view transitions wait for Angular's feature to leave developer preview.
     Coach Today hears the phone (W6): while its tab is in view it reads again quietly every 4 s (one a
@@ -2316,6 +2318,8 @@ limited to the coach's assigned clients.
 - A **rest timer ring** starts automatically, keeps time while the phone is locked, and keeps the
   screen awake (Wake Lock).
 - Exercise demo media, a note to the coach, and a PR badge with a vibration on Android.
+  Built in notes plan N9b4: the shown exercise's demo plays like a GIF under its name (muted, looping, small,
+  with its own pause button); Watch demo still opens it bigger with the browser's controls, now looping too.
 - A **finish summary**: duration, volume, PRs and completed sets, with a share card (§5 M9).
 - Dark theme.
 - Backend: last-performance per exercise for pre-fill, and the PR rule (named, versioned,
@@ -2335,6 +2339,10 @@ limited to the coach's assigned clients.
   late reads "Done late" with the day it was done, as the coach's timeline does (TRN-020 v2).
 - Critique B19 (TRN-031): a coach can keep finished programs back, and the server then sends none, so with
   nothing running or coming the page shows its empty state above Finished workouts. No word of why.
+- Notes plan N9b4: a self-directed trainee's "Train on your own" (and Today's start card) offers "Browse exercises",
+  TB Gym's pool at `/training/pool`: a search, Muscle and Equipment chips kept in the address, cards whose demos
+  loop like a GIF with one "Pause demos", and an exercise's page with its clip, its facts, "How to do it" and
+  "Start a workout" ("Add to your workout" while one is unfinished).
 
 **M4. Nutrition day**
 - A **day strip** instead of a date input.
