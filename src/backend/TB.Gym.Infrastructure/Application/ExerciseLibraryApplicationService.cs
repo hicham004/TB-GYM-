@@ -45,53 +45,17 @@ internal sealed class ExerciseLibraryApplicationService(
             query = query.Where(item => ids.Contains(item.Id));
         }
 
-        foreach (var pattern in LikePattern.EachWord(request.Query))
-        {
-            query = query.Where(item =>
-                EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter) ||
-                item.Tags.Any(tag => EF.Functions.ILike(tag.Value, pattern, LikePattern.EscapeCharacter)));
-        }
-
-        if (request.Equipment is { } equipment)
-        {
-            query = query.Where(item => item.Equipment == equipment);
-        }
-
-        if (request.MovementPatterns is { Count: > 0 } movementPatterns)
-        {
-            query = query.Where(item => movementPatterns.Contains(item.MovementPattern));
-        }
-
-        if (request.Classification is { } classification)
-        {
-            query = query.Where(item => item.Classification == classification);
-        }
-
-        // Other's own name, in any case, as the Type filter lists it (critique B9).
-        if (!string.IsNullOrWhiteSpace(request.TypeName))
-        {
-            var typeName = LikePattern.Escape(request.TypeName.Trim());
-            query = query.Where(item =>
-                item.Classification == ExerciseClassification.Other &&
-                item.TypeName != null &&
-                EF.Functions.ILike(item.TypeName, typeName, LikePattern.EscapeCharacter));
-        }
-
-        if (request.Muscle is { } muscle)
-        {
-            query = query.Where(item => item.Muscles.Any(link => link.Muscle == muscle));
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Tag))
-        {
-            var normalizedTag = request.Tag.Trim().ToUpperInvariant();
-            query = query.Where(item => item.Tags.Any(tag => tag.NormalizedValue == normalizedTag));
-        }
-
+        query = Search(
+            query,
+            request.Query,
+            request.Equipment,
+            request.MovementPatterns,
+            request.Classification,
+            request.TypeName,
+            request.Muscle,
+            request.Tag);
         var total = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(item => EF.Functions.Collate(item.Name, NameOrder.Collation))
-            .ThenBy(item => item.Id)
+        var items = await InNameOrder(query)
             .Skip(skip)
             .Take(take)
             .AsSplitQuery()
@@ -108,6 +72,72 @@ internal sealed class ExerciseLibraryApplicationService(
             [.. patterns.OrderBy(item => item.Pattern)],
             request.IncludeFacets ? await FacetsAsync(library, cancellationToken) : null);
     }
+
+    /// <summary>
+    /// LIB-003's search over a library: every word typed found in the name or a tag, in any order and any case, up to
+    /// the first eight, then the filters. The coach's library and the house's pool (LIB-006) search alike.
+    /// </summary>
+    internal static IQueryable<Exercise> Search(
+        IQueryable<Exercise> query,
+        string? text,
+        ExerciseEquipment? equipment,
+        IReadOnlyList<MovementPattern>? movementPatterns,
+        ExerciseClassification? classification,
+        string? typeName,
+        MuscleGroup? muscle,
+        string? tag)
+    {
+        foreach (var pattern in LikePattern.EachWord(text))
+        {
+            query = query.Where(item =>
+                EF.Functions.ILike(item.Name, pattern, LikePattern.EscapeCharacter) ||
+                item.Tags.Any(link => EF.Functions.ILike(link.Value, pattern, LikePattern.EscapeCharacter)));
+        }
+
+        if (equipment is { } wantedEquipment)
+        {
+            query = query.Where(item => item.Equipment == wantedEquipment);
+        }
+
+        if (movementPatterns is { Count: > 0 } patterns)
+        {
+            query = query.Where(item => patterns.Contains(item.MovementPattern));
+        }
+
+        if (classification is { } wantedClassification)
+        {
+            query = query.Where(item => item.Classification == wantedClassification);
+        }
+
+        // Other's own name, in any case, as the Type filter lists it (critique B9).
+        if (!string.IsNullOrWhiteSpace(typeName))
+        {
+            var escaped = LikePattern.Escape(typeName.Trim());
+            query = query.Where(item =>
+                item.Classification == ExerciseClassification.Other &&
+                item.TypeName != null &&
+                EF.Functions.ILike(item.TypeName, escaped, LikePattern.EscapeCharacter));
+        }
+
+        if (muscle is { } wantedMuscle)
+        {
+            query = query.Where(item => item.Muscles.Any(link => link.Muscle == wantedMuscle));
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = tag.Trim().ToUpperInvariant();
+            query = query.Where(item => item.Tags.Any(link => link.NormalizedValue == normalizedTag));
+        }
+
+        return query;
+    }
+
+    /// <summary>The library's natural order of name (LIB-003), ties by id so a page never repeats a row.</summary>
+    internal static IOrderedQueryable<Exercise> InNameOrder(IQueryable<Exercise> query) =>
+        query
+            .OrderBy(item => EF.Functions.Collate(item.Name, NameOrder.Collation))
+            .ThenBy(item => item.Id);
 
     /// <summary>
     /// The library page's filters (critique B9): how many exercises are in use and archived, and, among those in

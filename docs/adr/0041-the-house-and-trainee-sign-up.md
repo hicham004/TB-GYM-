@@ -66,11 +66,15 @@ their notes, their leaving and a coach's departure reach no inbox; both partners
 - N9a2 built the screens on these routes: `/train` and `/train/sign-up` for a visitor or someone signed in,
   the platform admin's House page (`/admin/house`), and a self-directed trainee's Today and Me, which read
   the trainee's own profile first and never ask for the staff member the record names. N9b1 starts Free at
-  the same confirmation step.
+  the same confirmation step and at the signed-in join, in their transaction; `house set` also makes the
+  house's Free plan, and the house's hourly sweeps renew it (SUB-019). The pool and its demos are the house's
+  alone (LIB-006, MED-017).
 
 ## Migration and recovery
 
 `HouseAndTraineeSignUp` adds the two columns with constant defaults (no row is rewritten), the two tables,
 their checks and triggers, and `SignUp` as a first coach-history reason. It reverts cleanly while no space is
 marked; once a house, a setting, a sign-up, a self-directed profile or a consumer terms document exists,
-its `Down` stops with "roll forward", since those are facts the earlier schema cannot hold.
+its `Down` stops with "roll forward", since those are facts the earlier schema cannot hold. Since N9b1, `house set`
+also makes the house's Free plan, which `house clear` takes off sale but keeps, so `HouseFreePlan`'s own `Down` refuses
+first once a space has been marked.

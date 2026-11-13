@@ -12,6 +12,7 @@ using TB.Gym.Modules.Identity;
 using TB.Gym.Modules.Invitations;
 using TB.Gym.Modules.Notifications;
 using TB.Gym.Modules.PlatformBilling;
+using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Website;
 using TB.Gym.SharedKernel;
@@ -117,6 +118,9 @@ public static class WorkerDependencyInjection
                 settings.Validate() ?? $"{TraineeSignUpOptions.SectionName} is not a valid trainee sign-up configuration.")
             .ValidateOnStart();
         services.TryAddScoped<ITraineeSignUpSweep, TraineeSignUpSweep>();
+        // Free in the house (SUB-019, notes plan N9b1): started at a confirmation in the API, renewed by the Worker.
+        services.TryAddScoped<HouseFreePlan>();
+        services.TryAddScoped<IHouseFreePlanRenewal, HouseFreePlanRenewal>();
         return services;
     }
 

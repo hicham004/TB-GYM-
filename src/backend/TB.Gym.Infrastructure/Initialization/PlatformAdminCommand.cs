@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using TB.Gym.Infrastructure.Application;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Identity;
+using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
+using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Initialization;
 
@@ -29,6 +32,10 @@ namespace TB.Gym.Infrastructure.Initialization;
 /// until the first is cleared, and a house that holds a sign-up or a self-directed trainee keeps its mark. Marking
 /// a space for the first time opens nothing: sign-up stays closed until the platform admin fills the house's
 /// settings in the app. A space marked again keeps the settings it was given before, and the command says so.
+/// Marking also makes the house's Free plan when it has none, or puts it back on sale (SUB-019), in the same
+/// transaction, so a house is never without one; a plan of the space's own already sold as Free stops the mark until
+/// it is renamed. Clearing takes Free off sale with the mark, and is refused while a plan of the house's tiers is
+/// booked for anyone.
 /// </para>
 /// </remarks>
 public static class PlatformAdminCommand
@@ -50,7 +57,7 @@ public static class PlatformAdminCommand
         await using var scope = services.CreateAsyncScope();
         if (verb == "house")
         {
-            return await RunHouseAsync(scope.ServiceProvider.GetRequiredService<GymDbContext>(), args, output);
+            return await RunHouseAsync(scope.ServiceProvider, args, output);
         }
 
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -126,8 +133,9 @@ public static class PlatformAdminCommand
     /// the mark away (CLI-022). The database keeps both rules whoever writes: one house at most, and a house that
     /// holds anyone keeps its mark.
     /// </summary>
-    private static async Task<int> RunHouseAsync(GymDbContext dbContext, IReadOnlyList<string> args, TextWriter output)
+    private static async Task<int> RunHouseAsync(IServiceProvider services, IReadOnlyList<string> args, TextWriter output)
     {
+        var dbContext = services.GetRequiredService<GymDbContext>();
         var action = args.Count > 2 ? args[2] : string.Empty;
         var house = await dbContext.Tenants.SingleOrDefaultAsync(tenant => tenant.IsHouse);
         switch (action)
@@ -138,16 +146,21 @@ public static class PlatformAdminCommand
                     : $"{house.Name} ({house.Slug}) is the house.");
                 return 0;
             case "set" when args.Count == 4:
-                return await SetHouseAsync(dbContext, house, args[3].Trim(), output);
+                return await SetHouseAsync(services, dbContext, house, args[3].Trim(), output);
             case "clear" when args.Count == 3:
-                return await ClearHouseAsync(dbContext, house, output);
+                return await ClearHouseAsync(services, dbContext, house, output);
             default:
                 await output.WriteLineAsync(Usage);
                 return 2;
         }
     }
 
-    private static async Task<int> SetHouseAsync(GymDbContext dbContext, Tenant? house, string slugOrId, TextWriter output)
+    private static async Task<int> SetHouseAsync(
+        IServiceProvider services,
+        GymDbContext dbContext,
+        Tenant? house,
+        string slugOrId,
+        TextWriter output)
     {
         var slug = slugOrId.ToLowerInvariant();
         var target = Guid.TryParse(slugOrId, out var id)
@@ -166,18 +179,40 @@ public static class PlatformAdminCommand
             return 2;
         }
 
-        if (target.MarkAsHouse())
+        // The mark and the house's Free plan (SUB-019) are written together, under the house's sign-up lock, so a
+        // house is never without Free and a confirmation never makes a second one.
+        services.GetRequiredService<IMutableTenantContext>().SetTenant(target.Id);
+        var targetId = target.Id;
+        try
         {
-            try
+            await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
             {
+                dbContext.ChangeTracker.Clear();
+                await using var transaction = await dbContext.Database.BeginTransactionAsync();
+                var space = await dbContext.Tenants.SingleAsync(tenant => tenant.Id == targetId);
+                if (space.MarkAsHouse())
+                {
+                    await dbContext.SaveChangesAsync();
+                }
+
+                await dbContext.Database.ExecuteSqlAsync(
+                    $"SELECT pg_advisory_xact_lock({TraineeSignUpService.SignUpLockKey}) /* house-free-plan */");
+                await services.GetRequiredService<HouseFreePlan>().EnsureAsync(space, CancellationToken.None);
                 await dbContext.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                // Another run marked a space between the read above and this write; the unique index refused.
-                await output.WriteLineAsync($"Another coaching space was marked as the house meanwhile. Run: {Name} house");
-                return 2;
-            }
+                await transaction.CommitAsync();
+            });
+        }
+        catch (ProductNameTakenException)
+        {
+            await output.WriteLineAsync(
+                $"{target.Name} ({target.Slug}) already sells a plan called {HouseFreePlanRule.Name}. Rename that plan in Plans you sell, then run this again: the house's own Free plan takes that name.");
+            return 2;
+        }
+        catch (DbUpdateException)
+        {
+            // Another run marked a space between the read above and this write; the unique index refused.
+            await output.WriteLineAsync($"Another coaching space was marked as the house meanwhile. Run: {Name} house");
+            return 2;
         }
 
         // A space marked before keeps the settings it was given then (they are append-only), so the command
@@ -189,7 +224,11 @@ public static class PlatformAdminCommand
         return 0;
     }
 
-    private static async Task<int> ClearHouseAsync(GymDbContext dbContext, Tenant? house, TextWriter output)
+    private static async Task<int> ClearHouseAsync(
+        IServiceProvider services,
+        GymDbContext dbContext,
+        Tenant? house,
+        TextWriter output)
     {
         if (house is null)
         {
@@ -209,12 +248,35 @@ public static class PlatformAdminCommand
             return 2;
         }
 
-        house.ClearHouse();
+        // A plan of one of the house's tiers was booked for somebody (Pro+ or Max by hand): a fact only the house holds
+        // (SUB-019), so the mark stays with it.
+        var houseId = house.Id;
+        if (await dbContext.ClientEnrollments.IgnoreQueryFilters()
+                .AnyAsync(enrollment => enrollment.TenantId == houseId && enrollment.HouseTier != null))
+        {
+            await output.WriteLineAsync(
+                $"{house.Name} ({house.Slug}) holds plans of the house's tiers and keeps its mark.");
+            return 2;
+        }
+
+        // The mark goes, and the house's Free goes off sale with it, in one transaction: an ordinary space sells no plan
+        // of the house's, and the name Free is its own again. Marking the space again puts Free back on sale.
+        services.GetRequiredService<IMutableTenantContext>().SetTenant(houseId);
         try
         {
-            await dbContext.SaveChangesAsync();
+            await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                dbContext.ChangeTracker.Clear();
+                await using var transaction = await dbContext.Database.BeginTransactionAsync();
+                var space = await dbContext.Tenants.SingleAsync(tenant => tenant.Id == houseId);
+                space.ClearHouse();
+                var free = await dbContext.CoachingProducts.SingleOrDefaultAsync(product => product.HouseTier == HouseTier.Free);
+                free?.SetHouseFreeOnSale(false);
+                await dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+            });
         }
-        catch (DbUpdateException)
+        catch (Exception exception) when (exception is DbUpdateException or RetryLimitExceededException)
         {
             // Somebody signed up between the check above and this write; the database kept the mark.
             await output.WriteLineAsync(

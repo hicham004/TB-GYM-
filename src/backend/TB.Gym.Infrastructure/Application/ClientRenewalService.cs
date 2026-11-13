@@ -123,11 +123,18 @@ internal sealed class ClientRenewalService(
             .AnyAsync(item => item.ClientProfileId == clientProfileId, cancellationToken);
         if (RenewalEligibility.EndedPlan(CoachingPlanRunOut.PlanDecisions(decisions, coachingPlanRanOut)) is { } ended)
         {
-            return new PlanToRenew(ended.EnrollmentId, ended.LastDay, Ended: true);
+            // A Free row that lapsed (its renewal never came, the Worker being down) is not a plan anyone asks to renew:
+            // the server renews it, and the house's own ask is for its paid plans (SUB-019).
+            return await dbContext.ClientEnrollments.AsNoTracking()
+                .AnyAsync(item => item.Id == ended.EnrollmentId && item.HouseTier == HouseTier.Free, cancellationToken)
+                ? null
+                : new PlanToRenew(ended.EnrollmentId, ended.LastDay, Ended: true);
         }
 
         var plans = await dbContext.ClientEnrollments.AsNoTracking()
+            // The house's Free is never the plan to renew: it renews by itself (SUB-019).
             .Where(item => item.ClientProfileId == clientProfileId &&
+                item.HouseTier != HouseTier.Free &&
                 item.Status != EnrollmentStatus.Cancelled &&
                 item.Status != EnrollmentStatus.Expired &&
                 item.EndDateExclusive > today)

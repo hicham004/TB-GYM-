@@ -823,6 +823,10 @@ public sealed partial class Phase3TrainingWorkflowTests
             (1L, 1L, 1L),
             (await A7ScalarAsync(N6cTableSql), await A7ScalarAsync(N6cTriggerSql), await N6cRowsAsync(scenario.ClientId)));
 
+        // The migrations after this one were reverted, each in its own transaction, before this one refused: the newest
+        // model goes back on before the API is asked anything.
+        await migrator.MigrateAsync();
+
         // The API reads the applied weight as before.
         var words = N6cSteppedWords(20m, today);
         foreach (var set in N6bSets(N6bSession(await ReadSliceAsync<TrainingMesocycleView>(coach, P2MesocycleUrl(block.Id)), 2)))

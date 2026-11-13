@@ -354,8 +354,13 @@ internal sealed class CoachOverviewReader(
 
             // A pack runs beside a plan (ADR 0038): it says when the client's plan ends only with no coaching plan
             // left, so 90 days of sessions never hide a plan ending soon, and never once one ran out (SES-010).
-            var coachingPlans = livePlans.Where(item => !item.IsSessionPack).ToArray();
-            var namingPlans = coachingPlans.Length > 0 || planState == ClientPlanState.Ended ? coachingPlans : livePlans;
+            // The house's Free runs beside every plan (SUB-019): it names the plan only with nothing else left, a pack
+            // included, so a year of Free never hides a plan or a pack that ends sooner.
+            var coachingPlans = livePlans.Where(item => item is { IsSessionPack: false, IsHouseFree: false }).ToArray();
+            var besideFree = livePlans.Where(item => !item.IsHouseFree).ToArray();
+            var namingPlans = coachingPlans.Length > 0 || planState == ClientPlanState.Ended
+                ? coachingPlans
+                : besideFree.Length > 0 ? besideFree : livePlans;
             var runningPlan = namingPlans.Where(item => item.Paid).MaxBy(item => item.EndDateExclusive)
                 ?? namingPlans.MaxBy(item => item.EndDateExclusive);
             var unpaidRenewals = runningPlan is { Paid: true }
@@ -472,7 +477,7 @@ internal sealed class CoachOverviewReader(
                     ? clientChats.OrderBy(item => item.ConversationId).Select(item => (Guid?)item.ConversationId).FirstOrDefault()
                     : null,
                 pausedAtUtc is { } pausedAt ? scope.LocalDate(pausedAt) : null,
-                livePlans.Count(item => item.EnrollmentId != runningPlan?.EnrollmentId),
+                livePlans.Count(item => item.EnrollmentId != runningPlan?.EnrollmentId && !item.IsHouseFree),
                 notRenewed,
                 runningPlan is { IsSessionPack: true },
                 unpaidPacks.Length,
@@ -854,6 +859,7 @@ internal sealed class CoachOverviewReader(
                     item.Status == EnrollmentStatus.Paused ? item.PausedAtUtc : null,
                     item.EndDateExclusive <= today,
                     item.SessionCountSnapshot != null,
+                    item.HouseTier == HouseTier.Free,
                     item.SessionCountSnapshot == null
                         ? 0
                         : dbContext.SessionLedgerEntries
@@ -1508,6 +1514,7 @@ internal sealed class CoachOverviewReader(
         DateTimeOffset? PausedAtUtc,
         bool Ended,
         bool IsSessionPack,
+        bool IsHouseFree,
         int SessionsLeft);
 
     private sealed record OpenBlockWeek(Guid BlockId, AttentionWeek? Week);

@@ -240,6 +240,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         // Applied again, the targets made before keep their numbers without their link, and new ones link.
         await migrator.MigrateAsync(migration);
         Assert.AreEqual(1L, await A6ScalarAsync($"SELECT count(*) FROM nutrition.\"CalculationSnapshots\" WHERE \"MacroMethodKey\" = 'CoachMacroOverride' AND \"MacroOverrideAuditId\" IS NULL AND \"Id\" = '{adjusted.Result.Id}'"));
+
+        // The migrations after this one go back on too: the API reads with the newest model.
+        await migrator.MigrateAsync();
         await RefreshCsrfAsync(coach);
         var afterwards = await coach.PostAsJsonAsync(A6OverrideUrl(mayaId, formula.Id), new CreateMacroOverrideRequest(140m, 60m, 210m, "After the revert"));
         await AssertStatusAsync(afterwards, HttpStatusCode.OK);

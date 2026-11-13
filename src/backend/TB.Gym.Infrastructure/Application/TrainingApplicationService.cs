@@ -663,6 +663,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 item.StartDate,
                 item.EndDateExclusive,
                 item.Status,
+                item.HouseTier,
                 IncludesTraining = item.Entitlements.Any(
                     entitlement => entitlement.Feature == CoachingFeature.Training),
             })
@@ -670,6 +671,14 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         if (enrollment is null)
         {
             return new CoverageLookup(false, new TrainingCoverageDecision(false, "The enrollment was not found."));
+        }
+
+        // Free holds a trainee's own workouts and never a program (SUB-019, TRN-011): programs start at Pro+.
+        if (enrollment.HouseTier == HouseTier.Free)
+        {
+            return new CoverageLookup(
+                true,
+                new TrainingCoverageDecision(false, "Free covers a trainee's own workouts, never a program. Choose another plan."));
         }
 
         var authorization = new TrainingCoverageAuthorization(

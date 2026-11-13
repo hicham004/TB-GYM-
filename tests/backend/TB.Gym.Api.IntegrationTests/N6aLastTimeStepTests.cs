@@ -894,5 +894,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(4L, await A7ScalarAsync(N6aColumnsSql));
         Assert.AreEqual(3L, await A7ScalarAsync(N6aStepChecksSql));
         Assert.AreEqual(1L, await A7ScalarAsync(N6aWorkoutGuardSql("PrescribedLoadStep")));
+
+        // The migrations after this one were reverted, each in its own transaction, before this one refused: the newest
+        // model goes back on before the API is asked anything.
+        await migrator.MigrateAsync();
     }
 }

@@ -142,6 +142,7 @@ internal sealed class CoachingFeatureAccessService(
                     enrollment.StartDate,
                     enrollment.EndDateExclusive,
                     enrollment.Status,
+                    enrollment.HouseTier == HouseTier.Free,
                     enrollment.PriceAmount,
                     dbContext.PaymentRecords
                         .Where(payment =>
@@ -190,8 +191,12 @@ internal sealed class CoachingFeatureAccessService(
             .Where(item => item.StartDate <= tenantToday && tenantToday < item.EndDateExclusive)
             .ToArray();
 
-        var granted = current.FirstOrDefault(item =>
-            item.Status == EnrollmentStatus.Active && item.PaidAmount >= item.PriceAmount);
+        // The house's Free grants Training beside any plan (SUB-019): a plan of another kind that grants too is the one
+        // named, so its dates are the ones read, and Free stands for the grant only with none.
+        var granted = current
+            .Where(item => item.Status == EnrollmentStatus.Active && item.PaidAmount >= item.PriceAmount)
+            .OrderBy(item => item.IsHouseFree)
+            .FirstOrDefault();
         if (granted is not null)
         {
             return Decision(feature, true, FeatureAccessReason.Granted, granted);
@@ -268,6 +273,7 @@ internal sealed class CoachingFeatureAccessService(
         DateOnly StartDate,
         DateOnly EndDateExclusive,
         EnrollmentStatus Status,
+        bool IsHouseFree,
         decimal PriceAmount,
         decimal PaidAmount);
 }

@@ -22,9 +22,18 @@ public sealed partial class GymDbContext
                 .HasMaxLength(32)
                 .HasDefaultValue(ProductKind.CoachingPlan)
                 .HasSentinel(default(ProductKind));
+            entity.Property(item => item.HouseTier).HasConversion<string>().HasMaxLength(16);
             entity.HasIndex(item => new { item.TenantId, item.Name });
+            // SUB-019: the house has one Free plan, which the server makes and keeps.
+            entity.HasIndex(item => item.TenantId)
+                .IsUnique()
+                .HasFilter("\"HouseTier\" = 'Free'")
+                .HasDatabaseName(DatabaseConstraintNames.OneHouseFreePlan);
             entity.HasQueryFilter(item =>
                 tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_CoachingProducts_HouseTier",
+                "\"HouseTier\" IS NULL OR (\"HouseTier\" IN ('Free', 'ProPlus', 'Max') AND \"Kind\" = 'CoachingPlan')"));
             ConfigureAuditable(entity);
         });
 
@@ -123,6 +132,7 @@ public sealed partial class GymDbContext
             entity.Property(item => item.EndDateExclusive).HasColumnType("date");
             entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.StatusReason).HasMaxLength(500);
+            entity.Property(item => item.HouseTier).HasConversion<string>().HasMaxLength(16);
             entity.HasIndex(item => new { item.TenantId, item.AssignmentCommandId }).IsUnique();
             entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.StartDate });
             entity.HasIndex(item => new { item.TenantId, item.RenewedFromEnrollmentId });
@@ -168,6 +178,9 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_ClientEnrollments_SessionCountSnapshot",
                     "\"SessionCountSnapshot\" IS NULL OR \"SessionCountSnapshot\" BETWEEN 1 AND 100");
+                table.HasCheckConstraint(
+                    "CK_ClientEnrollments_HouseTier",
+                    "\"HouseTier\" IS NULL OR \"HouseTier\" IN ('Free', 'ProPlus', 'Max')");
             });
             ConfigureAuditable(entity);
         });

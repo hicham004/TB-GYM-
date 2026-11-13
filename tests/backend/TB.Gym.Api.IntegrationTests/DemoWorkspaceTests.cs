@@ -311,6 +311,17 @@ public sealed class DemoWorkspaceTests
             Assert.AreEqual(0, await db.ClientProfiles.IgnoreQueryFilters().CountAsync(item => item.TenantId == house.Id));
             Assert.AreEqual(0, await db.HouseSettingChanges.IgnoreQueryFilters().CountAsync());
             Assert.AreEqual(0, await db.TraineeSignUps.IgnoreQueryFilters().CountAsync());
+
+            // Marking the house made its Free plan (notes plan N9b1, SUB-019): one plan with one option, booked by nobody.
+            var housePlan = await db.CoachingProducts.IgnoreQueryFilters().SingleAsync(item => item.TenantId == house.Id);
+            Assert.AreEqual(
+                ("Free", (HouseTier?)HouseTier.Free, true),
+                (housePlan.Name, housePlan.HouseTier, housePlan.IsActive));
+            var houseOption = await db.ProductOffers.IgnoreQueryFilters().SingleAsync(item => item.TenantId == house.Id);
+            Assert.AreEqual(
+                (housePlan.Id, 0m, 365, OfferDurationUnit.Day, true),
+                (houseOption.ProductId, houseOption.PriceAmount, houseOption.DurationCount, houseOption.DurationUnit, houseOption.IsActive));
+            Assert.AreEqual(0, await db.ClientEnrollments.IgnoreQueryFilters().CountAsync(item => item.TenantId == house.Id));
         }
 
         var signUp = await requests.AsAsync<ITraineeSignUpService, TraineeSignUpStatusView>(
@@ -339,6 +350,7 @@ public sealed class DemoWorkspaceTests
                 .GroupBy(item => item.Role)
                 .ToDictionaryAsync(group => group.Key, group => group.Count());
             Assert.AreEqual((2, 1, 1), (houseRoles.Count, houseRoles[TenantRole.Owner], houseRoles[TenantRole.Coach]));
+            Assert.AreEqual(1, await db.CoachingProducts.IgnoreQueryFilters().CountAsync(item => item.TenantId == houseId));
             Assert.AreEqual(1, await db.Tenants.CountAsync(item => item.Name == lynnOnly.WorkspaceName));
         }
     }

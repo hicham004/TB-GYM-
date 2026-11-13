@@ -954,20 +954,34 @@ public sealed partial class Phase3TrainingWorkflowTests
         var scopes = RequiredFactory.Services.GetRequiredService<IServiceScopeFactory>();
         var logger = RequiredFactory.Services.GetRequiredService<ILogger<TB.Gym.Worker.TraineeSignUpSweepWorker>>();
 
-        // Switched off by its setting, the Worker says so and removes nothing.
+        // Switched off by its setting, the Worker says so and removes nothing. Since N9b1 it runs on for Free's renewal
+        // (SUB-019), which that switch never stops, so it is stopped here rather than awaited to an end: once it has
+        // said so, since a stop that came first would cancel it before it ran at all (a BackgroundService runs the
+        // whole of ExecuteAsync on the thread pool, under its stopping token, since .NET 10).
+        const string disabled = "The trainee sign-up sweep is disabled by configuration.";
         using (var switchedOff = new TB.Gym.Worker.TraineeSignUpSweepWorker(
                    scopes,
                    Microsoft.Extensions.Options.Options.Create(new TraineeSignUpOptions { SweepEnabled = false }),
                    logger))
         {
             await switchedOff.StartAsync(CancellationToken.None);
-            await (switchedOff.ExecuteTask ?? Task.CompletedTask);
-            await switchedOff.StopAsync(CancellationToken.None);
+            try
+            {
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                while (!RequiredEveryLogLine.Text.Contains(disabled, StringComparison.Ordinal) && waited.Elapsed < TimeSpan.FromSeconds(30))
+                {
+                    await Task.Delay(50);
+                }
+            }
+            finally
+            {
+                await switchedOff.StopAsync(CancellationToken.None);
+            }
         }
 
         Assert.AreEqual(1, await N9a1SignUpRowsAsync());
         Assert.AreEqual(1, await N9a1AccountsAsync(email));
-        Assert.Contains("The trainee sign-up sweep is disabled by configuration.", RequiredEveryLogLine.Text);
+        Assert.Contains(disabled, RequiredEveryLogLine.Text);
 
         // Switched on, it sweeps once as it starts, on the host's own clock and days.
         using var worker = new TB.Gym.Worker.TraineeSignUpSweepWorker(
@@ -1056,8 +1070,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         var ritaId = await R31InviteAsync(house.Coach!, rita, house.TenantId, "n9a1-quiet-rita@example.test", "Rita", "Daher");
         var staff = new[] { (Caller: house.Owner, Who: "the owner"), (Caller: house.Coach!, Who: "the Coach") };
 
-        // Both joined today with no plan. The invited client asks for one; the trainee asks for nothing, on Today,
-        // on the list and on their own page, and is on Clients all the same.
+        // Both joined today. The invited client has no plan and asks for one; the trainee asks for nothing, on Today,
+        // on the list and on their own page, and is on Clients all the same. Since N9b1 the confirmation also starts
+        // the house's Free (SUB-019), so the trainee's row and page read Free as the plan that runs, on track, where
+        // before N9b1 they read no plan at all.
         foreach (var (caller, who) in staff)
         {
             var view = await ReadSliceAsync<CoachTodayView>(caller, CoachTodayUrl);
@@ -1073,7 +1089,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             Assert.IsTrue(traineeRow.SelfDirected, who);
             Assert.IsEmpty(traineeRow.Attention, who);
             Assert.IsEmpty(traineeRow.AttentionItems, who);
-            Assert.AreEqual((ClientOverviewStatus.NoActivePlan, ClientPlanState.None), (traineeRow.Status, traineeRow.PlanState), who);
+            Assert.AreEqual((ClientOverviewStatus.OnTrack, ClientPlanState.Running), (traineeRow.Status, traineeRow.PlanState), who);
+            Assert.AreEqual(("Free", 0m), (traineeRow.Plan!.Name, traineeRow.Plan.PriceAmount), who);
             Assert.AreEqual(house.CoachUserId, traineeRow.Client.AssignedCoachUserId, who);
             var ritaRow = list.Clients.Single(row => row.Client.ClientProfileId == ritaId);
             Assert.IsFalse(ritaRow.SelfDirected, who);
@@ -1083,7 +1100,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             var traineePage = await ReadSliceAsync<ClientProfileOverviewView>(caller, R33bOverviewUrl(trainee.ProfileId));
             Assert.AreEqual((CoachAttentionPolicy.Key, 9), (traineePage.AttentionRuleKey, traineePage.AttentionRuleVersion), who);
             Assert.IsEmpty(traineePage.Attention, who);
-            Assert.AreEqual(ClientOverviewStatus.NoActivePlan, traineePage.Status, who);
+            Assert.AreEqual((ClientOverviewStatus.OnTrack, "Free"), (traineePage.Status, traineePage.PlanName), who);
             var ritaPage = await ReadSliceAsync<ClientProfileOverviewView>(caller, R33bOverviewUrl(ritaId));
             Assert.AreEqual((CoachAttentionKind.NoPlan, ClientOverviewStatus.NeedsAttention), (ritaPage.Attention.Single().Kind, ritaPage.Status), who);
 
@@ -1530,7 +1547,10 @@ public sealed partial class Phase3TrainingWorkflowTests
     {
         using var owner = CreateClient();
         var houseId = await RegisterCoachAsync(owner, "n9a1-revert-owner@example.test", "Nour Haddad", "N9a1 Revert House");
-        await N9a1MarkHouseAsync(owner, houseId);
+        // Marked by hand, not by the command: since N9b1 the command also makes the house's Free plan, which stays after
+        // the mark is cleared and whose own migration (reverted first) would refuse before this one is reached. With
+        // no plan of a tier, this migration's own guard is the one that answers below, as its message shows.
+        await Phase6ExecuteAsync(N9a1MarkSql, ("mark", true), ("id", houseId));
 
         await using var scope = RequiredFactory.Services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<GymDbContext>();
@@ -1543,6 +1563,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             ?? throw new AssertFailedException($"Expected PostgreSQL's refusal, not {thrown}");
         Assert.AreEqual("55000", refused.SqlState, refused.MessageText);
         Assert.Contains("roll forward", refused.MessageText);
+        Assert.StartsWith("A coaching space is marked as the house", refused.MessageText);
         Assert.Contains(migration, await context.Database.GetAppliedMigrationsAsync());
         Assert.AreEqual((12L, 1L), (await A7ScalarAsync(N9a1SchemaSql), await A7ScalarAsync(N9a1SignUpReasonSql)));
 
@@ -1561,6 +1582,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             ?? throw new AssertFailedException($"Expected PostgreSQL's refusal, not {thrown}");
         Assert.AreEqual("55000", refused.SqlState, refused.MessageText);
         Assert.Contains("roll forward", refused.MessageText);
+        Assert.StartsWith("A coaching space is marked as the house", refused.MessageText);
         await migrator.MigrateAsync();
         Assert.Contains(migration, await context.Database.GetAppliedMigrationsAsync());
         Assert.HasCount(1, await N9a1StoredChangesAsync(houseId));

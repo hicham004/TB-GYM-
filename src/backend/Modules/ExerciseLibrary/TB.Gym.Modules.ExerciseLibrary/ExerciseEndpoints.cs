@@ -130,6 +130,55 @@ public static class ExerciseEndpoints
         .Produces<ExerciseView>()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // The house's pool (LIB-006): a group of its own, since a client never passes the library's TenantCoach group.
+        // Reads only; a trainee writes nothing to the pool.
+        var pool = endpoints
+            .MapGroup("/api/exercise-pool")
+            .RequireAuthorization(AuthorizationPolicies.TenantClient)
+            .WithTags(ExerciseLibraryModule.Name);
+
+        // movementPattern repeats as the library's does; nothing reads archived exercises here.
+        pool.MapGet("/", async (
+            string? query,
+            ExerciseEquipment? equipment,
+            MovementPattern[]? movementPattern,
+            MuscleGroup? muscle,
+            ExerciseClassification? classification,
+            string? typeName,
+            int? skip,
+            int? take,
+            IExercisePoolService service,
+            CancellationToken cancellationToken) =>
+        {
+            var page = await service.SearchAsync(
+                new ExercisePoolSearchRequest(
+                    query,
+                    equipment,
+                    movementPattern,
+                    muscle,
+                    classification,
+                    typeName,
+                    skip ?? 0,
+                    take is null or 0 ? 50 : take.Value),
+                cancellationToken);
+            return page is null ? Results.NotFound() : Results.Ok(page);
+        })
+        .WithName("SearchExercisePool")
+        .Produces<ExercisePoolPage>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        pool.MapGet("/{exerciseId:guid}", async (
+            Guid exerciseId,
+            IExercisePoolService service,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetAsync(exerciseId, cancellationToken);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        })
+        .WithName("GetExercisePoolExercise")
+        .Produces<ExercisePoolExerciseResult>()
+        .Produces(StatusCodes.Status404NotFound);
+
         return endpoints;
     }
 

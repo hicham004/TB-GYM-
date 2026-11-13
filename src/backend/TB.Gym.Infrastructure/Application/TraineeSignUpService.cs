@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Identity;
+using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.Modules.Website;
 using TB.Gym.SharedKernel;
@@ -109,11 +110,21 @@ internal sealed class TraineeSignUpService(
     IClock clock,
     ICurrentUser currentUser,
     IMutableTenantContext tenantContext,
+    HouseFreePlan freePlan,
     ILogger<TraineeSignUpService> logger)
     : ITraineeSignUpService
 {
-    /// <summary>"TBHOUSE1": one place of the house's week given at a time, held from the week's count to the commit.</summary>
-    private const long SignUpLockKey = 0x5442_484F_5553_4531L;
+    /// <summary>
+    /// "TBHOUSE1": one place of the house's week given at a time, held from the week's count to the commit. Whoever
+    /// makes the house's Free plan holds it too (<see cref="HouseFreePlan"/>).
+    /// </summary>
+    internal const long SignUpLockKey = 0x5442_484F_5553_4531L;
+
+    private static readonly Action<ILogger, Exception?> LogFreeNameTaken =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            new EventId(6415, "TraineeFreePlanNameTaken"),
+            "A trainee joined the house without Free: the house sells a plan of its own under Free's name. The Free plan sweep starts it once that plan is renamed.");
 
     private const string BirthDateMissing = "Enter your date of birth.";
 
@@ -698,6 +709,19 @@ internal sealed class TraineeSignUpService(
             profile.Id,
             ClientChangeSource.SignUp,
             [nameof(ClientProfile.UserId), nameof(ClientProfile.Email)]));
+
+        // Free starts the day they join, in the same unit of work (SUB-019). A plan of the staff's own already sold
+        // under Free's name stops it here without stopping the join: the sweep starts Free once that plan is renamed.
+        var house = await dbContext.Tenants.AsNoTracking().SingleAsync(tenant => tenant.Id == houseId, cancellationToken);
+        try
+        {
+            await freePlan.StartAsync(house, profile.Id, now, cancellationToken);
+        }
+        catch (ProductNameTakenException)
+        {
+            LogFreeNameTaken(logger, null);
+        }
+
         return profile;
     }
 

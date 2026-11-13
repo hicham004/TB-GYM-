@@ -8,7 +8,7 @@ public sealed class CoachingProduct : TenantEntity
     {
     }
 
-    private CoachingProduct(Guid tenantId, string name, string? description, ProductKind kind)
+    private CoachingProduct(Guid tenantId, string name, string? description, ProductKind kind, HouseTier? houseTier)
         : base(tenantId)
     {
         if (!Enum.IsDefined(kind))
@@ -16,9 +16,15 @@ public sealed class CoachingProduct : TenantEntity
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
+        if (houseTier is { } tier && (!Enum.IsDefined(tier) || kind != ProductKind.CoachingPlan))
+        {
+            throw new ArgumentException("Only a coaching plan carries a tier.", nameof(houseTier));
+        }
+
         Name = CommercialText.Required(name, 160, nameof(name));
         Description = CommercialText.Optional(description, 2_000, nameof(description));
         Kind = kind;
+        HouseTier = houseTier;
         IsActive = true;
     }
 
@@ -31,15 +37,54 @@ public sealed class CoachingProduct : TenantEntity
 
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// The house's tier this plan sells (SUB-019): Free, made by the server with the house; Pro+ or Max, named by the
+    /// house's staff when they make the plan. Null on every other plan: a trigger refuses a tier on a plan made
+    /// outside the house. It never changes; a space that stops being the house keeps its plans' tiers, inert there,
+    /// and its Free goes off sale.
+    /// </summary>
+    public HouseTier? HouseTier { get; private set; }
+
+    /// <summary>The house's Free plan, which the server starts, renews and keeps (SUB-019).</summary>
+    public bool IsHouseFree => HouseTier == Subscriptions.HouseTier.Free;
+
+    /// <param name="houseTier">Pro+ or Max for a plan of the house; Free is made only by <see cref="CreateHouseFree"/>.</param>
     public static CoachingProduct Create(
         Guid tenantId,
         string name,
         string? description,
-        ProductKind kind = ProductKind.CoachingPlan) =>
-        new(tenantId, name, description, kind);
+        ProductKind kind = ProductKind.CoachingPlan,
+        HouseTier? houseTier = null) =>
+        houseTier == Subscriptions.HouseTier.Free
+            ? throw new HouseFreePlanException()
+            : new(tenantId, name, description, kind, houseTier);
+
+    /// <summary>The house's Free plan, made with the house when it has none (SUB-019).</summary>
+    public static CoachingProduct CreateHouseFree(Guid tenantId) =>
+        new(tenantId, HouseFreePlanRule.Name, null, ProductKind.CoachingPlan, Subscriptions.HouseTier.Free);
+
+    /// <summary>
+    /// Takes the house's Free plan off sale or puts it back (SUB-019): `house clear` takes it off with the mark, so an
+    /// ordinary space sells no plan of the house's and its name is free again, and `house set` puts it back. Nobody
+    /// else does.
+    /// </summary>
+    public void SetHouseFreeOnSale(bool onSale)
+    {
+        if (!IsHouseFree)
+        {
+            throw new InvalidOperationException("Only the house's Free plan is put on and off sale by the server.");
+        }
+
+        IsActive = onSale;
+    }
 
     public void Update(string name, string? description, bool isActive)
     {
+        if (IsHouseFree)
+        {
+            throw new HouseFreePlanException();
+        }
+
         Name = CommercialText.Required(name, 160, nameof(name));
         Description = CommercialText.Optional(description, 2_000, nameof(description));
         IsActive = isActive;
@@ -189,6 +234,22 @@ public sealed class ProductOffer : TenantEntity
             features,
             sessionCount);
 
+    /// <summary>
+    /// Free's one option (SUB-019): a year of days at no price in the house's currency, covering Training beside any
+    /// other plan, so the GiST exclusion never weighs it and still keeps two paid plans apart.
+    /// </summary>
+    public static ProductOffer CreateHouseFree(Guid tenantId, Guid productId, string currencyCode) =>
+        new(
+            tenantId,
+            productId,
+            HouseFreePlanRule.Name,
+            HouseFreePlanRule.LengthInDays,
+            OfferDurationUnit.Day,
+            0m,
+            currencyCode,
+            HouseFreePlanRule.Features,
+            sessionCount: null);
+
     public SubscriptionPeriod GetPeriod(DateOnly startDate)
     {
         var days = DurationUnit switch
@@ -320,6 +381,7 @@ public sealed class ClientEnrollment : TenantEntity
         PriceAmount = offer.PriceAmount;
         PriceCurrency = offer.PriceCurrency;
         SessionCountSnapshot = offer.SessionCount;
+        HouseTier = product.HouseTier;
         StartDate = period.Start;
         EndDateExclusive = period.EndExclusive;
         Status = PriceAmount == 0m ? EnrollmentStatus.Active : EnrollmentStatus.PendingPayment;
@@ -355,6 +417,12 @@ public sealed class ClientEnrollment : TenantEntity
 
     /// <summary>The sessions this pack was sold with (SES-002); null on a coaching plan.</summary>
     public int? SessionCountSnapshot { get; private set; }
+
+    /// <summary>The house's tier its plan sells, copied when it was booked (SUB-019); null outside the house.</summary>
+    public HouseTier? HouseTier { get; private set; }
+
+    /// <summary>A row of the house's Free plan, which only the server writes (SUB-019).</summary>
+    public bool IsHouseFree => HouseTier == Subscriptions.HouseTier.Free;
 
     public DateOnly StartDate { get; private set; }
 
@@ -411,6 +479,7 @@ public sealed class ClientEnrollment : TenantEntity
 
     public void Pause(DateTimeOffset now, string reason)
     {
+        EnsureNotHouseFree();
         EnsureStatus(EnrollmentStatus.Active, "Only an active enrollment can be paused.");
         Status = EnrollmentStatus.Paused;
         PausedAtUtc = now;
@@ -419,6 +488,7 @@ public sealed class ClientEnrollment : TenantEntity
 
     public void Resume(DateTimeOffset now)
     {
+        EnsureNotHouseFree();
         EnsureStatus(EnrollmentStatus.Paused, "Only a paused enrollment can be resumed.");
         Status = EnrollmentStatus.Active;
         ActivatedAtUtc ??= now;
@@ -426,8 +496,17 @@ public sealed class ClientEnrollment : TenantEntity
         StatusReason = null;
     }
 
-    public void Cancel(DateTimeOffset now, string reason)
+    /// <param name="relationshipEnded">
+    /// The client left or was released (ADR 0027): everything that made them a current client ends, Free too. Nothing
+    /// else ends Free (SUB-019).
+    /// </param>
+    public void Cancel(DateTimeOffset now, string reason, bool relationshipEnded = false)
     {
+        if (!relationshipEnded)
+        {
+            EnsureNotHouseFree();
+        }
+
         if (Status is EnrollmentStatus.Cancelled or EnrollmentStatus.Expired)
         {
             throw new InvalidOperationException("A cancelled or expired enrollment cannot be cancelled again.");
@@ -495,6 +574,15 @@ public sealed class ClientEnrollment : TenantEntity
         return tenantToday < StartDate
             ? EffectiveEnrollmentStatus.Upcoming
             : EffectiveEnrollmentStatus.Active;
+    }
+
+    /// <summary>Free never pauses or ends by hand (SUB-019): a relationship block is how the house stops someone.</summary>
+    private void EnsureNotHouseFree()
+    {
+        if (IsHouseFree)
+        {
+            throw new HouseFreePlanException();
+        }
     }
 
     private void EnsureStatus(EnrollmentStatus expected, string message)

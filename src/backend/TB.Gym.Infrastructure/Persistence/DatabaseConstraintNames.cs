@@ -36,6 +36,17 @@ internal static class DatabaseConstraintNames
     public const string OneOfferPriceChangePerKey =
         "IX_OfferPriceChanges_TenantId_IdempotencyKey";
 
+    /// <summary>One Free plan in the house (SUB-019): two runs that make it at once leave one.</summary>
+    public const string OneHouseFreePlan =
+        "UX_CoachingProducts_OneHouseFree";
+
+    /// <summary>
+    /// A trainee's Free rows never overlap (SUB-019): the exclusion the GiST one cannot be, since Free covers Training
+    /// beside any other plan. Two starts or two renewals of one row racing leave one.
+    /// </summary>
+    public const string OneHouseFreeRowAtATime =
+        "EX_ClientEnrollments_OneHouseFreeAtATime";
+
     /// <summary>
     /// One update of a program's training maxes per idempotency key (STR-002). A retry that loses the
     /// race to the first answers with the first one's result.

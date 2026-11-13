@@ -442,7 +442,8 @@ public static class TraineeSignUpRule
 /// <summary>
 /// The Worker's housekeeping for the house's sign-ups, section <c>TraineeSignUps</c> (CLI-025): how long a sign-up
 /// may wait for its email to be confirmed, and the sweep that removes the ones that waited longer. Read when a host
-/// starts; a host whose settings are wrong refuses to start, naming the setting and never quoting its value.
+/// starts; a host whose settings are wrong refuses to start, naming the setting and never quoting its value. The same
+/// Worker tick renews the house's Free (SUB-019): the interval paces both, and the switch stops the sign-up sweep alone.
 /// </summary>
 public sealed class TraineeSignUpOptions
 {
@@ -463,10 +464,10 @@ public sealed class TraineeSignUpOptions
     /// </summary>
     public int RemoveUnconfirmedAfterDays { get; set; } = 2;
 
-    /// <summary>Whether the Worker runs the sweep at all.</summary>
+    /// <summary>Whether the Worker runs the sign-up sweep at all. Free's renewal runs on the same tick either way.</summary>
     public bool SweepEnabled { get; set; } = true;
 
-    /// <summary>Seconds between two sweeps: once an hour.</summary>
+    /// <summary>Seconds between two ticks of the house's sweeps: once an hour.</summary>
     public int SweepIntervalSeconds { get; set; } = 3_600;
 
     /// <summary>The first setting that is wrong, named and never quoted; null when every one is right.</summary>

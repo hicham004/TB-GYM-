@@ -185,6 +185,8 @@ public static class DependencyInjection
         services.AddScoped<ICoachOverviewService, CoachOverviewReader>();
         services.AddScoped<ICoachMonthService, CoachMonthReader>();
         services.AddScoped<ICoachingFeatureAccessService, CoachingFeatureAccessService>();
+        // Which of the house's tiers a client is on today (SUB-019, notes plan N9b1).
+        services.AddScoped<HouseTierReader>();
         services.AddScoped<ICommercialApplicationService, CommercialApplicationService>();
         services.AddScoped<IClientRenewalService, ClientRenewalService>();
         services.AddScoped<LegalAcceptanceGate>();
@@ -194,6 +196,8 @@ public static class DependencyInjection
         services.AddScoped<ICoachCertificateOwnService, CoachCertificateOwnService>();
         services.AddCoachCertificates(configuration);
         services.AddScoped<IExerciseLibraryApplicationService, ExerciseLibraryApplicationService>();
+        // The house's exercise pool, read by its trainees (LIB-006, notes plan N9b1).
+        services.AddScoped<IExercisePoolService, ExercisePoolService>();
         services.AddScoped<IStrengthApplicationService, StrengthApplicationService>();
         services.AddScoped<ITrainingApplicationService, TrainingApplicationService>();
         services.AddScoped<INutritionApplicationService, NutritionApplicationService>();

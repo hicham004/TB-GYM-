@@ -311,6 +311,12 @@ internal sealed class ClientProfileApplicationService(
                     }
                 }
 
+                // The profile's own row lock, taken after the staff's as the save would take it, and before the plans are
+                // read: a Free row the Worker adds for this client (SUB-019) either commits first and is cancelled below,
+                // or waits for this commit and finds them gone.
+                await dbContext.Database.ExecuteSqlAsync(
+                    $"""SELECT 1 FROM clients."ClientProfiles" WHERE "Id" = {profile.Id} FOR UPDATE /* end-relationship */""",
+                    cancellationToken);
                 await CloseOpenCoachingAsync(
                     profile.Id,
                     await GetTenantTodayAsync(cancellationToken),
@@ -363,7 +369,8 @@ internal sealed class ClientProfileApplicationService(
             .ToListAsync(cancellationToken);
         foreach (var enrollment in enrollments)
         {
-            enrollment.Cancel(now, closureReason);
+            // The relationship ended, so the house's Free ends with it (SUB-019), as nothing else may end it.
+            enrollment.Cancel(now, closureReason, relationshipEnded: true);
             await CommercialApplicationService.CancelScheduledNotificationsAsync(
                 dbContext,
                 enrollment.Id,

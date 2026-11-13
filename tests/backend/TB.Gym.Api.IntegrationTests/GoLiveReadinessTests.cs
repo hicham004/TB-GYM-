@@ -477,6 +477,23 @@ public sealed class GoLiveReadinessTests
     }
 
     /// <summary>
+    /// Free's sweep comes from the Worker's own composition too (notes plan N9b1, SUB-019), with the writer that makes
+    /// Free's rows, and the sign-up sweep beside it: the Worker's timer runs both on one tick. The integration tests
+    /// drive Free's sweep from the API host, so a sweep that leaned on an API-only service (the commercial service, the
+    /// coach scope, the current user) would pass them and fail in the Worker every hour.
+    /// </summary>
+    [TestMethod]
+    public async Task N9b1FreeTheWorkerComposesTheFreePlanSweepBesideTheSignUpSweep()
+    {
+        using var services = Worker([]);
+        await using var scope = services.CreateAsyncScope();
+        Assert.IsInstanceOfType<TB.Gym.Infrastructure.Application.HouseFreePlanRenewal>(
+            scope.ServiceProvider.GetRequiredService<TB.Gym.Modules.Subscriptions.IHouseFreePlanRenewal>());
+        Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.Infrastructure.Application.HouseFreePlan>());
+        Assert.IsNotNull(scope.ServiceProvider.GetRequiredService<TB.Gym.Modules.Tenancy.ITraineeSignUpSweep>());
+    }
+
+    /// <summary>
     /// The days a sign-up may wait and the sweep's interval are read when a host starts (notes plan N9a1): outside 1
     /// to 90 days, or outside a minute to a day, the API refuses to start and the Worker's composition refuses its
     /// settings, each naming the setting and never quoting its value.

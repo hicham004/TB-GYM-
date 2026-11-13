@@ -19,7 +19,9 @@ grant cookie hardened in Phase 4. Only authorization and lifecycle are new.
 explicitly and never inferred, because the two purposes have opposite access rules:
 
 - exercise media stays exactly as before, readable by any Owner/Coach of the workspace and by a
-  client whose current training prescription references it;
+  client whose current training prescription references it (in the code, any program or workout of
+  theirs that holds it); amended by notes plan N9b1 (MED-017): in the house, also by any current
+  client with Training access when it is a demo of an exercise in use in the house's pool;
 - a progress photo is readable by the client it depicts, and by an Owner/Coach of that workspace
   only while the coaching relationship is not blocked.
 

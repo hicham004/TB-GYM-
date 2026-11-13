@@ -54,10 +54,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         var body = await maya.GetStringAsync(OwnPlansUrl);
         using (var document = JsonDocument.Parse(body))
         {
-            Assert.AreEqual("coachName,plans,renewal,today", B10aFieldNames(document.RootElement));
+            Assert.AreEqual("coachName,free,plans,renewal,tier,today", B10aFieldNames(document.RootElement));
             Assert.AreEqual(
                 "cancelledOn,description,features,id,lastDay,name,optionLabel,sessions,startDate,status",
                 B10aFieldNames(document.RootElement.GetProperty("plans")[0]));
+            // The tier and Free are the house's alone (SUB-019): a coach's client reads neither.
+            Assert.AreEqual(
+                (JsonValueKind.Null, JsonValueKind.Null),
+                (document.RootElement.GetProperty("free").ValueKind, document.RootElement.GetProperty("tier").ValueKind));
         }
 
         // The price as JSON writes it (250.5 or 250.50): "250" alone also turns up inside a random id now and then.

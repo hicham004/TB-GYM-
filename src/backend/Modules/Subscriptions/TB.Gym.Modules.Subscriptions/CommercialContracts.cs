@@ -88,6 +88,10 @@ public sealed record ProductCatalog(
     IReadOnlyList<CoachingProductView> Products);
 
 /// <param name="Clients">Who is on the product, each client once across its price options (SUB-015).</param>
+/// <param name="HouseTier">
+/// The house's tier the plan sells (SUB-019): Free, the server's own plan, which nobody changes by hand; Pro+ or Max;
+/// null on every other plan.
+/// </param>
 public sealed record CoachingProductView(
     Guid Id,
     string Name,
@@ -96,7 +100,8 @@ public sealed record CoachingProductView(
     IReadOnlyList<ProductOfferView> Offers,
     uint Version,
     PlanClientCount Clients,
-    ProductKind Kind);
+    ProductKind Kind,
+    HouseTier? HouseTier = null);
 
 /// <param name="Clients">
 /// Who is on this option (SUB-015). A replacement from Change price also counts the clients of the options it
@@ -138,6 +143,7 @@ public sealed record ClientCommercialOverview(
 
 /// <param name="CancelledOn">The workspace day the plan was cancelled (COACH-20); null unless it was.</param>
 /// <param name="Sessions">A pack's sessions and ledger (SES-003); null on a coaching plan.</param>
+/// <param name="HouseTier">The house's tier the plan sold (SUB-019); a Free row is the server's and changes by no hand.</param>
 public sealed record ClientEnrollmentView(
     Guid Id,
     Guid ProductId,
@@ -160,7 +166,8 @@ public sealed record ClientEnrollmentView(
     IReadOnlyList<PaymentRecordView> Payments,
     DateTimeOffset CreatedAtUtc,
     uint Version,
-    SessionPackView? Sessions);
+    SessionPackView? Sessions,
+    HouseTier? HouseTier = null);
 
 /// <param name="ReceivedOn">The workspace day the money arrived (WEA-6), the same for every reader.</param>
 public sealed record PaymentRecordView(
@@ -177,11 +184,13 @@ public sealed record PaymentRecordView(
     PaymentSource Source,
     DateTimeOffset CreatedAtUtc);
 
+/// <param name="HouseTier">Pro+ or Max for a plan of the house (SUB-019); none elsewhere. It never changes.</param>
 public sealed record CreateCoachingProductRequest(
     string Name,
     string? Description,
     CreateProductOfferRequest InitialOffer,
-    ProductKind Kind = ProductKind.CoachingPlan);
+    ProductKind Kind = ProductKind.CoachingPlan,
+    HouseTier? HouseTier = null);
 
 public sealed record UpdateCoachingProductRequest(
     string Name,

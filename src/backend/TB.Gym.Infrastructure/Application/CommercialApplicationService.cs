@@ -18,7 +18,8 @@ internal sealed partial class CommercialApplicationService(
     ICoachingFeatureAccessService featureAccessService,
     IOptions<NotificationEmailOptions> notificationEmailOptions,
     CoachClientScope coachClientScope,
-    IClientRenewalService clientRenewal)
+    IClientRenewalService clientRenewal,
+    HouseTierReader houseTiers)
     : ICommercialApplicationService
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
@@ -46,8 +47,18 @@ internal sealed partial class CommercialApplicationService(
                 return Invalid("priceAmount", priceProblem);
             }
 
+            if (request.HouseTier is { } tier && await HouseTierProblemAsync(tier, cancellationToken) is { } tierProblem)
+            {
+                return Invalid("houseTier", tierProblem);
+            }
+
             var currency = await ResolveCurrencyAsync(request.InitialOffer.PriceCurrency, cancellationToken);
-            var product = CoachingProduct.Create(tenantContext.TenantId, request.Name, request.Description, request.Kind);
+            var product = CoachingProduct.Create(
+                tenantContext.TenantId,
+                request.Name,
+                request.Description,
+                request.Kind,
+                request.HouseTier);
             CoachingProduct.EnsureNameFree(product.Id, product.Name, await ActiveProductsAsync(cancellationToken));
             var offer = CreateOffer(product, request.InitialOffer, currency);
             dbContext.CoachingProducts.Add(product);
@@ -88,6 +99,11 @@ internal sealed partial class CommercialApplicationService(
             return NotFound();
         }
 
+        if (product.IsHouseFree)
+        {
+            return HouseFreePlanConflict();
+        }
+
         try
         {
             dbContext.Entry(product).Property(item => item.Version).OriginalValue = request.Version;
@@ -124,6 +140,31 @@ internal sealed partial class CommercialApplicationService(
     private Task<List<CoachingProduct>> ActiveProductsAsync(CancellationToken cancellationToken) =>
         dbContext.CoachingProducts.AsNoTracking().Where(item => item.IsActive).ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// Why a plan the staff make may not carry <paramref name="tier"/> (SUB-019), or null when it may: Pro+ and Max,
+    /// in the house alone. Free is made with the house, by the server.
+    /// </summary>
+    private async Task<string?> HouseTierProblemAsync(HouseTier tier, CancellationToken cancellationToken)
+    {
+        if (tier is not (HouseTier.ProPlus or HouseTier.Max))
+        {
+            return "Choose Pro+ or Max. Free is TB Gym's own plan, made with its coaching space.";
+        }
+
+        return await dbContext.Tenants.AsNoTracking()
+            .AnyAsync(tenant => tenant.Id == tenantContext.TenantId && tenant.IsHouse, cancellationToken)
+            ? null
+            : "Only TB Gym's own coaching space sells plans with a tier.";
+    }
+
+    /// <summary>Whether a plan is the house's Free, which only the server writes (SUB-019).</summary>
+    private Task<bool> IsHouseFreeProductAsync(Guid productId, CancellationToken cancellationToken) =>
+        dbContext.CoachingProducts.AsNoTracking()
+            .AnyAsync(item => item.Id == productId && item.HouseTier == HouseTier.Free, cancellationToken);
+
+    private static CommercialCommandResult HouseFreePlanConflict() =>
+        Conflict(HouseFreePlanException.Code, new HouseFreePlanException().Message);
+
     private const string ProductNameTakenCode = "product_name_taken";
 
     private static bool IsProductNameViolation(DbUpdateException exception) =>
@@ -144,6 +185,11 @@ internal sealed partial class CommercialApplicationService(
         if (product is null)
         {
             return NotFound();
+        }
+
+        if (product.IsHouseFree)
+        {
+            return HouseFreePlanConflict();
         }
 
         if (MoneyRules.AmountProblem(request.PriceAmount, allowZero: true) is { } priceProblem)
@@ -191,6 +237,11 @@ internal sealed partial class CommercialApplicationService(
         if (offer is null)
         {
             return NotFound();
+        }
+
+        if (await IsHouseFreeProductAsync(offer.ProductId, cancellationToken))
+        {
+            return HouseFreePlanConflict();
         }
 
         try
@@ -258,6 +309,11 @@ internal sealed partial class CommercialApplicationService(
                 if (source is null)
                 {
                     return NotFound();
+                }
+
+                if (await IsHouseFreeProductAsync(source.ProductId, cancellationToken))
+                {
+                    return HouseFreePlanConflict();
                 }
 
                 if (source.Version != request.Version)
@@ -439,6 +495,11 @@ internal sealed partial class CommercialApplicationService(
                     return NotFound();
                 }
 
+                if (enrollment.IsHouseFree)
+                {
+                    return HouseFreePlanConflict();
+                }
+
                 var refusal = await ApplyReceiptAsync(
                     enrollment,
                     new ReceiptEntry(
@@ -571,6 +632,11 @@ internal sealed partial class CommercialApplicationService(
         }
 
         await coachClientScope.EnsureNotReleasedAsync(source.ClientProfileId, cancellationToken);
+        if (source.IsHouseFree)
+        {
+            return HouseFreePlanConflict();
+        }
+
         var offerProductId = await dbContext.ProductOffers
             .Where(item => item.Id == request.OfferId)
             .Select(item => (Guid?)item.ProductId)
@@ -675,7 +741,9 @@ internal sealed partial class CommercialApplicationService(
             .ToListAsync(cancellationToken);
         var (zone, today) = await GetWorkspaceDayAsync(cancellationToken);
         var renewal = await clientRenewal.GetOwnStatusAsync(cancellationToken);
-        var shown = OwnPlans.Shown(enrollments, today, zone, renewal?.PlanId);
+        // The house's Free never ends, so it stands apart and never reads as a plan with a last day (SUB-019).
+        var free = enrollments.Where(item => item.IsHouseFree).ToArray();
+        var shown = OwnPlans.Shown([.. enrollments.Where(item => !item.IsHouseFree)], today, zone, renewal?.PlanId);
         var packs = await LoadSessionPacksAsync(shown, today, zone, cancellationToken);
         var coachName = packs.Count == 0
             ? null
@@ -705,7 +773,9 @@ internal sealed partial class CommercialApplicationService(
                     packs.TryGetValue(plan.Id, out var pack) ? OwnPlans.SessionsOf(pack) : null))
                 .ToArray(),
             string.IsNullOrWhiteSpace(coachName) ? null : coachName,
-            renewal);
+            renewal,
+            await houseTiers.TierAsync(client.Id, cancellationToken),
+            OwnPlans.FreeOf(free, today, client.IsCoachBlocked));
     }
 
     private async Task<CommercialCommandResult> AssignCoreAsync(
@@ -757,6 +827,12 @@ internal sealed partial class CommercialApplicationService(
         if (product is null)
         {
             return NotFound();
+        }
+
+        // Free starts and renews by itself (SUB-019): nobody books it by hand, nor renews a row of it.
+        if (product.IsHouseFree)
+        {
+            return HouseFreePlanConflict();
         }
 
         if (!product.IsActive || !offer.IsActive)
@@ -903,6 +979,11 @@ internal sealed partial class CommercialApplicationService(
         }
 
         await coachClientScope.EnsureNotReleasedAsync(enrollment.ClientProfileId, cancellationToken);
+        if (enrollment.IsHouseFree)
+        {
+            return HouseFreePlanConflict();
+        }
+
         try
         {
             if (await GetTenantTodayAsync(cancellationToken) >= enrollment.EndDateExclusive)
@@ -1158,7 +1239,8 @@ internal sealed partial class CommercialApplicationService(
                 offer.SessionCount)).ToArray(),
             product.Version,
             CountClients(clients.Where(item => item.ProductId == product.Id)),
-            product.Kind);
+            product.Kind,
+            product.HouseTier);
 
     /// <summary>
     /// SUB-015 per option. An option on sale counts the clients of the options it replaced too, who stay on
@@ -1291,7 +1373,8 @@ internal sealed partial class CommercialApplicationService(
                 item.CreatedAtUtc)).ToArray(),
             enrollment.CreatedAtUtc,
             enrollment.Version,
-            sessions);
+            sessions,
+            enrollment.HouseTier);
     }
 
     private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken) =>

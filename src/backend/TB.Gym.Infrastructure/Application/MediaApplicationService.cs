@@ -1033,6 +1033,11 @@ internal sealed class MediaApplicationService(
             return false;
         }
 
+        if (purpose == MediaPurpose.ExerciseMedia && await IsHousePoolDemoAsync(assetId, cancellationToken))
+        {
+            return true;
+        }
+
         var prescribedReference = await (
             from media in dbContext.ExercisePrescriptionMediaSnapshots.AsNoTracking()
             join prescription in dbContext.ExercisePrescriptions.AsNoTracking()
@@ -1066,6 +1071,33 @@ internal sealed class MediaApplicationService(
             where media.MediaAssetId == assetId && execution.ClientProfileId == client.Id
             select media.Id)
             .AnyAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// A demo of the house's exercise pool (MED-017, LIB-006, notes plan N9b1): ready media linked to one of the
+    /// house's exercises in use, which any current client of the house with Training access opens (the caller has
+    /// checked both), with no program holding it. Only the request's own workspace counts, so a client of the house
+    /// opens nothing of it under a coach's header, and a coach's client gains nothing: their workspace is no house.
+    /// Checked again on every content request, so a demo archived or deleted from the pool closes at once.
+    /// </summary>
+    private async Task<bool> IsHousePoolDemoAsync(Guid assetId, CancellationToken cancellationToken)
+    {
+        var tenantId = tenantContext.TenantId;
+        return await dbContext.Tenants.AsNoTracking()
+                   .AnyAsync(tenant => tenant.Id == tenantId && tenant.IsHouse && tenant.IsActive, cancellationToken) &&
+               await (
+                   from link in dbContext.ExerciseMediaLinks.AsNoTracking()
+                   join exercise in dbContext.Exercises.AsNoTracking()
+                       on new { link.TenantId, Id = link.ExerciseId }
+                       equals new { exercise.TenantId, exercise.Id }
+                   join asset in dbContext.MediaAssets.AsNoTracking()
+                       on new { link.TenantId, Id = link.MediaAssetId }
+                       equals new { asset.TenantId, asset.Id }
+                   where link.MediaAssetId == assetId &&
+                         !exercise.IsArchived &&
+                         asset.Status == MediaAssetStatus.Ready
+                   select link.Id)
+                   .AnyAsync(cancellationToken);
     }
 
     /// <summary>

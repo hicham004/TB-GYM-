@@ -120,12 +120,15 @@ web container after changing any of the three. Write the privacy note yourself; 
 - **The house** (trainees without a coach, ADR 0041): nothing opens by being deployed. Register TB Gym's
   own coaching space as a coach does, then mark it with
   `tb exec api dotnet TB.Gym.Api.dll platform-admin house set <the space's slug>` (`platform-admin house`
-  says which space is marked; `house clear` takes the mark away while the house holds nobody). Sign-up stays
+  says which space is marked; `house clear` takes the mark away while the house holds nobody). Marking also makes
+  the house's Free plan (SUB-019) and refuses while the space sells a plan of its own called Free, until that plan is
+  renamed; clearing takes Free off sale and is refused while a plan of the house's tiers is booked. Sign-up stays
   closed until the platform admin fills the house's two settings in the app, new sign-ups a week and the
   age that may sign up. Before filling them, have the house's Coach accept their team invitation: a
   trainee's record names the Coach who had joined when their email was confirmed, else the Owner, and the
   Owner moves an earlier trainee to the Coach one at a time. The Worker removes a sign-up whose email was never confirmed after
-  `TraineeSignUps:RemoveUnconfirmedAfterDays` days (2; 1 to 90, or neither process starts) (CLI-022 to CLI-025).
+  `TraineeSignUps:RemoveUnconfirmedAfterDays` days (2; 1 to 90, or neither process starts) (CLI-022 to CLI-025), and
+  renews each trainee's Free on the same hourly tick; `TraineeSignUps:SweepEnabled` switches off the removal alone.
 
 ## Before launch: a test copy on Render
 

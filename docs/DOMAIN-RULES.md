@@ -309,7 +309,7 @@ and gets a new profile beside the ended one (CLI-016), once in a house week (409
 someone whose coaching the house ended, or who left while it had blocked their access, may not (409
 `trainee_sign_up_not_available`): coming back is then the house's invitation to give, so no block is undone by
 leaving (CLI-009). A former member of the house's team is refused too (409 `trainee_former_staff`). A self-directed
-trainee's intake keeps to the house's age.
+trainee's intake keeps to the house's age. Free starts with the membership, in the same transaction (SUB-019).
 
 **CLI-025** A house sign-up whose email is never confirmed is removed by the Worker after
 `TraineeSignUps:RemoveUnconfirmedAfterDays` days (2 by default, 1 to 90; housekeeping, not a house setting; a
@@ -320,7 +320,8 @@ up afresh. The emptied account row stays, because the confirmation mail's histor
 recorded are append-only and name it. A sign-up whose email was confirmed while the week was full, and whose owner
 never came back for a place, is dropped the same way with its account left as it is. The sweep touches nothing
 else: no coach's account, no confirmed trainee. A confirmation, a signed-in join and the sweep take the sign-up's
-row lock first, so whichever comes first wins. It logs counts only.
+row lock first, so whichever comes first wins. It logs counts only. `TraineeSignUps:SweepEnabled` switches this sweep
+off alone: Free's renewal runs on the same tick regardless (SUB-019).
 
 **CLI-026** A self-directed trainee is a client of the house who trains as their own coach (decision 25): the mark
 is on the profile, set at sign-up, and a trigger refuses it in any other workspace. They raise nothing on Coach
@@ -497,6 +498,30 @@ A coach reads what counts for them. The owner reads the workspace's and each coa
 the owner first as You, then by name, then anyone who left the team with a number in either month, so the rows add
 up to the totals. Last month can still move, as money and sessions recorded late count on their own day. It decides
 no access.
+
+**SUB-019** Free and the house's tiers (notes plan N9b1; decisions 26 and 30 as the owner changed them on 11 Nov
+2026). A plan of the house may name a tier, Free, Pro+ or Max, which never changes and which each enrollment copies
+when it is booked; a trigger refuses a tier on a plan made outside the house, and keeps an enrollment's equal to its
+plan's. Free is the server's
+own plan: `platform-admin house set` makes it with the house when it has none (one Free plan a house), an ordinary
+coaching plan with one option at no price, 365 days, covering Training beside any plan (SUB-004's exception), so the
+GiST exclusion never weighs it and still keeps two paid plans apart. A trainee's Free starts on the house's day their
+sign-up is confirmed or they join while signed in, in that same transaction and once per profile (its command id is
+the profile's own), and the Worker renews it before it ends: from 30 days before a row's exclusive end, a new row
+from that end, linked to it (SUB-003), so the rows follow one another with no gap and no overlap, which an exclusion
+constraint keeps; a row that ended while the Worker was down is renewed from its own end. The Worker also starts it
+for a self-directed trainee who has none, and renews on the hourly house tick that `TraineeSignUps:SweepEnabled` does
+not stop. The trainee's plan read names Free apart, with the day it started and no end (the access read still
+carries the covering row's dates). Free raises no plan notice, is never the plan to renew (SUB-014), never names the
+client's plan on the Clients row or page reads while another plan or a pack runs, and never covers a program
+(TRN-011): a program needs another plan of the house, which it sells as Pro+ or Max. Until N9c3, a program's sessions
+ask only whether Training is open, whatever opens it. Nobody books, renews, pauses, resumes, cancels, edits or
+reprices Free by hand (409 `house_free_plan`); it ends only with the relationship (ADR 0027), and someone who comes
+back through sign-up gets a new profile and a new Free, while one the house invites back gets none, as no client it
+invites does. `house clear` takes Free off sale with the mark, and is refused while a plan of a tier is booked. Which tier a trainee is on is read on the server from the house's plans that grant today, as feature access
+grants (SUB-009): the highest of Max, Pro+ and Free among plans covering the day, active and paid in full; a plan
+waiting for its money, paused, cancelled, ended or to come grants none, and a block grants none at all. When Free and
+another plan both grant a feature, the access decision names the other one.
 
 ### Session packs (1-on-1 sessions, critique B10b, ADR 0038)
 
@@ -759,7 +784,8 @@ other choices then, saying why. Choosing the lift already chosen changes nothing
 **TRN-011** Enrollment and mesocycle are not the same aggregate. One training enrollment may
 authorize zero or multiple sequential mesocycles. A mesocycle must fit fully inside that
 enrollment. Phase 3 rejects overlapping primary mesocycles in application code and PostgreSQL;
-supplemental mesocycles are reserved but disabled.
+supplemental mesocycles are reserved but disabled. The house's Free never covers a program (SUB-019): it holds a
+trainee's own workouts, and a program needs another plan.
 
 **TRN-012** Starting execution snapshots exercise identity and every prescribed set. Actual
 reps/load/exertion/completion/note are separate fields. Completed execution and performance
@@ -2265,7 +2291,9 @@ size, uses generated object keys, and includes malware/content scanning before p
 program snapshot. Default clients see only assigned/permitted media. A coach may grant a
 client explicit full-library access per tenant. Since P4 the coach's read of an assigned program
 names each exercise's snapshot media, so the coach watches the demo the client was given. Any such
-library grant, once built, leaves archived exercises out (LIB-004); today no client reads the library.
+library grant leaves archived exercises out (LIB-004). The first is the house's pool (notes plan N9b1, LIB-006,
+MED-017): every current client of the house with Training access reads the house's library; a coach's client still
+reads no library.
 
 **MED-003** Coaches may receive download controls while clients receive short-lived streaming
 URLs, but a web application cannot guarantee that viewable media is impossible to copy.
@@ -2586,6 +2614,13 @@ from the link the coach pasted); nothing from the provider loads inside TB Gym a
 is. Only an upload plays inside the app. Playing a link here, through the privacy-oriented players
 ADR 0007 names, is a later step.
 
+**MED-017** A demo of the house's pool (notes plan N9b1, LIB-006). A current client of the house with Training
+access opens an exercise's media that is ready and linked to one of the house's exercises in use, with no program
+holding it, through the grant every demo uses, which is checked again on every content request, so a demo archived or
+deleted from the pool closes at once. Only the request's own workspace counts: under a coach's header a client of
+the house opens nothing of it. Nothing else changed: a coach's client opens exercise media only through a program or
+a workout of theirs that holds it (ADR 0011).
+
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and
 cannot leak one coach's private library into another tenant.
@@ -2612,6 +2647,15 @@ Other may carry a name of the coach's own, up to 40 characters, which no other t
 be another type's name; it is shown as the exercise's type and listed in the Type filter, and the exercise is
 Other in every other way. A type labels and filters the library; none changes what a program may prescribe.
 The tags in use are a filter of their own, each with how many exercises carry it.
+
+**LIB-006** The house's exercise pool (notes plan N9b1; MED-002's library grant, built for the house alone). Any
+current client of the house reads the house's exercise library while Training is open to them (`GET
+/api/exercise-pool` and `GET /api/exercise-pool/{exerciseId}`): the exercises in use alone (LIB-004), searched as the
+coach's library is (LIB-003) and filtered by equipment, movement, muscle and type, each with its name, type,
+equipment, movement, muscles, instructions and the demos that open now (MED-017), never the staff's tags, swaps or
+notes. Only the request's own workspace counts: a coach's workspace has no pool (404), so a coach's client still reads
+no library. With Training locked the read says why, as the Training reads do, and lists nothing. Nobody writes to the
+pool through it: the library's routes stay the staff's.
 
 ## 9. Theme and gamification
 

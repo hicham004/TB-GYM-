@@ -439,6 +439,17 @@ sign-up's row lock first. The Worker's hourly sweep (`TraineeSignUps:RemoveUncon
 outside 1 to 90 days) takes the same lock first, deletes a sign-up never confirmed and empties its account, logging
 counts only.
 
+Free in the house (SUB-019, notes plan N9b1) is a Subscriptions plan whose tier the house's products name and each
+enrollment copies. `HouseFreePlan` in Infrastructure makes it when `house set` marks the house, starts it inside the
+confirmation's or the signed-in join's transaction, and renews it from the same hourly Worker tick as the sign-up
+sweep (`IHouseFreePlanRenewal`, which that sweep's switch never stops; `house clear` takes Free off sale), each write
+under the house's advisory lock and the trainee's profile row lock, the
+row lock ending a relationship now also takes before it cancels plans. `HouseTierReader` reads the tier for the
+client's plan read through the access port. The pool (LIB-006) is the ExerciseLibrary module's contract and route
+(`/api/exercise-pool`, TenantClient); `ExercisePoolService` in Infrastructure composes it from the library, the
+house's mark, the caller's `CurrentFor` profile and the access port, and the media grant reads the same mark (MED-017),
+so neither ExerciseLibrary nor Media references Tenancy or Clients.
+
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.
 

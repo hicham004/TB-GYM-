@@ -1488,9 +1488,18 @@ public sealed partial class GymDbContext(
                 entry.Property(item => item.PriceAmount).IsModified ||
                 entry.Property(item => item.PriceCurrency).IsModified ||
                 entry.Property(item => item.StartDate).IsModified ||
-                entry.Property(item => item.EndDateExclusive).IsModified)
+                entry.Property(item => item.EndDateExclusive).IsModified ||
+                entry.Property(item => item.HouseTier).IsModified)
             {
                 throw new InvalidOperationException("Enrollment commercial snapshots are immutable.");
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<CoachingProduct>().Where(item => item.State == EntityState.Modified))
+        {
+            if (entry.Property(item => item.HouseTier).IsModified)
+            {
+                throw new InvalidOperationException("A plan's house tier never changes (SUB-019).");
             }
         }
 

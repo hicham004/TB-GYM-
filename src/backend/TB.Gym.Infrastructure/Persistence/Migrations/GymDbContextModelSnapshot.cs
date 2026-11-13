@@ -9318,6 +9318,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ExpiredAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("HouseTier")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<Guid>("OfferId")
                         .HasColumnType("uuid");
 
@@ -9401,6 +9405,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_ClientEnrollments_ExpiredState", "\"Status\" <> 'Expired' OR \"ExpiredAtUtc\" IS NOT NULL");
 
+                            t.HasCheckConstraint("CK_ClientEnrollments_HouseTier", "\"HouseTier\" IS NULL OR \"HouseTier\" IN ('Free', 'ProPlus', 'Max')");
+
                             t.HasCheckConstraint("CK_ClientEnrollments_Period", "\"EndDateExclusive\" > \"StartDate\"");
 
                             t.HasCheckConstraint("CK_ClientEnrollments_PriceAmount", "\"PriceAmount\" >= 0");
@@ -9428,6 +9434,10 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("HouseTier")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -9463,9 +9473,17 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CoachingProducts_OneHouseFree")
+                        .HasFilter("\"HouseTier\" = 'Free'");
+
                     b.HasIndex("TenantId", "Name");
 
-                    b.ToTable("CoachingProducts", "subscriptions");
+                    b.ToTable("CoachingProducts", "subscriptions", t =>
+                        {
+                            t.HasCheckConstraint("CK_CoachingProducts_HouseTier", "\"HouseTier\" IS NULL OR (\"HouseTier\" IN ('Free', 'ProPlus', 'Max') AND \"Kind\" = 'CoachingPlan')");
+                        });
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Subscriptions.EnrollmentEntitlement", b =>

@@ -798,6 +798,7 @@ export type ClientEnrollmentView = {
   createdAtUtc: string;
   version: number | string;
   sessions: null | SessionPackView;
+  houseTier?: null | HouseTier;
 };
 
 export type ClientExerciseView = {
@@ -1430,6 +1431,7 @@ export type CoachingProductView = {
   version: number | string;
   clients: PlanClientCount;
   kind: ProductKind;
+  houseTier?: null | HouseTier;
 };
 
 export type CoachMoneyReceivedView = {
@@ -1803,6 +1805,7 @@ export type CreateCoachingProductRequest = {
   description: null | string;
   initialOffer: CreateProductOfferRequest;
   kind?: ProductKind;
+  houseTier?: null | HouseTier;
 };
 
 export type CreateCoachInvitationRequest = {
@@ -2244,6 +2247,19 @@ export type ExercisePatternCount = {
   count: number | string;
 };
 
+export type ExercisePoolExerciseResult = {
+  isAllowed: boolean;
+  accessReason: string;
+  exercise: null | PoolExerciseView;
+};
+
+export type ExercisePoolPage = {
+  isAllowed: boolean;
+  accessReason: string;
+  total: number | string;
+  items: Array<PoolExerciseView>;
+};
+
 export type ExercisePrescriptionRequest = {
   exerciseId: string;
   position: number | string;
@@ -2509,6 +2525,8 @@ export type HouseSignUpView = {
   signUpsThisWeek: number | string;
   waitingForConfirmation: number | string;
 };
+
+export type HouseTier = 'Free' | 'ProPlus' | 'Max';
 
 export type HouseWorkspaceView = {
   tenantId: string;
@@ -3260,11 +3278,20 @@ export type OwnCoachView = {
   lines: Array<OwnCoachLineView>;
 };
 
+export type OwnFreePlanView = {
+  name: string;
+  since: string;
+  status: EffectiveEnrollmentStatus;
+  features: Array<CoachingFeature>;
+};
+
 export type OwnPlansView = {
   today: string;
   plans: Array<OwnPlanView>;
   coachName?: null | string;
   renewal?: null | RenewalStatusView;
+  tier?: null | HouseTier;
+  free?: null | OwnFreePlanView;
 };
 
 export type OwnPlanView = {
@@ -3365,6 +3392,25 @@ export type PlatformPaymentView = {
   note: null | string;
   receivedOn: string;
   recordedAtUtc: string;
+};
+
+export type PoolDemoKind = 'Picture' | 'Video' | 'VideoLink';
+
+export type PoolDemoView = {
+  mediaAssetId: string;
+  kind: PoolDemoKind;
+};
+
+export type PoolExerciseView = {
+  id: string;
+  name: string;
+  classification: ExerciseClassification;
+  typeName: null | string;
+  equipment: ExerciseEquipment;
+  movementPattern: MovementPattern;
+  muscles: Array<ExerciseMuscleView>;
+  instructions: null | string;
+  demos: Array<PoolDemoView>;
 };
 
 export type PreparationBasis = 'Raw' | 'Cooked' | 'AsSold' | 'Prepared';
@@ -7880,6 +7926,65 @@ export type SetExerciseArchivedResponses = {
 
 export type SetExerciseArchivedResponse =
   SetExerciseArchivedResponses[keyof SetExerciseArchivedResponses];
+
+export type SearchExercisePoolData = {
+  body?: never;
+  path?: never;
+  query?: {
+    query?: string;
+    equipment?: ExerciseEquipment;
+    movementPattern?: Array<MovementPattern>;
+    muscle?: MuscleGroup;
+    classification?: ExerciseClassification;
+    typeName?: string;
+    skip?: number | string;
+    take?: number | string;
+  };
+  url: '/api/exercise-pool';
+};
+
+export type SearchExercisePoolErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type SearchExercisePoolResponses = {
+  /**
+   * OK
+   */
+  200: ExercisePoolPage;
+};
+
+export type SearchExercisePoolResponse =
+  SearchExercisePoolResponses[keyof SearchExercisePoolResponses];
+
+export type GetExercisePoolExerciseData = {
+  body?: never;
+  path: {
+    exerciseId: string;
+  };
+  query?: never;
+  url: '/api/exercise-pool/{exerciseId}';
+};
+
+export type GetExercisePoolExerciseErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetExercisePoolExerciseResponses = {
+  /**
+   * OK
+   */
+  200: ExercisePoolExerciseResult;
+};
+
+export type GetExercisePoolExerciseResponse =
+  GetExercisePoolExerciseResponses[keyof GetExercisePoolExerciseResponses];
 
 export type ListStrengthMaxHistoryData = {
   body?: never;

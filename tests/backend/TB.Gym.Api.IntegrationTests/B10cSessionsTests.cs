@@ -57,7 +57,11 @@ public sealed partial class Phase3TrainingWorkflowTests
         var body = await maya.GetStringAsync(OwnPlansUrl);
         using (var document = JsonDocument.Parse(body))
         {
-            Assert.AreEqual("coachName,plans,renewal,today", B10aFieldNames(document.RootElement));
+            Assert.AreEqual("coachName,free,plans,renewal,tier,today", B10aFieldNames(document.RootElement));
+            // The tier and Free are the house's alone (SUB-019): a coach's client reads neither.
+            Assert.AreEqual(
+                (JsonValueKind.Null, JsonValueKind.Null),
+                (document.RootElement.GetProperty("free").ValueKind, document.RootElement.GetProperty("tier").ValueKind));
             var read = document.RootElement.GetProperty("plans")[0].GetProperty("sessions");
             Assert.AreEqual("count,lapsed,lapsedOn,left,sessions,used", B10aFieldNames(read));
             Assert.AreEqual("day,outcome,reason", B10aFieldNames(read.GetProperty("sessions")[0]));
