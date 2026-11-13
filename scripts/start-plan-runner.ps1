@@ -7,8 +7,8 @@ Registers (or replaces) a scheduled task that runs the plan runner in its own Po
 under the current user with no time limit, then starts it. The runner builds the plan's Open rows
 (by default the notes plan, -Plan notes, since 2026-11-05; -Plan motion, -Plan critique, -Plan audit
 and -Plan ui are finished) one fresh
-chat at a time (on -Model at -Effort: Fable 5.2 at extra-high effort, the owner's word of 2026-11-12;
-once its weekly limit is used up, Opus 5.5 at -FallbackEffort, extra-high since 2026-11-13, max before)
+chat at a time (on -Model at -Effort: Opus 5.5 at extra-high effort, the owner's word of 2026-11-14;
+Fable 5.2 from 2026-11-12, with Opus 5.5 at -FallbackEffort once Fable's weekly limit was used up)
 until every row is Done or waits for the owner, pushing each row that ends Done
 (-NoPush keeps commits local) and waiting out a used-up weekly limit (-OnWeeklyLimit stop ends the
 run instead), the owner's choices of 2026-10-29. It stops early at the first gate, Optional row or
@@ -38,8 +38,8 @@ param(
     # The session id of the chat a limit stopped (runner.log names it); its work is still in the tree.
     [string]$ResumeSession = '',
     [int]$MaxSteps = 40,
-    # Every chat's model and effort (the owner, 2026-11-12: Fable 5.2 at extra-high effort).
-    [string]$Model = 'claude-fable-5-2',
+    # Every chat's model and effort (the owner: Opus 5.5 at extra-high from 2026-11-14; Fable 5.2 from 2026-11-12).
+    [string]$Model = 'claude-opus-5-5',
     [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
     [string]$Effort = 'xhigh',
     # The effort of a chat that carries on with Opus 5.5 after -Model's weekly limit (the owner: max on

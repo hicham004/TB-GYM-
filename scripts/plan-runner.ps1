@@ -14,8 +14,8 @@ the fix batches in section 0 of docs/FULL-AUDIT-2026-10.md, all Done on 2026-10-
 runs the section 0 table of docs/UI-REDESIGN-PLAN.md, which the owner marked complete on
 2026-10-13.
 
-Each step is a new `claude -p` chat on -Model at -Effort: Fable 5.2 at extra-high effort since
-2026-11-12 (the owner's word; Opus 5.5 at max effort before), unless -RowModels names another
+Each step is a new `claude -p` chat on -Model at -Effort: Opus 5.5 at extra-high effort since
+2026-11-14 (the owner's word; Fable 5.2 at extra-high from 2026-11-12, Opus 5.5 at max before), unless -RowModels names another
 model for its row (the owner put R6.2 on Fable on 2026-10-11). A chat on -FallbackModel runs at
 -FallbackEffort: Opus 5.5 once Fable's weekly limit is used up, at extra-high effort since
 2026-11-13 (max the day before; the owner's word both times). It gets the plan's opening in $planPrompts plus the unattended-run rules in
@@ -76,9 +76,9 @@ param(
     [double]$StepHours = 8,
     [int]$IdleMinutes = 20,
     [int]$MaxLimitWaits = 12,
-    # Every chat's model and effort (the owner, 2026-11-12: Fable 5.2 at extra-high effort; Opus 5.5 at
-    # max before). The rest of the script reads them as $model and $effort.
-    [string]$Model = 'claude-fable-5-2',
+    # Every chat's model and effort (the owner: Opus 5.5 at extra-high from 2026-11-14; Fable 5.2 at
+    # extra-high from 2026-11-12; Opus 5.5 at max before). The rest of the script reads them as $model and $effort.
+    [string]$Model = 'claude-opus-5-5',
     [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
     [string]$Effort = 'xhigh',
     # Row id pattern (-like) to model; a row matching none runs on -Model.
