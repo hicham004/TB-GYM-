@@ -828,7 +828,7 @@ function Test-Retryable($Run) {
     if ((Get-Field $Run.RateLimit 'status') -eq 'rejected') { return $true }
     if ($null -eq $Run.Result) { return $false }
     if (-not (Get-Field $Run.Result 'is_error')) { return $false }
-    return (Get-ResultText $Run) -match '(?i)usage limit|limit reached|hit your limit|reached your [\w .-]*limit|resets|overloaded|rate.?limit|\b(429|500|502|503|504|529)\b|timed? ?out|ECONN'
+    return (Get-ResultText $Run) -match '(?i)usage limit|limit reached|hit your limit|reached your [\w .-]*limit|resets|overloaded|rate.?limit|\b(429|500|502|503|504|529)\b|timed? ?out|ECONN|attention required'
 }
 
 # The epoch second the chat's usage window resets, when its last rate-limit event or result says.
