@@ -13,7 +13,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { apiErrorMessage } from '../../core/api/api-error';
 import { AuthStore } from '../../core/auth/auth.store';
-import { SESSION_ENDED_REASON } from '../../core/auth/session-expiry';
+import { ACCOUNT_CLOSED_REASON, SESSION_ENDED_REASON } from '../../core/auth/session-expiry';
 import { FormAttempt } from '../../core/forms/form-attempt';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
@@ -50,6 +50,9 @@ export class SignIn implements OnInit {
   /** Sent here because the session ended while the app was open (WEB-1). */
   protected readonly sessionEnded =
     this.route.snapshot.queryParamMap.get('reason') === SESSION_ENDED_REASON;
+  /** Sent here after closing their own account from Me (notes plan N9e). */
+  protected readonly accountClosed =
+    this.route.snapshot.queryParamMap.get('reason') === ACCOUNT_CLOSED_REASON;
   /**
    * The page arrives as finished HTML (audit UIQ-13), and until the app has taken it over the button
    * is disabled: Enter or a tap then does nothing, where a native submit would reload the page and

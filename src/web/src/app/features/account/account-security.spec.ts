@@ -25,7 +25,13 @@ const USER: CurrentUser = {
   roles: [],
 };
 
-async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}, role = 'Owner') {
+async function render(
+  api: Partial<Record<keyof ApiClient, unknown>> = {},
+  role = 'Owner',
+  memberships: readonly { tenantId: string; tenantName: string; role: string }[] = [
+    { tenantId: 'tenant-1', tenantName: 'Atlas', role },
+  ],
+) {
   const toast = { show: vi.fn() };
   const isClient = role === 'Client';
   await TestBed.configureTestingModule({
@@ -53,6 +59,7 @@ async function render(api: Partial<Record<keyof ApiClient, unknown>> = {}, role 
           selectedTenantId: signal('tenant-1'),
           selectedMembership: signal({ tenantId: 'tenant-1', tenantName: 'Atlas', role }),
           isClient: signal(isClient),
+          memberships: signal(memberships),
         },
       },
     ],
@@ -103,6 +110,18 @@ describe('Settings › Password and security', () => {
    * reaches the request would send the wrong pair, and the server's refusal would look like the
    * person misremembering their own password.
    */
+  it('offers closing the account to someone with no coaching space left, and to nobody else here', async () => {
+    const member = await render({}, 'Client');
+    expect(member.host.querySelector('app-close-account [data-close-account]')).toBeNull();
+    TestBed.resetTestingModule();
+
+    const { host } = await render({}, 'Client', []);
+    const panel = host.querySelector('app-close-account section.panel');
+    expect(textOf(panel?.querySelector('h2'))).toBe('Close your account');
+    expect(textOf(panel?.querySelector('[data-close-account]'))).toBe('Close your TB Gym account');
+    expect(panel?.querySelector('[data-close-account]')?.getAttribute('variant')).toBe('outlined');
+  });
+
   it('changes the password using both the old and the new one, then clears the form', async () => {
     const { fixture, host, api, toast } = await render();
 

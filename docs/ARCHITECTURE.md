@@ -450,6 +450,15 @@ client's plan read through the access port. The pool (LIB-006) is the ExerciseLi
 house's mark, the caller's `CurrentFor` profile and the access port, and the media grant reads the same mark (MED-017),
 so neither ExerciseLibrary nor Media references Tenancy or Clients.
 
+Closing an account (CLI-027, notes plan N9e) is Identity's route, record (`identity."AccountClosures"`) and port
+(`IAccountClosureService`), composed by `AccountClosureService` in Infrastructure, because it reaches every module that
+holds the person. It is the one operation that writes in several workspaces at once, and it does so in one database
+transaction: a request's workspace never changes, so each space gets a scope of its own set to it, whose context joins
+the account scope's connection and transaction (`SetDbConnection`, `UseTransactionAsync`) and keeps that space's query
+filter and write guard; a waiting sign-up's row lock and then the account's are taken first (the confirmation's order),
+and deferred constraint triggers refuse anything new for a closed account at commit (`identity.refuse_closed_account`), and the ending itself is `ClientProfileApplicationService`'s
+leave, run inside that transaction.
+
 Cookie authentication assumes the SPA and API are served under one public origin. The
 Angular development proxy and production Nginx configuration preserve that model.
 

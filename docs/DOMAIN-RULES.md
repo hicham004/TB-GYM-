@@ -336,6 +336,26 @@ sees every one, and the Coach those whose record names them (CLI-013), which is 
 Coach joined the house's team (decision 33; the Coach therefore joins before sign-up is opened). The trainee's own
 profile read says so too, so their screens name the coaching space, not a coach.
 
+**CLI-027** Closing an account (notes plan N9e; `AccountClosure`). A client closes their own TB Gym account from Me,
+or from Password and security once they have no coaching space left (`POST /api/auth/account/close`, their password
+asked again), or the platform admin closes one on the person's
+request with the day they asked (`POST /api/platform-admin/accounts/close`). An account that owns or coaches, or
+ever did, in any space, and a platform admin's, is not closed here. Closing is one transaction: every space they
+are a current client of is left as CLI-015's leave leaves it (the reason "The client closed their TB Gym account.",
+the coach and owner told by the leave notice, plans and programs closed, nothing refunded); every client record of
+theirs, current or ended, is anonymised once, the only change an ended record ever takes (the name "Closed
+account", a reserved address of its own id, every other personal field, the intake and health answers and the
+coach's notes emptied, a database check keeping it so); the invitations they accepted lose what the coach typed;
+their declared allergens are deleted; their progress photos are removed and their bytes fall due for the purge at
+once (MED-020); a sign-up still waiting is deleted; and the account is emptied as CLI-025 empties one (a reserved
+address, no name, phone or password, locked, every session and link spent), so it can never sign in again and its
+email may sign up as a new person. Kept under the anonymous record, as SYS-004 asks: payments, plans, workouts,
+records, maxes, check-ins, messages, notes, weigh-ins and every append-only history. One append-only
+`identity."AccountClosures"` row records whose account, when, who closed it and the counts; logs carry counts only.
+A closed account takes nothing new: the database refuses, at commit, an active membership, a client record or an
+upload for it, so a join, an invitation's acceptance or an upload under way when it closed cannot put the person back.
+How long each kind is kept is the lawyer's list (not built).
+
 ## 3. Products, enrollments, payments, programs, and access
 
 **SUB-001** Product/catalog identity, offer/price, client enrollment, payment operation,
@@ -2692,6 +2712,11 @@ the upload reads it once, so the unlocked pre-check that bounds the stream and t
 agree. Empty, or once the mark is cleared, the platform's allowance stands; no other workspace is ever read against
 it. A number below what the house already stores refuses its uploads with the same code and deletes nothing. The
 per-client progress-photo allowance stays the platform's.
+
+**MED-020** A closed account's photos (notes plan N9e, CLI-027). Closing an account tombstones every progress photo of
+the person, and anything they uploaded that never became one, with no recoverable window: the bytes and thumbnails
+fall due for the next purge sweep, a photo removed earlier falls due at once too, and the file name their device
+gave it is forgotten. The asset rows stay, as every purged asset's do.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

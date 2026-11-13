@@ -263,6 +263,42 @@ public sealed class ClientInvitation : TenantEntity
         AcceptedAtUtc = now;
     }
 
+    /// <summary>
+    /// When the person who accepted this invitation closed their TB Gym account and what the coach typed about them
+    /// was erased (CLI-027). Set once on an accepted invitation, never undone.
+    /// </summary>
+    public DateTimeOffset? AnonymisedAtUtc { get; private set; }
+
+    /// <summary>The reserved domain an anonymised invitation's address sits under: no mail can ever reach it.</summary>
+    public const string ClosedAddressDomain = "closed.tbgym.invalid";
+
+    /// <summary>
+    /// Erases the person from an invitation they accepted, once their account is closed (CLI-027): the name becomes
+    /// "Closed account", the address a reserved one unique to the invitation, and the phone and date of birth go. The
+    /// invitation stays, with its workspace, coach, dates and tokens, as the record of how they joined. The database
+    /// lets the address change this way alone: an invitation still pending is never retargeted.
+    /// </summary>
+    public void Anonymise(DateTimeOffset now)
+    {
+        if (AnonymisedAtUtc is not null)
+        {
+            return;
+        }
+
+        if (Status != InvitationStatus.Accepted)
+        {
+            throw new InvalidOperationException("Only an accepted invitation is anonymised.");
+        }
+
+        Email = $"closed-{Id:N}@{ClosedAddressDomain}";
+        NormalizedEmail = Email.ToUpperInvariant();
+        FirstName = "Closed";
+        LastName = "account";
+        PhoneNumber = null;
+        BirthDate = null;
+        AnonymisedAtUtc = now;
+    }
+
     public void Revoke(DateTimeOffset now)
     {
         if (Status == InvitationStatus.Revoked)

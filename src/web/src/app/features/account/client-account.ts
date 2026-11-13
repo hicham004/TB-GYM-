@@ -30,6 +30,7 @@ import { SegmentedControl, type SegmentOption } from '../../ui/segmented-control
 import { StatusPill } from '../../ui/status-pill';
 import { FOUNDING_COACH, FOUNDING_COACH_LINE } from '../billing/founding.models';
 import { InstallCard } from '../install/install-card';
+import { CloseAccount } from './close-account';
 
 /** What a control follows: the account's value, and whether a save is still on its way. */
 interface Behind<T> {
@@ -57,6 +58,7 @@ interface Behind<T> {
   imports: [
     Avatar,
     Button,
+    CloseAccount,
     Icon,
     InstallCard,
     NgTemplateOutlet,

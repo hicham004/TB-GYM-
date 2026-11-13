@@ -66,3 +66,8 @@ Mechanism:
   are kept but not shown there yet.
 - How Step 2 billing counts active clients is decided there.
 - Moving a client and their history to another workspace remains a later, separate feature.
+- Amended by notes plan N9e (CLI-027): an ended record takes exactly one more change, its anonymising when the
+  person closes their TB Gym account. The freeze trigger lets one update through that sets `AnonymisedAtUtc` and
+  leaves the record's ids, coach, flags, onboarding state and dates as they were; `CK_ClientProfiles_Anonymised`
+  keeps every personal field of an anonymised record empty or anonymous; after it nothing changes again. Closing
+  leaves each space through the same ending as a client's leave, inside one transaction across the spaces.

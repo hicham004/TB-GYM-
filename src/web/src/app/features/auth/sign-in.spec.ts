@@ -167,6 +167,15 @@ describe('SignIn', () => {
     expect(navigate).toHaveBeenCalledWith('/clients/42');
   });
 
+  it('says the account is closed after its person closed it, and nothing about an ended session', async () => {
+    const { host } = await render({}, '/auth/sign-in?reason=account-closed');
+
+    expect(host.querySelector('[data-account-closed]')?.textContent?.trim()).toBe(
+      'Your TB Gym account is closed and your details are erased.',
+    );
+    expect(host.textContent).not.toContain('You were signed out.');
+  });
+
   it('says nothing about an ended session to someone who simply came to sign in', async () => {
     const { host } = await render();
 

@@ -181,7 +181,11 @@ public static class DependencyInjection
         services.AddTraineeSignUps(configuration);
         services.AddScoped<ITeamApplicationService, TeamApplicationService>();
         services.AddScoped<IInvitationApplicationService, InvitationApplicationService>();
-        services.AddScoped<IClientProfileApplicationService, ClientProfileApplicationService>();
+        services.AddScoped<ClientProfileApplicationService>();
+        services.AddScoped<IClientProfileApplicationService>(provider =>
+            provider.GetRequiredService<ClientProfileApplicationService>());
+        // Closing an account (CLI-027): composed here because it reaches every module that holds the person.
+        services.AddScoped<IAccountClosureService, AccountClosureService>();
         services.AddScoped<ICoachOverviewService, CoachOverviewReader>();
         services.AddScoped<ICoachMonthService, CoachMonthReader>();
         services.AddScoped<ICoachingFeatureAccessService, CoachingFeatureAccessService>();

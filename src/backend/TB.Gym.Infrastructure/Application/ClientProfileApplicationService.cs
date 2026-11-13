@@ -239,7 +239,6 @@ internal sealed class ClientProfileApplicationService(
             {
                 dbContext.ChangeTracker.Clear();
                 await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-                var tenantId = tenantContext.TenantId;
                 var profile = await dbContext.ClientProfiles.SingleOrDefaultAsync(which, cancellationToken);
                 if (profile is null)
                 {
@@ -251,78 +250,14 @@ internal sealed class ClientProfileApplicationService(
                     return new ClientCommandResult(ClientCommandStatus.Conflict);
                 }
 
-                var now = clock.UtcNow;
-                var ownerUserId = await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
-                await CoachTeam.LockActiveStaffAsync(dbContext, tenantId, ownerUserId, cancellationToken);
                 dbContext.Entry(profile).Property(client => client.Version).OriginalValue = version;
-                var previousCoachUserId = profile.AssignedCoachUserId;
-                if (profile.AssignCoach(ownerUserId))
-                {
-                    dbContext.ClientCoachAssignments.Add(ClientCoachAssignment.ForChange(
-                        tenantId,
-                        profile.Id,
-                        await CoachTeam.NextAssignmentSequenceAsync(dbContext, profile.Id, cancellationToken),
-                        previousCoachUserId,
-                        ownerUserId,
-                        releasedByOwner ? ClientCoachAssignmentReason.Released : ClientCoachAssignmentReason.ClientLeft,
-                        null,
-                        now));
-                }
-
-                profile.Release(ownerUserId, now);
-                dbContext.ClientRelationshipEvents.Add(ClientRelationshipEvent.Create(
-                    tenantId,
-                    profile.Id,
-                    releasedByOwner ? ClientRelationshipEventType.Released : ClientRelationshipEventType.Left,
+                await EndInsideTransactionAsync(
+                    profile,
                     reason,
-                    now));
-
-                if (profile.UserId is { } clientUserId &&
-                    await dbContext.TenantMemberships.SingleOrDefaultAsync(
-                        membership =>
-                            membership.TenantId == tenantId &&
-                            membership.UserId == clientUserId &&
-                            membership.Role == TenantRole.Client,
-                        cancellationToken) is { } membership)
-                {
-                    if (membership.Status == MembershipStatus.Active)
-                    {
-                        membership.ReleaseClient();
-                    }
-
-                    if (releasedByOwner)
-                    {
-                        dbContext.WorkspaceNoticeMailRequests.Add(WorkspaceNoticeMailRequest.ClientReleased(
-                            tenantId,
-                            clientUserId,
-                            profile.Id,
-                            actorUserId,
-                            now));
-                    }
-                }
-
-                // A self-directed trainee's leaving tells no staff inbox (CLI-026); the history above keeps it.
-                if (!releasedByOwner && !profile.IsSelfDirected)
-                {
-                    var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
-                    foreach (var staffUserId in new[] { ownerUserId, previousCoachUserId }.Distinct())
-                    {
-                        WorkspaceRelationshipNotices.ClientLeft(dbContext, tenantId, timeZoneId, staffUserId, profile.Id, now);
-                    }
-                }
-
-                // The profile's own row lock, taken after the staff's as the save would take it, and before the plans are
-                // read: a Free row the Worker adds for this client (SUB-019) either commits first and is cancelled below,
-                // or waits for this commit and finds them gone.
-                await dbContext.Database.ExecuteSqlAsync(
-                    $"""SELECT 1 FROM clients."ClientProfiles" WHERE "Id" = {profile.Id} FOR UPDATE /* end-relationship */""",
-                    cancellationToken);
-                await CloseOpenCoachingAsync(
-                    profile.Id,
-                    await GetTenantTodayAsync(cancellationToken),
-                    actorUserId,
+                    kind,
                     releasedByOwner ? ReleaseClosureReason : LeaveClosureReason,
-                    now,
+                    actorUserId,
+                    clock.UtcNow,
                     cancellationToken);
 
                 await dbContext.SaveChangesAsync(cancellationToken);
@@ -343,6 +278,94 @@ internal sealed class ClientProfileApplicationService(
             dbContext.ChangeTracker.Clear();
             return new ClientCommandResult(ClientCommandStatus.Conflict);
         }
+    }
+
+    /// <summary>
+    /// The ending itself, inside a transaction its caller owns and saves: <see cref="EndRelationshipAsync"/> for a
+    /// release or a leave, and closing an account (CLI-027) for each space the person leaves by closing it.
+    /// </summary>
+    internal async Task EndInsideTransactionAsync(
+        ClientProfile profile,
+        string reason,
+        ClientDepartureKind kind,
+        string closureReason,
+        Guid actorUserId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var releasedByOwner = kind == ClientDepartureKind.ReleasedByOwner;
+        var tenantId = tenantContext.TenantId;
+        var ownerUserId = await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
+        await CoachTeam.LockActiveStaffAsync(dbContext, tenantId, ownerUserId, cancellationToken);
+        var previousCoachUserId = profile.AssignedCoachUserId;
+        if (profile.AssignCoach(ownerUserId))
+        {
+            dbContext.ClientCoachAssignments.Add(ClientCoachAssignment.ForChange(
+                tenantId,
+                profile.Id,
+                await CoachTeam.NextAssignmentSequenceAsync(dbContext, profile.Id, cancellationToken),
+                previousCoachUserId,
+                ownerUserId,
+                releasedByOwner ? ClientCoachAssignmentReason.Released : ClientCoachAssignmentReason.ClientLeft,
+                null,
+                now));
+        }
+
+        profile.Release(ownerUserId, now);
+        dbContext.ClientRelationshipEvents.Add(ClientRelationshipEvent.Create(
+            tenantId,
+            profile.Id,
+            releasedByOwner ? ClientRelationshipEventType.Released : ClientRelationshipEventType.Left,
+            reason,
+            now));
+
+        if (profile.UserId is { } clientUserId &&
+            await dbContext.TenantMemberships.SingleOrDefaultAsync(
+                membership =>
+                    membership.TenantId == tenantId &&
+                    membership.UserId == clientUserId &&
+                    membership.Role == TenantRole.Client,
+                cancellationToken) is { } membership)
+        {
+            if (membership.Status == MembershipStatus.Active)
+            {
+                membership.ReleaseClient();
+            }
+
+            if (releasedByOwner)
+            {
+                dbContext.WorkspaceNoticeMailRequests.Add(WorkspaceNoticeMailRequest.ClientReleased(
+                    tenantId,
+                    clientUserId,
+                    profile.Id,
+                    actorUserId,
+                    now));
+            }
+        }
+
+        // A self-directed trainee's leaving tells no staff inbox (CLI-026); the history above keeps it.
+        if (!releasedByOwner && !profile.IsSelfDirected)
+        {
+            var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
+            foreach (var staffUserId in new[] { ownerUserId, previousCoachUserId }.Distinct())
+            {
+                WorkspaceRelationshipNotices.ClientLeft(dbContext, tenantId, timeZoneId, staffUserId, profile.Id, now);
+            }
+        }
+
+        // The profile's own row lock, taken after the staff's as the save would take it, and before the plans are
+        // read: a Free row the Worker adds for this client (SUB-019) either commits first and is cancelled below,
+        // or waits for this commit and finds them gone.
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM clients."ClientProfiles" WHERE "Id" = {profile.Id} FOR UPDATE /* end-relationship */""",
+            cancellationToken);
+        await CloseOpenCoachingAsync(
+            profile.Id,
+            await GetTenantTodayAsync(cancellationToken),
+            actorUserId,
+            closureReason,
+            now,
+            cancellationToken);
     }
 
     /// <summary>

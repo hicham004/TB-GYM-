@@ -13,6 +13,9 @@ export const RECHECK_AFTER_HIDDEN_MS = 5 * 60_000;
 /** The `reason` the sign-in page reads to say why the person is there. */
 export const SESSION_ENDED_REASON = 'session-ended';
 
+/** The `reason` after a person closed their own account from Me (CLI-027). */
+export const ACCOUNT_CLOSED_REASON = 'account-closed';
+
 /**
  * The sign-in page, with the page to come back to. An invitation is never carried along: its token
  * would sit in a second address and history entry (WEB-10), and the link opens the page again.

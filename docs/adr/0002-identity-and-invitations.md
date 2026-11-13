@@ -54,6 +54,10 @@ relationship.
 - An invitation lookup never reveals memberships or profiles from another tenant.
 - The same identity can have multiple tenant-local client profiles without shared coaching
   data.
+- A client's account can be closed (notes plan N9e, CLI-027): it is emptied and locked, never deleted, and its
+  email is free for a new account, which is a new person with a new id. An accepted invitation's address is then
+  replaced by a reserved one, the one change of an invitation's address the database allows; a pending
+  invitation's address still never changes.
 - Development captures outbound account and invitation emails for testing. The production provider
   sits behind the same seam and is configured before production launch; see ADR 0022.
 - Since Phase 6B-3C the token is no longer held on the invitation at all. It is minted at

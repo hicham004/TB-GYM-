@@ -93,6 +93,9 @@ public sealed partial class Phase3TrainingWorkflowTests
             ("PublishCheckInFormVersion", RateLimitPolicies.SensitiveWrite),
             ("SendConversationMessage", RateLimitPolicies.SensitiveWrite),
             ("ReleaseClient", RateLimitPolicies.SensitiveWrite),
+            // Closing an account, by its person or by the platform admin on their request (notes plan N9e).
+            ("CloseOwnAccount", RateLimitPolicies.SensitiveWrite),
+            ("CloseAccountOnRequest", RateLimitPolicies.SensitiveWrite),
             ("RecordOwnProgressPhoto", RateLimitPolicies.MediaUpload),
             ("Login", RateLimitPolicies.PublicAuthentication),
         })

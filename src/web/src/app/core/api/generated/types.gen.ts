@@ -16,6 +16,14 @@ export type AcceptLegalDocumentRequest = {
   tenantId: null | string;
 };
 
+export type AccountClosureView = {
+  closedAtUtc: string;
+  requestedOn: null | string;
+  spacesLeft: number | string;
+  recordsAnonymised: number | string;
+  photosRemoved: number | string;
+};
+
 export type AcknowledgeRealtimeEventsRequest = {
   eventSequences: Array<number | string>;
 };
@@ -1226,6 +1234,15 @@ export type ClientWorkoutView = {
   executionVersion: null | number | string;
   startedAtUtc?: null | string;
   durationSeconds?: null | number | string;
+};
+
+export type CloseAccountOnRequestRequest = {
+  email: null | string;
+  requestedOn: null | string;
+};
+
+export type CloseOwnAccountRequest = {
+  password: null | string;
 };
 
 export type CoachActivityItemView = {
@@ -5126,6 +5143,74 @@ export type GetSystemStatusResponses = {
 };
 
 export type GetSystemStatusResponse = GetSystemStatusResponses[keyof GetSystemStatusResponses];
+
+export type CloseOwnAccountData = {
+  body: CloseOwnAccountRequest;
+  path?: never;
+  query?: never;
+  url: '/api/auth/account/close';
+};
+
+export type CloseOwnAccountErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Unauthorized
+   */
+  401: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CloseOwnAccountError = CloseOwnAccountErrors[keyof CloseOwnAccountErrors];
+
+export type CloseOwnAccountResponses = {
+  /**
+   * No Content
+   */
+  204: void;
+};
+
+export type CloseOwnAccountResponse = CloseOwnAccountResponses[keyof CloseOwnAccountResponses];
+
+export type CloseAccountOnRequestData = {
+  body: CloseAccountOnRequestRequest;
+  path?: never;
+  query?: never;
+  url: '/api/platform-admin/accounts/close';
+};
+
+export type CloseAccountOnRequestErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CloseAccountOnRequestError =
+  CloseAccountOnRequestErrors[keyof CloseAccountOnRequestErrors];
+
+export type CloseAccountOnRequestResponses = {
+  /**
+   * OK
+   */
+  200: AccountClosureView;
+};
+
+export type CloseAccountOnRequestResponse =
+  CloseAccountOnRequestResponses[keyof CloseAccountOnRequestResponses];
 
 export type RegisterCoachData = {
   body: RegisterCoachRequest;

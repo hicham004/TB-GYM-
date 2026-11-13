@@ -333,6 +333,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertStatusAsync(
             await anonymous.PutAsJsonAsync("/api/platform-admin/house/settings/SignUpsPerWeek", new { value = "5", expectedVersion = 0 }),
             HttpStatusCode.Unauthorized);
+        // Closing an account on its person's request (notes plan N9e) too.
+        await AssertStatusAsync(
+            await anonymous.PostAsJsonAsync(
+                "/api/platform-admin/accounts/close",
+                new { email = "authz-client@example.test", requestedOn = new DateOnly(2026, 11, 1) }),
+            HttpStatusCode.Unauthorized);
 
         using var owner = CreateClient();
         var workspaceId = await RegisterCoachAsync(owner, "authz-owner@example.test", "Authz Owner", "Authz Gym");
@@ -386,6 +392,11 @@ public sealed partial class Phase3TrainingWorkflowTests
             await AssertStatusAsync(await caller.GetAsync("/api/platform-admin/house"), HttpStatusCode.Forbidden);
             await AssertStatusAsync(
                 await caller.PutAsJsonAsync("/api/platform-admin/house/settings/SignUpsPerWeek", new { value = "5", expectedVersion = 0 }),
+                HttpStatusCode.Forbidden);
+            await AssertStatusAsync(
+                await caller.PostAsJsonAsync(
+                    "/api/platform-admin/accounts/close",
+                    new { email = "authz-client@example.test", requestedOn = new DateOnly(2026, 11, 1) }),
                 HttpStatusCode.Forbidden);
         }
 

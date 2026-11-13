@@ -1243,7 +1243,7 @@ public sealed class N9a1HouseSignUpDomainTests
             "Invitation 1, Reassigned 2, CoachRemoved 3, Migration 4, Released 5, CoachResigned 6, ClientLeft 7, SignUp 8",
             string.Join(", ", Enum.GetValues<ClientCoachAssignmentReason>().Select(reason => $"{reason} {(int)reason}")));
         Assert.AreEqual(
-            "InvitationAcceptance 1, Client 2, Coach 3, OnboardingCompletion 4, SignUp 5",
+            "InvitationAcceptance 1, Client 2, Coach 3, OnboardingCompletion 4, SignUp 5, AccountClosure 6",
             string.Join(", ", Enum.GetValues<ClientChangeSource>().Select(source => $"{source} {(int)source}")));
 
         static ClientCoachAssignment Change(ClientCoachAssignmentReason reason) =>

@@ -27,6 +27,7 @@ import { Icon } from '../../ui/icon';
 import { PasswordReveal } from '../../ui/password-reveal';
 import { UiToast } from '../../ui/toast';
 import { SettingsFrame } from '../settings/settings-frame';
+import { CloseAccount } from './close-account';
 import { LeaveWorkspace } from './leave-workspace';
 
 type PasswordField = 'current' | 'next' | 'confirm';
@@ -51,6 +52,7 @@ const EMPTY: PasswordDraft = { current: '', next: '', confirm: '' };
   selector: 'app-account-security',
   imports: [
     Button,
+    CloseAccount,
     Control,
     Field,
     Icon,
@@ -76,6 +78,8 @@ export class AccountSecurity implements HoldsUnsavedWork {
   private readonly confirmDialog = viewChild.required<TemplateRef<unknown>>('confirmDialog');
 
   protected readonly isClient = this.tenants.isClient;
+  /** No coaching space left, so no Me: closing the account is offered here (notes plan N9e). */
+  protected readonly noSpace = computed(() => this.tenants.memberships().length === 0);
   protected readonly closeLabel = $localize`Close`;
   protected readonly draft = signal<PasswordDraft>(EMPTY);
   protected readonly changing = signal(false);

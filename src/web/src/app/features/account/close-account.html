@@ -1,0 +1,89 @@
+@if (canClose()) {
+  @if (framed()) {
+    <!-- On Password and security, for someone with no coaching space left. -->
+    <section class="panel" aria-labelledby="close-account-heading">
+      <h2 id="close-account-heading" i18n>Close your account</h2>
+      <p class="quiet" i18n>Erase your details from TB Gym for good. You can’t undo this.</p>
+      <div class="actions">
+        <button appButton variant="outlined" type="button" (click)="open()" data-close-account i18n>
+          Close your TB Gym account
+        </button>
+      </div>
+    </section>
+  } @else {
+    <section class="close-account" aria-labelledby="close-account-heading">
+      <h2 id="close-account-heading" class="close-title" i18n>Close your account</h2>
+      <p class="close-lead" i18n>
+        Leave every coaching space and erase your details from TB Gym. You can’t undo this.
+      </p>
+      <button
+        appButton
+        variant="text"
+        type="button"
+        class="close-open"
+        (click)="open()"
+        data-close-account
+        i18n
+      >
+        Close your TB Gym account
+      </button>
+    </section>
+  }
+}
+
+<!-- Closing is confirmed with the password first. Only "Close my account" calls the API. -->
+<ng-template #closeDialog>
+  <form [id]="formId" class="close-form" novalidate (submit)="$event.preventDefault(); close()">
+    <p class="close-text" i18n>
+      You leave every coaching space you’re part of, and any coach who coaches you is told you left.
+    </p>
+    <div class="close-split">
+      <p class="close-text">
+        <strong class="close-label" i18n>Erased</strong>
+        <span i18n
+          >Your name, email, phone and date of birth, everything you answered when you joined,
+          health details included, and your progress photos.</span
+        >
+      </p>
+      <p class="close-text">
+        <strong class="close-label" i18n>Kept, without your name</strong>
+        <span i18n
+          >Your plans and payments, your workouts and records, the figures your meal plans were
+          worked out from, and what you logged or wrote: weigh-ins, check-ins, notes and
+          messages.</span
+        >
+      </p>
+    </div>
+    <p class="close-text" i18n>
+      You can’t undo this. You can sign up again with the same email later, as a new person.
+    </p>
+    <app-field
+      label="Your password"
+      i18n-label
+      [errors]="passwordError() ? [passwordError()!] : null"
+    >
+      <app-password-reveal>
+        <input
+          appControl
+          id="close-account-password"
+          name="current-password"
+          type="password"
+          autocomplete="current-password"
+          [value]="password()"
+          (input)="typed($any($event.target).value)"
+        />
+      </app-password-reveal>
+    </app-field>
+    <p class="close-error" role="alert">{{ error() }}</p>
+  </form>
+  <ng-template appModalFooter>
+    <button appButton variant="text" type="button" (click)="cancel()" i18n>Keep my account</button>
+    <button appButton type="submit" [attr.form]="formId" [loading]="closing()">
+      @if (closing()) {
+        <ng-container i18n>Closing…</ng-container>
+      } @else {
+        <ng-container i18n>Close my account</ng-container>
+      }
+    </button>
+  </ng-template>
+</ng-template>

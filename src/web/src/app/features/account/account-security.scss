@@ -6,6 +6,11 @@
   flex-direction: column;
   gap: 1.125rem;
   max-inline-size: 48rem;
+
+  // Leave draws nothing for an owner or for someone with no space: no empty slot before Close your account.
+  > app-leave-workspace:empty {
+    display: none;
+  }
 }
 
 .email {

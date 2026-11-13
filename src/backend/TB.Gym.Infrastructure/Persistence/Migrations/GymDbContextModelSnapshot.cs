@@ -904,6 +904,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<DateTimeOffset?>("AnonymisedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("AssignedCoachUserId")
                         .HasColumnType("uuid");
 
@@ -1049,9 +1052,11 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ClientProfiles", "clients", t =>
                         {
+                            t.HasCheckConstraint("CK_ClientProfiles_Anonymised", "\"AnonymisedAtUtc\" IS NULL OR (\"ReleasedAtUtc\" IS NOT NULL AND \"FirstName\" = 'Closed' AND \"LastName\" = 'account' AND \"Email\" = 'closed-' || replace(\"Id\"::text, '-', '') || '@closed.tbgym.invalid' AND \"NormalizedEmail\" = upper(\"Email\") AND \"PhoneNumber\" IS NULL AND \"BirthDate\" IS NULL AND \"HeightCentimeters\" IS NULL AND \"HeightEnteredValue\" IS NULL AND \"HeightEnteredUnit\" IS NULL AND \"WorkType\" IS NULL AND \"AverageDailySteps\" IS NULL AND \"TrainingBackground\" IS NULL AND \"FoodPreferences\" IS NULL AND \"FoodAversions\" IS NULL AND \"Goals\" IS NULL AND \"Allergies\" IS NULL AND \"Medications\" IS NULL AND \"PreviousInjuries\" IS NULL AND \"CoachNotes\" IS NULL)");
+
                             t.HasCheckConstraint("CK_ClientProfiles_AverageDailySteps", "\"AverageDailySteps\" IS NULL OR (\"AverageDailySteps\" >= 0 AND \"AverageDailySteps\" <= 100000)");
 
-                            t.HasCheckConstraint("CK_ClientProfiles_CompletedOnboarding", "\"OnboardingStatus\" <> 'Completed' OR (\"BirthDate\" IS NOT NULL AND \"HeightCentimeters\" IS NOT NULL AND \"Goals\" IS NOT NULL AND \"OnboardingCompletedAtUtc\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_ClientProfiles_CompletedOnboarding", "\"OnboardingStatus\" <> 'Completed' OR \"AnonymisedAtUtc\" IS NOT NULL OR (\"BirthDate\" IS NOT NULL AND \"HeightCentimeters\" IS NOT NULL AND \"Goals\" IS NOT NULL AND \"OnboardingCompletedAtUtc\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_ClientProfiles_HeightCentimeters", "\"HeightCentimeters\" IS NULL OR (\"HeightCentimeters\" >= 50 AND \"HeightCentimeters\" <= 300)");
                         });
@@ -1707,6 +1712,75 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Identity.AccountClosure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ClosedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PhotosRemoved")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RecordsAnonymised")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("RequestedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("SpacesLeft")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClosedByUserId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("AccountClosures", "identity", t =>
+                        {
+                            t.HasCheckConstraint("CK_AccountClosures_Counts", "\"SpacesLeft\" >= 0 AND \"RecordsAnonymised\" >= 0 AND \"PhotosRemoved\" >= 0");
+
+                            t.HasCheckConstraint("CK_AccountClosures_Source", "(\"Source\" = 'Self' AND \"ClosedByUserId\" = \"UserId\" AND \"RequestedOn\" IS NULL) OR (\"Source\" = 'OnRequest' AND \"ClosedByUserId\" <> \"UserId\" AND \"RequestedOn\" IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Identity.ApplicationUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2097,6 +2171,9 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("AcceptedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("AnonymisedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("AssignedCoachUserId")
                         .HasColumnType("uuid");
 
@@ -2189,6 +2266,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.ToTable("ClientInvitations", "invitations", t =>
                         {
                             t.HasCheckConstraint("CK_ClientInvitations_AcceptedState", "\"Status\" <> 'Accepted' OR (\"AcceptedByUserId\" IS NOT NULL AND \"AcceptedAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ClientInvitations_Anonymised", "\"AnonymisedAtUtc\" IS NULL OR (\"Status\" = 'Accepted' AND \"FirstName\" = 'Closed' AND \"LastName\" = 'account' AND \"Email\" = 'closed-' || replace(\"Id\"::text, '-', '') || '@closed.tbgym.invalid' AND \"PhoneNumber\" IS NULL AND \"BirthDate\" IS NULL)");
 
                             t.HasCheckConstraint("CK_ClientInvitations_Kind", "\"Kind\" = 'Client' OR (\"Kind\" = 'Coach' AND \"AssignedCoachUserId\" IS NULL AND \"PhoneNumber\" IS NULL AND \"BirthDate\" IS NULL)");
 
@@ -13139,6 +13218,21 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("SubjectUserId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Identity.AccountClosure", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ClosedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Identity.CoachCertificateLine", b =>

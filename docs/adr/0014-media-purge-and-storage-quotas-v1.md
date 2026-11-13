@@ -112,6 +112,9 @@ a remote object store a slow call would hold one workspace's claimed rows for th
 what `Media:PurgeBatchSize` bounds. If storage latency ever makes that uncomfortable, the fix is to
 claim and finalise in separate transactions, not to widen the batch.
 
+A closed account's photos skip the recoverable window (notes plan N9e, MED-020): closing tombstones them due now,
+so the next sweep purges their bytes and thumbnails as it purges any other due asset.
+
 Deferred: a coach-facing view of storage usage and what is pending deletion, alerting on assets stuck
 pending after repeated failures, an administrative force-purge, restoring a tombstoned asset before
 its retention elapses, and provider-level inventory reconciliation for objects created outside the

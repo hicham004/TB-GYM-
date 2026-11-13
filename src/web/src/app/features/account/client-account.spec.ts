@@ -503,6 +503,19 @@ describe('ClientAccount', () => {
     expect(session.signOut).toHaveBeenCalledTimes(1);
   });
 
+  it('ends with the way to close the account, under Sign out and never as a link row', async () => {
+    const { host } = await render();
+
+    const signOut = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Sign out',
+    );
+    const close = host.querySelector('app-close-account [data-close-account]');
+    expect(close?.textContent?.trim()).toBe('Close your TB Gym account');
+    expect(
+      signOut!.compareDocumentPosition(close!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('links platform billing and the legal documents only for a platform admin', async () => {
     const admin = await render({ roles: ['PlatformAdmin'] });
     expect(admin.host.querySelector('a[href="/admin/billing"]')).not.toBeNull();

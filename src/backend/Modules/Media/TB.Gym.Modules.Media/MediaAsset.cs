@@ -275,6 +275,31 @@ public sealed class MediaAsset : TenantEntity
     }
 
     /// <summary>
+    /// The person this photo shows closed their TB Gym account (CLI-027, MED-020): the photo is tombstoned if it is not
+    /// yet, its bytes fall due for the purge at once instead of after the recoverable window, and the file name their
+    /// device gave it is forgotten. A photo already purged has no bytes left, so only its name goes.
+    /// </summary>
+    public void PurgeForClosedAccount(DateTimeOffset now)
+    {
+        OriginalFileName = null;
+        if (Status == MediaAssetStatus.Purged)
+        {
+            return;
+        }
+
+        if (Status != MediaAssetStatus.Tombstoned)
+        {
+            Status = MediaAssetStatus.Tombstoned;
+            TombstonedAtUtc = now;
+        }
+
+        if (PurgeAfterUtc is null || PurgeAfterUtc > now)
+        {
+            PurgeAfterUtc = now;
+        }
+    }
+
+    /// <summary>
     /// A video link removed from the library comes back when the coach adds the same video again
     /// (MED-015). It has no bytes, so nothing was scheduled for deletion and nothing is lost.
     /// </summary>

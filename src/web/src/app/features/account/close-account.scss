@@ -1,0 +1,68 @@
+// Closing your account (notes plan N9e), the last thing on Me or a panel on Password and security, and its
+// dialog. Brand v2 tokens only.
+@use '../settings/settings-page';
+
+:host {
+  display: block;
+}
+
+.close-account {
+  border-block-start: 1px solid var(--tb-line);
+  display: grid;
+  gap: var(--space-4);
+  padding-block-start: var(--space-16);
+}
+
+.close-title {
+  color: var(--tb-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  margin: 0;
+  padding-inline: var(--space-4);
+  text-transform: uppercase;
+}
+
+.close-lead {
+  color: var(--tb-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding-inline: var(--space-4);
+}
+
+.close-open {
+  justify-self: start;
+}
+
+.close-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.close-split {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.close-text {
+  color: var(--tb-ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.close-label {
+  display: block;
+  font-weight: 600;
+}
+
+.close-error {
+  color: var(--tb-danger);
+  font-size: 0.875rem;
+  margin: 0;
+
+  &:empty {
+    display: none;
+  }
+}

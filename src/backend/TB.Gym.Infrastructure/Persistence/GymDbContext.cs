@@ -338,6 +338,7 @@ public sealed partial class GymDbContext(
         ConfigureClients(builder);
         ConfigureHouse(builder);
         ConfigureInvitations(builder);
+        ConfigureAccountClosure(builder);
         ConfigureActionMail(builder);
         ConfigureProgress(builder);
         ConfigureCommercial(builder);
@@ -545,7 +546,7 @@ public sealed partial class GymDbContext(
                     "\"AverageDailySteps\" IS NULL OR (\"AverageDailySteps\" >= 0 AND \"AverageDailySteps\" <= 100000)");
                 table.HasCheckConstraint(
                     "CK_ClientProfiles_CompletedOnboarding",
-                    "\"OnboardingStatus\" <> 'Completed' OR (\"BirthDate\" IS NOT NULL AND \"HeightCentimeters\" IS NOT NULL AND \"Goals\" IS NOT NULL AND \"OnboardingCompletedAtUtc\" IS NOT NULL)");
+                    "\"OnboardingStatus\" <> 'Completed' OR \"AnonymisedAtUtc\" IS NOT NULL OR (\"BirthDate\" IS NOT NULL AND \"HeightCentimeters\" IS NOT NULL AND \"Goals\" IS NOT NULL AND \"OnboardingCompletedAtUtc\" IS NOT NULL)");
             });
             ConfigureAuditable(entity);
         });
@@ -1054,6 +1055,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<ClientRelationshipEvent>("Client relationship events are append-only.");
         RejectAppendOnlyMutations<ClientCoachAssignment>("Client coach assignment history is append-only.");
         RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");
+        RejectAppendOnlyMutations<AccountClosure>("Account closures are append-only.");
         RejectLegalDocumentWordChanges();
         RejectCoachCertificateLineMutations();
         RejectAppendOnlyMutations<StrengthMaxRecord>("Strength max history is append-only.");

@@ -101,6 +101,26 @@ public sealed class ClientProfile : TenantEntity
 
     public bool IsReleased => ReleasedAtUtc is not null;
 
+    /// <summary>
+    /// When the person's account was closed and this record anonymised (CLI-027). Set once, on an ended record, and
+    /// never undone: a database check keeps every personal field of an anonymised record empty or anonymous.
+    /// </summary>
+    public DateTimeOffset? AnonymisedAtUtc { get; private set; }
+
+    public bool IsAnonymised => AnonymisedAtUtc is not null;
+
+    /// <summary>The name every anonymised record carries, so the coach's lists and notices read "Closed account".</summary>
+    public const string ClosedFirstName = "Closed";
+
+    /// <inheritdoc cref="ClosedFirstName"/>
+    public const string ClosedLastName = "account";
+
+    /// <summary>The reserved domain an anonymised record's address sits under: no mail can ever reach it.</summary>
+    public const string ClosedAddressDomain = "closed.tbgym.invalid";
+
+    /// <summary>The address an anonymised record carries: unique to the record, and naming nobody.</summary>
+    public static string ClosedAddress(Guid clientProfileId) => $"closed-{clientProfileId:N}@{ClosedAddressDomain}";
+
     public static ClientProfile CreateForAcceptedInvitation(
         Guid tenantId,
         Guid userId,
@@ -334,6 +354,72 @@ public sealed class ClientProfile : TenantEntity
 
         IsCoachBlocked = false;
         return true;
+    }
+
+    /// <summary>
+    /// Erases the person from this ended record when they close their TB Gym account (CLI-027): the name becomes
+    /// "Closed account", the address a reserved one naming nobody, and every other personal field, the intake
+    /// answers, the health fields and the coach's notes, is emptied. The record itself stays, with its ids, its
+    /// coach, its dates and every fact hung on it (plans, payments, workouts, records), so nothing paid or done
+    /// is deleted (SYS-004).
+    /// </summary>
+    /// <returns>The fields that changed, for the profile's change history; empty when it was anonymised already.</returns>
+    public IReadOnlyList<string> Anonymise(DateTimeOffset now)
+    {
+        if (!IsReleased)
+        {
+            throw new InvalidOperationException("A client record is ended before it is anonymised.");
+        }
+
+        if (IsAnonymised)
+        {
+            return [];
+        }
+
+        var changed = new List<string>();
+        var address = ClosedAddress(Id);
+        SetIfChanged(nameof(FirstName), FirstName, ClosedFirstName, value => FirstName = value!, changed);
+        SetIfChanged(nameof(LastName), LastName, ClosedLastName, value => LastName = value!, changed);
+        if (Email != address)
+        {
+            Email = address;
+            NormalizedEmail = address.ToUpperInvariant();
+            changed.Add(nameof(Email));
+        }
+
+        SetIfChanged(nameof(PhoneNumber), PhoneNumber, null, value => PhoneNumber = value, changed);
+        if (BirthDate is not null)
+        {
+            BirthDate = null;
+            changed.Add(nameof(BirthDate));
+        }
+
+        if (HeightCentimeters is not null || HeightEnteredValue is not null || HeightEnteredUnit is not null)
+        {
+            HeightCentimeters = null;
+            HeightEnteredValue = null;
+            HeightEnteredUnit = null;
+            changed.Add("Height");
+        }
+
+        SetIfChanged(nameof(WorkType), WorkType, null, value => WorkType = value, changed);
+        if (AverageDailySteps is not null)
+        {
+            AverageDailySteps = null;
+            changed.Add(nameof(AverageDailySteps));
+        }
+
+        SetIfChanged(nameof(TrainingBackground), TrainingBackground, null, value => TrainingBackground = value, changed);
+        SetIfChanged(nameof(FoodPreferences), FoodPreferences, null, value => FoodPreferences = value, changed);
+        SetIfChanged(nameof(FoodAversions), FoodAversions, null, value => FoodAversions = value, changed);
+        SetIfChanged(nameof(Goals), Goals, null, value => Goals = value, changed);
+        SetIfChanged(nameof(Allergies), Allergies, null, value => Allergies = value, changed);
+        SetIfChanged(nameof(Medications), Medications, null, value => Medications = value, changed);
+        SetIfChanged(nameof(PreviousInjuries), PreviousInjuries, null, value => PreviousInjuries = value, changed);
+        SetIfChanged(nameof(CoachNotes), CoachNotes, null, value => CoachNotes = value, changed);
+        AnonymisedAtUtc = now;
+        changed.Add(nameof(AnonymisedAtUtc));
+        return changed;
     }
 
     private void EnsureNotReleased()
@@ -573,6 +659,9 @@ public enum ClientChangeSource
 
     /// <summary>The person signed up into the house with no invitation (CLI-024).</summary>
     SignUp = 5,
+
+    /// <summary>The person closed their TB Gym account and the record was anonymised (CLI-027).</summary>
+    AccountClosure = 6,
 }
 
 public enum ClientRelationshipEventType

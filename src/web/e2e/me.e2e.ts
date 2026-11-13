@@ -707,13 +707,170 @@ test('Me reflows at 200% text without sideways scrolling', async ({ page }) => {
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
   await expectNoHorizontalOverflow(page);
-  const signOut = page.getByRole('button', { name: 'Sign out' });
-  await signOut.scrollIntoViewIfNeeded();
-  await expect(signOut).toBeVisible();
-  // The tab bar sticks to the bottom, so the last control must end above it.
-  const box = await signOut.boundingBox();
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  // Closing the account is the last control (notes plan N9e). The tab bar sticks to the bottom, so it
+  // must end above it.
+  const last = page.getByRole('button', { name: 'Close your TB Gym account' });
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeVisible();
+  const box = await last.boundingBox();
   const tabs = await page.locator('app-client-tabs').boundingBox();
   expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual((tabs?.y ?? 0) + 1);
+});
+
+// ---------- closing the account (notes plan N9e) ----------
+
+/** Me with the close route answered: a wrong password first when asked, then closed; the session ends with it. */
+async function openMeToClose(
+  page: Page,
+  options: { width?: number; height?: number; wrongPasswordFirst?: boolean } = {},
+) {
+  const sent: string[] = [];
+  let closed = false;
+  await openMe(page, {
+    width: options.width,
+    height: options.height,
+    extra: {
+      'GET /api/auth/me': (route) => json(route, 200, closed ? null : MAYA),
+      'POST /api/auth/account/close': (route) => {
+        const { password } = route.request().postDataJSON() as { password: string };
+        sent.push(password);
+        if (options.wrongPasswordFirst && sent.length === 1) {
+          return json(route, 400, {
+            title: 'One or more validation errors occurred.',
+            status: 400,
+            errors: { password: ['That password isn’t right.'] },
+          });
+        }
+        closed = true;
+        return route.fulfill({ status: 204 });
+      },
+    },
+  });
+  return sent;
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`Close account at ${width}px says what goes and what stays, then asks for the password`, async ({
+    page,
+  }) => {
+    await openMeToClose(page, { width, height });
+    const open = page.getByRole('button', { name: 'Close your TB Gym account' });
+    await open.scrollIntoViewIfNeeded();
+    await expect(page.getByRole('heading', { name: 'Close your account', level: 2 })).toBeVisible();
+    await page.screenshot({ path: `test-results/n9e-me-close-${width}.png`, fullPage: true });
+
+    await open.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Close your TB Gym account?' })).toBeVisible();
+    await expect(dialog.getByText('Kept, without your name')).toBeVisible();
+    await expect(
+      dialog.getByText('health details included, and your progress photos'),
+    ).toBeVisible();
+    await expect(dialog.getByLabel('Your password')).toHaveAttribute(
+      'autocomplete',
+      'current-password',
+    );
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: `test-results/n9e-me-close-dialog-${width}.png` });
+
+    await dialog.getByRole('button', { name: 'Keep my account' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(open).toBeFocused();
+  });
+}
+
+test.describe('when the first password is wrong', () => {
+  test.use({ allowedConsoleErrors: { patterns: [/status of 400 .*\/api\/auth\/account\/close/] } });
+
+  test('a wrong password is said under its field, and the right one closes the account and leaves for sign-in', async ({
+    page,
+  }) => {
+    const sent = await openMeToClose(page, { wrongPasswordFirst: true });
+    await page.getByRole('button', { name: 'Close your TB Gym account' }).click();
+    const dialog = page.getByRole('dialog');
+
+    await dialog.getByRole('button', { name: 'Close my account' }).click();
+    await expect(dialog.getByText('Type your password to close your account.')).toBeVisible();
+    expect(sent).toEqual([]);
+
+    await dialog.getByLabel('Your password').fill('not-it');
+    await dialog.getByRole('button', { name: 'Close my account' }).click();
+    await expect(
+      dialog.getByText('That password isn’t right. Type the one you sign in with.'),
+    ).toBeVisible();
+    await expectNoAxeViolations(page);
+
+    await dialog.getByLabel('Your password').fill('Correct horse 12!');
+    await dialog.getByRole('button', { name: 'Close my account' }).click();
+    await expect(page).toHaveURL(/\/auth\/sign-in\?reason=account-closed/);
+    await expect(
+      page.getByText('Your TB Gym account is closed and your details are erased.'),
+    ).toBeVisible();
+    await expect(page.getByText('You were signed out.')).toHaveCount(0);
+    expect(sent).toEqual(['not-it', 'Correct horse 12!']);
+    await expectNoAxeViolations(page);
+  });
+});
+
+test('someone with no coaching space left closes their account from Password and security', async ({
+  page,
+}) => {
+  let closed = false;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockSession(page, {
+    memberships: [],
+    user: MAYA,
+    extra: {
+      'GET /api/auth/me': (route) => json(route, 200, closed ? null : MAYA),
+      'POST /api/auth/account/close': (route) => {
+        closed = true;
+        return route.fulfill({ status: 204 });
+      },
+    },
+  });
+  await page.goto('/account/security');
+  await expect(
+    page.getByRole('heading', { name: 'Password and security', level: 1 }),
+  ).toBeVisible();
+  const panel = page.getByRole('region', { name: 'Close your account' });
+  await expect(panel.getByText('Erase your details from TB Gym for good.')).toBeVisible();
+  await waitForFonts(page);
+  await expectNoAxeViolations(page);
+  await page.screenshot({ path: 'test-results/n9e-security-close-390.png', fullPage: true });
+
+  await panel.getByRole('button', { name: 'Close your TB Gym account' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Your password').fill('Correct horse 12!');
+  await dialog.getByRole('button', { name: 'Close my account' }).click();
+  await expect(page).toHaveURL(/\/auth\/sign-in\?reason=account-closed/);
+  await expect(
+    page.getByText('Your TB Gym account is closed and your details are erased.'),
+  ).toBeVisible();
+});
+
+test('someone who also coaches a space is not offered closing on Me', async ({ page }) => {
+  await openMe(page, { memberships: [ATLAS, { ...BARBELL, role: 'Coach' }] });
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close your TB Gym account' })).toHaveCount(0);
+});
+
+test('the closing dialog reflows at 200% text without sideways scrolling', async ({ page }) => {
+  await openMeToClose(page);
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await page.getByRole('button', { name: 'Close your TB Gym account' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Close your TB Gym account?' })).toBeVisible();
+
+  await expectNoHorizontalOverflow(page);
+  const submit = dialog.getByRole('button', { name: 'Close my account' });
+  await submit.scrollIntoViewIfNeeded();
+  await expect(submit).toBeVisible();
+  await page.screenshot({ path: 'test-results/n9e-me-close-dialog-200.png' });
 });
 
 test('Sign out leaves for the sign-in page', async ({ page }) => {
