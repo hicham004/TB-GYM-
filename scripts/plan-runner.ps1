@@ -17,8 +17,8 @@ runs the section 0 table of docs/UI-REDESIGN-PLAN.md, which the owner marked com
 Each step is a new `claude -p` chat on -Model at -Effort: Fable 5.2 at extra-high effort since
 2026-11-12 (the owner's word; Opus 5.5 at max effort before), unless -RowModels names another
 model for its row (the owner put R6.2 on Fable on 2026-10-11). A chat on -FallbackModel runs at
--FallbackEffort: Opus 5.5 at max effort once Fable's weekly limit is used up (the owner,
-2026-11-12). It gets the plan's opening in $planPrompts plus the unattended-run rules in
+-FallbackEffort: Opus 5.5 once Fable's weekly limit is used up, at extra-high effort since
+2026-11-13 (max the day before; the owner's word both times). It gets the plan's opening in $planPrompts plus the unattended-run rules in
 $sharedRules below. The owner decided on
 2026-10-11, and again for the audit on 2026-10-19, that such a chat commits its own step once
 every check AGENTS.md asks for is green. A chat never pushes: a deny rule blocks git push.
@@ -86,10 +86,10 @@ param(
     # After a weekly limit the chat carries on with this model, and so do later rows until that
     # limit resets (the owner, 2026-10-12). An empty string stops the runner instead.
     [string]$FallbackModel = 'claude-opus-5-5',
-    # The effort of a chat on -FallbackModel (the owner, 2026-11-12: Opus 5.5 at max effort once
-    # Fable's weekly limit is used up).
+    # The effort of a chat on -FallbackModel once Fable's weekly limit is used up (the owner: max on
+    # 2026-11-12, extra-high from 2026-11-13 to save tokens now that the rows are written).
     [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
-    [string]$FallbackEffort = 'max',
+    [string]$FallbackEffort = 'xhigh',
     # A weekly limit no other model can take over from: wait for its reset, or stop the run.
     [ValidateSet('wait', 'stop')]
     [string]$OnWeeklyLimit = 'wait',

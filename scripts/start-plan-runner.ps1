@@ -8,7 +8,7 @@ under the current user with no time limit, then starts it. The runner builds the
 (by default the notes plan, -Plan notes, since 2026-11-05; -Plan motion, -Plan critique, -Plan audit
 and -Plan ui are finished) one fresh
 chat at a time (on -Model at -Effort: Fable 5.2 at extra-high effort, the owner's word of 2026-11-12;
-once its weekly limit is used up, Opus 5.5 at -FallbackEffort, max, the owner's word that afternoon)
+once its weekly limit is used up, Opus 5.5 at -FallbackEffort, extra-high since 2026-11-13, max before)
 until every row is Done or waits for the owner, pushing each row that ends Done
 (-NoPush keeps commits local) and waiting out a used-up weekly limit (-OnWeeklyLimit stop ends the
 run instead), the owner's choices of 2026-10-29. It stops early at the first gate, Optional row or
@@ -42,9 +42,10 @@ param(
     [string]$Model = 'claude-fable-5-2',
     [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
     [string]$Effort = 'xhigh',
-    # The effort of a chat that carries on with Opus 5.5 after -Model's weekly limit (the owner, 2026-11-12).
+    # The effort of a chat that carries on with Opus 5.5 after -Model's weekly limit (the owner: max on
+    # 2026-11-12, extra-high from 2026-11-13 to save tokens).
     [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
-    [string]$FallbackEffort = 'max',
+    [string]$FallbackEffort = 'xhigh',
     # The first step starts at once instead of after 20 quiet minutes of other chats (the owner, 2026-11-12).
     [switch]$Now,
     [ValidateSet('wait', 'stop')]
