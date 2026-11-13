@@ -279,10 +279,13 @@ the settings it was given before (CLI-023's rows are never deleted), and the com
 **CLI-023** The house's settings are data the platform admin enters in the app (`/api/platform-admin/house`), never
 a constant, a seed or a document. Each change is one append-only row with who made it and when, numbered per
 setting, the highest in force; a change names the number its page read, so two admins never overwrite each other,
-and saving what already stands records nothing. Each setting starts empty, and an empty one closes what it governs.
-The first two: new sign-ups a week (0 to 10,000; empty or 0 keeps sign-up closed) and the age that may sign up (18
-to 100, never under 18 since the platform is adults only; empty keeps sign-up closed). The rows are the house's
-alone: a trigger refuses one for any other workspace.
+and saving what already stands records nothing. Each setting starts empty, and an empty one closes what it governs,
+leaves it without a limit, or leaves the platform's own figure in force, as each setting says. The first two: new
+sign-ups a week (0 to 10,000; empty or 0 keeps sign-up closed) and the age that may sign up (18 to 100, never under
+18 since the platform is adults only; empty keeps sign-up closed). Since notes plan N9b5: how far back a Free
+trainee's Progress reaches (1 to 3,650 days; empty means no limit, PRG-015) and the house's media storage (1 to
+10,240 whole gigabytes; empty leaves the platform's allowance, MED-019). Sign-up reads its own two alone. The rows
+are the house's alone: a trigger refuses one for any other workspace.
 
 **CLI-024** Trainee sign-up v1 (`TraineeSignUp`; decisions 24, 25 and 34). `POST /api/auth/register/trainee` is
 public and lands in the house alone, whatever the request carries. It is closed (409 `trainee_sign_up_closed`,
@@ -1058,7 +1061,9 @@ as frozen as a program's workout (TRN-012). Its name is "Workout" and its day th
 in history, records (TRN-019, the coach's read and Coach Today's too), last time (TRN-029), the finish summary a
 share card reads (TRN-030), the coach's exercise history (STR-016, whose estimates read its sets), the Clients row's
 last activity and the client page's last workout; never in a program's reads, Progress's planned sessions or where a
-lift stands (STR-019), so no weight is ever worked out from it. Today's read carries the unfinished one; the week's
+lift stands (STR-019), so no weight is ever worked out from it. Progress's training part (notes plan N9b5) counts the
+finished ones apart, by the house day each was started, in the house alone, which it says, so a trainee with no
+program reads the workouts they finished where a coach's client reads sessions done of sessions planned. Today's read carries the unfinished one; the week's
 read counts each finished one on the day it started. It is the client's own record: the house's staff never write a
 note in it, the client's notes on it tell nobody, and the coach's workout read answers 404 for it. The other routes
 on it answer 404 for another client's workout, or a row not in it, and 409 `own_workout_only` for a program's
@@ -1676,6 +1681,20 @@ mean of the workspace week (PRG-004) holding the first start, over that start's 
 weigh-ins, in kilograms and as a percentage of the start week's mean to 0.1 (half away from zero), sent
 with both weeks and their day counts; absent while the start's week has no weigh-in or no later week has
 one, when the start alone shows. The client's own read carries none of it (CLI-016).
+
+**PRG-015** How far back a Free trainee's own Progress reaches (notes plan N9b5; decision 27 as the owners ticked
+it and as checked against Hevy's own pages on 11 Nov 2026), `FreeProgressReach` 1.0. While the house's window
+(CLI-023) is filled, the client's house tier today is Free (SUB-019: no Pro+ or Max grants, one waiting for its money
+included) and no other plan of the house priced above nothing is active and paid in full today (a plan made without a
+tier, a pack), the client's own reads of Progress (the dashboard, the weigh-ins and their
+span, measurements and photos) start no earlier than `[today - N + 1, today + 1)`'s first day in the house's time
+zone: a window asked for further back is moved inside it, one wholly before it answers that first day, and nothing
+is refused for asking. Nothing dated before it is read at all, not as a trend's warm-up, a whole week's mean or an
+earlier day's date, and each read names the reach it applied, which Progress and Your entries say in one sentence.
+Everything logged is kept, nothing is locked or deleted, and the whole shows again while a paid plan grants and the
+reach comes back the day it stops. It never touches the house's staff's reads of the same trainee, a coach's client,
+a by-id read (a history, a photo, an export), workout history or records (TRN-019), which stay whole; an empty
+window means no limit. The number is the owner's, entered in the app.
 
 ## 8. Messaging, notifications, media, and libraries
 
@@ -2665,6 +2684,14 @@ never a public address; no poster or rendition is made, PRG-008), keeps at most 
 before it waits for a press, and stops off the screen. One pause holds for every clip, and a person who asked for
 reduced motion or less data gets its first frame with a play control. A clip that outlives its 30-minute grant asks
 a fresh one once when its bytes are refused.
+
+**MED-019** The house's own media storage (notes plan N9b5). While a workspace is the house and the platform admin
+has filled its media storage (CLI-023, whole gigabytes counted in binary as the platform's allowance is), that
+number is the house's workspace allowance of MED-009 in place of the platform's `Media:MaxWorkspaceStorageBytes`;
+the upload reads it once, so the unlocked pre-check that bounds the stream and the binding check under the lock
+agree. Empty, or once the mark is cleared, the platform's allowance stands; no other workspace is ever read against
+it. A number below what the house already stores refuses its uploads with the same code and deletes nothing. The
+per-client progress-photo allowance stays the platform's.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

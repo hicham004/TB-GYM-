@@ -93,11 +93,17 @@ internal sealed class MediaApplicationService(
                 return new MediaCommandResult(MediaCommandStatus.RateLimited);
             }
 
+            // The workspace's allowance, read once so the pre-check and the binding check below agree:
+            // the house's own when the platform admin has set one (MED-019), the platform's otherwise.
+            var allowanceBytes = await HouseReader.MediaStorageBytesAsync(
+                dbContext,
+                tenantContext.TenantId,
+                cancellationToken) ?? storageOptions.MaxWorkspaceStorageBytes;
+
             // An unlocked pre-check, used only to bound the accepted stream and to refuse an upload
             // that is already hopeless. It is not the guarantee: the binding check runs under an
             // advisory lock once the real byte count is known.
-            var remainingBytes = storageOptions.MaxWorkspaceStorageBytes
-                - await MeasureWorkspaceBytesAsync(cancellationToken);
+            var remainingBytes = allowanceBytes - await MeasureWorkspaceBytesAsync(cancellationToken);
             if (remainingBytes <= 0)
             {
                 return QuotaExceeded(
@@ -325,6 +331,7 @@ internal sealed class MediaApplicationService(
                 derivative,
                 clientProfileId,
                 attachmentReservations,
+                allowanceBytes,
                 cancellationToken);
             if (admitted is not null)
             {
@@ -842,6 +849,7 @@ internal sealed class MediaApplicationService(
         MediaAssetDerivative? derivative,
         Guid? clientProfileId,
         IReadOnlyCollection<MediaIngestObject> attachmentReservations,
+        long allowanceBytes,
         CancellationToken cancellationToken)
     {
         // The connection retries on transient failure, and that strategy owns transaction
@@ -867,7 +875,7 @@ internal sealed class MediaApplicationService(
                     cancellationToken,
                     attachmentIds,
                     admissionPriority) + incoming
-                > storageOptions.MaxWorkspaceStorageBytes)
+                > allowanceBytes)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return QuotaExceeded(

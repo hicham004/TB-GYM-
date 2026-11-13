@@ -28,6 +28,8 @@ who and when, the highest number of a setting in force, entered by the platform 
 (`/api/platform-admin/house`). Each starts empty and nothing is seeded. This row adds new sign-ups a week and
 the age that may sign up (18 to 100: the platform is adults only, so the house's age is never lower); later
 rows add theirs as values of the same table. Sign-up is closed while no space is marked or either is empty.
+N9b5 added how far back a Free trainee's Progress reaches (empty: no limit, PRG-015) and the house's media
+storage (empty: the platform's allowance, MED-019); sign-up reads its own two alone.
 
 **Sign-up** (CLI-024) is `POST /api/auth/register/trainee`, anonymous, with Talk to us's honeypot and a
 stamp of its own purpose, a rate limit of its own (20 an hour by address) and the age check before any

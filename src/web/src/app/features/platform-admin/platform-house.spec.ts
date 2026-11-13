@@ -119,7 +119,7 @@ describe('House, the platform admin’s page (notes plan N9a2)', () => {
       expect(document.activeElement).toBe(host.querySelector('h1'));
       expect(textOf(host.querySelector('h1'))).toBe('House');
       expect(textOf(host.querySelector('.lede'))).toBe(
-        'TB Gym’s own coaching space, where people with no coach sign up to train with TB Gym. Each setting starts empty, and sign-up stays closed until they are filled.',
+        'TB Gym’s own coaching space, where people with no coach sign up to train with TB Gym. Each setting starts empty, and sign-up stays closed until its two settings are filled.',
       );
       expect(host.querySelector('a[data-back]')?.getAttribute('href')).toBe('/admin/billing');
       expect(textOf(host.querySelector('a[data-back]'))).toBe('Platform billing');
@@ -337,6 +337,79 @@ describe('House, the platform admin’s page (notes plan N9a2)', () => {
       expect(toast()).toContain(
         'Youngest age that may sign up is now empty, so sign-up is closed.',
       );
+    });
+
+    describe('Free’s window and the house’s storage (notes plan N9b5)', () => {
+      const withAll = (): HouseAdminView => {
+        const house = houseAdmin();
+        return {
+          ...house,
+          settings: [
+            ...house.settings,
+            houseSetting({ setting: 'FreeProgressDays', value: '90', version: 2 }),
+            houseSetting({ setting: 'MediaStorageGigabytes', value: '50', version: 1 }),
+          ],
+        };
+      };
+
+      it('lists each with its unit and a Change named for it', async () => {
+        const { host } = await render({}, withAll);
+
+        expect(settingRows(host).slice(2)).toEqual([
+          [
+            'FreeProgressDays',
+            'How far back Free’s Progress reaches',
+            '90 days',
+            'Changed by Samir Aoun on Fri 9 Oct',
+            'Change how far back Free’s Progress reaches',
+          ],
+          [
+            'MediaStorageGigabytes',
+            'The house’s media storage',
+            '50 GB',
+            'Changed by Samir Aoun on Fri 9 Oct',
+            'Change the house’s media storage',
+          ],
+        ]);
+      });
+
+      it('says what empty means for each when it is emptied, never that sign-up closes', async () => {
+        const { fixture, host, api } = await render({}, withAll);
+
+        let sheet = await openChange(fixture, host, 'FreeProgressDays');
+        expect(titleOf(sheet)).toBe('Change how far back Free’s Progress reaches');
+        fill(sheet, 'How far back Free’s Progress reaches', '');
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+        expect(api.changeSetting).toHaveBeenCalledWith('FreeProgressDays', null, 2);
+        expect(toast()).toContain(
+          'How far back Free’s Progress reaches is now empty, so Free’s Progress has no limit.',
+        );
+        expect(toast()).not.toContain('sign-up is closed');
+
+        sheet = await openChange(fixture, host, 'MediaStorageGigabytes');
+        fill(sheet, 'The house’s media storage', '');
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+        expect(api.changeSetting).toHaveBeenCalledWith('MediaStorageGigabytes', null, 1);
+        expect(toast()).toContain(
+          'The house’s media storage is now empty, so the house has the platform’s allowance.',
+        );
+      });
+
+      it('says a number of days with its unit once it is saved', async () => {
+        const { fixture, host } = await render({}, withAll);
+
+        const sheet = await openChange(fixture, host, 'FreeProgressDays');
+        fill(sheet, 'How far back Free’s Progress reaches', '30');
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+
+        expect(toast()).toContain('How far back Free’s Progress reaches is now 30 days.');
+      });
     });
 
     it('says sign-up is closed when new sign-ups a week is set to 0', async () => {

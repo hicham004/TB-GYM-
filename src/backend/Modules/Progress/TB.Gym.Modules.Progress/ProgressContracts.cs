@@ -76,7 +76,7 @@ public sealed record StartingWeightCommandResult(
     string? Code = null,
     string? Message = null);
 
-public sealed record BodyweightHistorySpanView(DateOnly? FirstDate, DateOnly? LastDate);
+public sealed record BodyweightHistorySpanView(DateOnly? FirstDate, DateOnly? LastDate, ProgressReach? Reach = null);
 
 /// <summary>
 /// A streamed progress-photo upload. The stream is consumed once and never buffered whole.
@@ -105,7 +105,7 @@ public sealed record ProgressPhotosView(
     Guid ClientProfileId,
     DateOnly From,
     DateOnly ToExclusive,
-    IReadOnlyList<ProgressPhotoView> Photos, DateOnly? EarlierDate = null);
+    IReadOnlyList<ProgressPhotoView> Photos, DateOnly? EarlierDate = null, ProgressReach? Reach = null);
 
 public sealed record ProgressPhotoCommandResult(
     ProgressPhotoCommandStatus Status,
@@ -248,7 +248,8 @@ public sealed record ProgressView(
     DateOnly ToExclusive,
     IReadOnlyList<BodyweightDayView> Days,
     IReadOnlyList<BodyweightWeekView> Weeks,
-    BodyweightTrendView Trend);
+    BodyweightTrendView Trend,
+    ProgressReach? Reach = null);
 
 public sealed record BodyweightHistoryItemView(
     Guid Id,
@@ -323,7 +324,7 @@ public sealed record BodyMeasurementsView(
     MeasurementUnit DisplayUnit,
     DateOnly From,
     DateOnly ToExclusive,
-    IReadOnlyList<BodyMeasurementDayView> Days, DateOnly? EarlierDate = null);
+    IReadOnlyList<BodyMeasurementDayView> Days, DateOnly? EarlierDate = null, ProgressReach? Reach = null);
 
 public sealed record BodyMeasurementHistoryItemView(
     Guid Id,

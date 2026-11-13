@@ -17,7 +17,17 @@ internal sealed class HouseTierReader(
     IClock clock)
 {
     /// <summary>The tier of a client of the workspace in scope; null outside the house.</summary>
-    public async Task<HouseTier?> TierAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    public Task<HouseTier?> TierAsync(Guid clientProfileId, CancellationToken cancellationToken) =>
+        TierAsync(clientProfileId, decisions: null, cancellationToken);
+
+    /// <summary>
+    /// The same tier, from the feature access decisions the caller already read for this client in the workspace in
+    /// scope (<see cref="ICoachingFeatureAccessService.EvaluateAllAsync"/>), so a read that needs both asks once.
+    /// </summary>
+    public async Task<HouseTier?> TierAsync(
+        Guid clientProfileId,
+        IReadOnlyList<FeatureAccessDecision>? decisions,
+        CancellationToken cancellationToken)
     {
         if (!tenantContext.HasTenant)
         {
@@ -34,7 +44,7 @@ internal sealed class HouseTierReader(
             return null;
         }
 
-        var decisions = await featureAccess.EvaluateAllAsync(tenantId, clientProfileId, cancellationToken);
+        decisions ??= await featureAccess.EvaluateAllAsync(tenantId, clientProfileId, cancellationToken);
         if (decisions.Any(decision => decision.Reason is
                 FeatureAccessReason.MembershipInactive or
                 FeatureAccessReason.PlatformBlocked or

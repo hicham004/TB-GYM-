@@ -291,7 +291,8 @@ app-trend-chart {
 .coach .eyebrow {
   display: none;
 }
-.nutrition-panel > strong {
+.nutrition-panel > strong,
+.own-workouts > strong {
   font-size: 2rem;
   font-variant-numeric: tabular-nums;
 }

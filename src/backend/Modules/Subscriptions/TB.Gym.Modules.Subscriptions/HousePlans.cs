@@ -126,6 +126,25 @@ public static class HouseTierRule
 }
 
 /// <summary>
+/// How far back a trainee's own Progress reaches (PRG-015, "FreeProgressReach" 1.0): on Free, the house's window of
+/// days ending today, <c>[today - days + 1, today + 1)</c>, as the dashboard's own windows end on today; on any paid
+/// tier, outside the house, on no tier, or while the window is empty, no limit. What is older is kept and shows again
+/// the day a paid plan grants.
+/// </summary>
+public static class FreeProgressReachRule
+{
+    public const string MethodKey = "FreeProgressReach";
+
+    public const string MethodVersion = "1.0";
+
+    /// <summary>The earliest day a trainee's own Progress shows today; null when nothing limits it.</summary>
+    public static DateOnly? EarliestShown(HouseTier? tier, int? windowDays, DateOnly today) =>
+        tier == HouseTier.Free && windowDays is > 0
+            ? DateOnly.FromDayNumber(Math.Max(DateOnly.MinValue.DayNumber, today.DayNumber - windowDays.Value + 1))
+            : null;
+}
+
+/// <summary>
 /// The Worker's sweep of Free (SUB-019): each current trainee's last Free row renewed before it ends, and Free started
 /// for a self-directed trainee of the house who has none (one who joined before Free existed, or whose confirmation
 /// could not start it).

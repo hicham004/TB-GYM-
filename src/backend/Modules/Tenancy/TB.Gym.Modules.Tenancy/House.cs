@@ -42,7 +42,8 @@ public sealed partial class Tenant
 
 /// <summary>
 /// The house's settings (CLI-023): figures the platform admin enters in the app, never a constant, a seed or a
-/// document. Each starts empty, and an empty one closes what it governs. A later row of the plan adds its own.
+/// document. Each starts empty, and an empty one closes what it governs (sign-up), leaves it without a limit (Free's
+/// Progress) or leaves the platform's own figure in force (the media storage). A later row of the plan adds its own.
 /// </summary>
 public enum HouseSetting
 {
@@ -51,6 +52,18 @@ public enum HouseSetting
 
     /// <summary>The age a person must have reached to sign up. Empty keeps sign-up closed.</summary>
     MinimumSignUpAge = 2,
+
+    /// <summary>
+    /// How many days back a Free trainee's own Progress reaches (PRG-015). Empty means no limit; what is older is kept
+    /// and shows again under any paid plan.
+    /// </summary>
+    FreeProgressDays = 3,
+
+    /// <summary>
+    /// The house's media storage, in whole gigabytes (MED-019). Empty leaves the platform's allowance, every coaching
+    /// space's, in force.
+    /// </summary>
+    MediaStorageGigabytes = 4,
 }
 
 /// <summary>What a setting's typed value comes to: the stored form, or why it is refused.</summary>
@@ -78,11 +91,28 @@ public static class HouseSettingRule
 
     public const int MaximumSignUpAge = 100;
 
+    /// <summary>Ten years of days: past it a window means nothing a person could read on one page.</summary>
+    public const int MaximumFreeProgressDays = 3_650;
+
+    /// <summary>
+    /// Ten terabytes, the platform's own ceiling for a workspace's allowance (Media:MaxWorkspaceStorageBytes), counted
+    /// in binary gigabytes as that allowance is.
+    /// </summary>
+    public const int MaximumMediaStorageGigabytes = 10_240;
+
+    public const long BytesPerGigabyte = 1024L * 1024L * 1024L;
+
     public const string SignUpsPerWeekRefusal =
         "Enter a whole number from 0 to 10,000, or leave it empty. Empty or 0 keeps sign-up closed.";
 
     public const string MinimumSignUpAgeRefusal =
         "Enter an age from 18 to 100, or leave it empty, which keeps sign-up closed. TB Gym is for adults, so the age cannot be under 18.";
+
+    public const string FreeProgressDaysRefusal =
+        "Enter a whole number of days from 1 to 3,650, or leave it empty. Empty means Free's Progress has no limit.";
+
+    public const string MediaStorageGigabytesRefusal =
+        "Enter a whole number of gigabytes from 1 to 10,240, or leave it empty. Empty gives the house the platform's allowance.";
 
     public const string UnknownSettingRefusal = "Choose one of the house's settings.";
 
@@ -104,6 +134,9 @@ public static class HouseSettingRule
         {
             HouseSetting.SignUpsPerWeek => WholeNumber(text, 0, MaximumSignUpsPerWeek, SignUpsPerWeekRefusal),
             HouseSetting.MinimumSignUpAge => WholeNumber(text, AdultAge, MaximumSignUpAge, MinimumSignUpAgeRefusal),
+            HouseSetting.FreeProgressDays => WholeNumber(text, 1, MaximumFreeProgressDays, FreeProgressDaysRefusal),
+            HouseSetting.MediaStorageGigabytes =>
+                WholeNumber(text, 1, MaximumMediaStorageGigabytes, MediaStorageGigabytesRefusal),
             _ => HouseSettingValue.Refused(UnknownSettingRefusal),
         };
     }
@@ -122,9 +155,16 @@ public static class HouseSettingRule
 }
 
 /// <summary>The house's settings as they stand: the latest change of each, read as what it means.</summary>
-public sealed record HouseSettings(int? SignUpsPerWeek, int? MinimumSignUpAge)
+public sealed record HouseSettings(
+    int? SignUpsPerWeek,
+    int? MinimumSignUpAge,
+    int? FreeProgressDays = null,
+    int? MediaStorageGigabytes = null)
 {
     public static HouseSettings Empty { get; } = new(null, null);
+
+    /// <summary>The house's media storage in bytes, or none while the platform's allowance stands (MED-019).</summary>
+    public long? MediaStorageBytes => MediaStorageGigabytes * HouseSettingRule.BytesPerGigabyte;
 
     public static HouseSettings From(IEnumerable<KeyValuePair<HouseSetting, string?>> latest)
     {
@@ -132,7 +172,9 @@ public sealed record HouseSettings(int? SignUpsPerWeek, int? MinimumSignUpAge)
         var values = latest.ToDictionary(item => item.Key, item => item.Value);
         return new HouseSettings(
             HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.SignUpsPerWeek)),
-            HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MinimumSignUpAge)));
+            HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MinimumSignUpAge)),
+            HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.FreeProgressDays)),
+            HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MediaStorageGigabytes)));
     }
 }
 

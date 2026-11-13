@@ -24,7 +24,7 @@ import {
   progressView,
   weightHistory,
 } from '../../../testing/progress-fixtures';
-import { ProgressEntries } from './progress-entries';
+import { newerFirst, ProgressEntries } from './progress-entries';
 import { ProgressEntriesApi } from './progress-entries-api';
 
 type Api = Partial<Record<keyof ProgressEntriesApi, ReturnType<typeof vi.fn>>>;
@@ -622,5 +622,83 @@ describe('Your entries', () => {
       expect(weighIns).toHaveBeenCalledTimes(2);
       expect(all(host, '[data-weighin]')).toHaveLength(1);
     });
+  });
+});
+
+/** Notes plan N9b5: on Free, Your entries says how far back the trainee's own Progress reaches (PRG-015). */
+describe('Your entries on Free (notes plan N9b5)', () => {
+  const reach = { windowDays: 90, earliestShown: '2026-07-14' };
+
+  it('says how far back Progress reaches once the span says so, and never otherwise', async () => {
+    const { host } = await render({
+      api: { weightSpan: vi.fn(() => of({ firstDate: '2026-07-20', reach })) },
+    });
+    expect(textOf(host.querySelector('[data-reach]'))).toBe(
+      'On Free, Progress shows your last 90 days. Everything you log is kept, and all of it shows here again on a paid plan.',
+    );
+  });
+
+  it('shows no sentence while nothing limits Progress', async () => {
+    const { host } = await render();
+    expect(host.querySelector('[data-reach]')).toBeNull();
+  });
+
+  it('never says there are no earlier measurements while older ones are kept beyond the reach', async () => {
+    const { host } = await render({
+      url: '/progress?tab=measurements',
+      api: {
+        measurements: vi.fn(() =>
+          of({ ...measurementsView(mayaMeasurements()), earlierDate: null, reach }),
+        ),
+      },
+    });
+    expect(host.querySelector('[data-reach]')).not.toBeNull();
+    expect(host.querySelector('[data-earlier-measurements]')).toBeNull();
+    expect(host.textContent).not.toContain('There are no earlier measurements.');
+  });
+
+  it('never says there are no earlier photos while older ones are kept beyond the reach', async () => {
+    const { host } = await render({
+      url: '/progress?tab=photos',
+      api: { photos: vi.fn(() => of({ ...photosView(mayaPhotos()), earlierDate: null, reach })) },
+    });
+    expect(host.querySelector('[data-reach]')).not.toBeNull();
+    expect(host.querySelector('[data-earlier-photos]')).toBeNull();
+    expect(host.textContent).not.toContain('There are no earlier photos.');
+  });
+
+  it('says what the reach holds when it holds no weights, never yet or first', async () => {
+    const { host } = await render({
+      api: {
+        weighIns: vi.fn(() => of(progressView([]))),
+        weightSpan: vi.fn(() => of({ firstDate: null, reach })),
+      },
+    });
+    expect(host.textContent).toContain('No weights in your last 90 days');
+    expect(host.textContent).toContain(
+      'Anything you logged before is kept, and shows again on a paid plan.',
+    );
+    expect(host.textContent).not.toContain('No weights yet');
+    expect(host.textContent).not.toContain('Log your first weight');
+  });
+
+  it('keeps a refreshed window only when it starts before the newer one, so no day shows twice', () => {
+    // Newest first: a window wholly before a new reach comes back as the reach's first day, which the newest holds.
+    expect(newerFirst([{ from: '2026-08-16' }, { from: '2026-08-16' }])).toEqual([0]);
+    expect(
+      newerFirst([{ from: '2026-08-16' }, { from: '2025-08-15' }, { from: '2024-08-15' }]),
+    ).toEqual([0, 1, 2]);
+    expect(
+      newerFirst([{ from: '2026-08-16' }, { from: '2025-08-15' }, { from: '2025-08-15' }]),
+    ).toEqual([0, 1]);
+    expect(newerFirst([])).toEqual([]);
+  });
+
+  it('never shows the sentence on a coach’s embedded entries', async () => {
+    const { host } = await render({
+      clientId: 'client-9',
+      api: { weightSpan: vi.fn(() => of({ firstDate: '2026-07-20', reach })) },
+    });
+    expect(host.querySelector('[data-reach]')).toBeNull();
   });
 });

@@ -7,9 +7,11 @@ namespace TB.Gym.Infrastructure.Application;
 /// <summary>
 /// The workspace's configured IANA time zone and week start, plus the local date it is there right
 /// now. Every calendar decision in the product is made in this frame rather than the server's, and
-/// <see cref="Today"/> comes from <see cref="IClock"/> so it stays deterministic under test.
+/// <see cref="Today"/> comes from <see cref="IClock"/> so it stays deterministic under test. <see cref="IsHouse"/>
+/// says whether the workspace is the house today (ADR 0041), read in the same query, so a read that treats the house
+/// differently costs nothing anywhere else.
 /// </summary>
-internal sealed record WorkspaceCalendar(string TimeZoneId, DayOfWeek WeekStartsOn, DateOnly Today);
+internal sealed record WorkspaceCalendar(string TimeZoneId, DayOfWeek WeekStartsOn, DateOnly Today, bool IsHouse = false);
 
 internal static class WorkspaceCalendarReader
 {
@@ -21,7 +23,7 @@ internal static class WorkspaceCalendarReader
     {
         var tenant = await dbContext.Tenants
             .Where(item => item.Id == tenantId)
-            .Select(item => new { item.TimeZoneId, item.WeekStartsOn })
+            .Select(item => new { item.TimeZoneId, item.WeekStartsOn, IsHouse = item.IsHouse && item.IsActive })
             .SingleAsync(cancellationToken);
         var localNow = TimeZoneInfo.ConvertTime(
             clock.UtcNow,
@@ -29,6 +31,7 @@ internal static class WorkspaceCalendarReader
         return new WorkspaceCalendar(
             tenant.TimeZoneId,
             tenant.WeekStartsOn,
-            DateOnly.FromDateTime(localNow.DateTime));
+            DateOnly.FromDateTime(localNow.DateTime),
+            tenant.IsHouse);
     }
 }

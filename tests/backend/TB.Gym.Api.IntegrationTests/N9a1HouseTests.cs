@@ -368,7 +368,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             Assert.AreEqual("house_not_set", (await N9a1AnswerAsync(refused, HttpStatusCode.Conflict)).Code, name);
         }
 
-        // Marked, the house has both settings, empty, at version 0, changed by nobody.
+        // Marked, the house has every setting, empty, at version 0, changed by nobody.
         using var owner = CreateClient();
         var houseId = await RegisterCoachAsync(owner, "n9a1-kept-owner@example.test", "Nour Haddad", "N9a1 Kept House");
         await N9a1MarkHouseAsync(owner, houseId);
@@ -381,6 +381,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             {
                 new N9a1HouseSetting(N9a1PlacesSetting, null, 0, null, null, null),
                 new N9a1HouseSetting(N9a1AgeSetting, null, 0, null, null, null),
+                new N9a1HouseSetting("FreeProgressDays", null, 0, null, null, null),
+                new N9a1HouseSetting("MediaStorageGigabytes", null, 0, null, null, null),
             },
             empty.Settings);
         Assert.AreEqual("Closed", empty.SignUp!.Status);
@@ -447,7 +449,15 @@ public sealed partial class Phase3TrainingWorkflowTests
                 new N9a1StoredChange(N9a1AgeSetting, 1, "21", mayaId, third),
             },
             await N9a1StoredChangesAsync(houseId));
-        CollectionAssert.AreEqual(new[] { placesThree, ageOne }, (await N9a1HouseReadAsync(rami)).Settings);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                placesThree,
+                ageOne,
+                new N9a1HouseSetting("FreeProgressDays", null, 0, null, null, null),
+                new N9a1HouseSetting("MediaStorageGigabytes", null, 0, null, null, null),
+            },
+            (await N9a1HouseReadAsync(rami)).Settings);
     }
 
     [TestMethod]

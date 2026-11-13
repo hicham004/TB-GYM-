@@ -1089,3 +1089,256 @@ describe('ProgressDashboardView draws itself (W13)', () => {
     expect(query(host, '.weight-figure [data-figure]').textContent).toBe('81.5');
   });
 });
+
+/**
+ * Notes plan N9b5: a Free trainee's Progress reaches back the house's window (PRG-015), which the page says in one
+ * sentence; with nothing planned, the training part counts the workouts of one's own they finished (TRN-033).
+ */
+describe('Free’s reach and workouts of one’s own (notes plan N9b5)', () => {
+  const REACH = {
+    methodKey: 'FreeProgressReach',
+    methodVersion: '1.0',
+    windowDays: '90',
+    earliestShown: '2026-05-25',
+  };
+  const ownTraining = (overrides: Record<string, unknown> = {}) => ({
+    feature: 'Training',
+    availability: 'Available',
+    reason: 'Granted',
+    context: {
+      recentFrom: '2026-08-16',
+      recentToExclusive: '2026-08-23',
+      recentDayCount: '7',
+      recentScheduledSessionCount: '0',
+      recentCompletedWorkoutCount: '0',
+      windowScheduledSessionCount: '0',
+      windowCompletedWorkoutCount: '0',
+      windowInProgressWorkoutCount: '0',
+      lastCompletedDate: null,
+      ownWorkoutsCounted: true,
+      recentOwnCompletedWorkoutCount: '2',
+      windowOwnCompletedWorkoutCount: '9',
+      lastOwnCompletedDate: '2026-08-22',
+      ...overrides,
+    },
+  });
+  const textOf = (element: Element | null) =>
+    (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+  it('maps the reach and the counts of one’s own, and none of either when the server sends none', () => {
+    const mapped = mapProgressDashboard(contract({ reach: REACH, training: ownTraining() }));
+    expect(mapped.reach).toEqual({ windowDays: 90, earliestShown: '2026-05-25' });
+    expect(mapped.training.context).toMatchObject({
+      ownWorkoutsCounted: true,
+      recentOwnCompletedWorkoutCount: 2,
+      windowOwnCompletedWorkoutCount: 9,
+      lastOwnCompletedDate: '2026-08-22',
+    });
+    // An older server, or a coach's client: no reach and nothing of one's own counted.
+    const plain = mapProgressDashboard(contract());
+    expect(plain.reach).toBeNull();
+    expect(
+      mapProgressDashboard(contract({ training: ownTraining({ ownWorkoutsCounted: undefined }) }))
+        .training.context,
+    ).toMatchObject({ ownWorkoutsCounted: false });
+  });
+
+  it('says how far back Progress reaches on Free, under every range', async () => {
+    const { fixture, host } = await renderWith(of(contract({ reach: REACH })), {
+      getMyBodyweightSpan: vi.fn(() =>
+        of({ firstDate: '2026-06-01', lastDate: '2026-08-22', reach: REACH }),
+      ) as never,
+    });
+
+    expect(textOf(host.querySelector('[data-reach]'))).toBe(
+      'On Free, Progress shows your last 90 days. Everything you log is kept, and all of it shows here again on a paid plan.',
+    );
+    press(host, 'All');
+    await settle(fixture);
+    expect(host.querySelector('[data-reach]')).not.toBeNull();
+    // Under All the sentence stands where "Showing all recorded weight entries" would be untrue.
+    expect(host.textContent).not.toContain('Showing all recorded weight entries');
+  });
+
+  it('says one day as today alone', async () => {
+    const host = await render(of(contract({ reach: { ...REACH, windowDays: '1' } })));
+    expect(textOf(host.querySelector('[data-reach]'))).toContain(
+      'On Free, Progress shows today alone.',
+    );
+  });
+
+  it('keeps the All note when nothing limits Progress', async () => {
+    const { fixture, host } = await renderWith(of(contract()), {
+      getMyBodyweightSpan: vi.fn(() =>
+        of({ firstDate: '2026-06-01', lastDate: '2026-08-22' }),
+      ) as never,
+    });
+    expect(host.querySelector('[data-reach]')).toBeNull();
+    press(host, 'All');
+    await settle(fixture);
+    expect(host.textContent).toContain('Showing all recorded weight entries');
+  });
+
+  it('never shows the sentence on a coach’s read', async () => {
+    const api = {
+      getClientProgressDashboard: vi.fn(() => of(contract({ reach: REACH }))) as never,
+      getClientProgress: vi.fn(() =>
+        of({ days: [], weeks: [], trend: TREND, displayUnit: 'Kilogram' } as never),
+      ) as never,
+      getClientTrainingPersonalRecords: vi.fn(() =>
+        of({ isAllowed: false, accessReason: 'Expired', items: [] } as never),
+      ) as never,
+    };
+    const { host } = await renderWith(of(contract({ reach: REACH })), api, {
+      clientId: 'client-9',
+    });
+    expect(host.querySelector('[data-reach]')).toBeNull();
+  });
+
+  it('counts the workouts a trainee with no program finished, never against a plan', async () => {
+    const host = await render(of(contract({ training: ownTraining() })));
+    const own = host.querySelector('[data-own-workouts]');
+
+    expect(textOf(own)).toBe(
+      '2 workouts finished in the last 7 days 9 workouts finished in this period',
+    );
+    expect(host.querySelector('app-bar-chart')).toBeNull();
+  });
+
+  it('says one workout in the singular', async () => {
+    const host = await render(
+      of(
+        contract({
+          training: ownTraining({
+            recentOwnCompletedWorkoutCount: '1',
+            windowOwnCompletedWorkoutCount: '1',
+          }),
+        }),
+      ),
+    );
+    expect(textOf(host.querySelector('[data-own-workouts]'))).toBe(
+      '1 workout finished in the last 7 days 1 workout finished in this period',
+    );
+  });
+
+  it('says plainly where finished workouts will be counted while there are none', async () => {
+    const host = await render(
+      of(
+        contract({
+          training: ownTraining({
+            recentOwnCompletedWorkoutCount: '0',
+            windowOwnCompletedWorkoutCount: '0',
+          }),
+        }),
+      ),
+    );
+    expect(textOf(host.querySelector('[data-own-workouts]'))).toBe(
+      'Workouts you finish are counted here.',
+    );
+  });
+
+  it('keeps done of planned when sessions are planned, and adds the workouts of one’s own beside it', async () => {
+    const host = await render(
+      of(
+        contract({
+          training: ownTraining({
+            recentScheduledSessionCount: '3',
+            windowScheduledSessionCount: '12',
+            windowCompletedWorkoutCount: '10',
+          }),
+        }),
+      ),
+    );
+    expect(host.querySelector('app-bar-chart')).not.toBeNull();
+    expect(textOf(host.querySelector('[data-own-workouts]'))).toBe(
+      'Also 9 workouts of your own in this period',
+    );
+  });
+
+  const coachApi = (dashboard: ProgressDashboardContract) => ({
+    getClientProgressDashboard: vi.fn(() => of(dashboard)) as never,
+    getClientProgress: vi.fn(() =>
+      of({ days: [], weeks: [], trend: TREND, displayUnit: 'Kilogram' } as never),
+    ) as never,
+    getClientTrainingPersonalRecords: vi.fn(() =>
+      of({ isAllowed: false, accessReason: 'Expired', items: [] } as never),
+    ) as never,
+  });
+
+  it('tells the house’s coach a trainee finished no workouts, in their words', async () => {
+    const dashboard = contract({
+      training: ownTraining({
+        recentOwnCompletedWorkoutCount: '0',
+        windowOwnCompletedWorkoutCount: '0',
+      }),
+    });
+    const { host } = await renderWith(of(dashboard), coachApi(dashboard), { clientId: 'client-9' });
+    const own = host.querySelector('[data-own-workouts]');
+    expect(textOf(own)).toMatch(/has finished no workouts in this period.$/);
+    expect(own?.getAttribute('dir')).toBe('auto');
+  });
+
+  it('tells the house’s coach a coached client’s own workouts beside the planned ones', async () => {
+    const dashboard = contract({
+      training: ownTraining({
+        recentScheduledSessionCount: '3',
+        windowScheduledSessionCount: '12',
+      }),
+    });
+    const { host } = await renderWith(of(dashboard), coachApi(dashboard), { clientId: 'client-9' });
+    expect(textOf(host.querySelector('[data-own-workouts]'))).toBe(
+      'Also 9 workouts of their own in this period',
+    );
+  });
+
+  it('says the other sections keep their year under All when the window is longer', async () => {
+    const reach = { ...REACH, windowDays: '730' };
+    const { fixture, host } = await renderWith(of(contract({ reach })), {
+      getMyBodyweightSpan: vi.fn(() =>
+        of({ firstDate: '2026-06-01', lastDate: '2026-08-22', reach }),
+      ) as never,
+    });
+    expect(host.querySelector('[data-year-note]')).toBeNull();
+    press(host, 'All');
+    await settle(fixture);
+    expect(textOf(host.querySelector('[data-reach]'))).toContain('your last 730 days');
+    expect(textOf(host.querySelector('[data-year-note]'))).toBe(
+      'The other sections show the latest 12 months.',
+    );
+  });
+
+  it('never says a first entry is still to come while older weigh-ins are kept past the reach', async () => {
+    const host = await render(of(contract({ ...emptySections, reach: REACH })), {
+      getMyProgress: vi.fn(() =>
+        of({
+          from: '2026-05-25',
+          toExclusive: '2026-08-23',
+          days: [],
+          weeks: [],
+          trend: TREND,
+          displayUnit: 'Kilogram',
+        } as never),
+      ) as never,
+    });
+    expect(textOf(host.querySelector('[data-reach-empty]'))).toBe(
+      'No weigh-ins in your last 90 days.',
+    );
+    expect(host.textContent).not.toContain('after your first entry');
+  });
+
+  it('keeps a coach’s client with nothing planned on done of planned, as before', async () => {
+    const host = await render(
+      of(
+        contract({
+          training: ownTraining({
+            ownWorkoutsCounted: false,
+            recentOwnCompletedWorkoutCount: '0',
+            windowOwnCompletedWorkoutCount: '0',
+          }),
+        }),
+      ),
+    );
+    expect(host.querySelector('app-bar-chart')).not.toBeNull();
+    expect(host.querySelector('[data-own-workouts]')).toBeNull();
+  });
+});

@@ -88,11 +88,11 @@ public sealed class N9a1HouseSignUpDomainTests
     // ---- the house's settings (CLI-023) ----
 
     [TestMethod]
-    public void TheHouseHasItsTwoSettingsAndTheirBounds()
+    public void TheHouseHasItsSettingsAndTheirBounds()
     {
         // Each change row keeps the setting it changed, so a setting's number is never given to another.
         Assert.AreEqual(
-            "SignUpsPerWeek 1, MinimumSignUpAge 2",
+            "SignUpsPerWeek 1, MinimumSignUpAge 2, FreeProgressDays 3, MediaStorageGigabytes 4",
             string.Join(", ", Enum.GetValues<HouseSetting>().Select(setting => $"{setting} {(int)setting}")));
         Assert.AreEqual(
             (10_000, 18, 100),
@@ -109,7 +109,7 @@ public sealed class N9a1HouseSignUpDomainTests
             {
                 var value = HouseSettingRule.Normalize(setting, typed);
 
-                Assert.IsTrue(value.IsValid, $"{setting}: an empty setting is a way to close what it governs.");
+                Assert.IsTrue(value.IsValid, $"{setting}: an empty setting closes what it governs, or leaves it without a limit or at the platform's figure.");
                 Assert.IsNull(value.Value, $"{setting}: nothing is stored.");
                 Assert.IsNull(value.Error);
                 Assert.AreEqual(HouseSettingValue.Empty, value);
@@ -213,7 +213,7 @@ public sealed class N9a1HouseSignUpDomainTests
     [TestMethod]
     public void AnUndefinedSettingIsRefusedWhateverIsTyped()
     {
-        HouseSetting[] undefined = [(HouseSetting)0, (HouseSetting)3, (HouseSetting)(-1), (HouseSetting)int.MaxValue];
+        HouseSetting[] undefined = [(HouseSetting)0, (HouseSetting)5, (HouseSetting)(-1), (HouseSetting)int.MaxValue];
         string?[] typed = [null, "", "7", "19", "seven"];
 
         foreach (var setting in undefined)
@@ -327,7 +327,7 @@ public sealed class N9a1HouseSignUpDomainTests
         Assert.AreEqual(SignUpsPerWeekSentence, Refused(HouseSetting.SignUpsPerWeek, "-1").PersonMessage());
         Assert.AreEqual(MinimumSignUpAgeSentence, Refused(HouseSetting.MinimumSignUpAge, "17").PersonMessage());
         Assert.AreEqual(MinimumSignUpAgeSentence, Refused(HouseSetting.MinimumSignUpAge, "101").PersonMessage());
-        Assert.AreEqual(UnknownSettingSentence, Refused((HouseSetting)3, "7").PersonMessage());
+        Assert.AreEqual(UnknownSettingSentence, Refused((HouseSetting)5, "7").PersonMessage());
         Assert.AreEqual(UnknownSettingSentence, Refused((HouseSetting)0, null).PersonMessage());
         Assert.AreEqual("value", Refused(HouseSetting.MinimumSignUpAge, "17").ParamName);
     }

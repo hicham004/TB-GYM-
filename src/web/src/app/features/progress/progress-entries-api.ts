@@ -38,7 +38,12 @@ import {
   mapProgressPhotoImage,
   mapProgressPhotos,
 } from './progress.models';
-import { mapStartingWeight, type StartingWeight } from './progress-dashboard.models';
+import {
+  mapReach,
+  mapStartingWeight,
+  type ProgressReach,
+  type StartingWeight,
+} from './progress-dashboard.models';
 
 export type { MeasurementType, MeasurementUnit, RecordedMassUnit };
 
@@ -66,11 +71,18 @@ export class ProgressEntriesApi {
     ).pipe(map(mapProgress));
   }
 
-  /** The first and last day with a weigh-in, so "earlier" knows when there is no more. */
-  weightSpan(clientId: string | null): Observable<{ firstDate: string | null }> {
+  /**
+   * The first day with a weigh-in, so "earlier" knows when there is no more, and how far back the client's own read
+   * reached (PRG-015): the server starts the span inside that reach.
+   */
+  weightSpan(
+    clientId: string | null,
+  ): Observable<{ firstDate: string | null; reach: ProgressReach | null }> {
     return (
       clientId ? this.api.getClientBodyweightSpan(clientId) : this.api.getMyBodyweightSpan()
-    ).pipe(map((span) => ({ firstDate: span.firstDate ?? null })));
+    ).pipe(
+      map((span) => ({ firstDate: span.firstDate ?? null, reach: mapReach(span.reach ?? null) })),
+    );
   }
 
   recordWeight(

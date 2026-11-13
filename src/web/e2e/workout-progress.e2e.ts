@@ -256,6 +256,88 @@ for (const width of [390, 1440]) {
   });
 }
 
+/** A Free trainee's own Progress as the server cuts it (notes plan N9b5, PRG-015): 90 days, no program, own workouts. */
+const freeDashboard = {
+  ...dashboard,
+  from: '2026-07-02',
+  windowDayCount: 90,
+  reach: {
+    methodKey: 'FreeProgressReach',
+    methodVersion: '1.0',
+    windowDays: 90,
+    earliestShown: '2026-07-02',
+  },
+  nutrition: {
+    feature: 'Nutrition',
+    availability: 'Unavailable',
+    reason: 'NoEntitlement',
+    context: null,
+  },
+  training: {
+    feature: 'Training',
+    availability: 'Available',
+    reason: 'Granted',
+    context: {
+      recentFrom: '2026-09-23',
+      recentToExclusive: '2026-09-30',
+      recentDayCount: 7,
+      recentCompletedWorkoutCount: 0,
+      recentScheduledSessionCount: 0,
+      windowCompletedWorkoutCount: 0,
+      windowScheduledSessionCount: 0,
+      windowInProgressWorkoutCount: 0,
+      lastCompletedDate: null,
+      ownWorkoutsCounted: true,
+      recentOwnCompletedWorkoutCount: 3,
+      windowOwnCompletedWorkoutCount: 14,
+      lastOwnCompletedDate: '2026-09-29',
+    },
+  },
+};
+
+for (const width of [390, 1440]) {
+  test(`a Free trainee's Progress at ${width}px says how far back it reaches and counts their workouts (N9b5)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await traineeSession(page, {
+      'GET /api/progress/me/dashboard': (route) => json(route, 200, freeDashboard),
+      'GET /api/progress/me': (route) => json(route, 200, { ...progress, from: '2026-07-02' }),
+      'GET /api/progress/me/span': (route) =>
+        json(route, 200, {
+          firstDate: '2026-09-21',
+          lastDate: '2026-09-28',
+          reach: freeDashboard.reach,
+        }),
+      'GET /api/training/me/personal-records': (route) =>
+        json(route, 200, { isAllowed: true, accessReason: 'Granted', items: [] }),
+    });
+    await page.goto('/progress/dashboard');
+    const reach = page.locator('[data-reach]');
+    await expect(reach).toHaveText(
+      'On Free, Progress shows your last 90 days. Everything you log is kept, and all of it shows here again on a paid plan.',
+    );
+    const own = page.locator('[data-own-workouts]');
+    await expect(own).toContainText('3 workouts finished in the last 7 days');
+    await expect(own).toContainText('14 workouts finished in this period');
+    await expect(page.locator('app-bar-chart')).toHaveCount(0);
+    // Under All the sentence stays, where "Showing all recorded weight entries" would be untrue.
+    await page.getByRole('button', { name: 'All', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'All', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(reach).toBeVisible();
+    await expect(page.getByText('Showing all recorded weight entries')).toHaveCount(0);
+    await waitForFonts(page);
+    await accessible(page);
+    await page.evaluate(() => (document.documentElement.style.fontSize = '32px'));
+    await expect(reach).toBeVisible();
+    expect(await pastTheEdge(page, '[data-reach], [data-own-workouts]')).toEqual([]);
+    await accessible(page);
+  });
+}
+
 const workoutSet = (position: number, id: string) => ({
   prescriptionId: `prescription-${id}`,
   performanceId: `set-${id}`,

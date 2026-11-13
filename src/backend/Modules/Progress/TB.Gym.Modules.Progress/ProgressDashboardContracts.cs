@@ -25,7 +25,39 @@ public sealed record ProgressDashboardView(
     DashboardMeasurementsSection Measurements,
     DashboardPhotosSection Photos,
     DashboardEntitledSection<DashboardNutritionContext> Nutrition,
-    DashboardEntitledSection<DashboardTrainingContext> Training);
+    DashboardEntitledSection<DashboardTrainingContext> Training,
+    // Null unless the house's window for Free cut this read (PRG-015); never on a coach's read.
+    ProgressReach? Reach = null);
+
+/// <summary>
+/// How far back a client's own Progress reached in this read (PRG-015): the house's window for Free, in days, and the
+/// earliest day it shows. Everything older is kept and shows again under any paid plan; the read says so instead of
+/// letting an older day look as if nothing was logged.
+/// </summary>
+public sealed record ProgressReach(
+    string MethodKey,
+    string MethodVersion,
+    int WindowDays,
+    DateOnly EarliestShown);
+
+/// <summary>A requested window moved inside a reach: it never starts before the earliest day shown (PRG-015).</summary>
+public static class ProgressReachWindow
+{
+    /// <summary>
+    /// The window <c>[from, toExclusive)</c> that starts no earlier than <paramref name="earliestShown"/>. A window that
+    /// ends before it becomes the one day it starts on, so a read is never refused for asking too far back: it answers
+    /// what may be shown.
+    /// </summary>
+    public static (DateOnly From, DateOnly ToExclusive) Clamp(DateOnly from, DateOnly toExclusive, DateOnly? earliestShown)
+    {
+        if (earliestShown is not { } earliest || from >= earliest)
+        {
+            return (from, toExclusive);
+        }
+
+        return (earliest, toExclusive > earliest ? toExclusive : earliest.AddDays(1));
+    }
+}
 
 /// <summary>
 /// A cross-domain section, which exists only when the client is currently entitled to the feature
@@ -224,4 +256,11 @@ public sealed record DashboardTrainingContext(
     int WindowScheduledSessionCount,
     int WindowCompletedWorkoutCount,
     int WindowInProgressWorkoutCount,
-    DateOnly? LastCompletedDate);
+    DateOnly? LastCompletedDate,
+    // Workouts of one's own (TRN-033) finished in the same spans, by the house day each was started on. A program's
+    // planned sessions never count them, so they are counts of their own, read in the house alone, which says so:
+    // elsewhere nobody has one and the counts stay zero.
+    int RecentOwnCompletedWorkoutCount = 0,
+    int WindowOwnCompletedWorkoutCount = 0,
+    DateOnly? LastOwnCompletedDate = null,
+    bool OwnWorkoutsCounted = false);

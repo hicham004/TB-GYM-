@@ -204,8 +204,13 @@ export function progressDashboard(overrides: Partial<ProgressDashboard> = {}): P
         windowCompletedWorkoutCount: 27,
         windowInProgressWorkoutCount: 0,
         lastCompletedDate: '2026-09-30',
+        ownWorkoutsCounted: false,
+        recentOwnCompletedWorkoutCount: 0,
+        windowOwnCompletedWorkoutCount: 0,
+        lastOwnCompletedDate: null,
       },
     },
+    reach: null,
     isEmpty: false,
     ...overrides,
   };

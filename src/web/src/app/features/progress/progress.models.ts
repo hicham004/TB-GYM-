@@ -17,6 +17,7 @@ import type {
   ProgressPhotoSource,
   ProgressPhotoStatus,
 } from '../../core/api/generated';
+import { mapReach, type ProgressReach } from './progress-dashboard.models';
 
 export interface BodyMeasurement {
   id: string;
@@ -36,6 +37,8 @@ export interface BodyMeasurement {
 
 export interface BodyMeasurements {
   earlierDate?: string | null;
+  /** How far back the client's own read reached (PRG-015); absent when nothing limits it. */
+  reach?: ProgressReach;
   clientProfileId: string;
   timeZoneId: string;
   displayUnit: MeasurementUnit;
@@ -230,6 +233,7 @@ export function mapMeasurements(value: ContractMeasurements): BodyMeasurements {
       date: day.date,
       measurements: day.measurements.map(mapMeasurement),
     })),
+    reach: mapReach(value.reach ?? null) ?? undefined,
   };
 }
 
@@ -268,6 +272,8 @@ export interface ProgressPhoto {
 
 export interface ProgressPhotos {
   earlierDate?: string | null;
+  /** How far back the client's own read reached (PRG-015); absent when nothing limits it. */
+  reach?: ProgressReach;
   clientProfileId: string;
   from: string;
   toExclusive: string;
@@ -293,6 +299,7 @@ export function mapProgressPhotos(value: ContractProgressPhotos): ProgressPhotos
     toExclusive: value.toExclusive,
     photos: value.photos.map(mapProgressPhoto),
     earlierDate: value.earlierDate ?? null,
+    reach: mapReach(value.reach ?? null) ?? undefined,
   };
 }
 

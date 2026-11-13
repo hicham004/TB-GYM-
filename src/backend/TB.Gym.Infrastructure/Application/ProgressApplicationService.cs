@@ -14,7 +14,8 @@ internal sealed partial class ProgressApplicationService(
     ICurrentUser currentUser,
     ITenantContext tenantContext,
     IMediaApplicationService mediaService,
-    ICoachingFeatureAccessService featureAccessService)
+    ICoachingFeatureAccessService featureAccessService,
+    HouseTierReader houseTierReader)
     : IProgressApplicationService
 {
     private const int DefaultWindowDays = 84;
@@ -24,7 +25,7 @@ internal sealed partial class ProgressApplicationService(
         CancellationToken cancellationToken)
     {
         var client = await FindSelfAsync(cancellationToken);
-        return client is null ? null : await BodyweightSpanAsync(client.Id, cancellationToken);
+        return client is null ? null : await BodyweightSpanAsync(client.Id, own: true, cancellationToken);
     }
 
     public async Task<BodyweightHistorySpanView?> GetClientBodyweightSpanAsync(
@@ -36,21 +37,29 @@ internal sealed partial class ProgressApplicationService(
             .Select(item => new { item.IsCoachBlocked })
             .SingleOrDefaultAsync(cancellationToken);
         return relationship is { IsCoachBlocked: false }
-            ? await BodyweightSpanAsync(clientProfileId, cancellationToken)
+            ? await BodyweightSpanAsync(clientProfileId, own: false, cancellationToken)
             : null;
     }
 
     private async Task<BodyweightHistorySpanView> BodyweightSpanAsync(
         Guid clientProfileId,
+        bool own,
         CancellationToken cancellationToken)
     {
+        // A client's own span starts no earlier than their reach (PRG-015), so nothing asks for older weeks.
+        var reach = own
+            ? await OwnReachAsync(clientProfileId, await GetTenantCalendarAsync(cancellationToken), null, cancellationToken)
+            : null;
+        var floor = reach?.EarliestShown ?? DateOnly.MinValue;
         var dates = dbContext.BodyweightObservations.AsNoTracking()
             .Where(item => item.ClientProfileId == clientProfileId &&
-                           item.Status == BodyweightObservationStatus.Active)
+                           item.Status == BodyweightObservationStatus.Active &&
+                           item.MeasurementDate >= floor)
             .Select(item => (DateOnly?)item.MeasurementDate);
         return new BodyweightHistorySpanView(
             await dates.MinAsync(cancellationToken),
-            await dates.MaxAsync(cancellationToken));
+            await dates.MaxAsync(cancellationToken),
+            reach);
     }
 
     public async Task<ProgressView?> GetOwnAsync(
@@ -62,7 +71,7 @@ internal sealed partial class ProgressApplicationService(
         var client = await FindSelfAsync(cancellationToken);
         return client is null
             ? null
-            : await BuildViewAsync(client.Id, from, to, displayUnit, cancellationToken);
+            : await BuildViewAsync(client.Id, from, to, displayUnit, own: true, cancellationToken);
     }
 
     public async Task<ProgressView?> GetClientAsync(
@@ -78,7 +87,7 @@ internal sealed partial class ProgressApplicationService(
             .Select(client => new { client.IsCoachBlocked })
             .SingleOrDefaultAsync(cancellationToken);
         return client is { IsCoachBlocked: false }
-            ? await BuildViewAsync(clientProfileId, from, to, displayUnit, cancellationToken)
+            ? await BuildViewAsync(clientProfileId, from, to, displayUnit, own: false, cancellationToken)
             : null;
     }
 
@@ -192,7 +201,7 @@ internal sealed partial class ProgressApplicationService(
         var client = await FindSelfAsync(cancellationToken);
         return client is null
             ? null
-            : await BuildMeasurementsViewAsync(client.Id, from, to, displayUnit, cancellationToken);
+            : await BuildMeasurementsViewAsync(client.Id, from, to, displayUnit, own: true, cancellationToken);
     }
 
     public async Task<BodyMeasurementsView?> GetClientMeasurementsAsync(
@@ -204,7 +213,7 @@ internal sealed partial class ProgressApplicationService(
     {
         var client = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
         return client is false
-            ? await BuildMeasurementsViewAsync(clientProfileId, from, to, displayUnit, cancellationToken)
+            ? await BuildMeasurementsViewAsync(clientProfileId, from, to, displayUnit, own: false, cancellationToken)
             : null;
     }
 
@@ -509,6 +518,7 @@ internal sealed partial class ProgressApplicationService(
         DateOnly? requestedFrom,
         DateOnly? requestedTo,
         RecordedMassUnit displayUnit,
+        bool own,
         CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(displayUnit))
@@ -524,9 +534,13 @@ internal sealed partial class ProgressApplicationService(
             throw new ArgumentException($"Progress windows must contain between 1 and {MaximumWindowDays} days.");
         }
 
+        var reach = own ? await OwnReachAsync(clientProfileId, calendar, null, cancellationToken) : null;
+        (from, toExclusive) = ProgressReachWindow.Clamp(from, toExclusive, reach?.EarliestShown);
+
         var firstWeekStart = BodyweightWeekPolicy.GetWeekStart(from, calendar.WeekStartsOn);
         var trendWarmupStart = AddDaysClamped(from, -BodyweightTrendEwma.WarmupDays);
-        var queryStart = firstWeekStart < trendWarmupStart ? firstWeekStart : trendWarmupStart;
+        // Nothing before the reach is read at all, not even as the trend's warm-up or a whole week's mean.
+        var queryStart = AtOrAfter(firstWeekStart < trendWarmupStart ? firstWeekStart : trendWarmupStart, reach);
         var lastIncludedDate = toExclusive.AddDays(-1);
         var weekEndExclusive = BodyweightWeekPolicy.GetWeekStart(lastIncludedDate, calendar.WeekStartsOn).AddDays(7);
         // Days, weekly means and the trend are current truth, so a voided observation contributes
@@ -610,7 +624,8 @@ internal sealed partial class ProgressApplicationService(
                 from,
                 toExclusive,
                 latestTrend?.EstimateKilograms,
-                latestTrend is null ? null : BodyweightUnitConverter.FromKilograms(latestTrend.EstimateKilograms, displayUnit)));
+                latestTrend is null ? null : BodyweightUnitConverter.FromKilograms(latestTrend.EstimateKilograms, displayUnit)),
+            reach);
     }
 
     /// <summary>
@@ -817,6 +832,7 @@ internal sealed partial class ProgressApplicationService(
         DateOnly? requestedFrom,
         DateOnly? requestedTo,
         MeasurementUnit displayUnit,
+        bool own,
         CancellationToken cancellationToken)
     {
         if (displayUnit is not (MeasurementUnit.Centimetre or MeasurementUnit.Inch))
@@ -834,6 +850,10 @@ internal sealed partial class ProgressApplicationService(
             throw new ArgumentException(
                 $"Progress windows must contain between 1 and {MaximumWindowDays} days.");
         }
+
+        var reach = own ? await OwnReachAsync(clientProfileId, calendar, null, cancellationToken) : null;
+        (from, toExclusive) = ProgressReachWindow.Clamp(from, toExclusive, reach?.EarliestShown);
+        var floor = reach?.EarliestShown ?? DateOnly.MinValue;
 
         var measurements = await dbContext.BodyMeasurements
             .AsNoTracking()
@@ -868,8 +888,11 @@ internal sealed partial class ProgressApplicationService(
             toExclusive,
             days,
             await dbContext.BodyMeasurements.AsNoTracking()
-                .Where(item => item.ClientProfileId == clientProfileId && item.MeasurementDate < from)
-                .MaxAsync(item => (DateOnly?)item.MeasurementDate, cancellationToken));
+                .Where(item => item.ClientProfileId == clientProfileId &&
+                               item.MeasurementDate < from &&
+                               item.MeasurementDate >= floor)
+                .MaxAsync(item => (DateOnly?)item.MeasurementDate, cancellationToken),
+            reach);
     }
 
     private async Task<BodyMeasurementHistoryView?> GetMeasurementHistoryAsync(
@@ -949,7 +972,7 @@ internal sealed partial class ProgressApplicationService(
         // making an image silently vanish from their own history.
         return client is null
             ? null
-            : await BuildPhotosViewAsync(client.Id, from, endExclusive, includeRemoved: true, cancellationToken);
+            : await BuildPhotosViewAsync(client.Id, from, endExclusive, includeRemoved: true, own: true, cancellationToken);
     }
 
     public async Task<ProgressPhotosView?> GetClientPhotosAsync(
@@ -961,7 +984,7 @@ internal sealed partial class ProgressApplicationService(
         var blocked = await FindClientRelationshipAsync(clientProfileId, cancellationToken);
         return blocked is null or true
             ? null
-            : await BuildPhotosViewAsync(clientProfileId, from, endExclusive, includeRemoved: false, cancellationToken);
+            : await BuildPhotosViewAsync(clientProfileId, from, endExclusive, includeRemoved: false, own: false, cancellationToken);
     }
 
     public async Task<ProgressPhotoCommandResult> RemoveOwnPhotoAsync(
@@ -1183,6 +1206,7 @@ internal sealed partial class ProgressApplicationService(
         DateOnly? requestedFrom,
         DateOnly? requestedEndExclusive,
         bool includeRemoved,
+        bool own,
         CancellationToken cancellationToken)
     {
         var calendar = await GetTenantCalendarAsync(cancellationToken);
@@ -1192,6 +1216,10 @@ internal sealed partial class ProgressApplicationService(
         {
             throw new ArgumentException($"Progress windows must contain between 1 and {MaximumWindowDays} days.");
         }
+
+        var reach = own ? await OwnReachAsync(clientProfileId, calendar, null, cancellationToken) : null;
+        (from, toExclusive) = ProgressReachWindow.Clamp(from, toExclusive, reach?.EarliestShown);
+        var floor = reach?.EarliestShown ?? DateOnly.MinValue;
 
         var photos = await dbContext.ProgressPhotos
             .AsNoTracking()
@@ -1212,8 +1240,10 @@ internal sealed partial class ProgressApplicationService(
             photos.Select(ToPhotoView).ToArray(),
             await dbContext.ProgressPhotos.AsNoTracking()
                 .Where(item => item.ClientProfileId == clientProfileId && item.PhotoDate < from &&
+                    item.PhotoDate >= floor &&
                     (includeRemoved || item.Status == ProgressPhotoStatus.Active))
-                .MaxAsync(item => (DateOnly?)item.PhotoDate, cancellationToken));
+                .MaxAsync(item => (DateOnly?)item.PhotoDate, cancellationToken),
+            reach);
     }
 
     private async Task TombstoneOrphanedAssetAsync(Guid mediaAssetId, CancellationToken cancellationToken)

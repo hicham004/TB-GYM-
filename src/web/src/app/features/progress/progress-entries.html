@@ -8,6 +8,16 @@
         </a>
         <h1 #heading tabindex="-1" i18n>Your entries</h1>
         <p class="lede" i18n>Everything you have logged, and a way to put a mistake right.</p>
+        @if (reach(); as reach) {
+          <p class="reach" data-reach i18n>
+            On Free, Progress shows
+            {reach.windowDays, plural,
+              =1 {today alone}
+              other {your last {{ reach.windowDays }} days}
+
+            }. Everything you log is kept, and all of it shows here again on a paid plan.
+          </p>
+        }
       </div>
     </header>
   }
@@ -40,8 +50,12 @@
             @if (weightRows().length === 0) {
               <app-empty-state
                 class="panel"
-                [heading]="coachMode() ? noWeightsCoach() : noWeightsClient"
-                [description]="coachMode() ? noWeightsCoachHelp : noWeightsClientHelp"
+                [heading]="
+                  coachMode() ? noWeightsCoach() : (reachEmpty()?.weights ?? noWeightsClient)
+                "
+                [description]="
+                  coachMode() ? noWeightsCoachHelp : (reachEmpty()?.help ?? noWeightsClientHelp)
+                "
               >
                 <button
                   appButton
@@ -148,8 +162,16 @@
             @if (measurementList().length === 0 && !measurementMore()) {
               <app-empty-state
                 class="panel"
-                [heading]="coachMode() ? noMeasurementsCoach() : noMeasurementsClient"
-                [description]="coachMode() ? noMeasurementsCoachHelp : noMeasurementsClientHelp"
+                [heading]="
+                  coachMode()
+                    ? noMeasurementsCoach()
+                    : (reachEmpty()?.measurements ?? noMeasurementsClient)
+                "
+                [description]="
+                  coachMode()
+                    ? noMeasurementsCoachHelp
+                    : (reachEmpty()?.help ?? noMeasurementsClientHelp)
+                "
               >
                 <button
                   appButton
@@ -208,7 +230,7 @@
               >
                 Show earlier measurements
               </button>
-            } @else if (measurementList().length > 0) {
+            } @else if (measurementList().length > 0 && !reach()) {
               <p class="quiet" i18n>There are no earlier measurements.</p>
             }
           }
@@ -252,8 +274,10 @@
             ) {
               <app-empty-state
                 class="panel"
-                [heading]="coachMode() ? noPhotosCoach() : noPhotosClient"
-                [description]="coachMode() ? noPhotosCoachHelp : noPhotosClientHelp"
+                [heading]="coachMode() ? noPhotosCoach() : (reachEmpty()?.photos ?? noPhotosClient)"
+                [description]="
+                  coachMode() ? noPhotosCoachHelp : (reachEmpty()?.help ?? noPhotosClientHelp)
+                "
               >
                 <!-- With uploads off, the toolbar above says so. -->
                 @if (!uploadsOff()) {
@@ -351,7 +375,7 @@
               >
                 Show earlier photos
               </button>
-            } @else if (photoLists().days.length > 0) {
+            } @else if (photoLists().days.length > 0 && !reach()) {
               <p class="quiet" i18n>There are no earlier photos.</p>
             }
           }

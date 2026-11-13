@@ -1382,6 +1382,7 @@ export type {
   ProgressPhotoStatus,
   ProgressPhotosView,
   ProgressPhotoView,
+  ProgressReach,
   ProgressView,
   ProviderFoodSearchPage,
   PublicationStatus,

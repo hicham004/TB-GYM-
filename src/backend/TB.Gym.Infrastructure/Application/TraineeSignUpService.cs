@@ -79,6 +79,23 @@ internal static class HouseReader
             ? (await SettingsAsync(dbContext, tenantId, cancellationToken)).MinimumSignUpAge
             : null;
     }
+
+    /// <summary>
+    /// The house's own media storage in bytes (MED-019), for a workspace that is the house today and has filled it;
+    /// null anywhere else, a former house included, where the platform's allowance stands.
+    /// </summary>
+    public static async Task<long?> MediaStorageBytesAsync(
+        GymDbContext dbContext,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        var isHouse = await dbContext.Tenants
+            .AsNoTracking()
+            .AnyAsync(tenant => tenant.Id == tenantId && tenant.IsHouse && tenant.IsActive, cancellationToken);
+        return isHouse
+            ? (await SettingsAsync(dbContext, tenantId, cancellationToken)).MediaStorageBytes
+            : null;
+    }
 }
 
 /// <summary>

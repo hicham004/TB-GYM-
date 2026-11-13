@@ -89,6 +89,9 @@ function toHouseSignUp(view: HouseSignUpView): HouseSignUp {
   };
 }
 
+/** What a setting's number counts: places or years, days, or gigabytes of storage. */
+export type HouseSettingUnit = 'count' | 'days' | 'gigabytes';
+
 /** How a setting reads on the page and in its sheet; the bounds are the server's own (CLI-023). */
 export interface HouseSettingWords {
   readonly label: string;
@@ -99,6 +102,7 @@ export interface HouseSettingWords {
   readonly reason: string;
   readonly min: number;
   readonly max: number;
+  readonly unit: HouseSettingUnit;
 }
 
 /**
@@ -114,6 +118,7 @@ export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
       reason: $localize`Enter a whole number from 0 to 10,000, or leave it empty.`,
       min: 0,
       max: 10_000,
+      unit: 'count',
     },
     MinimumSignUpAge: {
       label: $localize`Youngest age that may sign up`,
@@ -122,15 +127,42 @@ export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
       reason: $localize`Enter an age from 18 to 100, or leave it empty.`,
       min: 18,
       max: 100,
+      unit: 'count',
+    },
+    FreeProgressDays: {
+      label: $localize`How far back Free’s Progress reaches`,
+      inSentence: $localize`how far back Free’s Progress reaches`,
+      help: $localize`Days, from 1 to 3,650. Empty means no limit. Everything a trainee logs is kept, and a paid plan shows all of it.`,
+      reason: $localize`Enter a whole number of days from 1 to 3,650, or leave it empty.`,
+      min: 1,
+      max: 3_650,
+      unit: 'days',
+    },
+    MediaStorageGigabytes: {
+      label: $localize`The house’s media storage`,
+      inSentence: $localize`the house’s media storage`,
+      help: $localize`Whole gigabytes, from 1 to 10,240. Empty gives the house the platform’s allowance, the same as every coaching space’s.`,
+      reason: $localize`Enter a whole number of gigabytes from 1 to 10,240, or leave it empty.`,
+      min: 1,
+      max: 10_240,
+      unit: 'gigabytes',
     },
   };
 }
 
-/** "20", "10,000" or "Empty": a setting's value as the page shows it. */
-export function settingValueText(value: string | null, locale: string): string {
+/** "20", "10,000", "90 days", "50 GB" or "Empty": a setting's value as the page shows it. */
+export function settingValueText(
+  value: string | null,
+  locale: string,
+  unit: HouseSettingUnit = 'count',
+): string {
   if (value === null || value.trim() === '') return $localize`Empty`;
   const number = Number(value);
-  return Number.isFinite(number) ? formatNumber(number, locale, '1.0-0') : value;
+  if (!Number.isFinite(number)) return value;
+  const shown = formatNumber(number, locale, '1.0-0');
+  if (unit === 'days') return number === 1 ? $localize`1 day` : $localize`${shown}:count: days`;
+  if (unit === 'gigabytes') return $localize`${shown}:count: GB`;
+  return shown;
 }
 
 /**

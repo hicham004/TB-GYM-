@@ -104,7 +104,12 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
     it('has words for every setting the API names, with the server’s own bounds (CLI-023)', () => {
       const words = houseSettingWords();
 
-      expect(Object.keys(words).sort()).toEqual(['MinimumSignUpAge', 'SignUpsPerWeek']);
+      expect(Object.keys(words).sort()).toEqual([
+        'FreeProgressDays',
+        'MediaStorageGigabytes',
+        'MinimumSignUpAge',
+        'SignUpsPerWeek',
+      ]);
       expect(words.SignUpsPerWeek).toEqual({
         label: 'New sign-ups a week',
         inSentence: 'new sign-ups a week',
@@ -112,6 +117,7 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         reason: 'Enter a whole number from 0 to 10,000, or leave it empty.',
         min: 0,
         max: 10_000,
+        unit: 'count',
       });
       expect(words.MinimumSignUpAge).toEqual({
         label: 'Youngest age that may sign up',
@@ -120,6 +126,26 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         reason: 'Enter an age from 18 to 100, or leave it empty.',
         min: 18,
         max: 100,
+        unit: 'count',
+      });
+      // Notes plan N9b5: Free's window in days, empty meaning no limit, and the house's storage in gigabytes.
+      expect(words.FreeProgressDays).toEqual({
+        label: 'How far back Free’s Progress reaches',
+        inSentence: 'how far back Free’s Progress reaches',
+        help: 'Days, from 1 to 3,650. Empty means no limit. Everything a trainee logs is kept, and a paid plan shows all of it.',
+        reason: 'Enter a whole number of days from 1 to 3,650, or leave it empty.',
+        min: 1,
+        max: 3_650,
+        unit: 'days',
+      });
+      expect(words.MediaStorageGigabytes).toEqual({
+        label: 'The house’s media storage',
+        inSentence: 'the house’s media storage',
+        help: 'Whole gigabytes, from 1 to 10,240. Empty gives the house the platform’s allowance, the same as every coaching space’s.',
+        reason: 'Enter a whole number of gigabytes from 1 to 10,240, or leave it empty.',
+        min: 1,
+        max: 10_240,
+        unit: 'gigabytes',
       });
     });
 
@@ -132,6 +158,17 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
       expect(settingValueText('   ', LOCALE)).toBe('Empty');
       // Something that is not a number is shown as the server keeps it, never as 0.
       expect(settingValueText('soon', LOCALE)).toBe('soon');
+    });
+
+    it('names a number of days or gigabytes with its unit, and an empty one as Empty (N9b5)', () => {
+      expect(settingValueText('90', LOCALE, 'days')).toBe('90 days');
+      expect(settingValueText('1', LOCALE, 'days')).toBe('1 day');
+      expect(settingValueText('3650', LOCALE, 'days')).toBe('3,650 days');
+      expect(settingValueText('50', LOCALE, 'gigabytes')).toBe('50 GB');
+      expect(settingValueText('10240', LOCALE, 'gigabytes')).toBe('10,240 GB');
+      expect(settingValueText(null, LOCALE, 'days')).toBe('Empty');
+      expect(settingValueText('', LOCALE, 'gigabytes')).toBe('Empty');
+      expect(settingValueText('23', LOCALE, 'count')).toBe('23');
     });
   });
 

@@ -74,6 +74,10 @@ A per-client progress-photo allowance is added alongside the workspace one, defa
 between one maximum-size image and the workspace allowance. Both are enforced: an upload must fit
 inside the workspace limit *and* the client limit.
 
+Since notes plan N9b5 the house (ADR 0041) has its own workspace allowance once the platform admin fills it,
+in whole gigabytes (MED-019); every other workspace, and a former house, keeps `Media:MaxWorkspaceStorageBytes`.
+The upload reads the allowance once, so the pre-check and the binding check under the lock agree.
+
 **Concurrency.** A read-then-write check cannot hold, because two uploads can observe the same free
 space and both commit. The measurement, the decision, and the insert therefore happen inside one
 transaction holding a transaction-scoped PostgreSQL advisory lock keyed on the workspace. Locking the

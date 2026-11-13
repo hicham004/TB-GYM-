@@ -29,6 +29,14 @@
   transform: scaleX(-1);
 }
 
+// How far back a Free trainee's own Progress reaches (PRG-015): one quiet line under the lede.
+.reach {
+  color: var(--tb-muted);
+  font-size: 0.9rem;
+  margin-block: 0.5rem 0;
+  max-inline-size: 40rem;
+}
+
 // The client's own page is a column, as Today and My profile are; a coach's sits inside a client's page.
 .page:not(.coach) {
   margin-inline: auto;

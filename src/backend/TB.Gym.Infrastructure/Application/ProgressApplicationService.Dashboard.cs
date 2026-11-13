@@ -98,23 +98,27 @@ internal sealed partial class ProgressApplicationService
             throw new ArgumentException($"Progress windows must contain between 1 and {MaximumWindowDays} days.");
         }
 
-        var windowDayCount = toExclusive.DayNumber - from.DayNumber;
-        var recentFrom = windowDayCount <= RecentDays ? from : AddDaysClamped(toExclusive, -RecentDays);
-        var window = new DashboardWindow(from, toExclusive, recentFrom, windowDayCount);
-
         // One evaluation covers every feature in a single pass over the entitlement tables, and
         // still yields a separate per-feature decision. Calling EvaluateAsync twice would repeat
-        // the same five queries to reach the same two answers.
+        // the same five queries to reach the same two answers. The client's own reach reads the
+        // tier from the same decisions, so it is evaluated before the window is fixed.
         var access = await featureAccessService.EvaluateAllAsync(
             tenantContext.TenantId,
             clientProfileId,
             cancellationToken);
+        var reach = forCoach ? null : await OwnReachAsync(clientProfileId, calendar, access, cancellationToken);
+        (from, toExclusive) = ProgressReachWindow.Clamp(from, toExclusive, reach?.EarliestShown);
+
+        var windowDayCount = toExclusive.DayNumber - from.DayNumber;
+        var recentFrom = windowDayCount <= RecentDays ? from : AddDaysClamped(toExclusive, -RecentDays);
+        var window = new DashboardWindow(from, toExclusive, recentFrom, windowDayCount);
 
         var bodyweight = await BuildDashboardBodyweightAsync(
             clientProfileId,
             window,
             calendar,
             displayUnit,
+            reach,
             cancellationToken);
         if (forCoach)
         {
@@ -131,7 +135,12 @@ internal sealed partial class ProgressApplicationService
             cancellationToken);
         var photos = await BuildDashboardPhotosAsync(clientProfileId, window, cancellationToken);
         var nutrition = await BuildDashboardNutritionAsync(clientProfileId, window, access, cancellationToken);
-        var training = await BuildDashboardTrainingAsync(clientProfileId, window, access, cancellationToken);
+        var training = await BuildDashboardTrainingAsync(
+            clientProfileId,
+            window,
+            access,
+            countOwnWorkouts: calendar.IsHouse,
+            cancellationToken);
 
         return new ProgressDashboardView(
             clientProfileId,
@@ -146,7 +155,8 @@ internal sealed partial class ProgressApplicationService
             measurements,
             photos,
             nutrition,
-            training);
+            training,
+            reach);
     }
 
     private async Task<DashboardBodyweightSection> BuildDashboardBodyweightAsync(
@@ -154,13 +164,15 @@ internal sealed partial class ProgressApplicationService
         DashboardWindow window,
         WorkspaceCalendar calendar,
         RecordedMassUnit displayUnit,
+        ProgressReach? reach,
         CancellationToken cancellationToken)
     {
         // The trend needs its warm-up, and the weekly grid needs whole workspace weeks, so the read
-        // spans the union of those and the window. It stays one date-filtered projection.
+        // spans the union of those and the window. It stays one date-filtered projection. Nothing
+        // before a client's reach is read (PRG-015), not even as warm-up or as a whole week.
         var firstWeekStart = BodyweightWeekPolicy.GetWeekStart(window.From, calendar.WeekStartsOn);
         var trendWarmupStart = AddDaysClamped(window.From, -BodyweightTrendEwma.WarmupDays);
-        var queryStart = firstWeekStart < trendWarmupStart ? firstWeekStart : trendWarmupStart;
+        var queryStart = AtOrAfter(firstWeekStart < trendWarmupStart ? firstWeekStart : trendWarmupStart, reach);
         var lastIncludedDate = window.ToExclusive.AddDays(-1);
         var weekEndExclusive = BodyweightWeekPolicy
             .GetWeekStart(lastIncludedDate, calendar.WeekStartsOn)
@@ -393,6 +405,7 @@ internal sealed partial class ProgressApplicationService
         Guid clientProfileId,
         DashboardWindow window,
         IReadOnlyList<FeatureAccessDecision> access,
+        bool countOwnWorkouts,
         CancellationToken cancellationToken)
     {
         var decision = Decision(access, CoachingFeature.Training);
@@ -430,6 +443,20 @@ internal sealed partial class ProgressApplicationService
             .Where(item => item.ExecutionStatus == WorkoutExecutionStatus.Completed)
             .ToArray();
         var inProgress = sessions.Count(item => item.ExecutionStatus == WorkoutExecutionStatus.InProgress);
+
+        // Workouts of one's own (TRN-033) are counted apart, never as a planned session: finished ones, by the house day
+        // each was started on, as the week strip counts them. Only the house holds them, so nowhere else asks.
+        var ownDates = countOwnWorkouts
+            ? await dbContext.WorkoutExecutions.AsNoTracking()
+                .Where(execution =>
+                    execution.ClientProfileId == clientProfileId &&
+                    execution.TrainingSessionId == null &&
+                    execution.Status == WorkoutExecutionStatus.Completed &&
+                    execution.ScheduledDateSnapshot >= window.From &&
+                    execution.ScheduledDateSnapshot < window.ToExclusive)
+                .Select(execution => execution.ScheduledDateSnapshot)
+                .ToArrayAsync(cancellationToken)
+            : [];
         return Available(decision, new DashboardTrainingContext(
             window.RecentFrom,
             window.ToExclusive,
@@ -439,7 +466,11 @@ internal sealed partial class ProgressApplicationService
             sessions.Length,
             completed.Length,
             inProgress,
-            completed.Length == 0 ? null : completed.Max(item => item.Date)));
+            completed.Length == 0 ? null : completed.Max(item => item.Date),
+            ownDates.Count(date => date >= window.RecentFrom),
+            ownDates.Length,
+            ownDates.Length == 0 ? null : ownDates.Max(),
+            countOwnWorkouts));
     }
 
     private static FeatureAccessDecision Decision(

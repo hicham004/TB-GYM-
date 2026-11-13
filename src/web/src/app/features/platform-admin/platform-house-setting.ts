@@ -74,7 +74,7 @@ export class PlatformHouseSetting {
   /** "In force now: 20 · Changed by Hicham Haddad on Thu 12 Nov". */
   protected readonly inForce = computed(() => {
     const current = this.current();
-    const value = settingValueText(current.value, this.locale);
+    const value = settingValueText(current.value, this.locale, this.words().unit);
     const changed = changedLine(current, this.house(), this.locale);
     return $localize`In force now: ${value}:value: · ${changed}:changed:`;
   });

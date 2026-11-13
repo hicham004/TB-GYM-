@@ -92,7 +92,7 @@ export class PlatformHouse extends GuardedSheets {
     return view.settings.map((row) => ({
       row,
       words: this.words[row.setting],
-      shown: settingValueText(row.value, this.locale),
+      shown: settingValueText(row.value, this.locale, this.words[row.setting].unit),
       changed: changedLine(row, house, this.locale),
     }));
   });
@@ -172,12 +172,13 @@ export class PlatformHouse extends GuardedSheets {
             }
           : view,
       );
-      const label = this.words[saved.setting].label;
-      const shown = settingValueText(saved.value, this.locale);
+      const words = this.words[saved.setting];
+      const label = words.label;
+      const shown = settingValueText(saved.value, this.locale, words.unit);
       this.done(
         sheet,
         saved.value === null
-          ? $localize`${label}:setting: is now empty, so sign-up is closed.`
+          ? emptiedWords(saved.setting, label)
           : saved.setting === 'SignUpsPerWeek' && Number(saved.value) === 0
             ? $localize`${label}:setting: is now ${shown}:value:, so sign-up is closed.`
             : $localize`${label}:setting: is now ${shown}:value:.`,
@@ -185,5 +186,17 @@ export class PlatformHouse extends GuardedSheets {
       return;
     }
     await this.closeAsking(sheet);
+  }
+}
+
+/** What emptying a setting does, in the toast: sign-up closes, Free's Progress has no limit, or the platform's room. */
+function emptiedWords(setting: HouseSetting, label: string): string {
+  switch (setting) {
+    case 'FreeProgressDays':
+      return $localize`${label}:setting: is now empty, so Free’s Progress has no limit.`;
+    case 'MediaStorageGigabytes':
+      return $localize`${label}:setting: is now empty, so the house has the platform’s allowance.`;
+    default:
+      return $localize`${label}:setting: is now empty, so sign-up is closed.`;
   }
 }

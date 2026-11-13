@@ -18,6 +18,7 @@ import type {
   MeasurementType,
   MeasurementUnit,
   ProgressDashboardView as ContractDashboard,
+  ProgressReach as ContractReach,
   ProgressPhotoPose,
   RecordedMassUnit,
 } from '../../core/api/generated';
@@ -168,6 +169,23 @@ export interface DashboardTraining {
   windowCompletedWorkoutCount: number;
   windowInProgressWorkoutCount: number;
   lastCompletedDate: string | null;
+  /**
+   * Whether the server counted workouts of one's own (TRN-033): in the house alone. Those are counts of their own,
+   * never planned sessions, so a trainee with no program reads them where a coach's client reads done of planned.
+   */
+  ownWorkoutsCounted: boolean;
+  recentOwnCompletedWorkoutCount: number;
+  windowOwnCompletedWorkoutCount: number;
+  lastOwnCompletedDate: string | null;
+}
+
+/**
+ * How far back the client's own Progress reached (PRG-015): the house's window for Free, in days, and the earliest day
+ * shown. Absent on a coach's read and whenever nothing limits it.
+ */
+export interface ProgressReach {
+  windowDays: number;
+  earliestShown: string;
 }
 
 export interface ProgressDashboard {
@@ -184,6 +202,7 @@ export interface ProgressDashboard {
   photos: DashboardPhotos;
   nutrition: DashboardSection<DashboardNutrition>;
   training: DashboardSection<DashboardTraining>;
+  reach: ProgressReach | null;
   /** True when no domain recorded anything in the window, which the view reports as empty. */
   isEmpty: boolean;
 }
@@ -208,6 +227,7 @@ export function mapProgressDashboard(value: ContractDashboard): ProgressDashboar
     photos,
     nutrition,
     training,
+    reach: mapReach(value.reach ?? null),
     // An unavailable section is not emptiness: the client may well have logged, and the viewer is
     // simply not permitted to see it. Only sections that are both readable and empty count here.
     isEmpty:
@@ -215,8 +235,17 @@ export function mapProgressDashboard(value: ContractDashboard): ProgressDashboar
       measurements.summaries.length === 0 &&
       photos.photoCount === 0 &&
       (!nutrition.available || nutrition.context?.windowLoggedDayCount === 0) &&
-      (!training.available || training.context?.windowScheduledSessionCount === 0),
+      (!training.available ||
+        (training.context?.windowScheduledSessionCount === 0 &&
+          training.context.windowOwnCompletedWorkoutCount === 0)),
   };
+}
+
+/** The reach the server applied, or none. */
+export function mapReach(value: ContractReach | null): ProgressReach | null {
+  return value === null
+    ? null
+    : { windowDays: Number(value.windowDays), earliestShown: value.earliestShown };
 }
 
 function mapBodyweight(value: ContractBodyweight): DashboardBodyweight {
@@ -465,6 +494,10 @@ function mapTrainingContext(value: ContractTrainingContext | null): DashboardTra
         windowCompletedWorkoutCount: Number(value.windowCompletedWorkoutCount),
         windowInProgressWorkoutCount: Number(value.windowInProgressWorkoutCount),
         lastCompletedDate: value.lastCompletedDate ?? null,
+        ownWorkoutsCounted: value.ownWorkoutsCounted ?? false,
+        recentOwnCompletedWorkoutCount: Number(value.recentOwnCompletedWorkoutCount ?? 0),
+        windowOwnCompletedWorkoutCount: Number(value.windowOwnCompletedWorkoutCount ?? 0),
+        lastOwnCompletedDate: value.lastOwnCompletedDate ?? null,
       };
 }
 

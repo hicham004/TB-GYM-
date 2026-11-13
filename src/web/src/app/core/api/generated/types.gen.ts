@@ -330,6 +330,7 @@ export type BodyMeasurementsView = {
   toExclusive: string;
   days: Array<BodyMeasurementDayView>;
   earlierDate?: null | string;
+  reach?: null | ProgressReach;
 };
 
 export type BodyMeasurementView = {
@@ -378,6 +379,7 @@ export type BodyweightHistoryItemView = {
 export type BodyweightHistorySpanView = {
   firstDate: null | string;
   lastDate: null | string;
+  reach?: null | ProgressReach;
 };
 
 export type BodyweightHistoryView = {
@@ -2057,6 +2059,10 @@ export type DashboardTrainingContext = {
   windowCompletedWorkoutCount: number | string;
   windowInProgressWorkoutCount: number | string;
   lastCompletedDate: null | string;
+  recentOwnCompletedWorkoutCount?: number | string;
+  windowOwnCompletedWorkoutCount?: number | string;
+  lastOwnCompletedDate?: null | string;
+  ownWorkoutsCounted?: boolean;
 };
 
 export type DashboardWeeklyChange = {
@@ -2515,7 +2521,8 @@ export type HouseAdminView = {
   signUp: null | HouseSignUpView;
 };
 
-export type HouseSetting = 'SignUpsPerWeek' | 'MinimumSignUpAge';
+export type HouseSetting =
+  'SignUpsPerWeek' | 'MinimumSignUpAge' | 'FreeProgressDays' | 'MediaStorageGigabytes';
 
 export type HouseSettingView = {
   setting: HouseSetting;
@@ -3720,6 +3727,7 @@ export type ProgressDashboardView = {
   photos: DashboardPhotosSection;
   nutrition: DashboardEntitledSectionOfDashboardNutritionContext;
   training: DashboardEntitledSectionOfDashboardTrainingContext;
+  reach?: null | ProgressReach;
 };
 
 export type ProgressionPreviewRequest = {
@@ -3770,6 +3778,7 @@ export type ProgressPhotosView = {
   toExclusive: string;
   photos: Array<ProgressPhotoView>;
   earlierDate?: null | string;
+  reach?: null | ProgressReach;
 };
 
 export type ProgressPhotoView = {
@@ -3784,6 +3793,13 @@ export type ProgressPhotoView = {
   version: number | string;
 };
 
+export type ProgressReach = {
+  methodKey: string;
+  methodVersion: string;
+  windowDays: number | string;
+  earliestShown: string;
+};
+
 export type ProgressView = {
   clientProfileId: string;
   timeZoneId: string;
@@ -3794,6 +3810,7 @@ export type ProgressView = {
   days: Array<BodyweightDayView>;
   weeks: Array<BodyweightWeekView>;
   trend: BodyweightTrendView;
+  reach?: null | ProgressReach;
 };
 
 export type ProviderFoodSearchPage = {

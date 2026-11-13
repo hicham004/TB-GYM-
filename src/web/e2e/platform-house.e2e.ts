@@ -31,7 +31,7 @@ const NOW = '2026-11-12T09:00:00Z';
 const HOUSE_ID = '00000000-0000-4000-8000-0000000000f1';
 const HOUSE_NAME = 'TB Gym coaching space';
 
-type Setting = 'SignUpsPerWeek' | 'MinimumSignUpAge';
+type Setting = 'SignUpsPerWeek' | 'MinimumSignUpAge' | 'FreeProgressDays' | 'MediaStorageGigabytes';
 
 interface SettingView {
   readonly setting: Setting;
@@ -484,6 +484,80 @@ test('emptying a setting sends no value, and the toast says sign-up is closed', 
   ]);
   await expect(perWeek.locator('[data-value]')).toHaveText('Empty');
 });
+
+/** Every setting the house has since notes plan N9b5: sign-up's two, Free's window and the house's storage. */
+function allSettings(): SettingView[] {
+  return [
+    ...filledSettings(),
+    {
+      setting: 'FreeProgressDays',
+      value: '90',
+      version: 2,
+      changedAtUtc: '2026-11-10T08:30:00Z',
+      changedByUserId: ADMIN.id,
+      changedByName: ADMIN.displayName,
+    },
+    {
+      setting: 'MediaStorageGigabytes',
+      value: '50',
+      version: 1,
+      changedAtUtc: '2026-11-10T08:30:00Z',
+      changedByUserId: ADMIN.id,
+      changedByName: ADMIN.displayName,
+    },
+  ];
+}
+
+for (const width of [390, 1440]) {
+  test(`Free’s window and the house’s storage read with their units at ${width}px, and emptying the window lifts the limit (N9b5)`, async ({
+    page,
+  }) => {
+    const record = await openHouse(page, width, {
+      record: new HouseRecord({ settings: allSettings() }),
+    });
+    const window = settingRow(page, 'FreeProgressDays');
+    const storage = settingRow(page, 'MediaStorageGigabytes');
+    await expect(window.locator('strong')).toHaveText('How far back Free’s Progress reaches');
+    await expect(window.locator('[data-value]')).toHaveText('90 days');
+    await expect(storage.locator('strong')).toHaveText('The house’s media storage');
+    await expect(storage.locator('[data-value]')).toHaveText('50 GB');
+    await axe(page);
+    await expectNoHorizontalOverflow(page);
+
+    await window
+      .getByRole('button', { name: 'Change how far back Free’s Progress reaches' })
+      .click();
+    const windowSheet = () =>
+      page.getByRole('dialog', {
+        name: 'Change how far back Free’s Progress reaches',
+        exact: true,
+      });
+    const sheet = windowSheet();
+    await sheet.getByLabel('How far back Free’s Progress reaches').fill('30');
+    await sheet.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(
+      page.getByText('How far back Free’s Progress reaches is now 30 days.'),
+    ).toBeVisible();
+    await expect(window.locator('[data-value]')).toHaveText('30 days');
+
+    await window
+      .getByRole('button', { name: 'Change how far back Free’s Progress reaches' })
+      .click();
+    await windowSheet().getByLabel('How far back Free’s Progress reaches').fill('');
+    await windowSheet().getByRole('button', { name: 'Save' }).click();
+    await expect(
+      page.getByText(
+        'How far back Free’s Progress reaches is now empty, so Free’s Progress has no limit.',
+      ),
+    ).toBeVisible();
+    await expect(window.locator('[data-value]')).toHaveText('Empty');
+    expect(record.puts).toEqual([
+      { setting: 'FreeProgressDays', body: { value: '30', expectedVersion: 2 } },
+      { setting: 'FreeProgressDays', body: { value: null, expectedVersion: 3 } },
+    ]);
+  });
+}
 
 test('Platform billing’s House link opens the page, and its own link leads back', async ({
   page,

@@ -51,6 +51,7 @@ import {
   type PhotoTile,
   type WeighInRow,
 } from './progress-entries.models';
+import type { ProgressReach } from './progress-dashboard.models';
 import type { BodyMeasurements, ProgressPhoto, ProgressViewModel } from './progress.models';
 
 /** One read covers up to a year; "Show earlier" reads the year before the oldest one loaded. */
@@ -184,6 +185,36 @@ export class ProgressEntries {
     () => $localize`${this.who()}:name: has no photos yet`,
   );
 
+  /**
+   * How far back the client's own Progress reaches (PRG-015), as the last own read said: the house's window on Free,
+   * or none. A coach's read never carries one.
+   */
+  protected readonly reach = signal<ProgressReach | null>(null);
+  /**
+   * The client's empty words while a reach cuts their own reads: what the reach holds, never "yet" or "first", since
+   * what they logged before is kept (PRG-015).
+   */
+  protected readonly reachEmpty = computed(() => {
+    const reach = this.reach();
+    if (reach === null) return null;
+    const days = reach.windowDays;
+    return {
+      weights:
+        days === 1
+          ? $localize`No weights today`
+          : $localize`No weights in your last ${days}:days: days`,
+      measurements:
+        days === 1
+          ? $localize`No measurements today`
+          : $localize`No measurements in your last ${days}:days: days`,
+      photos:
+        days === 1
+          ? $localize`No photos today`
+          : $localize`No photos in your last ${days}:days: days`,
+      help: $localize`Anything you logged before is kept, and shows again on a paid plan.`,
+    };
+  });
+
   // ---- weight ----
   protected readonly unit = signal<MassUnit>('Kilogram');
   protected readonly weightState = signal<FeedState>('idle');
@@ -252,6 +283,7 @@ export class ProgressEntries {
 
   private reset(): void {
     this.workspace.set(null);
+    this.reach.set(null);
     this.weightState.set('idle');
     this.weightWindows.set([]);
     this.weightRanges = [];
@@ -356,6 +388,7 @@ export class ProgressEntries {
         this.weightRanges = [range];
         this.weightWindows.set([window]);
         this.firstWeighIn = span.firstDate;
+        this.reach.set(span.reach ?? null);
         this.weightMore.set(span.firstDate !== null && span.firstDate < range.from);
         this.weightState.set('ready');
       } catch {
@@ -403,10 +436,14 @@ export class ProgressEntries {
             firstValueFrom(this.entries.weightSpan(this.clientId())),
           ]),
         );
-        this.weightWindows.set(windows);
+        const kept = newerFirst(windows);
+        this.weightRanges = kept.map((index) => ranges[index]);
+        this.weightWindows.set(kept.map((index) => windows[index]));
         this.firstWeighIn = span.firstDate;
+        this.reach.set(span.reach ?? null);
         this.weightMore.set(
-          span.firstDate !== null && span.firstDate < ranges[ranges.length - 1].from,
+          span.firstDate !== null &&
+            span.firstDate < this.weightRanges[this.weightRanges.length - 1].from,
         );
       } catch {
         if (!owner.current) return;
@@ -433,6 +470,7 @@ export class ProgressEntries {
         this.measurementRanges = [range];
         this.measurementWindows.set([window]);
         this.earlierMeasurementDate = window.earlierDate ?? null;
+        this.reach.set(window.reach ?? null);
         this.measurementMore.set(this.earlierMeasurementDate !== null);
         this.measurementState.set('ready');
       } catch {
@@ -478,8 +516,12 @@ export class ProgressEntries {
             ),
           ),
         );
-        this.measurementWindows.set(windows);
-        this.earlierMeasurementDate = windows.at(-1)?.earlierDate ?? null;
+        const kept = newerFirst(windows);
+        this.measurementRanges = kept.map((index) => this.measurementRanges[index]);
+        const shown = kept.map((index) => windows[index]);
+        this.measurementWindows.set(shown);
+        this.earlierMeasurementDate = shown.at(-1)?.earlierDate ?? null;
+        this.reach.set(shown.at(-1)?.reach ?? null);
         this.measurementMore.set(this.earlierMeasurementDate !== null);
       } catch {
         if (!owner.current) return;
@@ -504,6 +546,7 @@ export class ProgressEntries {
         this.photoRanges = [range];
         this.photoWindows.set([window.photos]);
         this.earlierPhotoDate = window.earlierDate ?? null;
+        this.reach.set(window.reach ?? null);
         this.photoMore.set(this.earlierPhotoDate !== null);
         this.photoState.set('ready');
         await owner.wait(this.grantThumbnails(window.photos, owner));
@@ -546,8 +589,12 @@ export class ProgressEntries {
             ),
           ),
         );
-        this.photoWindows.set(windows.map((window) => window.photos));
-        this.earlierPhotoDate = windows.at(-1)?.earlierDate ?? null;
+        const kept = newerFirst(windows);
+        this.photoRanges = kept.map((index) => this.photoRanges[index]);
+        const shown = kept.map((index) => windows[index]);
+        this.photoWindows.set(shown.map((window) => window.photos));
+        this.earlierPhotoDate = shown.at(-1)?.earlierDate ?? null;
+        this.reach.set(shown.at(-1)?.reach ?? null);
         this.photoMore.set(this.earlierPhotoDate !== null);
         await owner.wait(
           this.grantThumbnails(
@@ -616,4 +663,17 @@ export class ProgressEntries {
     if (action === 'correct') sheets.correctMeasurement(row);
     else sheets.measurementChanges(row);
   }
+}
+
+/**
+ * Which windows a refresh read again, newest first, to keep: each must start before the one after it. A window wholly
+ * before a Free trainee's reach comes back as the reach's first day (PRG-015), which a newer window already holds, so
+ * it is dropped with its range instead of showing that day twice.
+ */
+export function newerFirst(windows: readonly { from: string }[]): number[] {
+  const kept: number[] = [];
+  windows.forEach((window, index) => {
+    if (kept.length === 0 || window.from < windows[kept[kept.length - 1]].from) kept.push(index);
+  });
+  return kept;
 }

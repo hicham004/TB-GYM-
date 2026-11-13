@@ -57,7 +57,17 @@
       <div></div>
     </div>
   } @else if (dashboard(); as view) {
-    @if (range() === 'all') {
+    @if (!coachMode() && view.reach; as reach) {
+      <p class="range-note" data-reach i18n>
+        On Free, Progress shows
+        {reach.windowDays, plural, =1 {today alone} other {your last {{ reach.windowDays }} days}}.
+        Everything you log is kept, and all of it shows here again on a paid plan.
+      </p>
+      @if (range() === 'all' && reach.windowDays > 366) {
+        <!-- All reaches the window's weigh-ins; the other sections stay within the dashboard's year. -->
+        <p class="range-note" data-year-note i18n>The other sections show the latest 12 months.</p>
+      }
+    } @else if (range() === 'all') {
       <p class="range-note" i18n>
         Showing all recorded weight entries. The other sections show the latest 12 months.
       </p>
@@ -105,6 +115,14 @@
         </p>
       } @else if (coachMode()) {
         <p class="empty" dir="auto" i18n>{{ who() }} has no weigh-ins in this period.</p>
+      } @else if (view.reach; as reach) {
+        <!-- Older weigh-ins are kept past the reach (PRG-015): never "first" here. -->
+        <p class="empty" data-reach-empty i18n>
+          {reach.windowDays, plural,
+            =1 {No weigh-ins today.}
+            other {No weigh-ins in your last {{ reach.windowDays }} days.}
+          }
+        </p>
       } @else {
         <p class="empty" i18n>Your weight chart will appear after your first entry.</p>
       }
@@ -314,11 +332,64 @@
           </div>
           @if (!view.training.available) {
             <p class="empty">{{ unavailableReason(view.training.reason) }}</p>
-          } @else if (view.training.context) {
-            <app-bar-chart
-              [bars]="trainingBars()"
-              label="Completed workouts compared with scheduled workouts"
-            />
+          } @else if (view.training.context; as training) {
+            @if (training.ownWorkoutsCounted && training.windowScheduledSessionCount === 0) {
+              <!-- Nothing planned: a workout of one's own is counted as done, never against a plan (TRN-033). -->
+              @if (training.windowOwnCompletedWorkoutCount === 0) {
+                @if (coachMode()) {
+                  <p class="empty" dir="auto" data-own-workouts i18n>
+                    {{ who() }} has finished no workouts in this period.
+                  </p>
+                } @else {
+                  <p class="empty" data-own-workouts i18n>Workouts you finish are counted here.</p>
+                }
+              } @else {
+                <div class="own-workouts" data-own-workouts>
+                  <strong>{{ training.recentOwnCompletedWorkoutCount }}</strong
+                  ><span i18n>
+                    {training.recentOwnCompletedWorkoutCount, plural, =1 {workout} other {workouts}}
+                    finished in the last
+                    {training.recentDayCount, plural,
+                      =1 {day}
+                      other {{{ training.recentDayCount }} days}
+                    }</span
+                  >
+                  <p class="context" i18n>
+                    {training.windowOwnCompletedWorkoutCount, plural,
+                      =1 {1 workout}
+                      other {{{ training.windowOwnCompletedWorkoutCount }} workouts}
+                    }
+                    finished in this period
+                  </p>
+                </div>
+              }
+            } @else {
+              <app-bar-chart
+                [bars]="trainingBars()"
+                label="Completed workouts compared with scheduled workouts"
+              />
+              @if (training.windowOwnCompletedWorkoutCount > 0) {
+                @if (coachMode()) {
+                  <p class="context" data-own-workouts i18n>
+                    Also
+                    {training.windowOwnCompletedWorkoutCount, plural,
+                      =1 {1 workout}
+                      other {{{ training.windowOwnCompletedWorkoutCount }} workouts}
+                    }
+                    of their own in this period
+                  </p>
+                } @else {
+                  <p class="context" data-own-workouts i18n>
+                    Also
+                    {training.windowOwnCompletedWorkoutCount, plural,
+                      =1 {1 workout}
+                      other {{{ training.windowOwnCompletedWorkoutCount }} workouts}
+                    }
+                    of your own in this period
+                  </p>
+                }
+              }
+            }
           }
         </section>
 
