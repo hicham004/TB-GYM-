@@ -294,6 +294,15 @@ internal sealed class AccountClosureService(
             invitation.Anonymise(now);
         }
 
+        // The Whish name and number they said they sent a plan's money from (SUB-020): the asks and the money stay,
+        // the person's details go.
+        foreach (var transfer in await space.HousePlanTransfers
+                     .Where(transfer => profileIds.Contains(transfer.ClientProfileId))
+                     .ToListAsync(cancellationToken))
+        {
+            transfer.Anonymise(now);
+        }
+
         // A sign-up still waiting holds the name and date of birth typed; it is deleted as the sweep deletes one, under
         // the same row lock a confirmation takes.
         await space.Database.ExecuteSqlAsync(

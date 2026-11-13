@@ -209,6 +209,15 @@ internal sealed class NotificationApplicationService(
     }
 
     /// <summary>
+    /// The staff notices that open the client's page they are about, whose outbox row's aggregate is that client: a
+    /// renewal request (ADR 0029) and the house's two money notices (SUB-020).
+    /// </summary>
+    private static bool LinksToTheClient(CommercialNotificationKind kind) =>
+        kind is CommercialNotificationKind.RenewalRequested
+            or CommercialNotificationKind.HousePlanAsked
+            or CommercialNotificationKind.HousePlanMoneySent;
+
+    /// <summary>
     /// Where each linked notice leads: identifiers its intent holds, read from the outbox row and never
     /// returned as a payload. Only the kinds a screen links to are read.
     /// </summary>
@@ -217,7 +226,7 @@ internal sealed class NotificationApplicationService(
         CancellationToken cancellationToken)
     {
         var sources = notifications
-            .Where(item => item.Kind == CommercialNotificationKind.RenewalRequested ||
+            .Where(item => LinksToTheClient(item.Kind) ||
                 NotificationPurposeCatalog.IsTrainingKind(item.Kind))
             .Select(item => item.SourceOutboxItemId)
             .ToArray();
@@ -232,7 +241,7 @@ internal sealed class NotificationApplicationService(
             .ToListAsync(cancellationToken);
         var delivered = notifications.ToDictionary(item => item.SourceOutboxItemId, item => item.TargetWeeks);
         var training = rows
-            .Where(row => row.Kind != CommercialNotificationKind.RenewalRequested)
+            .Where(row => !LinksToTheClient(row.Kind))
             .Select(row => (row.Id, row.Kind, Payload: ReadTrainingPayload(row.PayloadJson)))
             .Where(row => row.Payload is not null)
             .Select(row => (row.Id, row.Kind, Payload: row.Payload!))
@@ -246,7 +255,7 @@ internal sealed class NotificationApplicationService(
             cancellationToken);
 
         var links = rows
-            .Where(row => row.Kind == CommercialNotificationKind.RenewalRequested)
+            .Where(row => LinksToTheClient(row.Kind))
             .ToDictionary(row => row.Id, row => new NotificationLink(row.AggregateId, null, null, null));
         foreach (var (id, kind, payload) in training)
         {

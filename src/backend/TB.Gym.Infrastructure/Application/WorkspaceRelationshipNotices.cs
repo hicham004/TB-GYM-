@@ -117,6 +117,75 @@ internal static class WorkspaceRelationshipNotices
             $"renewal-requested:{renewalRequestId:N}:v1",
             now);
 
+    /// <summary>
+    /// Tells the house's Owner and the trainee's coach, in-app only, that a trainee asked for a plan (SUB-020). One
+    /// row per recipient, the recipient in its key; the payload holds only the trainee's id.
+    /// </summary>
+    public static void HousePlanAsked(
+        GymDbContext dbContext,
+        Guid tenantId,
+        string tenantTimeZoneId,
+        IEnumerable<Guid> staffUserIds,
+        Guid clientProfileId,
+        Guid askId,
+        DateTimeOffset now) =>
+        HousePlanNotice(
+            dbContext,
+            tenantId,
+            tenantTimeZoneId,
+            staffUserIds,
+            clientProfileId,
+            CommercialNotificationKind.HousePlanAsked,
+            $"house-plan-asked:{askId:N}",
+            now);
+
+    /// <summary>
+    /// Tells the house's Owner and the trainee's coach, in-app only, that a trainee said an ask's money was sent
+    /// (SUB-020). Never the Whish name or number: the payload holds only the trainee's id.
+    /// </summary>
+    public static void HousePlanMoneySent(
+        GymDbContext dbContext,
+        Guid tenantId,
+        string tenantTimeZoneId,
+        IEnumerable<Guid> staffUserIds,
+        Guid clientProfileId,
+        Guid askId,
+        DateTimeOffset now) =>
+        HousePlanNotice(
+            dbContext,
+            tenantId,
+            tenantTimeZoneId,
+            staffUserIds,
+            clientProfileId,
+            CommercialNotificationKind.HousePlanMoneySent,
+            $"house-plan-money-sent:{askId:N}",
+            now);
+
+    private static void HousePlanNotice(
+        GymDbContext dbContext,
+        Guid tenantId,
+        string tenantTimeZoneId,
+        IEnumerable<Guid> staffUserIds,
+        Guid clientProfileId,
+        CommercialNotificationKind kind,
+        string keyPrefix,
+        DateTimeOffset now)
+    {
+        foreach (var staffUserId in staffUserIds.Distinct())
+        {
+            ScheduleInApp(
+                dbContext,
+                tenantId,
+                tenantTimeZoneId,
+                staffUserId,
+                clientProfileId,
+                kind,
+                Payload(new WorkspaceNotificationPayload(clientProfileId)),
+                $"{keyPrefix}:{staffUserId:N}:v1",
+                now);
+        }
+    }
+
     public static Task<string> TenantTimeZoneAsync(
         GymDbContext dbContext,
         Guid tenantId,

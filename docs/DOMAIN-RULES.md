@@ -284,7 +284,9 @@ leaves it without a limit, or leaves the platform's own figure in force, as each
 sign-ups a week (0 to 10,000; empty or 0 keeps sign-up closed) and the age that may sign up (18 to 100, never under
 18 since the platform is adults only; empty keeps sign-up closed). Since notes plan N9b5: how far back a Free
 trainee's Progress reaches (1 to 3,650 days; empty means no limit, PRG-015) and the house's media storage (1 to
-10,240 whole gigabytes; empty leaves the platform's allowance, MED-019). Sign-up reads its own two alone. The rows
+10,240 whole gigabytes; empty leaves the platform's allowance, MED-019). Since notes plan N9c1: the Whish number a
+trainee sends a paid plan's money to (6 to 20 digits, an optional + in front and single spaces between groups, 40
+characters at most; empty keeps asks for a paid plan closed, SUB-020). Sign-up reads its own two alone. The rows
 are the house's alone: a trigger refuses one for any other workspace.
 
 **CLI-024** Trainee sign-up v1 (`TraineeSignUp`; decisions 24, 25 and 34). `POST /api/auth/register/trainee` is
@@ -331,7 +333,8 @@ off alone: Free's renewal runs on the same tick regardless (SUB-019).
 is on the profile, set at sign-up, and a trigger refuses it in any other workspace. They raise nothing on Coach
 Today, the client list or their own page (CLI-018 v9), Today's activity feed and "Ended, not renewed" leave them
 out, their workout notes and their leaving reach no staff inbox, and a departing coach's hand-over tells them
-nothing; a money ask still reaches the staff (SUB-014). They stay on Clients, where their row says so: the Owner
+nothing. Their money asks are the only staff notices they raise: asking for a plan and saying its money was sent,
+to the house's Owner and their coach (SUB-020); a coach's Ask to renew is never theirs (SUB-014). They stay on Clients, where their row says so: the Owner
 sees every one, and the Coach those whose record names them (CLI-013), which is every trainee confirmed after the
 Coach joined the house's team (decision 33; the Coach therefore joins before sign-up is opened). The trainee's own
 profile read says so too, so their screens name the coaching space, not a coach.
@@ -346,7 +349,8 @@ the coach and owner told by the leave notice, plans and programs closed, nothing
 theirs, current or ended, is anonymised once, the only change an ended record ever takes (the name "Closed
 account", a reserved address of its own id, every other personal field, the intake and health answers and the
 coach's notes emptied, a database check keeping it so); the invitations they accepted lose what the coach typed;
-their declared allergens are deleted; their progress photos are removed and their bytes fall due for the purge at
+their declared allergens are deleted; the Whish name and number they said they sent a plan's money from are erased,
+the one change that row ever takes (SUB-020), the ask and its booking staying; their progress photos are removed and their bytes fall due for the purge at
 once (MED-020); a sign-up still waiting is deleted; and the account is emptied as CLI-025 empties one (a reserved
 address, no name, phone or password, locked, every session and link spent), so it can never sign in again and its
 email may sign up as a new person. Kept under the anonymous record, as SYS-004 asks: payments, plans, workouts,
@@ -465,6 +469,8 @@ calendar days, enforced by the `EX_RenewalRequests_OnePerWindow` exclusion const
 request answers with the stored one. The request and the coach's in-app notice commit together. A request made
 before the end stands once the plan has ended: it counts for a plan from that plan's ending-soon day, so the
 coach's screens read it from the day the plan ends, and until then the plan reads as ending soon (CLI-018).
+A self-directed trainee of the house never asks this way, Free running underneath every pass: their next pass is
+asked for the house's own way (SUB-020), so one pass is never asked for twice.
 
 **SUB-015** Clients on a plan (R5.1a, decided 2026-10-08). The product catalog counts, for each
 product and each price option, the caller's clients (ADR 0026: a Coach their own, the Owner every client
@@ -496,7 +502,8 @@ client reads their new profile's plans alone). Every plan not over shows, in the
 the one that ended last, a cancelled plan counting from the day it was cancelled. The plan the client may ask to renew
 always shows, first when it is over (critique B14): beside a pack that runs on nothing else would list it, and the plan
 notices open this page. The read carries their renewal state (SUB-014). Each says its name and its price
-option's name as sold, what's included, its first and last covered days, where it stands on the workspace's today, and
+option's name as sold (the house's plans on sale, which a trainee asks for, carry their prices on a read of their
+own, SUB-020), what's included, its first and last covered days, where it stands on the workspace's today, and
 the plan's description as it stands today, since an enrollment keeps no copy of it. A block speaks only of what still
 runs: a plan that is over reads as over. No price, payment or reason the coach typed reaches the client through this
 read, the one exception being the reason a session was charged, which is written for them (SES-007), and it decides
@@ -546,6 +553,32 @@ invites does. `house clear` takes Free off sale with the mark, and is refused wh
 grants (SUB-009): the highest of Max, Pro+ and Free among plans covering the day, active and paid in full; a plan
 waiting for its money, paused, cancelled, ended or to come grants none, and a block grants none at all. When Free and
 another plan both grant a feature, the access decision names the other one.
+
+**SUB-020** Asking for one of the house's plans and paying (notes plan N9c1; decisions 29 and 30, the owner's word of
+11 Nov 2026: a plan is booked when its money is recorded, never when it is asked for; 12 Nov 2026: built switched
+off). A self-directed trainee (CLI-026) reads the house's Pro+ plans on sale (`GET /api/house-plans/me`: each option
+priced above nothing, with the name, words, price, currency and length the house's staff typed in Plans you sell,
+the house's Whish number, and every ask of theirs), asks for one (`POST /api/house-plans/me/asks`), and then says
+they sent its money by Whish, from a name and number they type (`.../asks/{askId}/money-sent`, once an ask). Max
+is not asked for until its places exist (notes plan N9c5). While the house's Whish number (CLI-023) is empty, or the
+trainee is blocked, the read offers nothing and an ask is refused (409 `house_plan_asks_closed`, `client_blocked`).
+An ask books nothing: Free runs on, no paid day passes, and nothing a trainee taps ends, locks or shortens what they
+have. One ask is open at a time: the same option asked again answers the open ask; any other option, of that plan or
+another, is refused (409 `house_plan_ask_open`, naming the plan and option asked for) until the staff book or close it. Asks never lapse. Each ask and each "money sent" tells the
+house's Owner and the trainee's coach in-app, in the same transaction, naming the trainee and nothing of the ask
+(NOT-006). Once the money is there, the house's Owner or the trainee's coach books the plan and records its receipt
+in one step (`POST /api/commercial/clients/{clientProfileId}/house-plan-asks/{askId}/book`): one transaction, under
+the trainee's record's row lock, writes the plan active from the house's day the money is recorded, or from the day
+the last plan it cannot run beside ends on when that is later (the trainee's other Pro+ or Max, and any plan holding
+one of its features alone, as the database weighs them; SUB-003: no gap, no overlap), its receipt of the
+exact price in the plan's currency (a mobile-wallet receipt with the staff's optional reference; SUB-007, SUB-008: a
+part books nothing and is refused, as is another currency), and the ask's outcome; plan and receipt carry the
+staff's idempotency key, bound to the ask, the amount, the currency and the reference (SUB-011). The booked plan
+raises no plan notice to the trainee. The staff may instead close an ask with a reason the trainee reads. Asks, their
+"money sent" and their outcomes are append-only, an outcome at most one an ask, a booking checked by the database to
+name the trainee's own plan of the option asked for and a receipt of its whole price; the Whish details are erased
+when the account closes (CLI-027). One paid plan of the house at a time: an exclusion constraint keeps a trainee's
+Pro+ and Max rows that are not cancelled apart, Free underneath.
 
 ### Session packs (1-on-1 sessions, critique B10b, ADR 0038)
 
@@ -2007,7 +2040,9 @@ notice must not imply paid or active access, because a renewal may still be awai
 exception (ADR 0029): a client's renewal request names that client in the coach's in-app title,
 read when the row is written and never kept in the payload; that notice is never emailed. A client's
 note on a workout names the client to their coach the same way (R5.1c), and so does a client leaving,
-to the owner and the coach it tells (audit COACH-12); a week notice names the weeks by number ("week
+to the owner and the coach it tells (audit COACH-12), and so do a house trainee asking for a plan and saying
+its money was sent, to the house's Owner and their coach (SUB-020), never the plan, a price or the Whish details;
+a week notice names the weeks by number ("week
 3", "weeks 3 to 6", "6 weeks" when more than four are scattered), worded by the catalogue from the
 numbers the payload holds (ADR 0036, NOT-035); and a note's notice names the workout as the workout was
 named when it started, read when the row is written and cut to 60 characters, never the note's text

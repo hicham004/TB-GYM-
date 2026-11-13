@@ -57,7 +57,8 @@ stays, because its mail history and acceptances name it and are never deleted; i
 **Self-directed** (CLI-026) is a flag on the profile, the house's alone (a trigger). The record still names
 one member of the house's staff, as ADR 0026 requires until the owner privacy split makes it "at most one":
 the house's Coach who joined first, else the Owner. Coach attention v9 raises nothing for such a profile, and
-their notes, their leaving and a coach's departure reach no inbox; both partners keep them on Clients.
+their notes, their leaving and a coach's departure reach no inbox; both partners keep them on Clients. Their money
+asks are the exception (N9c1, SUB-020): asking for a plan and saying its money was sent tell the Owner and their coach.
 
 ## Consequences
 
@@ -72,6 +73,10 @@ their notes, their leaving and a coach's departure reach no inbox; both partners
   house's Free plan, and the house's hourly sweeps renew it (SUB-019). The pool and its demos are the house's
   alone (LIB-006, MED-017). N9b6's `house-library` command loads a bought library into the house alone, named by
   its slug or id and checked by the mark, as the house's Coach and through the library's own services (LIB-007).
+  N9c1 adds the house's Whish number to its settings (empty keeps asks closed) and the asks for a paid plan
+  (SUB-020): the Subscriptions module's records, routes and rule, composed in Infrastructure by `HousePlanAskService`,
+  which reads the mark and the Whish number from Tenancy and books through the commercial records; a trigger keeps
+  the asks in the house alone. A coach's Ask to renew is never a trainee's (SUB-014).
 
 ## Migration and recovery
 

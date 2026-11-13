@@ -48,6 +48,21 @@ internal static class DatabaseConstraintNames
         "EX_ClientEnrollments_OneHouseFreeAtATime";
 
     /// <summary>
+    /// One paid plan of the house at a time per trainee (SUB-020), whatever its features: a Pro+ or a Max row that is
+    /// not cancelled never shares a day with another. Free stays underneath.
+    /// </summary>
+    public const string OneHousePaidPlanAtATime =
+        "EX_ClientEnrollments_OneHousePaidPlanAtATime";
+
+    /// <summary>An ask ends once, booked or closed (SUB-020): a second booking or closing of one ask is refused.</summary>
+    public const string OneHousePlanAskOutcome =
+        "UX_HousePlanAskOutcomes_Ask";
+
+    /// <summary>The money of an ask is said sent once (SUB-020).</summary>
+    public const string OneHousePlanTransfer =
+        "UX_HousePlanTransfers_Ask";
+
+    /// <summary>
     /// One update of a program's training maxes per idempotency key (STR-002). A retry that loses the
     /// race to the first answers with the first one's result.
     /// </summary>

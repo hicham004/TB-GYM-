@@ -663,6 +663,11 @@ internal sealed class NotificationDispatchService(
             return await EvaluateRenewalRequestedAsync(context, item, delivery, payload, audience, cancellationToken);
         }
 
+        if (item.Kind is CommercialNotificationKind.HousePlanAsked or CommercialNotificationKind.HousePlanMoneySent)
+        {
+            return await EvaluateHousePlanAskAsync(context, item, delivery, payload, audience, cancellationToken);
+        }
+
         var recipientRole = audience.RecipientRole;
         var client = await context.ClientProfiles
             .AsNoTracking()
@@ -727,6 +732,55 @@ internal sealed class NotificationDispatchService(
         }
 
         return InAppOnly(item, delivery, audience.Culture);
+    }
+
+    /// <summary>
+    /// To the house's Owner and the trainee's coach when a trainee asked for a plan or said its money was sent
+    /// (SUB-020), while the recipient is still the Owner or that coach and the trainee has not left. The title names
+    /// the trainee, read now, so the payload holds no name and nothing of the ask.
+    /// </summary>
+    private static async Task<Eligibility> EvaluateHousePlanAskAsync(
+        GymDbContext context,
+        NotificationOutboxItem item,
+        NotificationChannelDelivery delivery,
+        WorkspaceNotificationPayload payload,
+        WorkspaceAudience audience,
+        CancellationToken cancellationToken)
+    {
+        if (item.AggregateId != payload.ClientProfileId)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.PayloadInvalid);
+        }
+
+        if (audience.RecipientRole is not (TenantRole.Owner or TenantRole.Coach))
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.MembershipInactive);
+        }
+
+        var client = await context.ClientProfiles
+            .AsNoTracking()
+            .Where(profile => profile.Id == payload.ClientProfileId)
+            .Select(profile => new { profile.FirstName, profile.LastName, profile.AssignedCoachUserId, profile.ReleasedAtUtc })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (client is null)
+        {
+            return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
+        }
+
+        if (client.ReleasedAtUtc is not null ||
+            (audience.RecipientRole != TenantRole.Owner && client.AssignedCoachUserId != item.RecipientUserId))
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+        }
+
+        if (delivery.Channel != NotificationChannel.InApp)
+        {
+            return Eligibility.Suppress(NotificationSuppressionCodes.EmailChannelUnavailable);
+        }
+
+        return NotificationTemplateCatalog.TryResolve(item.Kind, audience.Culture, out var template)
+            ? Eligibility.InApp(NotificationTemplateCatalog.NameClient(template, $"{client.FirstName} {client.LastName}"))
+            : Eligibility.Permanent(NotificationFailureCodes.TemplateMissing);
     }
 
     /// <summary>

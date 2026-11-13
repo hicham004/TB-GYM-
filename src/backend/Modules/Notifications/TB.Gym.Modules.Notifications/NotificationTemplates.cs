@@ -31,6 +31,8 @@ public sealed record NotificationTemplate(string Key, int Version, string Cultur
 /// plain text when the in-app row is written. It is in-app only, so the name never reaches email.
 /// A client's note on a workout names the client the same way (R5.1c), and so does a client leaving,
 /// to the owner and the coach it tells (audit COACH-12), who could not otherwise learn who left.
+/// A house trainee asking for a plan, and saying its money was sent, names the trainee the same way to the house's
+/// Owner and the trainee's coach (SUB-020); never the plan, a price or the trainee's Whish details.
 /// </para>
 /// <para>
 /// A second exception, decided for ADR 0036: a notice about weeks of a client's program names those
@@ -58,7 +60,10 @@ public static class NotificationTemplateCatalog
     /// <summary>The only culture with published templates in this slice.</summary>
     public const string DefaultCulture = "en";
 
-    /// <summary>Where a named template takes the client's name: RenewalRequested, ClientLeft and ClientWorkoutNote.</summary>
+    /// <summary>
+    /// Where a named template takes the client's name: RenewalRequested, ClientLeft, ClientWorkoutNote, HousePlanAsked
+    /// and HousePlanMoneySent.
+    /// </summary>
     public const string ClientNameToken = "{client}";
 
     /// <summary>Where a week notice takes the weeks it is about (ADR 0036): numbers only, worded here.</summary>
@@ -190,6 +195,20 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             $"{ClientNameToken} left a note on {WorkoutToken}",
             "Open the workout on the client's Training to read it."),
+        // The house's money notices (SUB-020), to its Owner and the trainee's coach, naming the trainee; the inbox
+        // links to the client's page, where the ask is.
+        [CommercialNotificationKind.HousePlanAsked] = new NotificationTemplate(
+            "workspace.house-plan-asked",
+            FirstVersion,
+            DefaultCulture,
+            $"{ClientNameToken} asked for a plan",
+            "Open the client's page to see the ask. Book the plan once the money is there."),
+        [CommercialNotificationKind.HousePlanMoneySent] = new NotificationTemplate(
+            "workspace.house-plan-money-sent",
+            FirstVersion,
+            DefaultCulture,
+            $"{ClientNameToken} says the money is sent",
+            "Check the Whish account, then book the plan from the client's page."),
     };
 
     /// <summary>The plan notices as a session pack hears them (SES-009), in English like the rest.</summary>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { HouseSetting } from '../../core/api/generated';
 import {
   emptyHouse,
   HOUSE_ID,
@@ -92,6 +93,26 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
       ).toEqual([
         ['SignUpsPerWeek', null, 0],
         ['MinimumSignUpAge', null, 0],
+      ]);
+    });
+
+    it('leaves off a setting the server names before this page has words for it', () => {
+      const house = houseAdmin();
+      const read = toHouseAdmin({
+        ...house,
+        settings: [
+          ...house.settings,
+          {
+            ...house.settings[0],
+            setting: 'WhishNumber' as HouseSetting,
+            value: '+961 70 123 456',
+          },
+        ],
+      });
+
+      expect(read.settings.map((row) => row.setting)).toEqual([
+        'SignUpsPerWeek',
+        'MinimumSignUpAge',
       ]);
     });
 

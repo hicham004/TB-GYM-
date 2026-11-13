@@ -117,6 +117,14 @@ internal sealed class ClientRenewalService(
     /// </summary>
     private async Task<PlanToRenew?> PlanToRenewAsync(Guid clientProfileId, DateOnly today, CancellationToken cancellationToken)
     {
+        // A self-directed trainee of the house asks for their next pass the house's own way (SUB-020), with Free
+        // underneath; a coach's Ask to renew is never theirs, so one pass is never asked for twice.
+        if (await dbContext.ClientProfiles.AsNoTracking()
+                .AnyAsync(profile => profile.Id == clientProfileId && profile.IsSelfDirected, cancellationToken))
+        {
+            return null;
+        }
+
         var decisions = await featureAccessService.EvaluateAllAsync(tenantContext.TenantId, clientProfileId, cancellationToken);
         var coachingPlanRanOut = CoachingPlanRunOut.HasPack(decisions) && await CoachingPlanRunOut
             .Among(dbContext.ClientEnrollments.AsNoTracking(), today)

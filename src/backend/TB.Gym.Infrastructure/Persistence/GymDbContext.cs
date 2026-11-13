@@ -342,6 +342,7 @@ public sealed partial class GymDbContext(
         ConfigureActionMail(builder);
         ConfigureProgress(builder);
         ConfigureCommercial(builder);
+        ConfigureHousePlanAsks(builder);
         ConfigureNotifications(builder);
         ConfigureLegalConsent(builder);
         ConfigureCoachCertificates(builder);

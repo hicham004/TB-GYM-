@@ -53,9 +53,12 @@ export interface HouseSignUp {
 }
 
 export function toHouseAdmin(view: HouseAdminView): HouseAdmin {
+  const words = houseSettingWords();
   return {
     house: view.house ? toHouseWorkspace(view.house) : null,
-    settings: view.settings.map(toHouseSetting),
+    // A setting the server added before this page has words for it (the house's Whish number, notes plan N9c1,
+    // until N9c2) is left off, so the page keeps working instead of failing on it.
+    settings: view.settings.filter((row) => Object.hasOwn(words, row.setting)).map(toHouseSetting),
     signUp: view.signUp ? toHouseSignUp(view.signUp) : null,
   };
 }

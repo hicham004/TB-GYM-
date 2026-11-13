@@ -450,6 +450,14 @@ client's plan read through the access port. The pool (LIB-006) is the ExerciseLi
 house's mark, the caller's `CurrentFor` profile and the access port, and the media grant reads the same mark (MED-017),
 so neither ExerciseLibrary nor Media references Tenancy or Clients.
 
+Asking for one of the house's plans (SUB-020, notes plan N9c1) is the Subscriptions module's: its records
+(`HousePlanAsk`, `HousePlanTransfer` for the trainee's word on the money, `HousePlanAskOutcome`), its rule and its routes
+(`/api/house-plans/me` for the trainee, `/api/commercial/clients/{clientProfileId}/house-plan-asks` for the house's staff).
+`HousePlanAskService` in Infrastructure composes them with the house's mark and Whish number (Tenancy), the trainee's
+`CurrentFor` profile (Clients) and the staff notices (Notifications); every write takes the trainee's profile row lock
+first, and a booking writes the enrollment, its receipt and the outcome in one transaction, never through the
+two-step staff routes. The account closing erases the Whish details through the same DbContext.
+
 Closing an account (CLI-027, notes plan N9e) is Identity's route, record (`identity."AccountClosures"`) and port
 (`IAccountClosureService`), composed by `AccountClosureService` in Infrastructure, because it reaches every module that
 holds the person. It is the one operation that writes in several workspaces at once, and it does so in one database

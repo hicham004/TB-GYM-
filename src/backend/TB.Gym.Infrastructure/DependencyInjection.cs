@@ -193,6 +193,7 @@ public static class DependencyInjection
         services.AddScoped<HouseTierReader>();
         services.AddScoped<ICommercialApplicationService, CommercialApplicationService>();
         services.AddScoped<IClientRenewalService, ClientRenewalService>();
+        services.AddScoped<IHousePlanAskService, HousePlanAskService>();
         services.AddScoped<LegalAcceptanceGate>();
         services.AddScoped<ILegalConsentApplicationService, LegalConsentApplicationService>();
         services.AddScoped<ILegalDocumentAdminService, LegalDocumentAdminService>();

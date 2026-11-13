@@ -64,6 +64,12 @@ public enum HouseSetting
     /// space's, in force.
     /// </summary>
     MediaStorageGigabytes = 4,
+
+    /// <summary>
+    /// The Whish number a trainee sends a paid plan's money to (SUB-020). Empty keeps asks for a paid plan closed: no
+    /// trainee pays before the company's Whish account exists (notes plan N9c1, decisions 3 and 13).
+    /// </summary>
+    WhishNumber = 5,
 }
 
 /// <summary>What a setting's typed value comes to: the stored form, or why it is refused.</summary>
@@ -114,6 +120,12 @@ public static class HouseSettingRule
     public const string MediaStorageGigabytesRefusal =
         "Enter a whole number of gigabytes from 1 to 10,240, or leave it empty. Empty gives the house the platform's allowance.";
 
+    /// <summary>The longest Whish number kept, as the platform's own Whish number allows (PBL-008).</summary>
+    public const int WhishNumberMaximumLength = 40;
+
+    public const string WhishNumberRefusal =
+        "Enter the Whish number trainees send money to: 6 to 20 digits, with a + in front if you like and spaces between groups. Or leave it empty, which keeps asks for a paid plan closed.";
+
     public const string UnknownSettingRefusal = "Choose one of the house's settings.";
 
     /// <summary>The value as it is stored: trimmed, empty as none, a number without leading zeros.</summary>
@@ -137,6 +149,7 @@ public static class HouseSettingRule
             HouseSetting.FreeProgressDays => WholeNumber(text, 1, MaximumFreeProgressDays, FreeProgressDaysRefusal),
             HouseSetting.MediaStorageGigabytes =>
                 WholeNumber(text, 1, MaximumMediaStorageGigabytes, MediaStorageGigabytesRefusal),
+            HouseSetting.WhishNumber => WhishNumber(text),
             _ => HouseSettingValue.Refused(UnknownSettingRefusal),
         };
     }
@@ -144,6 +157,40 @@ public static class HouseSettingRule
     /// <summary>A stored whole number, or none when the setting is empty.</summary>
     public static int? Number(string? value) =>
         int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
+
+    /// <summary>
+    /// A Whish number in the one form the house keeps: digits in the groups typed, single spaces between them, an
+    /// optional + in front; 6 to 20 digits, 40 characters at most. The trainee's own number is kept in the same form
+    /// (SUB-020), so the two read alike.
+    /// </summary>
+    private static HouseSettingValue WhishNumber(string text)
+    {
+        var groups = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var joined = string.Join(' ', groups);
+        if (joined.Length > WhishNumberMaximumLength)
+        {
+            return HouseSettingValue.Refused(WhishNumberRefusal);
+        }
+
+        var plus = joined.StartsWith('+');
+        var body = plus ? joined[1..].TrimStart() : joined;
+        var digits = 0;
+        foreach (var character in body)
+        {
+            if (character is >= '0' and <= '9')
+            {
+                digits++;
+            }
+            else if (character != ' ')
+            {
+                return HouseSettingValue.Refused(WhishNumberRefusal);
+            }
+        }
+
+        return digits is >= 6 and <= 20
+            ? HouseSettingValue.Of(plus ? "+" + body : body)
+            : HouseSettingValue.Refused(WhishNumberRefusal);
+    }
 
     private static HouseSettingValue WholeNumber(string text, int minimum, int maximum, string refusal) =>
         text.Length <= 9 &&
@@ -159,7 +206,8 @@ public sealed record HouseSettings(
     int? SignUpsPerWeek,
     int? MinimumSignUpAge,
     int? FreeProgressDays = null,
-    int? MediaStorageGigabytes = null)
+    int? MediaStorageGigabytes = null,
+    string? WhishNumber = null)
 {
     public static HouseSettings Empty { get; } = new(null, null);
 
@@ -174,7 +222,8 @@ public sealed record HouseSettings(
             HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.SignUpsPerWeek)),
             HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MinimumSignUpAge)),
             HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.FreeProgressDays)),
-            HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MediaStorageGigabytes)));
+            HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MediaStorageGigabytes)),
+            values.GetValueOrDefault(HouseSetting.WhishNumber));
     }
 }
 

@@ -557,13 +557,14 @@ public sealed class Phase6B1NotificationDispatchDomainTests
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Title));
             Assert.IsFalse(string.IsNullOrWhiteSpace(template.Body));
             // No format placeholder, except the ones allowed in a title: the client's name in a renewal
-            // request (ADR 0029), a client's workout note or a client leaving, the week numbers of a week
-            // notice (ADR 0036), and the workout a note is on (audit UIQ-21). Everything else is fixed
-            // text, so nothing a coach types or a payload carries can reach the wording, and the body
-            // never names anyone.
+            // request (ADR 0029), a client's workout note or a client leaving, a house trainee's ask for a
+            // plan or word that its money is sent (N9c1), the week numbers of a week notice (ADR 0036), and
+            // the workout a note is on (audit UIQ-21). Everything else is fixed text, so nothing a coach
+            // types or a payload carries can reach the wording, and the body never names anyone.
             var title = template.Title;
             if (kind is CommercialNotificationKind.RenewalRequested or CommercialNotificationKind.ClientWorkoutNote or
-                CommercialNotificationKind.ClientLeft)
+                CommercialNotificationKind.ClientLeft or CommercialNotificationKind.HousePlanAsked or
+                CommercialNotificationKind.HousePlanMoneySent)
             {
                 title = title.Replace(NotificationTemplateCatalog.ClientNameToken, string.Empty, StringComparison.Ordinal);
             }

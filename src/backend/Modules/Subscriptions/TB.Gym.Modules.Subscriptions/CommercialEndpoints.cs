@@ -330,6 +330,9 @@ public static class CommercialEndpoints
         .ProducesProblem(StatusCodes.Status409Conflict)
         .Produces(StatusCodes.Status404NotFound);
 
+        // The house's asks for a paid plan, its own way to a plan with Free underneath (SUB-020).
+        endpoints.MapHousePlanAsks();
+
         return endpoints;
     }
 

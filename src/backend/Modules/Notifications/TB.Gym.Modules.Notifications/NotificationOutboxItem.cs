@@ -204,6 +204,21 @@ public enum CommercialNotificationKind
     /// workout, read when it is delivered, as for a renewal request; never the note's text.
     /// </summary>
     ClientWorkoutNote = 14,
+
+    // The house's money kinds (SUB-020) are workspace kinds: in-app only, to the house's Owner and the trainee's
+    // coach, with a WorkspaceNotificationPayload. They are the only staff notices a self-directed trainee raises.
+
+    /// <summary>
+    /// To the house's Owner and the trainee's coach: a trainee asked for one of the house's paid plans. The title
+    /// names the trainee, read when it is delivered; never the plan, its price or the trainee's Whish details.
+    /// </summary>
+    HousePlanAsked = 15,
+
+    /// <summary>
+    /// To the house's Owner and the trainee's coach: a trainee said they sent an ask's money by Whish. The title
+    /// names the trainee, read when it is delivered; never the Whish name or number.
+    /// </summary>
+    HousePlanMoneySent = 16,
 }
 
 /// <summary>

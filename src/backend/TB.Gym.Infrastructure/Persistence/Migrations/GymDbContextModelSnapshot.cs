@@ -4858,7 +4858,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_NotificationOutboxItems_Cancellation", "(\"Status\" = 'Cancelled') = (\"CancelledAtUtc\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_NotificationOutboxItems_Vocabulary", "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested', 'ProgramAssigned', 'WeeksShared', 'WeeksChanged', 'CoachWorkoutNote', 'ClientWorkoutNote')");
+                            t.HasCheckConstraint("CK_NotificationOutboxItems_Vocabulary", "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested', 'ProgramAssigned', 'WeeksShared', 'WeeksChanged', 'CoachWorkoutNote', 'ClientWorkoutNote', 'HousePlanAsked', 'HousePlanMoneySent')");
                         });
                 });
 
@@ -9654,6 +9654,236 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "EnrollmentId", "ChangedAtUtc");
 
                     b.ToTable("EnrollmentStatusChanges", "subscriptions");
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.HousePlanAsk", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AskedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AskedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AskedOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Tier")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AskedByUserId");
+
+                    b.HasIndex("TenantId", "OfferId");
+
+                    b.HasIndex("TenantId", "ProductId");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "AskedAtUtc");
+
+                    b.ToTable("HousePlanAsks", "subscriptions", t =>
+                        {
+                            t.HasCheckConstraint("CK_HousePlanAsks_Tier", "\"Tier\" IN ('ProPlus', 'Max')");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.HousePlanAskOutcome", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CommandId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("DecidedOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("PaymentRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("DecidedByUserId");
+
+                    b.HasIndex("TenantId", "ClientProfileId");
+
+                    b.HasIndex("TenantId", "CommandId")
+                        .IsUnique()
+                        .HasFilter("\"CommandId\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "EnrollmentId")
+                        .IsUnique()
+                        .HasFilter("\"EnrollmentId\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "PaymentRecordId");
+
+                    b.HasIndex(new[] { "TenantId", "AskId" }, "UX_HousePlanAskOutcomes_Ask")
+                        .IsUnique();
+
+                    b.ToTable("HousePlanAskOutcomes", "subscriptions", t =>
+                        {
+                            t.HasCheckConstraint("CK_HousePlanAskOutcomes_Kind", "(\"Kind\" = 'Booked' AND \"EnrollmentId\" IS NOT NULL AND \"PaymentRecordId\" IS NOT NULL AND \"CommandId\" IS NOT NULL AND \"Reason\" IS NULL) OR (\"Kind\" = 'Closed' AND \"EnrollmentId\" IS NULL AND \"PaymentRecordId\" IS NULL AND \"CommandId\" IS NULL AND \"Reason\" IS NOT NULL AND \"Reason\" <> '')");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.HousePlanTransfer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AnonymisedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("SentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("SentOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("WhishName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("WhishNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "ClientProfileId");
+
+                    b.HasIndex(new[] { "TenantId", "AskId" }, "UX_HousePlanTransfers_Ask")
+                        .IsUnique();
+
+                    b.ToTable("HousePlanTransfers", "subscriptions", t =>
+                        {
+                            t.HasCheckConstraint("CK_HousePlanTransfers_Anonymised", "(\"AnonymisedAtUtc\" IS NULL AND \"WhishName\" IS NOT NULL AND \"WhishNumber\" IS NOT NULL) OR (\"AnonymisedAtUtc\" IS NOT NULL AND \"WhishName\" IS NULL AND \"WhishNumber\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Subscriptions.OfferEntitlement", b =>
@@ -14604,6 +14834,88 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "EnrollmentId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.HousePlanAsk", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AskedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.ProductOffer", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OfferId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.CoachingProduct", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ProductId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.HousePlanAskOutcome", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.HousePlanAsk", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "AskId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.ClientEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "EnrollmentId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.PaymentRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PaymentRecordId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Subscriptions.HousePlanTransfer", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Subscriptions.HousePlanAsk", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "AskId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

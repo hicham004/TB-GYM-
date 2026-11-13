@@ -383,6 +383,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 new N9a1HouseSetting(N9a1AgeSetting, null, 0, null, null, null),
                 new N9a1HouseSetting("FreeProgressDays", null, 0, null, null, null),
                 new N9a1HouseSetting("MediaStorageGigabytes", null, 0, null, null, null),
+                new N9a1HouseSetting("WhishNumber", null, 0, null, null, null),
             },
             empty.Settings);
         Assert.AreEqual("Closed", empty.SignUp!.Status);
@@ -456,6 +457,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 ageOne,
                 new N9a1HouseSetting("FreeProgressDays", null, 0, null, null, null),
                 new N9a1HouseSetting("MediaStorageGigabytes", null, 0, null, null, null),
+                new N9a1HouseSetting("WhishNumber", null, 0, null, null, null),
             },
             (await N9a1HouseReadAsync(rami)).Settings);
     }
