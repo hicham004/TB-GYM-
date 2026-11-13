@@ -1,11 +1,15 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import type { ClientCommercialOverview, ClientEnrollment } from '../src/app/core/api/api.models';
+import type { HousePlanAskView } from '../src/app/core/api/generated';
 import {
   cancelledPlan,
   catalog,
   catalogWithPacks,
   enrollment,
+  freePlan,
+  housePlanAsk,
+  houseProPlan,
   plansOverview,
   sessionPack,
   unpaidPack,
@@ -552,3 +556,265 @@ for (const [width, height] of [
     );
   });
 }
+
+/**
+ * A self-directed trainee of the house (SUB-020, notes plan N9c2): Maya holds the house's Free and has asked
+ * for Pro+ Programs, 4 weeks, which she says she sent by Whish. Karim books it or closes the ask from here.
+ */
+test.describe('a house trainee’s asks for a plan', () => {
+  const ASKS = `/api/commercial/clients/${ID}/house-plan-asks`;
+  const TRAINEE = plansOverview([freePlan()]);
+  const BOOKED = housePlanAsk({
+    state: 'Booked',
+    outcome: {
+      kind: 'Booked',
+      decidedOn: '2026-10-01',
+      reason: null,
+      enrollmentId: 'e-pro',
+      planStartDate: '2026-10-01',
+      planLastDay: '2026-10-28',
+      decidedByName: 'Karim Haddad',
+    },
+  });
+  const REASON = 'No money has come in yet. Ask again once you send it.';
+  const CLOSED = housePlanAsk({
+    state: 'Closed',
+    moneySent: null,
+    outcome: {
+      kind: 'Closed',
+      decidedOn: '2026-10-01',
+      reason: REASON,
+      enrollmentId: null,
+      planStartDate: null,
+      planLastDay: null,
+      decidedByName: 'Karim Haddad',
+    },
+  });
+
+  /** The trainee's asks, one answer per read: the page reads them again after a booking or a closing. */
+  function asksRead(...reads: HousePlanAskView[][]): Handlers {
+    let count = 0;
+    return {
+      [`GET ${ASKS}`]: (route) => json(route, 200, reads[Math.min(count++, reads.length - 1)]),
+    };
+  }
+
+  const panel = (page: Page) => page.locator('[aria-labelledby="asks-title"]');
+
+  for (const [width, height] of [
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    test(`booking the plan Maya asked for at ${width}px records its money and says so`, async ({
+      page,
+    }) => {
+      const requests: NonNullable<OpenOptions['requests']> = [];
+      await openService(page, width, height, {
+        plans: [TRAINEE, plansOverview([freePlan(), houseProPlan()])],
+        requests,
+        extra: {
+          ...asksRead([housePlanAsk()], [BOOKED]),
+          [`POST ${ASKS}/ask-1/book`]: (route) => json(route, 200, BOOKED),
+        },
+      });
+
+      const asks = panel(page);
+      await expect(asks.getByRole('heading', { level: 2 })).toHaveText('Asks for a plan');
+      await expect(asks.locator('.row-name')).toHaveText(['Pro+ Programs, 4 weeks']);
+      await expect(asks.locator('.row-meta')).toHaveText(['USD 47.50 · asked Tue 29 Sep']);
+      await expect(asks.locator('app-status-pill')).toHaveText(['Says it’s sent']);
+      await expect(asks.locator('[data-sent]')).toHaveText(
+        'Sent from Maya Fakhoury, +961 70 123 456 on Wed 30 Sep.',
+      );
+      await expect(asks.locator('.whish-number')).toHaveAttribute('dir', 'ltr');
+      // Book is outlined and Close is a text button: the page keeps its one filled button.
+      await expect(asks.locator('button.tb-button--filled')).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c2-asks-${width}.png`),
+        fullPage: true,
+      });
+
+      await asks.getByRole('button', { name: 'Book plan, Pro+ Programs, 4 weeks' }).click();
+      const sheet = page.getByRole('dialog', { name: 'Book the plan' });
+      await expect(sheet).toBeVisible();
+      await expect(sheet.locator('.plan-line')).toHaveText('Pro+ Programs, 4 weeks');
+      await expect(sheet).toContainText(
+        'Check the Whish account for USD 47.50 first. Booking starts Maya’s plan today, or the day after their current plan ends, and records the money as received by Whish today.',
+      );
+      await expect(sheet.locator('.sent')).toHaveText(
+        'Maya says they sent it from Maya Fakhoury, +961 70 123 456 on Wed 30 Sep.',
+      );
+      await expect(sheet.getByLabel('Amount received')).toHaveValue('47.50');
+      await expect(sheet.locator('.unit')).toHaveText('USD');
+      await sheet.getByLabel('Reference (optional)').fill('WH-88231');
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+      await page.screenshot({ path: test.info().outputPath(`n9c2-book-${width}.png`) });
+
+      await sheet.getByRole('button', { name: 'Book plan' }).click();
+      await expect(sheet).toBeHidden();
+      await expect(page.locator('.page-notice')).toHaveText(
+        'The plan is booked and its payment recorded.',
+      );
+      expect(requests).toEqual([
+        {
+          method: 'POST',
+          path: `${ASKS}/ask-1/book`,
+          body: {
+            amount: 47.5,
+            currencyCode: 'USD',
+            reference: 'WH-88231',
+            idempotencyKey: expect.any(String),
+          },
+        },
+      ]);
+      await expect(asks.locator('app-status-pill')).toHaveText(['Booked']);
+      await expect(asks.locator('[data-decided]')).toHaveText(
+        'Booked by Karim Haddad on Thu 1 Oct: runs Thu 1 Oct – Wed 28 Oct.',
+      );
+      await expect(asks.getByRole('button')).toHaveCount(0);
+      // The buttons went with the ask's new state, so focus waits on the asks' heading.
+      await expect(page.locator('#asks-title')).toBeFocused();
+      await expectNoHorizontalOverflow(page);
+    });
+  }
+
+  test('closing an ask asks for the reason Maya reads, then keeps the ask as closed', async ({
+    page,
+  }) => {
+    const requests: NonNullable<OpenOptions['requests']> = [];
+    await openService(page, 1440, 900, {
+      plans: [TRAINEE],
+      requests,
+      extra: {
+        ...asksRead([housePlanAsk({ state: 'Asked', moneySent: null })], [CLOSED]),
+        [`POST ${ASKS}/ask-1/close`]: (route) => json(route, 200, CLOSED),
+      },
+    });
+
+    const asks = panel(page);
+    await expect(asks.locator('app-status-pill')).toHaveText(['Waiting for the money']);
+    await expect(asks.locator('[data-sent]')).toHaveCount(0);
+    await asks.getByRole('button', { name: 'Close ask, Pro+ Programs, 4 weeks' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Close this ask' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.plan-line')).toHaveText('Pro+ Programs, 4 weeks');
+    await expect(dialog).toContainText(
+      'Maya reads this on their plan page. 500 characters at most.',
+    );
+    // Nothing is sent without a reason: the field says so and takes focus.
+    await dialog.getByRole('button', { name: 'Close ask' }).click();
+    const reason = dialog.getByLabel('Reason');
+    await expect(reason).toBeFocused();
+    await expect(reason).toHaveAttribute('aria-invalid', 'true');
+    await reason.fill(REASON);
+    await axe(page);
+    await page.screenshot({ path: test.info().outputPath('n9c2-close-1440.png') });
+
+    await dialog.getByRole('button', { name: 'Close ask' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.page-notice')).toHaveText('The ask is closed.');
+    expect(requests).toEqual([
+      { method: 'POST', path: `${ASKS}/ask-1/close`, body: { reason: REASON } },
+    ]);
+    await expect(asks.locator('app-status-pill')).toHaveText(['Closed']);
+    await expect(asks.locator('[data-decided]')).toHaveText('Closed by Karim Haddad on Thu 1 Oct.');
+    await expect(asks.locator('[data-reason]')).toHaveText(REASON);
+    await expect(asks.getByRole('button')).toHaveCount(0);
+  });
+
+  test('a booking on its way keeps its sheet open, so its answer is said and the ask shows booked', async ({
+    page,
+  }) => {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    await openService(page, 1440, 900, {
+      plans: [TRAINEE, plansOverview([freePlan(), houseProPlan()])],
+      extra: {
+        ...asksRead([housePlanAsk()], [BOOKED]),
+        [`POST ${ASKS}/ask-1/book`]: async (route) => {
+          await held;
+          await json(route, 200, BOOKED);
+        },
+      },
+    });
+
+    await panel(page).getByRole('button', { name: 'Book plan, Pro+ Programs, 4 weeks' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Book the plan' });
+    await sheet.getByRole('button', { name: 'Book plan' }).click();
+    await expect(sheet.getByRole('button', { name: 'Booking…' })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Not now' })).toBeDisabled();
+    // Neither Escape nor the sheet's own close button ends it while the booking is on its way.
+    await page.keyboard.press('Escape');
+    await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(sheet).toBeVisible();
+
+    answer();
+    await expect(sheet).toBeHidden();
+    await expect(page.locator('.page-notice')).toHaveText(
+      'The plan is booked and its payment recorded.',
+    );
+    await expect(panel(page).locator('app-status-pill')).toHaveText(['Booked']);
+    await expect(page.locator('#asks-title')).toBeFocused();
+  });
+
+  test('a former trainee’s asks read the same, with nothing to change', async ({ page }) => {
+    await openService(page, 1440, 900, {
+      plans: [TRAINEE],
+      profile: {
+        release: {
+          releasedAtUtc: '2026-09-30T10:00:00Z',
+          reason: 'Moved abroad',
+          releasedByName: 'Karim Haddad',
+          departureKind: 'ReleasedByOwner',
+        },
+      },
+      extra: asksRead([housePlanAsk()]),
+    });
+
+    const asks = panel(page);
+    await expect(page.locator('.former')).toContainText('This is a former client.');
+    await expect(asks.locator('.ask')).toHaveCount(1);
+    await expect(asks.locator('app-status-pill')).toHaveText(['Says it’s sent']);
+    await expect(asks.getByRole('button')).toHaveCount(0);
+    await axe(page);
+  });
+
+  test.describe('a refused booking', () => {
+    test.use({
+      allowedConsoleErrors: { patterns: [/status of 400 .*\/house-plan-asks\//] },
+    });
+
+    test('a part of the price is refused under the amount, in the server’s words', async ({
+      page,
+    }) => {
+      const message =
+        "Record the plan's exact price, USD 47.50. A part books nothing: wait for the rest, or close the ask.";
+      await openService(page, 390, 844, {
+        plans: [TRAINEE],
+        extra: {
+          ...asksRead([housePlanAsk()]),
+          [`POST ${ASKS}/ask-1/book`]: (route) =>
+            json(route, 400, {
+              title: 'One or more validation errors occurred.',
+              status: 400,
+              errors: { amount: [message] },
+            }),
+        },
+      });
+
+      await panel(page).getByRole('button', { name: 'Book plan, Pro+ Programs, 4 weeks' }).click();
+      const sheet = page.getByRole('dialog', { name: 'Book the plan' });
+      await sheet.getByLabel('Amount received').fill('20');
+      await sheet.getByRole('button', { name: 'Book plan' }).click();
+
+      await expect(sheet.getByLabel('Amount received')).toHaveAttribute('aria-invalid', 'true');
+      await expect(sheet).toContainText(message);
+      await expect(sheet.getByRole('alert')).toHaveText('Check the fields marked above.');
+      await expectNoHorizontalOverflow(page);
+      await axe(page);
+    });
+  });
+});

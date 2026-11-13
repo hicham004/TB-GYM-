@@ -27,14 +27,15 @@ import {
   type HouseSettingRow,
   type HouseWorkspace,
   settingValueText,
+  whishNumberForm,
 } from './platform-house.models';
 import { focusFirstProblem, SHEET_STYLES } from './platform-sheets';
 
 /**
- * Change one of the house's settings (notes plan N9a2, CLI-023): a number, or nothing, which closes what
- * the setting governs. It is sent at the version the page read; a change made meanwhile is refused, the
- * page reads the house again and what was typed stays to be saved over it. The server's own sentence is
- * shown under the box when it refuses the number.
+ * Change one of the house's settings (notes plan N9a2, CLI-023): a number, or the house's Whish number
+ * (N9c2), or nothing, which closes what the setting governs. It is sent at the version the page read; a
+ * change made meanwhile is refused, the page reads the house again and what was typed stays to be saved over
+ * it. The server's own sentence is shown under the box when it refuses the value.
  */
 @Component({
   selector: 'app-platform-house-setting',
@@ -64,6 +65,16 @@ export class PlatformHouseSetting {
   protected readonly attempt = new FormAttempt();
   protected readonly formId = modalFormId('platform-house-setting');
   protected readonly words = computed(() => houseSettingWords()[this.start().setting]);
+  /** A number setting's bounds for its number box; null for the Whish number, which has a text box. */
+  protected readonly bounds = computed(() => {
+    const words = this.words();
+    return words.kind === 'number' ? words : null;
+  });
+  /** The longest Whish number the server keeps, as its box's own limit; null for a number setting. */
+  protected readonly maxLength = computed(() => {
+    const words = this.words();
+    return words.kind === 'text' ? words.maxLength : null;
+  });
   protected readonly typed = linkedSignal(() => this.start().value ?? '');
   /** The box holds something the browser cannot read as a number: it is marked, never sent as empty. */
   protected readonly unreadable = signal(false);
@@ -74,7 +85,7 @@ export class PlatformHouseSetting {
   /** "In force now: 20 · Changed by Hicham Haddad on Thu 12 Nov". */
   protected readonly inForce = computed(() => {
     const current = this.current();
-    const value = settingValueText(current.value, this.locale, this.words().unit);
+    const value = settingValueText(current.value, this.locale, this.words());
     const changed = changedLine(current, this.house(), this.locale);
     return $localize`In force now: ${value}:value: · ${changed}:changed:`;
   });
@@ -84,6 +95,7 @@ export class PlatformHouseSetting {
     const typed = this.typed().trim();
     if (this.unreadable()) return [words.reason];
     if (typed === '') return [];
+    if (words.kind === 'text') return whishNumberForm(typed) === null ? [words.reason] : [];
     const number = Number(typed);
     return /^\d+$/.test(typed) && number >= words.min && number <= words.max ? [] : [words.reason];
   });
@@ -166,7 +178,7 @@ function refusalCode(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
-/** The server's sentence for a number it refused, under `value` (CLI-023's bounds). */
+/** The server's sentence for a value it refused, under `value` (CLI-023's bounds and the Whish number's form). */
 function valueRefusal(error: unknown): readonly string[] | null {
   if (!(error instanceof HttpErrorResponse) || error.status !== 400) return null;
   const errors = (error.error as { errors?: Record<string, unknown> } | null)?.errors;

@@ -417,6 +417,16 @@ describe('Notifications', () => {
       { ...item('e1', at, false, 'Your plan has ended'), kind: 'EnrollmentExpired' },
       { ...item('d1', at, false, 'Your coach has changed'), kind: 'CoachDeparted' },
       { ...item('t1', at, false, 'A coach left your team'), kind: 'CoachResigned' },
+      {
+        ...item('h1', at, false, 'Rima Aboud asked for a plan'),
+        kind: 'HousePlanAsked',
+        clientProfileId: 'client-rima',
+      },
+      {
+        ...item('h2', at, false, 'Rima Aboud says the money is sent'),
+        kind: 'HousePlanMoneySent',
+        clientProfileId: 'client-rima',
+      },
       item('n1', at),
     ];
     const { host } = await render(({ list }) => {
@@ -438,6 +448,9 @@ describe('Notifications', () => {
     expect(href('Your plan has ended')).toBe('/plan');
     expect(href('Your coach has changed')).toBe('/');
     expect(href('A coach left your team')).toBe('/clients');
+    // A house trainee's ask for a plan, and their word that they paid, on their Service & access (SUB-020).
+    expect(href('Rima Aboud asked for a plan')).toBe('/clients/client-rima/service');
+    expect(href('Rima Aboud says the money is sent')).toBe('/clients/client-rima/service');
     expect(row(host, 'Notification n1').querySelector('button.row')?.textContent).toContain(
       'mark as read',
     );

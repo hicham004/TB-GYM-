@@ -267,6 +267,7 @@ export function serviceWriteError(error: unknown, fallback: string, name: string
     case 'session_not_undoable':
     case 'client_blocked':
     case 'client_inactive':
+    case 'house_plan_ask_ended': // A house trainee's ask booked or closed meanwhile (SUB-020).
       return text ?? fallback;
   }
   const said = (text ?? '').toLowerCase();

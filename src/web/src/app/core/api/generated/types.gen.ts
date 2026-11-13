@@ -251,6 +251,10 @@ export type ApplyTrainingMaxesRequest = {
   idempotencyKey: string;
 };
 
+export type AskForHousePlanRequest = {
+  offerId: string;
+};
+
 export type AssignCheckInRequest = {
   formVersionId: string;
   dueDate: string;
@@ -456,6 +460,13 @@ export type BodyweightWeekView = {
   meanKilograms: null | number | string;
   displayMean: null | number | string;
   observedDayCount: number | string;
+};
+
+export type BookHousePlanAskRequest = {
+  amount: number | string;
+  currencyCode: null | string;
+  reference: null | string;
+  idempotencyKey: string;
 };
 
 export type CalculateNutritionTargetsRequest = {
@@ -1241,6 +1252,10 @@ export type CloseAccountOnRequestRequest = {
   requestedOn: null | string;
 };
 
+export type CloseHousePlanAskRequest = {
+  reason: null | string;
+};
+
 export type CloseOwnAccountRequest = {
   password: null | string;
 };
@@ -1635,7 +1650,9 @@ export type CommercialNotificationKind =
   | 'WeeksShared'
   | 'WeeksChanged'
   | 'CoachWorkoutNote'
-  | 'ClientWorkoutNote';
+  | 'ClientWorkoutNote'
+  | 'HousePlanAsked'
+  | 'HousePlanMoneySent';
 
 export type CompleteClientOnboardingRequest = {
   intake: UpdateClientIntakeRequest;
@@ -2538,8 +2555,75 @@ export type HouseAdminView = {
   signUp: null | HouseSignUpView;
 };
 
+export type HousePlanAskOutcomeKind = 'Booked' | 'Closed';
+
+export type HousePlanAskOutcomeView = {
+  kind: HousePlanAskOutcomeKind;
+  decidedOn: string;
+  reason: null | string;
+  enrollmentId: null | string;
+  planStartDate: null | string;
+  planLastDay: null | string;
+  decidedByName: null | string;
+};
+
+export type HousePlanAskState = 'Asked' | 'MoneySent' | 'Booked' | 'Closed';
+
+export type HousePlanAskView = {
+  id: string;
+  offerId: string;
+  tier: HouseTier;
+  planName: string;
+  optionLabel: string;
+  priceAmount: number | string;
+  priceCurrency: string;
+  durationCount: number | string;
+  durationUnit: OfferDurationUnit;
+  askedOn: string;
+  state: HousePlanAskState;
+  moneySent: null | HousePlanTransferView;
+  outcome: null | HousePlanAskOutcomeView;
+};
+
+export type HousePlanMoneySentRequest = {
+  whishName: null | string;
+  whishNumber: null | string;
+};
+
+export type HousePlanOfferView = {
+  offerId: string;
+  productId: string;
+  tier: HouseTier;
+  name: string;
+  description: null | string;
+  optionLabel: string;
+  priceAmount: number | string;
+  priceCurrency: string;
+  durationCount: number | string;
+  durationUnit: OfferDurationUnit;
+  features: Array<CoachingFeature>;
+};
+
+export type HousePlansView = {
+  today: string;
+  asksOpen: boolean;
+  whishNumber: null | string;
+  plans: Array<HousePlanOfferView>;
+  asks: Array<HousePlanAskView>;
+};
+
+export type HousePlanTransferView = {
+  whishName: null | string;
+  whishNumber: null | string;
+  sentOn: string;
+};
+
 export type HouseSetting =
-  'SignUpsPerWeek' | 'MinimumSignUpAge' | 'FreeProgressDays' | 'MediaStorageGigabytes';
+  | 'SignUpsPerWeek'
+  | 'MinimumSignUpAge'
+  | 'FreeProgressDays'
+  | 'MediaStorageGigabytes'
+  | 'WhishNumber';
 
 export type HouseSettingView = {
   setting: HouseSetting;
@@ -7926,6 +8010,202 @@ export type RequestOwnRenewalResponses = {
 
 export type RequestOwnRenewalResponse =
   RequestOwnRenewalResponses[keyof RequestOwnRenewalResponses];
+
+export type GetOwnHousePlansData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/house-plans/me';
+};
+
+export type GetOwnHousePlansErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type GetOwnHousePlansResponses = {
+  /**
+   * OK
+   */
+  200: HousePlansView;
+};
+
+export type GetOwnHousePlansResponse = GetOwnHousePlansResponses[keyof GetOwnHousePlansResponses];
+
+export type AskForHousePlanData = {
+  body: AskForHousePlanRequest;
+  path?: never;
+  query?: never;
+  url: '/api/house-plans/me/asks';
+};
+
+export type AskForHousePlanErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type AskForHousePlanError = AskForHousePlanErrors[keyof AskForHousePlanErrors];
+
+export type AskForHousePlanResponses = {
+  /**
+   * OK
+   */
+  200: HousePlanAskView;
+  /**
+   * Created
+   */
+  201: HousePlanAskView;
+};
+
+export type AskForHousePlanResponse = AskForHousePlanResponses[keyof AskForHousePlanResponses];
+
+export type SayHousePlanMoneySentData = {
+  body: HousePlanMoneySentRequest;
+  path: {
+    askId: string;
+  };
+  query?: never;
+  url: '/api/house-plans/me/asks/{askId}/money-sent';
+};
+
+export type SayHousePlanMoneySentErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type SayHousePlanMoneySentError =
+  SayHousePlanMoneySentErrors[keyof SayHousePlanMoneySentErrors];
+
+export type SayHousePlanMoneySentResponses = {
+  /**
+   * OK
+   */
+  200: HousePlanAskView;
+};
+
+export type SayHousePlanMoneySentResponse =
+  SayHousePlanMoneySentResponses[keyof SayHousePlanMoneySentResponses];
+
+export type ListClientHousePlanAsksData = {
+  body?: never;
+  path: {
+    clientProfileId: string;
+  };
+  query?: never;
+  url: '/api/commercial/clients/{clientProfileId}/house-plan-asks';
+};
+
+export type ListClientHousePlanAsksErrors = {
+  /**
+   * Not Found
+   */
+  404: unknown;
+};
+
+export type ListClientHousePlanAsksResponses = {
+  /**
+   * OK
+   */
+  200: Array<HousePlanAskView>;
+};
+
+export type ListClientHousePlanAsksResponse =
+  ListClientHousePlanAsksResponses[keyof ListClientHousePlanAsksResponses];
+
+export type BookHousePlanAskData = {
+  body: BookHousePlanAskRequest;
+  path: {
+    clientProfileId: string;
+    askId: string;
+  };
+  query?: never;
+  url: '/api/commercial/clients/{clientProfileId}/house-plan-asks/{askId}/book';
+};
+
+export type BookHousePlanAskErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type BookHousePlanAskError = BookHousePlanAskErrors[keyof BookHousePlanAskErrors];
+
+export type BookHousePlanAskResponses = {
+  /**
+   * OK
+   */
+  200: HousePlanAskView;
+};
+
+export type BookHousePlanAskResponse = BookHousePlanAskResponses[keyof BookHousePlanAskResponses];
+
+export type CloseHousePlanAskData = {
+  body: CloseHousePlanAskRequest;
+  path: {
+    clientProfileId: string;
+    askId: string;
+  };
+  query?: never;
+  url: '/api/commercial/clients/{clientProfileId}/house-plan-asks/{askId}/close';
+};
+
+export type CloseHousePlanAskErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type CloseHousePlanAskError = CloseHousePlanAskErrors[keyof CloseHousePlanAskErrors];
+
+export type CloseHousePlanAskResponses = {
+  /**
+   * OK
+   */
+  200: HousePlanAskView;
+};
+
+export type CloseHousePlanAskResponse =
+  CloseHousePlanAskResponses[keyof CloseHousePlanAskResponses];
 
 export type SearchExercisesData = {
   body?: never;

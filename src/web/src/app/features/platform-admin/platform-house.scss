@@ -89,6 +89,8 @@
   font-size: 1.25rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  // A Whish number of 20 digits typed without spaces still fits a phone at 200% text.
+  overflow-wrap: anywhere;
 }
 
 .value.empty {

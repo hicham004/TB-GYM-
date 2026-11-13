@@ -114,6 +114,10 @@ export function noticeAbout(kind: CommercialNotificationKind): string {
       return $localize`A coach’s note on a workout`;
     case 'ClientWorkoutNote':
       return $localize`A client’s note on a workout`;
+    case 'HousePlanAsked':
+      return $localize`An ask for a plan`;
+    case 'HousePlanMoneySent':
+      return $localize`A trainee saying they paid`;
     default:
       return $localize`A notice`;
   }
@@ -142,6 +146,8 @@ export function noticeAudience(kind: CommercialNotificationKind): string | null 
     case 'ClientLeft':
     case 'RenewalRequested':
     case 'ClientWorkoutNote':
+    case 'HousePlanAsked':
+    case 'HousePlanMoneySent':
       return $localize`For you or a coach`;
     default:
       // A kind this build does not know yet: rather than guess who it was for, the row says nothing.

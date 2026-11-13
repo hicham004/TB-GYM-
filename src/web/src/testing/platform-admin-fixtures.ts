@@ -737,6 +737,31 @@ export function houseAdmin(overrides: Partial<HouseAdminView> = {}): HouseAdminV
   };
 }
 
+/** The house's Whish number for plans as the server keeps it (notes plan N9c2); made up, never the owners'. */
+export const HOUSE_WHISH_NUMBER = '+961 70 123 456';
+
+/**
+ * The house with every setting it has since notes plan N9c1: sign-up's two, Free's window of 90 days, its
+ * storage of 50 GB, and its Whish number for plans, set by Samir Aoun on Thu 12 Nov on the house's clock.
+ */
+export function houseWithEverySetting(): HouseAdminView {
+  const house = houseAdmin();
+  return {
+    ...house,
+    settings: [
+      ...house.settings,
+      houseSetting({ setting: 'FreeProgressDays', value: '90', version: 2 }),
+      houseSetting({ setting: 'MediaStorageGigabytes', value: '50', version: 1 }),
+      houseSetting({
+        setting: 'WhishNumber',
+        value: HOUSE_WHISH_NUMBER,
+        version: 1,
+        changedAtUtc: '2026-11-12T08:00:00Z',
+      }),
+    ],
+  };
+}
+
 /** The house before anyone filled its settings: each empty at version 0, so sign-up is closed. */
 export function emptyHouse(): HouseAdminView {
   const house = houseAdmin();

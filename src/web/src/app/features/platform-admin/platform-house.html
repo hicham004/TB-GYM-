@@ -89,9 +89,14 @@
               <li [attr.data-setting]="item.row.setting">
                 <div class="setting">
                   <strong>{{ item.words.label }}</strong>
-                  <span class="value" [class.empty]="item.row.value === null" data-value>{{
-                    item.shown
-                  }}</span>
+                  <span
+                    class="value"
+                    [class.empty]="item.row.value === null"
+                    [attr.dir]="item.asStored ? 'ltr' : null"
+                    [attr.translate]="item.asStored ? 'no' : null"
+                    data-value
+                    >{{ item.shown }}</span
+                  >
                   <p class="quiet" data-changed>{{ item.changed }}</p>
                 </div>
                 <button

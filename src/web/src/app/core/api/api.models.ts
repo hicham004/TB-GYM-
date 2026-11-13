@@ -13,6 +13,7 @@ import type {
   CurrentUserResponse,
   DayOfWeek as ContractDayOfWeek,
   EmailActionResponse as ContractEmailActionResponse,
+  HouseTier as ContractHouseTier,
   InvitationAcceptanceResponse,
   InvitationKind as ContractInvitationKind,
   InvitationStatus as ContractInvitationStatus,
@@ -313,6 +314,8 @@ export interface ClientEnrollment {
   version: number;
   /** A pack's sessions and ledger (SES-003); null on a coaching plan. */
   sessions?: SessionPack | null;
+  /** The house's tier of the plan (N9b1): Free, Pro+ or Max; null outside the house's own plans. */
+  houseTier?: ContractHouseTier | null;
 }
 
 export interface SessionPack {

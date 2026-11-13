@@ -1348,23 +1348,23 @@ const HOUSE = {
   tenantSlug: 'tb-gym-coaching-space',
 };
 
-test.describe('a self-directed trainee of TB Gym’s own space (notes plan N9a2)', () => {
-  /** Training alone, as the house gives it, and the trainee's own profile says they coach themselves. */
-  const TRAINEE: Record<string, Handler> = {
-    'GET /api/client-access/me': (route) =>
-      json(
-        route,
-        200,
-        FEATURES.map((feature) => ({
-          feature,
-          isAllowed: feature === 'Training',
-          reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
-        })),
-      ),
-    'GET /api/client-profile/me': (route) =>
-      json(route, 200, finishedProfile({ selfDirected: true })),
-  };
+/** Training alone, as the house gives it, and the trainee's own profile says they coach themselves. */
+const TRAINEE: Record<string, Handler> = {
+  'GET /api/client-access/me': (route) =>
+    json(
+      route,
+      200,
+      FEATURES.map((feature) => ({
+        feature,
+        isAllowed: feature === 'Training',
+        reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
+      })),
+    ),
+  'GET /api/client-profile/me': (route) =>
+    json(route, 200, finishedProfile({ selfDirected: true })),
+};
 
+test.describe('a self-directed trainee of TB Gym’s own space (notes plan N9a2)', () => {
   for (const [width, height, mode] of [
     [390, 844, 'system'],
     [1440, 900, 'system'],
@@ -1421,6 +1421,615 @@ test.describe('a self-directed trainee of TB Gym’s own space (notes plan N9a2)
     const name = (await card.locator('strong').boundingBox())!;
     expect(name.x + name.width).toBeLessThanOrEqual(outer.x + outer.width + 0.5);
     expect(name.y + name.height).toBeLessThanOrEqual(outer.y + outer.height + 0.5);
+  });
+});
+
+// ---------- a self-directed trainee's My plan: Free, the plans TB Gym sells, the ask (notes plan N9c2) ----------
+
+/** Free, as `GET /api/client-plan/me` gives it to a trainee of the house (N9b1). */
+const FREE = { name: 'Free', since: '2026-10-01', status: 'Active', features: ['Training'] };
+
+/** The house's Whish number, in the form the House page keeps it. */
+const WHISH = '+961 70 123456';
+
+/** Two options of one of the house's paid plans, as `GET /api/house-plans/me` lists them. */
+const PRO_4_WEEKS = {
+  offerId: '00000000-0000-4000-8000-0000000000e1',
+  productId: '00000000-0000-4000-8000-0000000000e0',
+  tier: 'ProPlus',
+  name: 'Pro+',
+  description: 'A program TB Gym writes for you, changed every block, and a check-in each week.',
+  optionLabel: '4 weeks',
+  priceAmount: 47.5 as number | string,
+  priceCurrency: 'USD',
+  durationCount: 4,
+  durationUnit: 'Week',
+  features: ['Training', 'CheckIns'],
+};
+const PRO_TWO_BLOCKS = {
+  ...PRO_4_WEEKS,
+  offerId: '00000000-0000-4000-8000-0000000000e2',
+  optionLabel: 'Two blocks',
+  priceAmount: '89.75',
+  durationCount: 8,
+};
+
+const ASK_ID = '00000000-0000-4000-8000-0000000000a1';
+
+/** An ask of one option, as the house's read carries it. */
+function askOf(offer: typeof PRO_4_WEEKS, overrides: object = {}): Record<string, unknown> {
+  return {
+    id: ASK_ID,
+    offerId: offer.offerId,
+    tier: 'ProPlus',
+    planName: offer.name,
+    optionLabel: offer.optionLabel,
+    priceAmount: offer.priceAmount,
+    priceCurrency: offer.priceCurrency,
+    durationCount: offer.durationCount,
+    durationUnit: offer.durationUnit,
+    askedOn: '2026-10-15',
+    state: 'Asked',
+    moneySent: null,
+    outcome: null,
+    ...overrides,
+  };
+}
+
+/** An ask TB Gym booked, with the plan it started, and one it closed with a reason the trainee reads. */
+const BOOKED = askOf(PRO_4_WEEKS, {
+  id: '00000000-0000-4000-8000-0000000000a2',
+  askedOn: '2026-10-01',
+  state: 'Booked',
+  moneySent: { whishName: 'Rima Aboud', whishNumber: '+961 71 234567', sentOn: '2026-10-01' },
+  outcome: {
+    kind: 'Booked',
+    decidedOn: '2026-10-02',
+    reason: null,
+    enrollmentId: '00000000-0000-4000-8000-0000000000c9',
+    planStartDate: '2026-10-02',
+    planLastDay: '2026-10-29',
+    decidedByName: null,
+  },
+});
+const CLOSED = askOf(PRO_TWO_BLOCKS, {
+  id: '00000000-0000-4000-8000-0000000000a3',
+  askedOn: '2026-08-10',
+  state: 'Closed',
+  outcome: {
+    kind: 'Closed',
+    decidedOn: '2026-08-20',
+    reason: 'No money came from that Whish account. Ask again once it is sent.',
+    enrollmentId: null,
+    planStartDate: null,
+    planLastDay: null,
+    decidedByName: null,
+  },
+});
+
+/** The plan BOOKED started, as the trainee's own plans list it. */
+const BOOKED_PLAN = {
+  id: '00000000-0000-4000-8000-0000000000c9',
+  name: 'Pro+',
+  optionLabel: '4 weeks',
+  description: PRO_4_WEEKS.description,
+  startDate: '2026-10-02',
+  lastDay: '2026-10-29',
+  cancelledOn: null,
+  status: 'Active',
+  features: ['Training', 'CheckIns'],
+};
+
+interface HouseRead {
+  asksOpen: boolean;
+  whishNumber: string | null;
+  plans: object[];
+  asks: object[];
+}
+
+const ASKS_OFF: HouseRead = { asksOpen: false, whishNumber: null, plans: [], asks: [] };
+const ASKS_ON: HouseRead = {
+  asksOpen: true,
+  whishNumber: WHISH,
+  plans: [PRO_4_WEEKS, PRO_TWO_BLOCKS],
+  asks: [],
+};
+
+/** A trainee of the house on My plan: their plans with Free, and what the house sells, read from `house`. */
+async function openTraineePlan(
+  page: Page,
+  options: {
+    width?: number;
+    height?: number;
+    plans?: object[];
+    house?: HouseRead | (() => HouseRead);
+    extra?: Record<string, Handler>;
+  } = {},
+) {
+  await page.setViewportSize({ width: options.width ?? 390, height: options.height ?? 844 });
+  const house = options.house ?? ASKS_OFF;
+  await mockClient(page, {
+    memberships: [HOUSE],
+    extra: {
+      ...TRAINEE,
+      'GET /api/client-plan/me': (route) =>
+        json(route, 200, {
+          today: '2026-10-15',
+          plans: options.plans ?? [],
+          coachName: null,
+          renewal: null,
+          tier: 'Free',
+          free: FREE,
+        }),
+      'GET /api/house-plans/me': (route) =>
+        json(route, 200, {
+          today: '2026-10-15',
+          ...(typeof house === 'function' ? house() : house),
+        }),
+      ...(options.extra ?? {}),
+    },
+  });
+  await page.goto('/plan');
+  await expect(page.getByRole('heading', { name: 'My plan', level: 1 })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Free Since Thu 1 Oct' })).toBeVisible();
+  await waitForFonts(page);
+}
+
+test('a coach’s client never reads what TB Gym sells on My plan', async ({ page }) => {
+  const houseReads: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/house-plans/')) {
+      houseReads.push(request.url());
+    }
+  });
+  await openPlan(page, [ONLINE_COACHING]);
+
+  await expect(page.getByRole('region', { name: /Online Coaching/ })).toBeVisible();
+  await expect(page.getByText('What’s in your plan and the dates it runs.')).toBeVisible();
+  await expect(page.locator('[data-free], [data-open-ask], [data-plans-to-add]')).toHaveCount(0);
+  expect(houseReads).toEqual([]);
+});
+
+test.describe('a self-directed trainee’s My plan (notes plan N9c2)', () => {
+  for (const [width, height] of [
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    test(`at ${width}px, with asks switched off, shows Free as a plan with no end, and nothing to buy`, async ({
+      page,
+    }) => {
+      await openTraineePlan(page, { width, height });
+
+      await expect(
+        page.getByText('What you train on with TB Gym, and the dates each plan runs.'),
+      ).toBeVisible();
+      const free = page.getByRole('region', { name: 'Free Since Thu 1 Oct' });
+      await expect(free.getByRole('heading', { name: 'Free', level: 2 })).toBeVisible();
+      await expect(free.getByText('No end date', { exact: true })).toBeVisible();
+      await expect(
+        free.getByText('It never ends, and it keeps running beside any plan you add.'),
+      ).toBeVisible();
+      await expect(free.getByRole('listitem')).toHaveText(['Training']);
+      await expect(free).not.toContainText(/days left|Ends /);
+      await expect(page.locator('[data-plans-to-add]')).toHaveCount(0);
+      await expect(page.getByText('Pay by Whish.', { exact: false })).toHaveCount(0);
+      await expect(page.getByText('No plan yet')).toHaveCount(0);
+      await expect(page.getByText('Your coach will put your plan here.')).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c2-plan-asks-off-${width}.png`),
+        fullPage: true,
+      });
+    });
+
+    test(`at ${width}px, with asks switched on, lists one plan’s two options, each with its own Ask for`, async ({
+      page,
+    }) => {
+      await openTraineePlan(page, { width, height, house: ASKS_ON });
+
+      const add = page.getByRole('region', { name: 'Plans you can add' });
+      await expect(
+        add.getByText(
+          'Pay by Whish. A plan starts once TB Gym has your money, or when your current plan ends if that is later. Free keeps running underneath.',
+        ),
+      ).toBeVisible();
+      const offer = add.getByRole('article', { name: 'Pro+' });
+      await expect(offer.getByRole('heading', { name: 'Pro+', level: 3 })).toBeVisible();
+      await expect(offer.getByText(PRO_4_WEEKS.description)).toBeVisible();
+      await expect(offer.locator('.includes li')).toHaveText(['Training', 'Check-ins']);
+      await expect(offer.locator('.option-text')).toHaveText([
+        '4 weeks USD 47.50',
+        'Two blocks 8 weeks USD 89.75',
+      ]);
+      await expect(offer.getByRole('button')).toHaveText(['Ask for 4 weeks', 'Ask for Two blocks']);
+      // Each name starts with the words on its button, so voice control finds it (WCAG 2.5.3).
+      await expect(
+        offer.getByRole('button', { name: 'Ask for 4 weeks, Pro+', exact: true }),
+      ).toBeVisible();
+      await expect(
+        offer.getByRole('button', { name: 'Ask for Two blocks, Pro+', exact: true }),
+      ).toBeVisible();
+      // Free first, then what can be added.
+      const order = await page
+        .locator('[data-free], [data-plans-to-add]')
+        .evaluateAll((nodes) => nodes.map((node) => node.hasAttribute('data-free')));
+      expect(order).toEqual([true, false]);
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c2-plan-asks-on-${width}.png`),
+        fullPage: true,
+      });
+    });
+
+    test(`at ${width}px, lists the asks TB Gym booked or closed after the plan it booked`, async ({
+      page,
+    }) => {
+      await openTraineePlan(page, {
+        width,
+        height,
+        plans: [BOOKED_PLAN],
+        house: { ...ASKS_ON, asks: [BOOKED, CLOSED] },
+      });
+
+      await expect(
+        page.getByRole('region', { name: 'Pro+ 4 weeks · Fri 2 Oct – Thu 29 Oct' }),
+      ).toBeVisible();
+      const earlier = page.getByRole('region', { name: 'Earlier asks' });
+      const rows = earlier.locator('li.earlier-ask');
+      await expect(rows).toHaveCount(2);
+      await expect(rows.nth(0).locator('.ask-name')).toHaveText('Pro+, 4 weeks');
+      await expect(rows.nth(0).locator('app-status-pill')).toHaveText('Booked');
+      await expect(rows.nth(0)).toContainText('USD 47.50 · asked Thu 1 Oct');
+      await expect(rows.nth(0)).toContainText('Booked Fri 2 Oct: runs Fri 2 Oct – Thu 29 Oct.');
+      await expect(rows.nth(1).locator('.ask-name')).toHaveText('Pro+, Two blocks');
+      await expect(rows.nth(1).locator('app-status-pill')).toHaveText('Closed');
+      await expect(rows.nth(1)).toContainText('USD 89.75 · asked Mon 10 Aug');
+      await expect(rows.nth(1)).toContainText('TB Gym closed this ask on Thu 20 Aug.');
+      await expect(rows.nth(1).locator('.ask-reason')).toHaveText(
+        'No money came from that Whish account. Ask again once it is sent.',
+      );
+      // The paid plan, Free, what can be added, then the asks of before.
+      const order = await page
+        .locator('section.plan, [data-plans-to-add], [data-earlier-asks]')
+        .evaluateAll((nodes) =>
+          nodes.map((node) =>
+            node.hasAttribute('data-free')
+              ? 'free'
+              : node.hasAttribute('data-plans-to-add')
+                ? 'add'
+                : node.hasAttribute('data-earlier-asks')
+                  ? 'earlier'
+                  : 'plan',
+          ),
+        );
+      expect(order).toEqual(['plan', 'free', 'add', 'earlier']);
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9c2-plan-earlier-asks-${width}.png`),
+        fullPage: true,
+      });
+    });
+  }
+
+  test('asks for an option, then says the money was sent, and the card follows each step', async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    const asks: Record<string, unknown>[] = [];
+    const sent: { ask: unknown[]; paid: unknown[] } = { ask: [], paid: [] };
+    await openTraineePlan(page, {
+      house: () => ({ ...ASKS_ON, asks }),
+      extra: {
+        'POST /api/house-plans/me/asks': (route) => {
+          sent.ask.push(route.request().postDataJSON());
+          const ask = askOf(PRO_TWO_BLOCKS);
+          asks.unshift(ask);
+          return json(route, 201, ask);
+        },
+        [`POST /api/house-plans/me/asks/${ASK_ID}/money-sent`]: (route) => {
+          const body = route.request().postDataJSON() as { whishName: string; whishNumber: string };
+          sent.paid.push(body);
+          asks[0] = {
+            ...asks[0],
+            state: 'MoneySent',
+            moneySent: {
+              whishName: body.whishName,
+              whishNumber: body.whishNumber,
+              sentOn: '2026-10-15',
+            },
+          };
+          return json(route, 200, asks[0]);
+        },
+      },
+    });
+
+    await page.getByRole('button', { name: 'Ask for Two blocks, Pro+' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Ask for Pro+' });
+    await expect(confirm).toBeVisible();
+    await expect(confirm.locator('[data-ask-choice]')).toHaveText(
+      'Two blocks · 8 weeks · USD 89.75',
+    );
+    await expect(
+      confirm.getByText(
+        'You pay TB Gym by Whish, then tell us here. The plan starts once TB Gym has your money, or when your current plan ends if that is later. Free keeps running underneath.',
+      ),
+    ).toBeVisible();
+    await expect(
+      confirm.getByText('You can ask for something else once TB Gym books or closes this ask.'),
+    ).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: test.info().outputPath('n9c2-plan-ask-sheet-390.png') });
+    await confirm.getByRole('button', { name: 'Ask for it' }).click();
+
+    await expect(confirm).toHaveCount(0);
+    expect(sent.ask).toEqual([{ offerId: PRO_TWO_BLOCKS.offerId }]);
+    const card = page.getByRole('region', {
+      name: 'Your ask Pro+, Two blocks · USD 89.75 for 8 weeks',
+    });
+    await expect(card.getByText('Waiting for your payment', { exact: true })).toBeVisible();
+    const news = card.getByRole('status');
+    await expect(news).toHaveText('Asked. Send the money by Whish, then tell TB Gym here.');
+    await expect(news).toBeFocused();
+    await expect(
+      card.getByText(`Send USD 89.75 by Whish to ${WHISH}, then tell TB Gym you sent it.`),
+    ).toBeVisible();
+    await expect(
+      card.getByText('Nothing changes until TB Gym books it. Free keeps running.'),
+    ).toBeVisible();
+    // One ask at a time: nothing more to ask for until TB Gym books or closes this one.
+    await expect(page.locator('[data-plans-to-add]')).toHaveCount(0);
+    const order = await page
+      .locator('section.plan')
+      .evaluateAll((nodes) => nodes.map((node) => node.hasAttribute('data-open-ask')));
+    expect(order).toEqual([true, false]);
+
+    await card.getByRole('button', { name: 'Copy the Whish number' }).click();
+    await expect(page.getByText('Copied the Whish number.')).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(WHISH);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c2-plan-asked-390.png'),
+      fullPage: true,
+    });
+
+    await card.getByRole('button', { name: 'I’ve paid' }).click();
+    const paid = page.getByRole('dialog', { name: 'I’ve paid' });
+    await expect(
+      paid.getByText(
+        'Tell TB Gym which Whish account the USD 89.75 came from, so they can find it.',
+      ),
+    ).toBeVisible();
+    await expect(paid.getByText('You can say this once for this ask.')).toBeVisible();
+    await paid.getByRole('button', { name: 'Send' }).click();
+    await expect(
+      paid.getByText('Enter the name on the Whish account you sent the money from.'),
+    ).toBeVisible();
+    await expect(paid.getByLabel('Name on your Whish account')).toBeFocused();
+    expect(sent.paid).toEqual([]);
+    await paid.getByLabel('Name on your Whish account').fill('  Rima   Aboud ');
+    await paid.getByLabel('Your Whish number').fill(' +961   71 234567 ');
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({ path: test.info().outputPath('n9c2-plan-paid-sheet-390.png') });
+    await paid.getByRole('button', { name: 'Send' }).click();
+
+    await expect(paid).toHaveCount(0);
+    expect(sent.paid).toEqual([{ whishName: 'Rima Aboud', whishNumber: '+961 71 234567' }]);
+    await expect(card.getByText('Money sent', { exact: true })).toBeVisible();
+    await expect(news).toHaveText(
+      'You said you sent it on Thu 15 Oct from Rima Aboud, +961 71 234567.',
+    );
+    await expect(news).toBeFocused();
+    await expect(
+      card.getByText(
+        'TB Gym books your plan once the money is there. Free keeps running underneath.',
+      ),
+    ).toBeVisible();
+    await expect(card.getByRole('button')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c2-plan-money-sent-390.png'),
+      fullPage: true,
+    });
+  });
+
+  test('at 1440px, the open ask leads with the Whish number to send the money to', async ({
+    page,
+  }) => {
+    await openTraineePlan(page, {
+      width: 1440,
+      height: 900,
+      plans: [BOOKED_PLAN],
+      house: { ...ASKS_ON, asks: [askOf(PRO_4_WEEKS), CLOSED] },
+    });
+
+    // The option's name is its length, so the card says the length once.
+    const card = page.getByRole('region', {
+      name: 'Your ask Pro+, 4 weeks · USD 47.50',
+      exact: true,
+    });
+    await expect(card.getByRole('button', { name: 'I’ve paid' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Copy the Whish number' })).toBeVisible();
+    await expect(page.locator('[data-plans-to-add]')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c2-plan-asked-1440.png'),
+      fullPage: true,
+    });
+  });
+
+  test('the trainee’s page keeps inside the screen at 200% text', async ({ page }) => {
+    await openTraineePlan(page, {
+      plans: [BOOKED_PLAN],
+      house: { ...ASKS_ON, asks: [askOf(PRO_4_WEEKS), BOOKED, CLOSED] },
+    });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    await expect(page.getByRole('region', { name: /^Your ask/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Earlier asks' })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c2-plan-200-percent-390.png'),
+      fullPage: true,
+    });
+  });
+
+  test('the Ask sheet scrolls from the keyboard at 200% text, its words being one focusable region', async ({
+    page,
+  }) => {
+    await openTraineePlan(page, { house: ASKS_ON });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    await page.getByRole('button', { name: 'Ask for Two blocks, Pro+' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Ask for Pro+' });
+    const words = confirm.getByRole('region', { name: 'The plan you ask for' });
+    await expect(words).toContainText('Free keeps running underneath.');
+    await expect(words).toHaveAttribute('tabindex', '0');
+    // The words outgrow the sheet at 200% text, so its body scrolls: the region is how a keyboard does it.
+    const body = confirm.locator('.tb-modal__body');
+    await expect
+      .poll(() => body.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
+    await words.focus();
+    await expect(words).toBeFocused();
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c2-plan-ask-sheet-200-percent-390.png'),
+    });
+  });
+
+  test('a 20-digit Whish number wraps inside the card at 200% text, never cut off', async ({
+    page,
+  }) => {
+    const long = '96170123456789012345';
+    const asks: Record<string, unknown>[] = [askOf(PRO_TWO_BLOCKS)];
+    await openTraineePlan(page, { house: () => ({ ...ASKS_ON, whishNumber: long, asks }) });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    // The card clips what overflows it, so the page never scrolls sideways: the number's own edges are read.
+    const inside = async () => {
+      const card = page.locator('[data-open-ask] .plan-head');
+      const box = (await card.boundingBox())!;
+      const numbers = card.locator('.whish-number');
+      await expect(numbers).not.toHaveCount(0);
+      for (const number of await numbers.all()) {
+        const edge = await number.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            scroll: element.scrollWidth - element.clientWidth,
+          };
+        });
+        expect(edge.left).toBeGreaterThanOrEqual(box.x);
+        expect(edge.right).toBeLessThanOrEqual(box.x + box.width);
+        expect(edge.scroll).toBeLessThanOrEqual(0);
+      }
+    };
+    await expect(page.locator('[data-open-ask] strong.whish-number')).toHaveText(long);
+    await inside();
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c2-plan-long-whish-200-percent-390.png'),
+      fullPage: true,
+    });
+
+    // The trainee's own 20-digit number, once they said they sent the money from it.
+    asks[0] = {
+      ...asks[0],
+      state: 'MoneySent',
+      moneySent: { whishName: 'Rima Aboud', whishNumber: long, sentOn: '2026-10-15' },
+    };
+    await page.reload();
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await expect(page.locator('[data-open-ask] bdi.whish-number')).toHaveText(long);
+    await inside();
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({
+      path: test.info().outputPath('n9c2-plan-long-whish-sent-200-percent-390.png'),
+      fullPage: true,
+    });
+  });
+
+  test.describe('when the server refuses or fails', () => {
+    test.use({
+      allowedConsoleErrors: {
+        patterns: [
+          /status of 409 .*\/api\/house-plans\/me\/asks/,
+          /status of 500 .*\/api\/house-plans\/me/,
+        ],
+      },
+    });
+
+    test('a refused ask says the server’s words in the sheet, and the page reads the plans again', async ({
+      page,
+    }) => {
+      let reads = 0;
+      const message =
+        'You already asked for Pro+, 4 weeks. TB Gym books it once your money is there, or closes the ask, before you can ask for anything else.';
+      await openTraineePlan(page, {
+        house: () => {
+          reads += 1;
+          return reads === 1 ? ASKS_ON : { ...ASKS_ON, asks: [askOf(PRO_4_WEEKS)] };
+        },
+        extra: {
+          'POST /api/house-plans/me/asks': (route) =>
+            json(route, 409, { code: 'house_plan_ask_open', message }),
+        },
+      });
+
+      await page.getByRole('button', { name: 'Ask for Two blocks, Pro+' }).click();
+      const confirm = page.getByRole('dialog', { name: 'Ask for Pro+' });
+      await confirm.getByRole('button', { name: 'Ask for it' }).click();
+      const summary = confirm.getByRole('alert');
+      await expect(summary).toHaveText(message);
+      await expect(summary).toBeFocused();
+      await expectNoAxeViolations(page);
+      await confirm.getByRole('button', { name: 'Not now' }).click();
+
+      await expect(confirm).toHaveCount(0);
+      await expect(
+        page.getByRole('region', { name: 'Your ask Pro+, 4 weeks · USD 47.50', exact: true }),
+      ).toBeVisible();
+      await expect(page.locator('[data-plans-to-add]')).toHaveCount(0);
+      expect(reads).toBe(2);
+    });
+
+    test('a failed read of the plans for sale says so in their place alone, and Try again reads them', async ({
+      page,
+    }) => {
+      let reads = 0;
+      await openTraineePlan(page, {
+        extra: {
+          'GET /api/house-plans/me': (route) => {
+            reads += 1;
+            return reads === 1
+              ? json(route, 500, { title: 'Nope' })
+              : json(route, 200, { today: '2026-10-15', ...ASKS_ON });
+          },
+        },
+      });
+
+      const failed = page.locator('[data-house-failed]');
+      await expect(failed.getByRole('alert')).toHaveText(
+        'The plans TB Gym sells couldn’t be loaded.',
+      );
+      await expect(page.getByText('Your plan couldn’t be loaded.')).toHaveCount(0);
+      await expectNoAxeViolations(page);
+      await failed.getByRole('button', { name: 'Try again' }).click();
+
+      await expect(page.getByRole('region', { name: 'Plans you can add' })).toBeVisible();
+      await expect(failed).toHaveCount(0);
+      expect(reads).toBe(2);
+    });
   });
 });
 

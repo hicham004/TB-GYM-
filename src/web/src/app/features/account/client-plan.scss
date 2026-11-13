@@ -153,7 +153,8 @@
   min-inline-size: 0;
 }
 
-h3 {
+// A part's small label; a plan on sale's own name is an h3 of its own look.
+.plan-part > h3 {
   color: var(--tb-muted);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -241,8 +242,203 @@ h3 {
   white-space: pre-line;
 }
 
+// ---------- a self-directed trainee's part (notes plan N9c2) ----------
+
+// On the brand colour the kit's focus ring (the brand ink) would not show: the accent does.
+.plan-head .tb-button:focus-visible {
+  outline-color: var(--tb-accent);
+}
+
+// What just happened to the ask; nothing when nothing did.
+.ask-news:empty {
+  display: none;
+}
+
+.ask-news:focus {
+  outline: none;
+}
+
+.ask-news {
+  font-weight: 600;
+}
+
+// The house's Whish number and the button that copies it, kept together where the line wraps.
+.whish {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-12);
+}
+
+// Whole on one line when it fits, as .plan-dates is; the card clips overflow, so a number wider than
+// the card (20 digits at 200% text on a phone) breaks at its spaces, then anywhere, and is never cut off.
+.whish-number {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+// An outlined button that reads on the brand colour.
+.plan-head .copy {
+  border-color: color-mix(in srgb, var(--tb-on-brand) 55%, transparent);
+  color: var(--tb-on-brand);
+}
+
+.plan-head .copy:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--tb-on-brand) 14%, transparent);
+}
+
+.plan-head .copy:active:not(:disabled) {
+  background-color: color-mix(in srgb, var(--tb-on-brand) 22%, transparent);
+  box-shadow: none;
+}
+
+// The plans TB Gym sells: a heading, then a card per plan with its options.
+.house {
+  display: grid;
+  gap: var(--space-16);
+  min-inline-size: 0;
+}
+
+.house-head {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.house-head h2,
+.earlier h2 {
+  font-size: 1.125rem;
+}
+
+.offer {
+  background: var(--tb-surface);
+  border: 1px solid var(--tb-line);
+  border-radius: 26px;
+  display: grid;
+  gap: var(--space-16);
+  min-inline-size: 0;
+  padding: clamp(1.25rem, 5vw, 1.75rem);
+}
+
+.offer-name {
+  color: var(--tb-ink);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.options {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.option {
+  align-items: center;
+  border-block-start: 1px solid var(--tb-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+  justify-content: space-between;
+  padding-block: var(--space-12);
+}
+
+.option:last-child {
+  padding-block-end: 0;
+}
+
+.option-text {
+  align-items: baseline;
+  display: flex;
+  flex: 1 1 12rem;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-12);
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.option-name {
+  color: var(--tb-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.option-length {
+  color: var(--tb-muted);
+}
+
+.option-price {
+  color: var(--tb-ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// What one option includes, when the plan's options differ.
+.option-includes {
+  color: var(--tb-muted);
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: var(--space-4) var(--space-12);
+  list-style: none;
+  margin: 0;
+  order: 1;
+  padding: 0;
+}
+
+.option-ask {
+  flex: none;
+}
+
+// The asks TB Gym booked or closed.
+.earlier-ask {
+  display: grid;
+  gap: var(--space-4);
+  padding-block: var(--space-12);
+}
+
+.earlier-ask:last-child {
+  padding-block-end: 0;
+}
+
+.ask-top {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-12);
+  justify-content: space-between;
+}
+
+.ask-name,
+.ask-outcome,
+.ask-reason {
+  color: var(--tb-ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ask-name {
+  font-weight: 600;
+  min-inline-size: 0;
+}
+
+// TB Gym's reason, in the words its staff wrote.
+.ask-reason {
+  border-inline-start: 3px solid var(--tb-line);
+  padding-inline-start: var(--space-12);
+  white-space: pre-line;
+}
+
 @media (forced-colors: active) {
-  .plan {
+  .plan,
+  .offer {
     border-color: CanvasText;
   }
 }

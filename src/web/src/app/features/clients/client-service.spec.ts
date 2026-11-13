@@ -4,7 +4,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { of, throwError, type Observable } from 'rxjs';
+import { of, Subject, throwError, type Observable } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
@@ -17,10 +17,14 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
+  bookedAsk,
   cancelledPlan,
   catalog,
   catalogWithPacks,
+  closedAsk,
   enrollment,
+  freePlan,
+  housePlanAsk,
   plansOverview,
   SERVICE_TODAY,
   sessionPack,
@@ -28,12 +32,23 @@ import {
   unpaidRenewal,
 } from '../../../testing/client-service-fixtures';
 import { installDialogSupport } from '../../../testing/dialog';
-import { field, fill, menuChoices, press, settle, toggleFold } from '../../../testing/dom';
+import {
+  button,
+  field,
+  fill,
+  formSummary,
+  menuChoices,
+  press,
+  settle,
+  toggleFold,
+} from '../../../testing/dom';
 import { provideEmailDelivery } from '../../../testing/email-delivery';
 import { TeamApi } from '../team/team-api';
 import { ClientService } from './client-service';
 import { ClientWorkspaceContext } from './client-workspace.context';
 import { FormerClientsApi } from './former-clients-api';
+import { HousePlanAsksApi } from './house-plan-asks-api';
+import { toHousePlanAsk, type HousePlanAsk } from './house-plan-asks.models';
 
 const PROFILE = {
   id: 'client-1',
@@ -78,6 +93,8 @@ interface Options {
   getTeamMembers?: () => Observable<TeamMember[]>;
   /** Who is signed in; nobody by default. */
   user?: { id: string; displayName: string };
+  /** The house's asks API (SUB-020); a fake that answers no asks by default. */
+  houseAsks?: Record<string, unknown>;
 }
 
 async function render(options: Options = {}) {
@@ -112,6 +129,12 @@ async function render(options: Options = {}) {
     recordManualPayment: vi.fn(() => of(unpaidRenewal())),
     ...options.api,
   };
+  const houseAsks = {
+    list: vi.fn(() => of([])),
+    book: vi.fn(() => of(toHousePlanAsk(bookedAsk()))),
+    close: vi.fn(() => of(toHousePlanAsk(closedAsk()))),
+    ...options.houseAsks,
+  };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([{ path: 'clients/:clientId/service', component: ClientService }]),
@@ -124,6 +147,7 @@ async function render(options: Options = {}) {
       },
       ...(options.user ? [{ provide: AuthStore, useValue: { user: signal(options.user) } }] : []),
       { provide: FormerClientsApi, useValue: { releaseClient: options.releaseClient ?? vi.fn() } },
+      { provide: HousePlanAsksApi, useValue: houseAsks },
       provideEmailDelivery(options.emailOff),
       {
         provide: TenantStore,
@@ -145,6 +169,7 @@ async function render(options: Options = {}) {
     harness,
     host: harness.routeNativeElement as HTMLElement,
     api,
+    houseAsks,
     context,
     router: TestBed.inject(Router),
   };
@@ -772,6 +797,311 @@ describe('a client’s Service & access', () => {
       await toggleFold(harness.fixture, section(host)!, 'History');
       expect(all(section(host)!, '.ledger-row').length).toBe(6);
       expect(all(section(host)!, '.ledger-row button')).toEqual([]);
+    });
+  });
+
+  describe('a house trainee’s asks for a plan (SUB-020, N9c2)', () => {
+    const ENDED =
+      'This ask was already booked or closed. Reload the client to see where it stands.';
+    const panel = (host: HTMLElement) =>
+      host.querySelector<HTMLElement>('[aria-labelledby="asks-title"]');
+    const rows = (host: HTMLElement) => all(panel(host)!, '.ask');
+    const trainee = () => plansOverview([freePlan()]);
+    const asked = (...views: ReturnType<typeof housePlanAsk>[]) =>
+      vi.fn(() => of(views.map(toHousePlanAsk)));
+
+    it('reads no asks for a client without the house’s Free', async () => {
+      const { host, houseAsks } = await render();
+
+      expect(houseAsks.list).not.toHaveBeenCalled();
+      expect(panel(host)).toBeNull();
+    });
+
+    it('stays away while the trainee has asked for nothing', async () => {
+      const { host, houseAsks } = await render({ plans: trainee() });
+
+      expect(houseAsks.list).toHaveBeenCalledWith('client-1');
+      expect(panel(host)).toBeNull();
+    });
+
+    it('lists each ask after the plan, newest first, with what the trainee said and how it ended', async () => {
+      const { host } = await render({
+        plans: trainee(),
+        houseAsks: { list: asked(closedAsk(), housePlanAsk(), bookedAsk()) },
+      });
+
+      // After the plan in front, before the payments.
+      const sections = all(host, 'section.panel');
+      expect(sections.indexOf(panel(host)!)).toBe(1);
+      expect(textOf(panel(host)!.querySelector('h2'))).toBe('Asks for a plan');
+      expect(
+        rows(host).map((row) => [
+          textOf(row.querySelector('.row-name')),
+          textOf(row.querySelector('.row-meta')),
+          textOf(row.querySelector('app-status-pill')),
+        ]),
+      ).toEqual([
+        ['Pro+ Programs, 4 weeks', 'USD 47.50 · asked Tue 29 Sep', 'Says it’s sent'],
+        ['Pro+ Programs, 8 weeks', 'USD 89.75 · asked Sat 1 Aug', 'Booked'],
+        ['Pro+ Programs, 4 weeks', 'USD 47.50 · asked Mon 20 Jul', 'Closed'],
+      ]);
+      const [open, booked, closed] = rows(host);
+      expect(textOf(open.querySelector('[data-sent]'))).toBe(
+        'Sent from Maya Fakhoury, +961 70 123 456 on Wed 30 Sep.',
+      );
+      const number = open.querySelector('[data-sent] .whish-number')!;
+      expect([number.getAttribute('dir'), number.getAttribute('translate')]).toEqual(['ltr', 'no']);
+      expect(open.querySelector('[data-sent] span[dir="auto"]')?.textContent).toBe('Maya Fakhoury');
+      expect(textOf(booked.querySelector('[data-decided]'))).toBe(
+        'Booked by Karim Haddad on Mon 3 Aug: runs Mon 3 Aug – Sun 27 Sep.',
+      );
+      expect(textOf(closed.querySelector('[data-decided]'))).toBe(
+        'Closed by Lea Khoury on Mon 27 Jul.',
+      );
+      expect(textOf(closed.querySelector('[data-reason]'))).toBe(
+        'No money came in a week. Ask again when you are ready.',
+      );
+      // The open ask alone can be booked or closed; neither is the page's one filled button.
+      expect(
+        all(panel(host)!, 'button').map((item) => [
+          textOf(item),
+          item.getAttribute('aria-label'),
+          item.className.includes('tb-button--filled'),
+        ]),
+      ).toEqual([
+        // Each name starts with the button's visible words (WCAG 2.5.3).
+        ['Book plan', 'Book plan, Pro+ Programs, 4 weeks', false],
+        ['Close ask', 'Close ask, Pro+ Programs, 4 weeks', false],
+      ]);
+    });
+
+    it('says the day alone once the trainee’s Whish details were erased', async () => {
+      const { host } = await render({
+        plans: trainee(),
+        houseAsks: {
+          list: asked(
+            housePlanAsk({
+              moneySent: { whishName: null, whishNumber: null, sentOn: '2026-09-30' },
+            }),
+          ),
+        },
+      });
+
+      expect(textOf(rows(host)[0].querySelector('[data-sent]'))).toBe('Sent on Wed 30 Sep.');
+    });
+
+    it('shows a former client’s asks with nothing to change', async () => {
+      const { host, houseAsks } = await render({
+        plans: trainee(),
+        profile: FORMER,
+        houseAsks: { list: asked(housePlanAsk()) },
+      });
+
+      expect(houseAsks.list).toHaveBeenCalled();
+      expect(rows(host).length).toBe(1);
+      expect(all(panel(host)!, 'button')).toEqual([]);
+    });
+
+    it('says the asks could not be loaded, keeps the rest of the page, and tries again', async () => {
+      const list = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 500 })))
+        .mockReturnValue(of([toHousePlanAsk(housePlanAsk())]));
+      const { host, harness } = await render({ plans: trainee(), houseAsks: { list } });
+
+      expect(textOf(host.querySelector('#plan-title'))).toBe('Free');
+      expect(textOf(panel(host)!.querySelector('[role="alert"]'))).toBe(
+        'The asks could not be loaded.',
+      );
+      const retry = button(panel(host)!, 'Try again');
+      retry.focus();
+      retry.click();
+      await settle(harness.fixture);
+
+      expect(list).toHaveBeenCalledTimes(2);
+      expect(rows(host).length).toBe(1);
+      expect(panel(host)!.querySelector('[role="alert"]')).toBeNull();
+      // Try again went with the failed panel: focus waits on the asks' heading, not on the page.
+      expect(document.activeElement?.id).toBe('asks-title');
+    });
+
+    it('books the plan in its sheet at the price asked, then says so and reads the plans and asks again', async () => {
+      const list = vi
+        .fn()
+        .mockReturnValueOnce(of([toHousePlanAsk(housePlanAsk())]))
+        .mockReturnValue(of([toHousePlanAsk(bookedAsk({ id: 'ask-1' }))]));
+      const { host, harness, api, houseAsks, context } = await render({
+        plans: trainee(),
+        houseAsks: { list },
+      });
+
+      press(panel(host)!, 'Book plan');
+      await settle(harness.fixture);
+      expect(textOf(dialog()?.querySelector('h2'))).toBe('Book the plan');
+      // The option is named by its length, so the length is not said twice.
+      expect(textOf(dialog()?.querySelector('.plan-line'))).toBe('Pro+ Programs, 4 weeks');
+      expect(textOf(dialog())).toContain(
+        'Check the Whish account for USD 47.50 first. Booking starts Maya’s plan today, or the day after their current plan ends, and records the money as received by Whish today.',
+      );
+      expect(textOf(dialog()?.querySelector('.sent'))).toBe(
+        'Maya says they sent it from Maya Fakhoury, +961 70 123 456 on Wed 30 Sep.',
+      );
+      expect(field(dialog()!, 'Amount received').value).toBe('47.50');
+      fill(dialog()!, 'Reference (optional)', ' WH-88231 ');
+      press(dialog()!, 'Book plan');
+      await settle(harness.fixture);
+
+      expect(houseAsks.book).toHaveBeenCalledWith('client-1', 'ask-1', {
+        amount: 47.5,
+        currencyCode: 'USD',
+        reference: 'WH-88231',
+        idempotencyKey: expect.any(String),
+      });
+      expect(dialog()).toBeNull();
+      expect(context.notice()).toBe('The plan is booked and its payment recorded.');
+      expect(api.getClientCommercialOverview).toHaveBeenCalledTimes(2);
+      expect(list).toHaveBeenCalledTimes(2);
+      expect(textOf(rows(host)[0].querySelector('app-status-pill'))).toBe('Booked');
+      expect(all(panel(host)!, 'button')).toEqual([]);
+      // The buttons went with the ask's new state: focus stays in its section.
+      expect(document.activeElement?.id).toBe('asks-title');
+    });
+
+    it('keeps a refused amount under the field, in the server’s words', async () => {
+      const message =
+        'Record the plan’s exact price, USD 47.50. A part books nothing: wait for the rest, or close the ask.';
+      const book = vi.fn(() =>
+        throwError(
+          () => new HttpErrorResponse({ status: 400, error: { errors: { amount: [message] } } }),
+        ),
+      );
+      const { host, harness, context } = await render({
+        plans: trainee(),
+        houseAsks: { list: asked(housePlanAsk()), book },
+      });
+
+      press(panel(host)!, 'Book plan');
+      await settle(harness.fixture);
+      fill(dialog()!, 'Amount received', '20');
+      press(dialog()!, 'Book plan');
+      await settle(harness.fixture);
+
+      expect(book).toHaveBeenCalledWith(
+        'client-1',
+        'ask-1',
+        expect.objectContaining({ amount: 20 }),
+      );
+      const amount = field(dialog()!, 'Amount received');
+      expect(amount.getAttribute('aria-invalid')).toBe('true');
+      expect(
+        textOf(document.getElementById(amount.getAttribute('aria-describedby')!.split(' ')[0])),
+      ).toBe(message);
+      expect(textOf(formSummary(dialog()!))).toBe('Check the fields marked above.');
+      expect(document.activeElement).toBe(formSummary(dialog()!));
+      expect(context.notice()).toBeNull();
+    });
+
+    it('keeps the booking sheet open while it books, then reads the asks again once it is left after the ask ended meanwhile', async () => {
+      const answer = new Subject<HousePlanAsk>();
+      const list = vi
+        .fn()
+        .mockReturnValueOnce(of([toHousePlanAsk(housePlanAsk())]))
+        .mockReturnValue(of([toHousePlanAsk(bookedAsk({ id: 'ask-1' }))]));
+      const { host, harness, api, context } = await render({
+        plans: trainee(),
+        houseAsks: { list, book: vi.fn(() => answer) },
+      });
+
+      press(panel(host)!, 'Book plan');
+      await settle(harness.fixture);
+      press(dialog()!, 'Book plan');
+      await settle(harness.fixture);
+      expect(button(dialog()!, 'Not now').disabled).toBe(true);
+      // Neither Escape nor the sheet's own close button ends it while the answer is on its way.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      dialog()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+      await settle(harness.fixture);
+      expect(textOf(dialog()?.querySelector('button[type="submit"]'))).toBe('Booking…');
+
+      answer.error(
+        new HttpErrorResponse({
+          status: 409,
+          error: { code: 'house_plan_ask_ended', message: ENDED },
+        }),
+      );
+      await settle(harness.fixture);
+      expect(textOf(formSummary(dialog()!))).toBe(ENDED);
+      expect(button(dialog()!, 'Not now').disabled).toBe(false);
+      expect(list).toHaveBeenCalledTimes(1);
+
+      dialog()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+      await settle(harness.fixture);
+      expect(dialog()).toBeNull();
+      expect(api.getClientCommercialOverview).toHaveBeenCalledTimes(2);
+      expect(list).toHaveBeenCalledTimes(2);
+      expect(textOf(rows(host)[0].querySelector('app-status-pill'))).toBe('Booked');
+      expect(all(panel(host)!, 'button')).toEqual([]);
+      expect(document.activeElement?.id).toBe('asks-title');
+      expect(context.notice()).toBeNull();
+    });
+
+    it('keeps the closing dialog open while it closes the ask, so its answer is said', async () => {
+      const answer = new Subject<HousePlanAsk>();
+      const list = vi
+        .fn()
+        .mockReturnValueOnce(of([toHousePlanAsk(housePlanAsk())]))
+        .mockReturnValue(of([toHousePlanAsk(closedAsk({ id: 'ask-1' }))]));
+      const { host, harness, context } = await render({
+        plans: trainee(),
+        houseAsks: { list, close: vi.fn(() => answer) },
+      });
+
+      press(panel(host)!, 'Close ask');
+      await settle(harness.fixture);
+      fill(dialog()!, 'Reason', 'No money came in a week.');
+      press(dialog()!, 'Close ask');
+      await settle(harness.fixture);
+      expect(button(dialog()!, 'Not now').disabled).toBe(true);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      dialog()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+      await settle(harness.fixture);
+      expect(textOf(dialog()?.querySelector('button[type="submit"]'))).toBe('Closing…');
+
+      answer.next(toHousePlanAsk(closedAsk({ id: 'ask-1' })));
+      answer.complete();
+      await settle(harness.fixture);
+      expect(dialog()).toBeNull();
+      expect(context.notice()).toBe('The ask is closed.');
+      expect(list).toHaveBeenCalledTimes(2);
+      expect(textOf(rows(host)[0].querySelector('app-status-pill'))).toBe('Closed');
+    });
+
+    it('closes an ask with the reason the trainee reads', async () => {
+      const list = vi
+        .fn()
+        .mockReturnValueOnce(of([toHousePlanAsk(housePlanAsk())]))
+        .mockReturnValue(of([toHousePlanAsk(closedAsk({ id: 'ask-1' }))]));
+      const { host, harness, houseAsks, context } = await render({
+        plans: trainee(),
+        houseAsks: { list },
+      });
+
+      press(panel(host)!, 'Close ask');
+      await settle(harness.fixture);
+      expect(textOf(dialog()?.querySelector('h2'))).toBe('Close this ask');
+      expect(textOf(dialog()?.querySelector('.plan-line'))).toBe('Pro+ Programs, 4 weeks');
+      expect(textOf(dialog())).toContain(
+        'Maya reads this on their plan page. 500 characters at most.',
+      );
+      fill(dialog()!, 'Reason', ' No money came in a week. ');
+      press(dialog()!, 'Close ask');
+      await settle(harness.fixture);
+
+      expect(houseAsks.close).toHaveBeenCalledWith('client-1', 'ask-1', 'No money came in a week.');
+      expect(dialog()).toBeNull();
+      expect(context.notice()).toBe('The ask is closed.');
+      expect(textOf(rows(host)[0].querySelector('app-status-pill'))).toBe('Closed');
+      expect(document.activeElement?.id).toBe('asks-title');
     });
   });
 });

@@ -6,7 +6,11 @@
         <span i18n>Me</span>
       </a>
       <h1 #heading tabindex="-1" i18n>My plan</h1>
-      <p class="lede" i18n>What’s in your plan and the dates it runs.</p>
+      @if (trainee()) {
+        <p class="lede" i18n>What you train on with TB Gym, and the dates each plan runs.</p>
+      } @else {
+        <p class="lede" i18n>What’s in your plan and the dates it runs.</p>
+      }
     </div>
   </header>
 
@@ -23,6 +27,81 @@
       </div>
     }
     @default {
+      <!-- A trainee's ask waiting on TB Gym comes first: it is the one thing they may still have to do. -->
+      @if (openAsk(); as ask) {
+        <section class="plan ask" aria-labelledby="ask-heading ask-line" data-open-ask>
+          <div class="plan-head">
+            <app-status-pill [label]="ask.pill.label" [tone]="ask.pill.tone" />
+            <h2 id="ask-heading" i18n>Your ask</h2>
+            <p class="plan-when" id="ask-line">
+              <ng-container i18n
+                ><bdi dir="auto">{{ ask.planName }}</bdi
+                >, <bdi dir="auto">{{ ask.optionLabel }}</bdi> ·
+                <span class="plan-dates">{{ ask.cost }}</span></ng-container
+              >
+            </p>
+            <!-- Present while the card is: it says what just happened, and takes focus after a sheet. -->
+            <p #askStatus class="plan-note ask-news" role="status" tabindex="-1">
+              @if (ask.sent; as sent) {
+                <ng-container i18n
+                  >You said you sent it on <span class="plan-dates">{{ sent.on }}</span> from
+                  <bdi dir="auto">{{ sent.name }}</bdi
+                  >, <bdi class="whish-number" dir="ltr" translate="no">{{ sent.number }}</bdi
+                  >.</ng-container
+                >
+              } @else if (askNews(); as news) {
+                {{ news }}
+              }
+            </p>
+            @if (ask.state === 'Asked') {
+              @if (house()?.whishNumber; as whish) {
+                <div class="whish">
+                  <p class="plan-note">
+                    <ng-container i18n
+                      >Send <span class="plan-dates">{{ ask.price }}</span> by Whish to
+                      <strong class="whish-number" dir="ltr" translate="no">{{ whish }}</strong
+                      >, then tell TB Gym you sent it.</ng-container
+                    >
+                  </p>
+                  <button
+                    appButton
+                    type="button"
+                    variant="outlined"
+                    class="copy"
+                    (click)="copy(whish)"
+                    data-copy-whish
+                  >
+                    <ng-container i18n
+                      >Copy<span class="tb-visually-hidden"> the Whish number</span></ng-container
+                    >
+                  </button>
+                </div>
+              } @else {
+                <p class="plan-note" i18n>If you already sent the money, tell TB Gym here.</p>
+              }
+              <p class="plan-note" i18n>
+                Nothing changes until TB Gym books it. Free keeps running.
+              </p>
+              <button
+                appButton
+                type="button"
+                variant="accent"
+                size="touch"
+                class="plan-action"
+                (click)="openPaidSheet(ask)"
+                data-paid
+                i18n
+              >
+                I’ve paid
+              </button>
+            } @else {
+              <p class="plan-note" i18n>
+                TB Gym books your plan once the money is there. Free keeps running underneath.
+              </p>
+            }
+          </div>
+        </section>
+      }
       @for (plan of plans(); track plan.id) {
         @let renewalHere = renewalOf(plan.id);
         <!-- Named with its dates too: two packs of one plan share a name. -->
@@ -126,15 +205,188 @@
           </div>
         </section>
       } @empty {
-        <div class="panel">
-          <app-empty-state
-            heading="No plan yet"
-            i18n-heading
-            description="Your coach will put your plan here."
-            i18n-description
-          />
-        </div>
+        <!-- A trainee always has Free, which stands here instead. -->
+        @if (!trainee()) {
+          <div class="panel">
+            <app-empty-state
+              heading="No plan yet"
+              i18n-heading
+              description="Your coach will put your plan here."
+              i18n-description
+            />
+          </div>
+        }
+      }
+      @if (free(); as plan) {
+        <!-- Free, TB Gym's own plan: drawn as one of the plans, with no end date. -->
+        <section class="plan" aria-labelledby="free-name free-when" data-free>
+          <div class="plan-head">
+            <app-status-pill [label]="plan.pill.label" [tone]="plan.pill.tone" />
+            <h2 id="free-name" dir="auto">{{ plan.name }}</h2>
+            <p class="plan-when" id="free-when">{{ plan.since }}</p>
+            @for (note of plan.notes; track note) {
+              <p class="plan-note">{{ note }}</p>
+            }
+          </div>
+          <div class="plan-body">
+            <div class="plan-part">
+              <h3 i18n>What’s included</h3>
+              <ul class="includes" role="list">
+                @for (item of plan.includes; track item.feature) {
+                  <li>
+                    <span class="include-icon"><app-icon [name]="item.icon" /></span>
+                    {{ item.label }}
+                  </li>
+                }
+              </ul>
+            </div>
+          </div>
+        </section>
+      }
+      @if (trainee()) {
+        @switch (houseState()) {
+          @case ('loading') {
+            <div class="panel" aria-busy="true">
+              <app-skeleton [label]="houseLoadingLabel" [lines]="3" />
+            </div>
+          }
+          @case ('error') {
+            <!-- Only the house's part failed: the plans above stay. -->
+            <div class="panel load-failed" data-house-failed>
+              <p role="alert" i18n>The plans TB Gym sells couldn’t be loaded.</p>
+              <button appButton type="button" variant="outlined" (click)="rereadHouse()" i18n>
+                Try again
+              </button>
+            </div>
+          }
+        }
+        @if (groups().length > 0) {
+          <section class="house" aria-labelledby="add-heading" data-plans-to-add>
+            <div class="house-head">
+              <h2 id="add-heading" i18n>Plans you can add</h2>
+              <!-- Booked from today, or from the day after a paid plan still running ends (N9c1). -->
+              <p class="quiet" i18n>
+                Pay by Whish. A plan starts once TB Gym has your money, or when your current plan
+                ends if that is later. Free keeps running underneath.
+              </p>
+            </div>
+            @for (group of groups(); track group.productId) {
+              <article class="offer" [attr.aria-labelledby]="'offer-' + group.productId">
+                <h3 class="offer-name" [id]="'offer-' + group.productId" dir="auto">
+                  {{ group.name }}
+                </h3>
+                @if (group.description; as description) {
+                  <p class="description" dir="auto">{{ description }}</p>
+                }
+                @if (group.includes; as chips) {
+                  <ul class="includes" role="list" aria-label="What’s included" i18n-aria-label>
+                    @for (item of chips; track item.feature) {
+                      <li>
+                        <span class="include-icon"><app-icon [name]="item.icon" /></span>
+                        {{ item.label }}
+                      </li>
+                    }
+                  </ul>
+                }
+                <ul class="options" role="list">
+                  @for (option of group.options; track option.offerId) {
+                    <li class="option" [attr.data-offer]="option.offerId">
+                      <p class="option-text">
+                        <!-- The kept spaces read "Two blocks 8 weeks USD 89.75" aloud, never run together. -->
+                        <strong class="option-name"
+                          ><bdi dir="auto">{{ option.label }}</bdi></strong
+                        >
+                        @if (option.length; as length) {
+                          &ngsp;<span class="option-length">{{ length }}</span
+                          >&ngsp;<span class="option-price">{{ option.price }}</span>
+                        } @else {
+                          &ngsp;<span class="option-price">{{ option.price }}</span>
+                        }
+                      </p>
+                      @if (option.includes; as chips) {
+                        <ul
+                          class="option-includes"
+                          role="list"
+                          aria-label="What’s included"
+                          i18n-aria-label
+                        >
+                          @for (item of chips; track item.feature) {
+                            <li>{{ item.label }}</li>
+                          }
+                        </ul>
+                      }
+                      <!-- The name starts with the words on the button, for voice control (WCAG 2.5.3). -->
+                      <button
+                        appButton
+                        type="button"
+                        variant="outlined"
+                        class="option-ask"
+                        [attr.aria-label]="option.askName"
+                        (click)="openAskSheet(group, option)"
+                      >
+                        <!-- One flex item, so the button's gap never opens between the words. -->
+                        <span i18n
+                          >Ask for <bdi dir="auto">{{ option.label }}</bdi></span
+                        >
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </article>
+            }
+          </section>
+        }
+        @if (earlier().length > 0) {
+          <section class="panel earlier" aria-labelledby="earlier-heading" data-earlier-asks>
+            <h2 id="earlier-heading" i18n>Earlier asks</h2>
+            <ul class="rows asks" role="list">
+              @for (item of earlier(); track item.id) {
+                <li class="earlier-ask">
+                  <div class="ask-top">
+                    <p class="ask-name">
+                      <ng-container i18n
+                        ><bdi dir="auto">{{ item.planName }}</bdi
+                        >, <bdi dir="auto">{{ item.optionLabel }}</bdi></ng-container
+                      >
+                    </p>
+                    <app-status-pill [label]="item.pill.label" [tone]="item.pill.tone" />
+                  </div>
+                  <p class="quiet">{{ item.asked }}</p>
+                  @if (item.outcome) {
+                    <p class="ask-outcome">{{ item.outcome }}</p>
+                  }
+                  @if (item.reason; as reason) {
+                    <p class="ask-reason" dir="auto">{{ reason }}</p>
+                  }
+                </li>
+              }
+            </ul>
+          </section>
+        }
       }
     }
   }
 </div>
+
+<!-- The sheets the trainee's buttons open; they stay here so they share the page's data. -->
+<ng-template #askSheet let-sheet>
+  @if (choice(); as picked) {
+    <app-house-plan-ask-sheet
+      [choice]="picked"
+      (busyChange)="sheetBusy.set($event)"
+      (stale)="markStale()"
+      (closed)="asked($event, sheet)"
+    />
+  }
+</ng-template>
+
+<ng-template #paidSheet let-sheet>
+  @if (paying(); as ask) {
+    <app-house-plan-paid-sheet
+      [ask]="ask"
+      (busyChange)="sheetBusy.set($event)"
+      (stale)="markStale()"
+      (closed)="paid($event, sheet)"
+    />
+  }
+</ng-template>

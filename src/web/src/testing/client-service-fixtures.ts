@@ -6,6 +6,7 @@ import type {
   ProductCatalog,
   SessionPack,
 } from '../app/core/api/api.models';
+import type { HousePlanAskView } from '../app/core/api/generated';
 
 /**
  * Plans and payments for a client's Service & access (R3.4b): Maya Fakhoury on Atlas Performance,
@@ -387,4 +388,133 @@ export function catalogWithPacks(): ProductCatalog {
       },
     ],
   };
+}
+
+/**
+ * The house's Free (N9b1): a self-directed trainee's endless plan, a year at no price renewed by the server,
+ * which tells the house's staff the client may ask for a paid plan (SUB-020).
+ */
+export function freePlan(overrides: Partial<ClientEnrollment> = {}): ClientEnrollment {
+  return enrollment({
+    id: 'e-free',
+    productId: 'p-free',
+    offerId: 'o-free',
+    productName: 'Free',
+    offerLabel: 'Free',
+    priceAmount: 0,
+    paidAmount: 0,
+    balanceAmount: 0,
+    startDate: '2026-09-14',
+    endDateExclusive: '2027-09-14',
+    lastActiveDate: '2027-09-13',
+    features: ['Training'],
+    payments: [],
+    createdAtUtc: '2026-09-14T08:00:00Z',
+    version: 1,
+    houseTier: 'Free',
+    ...overrides,
+  });
+}
+
+/**
+ * Pro+ Programs, 4 weeks from Thu 1 Oct at USD 47.50, paid by Whish: the plan the house books from Maya's ask
+ * (SUB-020), running beside Free.
+ */
+export function houseProPlan(overrides: Partial<ClientEnrollment> = {}): ClientEnrollment {
+  return enrollment({
+    id: 'e-pro',
+    productId: 'p-pro',
+    offerId: 'o-pro-4',
+    productName: 'Pro+ Programs',
+    offerLabel: '4 weeks',
+    priceAmount: 47.5,
+    paidAmount: 47.5,
+    balanceAmount: 0,
+    startDate: '2026-10-01',
+    endDateExclusive: '2026-10-29',
+    lastActiveDate: '2026-10-28',
+    features: ['Training'],
+    payments: [
+      payment({
+        id: 'pay-pro',
+        amount: 47.5,
+        receivedOn: '2026-10-01',
+        receivedAtUtc: '2026-10-01T12:00:00Z',
+        method: 'MobileWallet',
+        reference: 'WH-88231',
+        createdAtUtc: '2026-10-01T12:00:00Z',
+      }),
+    ],
+    createdAtUtc: '2026-10-01T12:00:00Z',
+    version: 1,
+    houseTier: 'ProPlus',
+    ...overrides,
+  });
+}
+
+/**
+ * Maya's ask for Pro+ Programs, 4 weeks at USD 47.50 on Tue 29 Sep, which she says she sent by Whish on Wed 30
+ * Sep: the server's staff read of it (SUB-020).
+ */
+export function housePlanAsk(overrides: Partial<HousePlanAskView> = {}): HousePlanAskView {
+  return {
+    id: 'ask-1',
+    offerId: 'o-pro-4',
+    tier: 'ProPlus',
+    planName: 'Pro+ Programs',
+    optionLabel: '4 weeks',
+    priceAmount: 47.5,
+    priceCurrency: 'USD',
+    durationCount: 4,
+    durationUnit: 'Week',
+    askedOn: '2026-09-29',
+    state: 'MoneySent',
+    moneySent: { whishName: 'Maya Fakhoury', whishNumber: '+961 70 123 456', sentOn: '2026-09-30' },
+    outcome: null,
+    ...overrides,
+  };
+}
+
+/** An earlier ask the house booked: 8 weeks from Mon 3 Aug, by Karim. */
+export function bookedAsk(overrides: Partial<HousePlanAskView> = {}): HousePlanAskView {
+  return housePlanAsk({
+    id: 'ask-0',
+    offerId: 'o-pro-8',
+    optionLabel: '8 weeks',
+    priceAmount: 89.75,
+    durationCount: 8,
+    askedOn: '2026-08-01',
+    state: 'Booked',
+    moneySent: { whishName: 'Maya Fakhoury', whishNumber: '+961 70 123 456', sentOn: '2026-08-02' },
+    outcome: {
+      kind: 'Booked',
+      decidedOn: '2026-08-03',
+      reason: null,
+      enrollmentId: 'e-pro-8',
+      planStartDate: '2026-08-03',
+      planLastDay: '2026-09-27',
+      decidedByName: 'Karim Haddad',
+    },
+    ...overrides,
+  });
+}
+
+/** An ask the house closed with a reason Maya reads, by Lea. */
+export function closedAsk(overrides: Partial<HousePlanAskView> = {}): HousePlanAskView {
+  return housePlanAsk({
+    id: 'ask-closed',
+    askedOn: '2026-07-20',
+    state: 'Closed',
+    moneySent: null,
+    outcome: {
+      kind: 'Closed',
+      decidedOn: '2026-07-27',
+      reason: 'No money came in a week. Ask again when you are ready.',
+      enrollmentId: null,
+      planStartDate: null,
+      planLastDay: null,
+      decidedByName: 'Lea Khoury',
+    },
+    ...overrides,
+  });
 }

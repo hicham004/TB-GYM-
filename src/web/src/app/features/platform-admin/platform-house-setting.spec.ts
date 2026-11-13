@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HouseSetting } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { button, field, fill, leave, press, settle } from '../../../testing/dom';
-import { emptyHouse, houseAdmin, houseSetting } from '../../../testing/platform-admin-fixtures';
+import {
+  emptyHouse,
+  HOUSE_WHISH_NUMBER,
+  houseAdmin,
+  houseSetting,
+} from '../../../testing/platform-admin-fixtures';
 import { PlatformHouseApi } from './platform-house-api';
 import { PlatformHouseSetting } from './platform-house-setting';
 import { type HouseSettingRow, toHouseAdmin, toHouseSetting } from './platform-house.models';
@@ -29,6 +34,19 @@ const CHANGED = toHouseSetting(
 
 const PER_WEEK_REASON = 'Enter a whole number from 0 to 10,000, or leave it empty.';
 const AGE_REASON = 'Enter an age from 18 to 100, or leave it empty.';
+
+/** The house's Whish number for plans: +961 70 123 456 at version 1, set on Thu 12 Nov (notes plan N9c2). */
+const WHISH = toHouseSetting(
+  houseSetting({
+    setting: 'WhishNumber',
+    value: HOUSE_WHISH_NUMBER,
+    version: 1,
+    changedAtUtc: '2026-11-12T08:00:00Z',
+  }),
+);
+const WHISH_LABEL = 'Whish number for plans';
+const WHISH_REASON =
+  'Enter 6 to 20 digits, with a + in front if you like and spaces between groups, or leave it empty.';
 
 async function render(
   inputs: { start?: HouseSettingRow; current?: HouseSettingRow } = {},
@@ -569,6 +587,151 @@ describe('Changing one of the house’s settings (notes plan N9a2)', () => {
       fill(host, 'Youngest age that may sign up', '21');
       await settle(fixture);
       expect(dirty.at(-1)).toBe(true);
+    });
+  });
+
+  describe('the house’s Whish number (notes plan N9c2)', () => {
+    it('edits it in a text box for a phone’s number pad, left to right, as long as the server keeps', async () => {
+      const { host, dirty } = await render({ start: WHISH });
+
+      expect(textOf(host.querySelector('[data-in-force]'))).toBe(
+        'In force now: +961 70 123 456 · Changed by Samir Aoun on Thu 12 Nov',
+      );
+      const input = field(host, WHISH_LABEL);
+      expect(input).toBe(box(host));
+      expect(input.value).toBe(HOUSE_WHISH_NUMBER);
+      expect(input.type).toBe('text');
+      expect(input.getAttribute('inputmode')).toBe('tel');
+      expect(input.getAttribute('autocomplete')).toBe('off');
+      expect(input.getAttribute('dir')).toBe('ltr');
+      expect(input.getAttribute('maxlength')).toBe('40');
+      for (const bound of ['min', 'max', 'step']) expect(input.hasAttribute(bound)).toBe(false);
+      expect(support(host)).toBe(
+        'The number trainees send a plan’s money to by Whish: 6 to 20 digits, with a + in front if you like and spaces between groups. Empty keeps asks for a paid plan closed.',
+      );
+      expect(dirty.at(-1)).toBe(false);
+    });
+
+    it('keeps a number setting’s box a number box, with no text limit', async () => {
+      const { host } = await render();
+
+      expect(box(host).type).toBe('number');
+      expect(box(host).hasAttribute('maxlength')).toBe(false);
+      expect(box(host).hasAttribute('dir')).toBe(false);
+    });
+
+    it('sends a number in the server’s form, or with spaces it will make one, at the version in force', async () => {
+      for (const typed of ['+961 70 123 456', '  +961   70 123456 ', '+ 961 71 234', '70123456']) {
+        const { fixture, host, api, closed } = await render({ start: WHISH });
+
+        fill(host, WHISH_LABEL, typed);
+        await settle(fixture);
+        press(host, 'Save');
+        await settle(fixture);
+
+        // The server keeps its one form; the page shows what it answers.
+        expect(api.changeSetting).toHaveBeenCalledWith('WhishNumber', typed.trim(), 1);
+        expect(errorUnder(host)).toBe('');
+        expect(closed).toHaveLength(1);
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('refuses what the server would, and says why under the box before sending', async () => {
+      const twentyInGroups = '1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0';
+      for (const typed of ['70-123-456', '12345', '1'.repeat(21), `+ ${twentyInGroups}`]) {
+        const { fixture, host, api, closed } = await render({ start: WHISH });
+
+        fill(host, WHISH_LABEL, typed);
+        await settle(fixture);
+        press(host, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting).not.toHaveBeenCalled();
+        expect(errorUnder(host)).toBe(WHISH_REASON);
+        expect(box(host).getAttribute('aria-invalid')).toBe('true');
+        expect(document.activeElement).toBe(box(host));
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+        expect(closed).toEqual([]);
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('says why once the box is left, and the reason goes as the number is fixed', async () => {
+      const { fixture, host, api } = await render({ start: WHISH });
+
+      fill(host, WHISH_LABEL, '70-123-456');
+      await settle(fixture);
+      expect(errorUnder(host)).toBe('');
+      leave(host, WHISH_LABEL);
+      await settle(fixture);
+      expect(errorUnder(host)).toBe(WHISH_REASON);
+
+      fill(host, WHISH_LABEL, '70 123 456');
+      await settle(fixture);
+      expect(errorUnder(host)).toBe('');
+      press(host, 'Save');
+      await settle(fixture);
+      expect(api.changeSetting).toHaveBeenCalledWith('WhishNumber', '70 123 456', 1);
+    });
+
+    it('sends null for an emptied box, which closes asks for a paid plan', async () => {
+      const { fixture, host, api, closed, dirty } = await render({ start: WHISH });
+
+      fill(host, WHISH_LABEL, '   ');
+      await settle(fixture);
+      expect(dirty.at(-1)).toBe(true);
+      press(host, 'Save');
+      await settle(fixture);
+
+      expect(api.changeSetting).toHaveBeenCalledWith('WhishNumber', null, 1);
+      expect(closed[0]).toMatchObject({ setting: 'WhishNumber', value: null, version: 2 });
+    });
+
+    it('starts empty while it was never set, and fills at version 0', async () => {
+      const never = toHouseSetting({ setting: 'WhishNumber', value: null, version: 0 });
+      const { fixture, host, api, dirty } = await render({ start: never });
+
+      expect(textOf(host.querySelector('[data-in-force]'))).toBe('In force now: Empty · Never set');
+      expect(box(host).value).toBe('');
+      fill(host, WHISH_LABEL, '+961 70 123 456');
+      await settle(fixture);
+      expect(dirty.at(-1)).toBe(true);
+      press(host, 'Save');
+      await settle(fixture);
+
+      expect(api.changeSetting).toHaveBeenCalledWith('WhishNumber', '+961 70 123 456', 0);
+    });
+
+    it('shows the server’s sentence under the box when it refuses the number', async () => {
+      const sentence =
+        'Enter the Whish number trainees send money to: 6 to 20 digits, with a + in front if you like and spaces between groups. Or leave it empty, which keeps asks for a paid plan closed.';
+      const { fixture, host, closed } = await render(
+        { start: WHISH },
+        {
+          changeSetting: vi.fn(() =>
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 400,
+                  error: { title: 'One or more errors.', errors: { value: [sentence] } },
+                }),
+            ),
+          ),
+        },
+      );
+
+      fill(host, WHISH_LABEL, '+961 71 234 567');
+      await settle(fixture);
+      press(host, 'Save');
+      await settle(fixture);
+
+      expect(errorUnder(host)).toBe(sentence);
+      expect(box(host).getAttribute('aria-invalid')).toBe('true');
+      expect(document.activeElement).toBe(box(host));
+      expect(box(host).value).toBe('+961 71 234 567');
+      expect(host.querySelector('[role="alert"]')).toBeNull();
+      expect(closed).toEqual([]);
     });
   });
 });

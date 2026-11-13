@@ -11,8 +11,10 @@ import {
   emptyHouse,
   HOUSE_ID,
   HOUSE_NAME,
+  HOUSE_WHISH_NUMBER,
   houseAdmin,
   houseSetting,
+  houseWithEverySetting,
   noHouse,
 } from '../../../testing/platform-admin-fixtures';
 import { PlatformHouse } from './platform-house';
@@ -409,6 +411,121 @@ describe('House, the platform admin’s page (notes plan N9a2)', () => {
         await settle(fixture);
 
         expect(toast()).toContain('How far back Free’s Progress reaches is now 30 days.');
+      });
+    });
+
+    describe('the house’s Whish number for plans (notes plan N9c2)', () => {
+      /** The server keeps one form: what was typed, its runs of spaces made one. */
+      const storedForm = (value: string | null) => value?.split(/\s+/).join(' ') ?? null;
+      const normalising = () =>
+        vi.fn((setting: HouseSetting, value: string | null, version: number) =>
+          of(
+            toHouseSetting(
+              houseSetting({
+                setting,
+                value: storedForm(value),
+                version: version + 1,
+                changedAtUtc: '2026-11-12T10:00:00Z',
+              }),
+            ),
+          ),
+        );
+
+      it('lists it as the server keeps it, left to right and untranslated, with who set it and a Change', async () => {
+        const { host } = await render({}, houseWithEverySetting);
+
+        expect(settingRows(host)).toHaveLength(5);
+        expect(settingRows(host)[4]).toEqual([
+          'WhishNumber',
+          'Whish number for plans',
+          HOUSE_WHISH_NUMBER,
+          // 08:00 UTC is 10:00 on Thu 12 Nov in Beirut.
+          'Changed by Samir Aoun on Thu 12 Nov',
+          'Change the Whish number for plans',
+        ]);
+        const value = query<HTMLElement>(host, 'li[data-setting="WhishNumber"] [data-value]');
+        expect(value.getAttribute('dir')).toBe('ltr');
+        expect(value.getAttribute('translate')).toBe('no');
+        expect(value.classList.contains('empty')).toBe(false);
+        // A number setting's value is a number the page formats: it keeps the page's direction.
+        const perWeek = query<HTMLElement>(host, 'li[data-setting="SignUpsPerWeek"] [data-value]');
+        expect(perWeek.hasAttribute('dir')).toBe(false);
+        expect(perWeek.hasAttribute('translate')).toBe(false);
+      });
+
+      it('says Empty and Never set while it was never set, in the page’s own words', async () => {
+        const unset = () => {
+          const house = houseWithEverySetting();
+          return {
+            ...house,
+            settings: house.settings.map((row) =>
+              row.setting === 'WhishNumber'
+                ? { ...row, value: null, version: 0, changedAtUtc: null, changedByName: null }
+                : row,
+            ),
+          };
+        };
+        const { host } = await render({}, unset);
+
+        const row = query<HTMLElement>(host, 'li[data-setting="WhishNumber"]');
+        const value = query<HTMLElement>(row, '[data-value]');
+        expect(textOf(value)).toBe('Empty');
+        expect(value.classList.contains('empty')).toBe(true);
+        expect(value.hasAttribute('dir')).toBe(false);
+        expect(value.hasAttribute('translate')).toBe(false);
+        expect(textOf(row.querySelector('[data-changed]'))).toBe('Never set');
+      });
+
+      it('saves a new number, and the toast and the row show it as the server keeps it', async () => {
+        const changeSetting = normalising();
+        const { fixture, host, api } = await render({ changeSetting }, houseWithEverySetting);
+
+        const sheet = await openChange(fixture, host, 'WhishNumber');
+        expect(titleOf(sheet)).toBe('Change the Whish number for plans');
+        expect(textOf(sheet.querySelector('[data-in-force]'))).toBe(
+          'In force now: +961 70 123 456 · Changed by Samir Aoun on Thu 12 Nov',
+        );
+        fill(sheet, 'Whish number for plans', '  +961   71 234 567 ');
+        await settle(fixture);
+        // The read after the save finds the number as the server keeps it.
+        const saved = houseWithEverySetting();
+        api.getHouse.mockReturnValue(
+          of(
+            toHouseAdmin({
+              ...saved,
+              settings: saved.settings.map((row) =>
+                row.setting === 'WhishNumber'
+                  ? { ...row, value: '+961 71 234 567', version: 2 }
+                  : row,
+              ),
+            }),
+          ),
+        );
+        press(sheet, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting).toHaveBeenCalledWith('WhishNumber', '+961   71 234 567', 1);
+        expect(overlays()).toEqual([]);
+        expect(toast()).toContain('Whish number for plans is now +961 71 234 567.');
+        expect(textOf(query(host, 'li[data-setting="WhishNumber"] [data-value]'))).toBe(
+          '+961 71 234 567',
+        );
+      });
+
+      it('says asks for a paid plan are closed when it is emptied, never that sign-up closes', async () => {
+        const { fixture, host, api } = await render({}, houseWithEverySetting);
+
+        const sheet = await openChange(fixture, host, 'WhishNumber');
+        fill(sheet, 'Whish number for plans', '');
+        await settle(fixture);
+        press(sheet, 'Save');
+        await settle(fixture);
+
+        expect(api.changeSetting).toHaveBeenCalledWith('WhishNumber', null, 1);
+        expect(toast()).toContain(
+          'Whish number for plans is now empty, so asks for a paid plan are closed.',
+        );
+        expect(toast()).not.toContain('sign-up is closed');
       });
     });
 

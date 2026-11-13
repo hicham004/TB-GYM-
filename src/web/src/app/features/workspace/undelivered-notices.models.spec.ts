@@ -113,6 +113,8 @@ describe('Undelivered notices, as the owner reads them (audit INV-4)', () => {
       'WeeksChanged',
       'CoachWorkoutNote',
       'ClientWorkoutNote',
+      'HousePlanAsked',
+      'HousePlanMoneySent',
     ];
     expect(kinds.map((kind) => [noticeAbout(kind), noticeAudience(kind)])).toEqual([
       ['A plan waiting for payment', 'For a client'],
@@ -129,6 +131,8 @@ describe('Undelivered notices, as the owner reads them (audit INV-4)', () => {
       ['Program weeks updated', 'For a client'],
       ['A coach’s note on a workout', 'For a client'],
       ['A client’s note on a workout', 'For you or a coach'],
+      ['An ask for a plan', 'For you or a coach'],
+      ['A trainee saying they paid', 'For you or a coach'],
     ]);
     // A kind this build does not know yet still reads as a notice, for nobody it can name.
     expect(noticeAbout('SomethingNew' as CommercialNotificationKind)).toBe('A notice');

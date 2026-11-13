@@ -2,19 +2,35 @@
   <p class="notice" data-in-force>{{ inForce() }}</p>
 
   <app-field [label]="words().label" [help]="words().help" [errors]="errorsShown()">
-    <input
-      appControl
-      name="value"
-      type="number"
-      inputmode="numeric"
-      step="1"
-      autocomplete="off"
-      [attr.min]="words().min"
-      [attr.max]="words().max"
-      [value]="typed()"
-      (input)="setTyped($any($event.target))"
-      (blur)="attempt.touch('value')"
-    />
+    @if (bounds(); as number) {
+      <input
+        appControl
+        name="value"
+        type="number"
+        inputmode="numeric"
+        step="1"
+        autocomplete="off"
+        [attr.min]="number.min"
+        [attr.max]="number.max"
+        [value]="typed()"
+        (input)="setTyped($any($event.target))"
+        (blur)="attempt.touch('value')"
+      />
+    } @else {
+      <!-- The Whish number: digits and spaces with an optional +, read left to right in every language. -->
+      <input
+        appControl
+        name="value"
+        type="text"
+        inputmode="tel"
+        autocomplete="off"
+        dir="ltr"
+        [attr.maxlength]="maxLength()"
+        [value]="typed()"
+        (input)="setTyped($any($event.target))"
+        (blur)="attempt.touch('value')"
+      />
+    }
   </app-field>
 
   @if (error(); as message) {

@@ -156,6 +156,19 @@ describe('noticeTarget', () => {
       noticeTarget(notice('r', at, { kind: 'RenewalRequested', clientProfileId: 'c-1' }), true),
     ).toEqual({ commands: ['/clients', 'c-1', 'service'] });
   });
+
+  it('opens a house trainee’s ask for a plan, and their word that they paid, on their Service & access', () => {
+    for (const kind of ['HousePlanAsked', 'HousePlanMoneySent'] as const) {
+      expect(noticeTarget(notice(kind, at, { kind, clientProfileId: 'c-1' }), true)).toEqual({
+        commands: ['/clients', 'c-1', 'service'],
+      });
+      // A Coach reads the same notice for their own trainee.
+      expect(noticeTarget(notice(kind, at, { kind, clientProfileId: 'c-1' }), false)).toEqual({
+        commands: ['/clients', 'c-1', 'service'],
+      });
+      expect(noticeTarget(notice(kind, at, { kind }), true)).toBeNull();
+    }
+  });
 });
 
 describe('noticeIcon', () => {
@@ -164,5 +177,6 @@ describe('noticeIcon', () => {
     expect(noticeIcon('ClientWorkoutNote')).toBe('messages');
     expect(noticeIcon('CoachResigned')).toBe('clients');
     expect(noticeIcon('EnrollmentEndingSoon')).toBe('products');
+    expect(noticeIcon('HousePlanMoneySent')).toBe('products');
   });
 });

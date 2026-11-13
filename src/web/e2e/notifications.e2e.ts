@@ -207,10 +207,16 @@ function inboxHandlers(start: Notice[]): { handlers: Record<string, Handler>; re
   return { handlers, reads };
 }
 
-async function openInbox(page: Page, role: 'coach' | 'client', width: number, dark = false) {
+async function openInbox(
+  page: Page,
+  role: 'coach' | 'client',
+  width: number,
+  dark = false,
+  notices?: Notice[],
+) {
   await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
   await page.setViewportSize({ width, height: 900 });
-  const start = role === 'coach' ? coachInbox() : clientInbox();
+  const start = notices ?? (role === 'coach' ? coachInbox() : clientInbox());
   const inbox = inboxHandlers(start);
   await mockSession(page, {
     memberships: role === 'coach' ? [OWNER_MEMBERSHIP] : [ATLAS_CLIENT],
@@ -314,6 +320,44 @@ for (const width of [390, 1440]) {
     });
   }
 }
+
+test('a house trainee’s ask for a plan, and their word that they paid, open their Service & access', async ({
+  page,
+}) => {
+  // The house's staff (SUB-020, notes plan N9c2): both notices lead to the trainee's Service & access,
+  // where the ask is booked or closed.
+  await openInbox(page, 'coach', 390, false, [
+    notice(
+      'h1',
+      'HousePlanMoneySent',
+      'Rima Aboud says the money is sent',
+      "Check the Whish account, then book the plan from the client's page.",
+      at(0, 9, 30),
+      false,
+      { clientProfileId: 'rima' },
+    ),
+    notice(
+      'h2',
+      'HousePlanAsked',
+      'Rima Aboud asked for a plan',
+      "Open the client's page to see the ask. Book the plan once the money is there.",
+      at(0, 9, 5),
+      true,
+      { clientProfileId: 'rima' },
+    ),
+  ]);
+
+  await expect(
+    page.getByRole('link', { name: /Rima Aboud says the money is sent/ }),
+  ).toHaveAttribute('href', '/clients/rima/service');
+  await expect(page.getByRole('link', { name: /Rima Aboud asked for a plan/ })).toHaveAttribute(
+    'href',
+    '/clients/rima/service',
+  );
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+  await page.screenshot({ path: test.info().outputPath('n9c2-inbox-390.png'), fullPage: true });
+});
 
 test('Unread shows what is waiting, and Mark all as read clears it and the badge', async ({
   page,

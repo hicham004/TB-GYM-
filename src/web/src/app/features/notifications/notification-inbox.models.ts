@@ -23,7 +23,11 @@ export interface NoticeDay {
  */
 export function noticeTarget(item: NotificationItem, isOwner: boolean): NoticeTarget | null {
   switch (item.kind) {
+    // A client asking to renew, and a house trainee asking for a plan or saying they paid (SUB-020): their
+    // Service & access, where the plan is renewed or the ask booked.
     case 'RenewalRequested':
+    case 'HousePlanAsked':
+    case 'HousePlanMoneySent':
       return item.clientProfileId
         ? { commands: ['/clients', item.clientProfileId, 'service'] }
         : null;

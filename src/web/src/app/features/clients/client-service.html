@@ -84,6 +84,90 @@
         </section>
       }
 
+      @if (asksFailed()) {
+        <section class="panel" aria-labelledby="asks-title">
+          <header class="panel-head">
+            <h2 id="asks-title" #asksHeading tabindex="-1" i18n>Asks for a plan</h2>
+          </header>
+          <div class="panel-body load-failed">
+            <p role="alert" i18n>The asks could not be loaded.</p>
+            <button
+              appButton
+              type="button"
+              variant="outlined"
+              [loading]="retryingAsks()"
+              (click)="retryAsks()"
+              i18n
+            >
+              Try again
+            </button>
+          </div>
+        </section>
+      } @else if (askRows().length > 0) {
+        <section class="panel" aria-labelledby="asks-title">
+          <header class="panel-head">
+            <h2 id="asks-title" #asksHeading tabindex="-1" i18n>Asks for a plan</h2>
+          </header>
+          <div class="panel-body">
+            <ul class="rows asks">
+              @for (ask of askRows(); track ask.id) {
+                <li class="ask">
+                  <div class="ask-head">
+                    <span class="row-main">
+                      <span class="row-name" dir="auto">{{ ask.name }}</span>
+                      <span class="row-meta">{{ ask.meta }}</span>
+                    </span>
+                    <app-status-pill [label]="ask.pill.label" [tone]="ask.pill.tone" />
+                  </div>
+                  @if (ask.sent; as sent) {
+                    @if (sent.name && sent.number) {
+                      <p class="ask-line" data-sent i18n>
+                        Sent from <span dir="auto">{{ sent.name }}</span
+                        >,
+                        <span class="whish-number" dir="ltr" translate="no">{{ sent.number }}</span>
+                        on {{ sent.day }}.
+                      </p>
+                    } @else {
+                      <p class="ask-line" data-sent i18n>Sent on {{ sent.day }}.</p>
+                    }
+                  }
+                  @if (ask.decided; as decided) {
+                    <p class="ask-line" dir="auto" data-decided>{{ decided }}</p>
+                  }
+                  @if (ask.reason; as reason) {
+                    <p class="ask-reason" dir="auto" data-reason>{{ reason }}</p>
+                  }
+                  @if (ask.open && !context.isFormer()) {
+                    <div class="ask-actions">
+                      <button
+                        appButton
+                        type="button"
+                        variant="outlined"
+                        [attr.aria-label]="ask.bookLabel"
+                        (click)="openBook(ask.id)"
+                        i18n
+                      >
+                        Book plan
+                      </button>
+                      <button
+                        appButton
+                        type="button"
+                        variant="text"
+                        [attr.aria-label]="ask.closeLabel"
+                        (click)="openCloseAsk(ask.id)"
+                        i18n
+                      >
+                        Close ask
+                      </button>
+                    </div>
+                  }
+                </li>
+              }
+            </ul>
+          </div>
+        </section>
+      }
+
       @if (showSessions()) {
         <section class="panel" aria-labelledby="sessions-title">
           <header class="panel-head sessions-head">
@@ -370,6 +454,33 @@
       [today]="today()"
       (dirtyChange)="dirty = $event"
       (closed)="closePlanSheet($event, sheet)"
+    />
+  }
+</ng-template>
+
+<ng-template #bookSheet let-sheet>
+  @if (askSubject(); as ask) {
+    <app-house-plan-book
+      [clientId]="context.clientId()"
+      [ask]="ask"
+      [firstName]="firstName()"
+      (dirtyChange)="dirty = $event"
+      (busyChange)="askBusy.set($event)"
+      (stale)="markAsksStale()"
+      (closed)="closePlanSheet($event, sheet)"
+    />
+  }
+</ng-template>
+
+<ng-template #closeAskDialog let-dialog>
+  @if (askSubject(); as ask) {
+    <app-house-plan-close
+      [clientId]="context.clientId()"
+      [ask]="ask"
+      [firstName]="firstName()"
+      (busyChange)="askBusy.set($event)"
+      (stale)="markAsksStale()"
+      (closed)="dialog.close($event)"
     />
   }
 </ng-template>

@@ -56,8 +56,8 @@ export function toHouseAdmin(view: HouseAdminView): HouseAdmin {
   const words = houseSettingWords();
   return {
     house: view.house ? toHouseWorkspace(view.house) : null,
-    // A setting the server added before this page has words for it (the house's Whish number, notes plan N9c1,
-    // until N9c2) is left off, so the page keeps working instead of failing on it.
+    // A setting the server adds before this page has words for it is left off, so the page keeps working
+    // instead of failing on it (notes plan N9c1).
     settings: view.settings.filter((row) => Object.hasOwn(words, row.setting)).map(toHouseSetting),
     signUp: view.signUp ? toHouseSignUp(view.signUp) : null,
   };
@@ -95,18 +95,34 @@ function toHouseSignUp(view: HouseSignUpView): HouseSignUp {
 /** What a setting's number counts: places or years, days, or gigabytes of storage. */
 export type HouseSettingUnit = 'count' | 'days' | 'gigabytes';
 
-/** How a setting reads on the page and in its sheet; the bounds are the server's own (CLI-023). */
-export interface HouseSettingWords {
+/** The longest Whish number the house keeps, as the server allows (CLI-023). */
+export const WHISH_NUMBER_MAXIMUM_LENGTH = 40;
+
+interface HouseSettingWordsBase {
   readonly label: string;
   /** The label inside a sentence: "Change new sign-ups a week". */
   readonly inSentence: string;
   readonly help: string;
-  /** What the sheet says before sending a number outside the bounds; the server words its own refusal. */
+  /** What the sheet says before sending a value the server would refuse; the server words its own refusal. */
   readonly reason: string;
+}
+
+/** A whole number within the server's own bounds (CLI-023). */
+export interface HouseNumberSettingWords extends HouseSettingWordsBase {
+  readonly kind: 'number';
   readonly min: number;
   readonly max: number;
   readonly unit: HouseSettingUnit;
 }
+
+/** Text the page shows exactly as the server keeps it: the house's Whish number (notes plan N9c1). */
+export interface HouseTextSettingWords extends HouseSettingWordsBase {
+  readonly kind: 'text';
+  readonly maxLength: number;
+}
+
+/** How a setting reads on the page and in its sheet. */
+export type HouseSettingWords = HouseNumberSettingWords | HouseTextSettingWords;
 
 /**
  * Each setting's words. A `Record` over every setting the API names, so a later row's new setting does not
@@ -115,6 +131,7 @@ export interface HouseSettingWords {
 export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
   return {
     SignUpsPerWeek: {
+      kind: 'number',
       label: $localize`New sign-ups a week`,
       inSentence: $localize`new sign-ups a week`,
       help: $localize`A whole number from 0 to 10,000. Empty or 0 keeps sign-up closed.`,
@@ -124,6 +141,7 @@ export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
       unit: 'count',
     },
     MinimumSignUpAge: {
+      kind: 'number',
       label: $localize`Youngest age that may sign up`,
       inSentence: $localize`the youngest age that may sign up`,
       help: $localize`From 18 to 100. Empty keeps sign-up closed. TB Gym is for adults, so it can’t be under 18.`,
@@ -133,6 +151,7 @@ export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
       unit: 'count',
     },
     FreeProgressDays: {
+      kind: 'number',
       label: $localize`How far back Free’s Progress reaches`,
       inSentence: $localize`how far back Free’s Progress reaches`,
       help: $localize`Days, from 1 to 3,650. Empty means no limit. Everything a trainee logs is kept, and a paid plan shows all of it.`,
@@ -142,6 +161,7 @@ export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
       unit: 'days',
     },
     MediaStorageGigabytes: {
+      kind: 'number',
       label: $localize`The house’s media storage`,
       inSentence: $localize`the house’s media storage`,
       help: $localize`Whole gigabytes, from 1 to 10,240. Empty gives the house the platform’s allowance, the same as every coaching space’s.`,
@@ -150,19 +170,50 @@ export function houseSettingWords(): Record<HouseSetting, HouseSettingWords> {
       max: 10_240,
       unit: 'gigabytes',
     },
+    WhishNumber: {
+      kind: 'text',
+      label: $localize`Whish number for plans`,
+      inSentence: $localize`the Whish number for plans`,
+      help: $localize`The number trainees send a plan’s money to by Whish: 6 to 20 digits, with a + in front if you like and spaces between groups. Empty keeps asks for a paid plan closed.`,
+      reason: $localize`Enter 6 to 20 digits, with a + in front if you like and spaces between groups, or leave it empty.`,
+      maxLength: WHISH_NUMBER_MAXIMUM_LENGTH,
+    },
   };
 }
 
-/** "20", "10,000", "90 days", "50 GB" or "Empty": a setting's value as the page shows it. */
+/**
+ * A typed Whish number in the one form the server keeps (CLI-023): each run of spaces made one, trimmed, an
+ * optional + with any space after it dropped, then only digits and spaces, 6 to 20 digits and 40 characters
+ * at most. Empty for an empty box, null for a number the server would refuse. The server's rule decides;
+ * this only spares a round trip.
+ */
+export function whishNumberForm(typed: string): string | null {
+  const joined = typed.trim().split(/\s+/).join(' ');
+  if (joined === '') return '';
+  if (joined.length > WHISH_NUMBER_MAXIMUM_LENGTH) return null;
+  const plus = joined.startsWith('+');
+  const body = plus ? joined.slice(1).trimStart() : joined;
+  if (!/^[0-9 ]*$/.test(body)) return null;
+  const digits = body.replace(/ /g, '').length;
+  return digits >= 6 && digits <= 20 ? (plus ? `+${body}` : body) : null;
+}
+
+/**
+ * "20", "10,000", "90 days", "50 GB", a Whish number exactly as the server keeps it, or "Empty": a setting's
+ * value as the page shows it. Without words it reads as a count.
+ */
 export function settingValueText(
   value: string | null,
   locale: string,
-  unit: HouseSettingUnit = 'count',
+  words?: HouseSettingWords,
 ): string {
   if (value === null || value.trim() === '') return $localize`Empty`;
+  // "+961 70 123 456" is not a number to format: as one, it would lose its + and its groups.
+  if (words?.kind === 'text') return value;
   const number = Number(value);
   if (!Number.isFinite(number)) return value;
   const shown = formatNumber(number, locale, '1.0-0');
+  const unit = words?.unit ?? 'count';
   if (unit === 'days') return number === 1 ? $localize`1 day` : $localize`${shown}:count: days`;
   if (unit === 'gigabytes') return $localize`${shown}:count: GB`;
   return shown;

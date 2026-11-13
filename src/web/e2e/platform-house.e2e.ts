@@ -31,7 +31,19 @@ const NOW = '2026-11-12T09:00:00Z';
 const HOUSE_ID = '00000000-0000-4000-8000-0000000000f1';
 const HOUSE_NAME = 'TB Gym coaching space';
 
-type Setting = 'SignUpsPerWeek' | 'MinimumSignUpAge' | 'FreeProgressDays' | 'MediaStorageGigabytes';
+type Setting =
+  | 'SignUpsPerWeek'
+  | 'MinimumSignUpAge'
+  | 'FreeProgressDays'
+  | 'MediaStorageGigabytes'
+  | 'WhishNumber';
+
+/** A Whish number in the one form the server keeps (CLI-023): each run of spaces one, none after the +. */
+function whishForm(value: string | null): string | null {
+  if (value === null) return null;
+  const joined = value.trim().split(/\s+/).join(' ');
+  return joined.startsWith('+') ? `+${joined.slice(1).trimStart()}` : joined;
+}
 
 interface SettingView {
   readonly setting: Setting;
@@ -174,7 +186,8 @@ class HouseRecord {
     }
     const saved: SettingView = {
       ...row,
-      value: body.value,
+      // The server keeps the Whish number in its one form, and answers with it.
+      value: row.setting === 'WhishNumber' ? whishForm(body.value) : body.value,
       version: row.version + 1,
       changedAtUtc: NOW,
       changedByUserId: ADMIN.id,
@@ -485,7 +498,10 @@ test('emptying a setting sends no value, and the toast says sign-up is closed', 
   await expect(perWeek.locator('[data-value]')).toHaveText('Empty');
 });
 
-/** Every setting the house has since notes plan N9b5: sign-up's two, Free's window and the house's storage. */
+/**
+ * Every setting the house has since notes plan N9c1: sign-up's two, Free's window, the house's storage, and
+ * its Whish number for plans, never set yet, so asks for a paid plan are closed.
+ */
 function allSettings(): SettingView[] {
   return [
     ...filledSettings(),
@@ -505,8 +521,126 @@ function allSettings(): SettingView[] {
       changedByUserId: ADMIN.id,
       changedByName: ADMIN.displayName,
     },
+    {
+      setting: 'WhishNumber',
+      value: null,
+      version: 0,
+      changedAtUtc: null,
+      changedByUserId: null,
+      changedByName: null,
+    },
   ];
 }
+
+const WHISH_HELP =
+  'The number trainees send a plan’s money to by Whish: 6 to 20 digits, with a + in front if you like and spaces between groups. Empty keeps asks for a paid plan closed.';
+const WHISH_REASON =
+  'Enter 6 to 20 digits, with a + in front if you like and spaces between groups, or leave it empty.';
+const whishSheet = (page: Page) =>
+  page.getByRole('dialog', { name: 'Change the Whish number for plans', exact: true });
+
+for (const width of [390, 1440]) {
+  test(`the house’s Whish number for plans at ${width}px is typed in a text box, saved in the server’s form and shown as kept, and emptying it closes asks (N9c2)`, async ({
+    page,
+  }) => {
+    const record = await openHouse(page, width, {
+      record: new HouseRecord({ settings: allSettings() }),
+    });
+    const whish = settingRow(page, 'WhishNumber');
+    const value = whish.locator('[data-value]');
+    await expect(whish.locator('strong')).toHaveText('Whish number for plans');
+    await expect(value).toHaveText('Empty');
+    await expect(whish.locator('[data-changed]')).toHaveText('Never set');
+
+    await whish.getByRole('button', { name: 'Change the Whish number for plans' }).click();
+    const sheet = whishSheet(page);
+    const number = sheet.getByLabel('Whish number for plans');
+    await expect(sheet.locator('[data-in-force]')).toHaveText('In force now: Empty · Never set');
+    await expect(sheet).toContainText(WHISH_HELP);
+    await expect(number).toHaveAttribute('type', 'text');
+    await expect(number).toHaveAttribute('inputmode', 'tel');
+    await expect(number).toHaveAttribute('autocomplete', 'off');
+    await expect(number).toHaveAttribute('dir', 'ltr');
+    await expect(number).toHaveAttribute('maxlength', '40');
+    await expect(number).not.toHaveAttribute('min');
+
+    // Dashes are not the server's form: the sheet says so under the box and sends nothing.
+    await number.fill('70-123-456');
+    await sheet.getByRole('button', { name: 'Save' }).click();
+    await expect(sheet.getByText(WHISH_REASON)).toBeVisible();
+    await expect(number).toHaveAttribute('aria-invalid', 'true');
+    await expect(number).toBeFocused();
+    expect(record.puts).toEqual([]);
+
+    await number.fill('  +961   70 123 456 ');
+    await expect(sheet.getByText(WHISH_REASON)).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: test.info().outputPath(`n9c2-whish-sheet-${width}.png`) });
+    await sheet.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText('Whish number for plans is now +961 70 123 456.')).toBeVisible();
+    await expect(value).toHaveText('+961 70 123 456');
+    await expect(value).toHaveAttribute('dir', 'ltr');
+    await expect(value).toHaveAttribute('translate', 'no');
+    await expect(whish.locator('[data-changed]')).toHaveText('Changed by Ziad Matar on Thu 12 Nov');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9c2-whish-${width}.png`),
+      fullPage: true,
+    });
+
+    await whish.getByRole('button', { name: 'Change the Whish number for plans' }).click();
+    await expect(whishSheet(page).getByLabel('Whish number for plans')).toHaveValue(
+      '+961 70 123 456',
+    );
+    await whishSheet(page).getByLabel('Whish number for plans').fill('');
+    await whishSheet(page).getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(
+      page.getByText('Whish number for plans is now empty, so asks for a paid plan are closed.'),
+    ).toBeVisible();
+    await expect(value).toHaveText('Empty');
+    await expect(value).not.toHaveAttribute('dir');
+    expect(record.puts).toEqual([
+      { setting: 'WhishNumber', body: { value: '+961   70 123 456', expectedVersion: 0 } },
+      { setting: 'WhishNumber', body: { value: null, expectedVersion: 1 } },
+    ]);
+  });
+}
+
+test('a Whish number of 20 digits with no spaces wraps on a phone at 200% text, on the page and in its sheet (N9c2)', async ({
+  page,
+}) => {
+  const settings = allSettings().map((row) =>
+    row.setting === 'WhishNumber'
+      ? {
+          ...row,
+          value: '96170123456789012345',
+          version: 1,
+          changedAtUtc: '2026-11-10T08:30:00Z',
+          changedByUserId: ADMIN.id,
+          changedByName: ADMIN.displayName,
+        }
+      : row,
+  );
+  await openHouse(page, 390, { record: new HouseRecord({ settings }) });
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  const whish = settingRow(page, 'WhishNumber');
+  await expect(whish.locator('[data-value]')).toHaveText('96170123456789012345');
+  await whish.scrollIntoViewIfNeeded();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: test.info().outputPath('n9c2-whish-200.png'), fullPage: true });
+
+  await whish.getByRole('button', { name: 'Change the Whish number for plans' }).click();
+  await expect(whishSheet(page).locator('[data-in-force]')).toHaveText(
+    'In force now: 96170123456789012345 · Changed by Ziad Matar on Tue 10 Nov',
+  );
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: test.info().outputPath('n9c2-whish-sheet-200.png') });
+});
 
 for (const width of [390, 1440]) {
   test(`Free’s window and the house’s storage read with their units at ${width}px, and emptying the window lifts the limit (N9b5)`, async ({

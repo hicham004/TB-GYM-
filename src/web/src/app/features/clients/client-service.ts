@@ -1,10 +1,13 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { UiConfirm } from '../../ui/confirm';
 import {
+  afterNextRender,
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
+  Injector,
   LOCALE_ID,
   signal,
   TemplateRef,
@@ -16,6 +19,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import type {
+  ClientCommercialOverview,
   ClientEnrollment,
   CoachClientDetails,
   ProductCatalog,
@@ -60,6 +64,10 @@ import {
 } from './client-service.models';
 import { planEnding } from './client-overview.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
+import { HousePlanAsksApi } from './house-plan-asks-api';
+import { askRows, isHouseTrainee, type HousePlanAsk } from './house-plan-asks.models';
+import { HousePlanBook } from './house-plan-book';
+import { HousePlanClose } from './house-plan-close';
 import { AccessChange, PlanStatusChange } from './plan-dialogs';
 import { PlanPayment, PlanStart } from './plan-sheets';
 import { SessionSheet } from './session-sheet';
@@ -81,6 +89,8 @@ import { SessionSheet } from './session-sheet';
     ClientCoach,
     ClientRelease,
     EmptyState,
+    HousePlanBook,
+    HousePlanClose,
     NgTemplateOutlet,
     PlanPayment,
     PlanStart,
@@ -98,6 +108,8 @@ import { SessionSheet } from './session-sheet';
 export class ClientService extends GuardedSheets {
   private readonly api = inject(ApiClient);
   private readonly team = inject(TeamApi);
+  private readonly houseAsks = inject(HousePlanAsksApi);
+  private readonly injector = inject(Injector);
   private readonly auth = inject(AuthStore);
   private readonly csrf = inject(CsrfService);
   private readonly emailDelivery = inject(EmailDelivery);
@@ -117,6 +129,11 @@ export class ClientService extends GuardedSheets {
 
   protected confirmDialog(): TemplateRef<unknown> {
     return this.confirmTemplate();
+  }
+
+  /** No sheet closes while a booking is on its way: the close button, Escape, the backdrop or Not now. */
+  protected override canClose(): boolean | Promise<boolean> {
+    return this.askBusy() ? false : super.canClose();
   }
 
   /** A plan sheet's result: saved closes it at once, Not now asks first when something is typed. */
@@ -146,12 +163,27 @@ export class ClientService extends GuardedSheets {
   protected readonly resuming = signal(false);
   /** Whether the start sheet is selling sessions, so it offers packs alone. */
   protected readonly sellingSessions = signal(false);
+  /**
+   * A house trainee's asks for a paid plan (SUB-020): read for a client holding the house's Free alone, so no
+   * other page reads them; `failed` keeps the rest of the page when only this read was refused.
+   */
+  private readonly asks = signal<AsksRead>({ kind: 'none' });
+  /** The ask the booking sheet or the closing dialog is about. */
+  protected readonly askSubject = signal<HousePlanAsk | null>(null);
+  protected readonly retryingAsks = signal(false);
+  /** A booking or closing on its way: its sheet or dialog stays open, so its answer is said and acted on. */
+  protected readonly askBusy = signal(false);
+  /** The server said the ask was booked or closed meanwhile: the asks are read again once its surface closes. */
+  private asksStale = false;
 
   protected readonly startSheet = viewChild.required<TemplateRef<unknown>>('startSheet');
   protected readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
   protected readonly paymentSheet = viewChild.required<TemplateRef<unknown>>('paymentSheet');
   protected readonly statusDialog = viewChild.required<TemplateRef<unknown>>('statusDialog');
   protected readonly accessDialog = viewChild.required<TemplateRef<unknown>>('accessDialog');
+  protected readonly bookSheet = viewChild.required<TemplateRef<unknown>>('bookSheet');
+  protected readonly closeAskDialog = viewChild.required<TemplateRef<unknown>>('closeAskDialog');
+  private readonly asksHeading = viewChild<ElementRef<HTMLElement>>('asksHeading');
 
   private readonly query = toSignal(this.route.queryParamMap, { requireSync: true });
 
@@ -193,6 +225,13 @@ export class ClientService extends GuardedSheets {
   protected readonly hasOthers = computed(
     () => this.others().coming.length + this.others().earlier.length > 0,
   );
+
+  /** The trainee's asks, newest first; none for any other client. */
+  protected readonly askRows = computed(() => {
+    const read = this.asks();
+    return read.kind === 'ready' ? askRows(read.asks, this.serviceContext()) : [];
+  });
+  protected readonly asksFailed = computed(() => this.asks().kind === 'failed');
 
   /** Whether the request is about the plan in front, so it is said there and answered there. */
   private readonly askedHere = computed(() => renewalAskedFor(this.renewalRequest(), this.card()));
@@ -325,9 +364,10 @@ export class ClientService extends GuardedSheets {
       try {
         // The plans and the overview the record read for this page when it opened here, or fresh reads
         // (audit UIQ-8); the overview carries the client's request to renew and whether the plan ends soon.
-        const [plans, catalog, overview, members] = await owner.wait(
+        const plansRead = this.context.plansForPage();
+        const [plans, catalog, overview, members, asks] = await owner.wait(
           Promise.all([
-            this.context.plansForPage(),
+            plansRead,
             former
               ? Promise.resolve(null)
               : firstValueFrom(this.api.getProductCatalog()).catch(() => null),
@@ -335,12 +375,14 @@ export class ClientService extends GuardedSheets {
             former || !this.context.isOwner()
               ? Promise.resolve(null)
               : firstValueFrom(this.team.getTeamMembers()).catch(() => null),
+            plansRead.then((read) => this.readAsks(read)),
           ]),
         );
         this.context.setPlans(plans);
         this.catalog.set(catalog);
         this.renewalRequest.set(renewalRequestOf(overview));
         this.members.set(members);
+        this.asks.set(asks);
         this.state.set('ready');
       } catch {
         if (!owner.current) return;
@@ -377,6 +419,111 @@ export class ClientService extends GuardedSheets {
         if (card) void this.resume(card);
         return;
     }
+  }
+
+  // ---------- a house trainee's asks for a plan (SUB-020) ----------
+
+  /** The asks of a client holding the house's Free; nothing is read for anyone else. */
+  private async readAsks(plans: ClientCommercialOverview | null): Promise<AsksRead> {
+    if (!isHouseTrainee(plans?.enrollments)) return { kind: 'none' };
+    try {
+      const asks = await firstValueFrom(this.houseAsks.list(this.context.clientId()));
+      return { kind: 'ready', asks };
+    } catch {
+      return { kind: 'failed' };
+    }
+  }
+
+  protected retryAsks(): Promise<void> {
+    if (this.retryingAsks()) return Promise.resolve();
+    return this.scope.run('asks', async (owner) => {
+      this.retryingAsks.set(true);
+      try {
+        const read = await owner.wait(this.readAsks(this.context.plans()));
+        this.asks.set(read);
+        // Try again goes with the panel it was in: focus waits on the asks' heading, if any are listed.
+        if (read.kind !== 'failed') this.focusAsksIfLost();
+      } finally {
+        if (owner.current) this.retryingAsks.set(false);
+      }
+    });
+  }
+
+  private askOf(id: string): HousePlanAsk | null {
+    const read = this.asks();
+    return read.kind === 'ready' ? (read.asks.find((ask) => ask.id === id) ?? null) : null;
+  }
+
+  protected openBook(id: string): void {
+    const ask = this.askOf(id);
+    if (!ask || this.context.isFormer()) return;
+    this.askSubject.set(ask);
+    this.clearAskWork();
+    this.show<boolean | null>(this.bookSheet(), $localize`Book the plan`).closed.subscribe(
+      (booked) =>
+        this.askSurfaceClosed(
+          booked ? $localize`The plan is booked and its payment recorded.` : null,
+        ),
+    );
+  }
+
+  protected openCloseAsk(id: string): void {
+    const ask = this.askOf(id);
+    if (!ask || this.context.isFormer()) return;
+    this.askSubject.set(ask);
+    this.clearAskWork();
+    const ref = this.dialogs.open<boolean>(this.closeAskDialog(), {
+      title: $localize`Close this ask`,
+      closeLabel: this.closeLabel,
+      // While the closing is on its way, its answer must arrive with the dialog still open.
+      canClose: () => !this.askBusy(),
+    });
+    ref.closed.subscribe((closed) =>
+      this.askSurfaceClosed(closed ? $localize`The ask is closed.` : null),
+    );
+  }
+
+  /** Set by the booking sheet or the closing dialog when the server says the ask ended meanwhile. */
+  protected markAsksStale(): void {
+    this.asksStale = true;
+  }
+
+  private clearAskWork(): void {
+    this.askBusy.set(false);
+    this.asksStale = false;
+  }
+
+  /**
+   * The sheet or dialog closed. Booked or closed here: say so. Booked or closed here or meanwhile, as the
+   * server said: read the plans and asks again, and put focus on the asks, since the button that opened it
+   * goes with the ask's new state.
+   */
+  private askSurfaceClosed(notice: string | null): void {
+    this.askBusy.set(false);
+    const stale = this.asksStale;
+    this.asksStale = false;
+    if (!notice && !stale) return;
+    if (notice) {
+      this.context.error.set(null);
+      this.context.notice.set(notice);
+    }
+    void this.reread().then(() =>
+      afterNextRender(() => this.asksHeading()?.nativeElement.focus(), {
+        injector: this.injector,
+      }),
+    );
+  }
+
+  /** Focus fell with a button that went away: the asks' heading takes it, if the asks are still listed. */
+  private focusAsksIfLost(): void {
+    afterNextRender(
+      () => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        this.asksHeading()?.nativeElement.focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   protected openStart(): void {
@@ -557,15 +704,18 @@ export class ClientService extends GuardedSheets {
     return this.scope.run('reread', async (owner) => {
       const clientId = this.context.clientId();
       try {
-        const [plans, overview] = await owner.wait(
+        const plansRead = firstValueFrom(this.api.getClientCommercialOverview(clientId));
+        const [plans, overview, asks] = await owner.wait(
           Promise.all([
-            firstValueFrom(this.api.getClientCommercialOverview(clientId)),
+            plansRead,
             this.context.isFormer()
               ? Promise.resolve(null)
               : firstValueFrom(this.api.getClientOverview(clientId)).catch(() => null),
+            plansRead.then((read) => this.readAsks(read)),
           ]),
         );
         this.context.setPlans(plans);
+        this.asks.set(asks);
         // The header reads it too, so a plan renewed here stops being flagged there.
         if (overview) this.context.setOverview(overview);
         this.renewalRequest.set(renewalRequestOf(overview));
@@ -588,8 +738,18 @@ export class ClientService extends GuardedSheets {
     this.picked.set(null);
     this.subject.set(null);
     this.renewSource.set(null);
+    this.asks.set({ kind: 'none' });
+    this.askSubject.set(null);
+    this.retryingAsks.set(false);
+    this.clearAskWork();
   }
 }
+
+/** The house's asks as this page last read them: none to read, the read refused, or the asks. */
+type AsksRead =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'failed' }
+  | { readonly kind: 'ready'; readonly asks: readonly HousePlanAsk[] };
 
 /** The client's standing request to renew, from the overview read; null without one. */
 function renewalRequestOf(

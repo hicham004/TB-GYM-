@@ -4,8 +4,10 @@ import {
   emptyHouse,
   HOUSE_ID,
   HOUSE_NAME,
+  HOUSE_WHISH_NUMBER,
   houseAdmin,
   houseSetting,
+  houseWithEverySetting,
   noHouse,
 } from '../../../testing/platform-admin-fixtures';
 import {
@@ -21,6 +23,7 @@ import {
   toHouseAdmin,
   toHouseSetting,
   weekRange,
+  whishNumberForm,
 } from './platform-house.models';
 
 const LOCALE = 'en-LB';
@@ -102,11 +105,7 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         ...house,
         settings: [
           ...house.settings,
-          {
-            ...house.settings[0],
-            setting: 'WhishNumber' as HouseSetting,
-            value: '+961 70 123 456',
-          },
+          { ...house.settings[0], setting: 'SomethingNew' as HouseSetting, value: '7' },
         ],
       });
 
@@ -114,6 +113,25 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         'SignUpsPerWeek',
         'MinimumSignUpAge',
       ]);
+    });
+
+    it('keeps the house’s Whish number with the other settings, as the server keeps it (N9c2)', () => {
+      const read = toHouseAdmin(houseWithEverySetting());
+
+      expect(read.settings.map((row) => row.setting)).toEqual([
+        'SignUpsPerWeek',
+        'MinimumSignUpAge',
+        'FreeProgressDays',
+        'MediaStorageGigabytes',
+        'WhishNumber',
+      ]);
+      expect(read.settings[4]).toEqual({
+        setting: 'WhishNumber',
+        value: HOUSE_WHISH_NUMBER,
+        version: 1,
+        changedAtUtc: '2026-11-12T08:00:00Z',
+        changedByName: 'Samir Aoun',
+      });
     });
 
     it('has no house, no settings and no sign-up while no space is marked', () => {
@@ -130,8 +148,10 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         'MediaStorageGigabytes',
         'MinimumSignUpAge',
         'SignUpsPerWeek',
+        'WhishNumber',
       ]);
       expect(words.SignUpsPerWeek).toEqual({
+        kind: 'number',
         label: 'New sign-ups a week',
         inSentence: 'new sign-ups a week',
         help: 'A whole number from 0 to 10,000. Empty or 0 keeps sign-up closed.',
@@ -141,6 +161,7 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         unit: 'count',
       });
       expect(words.MinimumSignUpAge).toEqual({
+        kind: 'number',
         label: 'Youngest age that may sign up',
         inSentence: 'the youngest age that may sign up',
         help: 'From 18 to 100. Empty keeps sign-up closed. TB Gym is for adults, so it can’t be under 18.',
@@ -151,6 +172,7 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
       });
       // Notes plan N9b5: Free's window in days, empty meaning no limit, and the house's storage in gigabytes.
       expect(words.FreeProgressDays).toEqual({
+        kind: 'number',
         label: 'How far back Free’s Progress reaches',
         inSentence: 'how far back Free’s Progress reaches',
         help: 'Days, from 1 to 3,650. Empty means no limit. Everything a trainee logs is kept, and a paid plan shows all of it.',
@@ -160,6 +182,7 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         unit: 'days',
       });
       expect(words.MediaStorageGigabytes).toEqual({
+        kind: 'number',
         label: 'The house’s media storage',
         inSentence: 'the house’s media storage',
         help: 'Whole gigabytes, from 1 to 10,240. Empty gives the house the platform’s allowance, the same as every coaching space’s.',
@@ -168,6 +191,30 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
         max: 10_240,
         unit: 'gigabytes',
       });
+      // Notes plan N9c2: the house's Whish number is text, with the server's longest form and no bounds.
+      expect(words.WhishNumber).toEqual({
+        kind: 'text',
+        label: 'Whish number for plans',
+        inSentence: 'the Whish number for plans',
+        help: 'The number trainees send a plan’s money to by Whish: 6 to 20 digits, with a + in front if you like and spaces between groups. Empty keeps asks for a paid plan closed.',
+        reason:
+          'Enter 6 to 20 digits, with a + in front if you like and spaces between groups, or leave it empty.',
+        maxLength: 40,
+      });
+    });
+
+    it('keeps a number setting’s bounds and unit, and a text setting’s longest form, by its kind', () => {
+      const bounds = Object.values(houseSettingWords()).map((words) =>
+        words.kind === 'number' ? [words.min, words.max, words.unit] : [words.maxLength],
+      );
+
+      expect(bounds).toEqual([
+        [0, 10_000, 'count'],
+        [18, 100, 'count'],
+        [1, 3_650, 'days'],
+        [1, 10_240, 'gigabytes'],
+        [40],
+      ]);
     });
 
     it('shows a value as a number, and an empty one as Empty', () => {
@@ -182,14 +229,71 @@ describe('The house as the platform admin reads it (notes plan N9a2)', () => {
     });
 
     it('names a number of days or gigabytes with its unit, and an empty one as Empty (N9b5)', () => {
-      expect(settingValueText('90', LOCALE, 'days')).toBe('90 days');
-      expect(settingValueText('1', LOCALE, 'days')).toBe('1 day');
-      expect(settingValueText('3650', LOCALE, 'days')).toBe('3,650 days');
-      expect(settingValueText('50', LOCALE, 'gigabytes')).toBe('50 GB');
-      expect(settingValueText('10240', LOCALE, 'gigabytes')).toBe('10,240 GB');
-      expect(settingValueText(null, LOCALE, 'days')).toBe('Empty');
-      expect(settingValueText('', LOCALE, 'gigabytes')).toBe('Empty');
-      expect(settingValueText('23', LOCALE, 'count')).toBe('23');
+      const {
+        FreeProgressDays: days,
+        MediaStorageGigabytes: storage,
+        SignUpsPerWeek: count,
+      } = houseSettingWords();
+
+      expect(settingValueText('90', LOCALE, days)).toBe('90 days');
+      expect(settingValueText('1', LOCALE, days)).toBe('1 day');
+      expect(settingValueText('3650', LOCALE, days)).toBe('3,650 days');
+      expect(settingValueText('50', LOCALE, storage)).toBe('50 GB');
+      expect(settingValueText('10240', LOCALE, storage)).toBe('10,240 GB');
+      expect(settingValueText(null, LOCALE, days)).toBe('Empty');
+      expect(settingValueText('', LOCALE, storage)).toBe('Empty');
+      expect(settingValueText('23', LOCALE, count)).toBe('23');
+    });
+
+    it('shows the Whish number exactly as the server keeps it, never as a number (N9c2)', () => {
+      const whish = houseSettingWords().WhishNumber;
+
+      expect(settingValueText('+961 70 123 456', LOCALE, whish)).toBe('+961 70 123 456');
+      // As numbers these would read "123,456" and "96,170,123,456".
+      expect(settingValueText('123456', LOCALE, whish)).toBe('123456');
+      expect(settingValueText('+96170123456', LOCALE, whish)).toBe('+96170123456');
+      expect(settingValueText(null, LOCALE, whish)).toBe('Empty');
+      expect(settingValueText('  ', LOCALE, whish)).toBe('Empty');
+    });
+  });
+
+  describe('a typed Whish number, in the server’s one form (N9c2, CLI-023)', () => {
+    it('takes digits in groups with an optional + in front, each run of spaces made one', () => {
+      expect(whishNumberForm('+961 70 123 456')).toBe('+961 70 123 456');
+      expect(whishNumberForm('  +961   70 123456 ')).toBe('+961 70 123456');
+      expect(whishNumberForm('+ 961 71 234')).toBe('+961 71 234');
+      expect(whishNumberForm('+961\t70\n123 456')).toBe('+961 70 123 456');
+      expect(whishNumberForm('70123456')).toBe('70123456');
+      // 6 and 20 digits, the bounds themselves.
+      expect(whishNumberForm('123456')).toBe('123456');
+      expect(whishNumberForm('1'.repeat(20))).toBe('1'.repeat(20));
+    });
+
+    it('takes 40 characters with their spaces, and no more', () => {
+      const twenty = '1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0';
+
+      expect(`+${twenty}`).toHaveLength(40);
+      expect(whishNumberForm(`+${twenty}`)).toBe(`+${twenty}`);
+      // 41 once its spaces are made one: the server counts before it drops the space after the +.
+      expect(`+ ${twenty}`).toHaveLength(41);
+      expect(whishNumberForm(`+ ${twenty}`)).toBeNull();
+    });
+
+    it('refuses anything but digits and spaces, and fewer than 6 or more than 20 digits', () => {
+      expect(whishNumberForm('70-123-456')).toBeNull();
+      expect(whishNumberForm('12345')).toBeNull();
+      expect(whishNumberForm('1'.repeat(21))).toBeNull();
+      expect(whishNumberForm('++961 70 123 456')).toBeNull();
+      expect(whishNumberForm('961 70 123 456+')).toBeNull();
+      expect(whishNumberForm('+')).toBeNull();
+      expect(whishNumberForm('(961) 70 123 456')).toBeNull();
+      // Only the digits 0 to 9, as the server: not Arabic-Indic ones.
+      expect(whishNumberForm('٧٠١٢٣٤٥٦')).toBeNull();
+    });
+
+    it('reads an empty box as empty, which clears the number', () => {
+      expect(whishNumberForm('')).toBe('');
+      expect(whishNumberForm('   ')).toBe('');
     });
   });
 

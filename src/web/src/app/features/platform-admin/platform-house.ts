@@ -89,12 +89,18 @@ export class PlatformHouse extends GuardedSheets {
     const view = this.view();
     const house = view?.house;
     if (!view || !house) return [];
-    return view.settings.map((row) => ({
-      row,
-      words: this.words[row.setting],
-      shown: settingValueText(row.value, this.locale, this.words[row.setting].unit),
-      changed: changedLine(row, house, this.locale),
-    }));
+    return view.settings.map((row) => {
+      const words = this.words[row.setting];
+      const shown = settingValueText(row.value, this.locale, words);
+      return {
+        row,
+        words,
+        shown,
+        // The Whish number as the server keeps it, left to right and never translated; Empty is a word.
+        asStored: words.kind === 'text' && shown === row.value,
+        changed: changedLine(row, house, this.locale),
+      };
+    });
   });
   protected readonly zone = computed(() => {
     const house = this.view()?.house;
@@ -174,7 +180,7 @@ export class PlatformHouse extends GuardedSheets {
       );
       const words = this.words[saved.setting];
       const label = words.label;
-      const shown = settingValueText(saved.value, this.locale, words.unit);
+      const shown = settingValueText(saved.value, this.locale, words);
       this.done(
         sheet,
         saved.value === null
@@ -189,14 +195,20 @@ export class PlatformHouse extends GuardedSheets {
   }
 }
 
-/** What emptying a setting does, in the toast: sign-up closes, Free's Progress has no limit, or the platform's room. */
+/**
+ * What emptying a setting does, in the toast: sign-up closes, Free's Progress has no limit, the platform's
+ * room, or asks for a paid plan close. A case for every setting, so a new one does not compile without its own.
+ */
 function emptiedWords(setting: HouseSetting, label: string): string {
   switch (setting) {
+    case 'SignUpsPerWeek':
+    case 'MinimumSignUpAge':
+      return $localize`${label}:setting: is now empty, so sign-up is closed.`;
     case 'FreeProgressDays':
       return $localize`${label}:setting: is now empty, so Free’s Progress has no limit.`;
     case 'MediaStorageGigabytes':
       return $localize`${label}:setting: is now empty, so the house has the platform’s allowance.`;
-    default:
-      return $localize`${label}:setting: is now empty, so sign-up is closed.`;
+    case 'WhishNumber':
+      return $localize`${label}:setting: is now empty, so asks for a paid plan are closed.`;
   }
 }

@@ -6,6 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import { HttpErrorResponse } from '@angular/common/http';
 import type {
+  HousePlanAskView,
+  HousePlanOfferView,
+  HousePlansView,
+  OwnFreePlanView,
   OwnPlansView,
   OwnPlanView,
   OwnSessionsView,
@@ -13,8 +17,11 @@ import type {
 } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
-import { click, settle } from '../../../testing/dom';
+import { UiToast } from '../../ui/toast';
+import { button, click, fill, formSummary, press, settle } from '../../../testing/dom';
 import { ClientPlanPage } from './client-plan';
+import { HousePlansApi } from './house-plans-api';
+import { toHouseAsk, toHousePlans, type HouseAsk } from './house-plans.models';
 
 const TODAY = '2026-10-15';
 
@@ -87,6 +94,7 @@ const sentRequest = {
 async function render(
   answer: () => ReturnType<ApiClient['getOwnPlans']>,
   more: Partial<Record<'requestRenewal' | 'getOwnRenewalStatus', ReturnType<typeof vi.fn>>> = {},
+  house: Partial<Record<'plans' | 'ask' | 'moneySent', ReturnType<typeof vi.fn>>> = {},
 ) {
   const api = {
     getOwnPlans: vi.fn(answer),
@@ -94,19 +102,38 @@ async function render(
     getOwnRenewalStatus: vi.fn(() => of(renewal())),
     ...more,
   };
+  // Only a trainee of the house reads what it sells; a coach's client never calls these.
+  const housePlans = {
+    plans: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
+    ask: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
+    moneySent: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
+    ...house,
+  };
+  const csrf = { refresh: vi.fn().mockResolvedValue(undefined) };
+  const toast = { show: vi.fn() };
   const selectedTenantId = signal<string | null>('tenant-atlas');
   await TestBed.configureTestingModule({
     imports: [ClientPlanPage],
     providers: [
       provideRouter([]),
       { provide: ApiClient, useValue: api },
-      { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
+      { provide: HousePlansApi, useValue: housePlans },
+      { provide: CsrfService, useValue: csrf },
+      { provide: UiToast, useValue: toast },
       { provide: TenantStore, useValue: { selectedTenantId } },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(ClientPlanPage);
   await settle(fixture);
-  return { fixture, host: fixture.nativeElement as HTMLElement, api, selectedTenantId };
+  return {
+    fixture,
+    host: fixture.nativeElement as HTMLElement,
+    api,
+    housePlans,
+    csrf,
+    toast,
+    selectedTenantId,
+  };
 }
 
 const text = (host: Element) => host.textContent?.replace(/\s+/g, ' ').trim() ?? '';
@@ -484,5 +511,711 @@ describe('ClientPlanPage', () => {
     const { host } = await render(() => of(view()));
 
     expect(host.querySelector('a.back')!.getAttribute('href')).toBe('/me');
+  });
+
+  it('never reads the plans TB Gym sells for a coach’s client', async () => {
+    const { host, housePlans } = await render(() => of(view(plan())));
+
+    expect(housePlans.plans).not.toHaveBeenCalled();
+    expect(text(host.querySelector('.lede')!)).toBe('What’s in your plan and the dates it runs.');
+    expect(host.querySelector('[data-free], [data-open-ask], [data-plans-to-add]')).toBeNull();
+  });
+});
+
+// ---------- a self-directed trainee of TB Gym's own space (notes plan N9c2) ----------
+
+const FREE: OwnFreePlanView = {
+  name: 'Free',
+  since: '2026-10-01',
+  status: 'Active',
+  features: ['Training'],
+};
+
+const traineeView = (...plans: OwnPlanView[]): OwnPlansView => ({
+  today: TODAY,
+  plans,
+  coachName: null,
+  renewal: null,
+  tier: 'Free',
+  free: FREE,
+});
+
+function offerView(overrides: Partial<HousePlanOfferView> = {}): HousePlanOfferView {
+  return {
+    offerId: 'offer-4w',
+    productId: 'pro-plus',
+    tier: 'ProPlus',
+    name: 'Pro+',
+    description: 'A program written for you by TB Gym, changed each block.',
+    optionLabel: '4 weeks',
+    priceAmount: '47.5',
+    priceCurrency: 'USD',
+    durationCount: 4,
+    durationUnit: 'Week',
+    features: ['Training', 'CheckIns'],
+    ...overrides,
+  };
+}
+
+const EIGHT_WEEKS = offerView({
+  offerId: 'offer-8w',
+  optionLabel: 'Two blocks',
+  priceAmount: 89.75,
+  durationCount: 8,
+});
+
+function askView(overrides: Partial<HousePlanAskView> = {}): HousePlanAskView {
+  return {
+    id: 'ask-1',
+    offerId: 'offer-8w',
+    tier: 'ProPlus',
+    planName: 'Pro+',
+    optionLabel: 'Two blocks',
+    priceAmount: 89.75,
+    priceCurrency: 'USD',
+    durationCount: 8,
+    durationUnit: 'Week',
+    askedOn: TODAY,
+    state: 'Asked',
+    moneySent: null,
+    outcome: null,
+    ...overrides,
+  };
+}
+
+const houseRead = (overrides: Partial<HousePlansView> = {}) =>
+  toHousePlans({
+    today: TODAY,
+    asksOpen: true,
+    whishNumber: '+961 70 123456',
+    plans: [offerView(), EIGHT_WEEKS],
+    asks: [],
+    ...overrides,
+  });
+
+const BOOKED = askView({
+  id: 'ask-booked',
+  offerId: 'offer-4w',
+  optionLabel: '4 weeks',
+  priceAmount: 47.5,
+  durationCount: 4,
+  askedOn: '2026-10-01',
+  state: 'Booked',
+  outcome: {
+    kind: 'Booked',
+    decidedOn: '2026-10-02',
+    reason: null,
+    enrollmentId: 'plan-1',
+    planStartDate: '2026-10-02',
+    planLastDay: '2026-10-29',
+    decidedByName: null,
+  },
+});
+
+const CLOSED = askView({
+  id: 'ask-closed',
+  askedOn: '2026-08-10',
+  state: 'Closed',
+  outcome: {
+    kind: 'Closed',
+    decidedOn: '2026-08-20',
+    reason: 'No money came from that Whish account.',
+    enrollmentId: null,
+    planStartDate: null,
+    planLastDay: null,
+    decidedByName: null,
+  },
+});
+
+/** The sheet, which the CDK draws outside the page. */
+const sheet = () => document.querySelector<HTMLElement>('[role="dialog"]');
+
+async function renderTrainee(
+  house: Partial<Record<'plans' | 'ask' | 'moneySent', ReturnType<typeof vi.fn>>> = {},
+  ...plans: OwnPlanView[]
+) {
+  return render(
+    () => of(traineeView(...plans)),
+    {},
+    { plans: vi.fn(() => of(houseRead())), ...house },
+  );
+}
+
+describe('ClientPlanPage for a self-directed trainee (notes plan N9c2)', () => {
+  afterEach(() => {
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((node) => node.remove());
+    TestBed.resetTestingModule();
+  });
+
+  it('shows Free alone while asks are switched off, and never a coach’s words', async () => {
+    const { host, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asksOpen: false, whishNumber: null, plans: [] }))),
+    });
+
+    expect(housePlans.plans).toHaveBeenCalledTimes(1);
+    expect(text(host.querySelector('.lede')!)).toBe(
+      'What you train on with TB Gym, and the dates each plan runs.',
+    );
+    const free = host.querySelector('section.plan[data-free]')!;
+    expect(free.getAttribute('aria-labelledby')).toBe('free-name free-when');
+    expect(text(free.querySelector('h2')!)).toBe('Free');
+    expect(free.querySelector('h2')!.getAttribute('dir')).toBe('auto');
+    expect(text(free.querySelector('app-status-pill')!)).toBe('No end date');
+    expect(text(free.querySelector('.plan-when')!)).toBe('Since Thu 1 Oct');
+    expect([...free.querySelectorAll('.plan-note')].map(text)).toEqual([
+      'It never ends, and it keeps running beside any plan you add.',
+    ]);
+    expect([...free.querySelectorAll('.includes li')].map(text)).toEqual(['Training']);
+    expect(host.querySelector('[data-plans-to-add]')).toBeNull();
+    expect(host.querySelector('[data-open-ask], [data-earlier-asks]')).toBeNull();
+    expect(text(host)).not.toContain('Plans you can add');
+    expect(text(host)).not.toContain('Your coach will put your plan here.');
+    expect(text(host)).not.toContain('No plan yet');
+  });
+
+  it('lists the plans on sale, grouped, with an Ask for on each option', async () => {
+    const { host } = await renderTrainee();
+
+    const section = host.querySelector('[data-plans-to-add]')!;
+    expect(text(section.querySelector('h2')!)).toBe('Plans you can add');
+    expect(text(section.querySelector('.house-head .quiet')!)).toBe(
+      'Pay by Whish. A plan starts once TB Gym has your money, or when your current plan ends if that is later. Free keeps running underneath.',
+    );
+    const offers = [...section.querySelectorAll('article.offer')];
+    expect(offers).toHaveLength(1);
+    expect(text(offers[0].querySelector('h3')!)).toBe('Pro+');
+    expect(text(offers[0].querySelector('.description')!)).toBe(
+      'A program written for you by TB Gym, changed each block.',
+    );
+    expect([...offers[0].querySelectorAll('.includes li')].map(text)).toEqual([
+      'Training',
+      'Check-ins',
+    ]);
+    expect([...offers[0].querySelectorAll('.option-text')].map(text)).toEqual([
+      '4 weeks USD 47.50',
+      'Two blocks 8 weeks USD 89.75',
+    ]);
+    const buttons = [...offers[0].querySelectorAll<HTMLButtonElement>('.option button')];
+    expect(buttons.map(text)).toEqual(['Ask for 4 weeks', 'Ask for Two blocks']);
+    // The name starts with the words on the button, so voice control finds it (WCAG 2.5.3).
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Ask for 4 weeks, Pro+',
+      'Ask for Two blocks, Pro+',
+    ]);
+    // The order: Free, then what can be added.
+    const order = [...host.querySelectorAll('[data-free], [data-plans-to-add]')];
+    expect(order.map((node) => node.hasAttribute('data-free'))).toEqual([true, false]);
+  });
+
+  it('asks for an option after a confirmation, then shows the ask at the top with focus', async () => {
+    const asked = toHouseAsk(askView());
+    const { fixture, host, housePlans, csrf } = await renderTrainee({
+      ask: vi.fn(() => of(asked)),
+    });
+
+    press(host, 'Ask for Two blocks');
+    await settle(fixture);
+    const opened = sheet()!;
+    expect(text(opened.querySelector('.tb-modal__title')!)).toBe('Ask for Pro+');
+    expect(text(opened.querySelector('[data-ask-choice]')!)).toBe(
+      'Two blocks · 8 weeks · USD 89.75',
+    );
+    expect(text(opened)).toContain(
+      'You pay TB Gym by Whish, then tell us here. The plan starts once TB Gym has your money, or when your current plan ends if that is later. Free keeps running underneath.',
+    );
+    expect(text(opened)).toContain(
+      'You can ask for something else once TB Gym books or closes this ask.',
+    );
+    // Words alone in the sheet's body, its buttons in the footer: one focusable region a keyboard scrolls.
+    const words = opened.querySelector<HTMLElement>('[data-ask-words]')!;
+    expect(words.getAttribute('tabindex')).toBe('0');
+    expect(words.getAttribute('role')).toBe('region');
+    expect(words.getAttribute('aria-label')).toBe('The plan you ask for');
+    expect(words.querySelector('[data-ask-choice]')).not.toBeNull();
+    expect(text(words)).toContain('Free keeps running underneath.');
+    expect(words.querySelector('button, app-form-summary')).toBeNull();
+
+    press(opened, 'Ask for it');
+    await settle(fixture);
+
+    expect(csrf.refresh).toHaveBeenCalled();
+    expect(housePlans.ask).toHaveBeenCalledExactlyOnceWith('offer-8w');
+    expect(sheet()).toBeNull();
+    const card = host.querySelector('section.plan[data-open-ask]')!;
+    expect(host.querySelector('section.plan')).toBe(card);
+    expect(text(card.querySelector('h2')!)).toBe('Your ask');
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Waiting for your payment');
+    expect(text(card.querySelector('#ask-line')!)).toBe('Pro+, Two blocks · USD 89.75 for 8 weeks');
+    const news = card.querySelector<HTMLElement>('.ask-news')!;
+    expect(news.getAttribute('role')).toBe('status');
+    expect(text(news)).toBe('Asked. Send the money by Whish, then tell TB Gym here.');
+    expect(document.activeElement).toBe(news);
+    expect(text(card.querySelector('.whish .plan-note')!)).toBe(
+      'Send USD 89.75 by Whish to +961 70 123456, then tell TB Gym you sent it.',
+    );
+    expect(text(card.querySelector('.whish [data-copy-whish]')!)).toBe('Copy the Whish number');
+    expect(card.querySelector('.whish-number')!.getAttribute('dir')).toBe('ltr');
+    expect(card.querySelector('.whish-number')!.getAttribute('translate')).toBe('no');
+    expect(text(card)).toContain('Nothing changes until TB Gym books it. Free keeps running.');
+    expect(card.querySelector('[data-paid]')!.classList).toContain('tb-button--accent');
+    // One ask at a time: nothing more to ask for until TB Gym books or closes it.
+    expect(host.querySelector('[data-plans-to-add]')).toBeNull();
+  });
+
+  it('asks nothing when the trainee says Not now', async () => {
+    const { fixture, host, housePlans } = await renderTrainee();
+
+    press(host, 'Ask for 4 weeks');
+    await settle(fixture);
+    press(sheet()!, 'Not now');
+    await settle(fixture);
+
+    expect(sheet()).toBeNull();
+    expect(housePlans.ask).not.toHaveBeenCalled();
+    expect(housePlans.plans).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-plans-to-add]')).not.toBeNull();
+  });
+
+  it('keeps the ask sheet open while the ask is on its way, so its answer lands in it', async () => {
+    const answer = new Subject<HouseAsk>();
+    const { fixture, host, housePlans } = await renderTrainee({ ask: vi.fn(() => answer) });
+
+    press(host, 'Ask for Two blocks');
+    await settle(fixture);
+    press(sheet()!, 'Ask for it');
+    await settle(fixture);
+    expect(text(sheet()!)).toContain('Asking…');
+
+    // A second tap, or the form sent again, asks nothing more.
+    sheet()!.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    sheet()!
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle(fixture);
+    expect(housePlans.ask).toHaveBeenCalledTimes(1);
+
+    // Neither Not now, the sheet's Close nor Escape ends it while the answer is on its way.
+    press(sheet()!, 'Not now');
+    sheet()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+    sheet()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(sheet()).not.toBeNull();
+    expect(text(sheet()!)).toContain('Asking…');
+
+    answer.next(toHouseAsk(askView()));
+    answer.complete();
+    await settle(fixture);
+
+    expect(sheet()).toBeNull();
+    const card = host.querySelector('[data-open-ask]')!;
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Waiting for your payment');
+    expect(document.activeElement).toBe(card.querySelector('.ask-news'));
+  });
+
+  it('says a refused ask in the server’s words, and reads the plans again once it closes', async () => {
+    const message =
+      'You already asked for Pro+, 4 weeks. TB Gym books it once your money is there, or closes the ask, before you can ask for anything else.';
+    const reads = [houseRead(), houseRead({ asks: [askView({ offerId: 'offer-4w' })] })];
+    const { fixture, host, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(reads.shift()!)),
+      ask: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({ status: 409, error: { code: 'house_plan_ask_open', message } }),
+        ),
+      ),
+    });
+
+    // Pressed from the keyboard: the sheet gives focus back to this button as it closes.
+    const opener = button(host, 'Ask for Two blocks');
+    opener.focus();
+    opener.click();
+    await settle(fixture);
+    press(sheet()!, 'Ask for it');
+    await settle(fixture);
+
+    const summary = formSummary(sheet()!);
+    expect(text(summary)).toBe(message);
+    expect(document.activeElement).toBe(summary);
+    expect(housePlans.plans).toHaveBeenCalledTimes(1);
+
+    press(sheet()!, 'Not now');
+    await settle(fixture);
+
+    expect(housePlans.plans).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-open-ask]')).not.toBeNull();
+    expect(host.querySelector('[data-plans-to-add]')).toBeNull();
+    // The new read took the button away with its section; the ask's status line has nothing to say, so
+    // it is hidden, and the h1 takes focus rather than the document's body.
+    expect(opener.isConnected).toBe(false);
+    expect(text(host.querySelector('[data-open-ask] .ask-news')!)).toBe('');
+    expect(document.activeElement).toBe(host.querySelector('h1'));
+  });
+
+  it('says a failed ask in its own words and keeps the page as it was', async () => {
+    const { fixture, housePlans } = await renderTrainee({
+      ask: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 500 }))),
+    });
+
+    press(fixture.nativeElement, 'Ask for 4 weeks');
+    await settle(fixture);
+    press(sheet()!, 'Ask for it');
+    await settle(fixture);
+
+    expect(text(formSummary(sheet()!))).toBe('Your ask couldn’t be sent. Try again.');
+    press(sheet()!, 'Not now');
+    await settle(fixture);
+    expect(housePlans.plans).toHaveBeenCalledTimes(1);
+  });
+
+  it('says where to send the money and takes "I’ve paid" with the Whish details', async () => {
+    const sent = toHouseAsk(
+      askView({
+        state: 'MoneySent',
+        moneySent: { whishName: 'Rima Aboud', whishNumber: '+961 71 234567', sentOn: TODAY },
+      }),
+    );
+    const { fixture, host, housePlans, csrf } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asks: [askView()] }))),
+      moneySent: vi.fn(() => of(sent)),
+    });
+
+    press(host, 'I’ve paid');
+    await settle(fixture);
+    const opened = sheet()!;
+    expect(text(opened.querySelector('.tb-modal__title')!)).toBe('I’ve paid');
+    expect(text(opened)).toContain(
+      'Tell TB Gym which Whish account the USD 89.75 came from, so they can find it.',
+    );
+    expect(text(opened)).toContain('6 to 20 digits, with a + in front if you like.');
+    expect(text(opened)).toContain('You can say this once for this ask.');
+    const number = opened.querySelector<HTMLInputElement>('input[name="whishNumber"]')!;
+    expect(number.getAttribute('inputmode')).toBe('tel');
+    expect(number.getAttribute('autocomplete')).toBe('tel');
+    expect(number.getAttribute('dir')).toBe('ltr');
+    expect(number.getAttribute('maxlength')).toBe('40');
+    const name = opened.querySelector<HTMLInputElement>('input[name="whishName"]')!;
+    expect(name.getAttribute('autocomplete')).toBe('name');
+    expect(name.getAttribute('maxlength')).toBe('100');
+
+    fill(opened, 'Name on your Whish account', '  Rima   Aboud ');
+    fill(opened, 'Your Whish number', '  +961   71 234567 ');
+    await settle(fixture);
+    press(opened, 'Send');
+    await settle(fixture);
+
+    expect(csrf.refresh).toHaveBeenCalled();
+    expect(housePlans.moneySent).toHaveBeenCalledExactlyOnceWith(
+      'ask-1',
+      'Rima Aboud',
+      '+961 71 234567',
+    );
+    expect(sheet()).toBeNull();
+    const card = host.querySelector('[data-open-ask]')!;
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Money sent');
+    const news = card.querySelector<HTMLElement>('.ask-news')!;
+    expect(text(news)).toBe('You said you sent it on Thu 15 Oct from Rima Aboud, +961 71 234567.');
+    expect(document.activeElement).toBe(news);
+    expect(text(card)).toContain(
+      'TB Gym books your plan once the money is there. Free keeps running underneath.',
+    );
+    expect(card.querySelector('[data-paid], [data-copy-whish]')).toBeNull();
+  });
+
+  it('keeps the "I’ve paid" sheet open while the word is on its way, so its answer lands in it', async () => {
+    const answer = new Subject<HouseAsk>();
+    const { fixture, host, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asks: [askView()] }))),
+      moneySent: vi.fn(() => answer),
+    });
+
+    press(host, 'I’ve paid');
+    await settle(fixture);
+    fill(sheet()!, 'Name on your Whish account', 'Rima Aboud');
+    fill(sheet()!, 'Your Whish number', '+961 71 234567');
+    await settle(fixture);
+    press(sheet()!, 'Send');
+    await settle(fixture);
+    expect(text(sheet()!)).toContain('Sending…');
+
+    sheet()!.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    sheet()!
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await settle(fixture);
+    expect(housePlans.moneySent).toHaveBeenCalledTimes(1);
+
+    press(sheet()!, 'Not now');
+    sheet()!.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+    sheet()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(sheet()).not.toBeNull();
+    expect(text(sheet()!)).toContain('Sending…');
+
+    answer.next(
+      toHouseAsk(
+        askView({
+          state: 'MoneySent',
+          moneySent: { whishName: 'Rima Aboud', whishNumber: '+961 71 234567', sentOn: TODAY },
+        }),
+      ),
+    );
+    answer.complete();
+    await settle(fixture);
+
+    expect(sheet()).toBeNull();
+    const card = host.querySelector('[data-open-ask]')!;
+    expect(text(card.querySelector('app-status-pill')!)).toBe('Money sent');
+    expect(document.activeElement).toBe(card.querySelector('.ask-news'));
+  });
+
+  it('checks the Whish details as the server does before sending them', async () => {
+    const { fixture, host, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asks: [askView()] }))),
+    });
+
+    press(host, 'I’ve paid');
+    await settle(fixture);
+    const opened = sheet()!;
+    press(opened, 'Send');
+    await settle(fixture);
+
+    expect(housePlans.moneySent).not.toHaveBeenCalled();
+    expect(text(formSummary(opened))).toBe('Check the fields marked above.');
+    expect(text(opened)).toContain('Enter the name on the Whish account you sent the money from.');
+    expect(text(opened)).toContain(
+      'Enter the Whish number you sent the money from: 6 to 20 digits, with a + in front if you like.',
+    );
+    expect(document.activeElement).toBe(opened.querySelector('input[name="whishName"]'));
+
+    fill(opened, 'Name on your Whish account', 'Rima Aboud');
+    fill(opened, 'Your Whish number', '70-123-456');
+    await settle(fixture);
+    press(opened, 'Send');
+    await settle(fixture);
+
+    expect(housePlans.moneySent).not.toHaveBeenCalled();
+    expect(text(opened)).not.toContain('Enter the name on the Whish account');
+    expect(document.activeElement).toBe(opened.querySelector('input[name="whishNumber"]'));
+  });
+
+  it('puts the server’s refusal of a Whish detail under its field', async () => {
+    const said =
+      'Enter the Whish number you sent the money from: 6 to 20 digits, with a + in front if you like and spaces between groups.';
+    const { fixture, host } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asks: [askView()] }))),
+      moneySent: vi.fn(() =>
+        throwError(
+          () => new HttpErrorResponse({ status: 400, error: { errors: { whishNumber: [said] } } }),
+        ),
+      ),
+    });
+
+    press(host, 'I’ve paid');
+    await settle(fixture);
+    const opened = sheet()!;
+    fill(opened, 'Name on your Whish account', 'Rima Aboud');
+    fill(opened, 'Your Whish number', '96170123456');
+    await settle(fixture);
+    press(opened, 'Send');
+    await settle(fixture);
+
+    const number = opened.querySelector<HTMLInputElement>('input[name="whishNumber"]')!;
+    expect(number.getAttribute('aria-invalid')).toBe('true');
+    expect(text(opened.querySelector(`#${number.getAttribute('aria-describedby')}`)!)).toBe(said);
+    expect(document.activeElement).toBe(number);
+  });
+
+  it('says "I’ve paid" was refused and reads the ask again once the sheet closes', async () => {
+    const message =
+      'You already said you sent this money, from other Whish details. TB Gym looks for it with the details you gave first.';
+    const reads = [
+      houseRead({ asks: [askView()] }),
+      houseRead({
+        asks: [
+          askView({
+            state: 'MoneySent',
+            moneySent: { whishName: 'Rima A', whishNumber: '70123456', sentOn: TODAY },
+          }),
+        ],
+      }),
+    ];
+    const { fixture, host, housePlans } = await renderTrainee({
+      plans: vi.fn(() => of(reads.shift()!)),
+      moneySent: vi.fn(() =>
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status: 409,
+              error: { code: 'house_plan_money_already_sent', message },
+            }),
+        ),
+      ),
+    });
+
+    const opener = button(host, 'I’ve paid');
+    opener.focus();
+    opener.click();
+    await settle(fixture);
+    fill(sheet()!, 'Name on your Whish account', 'Rima Aboud');
+    fill(sheet()!, 'Your Whish number', '+961 71 234567');
+    await settle(fixture);
+    press(sheet()!, 'Send');
+    await settle(fixture);
+
+    expect(text(formSummary(sheet()!))).toBe(message);
+    press(sheet()!, 'Not now');
+    await settle(fixture);
+
+    expect(housePlans.plans).toHaveBeenCalledTimes(2);
+    const news = host.querySelector<HTMLElement>('[data-open-ask] .ask-news')!;
+    expect(text(news)).toBe('You said you sent it on Thu 15 Oct from Rima A, 70123456.');
+    // "I've paid" went with the new read: the status line saying where the ask stands takes focus.
+    expect(opener.isConnected).toBe(false);
+    expect(document.activeElement).toBe(news);
+  });
+
+  it('asks only to be told when the house has no Whish number to show', async () => {
+    const { host } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asksOpen: false, whishNumber: null, asks: [askView()] }))),
+    });
+
+    const card = host.querySelector('[data-open-ask]')!;
+    expect(card.querySelector('.whish')).toBeNull();
+    expect(text(card)).toContain('If you already sent the money, tell TB Gym here.');
+    expect(card.querySelector('[data-paid]')).not.toBeNull();
+    expect(host.querySelector('[data-plans-to-add]')).toBeNull();
+  });
+
+  it('copies the Whish number and says so', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const { fixture, host, toast } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asks: [askView()] }))),
+    });
+
+    press(host, 'Copy the Whish number');
+    await settle(fixture);
+
+    expect(writeText).toHaveBeenCalledWith('+961 70 123456');
+    expect(toast.show).toHaveBeenCalledWith('Copied the Whish number.', { tone: 'success' });
+
+    writeText.mockImplementationOnce(() => Promise.reject(new Error('denied')));
+    press(host, 'Copy the Whish number');
+    await settle(fixture);
+
+    expect(toast.show).toHaveBeenLastCalledWith('Couldn’t copy. Select it and copy it yourself.', {
+      tone: 'error',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('lists the asks TB Gym booked or closed, newest first, with the reason it gave', async () => {
+    const { host } = await renderTrainee({
+      plans: vi.fn(() => of(houseRead({ asks: [BOOKED, CLOSED] }))),
+    });
+
+    const earlier = host.querySelector('[data-earlier-asks]')!;
+    expect(text(earlier.querySelector('h2')!)).toBe('Earlier asks');
+    const rows = [...earlier.querySelectorAll('li.earlier-ask')];
+    expect(rows.map((row) => text(row.querySelector('.ask-name')!))).toEqual([
+      'Pro+, 4 weeks',
+      'Pro+, Two blocks',
+    ]);
+    expect(rows.map((row) => text(row.querySelector('app-status-pill')!))).toEqual([
+      'Booked',
+      'Closed',
+    ]);
+    expect(rows.map((row) => text(row.querySelector('.quiet')!))).toEqual([
+      'USD 47.50 · asked Thu 1 Oct',
+      'USD 89.75 · asked Mon 10 Aug',
+    ]);
+    expect(text(rows[0].querySelector('.ask-outcome')!)).toBe(
+      'Booked Fri 2 Oct: runs Fri 2 Oct – Thu 29 Oct.',
+    );
+    expect(text(rows[1].querySelector('.ask-outcome')!)).toBe(
+      'TB Gym closed this ask on Thu 20 Aug.',
+    );
+    expect(text(rows[1].querySelector('.ask-reason')!)).toBe(
+      'No money came from that Whish account.',
+    );
+    expect(rows[1].querySelector('.ask-reason')!.getAttribute('dir')).toBe('auto');
+    expect(rows[0].querySelector('.ask-reason')).toBeNull();
+    // Asks still open again once each was booked or closed.
+    expect(host.querySelector('[data-plans-to-add]')).not.toBeNull();
+  });
+
+  it('words a paid plan’s notes for a trainee, and Free still stands beside it', async () => {
+    const { host } = await renderTrainee(
+      {},
+      plan({ id: 'pro', name: 'Pro+', status: 'Expired', lastDay: '2026-10-10' }),
+      plan({ id: 'next', name: 'Pro+', status: 'PendingPayment', startDate: '2026-10-20' }),
+    );
+
+    expect(
+      [...host.querySelectorAll('section.plan:not([data-free]) .plan-note')].map(text),
+    ).toEqual([
+      'You’re back on Free. Everything you logged stays yours.',
+      'It starts once TB Gym has your payment.',
+    ]);
+    expect(host.querySelector('[data-free]')).not.toBeNull();
+  });
+
+  it('says Free’s access is paused when TB Gym paused it', async () => {
+    const { host } = await render(
+      () => of({ ...traineeView(), free: { ...FREE, status: 'Blocked' } }),
+      {},
+      { plans: vi.fn(() => of(houseRead({ asksOpen: false, whishNumber: null, plans: [] }))) },
+    );
+
+    const free = host.querySelector('[data-free]')!;
+    expect(text(free.querySelector('app-status-pill')!)).toBe('Access paused');
+    expect([...free.querySelectorAll('.plan-note')].map(text)).toEqual([
+      'TB Gym has paused your access.',
+      'It never ends, and it keeps running beside any plan you add.',
+    ]);
+  });
+
+  it('says only the plans for sale failed to load, and reads them again on Try again', async () => {
+    let refused = true;
+    const { fixture, host, housePlans } = await renderTrainee({
+      plans: vi.fn(() =>
+        refused ? throwError(() => new HttpErrorResponse({ status: 500 })) : of(houseRead()),
+      ),
+    });
+
+    const failed = host.querySelector('[data-house-failed]')!;
+    expect(text(failed.querySelector('[role="alert"]')!)).toBe(
+      'The plans TB Gym sells couldn’t be loaded.',
+    );
+    expect(host.querySelector('[data-free]')).not.toBeNull();
+    expect(text(host)).not.toContain('Your plan couldn’t be loaded.');
+
+    refused = false;
+    const retry = button(failed as HTMLElement, 'Try again');
+    retry.focus();
+    retry.click();
+    await settle(fixture);
+
+    expect(housePlans.plans).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-house-failed]')).toBeNull();
+    expect(host.querySelector('[data-plans-to-add]')).not.toBeNull();
+    // Try again went with the failed read; focus stays on the page, at its h1.
+    expect(retry.isConnected).toBe(false);
+    expect(document.activeElement).toBe(host.querySelector('h1'));
+  });
+
+  it('shows nothing of the house when the server says it is not theirs', async () => {
+    const { host } = await renderTrainee({
+      plans: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404 }))),
+    });
+
+    expect(host.querySelector('[data-free]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-house-failed], [data-plans-to-add], [data-open-ask]'),
+    ).toBeNull();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 });

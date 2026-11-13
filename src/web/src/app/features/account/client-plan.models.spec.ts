@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { OwnPlanView } from '../../core/api/generated';
-import { ownPlan, ownPlans } from './client-plan.models';
+import type { OwnFreePlanView, OwnPlanView } from '../../core/api/generated';
+import { freePlan, ownPlan, ownPlans } from './client-plan.models';
 
 const TODAY = '2026-10-15';
 
@@ -125,5 +125,69 @@ describe('ownPlans', () => {
       ['plan-1', 'Ends tomorrow'],
       ['plan-2', 'Starts in 2 days'],
     ]);
+  });
+});
+
+describe('a self-directed trainee of the house (notes plan N9c2)', () => {
+  const FREE: OwnFreePlanView = {
+    name: 'Free',
+    since: '2026-10-01',
+    status: 'Active',
+    features: ['Training'],
+  };
+
+  const asTrainee = (overrides: Partial<OwnPlanView> = {}) =>
+    ownPlan(plan(overrides), TODAY, 'en-GB', null, true);
+
+  it('names TB Gym where a coach would stand, and leaves them on Free when a plan runs out', () => {
+    expect(asTrainee({ status: 'PendingPayment' }).note).toBe(
+      'It starts once TB Gym has your payment.',
+    );
+    expect(asTrainee({ status: 'Paused' }).note).toBe(
+      'TB Gym has paused this plan. It still ends on Sun 27 Dec.',
+    );
+    expect(asTrainee({ status: 'Blocked' }).note).toBe('TB Gym has paused your access.');
+    const ended = asTrainee({ status: 'Expired', lastDay: '2026-10-10' });
+    expect(ended.pill).toEqual({ label: 'Ended', tone: 'neutral' });
+    expect(ended.note).toBe('You’re back on Free. Everything you logged stays yours.');
+    expect(asTrainee().pill).toEqual(read().pill);
+  });
+
+  it('reads the plans as a trainee’s only when the server gives Free', () => {
+    const view = { today: TODAY, plans: [plan({ status: 'Blocked' })], coachName: null };
+    expect(ownPlans(view, 'en-GB')[0].note).toBe('Your coach has paused your access.');
+    expect(ownPlans({ ...view, free: null }, 'en-GB')[0].note).toBe(
+      'Your coach has paused your access.',
+    );
+    expect(ownPlans({ ...view, free: FREE }, 'en-GB')[0].note).toBe(
+      'TB Gym has paused your access.',
+    );
+  });
+
+  it('draws Free with the day it began and no end date', () => {
+    expect(freePlan(FREE, TODAY, 'en-GB')).toEqual({
+      name: 'Free',
+      since: 'Since Thu 1 Oct',
+      pill: { label: 'No end date', tone: 'success' },
+      notes: ['It never ends, and it keeps running beside any plan you add.'],
+      includes: [{ feature: 'Training', label: 'Training', icon: 'training' }],
+    });
+    expect(freePlan({ ...FREE, since: '2025-11-30' }, TODAY, 'en-GB').since).toBe(
+      'Since 30 Nov 2025',
+    );
+  });
+
+  it('says TB Gym paused Free’s access, and otherwise takes a plan’s own pill', () => {
+    const blocked = freePlan({ ...FREE, status: 'Blocked' }, TODAY, 'en-GB');
+    expect(blocked.pill).toEqual({ label: 'Access paused', tone: 'warning' });
+    expect(blocked.notes).toEqual([
+      'TB Gym has paused your access.',
+      'It never ends, and it keeps running beside any plan you add.',
+    ]);
+    const waiting = freePlan({ ...FREE, status: 'PendingPayment' }, TODAY, 'en-GB');
+    expect(waiting.pill).toEqual({ label: 'Waiting for payment', tone: 'warm' });
+    expect(JSON.stringify(freePlan({ ...FREE, status: 'Expired' }, TODAY, 'en-GB'))).not.toMatch(
+      /days left|Ends /,
+    );
   });
 });
