@@ -77,9 +77,25 @@
         <section class="today-week" aria-label="This week's training" i18n-aria-label>
           <div class="today-week-top">
             <strong i18n>This week</strong>
-            <span i18n
-              >{{ weekProgress().completed }} of {{ weekProgress().scheduled }} sessions done</span
-            >
+            @let progress = weekProgress();
+            <!-- A trainee's own workouts count too (TRN-033); a program's sessions keep their count. -->
+            @if (progress.scheduled === 0 && (selfDirected() || progress.own > 0)) {
+              <span data-own-week i18n>{progress.own, plural,
+                =0 {No workouts yet}
+                =1 {1 workout done}
+                other {{{ progress.own }} workouts done}
+              }</span>
+            } @else if (progress.own > 0) {
+              <span data-own-week i18n
+                >{{ progress.completed }} of {{ progress.scheduled }} sessions done ·
+                {progress.own, plural,
+                  =1 {1 of your own}
+                  other {{{ progress.own }} of your own}
+                }</span
+              >
+            } @else {
+              <span i18n>{{ progress.completed }} of {{ progress.scheduled }} sessions done</span>
+            }
           </div>
           <ol class="today-week-days">
             @for (item of currentWeek.days; track item.date) {
@@ -90,18 +106,40 @@
                     <ng-container i18n
                       >{{ item.completed }} of {{ item.scheduled }} sessions done</ng-container
                     >
+                    @if (item.ownCompleted) {
+                      <ng-container i18n
+                        >,
+                        {item.ownCompleted, plural,
+                          =1 {and 1 workout of your own}
+                          other {and {{ item.ownCompleted }} workouts of your own}
+                        }</ng-container
+                      >
+                    }
+                  } @else if (item.ownCompleted) {
+                    <ng-container i18n>{item.ownCompleted, plural,
+                      =1 {1 workout done}
+                      other {{{ item.ownCompleted }} workouts done}
+                    }</ng-container>
+                  } @else if (selfDirected()) {
+                    <ng-container i18n>No workout</ng-container>
                   } @else {
                     <ng-container i18n>No session</ng-container>
                   }
                 </span>
                 <span
                   class="today-week-ring"
-                  [class.is-done]="item.scheduled > 0 && item.completed === item.scheduled"
+                  [class.is-done]="dayDone(item)"
                   [class.is-planned]="item.scheduled > 0 && item.completed < item.scheduled"
-                  [style.--done]="item.scheduled ? (100 * item.completed) / item.scheduled : 0"
+                  [style.--done]="
+                    item.scheduled
+                      ? (100 * item.completed) / item.scheduled
+                      : item.ownCompleted
+                        ? 100
+                        : 0
+                  "
                   aria-hidden="true"
                 >
-                  @if (item.scheduled > 0 && item.completed === item.scheduled) {
+                  @if (dayDone(item)) {
                     <app-icon name="check-circle" />
                   }
                 </span>
@@ -128,7 +166,9 @@
         [class.today-card--hero]="
           current?.kind === 'scheduled' ||
           current?.kind === 'in-progress' ||
-          current?.kind === 'completed'
+          current?.kind === 'completed' ||
+          current?.kind === 'own-in-progress' ||
+          startCard()
         "
         [attr.aria-labelledby]="
           !trainingLoading() && !error() && current ? 'today-training-heading' : null
@@ -304,6 +344,56 @@
                 >View workout</a
               >
             }
+            @case ('own-in-progress') {
+              <!-- A workout of one's own not finished yet, whatever day it was started (TRN-033). -->
+              @if (current.startedOn === localDate()) {
+                <p class="today-state" i18n>
+                  In progress ·
+                  {current.summary.sets, plural,
+                    =0 {nothing logged yet}
+                    =1 {{{ current.summary.setsLogged }} of 1 set logged}
+                    other {
+                      {{ current.summary.setsLogged }} of {{ current.summary.sets }} sets logged
+                    }
+                  }
+                </p>
+              } @else {
+                <p class="today-state" i18n>
+                  Started {{ current.startedOn + 'T12:00:00' | date: 'EEE d MMM' }}
+                </p>
+              }
+              <h2 id="today-training-heading" #trainingHeading tabindex="-1" dir="auto">
+                {{ current.workout.name }}
+              </h2>
+              <p class="summary">
+                @if (current.summary.exercises) {
+                  <span i18n>{current.summary.exercises, plural,
+                    =1 {1 exercise}
+                    other {{{ current.summary.exercises }} exercises}
+                  }</span>
+                  ·
+                  <span i18n>{current.summary.sets, plural,
+                    =1 {1 set}
+                    other {{{ current.summary.sets }} sets}
+                  }</span>
+                } @else {
+                  <span i18n>No exercises yet</span>
+                }
+              </p>
+              <a
+                appButton
+                size="touch"
+                class="today-action"
+                routerLink="/training/today"
+                [queryParams]="{ sessionId: current.workout.workoutExecutionId }"
+                i18n
+                >Carry on</a
+              >
+              <!-- A start refused because this one was already running says so here (notes plan N9b3). -->
+              @if (startProblem(); as problem) {
+                <p class="today-problem" role="alert">{{ problem }}</p>
+              }
+            }
             @case ('rest-day') {
               <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>Rest day</h2>
               <p i18n>No workout is scheduled today.</p>
@@ -331,8 +421,31 @@
               }
             }
             @case ('nothing-assigned') {
-              @if (selfDirected()) {
-                <!-- Until a trainee can start a workout of their own (notes plan N9b3). -->
+              @if (startCard()) {
+                <!-- A trainee of TB Gym's own space starts a workout of their own (notes plan N9b3). -->
+                <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
+                  Your workout
+                </h2>
+                <p class="summary" data-self-directed i18n>
+                  Pick exercises from TB Gym’s pool and log each set as you go.
+                </p>
+                <button
+                  appButton
+                  type="button"
+                  size="touch"
+                  class="today-action"
+                  data-start-own
+                  [loading]="startingOwn()"
+                  (click)="startOwn()"
+                  i18n
+                >
+                  Start a workout
+                </button>
+                @if (startProblem(); as problem) {
+                  <p class="today-problem" role="alert">{{ problem }}</p>
+                }
+              } @else if (selfDirected()) {
+                <!-- Training is closed to the trainee: nothing to start, a line true for them. -->
                 <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
                   No workouts yet
                 </h2>

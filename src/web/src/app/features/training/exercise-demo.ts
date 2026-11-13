@@ -36,6 +36,7 @@ import { externalVideo } from './external-video';
         type="button"
         class="demo"
         [class.compact]="compact()"
+        [class.touch]="touch()"
         [class.tile]="tile()"
         [attr.aria-label]="label()"
         [disabled]="opening()"
@@ -135,6 +136,13 @@ import { externalVideo } from './external-video';
       justify-content: center;
       min-inline-size: 2rem;
       padding: 0.25rem;
+    }
+
+    /* A client's thumb (plan §2 rule 6): the trainee's picker over the pool (notes plan N9b3). After
+       compact, which it widens. */
+    .demo.touch {
+      min-block-size: 2.75rem;
+      min-inline-size: 2.75rem;
     }
 
     .demo:hover {
@@ -243,6 +251,8 @@ export class ExerciseDemo {
   readonly exerciseName = input.required<string>();
   /** An icon alone, named for assistive technology, where a row has little room. */
   readonly compact = input(false, { transform: booleanAttribute });
+  /** A client's touch size, 44 px, where the button sits on a phone screen. */
+  readonly touch = input(false, { transform: booleanAttribute });
   /** The whole of a tile: the page draws what is inside the button, and the button is named for it. */
   readonly tile = input(false, { transform: booleanAttribute });
 

@@ -1,0 +1,119 @@
+<!-- The search stays in reach while the list scrolls, and a refused press is said there, in view. -->
+<div class="top">
+  <div class="search" role="search">
+    <app-icon name="search" />
+    <input
+      type="search"
+      [value]="list.filter()"
+      (input)="typed($any($event.target).value)"
+      placeholder="Search by name"
+      i18n-placeholder
+      autocomplete="off"
+      aria-label="Search exercises"
+      i18n-aria-label
+      enterkeyhint="search"
+    />
+  </div>
+  @if (problem(); as text) {
+    <p class="problem" role="alert">{{ text }}</p>
+  }
+</div>
+
+@if (closedReason(); as reason) {
+  <div class="note">
+    <p role="alert" i18n>No exercise can be added now.</p>
+    <p>{{ closedWords(reason) }}</p>
+  </div>
+} @else if (loadingFirst()) {
+  <app-skeleton label="Loading the exercises…" i18n-label [lines]="3" />
+} @else if (firstFailed() && !list.answered()) {
+  <div class="note">
+    <p role="alert" i18n>The exercises couldn’t be loaded.</p>
+    <button appButton type="button" variant="outlined" (click)="loadFirst()" i18n>Try again</button>
+  </div>
+} @else if (list.failed()) {
+  <div class="note">
+    <p role="alert" i18n>The exercises couldn’t be loaded.</p>
+    <button appButton type="button" variant="outlined" (click)="list.retry()" i18n>
+      Try again
+    </button>
+  </div>
+} @else if (poolEmpty()) {
+  <div class="note">
+    <p role="status" i18n>
+      No exercises are in the pool yet. TB Gym adds them, so check back soon.
+    </p>
+  </div>
+} @else if (rows().length === 0 && !list.searching()) {
+  <div class="note">
+    <p role="status">{{ noMatch() }}</p>
+    <button appButton type="button" variant="text" (click)="clear()" i18n>
+      Show all exercises
+    </button>
+  </div>
+} @else {
+  <ul class="items" role="list" [attr.aria-busy]="list.searching() || null">
+    @for (row of rows(); track row.exercise.id) {
+      @let count = addedCount(row.exercise);
+      <li class="row">
+        <button
+          type="button"
+          class="pick"
+          [attr.aria-label]="addLabel(row.exercise)"
+          (click)="chosen.emit(row.exercise)"
+        >
+          <span class="text">
+            <span class="name" dir="auto">{{ row.exercise.name }}</span>
+            @if (row.detail) {
+              <span class="detail">{{ row.detail }}</span>
+            }
+          </span>
+          @if (count > 1) {
+            <span class="mark added" aria-hidden="true"
+              ><app-icon name="check-circle" /><span i18n>Added ×{{ count }}</span></span
+            >
+          } @else if (count === 1) {
+            <span class="mark added" aria-hidden="true"
+              ><app-icon name="check-circle" /><span i18n>Added</span></span
+            >
+          } @else if (inWorkout().has(row.exercise.id)) {
+            <span class="mark" aria-hidden="true" i18n>In this workout</span>
+          } @else {
+            <span class="add" aria-hidden="true"><app-icon name="plus" /></span>
+          }
+        </button>
+        <app-exercise-demo
+          [assetIds]="row.demos"
+          [exerciseName]="row.exercise.name"
+          compact
+          touch
+        />
+      </li>
+    }
+  </ul>
+  @if (list.hasMore() || moreFailed()) {
+    <div class="more">
+      @if (moreFailed()) {
+        <p role="alert" i18n>More exercises couldn’t be loaded. Try again.</p>
+      }
+      <button
+        appButton
+        type="button"
+        variant="outlined"
+        [loading]="list.loadingMore()"
+        (click)="more()"
+        i18n
+      >
+        Show more exercises
+      </button>
+    </div>
+  }
+}
+<p class="tb-visually-hidden" role="status">
+  @for (line of announcementLines(); track line.version) {
+    <span>{{ line.text }}</span>
+  }
+</p>
+<ng-template appModalFooter>
+  <button appButton type="button" (click)="done.emit()" i18n>Done</button>
+</ng-template>

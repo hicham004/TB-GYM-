@@ -1,6 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
+import type { OwnWorkoutView } from '../src/app/core/api/generated';
+import { finishedProfile } from '../src/testing/intake-fixtures';
 import {
+  historyItem,
   historyPage,
   nextProgramView,
   programView,
@@ -40,6 +43,8 @@ async function openTraining(page: Page, width: number, height: number, program =
       'GET /api/client-access/me': (route: Route) => json(route, 200, decisions),
       'GET /api/training/me/program': (route: Route) => json(route, 200, program),
       'GET /api/training/me/history': (route: Route) => json(route, 200, historyPage()),
+      // With no program the page asks who reads it: a coach's client here (notes plan N9b3).
+      'GET /api/client-profile/me': (route: Route) => json(route, 200, finishedProfile()),
     },
   });
   await page.goto('/training/program');
@@ -136,6 +141,8 @@ for (const [width, height] of [
     await expect(page.getByText('Program finished')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Finished workouts' })).toBeVisible();
     await expect(page.locator('.history-item').first()).toBeVisible();
+    // A coach's client starts no workout of their own, from nothing or from history (notes plan N9b3).
+    await expect(page.locator('[data-start-own], [data-start-from]')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
     await axe(page);
     await page.screenshot({ path: `test-results/b19-kept-back-${width}.png` });
@@ -205,4 +212,288 @@ test('the page reflows at 200% text without sideways scrolling', async ({ page }
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
   await expectNoHorizontalOverflow(page);
   await expect(page.locator('a.hero-action')).toBeVisible();
+});
+
+// Notes plan N9b3, TRN-033: a trainee of TB Gym's own space has no program; Training offers a workout of
+// their own, from nothing or from any finished workout, and history names their own ones as theirs.
+
+/** TB Gym's own coaching space, whose trainees train with no coach (notes plan N9a2). */
+const house = {
+  tenantId: '00000000-0000-4000-8000-0000000000f1',
+  tenantName: 'TB Gym coaching space',
+  tenantSlug: 'tb-gym-coaching-space',
+  role: 'Client',
+};
+const traineeDecisions = [
+  'Training',
+  'Nutrition',
+  'CheckIns',
+  'Messaging',
+  'ResourceLibrary',
+  'Sessions',
+].map((feature) => ({
+  feature,
+  isAllowed: feature === 'Training',
+  reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
+}));
+/** A finished workout of one's own: no program holds it, so its program's name is empty. */
+const ownFinished = historyItem({
+  workoutExecutionId: 'own-past',
+  name: 'Workout',
+  programName: '',
+  isOwnWorkout: true,
+  date: '2026-09-29',
+  completedAtUtc: '2026-09-29T18:10:00Z',
+  durationSeconds: 2400,
+  completedSetCount: 6,
+  totalSetCount: 6,
+  volume: [{ unit: 'Kilogram', loadTimesRepetitions: 1450 }],
+  personalRecords: [
+    {
+      setPerformanceId: 'own-set-3',
+      exerciseName: 'Goblet squat',
+      repetitions: 10,
+      load: 24,
+      unit: 'Kilogram',
+      ruleKey: 'ExactRepsLoad',
+      ruleVersion: 1,
+    },
+  ],
+});
+/** What a start answers: copied from a finished workout, its exercise still in the pool with an empty set. */
+const started = (fromWorkoutId: string | null): OwnWorkoutView => ({
+  workoutExecutionId: 'own-new',
+  name: 'Workout',
+  date: '2026-09-30',
+  status: 'InProgress',
+  startedAtUtc: '2026-09-30T08:00:00Z',
+  completedAtUtc: null,
+  version: 1,
+  exercises: fromWorkoutId
+    ? [
+        {
+          performanceId: 'perf-goblet',
+          exerciseId: 'goblet',
+          exerciseName: 'Goblet squat',
+          position: 1,
+          mediaAssetIds: [],
+          previousPerformance: null,
+          sets: [
+            {
+              performanceId: 'set-goblet-1',
+              position: 1,
+              actualRepetitions: null,
+              actualLoad: null,
+              actualLoadUnit: null,
+              actualRpe: null,
+              actualRir: null,
+              isCompleted: false,
+              clientNote: null,
+            },
+          ],
+        },
+      ]
+    : [],
+  notes: [],
+});
+
+/** Training for a trainee of the house: no program, their own finished workout and a program's. */
+async function openTraineeTraining(
+  page: Page,
+  width: number,
+  height: number,
+  extra: Record<string, (route: Route) => Promise<void> | void> = {},
+) {
+  await page.setViewportSize({ width, height });
+  await mockSession(page, {
+    memberships: [house],
+    user,
+    extra: {
+      'GET /api/client-access/me': (route: Route) => json(route, 200, traineeDecisions),
+      'GET /api/training/me/program': (route: Route) =>
+        json(route, 200, programView({ program: null })),
+      'GET /api/training/me/history': (route: Route) =>
+        json(route, 200, historyPage([ownFinished, historyItem()])),
+      'GET /api/client-profile/me': (route: Route) =>
+        json(route, 200, finishedProfile({ selfDirected: true })),
+      ...extra,
+    },
+  });
+  await page.goto('/training/program');
+  await expect(page.getByRole('heading', { name: 'Training', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Train on your own' })).toBeVisible();
+  await expect(page.locator('.history-item')).toHaveCount(2);
+  await waitForFonts(page);
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a trainee’s Training offers a workout of their own, and history names their own`, async ({
+    page,
+  }) => {
+    await openTraineeTraining(page, width, height);
+
+    await expect(
+      page.getByText(
+        'Start a workout, pick exercises from TB Gym’s pool and log each set. Your finished workouts are below.',
+      ),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start a workout' })).toHaveAttribute(
+      'data-start-own',
+      '',
+    );
+    await expect(page.getByRole('heading', { name: 'Nothing assigned yet' })).toHaveCount(0);
+    await expect(page.getByText('Your coach will put your program here.')).toHaveCount(0);
+
+    // Their own workout is named as theirs, with no empty program name trailing it.
+    const [own, program] = [
+      page.locator('.history-item').nth(0),
+      page.locator('.history-item').nth(1),
+    ];
+    await expect(own.locator('.history-top strong')).toHaveText('Workout');
+    await expect(own.locator('.history-meta > :last-child')).toHaveText('Your own workout');
+    await expect(own.locator('.history-meta bdi')).toHaveCount(0);
+    await expect(program.locator('.history-meta bdi')).toHaveText('Strength Foundations');
+    await expect(program.locator('.history-meta')).not.toContainText('Your own workout');
+    // Any finished workout can be started again, each button named for its own workout. The name's
+    // hidden part is a block of its own, so the name may hold a space before its colon.
+    const startFrom = own.locator('[data-start-from]');
+    await expect(startFrom).toHaveText('Start from this workout: Workout, Tue 29 Sep');
+    await expect(startFrom).toHaveAccessibleName(
+      /^Start from this workout ?: Workout, Tue 29 Sep$/,
+    );
+    await expect(program.locator('[data-start-from]')).toHaveAccessibleName(
+      /^Start from this workout ?: Upper A, Mon 28 Sep$/,
+    );
+    await expect(page.locator('[data-start-from]')).toHaveCount(2);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9b3-training-trainee-${width}.png`),
+      fullPage: true,
+    });
+  });
+}
+
+for (const { button, press, body, first } of [
+  {
+    button: 'Start a workout',
+    press: (page: Page) => page.getByRole('button', { name: 'Start a workout' }),
+    body: {},
+    first: 'No exercises yet',
+  },
+  {
+    button: 'Start from this workout',
+    press: (page: Page) => page.locator('.history-item').first().locator('[data-start-from]'),
+    body: { fromWorkoutId: 'own-past' },
+    first: 'Goblet squat',
+  },
+]) {
+  test(`“${button}” starts a workout of one’s own and opens the player on it`, async ({ page }) => {
+    const sent: unknown[] = [];
+    const view = started('fromWorkoutId' in body ? body.fromWorkoutId : null);
+    await openTraineeTraining(page, 390, 844, {
+      'POST /api/training/me/workouts': (route: Route) => {
+        sent.push(route.request().postDataJSON());
+        return json(route, 200, view);
+      },
+      // The player's reads, once it opens on the workout just started.
+      'GET /api/training/me/today': (route: Route) =>
+        json(route, 200, {
+          isAllowed: true,
+          accessReason: 'Granted',
+          localDate: '2026-09-30',
+          workouts: [],
+          ownWorkout: view,
+        }),
+      'GET /api/training/me/upcoming': (route: Route) =>
+        json(route, 200, {
+          isAllowed: true,
+          accessReason: 'Granted',
+          localDate: '2026-09-30',
+          timeZoneId: 'Asia/Beirut',
+          hasAssignedProgram: false,
+          hasVisibleSessions: false,
+          searchThrough: '2026-12-29',
+          nextSession: null,
+          unfinishedWorkouts: [],
+          nextSkip: null,
+          todayCoverage: { activeBlock: null, nextBlockStartDate: null },
+        }),
+    });
+
+    await press(page).click();
+
+    await expect(page).toHaveURL('/training/today?sessionId=own-new');
+    await expect(page.locator('.player-top .eyebrow')).toHaveText('YOUR OWN WORKOUT');
+    await expect(page.getByRole('heading', { level: 2, name: first })).toBeVisible();
+    expect(sent).toEqual([body]);
+  });
+}
+
+test.describe('a start the server refuses', () => {
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [
+        /status of 409 .*\/api\/training\/me\/workouts/,
+        /status of 500 .*\/api\/client-profile\/me/,
+      ],
+    },
+  });
+
+  test('one already in progress is said under the workout it was asked from, with Carry on', async ({
+    page,
+  }) => {
+    await openTraineeTraining(page, 390, 844, {
+      'POST /api/training/me/workouts': (route: Route) =>
+        json(route, 409, {
+          code: 'own_workout_in_progress',
+          message:
+            'You have a workout you have not finished. Carry on with it, or finish it first.',
+        }),
+    });
+    const own = page.locator('.history-item').nth(0);
+
+    await own.locator('[data-start-from]').click();
+
+    const problem = own.locator('.own-problem');
+    await expect(problem.getByRole('alert')).toHaveText(
+      'You have a workout you haven’t finished. Carry on with it, or finish it first.',
+    );
+    await expect(problem.getByRole('link', { name: 'Carry on' })).toHaveAttribute(
+      'href',
+      '/training/today',
+    );
+    // Said once, where it was asked.
+    await expect(page.locator('.own-problem')).toHaveCount(1);
+    await expect(page).toHaveURL('/training/program');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+  });
+
+  test('when the profile cannot say who reads, the page says only that workouts will start here', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockSession(page, {
+      memberships: [house],
+      user,
+      extra: {
+        'GET /api/client-access/me': (route: Route) => json(route, 200, traineeDecisions),
+        'GET /api/training/me/program': (route: Route) =>
+          json(route, 200, programView({ program: null })),
+        'GET /api/training/me/history': (route: Route) => json(route, 200, historyPage()),
+        'GET /api/client-profile/me': (route: Route) => json(route, 500, { title: 'Server error' }),
+      },
+    });
+    await page.goto('/training/program');
+
+    await expect(page.getByRole('heading', { name: 'No workouts yet' })).toBeVisible();
+    await expect(page.getByText('Your workouts will start here.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Nothing assigned yet' })).toHaveCount(0);
+    await expect(page.locator('[data-start-own], [data-start-from]')).toHaveCount(0);
+    await expect(page.locator('.history-item')).toHaveCount(2);
+  });
 });

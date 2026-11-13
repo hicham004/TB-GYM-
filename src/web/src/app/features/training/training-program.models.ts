@@ -79,7 +79,9 @@ export interface HistoryRecord {
 export interface HistoryWorkout {
   readonly id: string;
   readonly name: string;
+  /** Empty on a workout of one's own, which no program holds (TRN-033). */
   readonly programName: string;
+  readonly isOwn: boolean;
   readonly date: string;
   /** Whole minutes, or null when the workout was opened and finished within a minute. */
   readonly minutes: number | null;
@@ -178,6 +180,8 @@ export function mapWorkoutHistory(value: ClientWorkoutHistoryPage): WorkoutHisto
         id: item.workoutExecutionId,
         name: item.name,
         programName: item.programName,
+        // A read from before workouts of one's own carries no flag: every item was a program's.
+        isOwn: item.isOwnWorkout === true,
         date: item.date,
         minutes: seconds >= 60 ? Math.round(seconds / 60) : null,
         completedSets: Number(item.completedSetCount),

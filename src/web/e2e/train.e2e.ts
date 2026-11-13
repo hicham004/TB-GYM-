@@ -320,7 +320,8 @@ function spacesAsked(page: Page): SpacesAsked {
 /** Today opened in TB Gym's space: each of its reads was asked there, and the chip names it. */
 async function expectTodayInTheHouse(page: Page, asked: SpacesAsked): Promise<void> {
   await expect(page).toHaveURL('/');
-  await expect(page.locator('#today-training-heading')).toHaveText('No workouts yet');
+  // A trainee with Training open lands on the start of a workout of their own (notes plan N9b3).
+  await expect(page.locator('#today-training-heading')).toHaveText('Your workout');
   await expect(page.locator('.row-skeleton')).toHaveCount(0);
   await expect(page.locator('.today-coach[data-self-directed] .tb-visually-hidden')).toHaveText(
     `Self-directed · ${HOUSE_NAME}`,
@@ -803,7 +804,8 @@ test('signed in, signing up with the account joins at once and opens Today in TB
 
   await expect(page).toHaveURL('/');
   await expect(page).toHaveTitle('Today | TB Gym');
-  await expect(page.locator('#today-training-heading')).toHaveText('No workouts yet');
+  // A trainee with Training open lands on the start of a workout of their own (notes plan N9b3).
+  await expect(page.locator('#today-training-heading')).toHaveText('Your workout');
   await expect(page.locator('.today-coach[data-self-directed] .tb-visually-hidden')).toHaveText(
     `Self-directed · ${HOUSE_NAME}`,
   );

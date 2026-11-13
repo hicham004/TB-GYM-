@@ -243,6 +243,46 @@
           />
         </section>
       }
+    } @else if (profile() === 'trainee') {
+      <!-- A trainee of TB Gym's own space trains on their own (TRN-033, notes plan N9b3). -->
+      <app-empty-state
+        heading="Train on your own"
+        i18n-heading
+        description="Start a workout, pick exercises from TB Gym’s pool and log each set. Your finished workouts are below."
+        i18n-description
+      >
+        <button
+          appButton
+          type="button"
+          size="touch"
+          empty-state-action
+          data-start-own
+          [loading]="startingOwn() === 'new'"
+          [disabled]="startingOwn() !== null && startingOwn() !== 'new'"
+          (click)="startOwn(null)"
+          i18n
+        >
+          Start a workout
+        </button>
+      </app-empty-state>
+      @if (ownProblem(); as problem) {
+        @if (problem.from === 'new') {
+          <div class="own-problem">
+            <p class="do-now-problem" role="alert">{{ problem.message }}</p>
+            @if (problem.carryOn) {
+              <a appButton variant="outlined" routerLink="/training/today" i18n>Carry on</a>
+            }
+          </div>
+        }
+      }
+    } @else if (profile() === 'unknown') {
+      <!-- The profile could not say whether a coach is there: a line true for anyone. -->
+      <app-empty-state
+        heading="No workouts yet"
+        i18n-heading
+        description="Your workouts will start here."
+        i18n-description
+      />
     } @else {
       <app-empty-state
         heading="Nothing assigned yet"
@@ -305,7 +345,12 @@
                     <span class="tb-visually-hidden">, </span>
                     <span i18n>{{ item.minutes }} min</span>
                   }
-                  @if (item.programName !== program()?.name) {
+                  <!-- A workout of one's own has no program to name (TRN-033). -->
+                  @if (item.isOwn) {
+                    <span aria-hidden="true"> · </span>
+                    <span class="tb-visually-hidden">, </span>
+                    <span i18n>Your own workout</span>
+                  } @else if (item.programName && item.programName !== program()?.name) {
                     <span aria-hidden="true"> · </span>
                     <span class="tb-visually-hidden">, </span>
                     <bdi dir="auto">{{ item.programName }}</bdi>
@@ -339,6 +384,38 @@
                       </li>
                     }
                   </ul>
+                }
+                @if (profile() === 'trainee') {
+                  <!-- Its exercises still in the pool, in their order, with empty sets (TRN-033). -->
+                  <button
+                    appButton
+                    type="button"
+                    variant="outlined"
+                    size="touch"
+                    class="history-start"
+                    data-start-from
+                    [loading]="startingOwn() === item.id"
+                    [disabled]="startingOwn() !== null && startingOwn() !== item.id"
+                    (click)="startOwn(item.id)"
+                  >
+                    <ng-container i18n>Start from this workout</ng-container
+                    ><span class="tb-visually-hidden"
+                      >: <bdi>{{ item.name }}</bdi
+                      >, {{ item.date + 'T12:00:00' | date: 'EEE d MMM' }}</span
+                    >
+                  </button>
+                  @if (ownProblem(); as problem) {
+                    @if (problem.from === item.id) {
+                      <div class="own-problem">
+                        <p class="do-now-problem" role="alert">{{ problem.message }}</p>
+                        @if (problem.carryOn) {
+                          <a appButton variant="outlined" routerLink="/training/today" i18n
+                            >Carry on</a
+                          >
+                        }
+                      </div>
+                    }
+                  }
                 }
               </li>
             }

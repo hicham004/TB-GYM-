@@ -1,0 +1,45 @@
+// A workout of one's own (notes plan N9b3, TRN-033) on the player's night colour: its first exercise asked
+// for, the set buttons under the sets, and Add an exercise at the foot of the exercise shown.
+.own-empty {
+  padding: 1.5rem 1rem;
+  border-radius: 1rem;
+  background: #ffffff0e;
+  text-align: center;
+}
+.own-empty h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+}
+.own-empty p,
+.own-no-sets,
+.own-limit,
+.own-stays {
+  margin: 0.5rem 0;
+  color: #c7d6cc;
+  font-size: 0.9rem;
+}
+.own-sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-block-start: 0.75rem;
+}
+.own-sets button {
+  background: #ffffff1c;
+  color: #fff;
+  padding: 0.6rem 1rem;
+  // Never narrower than its longest word, so large text wraps the row instead (as the player's actions).
+  min-inline-size: auto;
+}
+// The player's danger token is drawn for the night: readable on its colour (UIQ-18).
+.exercise-actions .own-remove {
+  color: var(--tb-danger, #f4a38f);
+}
+.own-add {
+  inline-size: 100%;
+  margin-block-start: 1.2rem;
+  padding: 0.8rem 1.2rem;
+  border: 1px dashed #ffffff66;
+  background: transparent;
+  color: #fff;
+}

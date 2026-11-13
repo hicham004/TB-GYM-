@@ -577,11 +577,75 @@ const HOUSE = {
   role: 'Client',
 };
 
+/** The id of the workout of one's own the trainee is in the middle of (notes plan N9b3). */
+const OWN_WORKOUT_ID = '00000000-0000-4000-8000-0000000000e1';
+const ownSet = (id: string, position: number, isCompleted = false) => ({
+  performanceId: id,
+  position,
+  actualRepetitions: isCompleted ? 10 : null,
+  actualLoad: isCompleted ? 20 : null,
+  actualLoadUnit: isCompleted ? 'Kilogram' : null,
+  actualRpe: null,
+  actualRir: null,
+  isCompleted,
+  clientNote: null,
+});
+const ownExercise = (
+  id: string,
+  name: string,
+  position: number,
+  sets: ReturnType<typeof ownSet>[],
+) => ({
+  performanceId: `${id}-performance`,
+  exerciseId: id,
+  exerciseName: name,
+  position,
+  mediaAssetIds: [],
+  previousPerformance: null,
+  sets,
+});
+/**
+ * A workout of one's own still running, as Today's read carries it (TRN-033): started today, two
+ * exercises from TB Gym's pool and three sets, one of them logged. The name stored is "Workout".
+ */
+const ownWorkout = (overrides: Record<string, unknown> = {}) => ({
+  workoutExecutionId: OWN_WORKOUT_ID,
+  name: 'Workout',
+  date: TODAY,
+  status: 'InProgress',
+  startedAtUtc: '2026-09-20T07:40:00Z',
+  completedAtUtc: null,
+  version: 4,
+  exercises: [
+    ownExercise('goblet', 'Goblet squat', 1, [ownSet('goblet-1', 1, true), ownSet('goblet-2', 2)]),
+    ownExercise('row', 'Seated cable row', 2, [ownSet('row-1', 1)]),
+  ],
+  notes: [],
+  ...overrides,
+});
+
+interface TraineeToday {
+  /** The day's training read, answered afresh on every read: by default nothing assigned or running. */
+  readonly day?: () => object;
+  /** The week's days over nothing scheduled: each may set `scheduled`, `completed` and `ownCompleted`. */
+  readonly week?: readonly { scheduled?: number; completed?: number; ownCompleted?: number }[];
+  /** Training is outside the trainee's plan. */
+  readonly closed?: boolean;
+  /** The training card's heading once it is drawn; the offer to start a workout by default. */
+  readonly heading?: string;
+  readonly extra?: Record<string, (route: Route) => Promise<void> | void>;
+}
+
 /**
  * Today for a trainee of the house: Training alone, nothing in it yet, and their own profile says they
  * coach themselves. Returns the reads of the coach's name, which must never be asked for (CLI-026).
  */
-async function openTraineeToday(page: Page, width: number, height: number): Promise<string[]> {
+async function openTraineeToday(
+  page: Page,
+  width: number,
+  height: number,
+  options: TraineeToday = {},
+): Promise<string[]> {
   const coachReads: string[] = [];
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/api/client-profile/me/coach') {
@@ -589,6 +653,7 @@ async function openTraineeToday(page: Page, width: number, height: number): Prom
     }
   });
   const nothing = STATES['nothing assigned'];
+  const training = options.closed ? 'NoEntitlement' : 'Granted';
   await page.setViewportSize({ width, height });
   await mockSession(page, {
     memberships: [HOUSE],
@@ -600,8 +665,8 @@ async function openTraineeToday(page: Page, width: number, height: number): Prom
           200,
           FEATURES.map((feature) => ({
             feature,
-            isAllowed: feature === 'Training',
-            reason: feature === 'Training' ? 'Granted' : 'NoEntitlement',
+            isAllowed: feature === 'Training' && !options.closed,
+            reason: feature === 'Training' ? training : 'NoEntitlement',
           })),
         ),
       'GET /api/client-profile/me': (route: Route) =>
@@ -609,12 +674,24 @@ async function openTraineeToday(page: Page, width: number, height: number): Prom
       // Answered as for anyone, so only the count can tell it was asked.
       'GET /api/client-profile/me/coach': (route: Route) =>
         json(route, 200, { name: 'Lea Haddad' }),
-      'GET /api/training/me/today': (route: Route) => json(route, 200, nothing.day),
+      'GET /api/training/me/today': (route: Route) =>
+        json(
+          route,
+          200,
+          options.day?.() ?? (options.closed ? day([], false, 'NoEntitlement') : nothing.day),
+        ),
       'GET /api/training/me/upcoming': (route: Route) => json(route, 200, nothing.upcoming),
       'GET /api/training/me/week': (route: Route) =>
         json(route, 200, {
           ...trainingWeek,
-          days: trainingWeek.days.map((one) => ({ ...one, scheduled: 0, completed: 0 })),
+          isAllowed: !options.closed,
+          accessReason: training,
+          days: trainingWeek.days.map((one, index) => ({
+            ...one,
+            scheduled: 0,
+            completed: 0,
+            ...options.week?.[index],
+          })),
         }),
       'GET /api/client-renewal/me': (route: Route) => json(route, 200, planRunning),
       'GET /api/messaging/conversations': (route: Route) =>
@@ -624,11 +701,14 @@ async function openTraineeToday(page: Page, width: number, height: number): Prom
           nextBeforeActivityAtUtc: null,
           nextBeforeConversationId: null,
         }),
+      ...options.extra,
     },
   });
   await page.goto('/');
   await expect(page.locator('app-client-tabs')).toBeVisible();
-  await expect(page.locator('#today-training-heading')).toHaveText('No workouts yet');
+  await expect(page.locator('#today-training-heading')).toHaveText(
+    options.heading ?? 'Your workout',
+  );
   await expect(page.locator('.row-skeleton')).toHaveCount(0);
   await waitForFonts(page);
   return coachReads;
@@ -663,8 +743,9 @@ for (const [width, height] of [
       expect(name.whole, 'the space’s name is cut short').toBeLessThanOrEqual(name.seen + 1);
     }
     await expect(page.locator('.today-coach:not([data-self-directed])')).toHaveCount(0);
+    // With Training open and nothing in progress, the card offers a workout of their own (notes plan N9b3).
     await expect(page.locator('p[data-self-directed]')).toHaveText(
-      'Your workouts will start here.',
+      'Pick exercises from TB Gym’s pool and log each set as you go.',
     );
     await expect(page.getByText('Your coach will put your program here.')).toHaveCount(0);
     await expect(page.getByText('Message your coach')).toHaveCount(0);
@@ -691,6 +772,333 @@ test('a coach’s client with nothing assigned still reads that their coach will
   );
   await expect(page.locator('[data-self-directed]')).toHaveCount(0);
   await expect(page.locator('.today-coach .tb-visually-hidden')).toHaveText('Coached by');
+  // A coach's client is never offered a workout of their own (notes plan N9b3).
+  await expect(page.locator('[data-start-own]')).toHaveCount(0);
+});
+
+// Notes plan N9b3, TRN-033: a trainee of TB Gym's own space starts a workout of their own from Today,
+// carries on with the one in progress, and the week counts the ones they finished.
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a trainee with nothing in progress is offered to start a workout of their own`, async ({
+    page,
+  }) => {
+    await openTraineeToday(page, width, height);
+
+    const card = page.locator('section.today-card');
+    await expect(card).toHaveClass(/today-card--hero/);
+    await expect(card).toHaveAttribute('aria-labelledby', 'today-training-heading');
+    await expect(card.locator('p[data-self-directed]')).toHaveText(
+      'Pick exercises from TB Gym’s pool and log each set as you go.',
+    );
+    const start = card.getByRole('button', { name: 'Start a workout' });
+    await expect(start).toBeVisible();
+    await expect(start).toHaveAttribute('data-start-own', '');
+    await expect(card.locator('.today-problem')).toHaveCount(0);
+    // Nothing to carry on, so no link into the player.
+    await expect(card.locator('a.today-action')).toHaveCount(0);
+    // Nothing scheduled and nothing done yet: the week speaks of workouts, never of sessions.
+    const week = page.locator('section.today-week');
+    await expect(week.locator('[data-own-week]')).toHaveText('No workouts yet');
+    await expect(week.locator('.today-week-days .tb-visually-hidden')).toHaveText(
+      Array.from({ length: 7 }, () => 'No workout'),
+    );
+    await expect(week.locator('.today-week-ring.is-done')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9b3-today-start-${width}.png`),
+      fullPage: true,
+    });
+  });
+}
+
+test('Start a workout refreshes the security token, starts one and opens the player on it', async ({
+  page,
+}) => {
+  let started = false;
+  const sent: unknown[] = [];
+  const asked: string[] = [];
+  const empty = ownWorkout({ exercises: [], version: 1 });
+  await openTraineeToday(page, 390, 844, {
+    // The player reads the day again once it opens, and finds the workout just started.
+    day: () => ({ ...STATES['nothing assigned'].day, ownWorkout: started ? empty : null }),
+    extra: {
+      'POST /api/training/me/workouts': (route: Route) => {
+        sent.push(route.request().postDataJSON());
+        started = true;
+        return json(route, 200, empty);
+      },
+    },
+  });
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/auth/csrf' || path === '/api/training/me/workouts') {
+      asked.push(`${request.method()} ${path}`);
+    }
+  });
+
+  await page.getByRole('button', { name: 'Start a workout' }).click();
+
+  await expect(page).toHaveURL(`/training/today?sessionId=${OWN_WORKOUT_ID}`);
+  await expect(page.locator('.player-top .eyebrow')).toHaveText('YOUR OWN WORKOUT');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Workout');
+  await expect(page.getByRole('heading', { name: 'No exercises yet' })).toBeVisible();
+  // An empty start, after a fresh token: the first write after a sign-up would be refused without it.
+  expect(sent).toEqual([{}]);
+  expect(asked.slice(0, 2)).toEqual(['GET /api/auth/csrf', 'POST /api/training/me/workouts']);
+});
+
+test('with motion allowed, Start a workout grows the card into the player (W7)', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  // Counts the view transitions the page starts, so the reveal is seen to run, not only its end.
+  await page.addInitScript(() => {
+    const start = Document.prototype.startViewTransition;
+    const counted = window as unknown as { tbTransitions: number };
+    counted.tbTransitions = 0;
+    Document.prototype.startViewTransition = function (
+      this: Document,
+      ...args: Parameters<Document['startViewTransition']>
+    ) {
+      counted.tbTransitions += 1;
+      return start.apply(this, args);
+    };
+  });
+  let started = false;
+  const empty = ownWorkout({ exercises: [], version: 1 });
+  await openTraineeToday(page, 390, 844, {
+    day: () => ({ ...STATES['nothing assigned'].day, ownWorkout: started ? empty : null }),
+    extra: {
+      'POST /api/training/me/workouts': (route: Route) => {
+        started = true;
+        return json(route, 200, empty);
+      },
+    },
+  });
+
+  await page.getByRole('button', { name: 'Start a workout' }).click();
+
+  await expect(page).toHaveURL(`/training/today?sessionId=${OWN_WORKOUT_ID}`);
+  await expect(page.getByRole('heading', { name: 'No exercises yet' })).toBeVisible();
+  expect(
+    await page.evaluate(() => (window as unknown as { tbTransitions: number }).tbTransitions),
+  ).toBe(1);
+  // The reveal tidies up after itself once the player is in place.
+  await expect(page.locator('html')).not.toHaveClass(/tb-player-reveal/);
+});
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`at ${width}px a workout of one’s own in progress is Today’s card, and Carry on opens it in the player`, async ({
+    page,
+  }) => {
+    await openTraineeToday(page, width, height, {
+      day: () => ({ ...STATES['nothing assigned'].day, ownWorkout: ownWorkout() }),
+      heading: 'Workout',
+    });
+
+    const card = page.locator('section.today-card');
+    await expect(card).toHaveClass(/today-card--hero/);
+    await expect(card.locator('.today-state')).toHaveText('In progress · 1 of 3 sets logged');
+    await expect(card.locator('.summary')).toHaveText('2 exercises · 3 sets');
+    const carryOn = card.getByRole('link', { name: 'Carry on' });
+    await expect(carryOn).toHaveAttribute('href', `/training/today?sessionId=${OWN_WORKOUT_ID}`);
+    await expect(card.locator('[data-start-own]')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await page.screenshot({
+      path: test.info().outputPath(`n9b3-today-carry-on-${width}.png`),
+      fullPage: true,
+    });
+
+    await carryOn.click();
+    await expect(page).toHaveURL(`/training/today?sessionId=${OWN_WORKOUT_ID}`);
+    await expect(page.locator('.player-top .eyebrow')).toHaveText('YOUR OWN WORKOUT');
+    await expect(page.getByRole('heading', { level: 2, name: 'Goblet squat' })).toBeVisible();
+  });
+}
+
+test('a workout of one’s own started on an earlier day says when, and that it holds no exercise yet', async ({
+  page,
+}) => {
+  await openTraineeToday(page, 390, 844, {
+    day: () => ({
+      ...STATES['nothing assigned'].day,
+      ownWorkout: ownWorkout({
+        date: '2026-09-18',
+        startedAtUtc: '2026-09-18T16:00:00Z',
+        exercises: [],
+      }),
+    }),
+    heading: 'Workout',
+  });
+
+  const card = page.locator('section.today-card');
+  await expect(card.locator('.today-state')).toHaveText('Started Fri 18 Sep');
+  await expect(card.locator('.summary')).toHaveText('No exercises yet');
+  await expect(card.getByRole('link', { name: 'Carry on' })).toHaveAttribute(
+    'href',
+    `/training/today?sessionId=${OWN_WORKOUT_ID}`,
+  );
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+});
+
+test('the week counts a trainee’s own workouts, and each day says how many', async ({ page }) => {
+  await openTraineeToday(page, 390, 844, {
+    week: [{ ownCompleted: 1 }, {}, { ownCompleted: 2 }],
+  });
+
+  const week = page.locator('section.today-week');
+  await expect(week.locator('[data-own-week]')).toHaveText('3 workouts done');
+  await expect(week.locator('.today-week-days .tb-visually-hidden')).toHaveText([
+    '1 workout done',
+    'No workout',
+    '2 workouts done',
+    'No workout',
+    'No workout',
+    'No workout',
+    'No workout',
+  ]);
+  const rings = week.locator('.today-week-ring');
+  await expect(rings.nth(0)).toHaveClass(/is-done/);
+  await expect(rings.nth(1)).not.toHaveClass(/is-done/);
+  await expect(rings.nth(2)).toHaveClass(/is-done/);
+  await expect(week.locator('.today-week-ring.is-done')).toHaveCount(2);
+  await expect(week.locator('.today-week-ring.is-planned')).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+});
+
+test('with a program’s sessions too, the week counts both, and a day with both says both', async ({
+  page,
+}) => {
+  await openTraineeToday(page, 390, 844, {
+    week: [
+      { scheduled: 1, completed: 1 },
+      { ownCompleted: 1 },
+      { scheduled: 1, completed: 1, ownCompleted: 1 },
+      {},
+      {},
+      {},
+      { scheduled: 1 },
+    ],
+  });
+
+  const week = page.locator('section.today-week');
+  await expect(week.locator('[data-own-week]')).toHaveText('2 of 3 sessions done · 2 of your own');
+  await expect(week.locator('.today-week-days .tb-visually-hidden')).toHaveText([
+    '1 of 1 sessions done',
+    '1 workout done',
+    '1 of 1 sessions done, and 1 workout of your own',
+    'No workout',
+    'No workout',
+    'No workout',
+    '0 of 1 sessions done',
+  ]);
+  await expect(week.locator('.today-week-ring.is-done')).toHaveCount(3);
+  await expect(week.locator('.today-week-ring').nth(6)).toHaveClass(/is-planned/);
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+});
+
+test('a trainee whose Training is closed is offered no start, only that their workouts will start here', async ({
+  page,
+}) => {
+  await openTraineeToday(page, 390, 844, { closed: true, heading: 'No workouts yet' });
+
+  const card = page.locator('section.today-card');
+  await expect(card.locator('p[data-self-directed]')).toHaveText('Your workouts will start here.');
+  await expect(page.locator('[data-start-own]')).toHaveCount(0);
+  await expect(card).not.toHaveClass(/today-card--hero/);
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+});
+
+test.describe('a start the server refuses', () => {
+  test.use({
+    allowedConsoleErrors: { patterns: [/status of 409 .*\/api\/training\/me\/workouts/] },
+  });
+
+  test('ten started today says so on the card, and nothing opens', async ({ page }) => {
+    await openTraineeToday(page, 390, 844, {
+      extra: {
+        'POST /api/training/me/workouts': (route: Route) =>
+          json(route, 409, {
+            code: 'own_workout_daily_limit',
+            message:
+              'You have started 10 workouts today, the most one day holds. Start the next one tomorrow.',
+          }),
+      },
+    });
+
+    await page.getByRole('button', { name: 'Start a workout' }).click();
+
+    const problem = page.locator('.today-card .today-problem');
+    await expect(problem).toHaveText(
+      'You’ve started 10 workouts today, the most one day holds. Start the next one tomorrow.',
+    );
+    await expect(problem).toHaveAttribute('role', 'alert');
+    await expect(page).toHaveURL('/');
+    // The button is there to try again tomorrow, no longer busy.
+    await expect(page.getByRole('button', { name: 'Start a workout' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+  });
+
+  test('one already in progress on another phone turns the card into Carry on, which says why and takes focus', async ({
+    page,
+  }) => {
+    let refused = false;
+    let reads = 0;
+    await openTraineeToday(page, 390, 844, {
+      day: () => {
+        reads += 1;
+        return { ...STATES['nothing assigned'].day, ownWorkout: refused ? ownWorkout() : null };
+      },
+      extra: {
+        'POST /api/training/me/workouts': (route: Route) => {
+          refused = true;
+          return json(route, 409, {
+            code: 'own_workout_in_progress',
+            message:
+              'You have a workout you have not finished. Carry on with it, or finish it first.',
+          });
+        },
+      },
+    });
+    const before = reads;
+
+    await page.getByRole('button', { name: 'Start a workout' }).click();
+
+    // Today reads the day again and finds the one already running.
+    const heading = page.locator('#today-training-heading');
+    await expect(heading).toHaveText('Workout');
+    await expect(page.getByRole('link', { name: 'Carry on' })).toHaveAttribute(
+      'href',
+      `/training/today?sessionId=${OWN_WORKOUT_ID}`,
+    );
+    await expect(page.locator('[data-start-own]')).toHaveCount(0);
+    // The Carry on card says why nothing started; focus moves to its heading, since Start is gone.
+    const problem = page.locator('.today-card .today-problem');
+    await expect(problem).toHaveText(
+      'You have a workout you haven’t finished. Carry on with it, or finish it first.',
+    );
+    await expect(problem).toHaveAttribute('role', 'alert');
+    await expect(heading).toBeFocused();
+    expect(reads).toBe(before + 1);
+    await expect(page).toHaveURL('/');
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+  });
 });
 
 test('personal mode persists when the account screen reloads', async ({ page }) => {

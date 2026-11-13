@@ -21,6 +21,7 @@ import type { ClientTrainingDayResult } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { Motion } from '../../core/motion/motion';
 import { NotificationStore } from '../../core/notifications/notification.store';
+import { CsrfService } from '../../core/security/csrf.service';
 import { TenantAsyncScope } from '../../core/tenancy/tenant-async-scope';
 import { WorkspaceBrandStore } from '../../core/theme/workspace-brand.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
@@ -32,18 +33,20 @@ import { drawnTogether } from '../../ui/drawn-together';
 import { Icon } from '../../ui/icon';
 import { StatusLabel } from '../../ui/status-label';
 import { InstallCard } from '../install/install-card';
+import { OwnWorkoutApi } from '../training/own-workout-api';
+import { ownRefusal, startRefusalWords } from '../training/own-workout.models';
 import {
   mapUpcomingTraining,
   trainingReadAccessLabel,
   type UpcomingTraining,
 } from '../training/training-read.models';
-import { PLAYER_PRELOAD, revealInto, revealTarget, whenIdle } from './open-moment';
+import { OPEN_MOMENT, PLAYER_PRELOAD, revealInto, revealTarget, whenIdle } from './open-moment';
 import { mapRenewalStatus, type RenewalStatus } from './renewal.models';
 import { TodayAlso } from './today-also';
 import { TodayCoachMessage } from './today-coach-message';
 import { riseTodaySteps, type TodayStep } from './today-moment';
 import { TodayRenewal } from './today-renewal';
-import { mapTrainingWeek, trainingCard, type TrainingWeek } from './today.models';
+import { mapTrainingWeek, trainingCard, weekDayDone, type TrainingWeek } from './today.models';
 
 /**
  * The client's Today: the workspace date, the one training decision for the day,
@@ -74,6 +77,8 @@ import { mapTrainingWeek, trainingCard, type TrainingWeek } from './today.models
 })
 export class ClientToday {
   private readonly api = inject(ApiClient);
+  private readonly ownApi = inject(OwnWorkoutApi);
+  private readonly csrf = inject(CsrfService);
   private readonly locale = inject(LOCALE_ID);
   private readonly tenants = inject(TenantStore);
   private readonly auth = inject(AuthStore);
@@ -128,6 +133,10 @@ export class ClientToday {
   private readonly workspaceDate = signal<string | null>(null);
   private readonly workspaceZone = signal<string | null>(null);
   protected readonly accessLabel = trainingReadAccessLabel;
+  protected readonly dayDone = weekDayDone;
+  /** A workout of one's own on its way to starting, and why the last start was refused (notes plan N9b3). */
+  protected readonly startingOwn = signal(false);
+  protected readonly startProblem = signal<string | null>(null);
 
   /** Today in the workspace, or null (no date at all) when neither read could say. */
   protected readonly localDate = computed(
@@ -161,13 +170,26 @@ export class ClientToday {
       this.loading() ||
       (this.renewalLoading() && card?.kind === 'access-closed' && card.reason === 'Expired') ||
       // Nothing assigned reads differently for a self-directed trainee: it waits for that answer.
-      (this.coachLoading() && card?.kind === 'nothing-assigned')
+      (this.coachLoading() &&
+        (card?.kind === 'nothing-assigned' || card?.kind === 'own-in-progress'))
     );
   });
 
   /** "Message your coach" is offered only while messaging is open. */
   protected readonly canMessage = computed(
     () => this.access.decision('Messaging')?.isAllowed ?? false,
+  );
+
+  /**
+   * A trainee of TB Gym's own space with nothing to carry on and Training open: the card offers to start
+   * a workout of their own (TRN-033); the server decides whether it may.
+   */
+  protected readonly startCard = computed(
+    () =>
+      this.selfDirected() &&
+      this.card()?.kind === 'nothing-assigned' &&
+      this.day()?.isAllowed === true &&
+      this.upcoming()?.isAllowed === true,
   );
 
   /** The week and the day's card, drawn in one frame once both have answered. */
@@ -197,6 +219,7 @@ export class ClientToday {
     return {
       scheduled: days.reduce((total, day) => total + day.scheduled, 0),
       completed: days.reduce((total, day) => total + day.completed, 0),
+      own: days.reduce((total, day) => total + day.ownCompleted, 0),
     };
   });
   protected readonly initials = computed(() =>
@@ -229,6 +252,8 @@ export class ClientToday {
       this.workspaceDate.set(null);
       this.workspaceZone.set(null);
       this.renewal.set(null);
+      this.startingOwn.set(false);
+      this.startProblem.set(null);
       this.risen.clear();
       if (tenant) {
         void this.load();
@@ -297,6 +322,50 @@ export class ClientToday {
     this.cancelPreload = whenIdle(view, () => {
       this.cancelPreload = null;
       void this.preload();
+    });
+  }
+
+  /**
+   * Starts a workout of one's own and opens the player on it, the card growing into it as a link's
+   * press does (W7). A refusal is said on the card; one already started elsewhere turns it into Carry on.
+   */
+  protected async startOwn(): Promise<void> {
+    // Asked before the lane is taken, since a second press would otherwise cancel the first start; the
+    // action's first line runs at once, in the same call, so no press slips in between.
+    if (this.startingOwn()) return;
+    return this.scope.run('start-own', async (owner) => {
+      this.startingOwn.set(true);
+      this.startProblem.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const view = await owner.wait(firstValueFrom(this.ownApi.start()));
+        const url = this.router.serializeUrl(
+          this.router.createUrlTree(['/training/today'], {
+            queryParams: { sessionId: view.workoutExecutionId },
+          }),
+        );
+        const card = this.host.nativeElement.querySelector('.today-card');
+        if (
+          card &&
+          typeof this.document.startViewTransition === 'function' &&
+          this.motion.allowed(OPEN_MOMENT)
+        ) {
+          revealInto(card, () => this.router.navigateByUrl(url), this.document, this.environment);
+        } else {
+          await this.router.navigateByUrl(url);
+        }
+      } catch (error) {
+        if (!owner.current) return;
+        this.startProblem.set(startRefusalWords(error));
+        if (ownRefusal(error) === 'in-progress') {
+          // One started on another phone or tab: the card becomes its Carry on, still saying why, and
+          // focus moves to it, since the Start button is gone.
+          await owner.wait(this.load());
+          if (!this.error()) setTimeout(() => this.trainingHeading()?.nativeElement.focus());
+        }
+      } finally {
+        if (owner.current) this.startingOwn.set(false);
+      }
     });
   }
 
@@ -425,5 +494,7 @@ export class ClientToday {
     this.renewalLoading.set(false);
     this.loading.set(false);
     this.error.set(false);
+    this.startingOwn.set(false);
+    this.startProblem.set(null);
   }
 }

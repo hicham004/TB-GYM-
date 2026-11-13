@@ -7,6 +7,7 @@ import type {
   ClientTrainingWeekView,
   ClientWorkoutView,
   OwnPlansView,
+  OwnWorkoutView,
 } from '../../core/api/generated';
 import { todaySessions, type TodaySessions } from '../account/own-sessions.models';
 
@@ -15,7 +16,8 @@ export interface TrainingWeek {
   accessReason: string;
   localDate: string;
   weekStart: string;
-  days: { date: string; scheduled: number; completed: number }[];
+  /** A program's sessions planned and done each day, and the workouts of one's own finished (TRN-033). */
+  days: { date: string; scheduled: number; completed: number; ownCompleted: number }[];
 }
 
 export function mapTrainingWeek(value: ClientTrainingWeekView): TrainingWeek {
@@ -25,8 +27,15 @@ export function mapTrainingWeek(value: ClientTrainingWeekView): TrainingWeek {
       date: day.date,
       scheduled: Number(day.scheduled),
       completed: Number(day.completed),
+      // A read from before workouts of one's own carries none.
+      ownCompleted: Number(day.ownCompleted ?? 0),
     })),
   };
+}
+
+/** A day of the week strip is done when its program's sessions are, or, with none planned, a workout of one's own is. */
+export function weekDayDone(day: TrainingWeek['days'][number]): boolean {
+  return day.scheduled > 0 ? day.completed === day.scheduled : day.ownCompleted > 0;
 }
 import type { Conversation } from '../messaging/messaging.models';
 import type { NutritionDay } from '../nutrition/nutrition.models';
@@ -79,12 +88,23 @@ export type TrainingCard =
       summary: WorkoutSummary;
       week: ProgramWeekKicker | null;
     }
+  | {
+      /** A workout of one's own not finished yet (TRN-033), whatever day it was started: Carry on. */
+      kind: 'own-in-progress';
+      workout: OwnWorkoutView;
+      summary: WorkoutSummary;
+      /** The house's day it was started on. */
+      startedOn: string;
+    }
   | { kind: 'rest-day'; next: { date: string; name: string } | null }
   | { kind: 'week-not-shared' }
   | { kind: 'between-programs'; startsOn: string }
   | { kind: 'nothing-assigned' };
 
-export function workoutSummary(workout: ClientWorkoutView): WorkoutSummary {
+/** Exercises, sets and the sets logged, of a program's workout or of one's own. */
+export function workoutSummary(workout: {
+  readonly exercises: readonly { readonly sets: readonly { readonly isCompleted: boolean }[] }[];
+}): WorkoutSummary {
   const sets = workout.exercises.flatMap((exercise) => exercise.sets);
   return {
     exercises: workout.exercises.length,
@@ -108,6 +128,17 @@ export function trainingCard(
       return hideWhenNotInPlan ? { kind: 'hidden' } : { kind: 'nothing-assigned' };
     }
     return { kind: 'access-closed', reason };
+  }
+
+  // A workout of one's own not finished comes first: it is what the trainee is in the middle of.
+  const own = day.ownWorkout;
+  if (own && own.status !== 'Completed') {
+    return {
+      kind: 'own-in-progress',
+      workout: own,
+      summary: workoutSummary(own),
+      startedOn: own.date,
+    };
   }
 
   // Today's sessions arrive in their programmed order.

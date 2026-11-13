@@ -1064,7 +1064,11 @@ note in it, the client's notes on it tell nobody, and the coach's workout read a
 on it answer 404 for another client's workout, or a row not in it, and 409 `own_workout_only` for a program's
 workout. Database checks keep its program and session empty together, its exercises their own and its sets with
 nothing prescribed, and the workout triggers refuse any other shape. The house keeps its mark while it holds one
-(`platform-admin house clear` refuses), so a workout of one's own never sits in an ordinary coach's space.
+(`platform-admin house clear` refuses), so a workout of one's own never sits in an ordinary coach's space. On
+screen (notes plan N9b3) a self-directed trainee's Today and Training offer "Start a workout", Today "Carry on" while one
+is unfinished, and history "Start from this workout"; the player shows nothing prescribed, its sets starting at last
+time's numbers in the unit the workout shows (TRN-029, which nothing prescribed leaves open; once known, the unit holds
+for every set as a chosen one does), and asks before a finish with nothing logged. The server answers every refusal.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 

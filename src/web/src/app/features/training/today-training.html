@@ -7,7 +7,11 @@
   <header class="player-top">
     <a routerLink="/" class="round" aria-label="Back to Today" i18n-aria-label>×</a>
     <div>
-      <p class="eyebrow" i18n>YOUR WORKOUT</p>
+      @if (isOwn(activeWorkout())) {
+        <p class="eyebrow" i18n>YOUR OWN WORKOUT</p>
+      } @else {
+        <p class="eyebrow" i18n>YOUR WORKOUT</p>
+      }
       <h1 dir="auto">{{ activeWorkout()?.name ?? 'Your workout' }}</h1>
     </div>
     @if (activeWorkout(); as shown) {
@@ -106,7 +110,36 @@
         [description]="accessReasonLabel(currentDay.accessReason)"
       />
     } @else if (!currentDay.workouts.length) {
-      @if (!upcoming()?.hasAssignedProgram) {
+      @if (profile() === 'trainee') {
+        <!-- A trainee of TB Gym's own space starts a workout of their own here (TRN-033, notes plan N9b3). -->
+        <app-empty-state
+          heading="No workout in progress"
+          i18n-heading
+          description="Start one, add exercises from TB Gym’s pool and log each set as you go."
+          i18n-description
+        >
+          <button
+            appButton
+            type="button"
+            size="touch"
+            empty-state-action
+            data-start-own
+            [loading]="busy()"
+            (click)="startOwn()"
+            i18n
+          >
+            Start a workout
+          </button>
+        </app-empty-state>
+      } @else if (profile() === 'unknown') {
+        <!-- The profile could not say whether a coach is there: a line true for anyone. -->
+        <app-empty-state
+          heading="No workouts yet"
+          i18n-heading
+          description="Your workouts will start here."
+          i18n-description
+        />
+      } @else if (!upcoming()?.hasAssignedProgram) {
         <app-empty-state
           heading="Nothing assigned yet"
           i18n-heading
@@ -146,6 +179,9 @@
       }
       @for (workout of shownWorkouts(); track workout.sessionId) {
         @let readOnly = !workout.workoutExecutionId || workout.status === 'Completed';
+        <!-- A workout of one's own (TRN-033): nothing prescribed is shown, and its exercises and sets
+             are added and taken away here while it runs. -->
+        @let own = isOwn(workout);
         <article class="workout" [attr.aria-label]="workout.name">
           <div class="segments" role="group" aria-label="Exercise completion" i18n-aria-label>
             @for (exercise of workout.exercises; track exercise.prescriptionId) {
@@ -191,6 +227,18 @@
             </p>
           }
           <div class="player-body">
+            @if (own && !workout.exercises.length) {
+              <section class="own-empty" aria-labelledby="own-empty-heading">
+                @if (readOnly) {
+                  <!-- Finished on another phone or tab: nothing is left to add. -->
+                  <h2 id="own-empty-heading" i18n>No exercises</h2>
+                  <p i18n>This workout was finished with no exercises in it.</p>
+                } @else {
+                  <h2 id="own-empty-heading" i18n>No exercises yet</h2>
+                  <p i18n>Add your first exercise from TB Gym’s pool, then log its sets.</p>
+                }
+              </section>
+            }
             @for (
               exercise of workout.exercises;
               track exercise.prescriptionId;
@@ -243,10 +291,16 @@
                       }
                     </p>
                   }
-                  <div class="set-head" aria-hidden="true">
-                    <span i18n>Set</span><span i18n>Last time</span><span i18n>Load</span
-                    ><span i18n>Reps</span><span></span>
-                  </div>
+                  @if (exercise.sets.length) {
+                    <div class="set-head" aria-hidden="true">
+                      <span i18n>Set</span><span i18n>Last time</span><span i18n>Load</span
+                      ><span i18n>Reps</span><span></span>
+                    </div>
+                  } @else if (readOnly) {
+                    <p class="own-no-sets" i18n>No sets were logged for this exercise.</p>
+                  } @else {
+                    <p class="own-no-sets" i18n>No sets yet. Add one to log it.</p>
+                  }
                   <div class="sets">
                     @for (set of exercise.sets; track set.prescriptionId; let setIndex = $index) {
                       @let draft = setDraft(set);
@@ -402,43 +456,47 @@
                             Log set
                           </button>
                         }
-                        <p class="prescription">
-                          <span i18n>Target:</span> {{ prescribedReps(set) }} <span i18n>reps</span>
-                          <!-- The coach's load is for the prescribed lift, not a swap (TRN-029). -->
-                          @if (set.prescribedLoad !== null && !exercise.wasSubstituted) {
-                            ·
-                            <!-- A tap on the target opens its plates (W11), in the unit the workout is in. -->
-                            @if (
-                              !readOnly &&
-                              !collapsed(set) &&
-                              set.prescribedLoadUnit === workoutUnit()
-                            ) {
-                              <button
-                                type="button"
-                                class="target-weight"
-                                aria-haspopup="dialog"
-                                (click)="
-                                  openPlates(exercise, set.prescribedLoad, set.prescribedLoadUnit)
-                                "
-                              >
+                        <!-- Nothing is prescribed in a workout of one's own, so it has no target. -->
+                        @if (!own) {
+                          <p class="prescription">
+                            <span i18n>Target:</span> {{ prescribedReps(set) }}
+                            <span i18n>reps</span>
+                            <!-- The coach's load is for the prescribed lift, not a swap (TRN-029). -->
+                            @if (set.prescribedLoad !== null && !exercise.wasSubstituted) {
+                              ·
+                              <!-- A tap on the target opens its plates (W11), in the unit the workout is in. -->
+                              @if (
+                                !readOnly &&
+                                !collapsed(set) &&
+                                set.prescribedLoadUnit === workoutUnit()
+                              ) {
+                                <button
+                                  type="button"
+                                  class="target-weight"
+                                  aria-haspopup="dialog"
+                                  (click)="
+                                    openPlates(exercise, set.prescribedLoad, set.prescribedLoadUnit)
+                                  "
+                                >
+                                  {{ set.prescribedLoad }}
+                                  {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                                </button>
+                              } @else {
                                 {{ set.prescribedLoad }}
                                 {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
-                              </button>
-                            } @else {
-                              {{ set.prescribedLoad }}
-                              {{ set.prescribedLoadUnit === 'Kilogram' ? 'kg' : 'lb' }}
+                              }
                             }
-                          }
-                          @if (set.prescribedTargetRpe !== null) {
-                            · {{ prescribedEffort(set) }}
-                          }
-                          @if (set.restSeconds !== null) {
-                            · <span i18n>rest</span> {{ restLabel(set.restSeconds) }}
-                          }
-                          @if (set.tempo) {
-                            · <span i18n>tempo</span> {{ set.tempo }}
-                          }
-                        </p>
+                            @if (set.prescribedTargetRpe !== null) {
+                              · {{ prescribedEffort(set) }}
+                            }
+                            @if (set.restSeconds !== null) {
+                              · <span i18n>rest</span> {{ restLabel(set.restSeconds) }}
+                            }
+                            @if (set.tempo) {
+                              · <span i18n>tempo</span> {{ set.tempo }}
+                            }
+                          </p>
+                        }
                         <!-- The coach's note on this set (C3), marked like their note on the exercise. -->
                         @if (set.coachNotes) {
                           <p class="coach-note" dir="auto">{{ set.coachNotes }}</p>
@@ -505,9 +563,13 @@
                                   ></label
                                 >
                               </div>
-                              <label
-                                ><span i18n>Note for your coach</span
-                                ><input
+                              <label>
+                                @if (own) {
+                                  <span i18n>Note (optional)</span>
+                                } @else {
+                                  <span i18n>Note for your coach</span>
+                                }
+                                <input
                                   dir="auto"
                                   maxlength="1000"
                                   [ngModel]="draft?.clientNote"
@@ -524,6 +586,33 @@
                       </section>
                     }
                   </div>
+                  @if (own && !readOnly) {
+                    <!-- Only the last set goes, so the sets stay numbered as last time's (TRN-033). -->
+                    <div class="own-sets" role="group" [attr.aria-label]="setsLabel(exercise)">
+                      <button
+                        type="button"
+                        data-add-set
+                        [disabled]="exercise.sets.length >= setLimit"
+                        (click)="addSet(workout, exercise)"
+                        i18n
+                      >
+                        Add set
+                      </button>
+                      @if (exercise.sets.length) {
+                        <button
+                          type="button"
+                          data-remove-set
+                          (click)="removeLastSet(workout, exercise)"
+                          i18n
+                        >
+                          Remove last set
+                        </button>
+                      }
+                    </div>
+                    @if (exercise.sets.length >= setLimit) {
+                      <p class="own-limit" i18n>An exercise holds at most 20 sets.</p>
+                    }
+                  }
                   <div class="exercise-actions">
                     <!-- The barbell (W11): the draft weight as plates, a reading that changes no set. -->
                     @if (!readOnly && editableSet(exercise) !== null) {
@@ -569,6 +658,23 @@
                         (chosen)="substitute(workout, exercise, $event)"
                       />
                     }
+                    @if (own && !readOnly && exercise.performanceId) {
+                      @if (hasNote(workout, exercise)) {
+                        <p class="own-stays" i18n>
+                          This exercise has a note, so it stays in this workout.
+                        </p>
+                      } @else {
+                        <button
+                          type="button"
+                          class="own-remove"
+                          data-remove-exercise
+                          (click)="removeExercise(workout, exercise)"
+                          i18n
+                        >
+                          Remove exercise
+                        </button>
+                      }
+                    }
                   </div>
                   @if (exerciseIndex + 1 < workout.exercises.length) {
                     <p class="nextline" i18n>
@@ -578,11 +684,28 @@
                 </section>
               }
             }
+            @if (own && !readOnly) {
+              <button
+                type="button"
+                class="own-add"
+                data-add-exercise
+                aria-haspopup="dialog"
+                [disabled]="workout.exercises.length >= exerciseLimit"
+                (click)="openPicker()"
+                i18n
+              >
+                Add an exercise
+              </button>
+              @if (workout.exercises.length >= exerciseLimit) {
+                <p class="own-limit" i18n>A workout holds at most 40 exercises.</p>
+              }
+            }
           </div>
           @if (workout.workoutExecutionId) {
             <footer class="workout-footer">
               @if (!readOnly) {
-                <app-disclosure label="Note for your coach" i18n-label>
+                <!-- A note on a workout of one's own is kept and goes to nobody (TRN-033). -->
+                <app-disclosure [label]="own ? ownNoteLabel : coachNoteLabel">
                   <ng-template appDisclosureContent>
                     <label
                       ><span i18n>Workout note</span
@@ -596,9 +719,12 @@
                       type="button"
                       [disabled]="!workoutNotes[workout.sessionId] || busy()"
                       (click)="addNote(workout)"
-                      i18n
                     >
-                      Send note
+                      @if (own) {
+                        <ng-container i18n>Save note</ng-container>
+                      } @else {
+                        <ng-container i18n>Send note</ng-container>
+                      }
                     </button>
                   </ng-template>
                 </app-disclosure>
@@ -646,10 +772,18 @@
           @if (finishConfirmation() === workout.sessionId) {
             <section class="finish-confirmation" aria-label="Finish confirmation" i18n-aria-label>
               <h3 i18n>Finish workout?</h3>
-              <p i18n>
-                {{ loggedSetCount(workout) }} of {{ totalSetCount(workout) }} sets logged. You can’t
-                change this workout afterwards.
-              </p>
+              @if (own && loggedSetCount(workout) === 0) {
+                <!-- No discard exists: a workout finished with nothing logged stays in history (TRN-033). -->
+                <p i18n>
+                  Nothing is logged yet. If you finish now, this workout stays in your history with
+                  no sets, and you can’t change it afterwards.
+                </p>
+              } @else {
+                <p i18n>
+                  {{ loggedSetCount(workout) }} of {{ totalSetCount(workout) }} sets logged. You
+                  can’t change this workout afterwards.
+                </p>
+              }
               <button type="button" [disabled]="busy()" (click)="complete(workout)" i18n>
                 Confirm finish
               </button>
@@ -750,6 +884,28 @@
     [confirmLabel]="leaveConfirm"
     [cancelLabel]="leaveCancel"
     (answer)="dialog.close($event)"
+  />
+</ng-template>
+
+<!-- A workout of one's own: the question before something logged is taken away. -->
+<ng-template #removeDialog let-dialog>
+  <app-confirm
+    [message]="removeMessage()"
+    [confirmLabel]="removeConfirm()"
+    [cancelLabel]="removeCancel"
+    (answer)="dialog.close($event)"
+  />
+</ng-template>
+
+<!-- The picker over TB Gym's pool (notes plan N9b3): it stays open for the next exercise. -->
+<ng-template #pickerSheet>
+  <app-pool-picker
+    [inWorkout]="pickerInWorkout()"
+    [added]="pickerAdded()"
+    [announcement]="pickerAnnouncement()"
+    [problem]="pickerProblem()"
+    (chosen)="addExercise($event)"
+    (done)="closePicker()"
   />
 </ng-template>
 

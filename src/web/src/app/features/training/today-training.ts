@@ -18,7 +18,7 @@ import {
 import type { DialogRef } from '@angular/cdk/dialog';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, type Observable } from 'rxjs';
 import { ApiClient } from '../../core/api/api-client';
 import { apiErrorMessage, failureKind } from '../../core/api/api-error';
 import type {
@@ -27,6 +27,8 @@ import type {
   ClientTrainingDayResult,
   ClientWorkoutView,
   MediaAccessView,
+  OwnWorkoutView,
+  PoolExerciseView,
   PreviousSetPerformanceView,
   TrainingLoadUnit,
   WorkoutFinishSummaryView,
@@ -50,7 +52,20 @@ import { UiSheet } from '../../ui/sheet';
 import { StatusLabel } from '../../ui/status-label';
 import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareTeaser } from '../share-cards/share-teaser';
+import { PoolPicker } from './pool-picker';
 import { externalVideo } from './external-video';
+import { OwnWorkoutApi } from './own-workout-api';
+import {
+  changeRefusalWords,
+  exerciseHasNote,
+  isOwnWorkout,
+  OWN_EXERCISE_LIMIT,
+  OWN_SET_LIMIT,
+  ownRefusal,
+  ownWorkoutAsPlayed,
+  startRefusalWords,
+  type OwnPlayedWorkout,
+} from './own-workout.models';
 import { PlatesSheet } from './plates-sheet';
 import { type FinishFormats, playFinishMoment } from './finish-moment';
 import { playPlayerMoment } from './player-moment';
@@ -110,6 +125,7 @@ function isConflict(error: unknown): error is HttpErrorResponse {
   imports: [
     Button,
     ButtonLink,
+    PoolPicker,
     FormsModule,
     DatePipe,
     DecimalPipe,
@@ -126,20 +142,22 @@ function isConflict(error: unknown): error is HttpErrorResponse {
     PlatesSheet,
   ],
   templateUrl: './today-training.html',
-  // The set rows and the demo overlay's link panel have their own sheets: the main one sits near the
-  // 8 kB style budget.
+  // The set rows, the demo overlay's link panel and a workout of one's own have their own sheets: the
+  // main one sits near the 8 kB style budget.
   styleUrls: [
     './today-training.scss',
     './today-training-sets.scss',
     './today-training-media.scss',
     './today-training-moments.scss',
     './today-training-note.scss',
+    './today-training-own.scss',
   ],
   // The player is always drawn on the night colour, so the kit pieces inside it read the dark tokens.
   host: { 'data-mode': 'dark', '(window:beforeunload)': 'onBeforeUnload($event)' },
 })
 export class TodayTraining implements HoldsUnsavedWork {
   private readonly api = inject(ApiClient);
+  private readonly ownApi = inject(OwnWorkoutApi);
   private readonly csrf = inject(CsrfService);
   private readonly tenants = inject(TenantStore);
   private readonly dialogs = inject(UiDialog);
@@ -164,6 +182,39 @@ export class TodayTraining implements HoldsUnsavedWork {
   /** The kg or lb the client chose, per workout, kept through every reload of the day (CLIENT-1). */
   private readonly chosenUnits = new Map<string, TrainingLoadUnit>();
   private readonly leaveDialog = viewChild.required<TemplateRef<unknown>>('leaveDialog');
+  /** Each change to a workout of one's own has a lane of its own, so a second press queues, never cancels. */
+  private ownChanges = 0;
+  // A workout of one's own (notes plan N9b3): the pool's picker in the kit's sheet, and the question
+  // before an exercise or a set with something logged is taken away.
+  private readonly pickerSheet = viewChild<TemplateRef<unknown>>('pickerSheet');
+  private pickerRef: DialogRef<unknown, ModalSurface> | null = null;
+  private readonly removeDialog = viewChild.required<TemplateRef<unknown>>('removeDialog');
+  /** The exercises added since the picker opened, and those on their way, so a second press adds none. */
+  protected readonly pickerAdded = signal<ReadonlyMap<string, number>>(new Map());
+  private readonly pickerPending = new Set<string>();
+  /** Each sentence counted, so the same words said twice are heard twice. */
+  protected readonly pickerAnnouncement = signal<{
+    readonly text: string;
+    readonly version: number;
+  } | null>(null);
+  private announcements = 0;
+  protected readonly pickerProblem = signal<string | null>(null);
+  protected readonly removeMessage = signal('');
+  protected readonly removeConfirm = signal('');
+  protected readonly removeCancel = $localize`Keep it`;
+  /**
+   * Who sees the page when there is nothing to train: a trainee of TB Gym's own space starts a workout of
+   * their own (CLI-026), a coach's client reads why there is nothing; read only then, and 'unknown' when the
+   * profile could not say, which gets a line true for both.
+   */
+  protected readonly profile = signal<'trainee' | 'coached' | 'unknown' | null>(null);
+  protected readonly isOwn = isOwnWorkout;
+  protected readonly exerciseLimit = OWN_EXERCISE_LIMIT;
+  protected readonly setLimit = OWN_SET_LIMIT;
+  /** The exercises whose last set or whole is being taken away: a second press waits for nothing. */
+  private readonly removing = new Set<string>();
+  protected readonly ownNoteLabel = $localize`Workout note`;
+  protected readonly coachNoteLabel = $localize`Note for your coach`;
 
   protected readonly day = signal<ClientTrainingDayResult | null>(null);
   protected readonly loading = signal(false);
@@ -215,6 +266,11 @@ export class TodayTraining implements HoldsUnsavedWork {
   protected readonly activeWorkout = computed(() => this.shownWorkouts()[0] ?? null);
   protected readonly activeExercise = computed(
     () => this.activeWorkout()?.exercises[this.activeExerciseIndex()] ?? null,
+  );
+  /** The exercises already in the workout shown, which the picker marks. */
+  protected readonly pickerInWorkout = computed<ReadonlySet<string>>(
+    () =>
+      new Set((this.activeWorkout()?.exercises ?? []).map((exercise) => exercise.actualExerciseId)),
   );
   /** Today's workouts and the unfinished earlier ones, for Choose workout. */
   protected readonly workoutChoices = computed<UiMenuItem[]>(() => {
@@ -296,6 +352,7 @@ export class TodayTraining implements HoldsUnsavedWork {
       if (this.timerHandle) clearInterval(this.timerHandle);
       void this.wakeLock?.release();
       this.platesRef?.close();
+      this.pickerRef?.close();
       document.removeEventListener('visibilitychange', this.onVisibilityChange);
     });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
@@ -338,6 +395,377 @@ export class TodayTraining implements HoldsUnsavedWork {
         }),
       );
     });
+  }
+
+  /**
+   * A workout of one's own, started here when nothing is in progress (TRN-033): it opens empty, for its
+   * first exercise. A refusal says why; one started on another phone or tab meanwhile is shown instead.
+   */
+  protected async startOwn(): Promise<void> {
+    // Asked before the lane is taken: a second press would otherwise cancel the first start.
+    if (this.busy()) return;
+    return this.scope.run('startOwn', async (owner) => {
+      await owner.wait(
+        this.runWrite(async (generation) => {
+          try {
+            const view = await owner.wait(firstValueFrom(this.ownApi.start()));
+            if (!this.ownsContext(generation)) return;
+            this.showOwn(this.applyOwnWorkout(view));
+            this.say($localize`Workout started.`);
+            void this.keepScreenAwake();
+            // The Start button is gone with the empty state: focus goes to the first thing to do.
+            this.focusSoon('[data-add-exercise]');
+          } catch (error) {
+            if (!owner.current || !this.ownsContext(generation)) return;
+            if (ownRefusal(error) === 'in-progress') await owner.wait(this.load(false));
+            if (this.ownsContext(generation)) this.reportError(startRefusalWords(error), true);
+          }
+        }),
+      );
+    });
+  }
+
+  /** The picker over TB Gym's pool, in the kit's sheet, dark over the player; it stays open for more. */
+  protected openPicker(): void {
+    const template = this.pickerSheet();
+    if (!template) return;
+    this.pickerRef?.close();
+    this.pickerAdded.set(new Map());
+    this.pickerAnnouncement.set(null);
+    this.pickerProblem.set(null);
+    const ref = this.sheets.open(template, {
+      title: $localize`Add an exercise`,
+      closeLabel: $localize`Close`,
+      mode: 'dark',
+    });
+    this.pickerRef = ref;
+    ref.closed.subscribe(() => {
+      if (this.pickerRef === ref) this.pickerRef = null;
+    });
+  }
+
+  protected closePicker(): void {
+    this.pickerRef?.close();
+  }
+
+  /**
+   * An exercise from the pool, shown at once with one empty set to type into (the server adds none);
+   * a second press on the same row while the first is on its way adds nothing.
+   */
+  protected async addExercise(exercise: PoolExerciseView): Promise<void> {
+    const workout = this.activeWorkout();
+    const workoutId = workout?.workoutExecutionId;
+    if (!workout || !workoutId || !isOwnWorkout(workout) || workout.status === 'Completed') return;
+    if (this.pickerPending.has(exercise.id)) return;
+    this.pickerPending.add(exercise.id);
+    this.pickerProblem.set(null);
+    try {
+      const before = new Set(workout.exercises.map((item) => item.performanceId));
+      const added = await this.changeOwn(
+        workoutId,
+        (version) => this.ownApi.addExercise(workoutId, exercise.id, version),
+        $localize`${exercise.name}:exercise: couldn’t be added. Try again.`,
+      );
+      // This pick's own row: another pick queued before it may have answered with a new row of its own.
+      const fresh = added?.exercises
+        .filter((item) => item.actualExerciseId === exercise.id && !before.has(item.performanceId))
+        .at(-1);
+      if (!added || !fresh?.performanceId) return;
+      this.pickerAdded.update((counts) =>
+        new Map(counts).set(exercise.id, (counts.get(exercise.id) ?? 0) + 1),
+      );
+      this.showExercise(added.exercises.indexOf(fresh));
+      const performanceId = fresh.performanceId;
+      if (fresh.sets.length === 0) {
+        await this.changeOwn(
+          workoutId,
+          (version) => this.ownApi.addSet(workoutId, performanceId, version),
+          $localize`${exercise.name}:exercise: was added without a set. Add one with Add set.`,
+        );
+      }
+      this.tell(
+        (this.pickerAdded().get(exercise.id) ?? 0) > 1
+          ? $localize`${exercise.name}:exercise: added again.`
+          : $localize`${exercise.name}:exercise: added.`,
+      );
+    } finally {
+      this.pickerPending.delete(exercise.id);
+    }
+  }
+
+  protected async addSet(workout: ClientWorkoutView, exercise: ClientExerciseView): Promise<void> {
+    const workoutId = workout.workoutExecutionId;
+    const performanceId = exercise.performanceId;
+    if (!workoutId || !performanceId || !isOwnWorkout(workout)) return;
+    const done = await this.changeOwn(
+      workoutId,
+      (version) => this.ownApi.addSet(workoutId, performanceId, version),
+      $localize`The set couldn’t be added. Try again.`,
+    );
+    if (done) this.say($localize`Set added.`);
+  }
+
+  /** Only the last set goes, so the sets stay numbered as last time's (TRN-033); a logged one is asked about. */
+  protected async removeLastSet(
+    workout: ClientWorkoutView,
+    exercise: ClientExerciseView,
+  ): Promise<void> {
+    const workoutId = workout.workoutExecutionId;
+    const performanceId = exercise.performanceId;
+    const last = exercise.sets.at(-1);
+    const setId = last?.performanceId;
+    if (!workoutId || !performanceId || !last || !setId || !isOwnWorkout(workout)) return;
+    if (this.removing.has(performanceId)) return;
+    this.removing.add(performanceId);
+    try {
+      if (
+        this.loggedOrLogging(last) &&
+        !(await this.ask(
+          $localize`Remove set ${exercise.sets.length}:number:?`,
+          $localize`It’s logged. Once it’s removed, it’s gone from this workout.`,
+          $localize`Remove set`,
+        ))
+      ) {
+        return;
+      }
+      const after = await this.changeOwn(
+        workoutId,
+        (version) => this.ownApi.removeSet(workoutId, setId, version),
+        $localize`The set couldn’t be removed. Try again.`,
+      );
+      if (!after) return;
+      this.say($localize`Set removed.`);
+      // With no set left its Remove button is gone: focus stays in the row, on Add set.
+      if (!after.exercises.find((item) => item.performanceId === performanceId)?.sets.length) {
+        this.focusSoon('[data-add-set]');
+      }
+    } finally {
+      this.removing.delete(performanceId);
+    }
+  }
+
+  /**
+   * An exercise taken away with its sets, before the workout is finished (TRN-033). One a note names
+   * stays, and the page says why; one with logged sets is asked about first.
+   */
+  protected async removeExercise(
+    workout: ClientWorkoutView,
+    exercise: ClientExerciseView,
+  ): Promise<void> {
+    const workoutId = workout.workoutExecutionId;
+    const performanceId = exercise.performanceId;
+    if (!workoutId || !performanceId || !isOwnWorkout(workout)) return;
+    const name = exercise.actualExerciseName;
+    if (exerciseHasNote(workout, performanceId)) {
+      this.reportError($localize`This exercise has a note, so it stays in this workout.`, true);
+      return;
+    }
+    if (this.removing.has(performanceId)) return;
+    this.removing.add(performanceId);
+    try {
+      const logged = exercise.sets.filter((set) => this.loggedOrLogging(set)).length;
+      if (
+        logged > 0 &&
+        !(await this.ask(
+          $localize`Remove ${name}:exercise:?`,
+          logged === 1
+            ? $localize`Its logged set goes with it.`
+            : $localize`Its ${logged}:count: logged sets go with it.`,
+          $localize`Remove exercise`,
+        ))
+      ) {
+        return;
+      }
+      const index = this.activeExerciseIndex();
+      const after = await this.changeOwn(
+        workoutId,
+        (version) => this.ownApi.removeExercise(workoutId, performanceId, version),
+        $localize`${name}:exercise: couldn’t be removed. Try again.`,
+      );
+      if (!after) return;
+      this.activeExerciseIndex.set(Math.max(0, Math.min(index, after.exercises.length - 1)));
+      this.say($localize`${name}:exercise: removed.`);
+      // Its button went with it: focus moves to Add an exercise, always there while the workout runs.
+      this.focusSoon('[data-add-exercise]');
+    } finally {
+      this.removing.delete(performanceId);
+    }
+  }
+
+  /** Logged, or on its way to being logged: a ✓ still saving counts, so taking it away is asked about. */
+  private loggedOrLogging(set: ClientSetView): boolean {
+    return (
+      set.isCompleted ||
+      this.setDraft(set)?.isCompleted === true ||
+      (set.performanceId !== null && this.savingSetIds().has(set.performanceId))
+    );
+  }
+
+  protected hasNote(workout: ClientWorkoutView, exercise: ClientExerciseView): boolean {
+    return exercise.performanceId !== null && exerciseHasNote(workout, exercise.performanceId);
+  }
+
+  /** The set buttons' group, named for its exercise, since each exercise has its own. */
+  protected setsLabel(exercise: ClientExerciseView): string {
+    return $localize`Sets of ${exercise.actualExerciseName}:exercise:`;
+  }
+
+  /** Focus on the player's control once the next render has drawn it, unless focus went elsewhere. */
+  private focusSoon(selector: string): void {
+    afterNextRender(
+      () => {
+        const active = document.activeElement;
+        if (active && active !== document.body && this.host.nativeElement.contains(active)) return;
+        (this.host.nativeElement as HTMLElement).querySelector<HTMLElement>(selector)?.focus();
+      },
+      { injector: this.injector },
+    );
+  }
+
+  /** The kit's question, dark over the player, before something logged is taken away. */
+  private async ask(title: string, message: string, confirm: string): Promise<boolean> {
+    this.removeMessage.set(message);
+    this.removeConfirm.set(confirm);
+    const dialog = this.dialogs.open<boolean>(this.removeDialog(), {
+      title,
+      closeLabel: $localize`Close`,
+      mode: 'dark',
+    });
+    return (await firstValueFrom(dialog.closed)) === true;
+  }
+
+  /** What a change did: in the picker while it is open over the page, else on the page's own line. */
+  private tell(text: string): void {
+    if (this.pickerRef) this.pickerAnnouncement.set({ text, version: ++this.announcements });
+    else this.say(text);
+  }
+
+  /**
+   * One change to a workout of one's own, queued behind any set still saving to it (each moves the
+   * version), sent on the version the page holds then. The answer is the whole workout, put in place.
+   * A refusal says why; when the workout moved on elsewhere it is read again first, so it shows as it is.
+   * Never sent twice by itself: adding is not idempotent.
+   */
+  private async changeOwn(
+    workoutId: string,
+    send: (version: number) => Observable<OwnWorkoutView>,
+    fallback: string,
+  ): Promise<OwnPlayedWorkout | null> {
+    return this.scope.run(
+      `own:${++this.ownChanges}`,
+      async (owner) => {
+        const generation = this.contextGeneration;
+        let changed: OwnPlayedWorkout | null = null;
+        const previous = this.workoutSaveQueues.get(workoutId) ?? Promise.resolve(true);
+        const operation = previous.then(async () => {
+          if (!this.ownsContext(generation)) return false;
+          this.busy.set(true);
+          this.clearMessages();
+          try {
+            await owner.wait(this.csrf.refresh());
+            const current = this.day()?.workouts.find(
+              (item) => item.workoutExecutionId === workoutId,
+            );
+            if (!current || current.status === 'Completed' || current.executionVersion == null) {
+              return false;
+            }
+            const view = await owner.wait(firstValueFrom(send(numeric(current.executionVersion))));
+            if (!this.ownsContext(generation)) return false;
+            changed = this.applyOwnWorkout(view);
+            return true;
+          } catch (error) {
+            if (!owner.current || !this.ownsContext(generation)) return false;
+            const refusal = ownRefusal(error);
+            if (refusal === 'closed') {
+              await this.refreshAccess(generation);
+            } else if (refusal !== null && refusal !== 'limit') {
+              await owner.wait(this.load(false));
+            }
+            if (this.ownsContext(generation)) {
+              const words = changeRefusalWords(error, fallback);
+              // While the picker is open its own line says why, and focus stays in it: the page's line is
+              // behind the sheet, hidden from a screen reader.
+              this.reportError(words, !this.pickerRef);
+              if (this.pickerRef) this.pickerProblem.set(words);
+            }
+            return false;
+          } finally {
+            if (owner.current && this.ownsContext(generation)) this.busy.set(false);
+          }
+        });
+        this.workoutSaveQueues.set(workoutId, operation);
+        await owner.wait(operation);
+        if (this.workoutSaveQueues.get(workoutId) === operation) {
+          this.workoutSaveQueues.delete(workoutId);
+        }
+        return changed;
+      },
+      null,
+    );
+  }
+
+  /** The workout of one's own as the server answered it, in its place in the day, typed work kept (TRN-017). */
+  private applyOwnWorkout(view: OwnWorkoutView): OwnPlayedWorkout {
+    const played = ownWorkoutAsPlayed(view);
+    this.day.update((day) => {
+      if (!day) return day;
+      const at = day.workouts.findIndex(
+        (item) => item.workoutExecutionId === played.workoutExecutionId,
+      );
+      return {
+        ...day,
+        workouts:
+          at >= 0
+            ? day.workouts.map((item, index) => (index === at ? played : item))
+            : [played, ...day.workouts],
+      };
+    });
+    const day = this.day();
+    if (day) {
+      this.setDrafts.update((drafts) => reconcileWorkoutSetDrafts(day, drafts, this.chosenUnits));
+    }
+    this.settleOwnUnit(played);
+    return played;
+  }
+
+  /**
+   * A workout of one's own shows one unit, and its sets follow it (TRN-029, TRN-016). With nothing
+   * prescribed, the choice starts where last time's loads put it; once known, chosen or started so, it
+   * holds for every set as a chosen unit does, so a set whose last time is in the other unit starts
+   * empty rather than under a label it is not in, and a load typed before takes the unit shown.
+   */
+  private settleOwnUnit(workout: ClientWorkoutView | null | undefined): void {
+    if (!isOwnWorkout(workout) || workout.status === 'Completed') return;
+    const unit = this.unitFor(workout);
+    if (!unit) return;
+    if (this.activeWorkout()?.sessionId === workout.sessionId) {
+      this.workoutUnit.set(unit);
+      this.unitSessionId = workout.sessionId;
+    }
+    this.chosenUnits.set(workout.sessionId, unit);
+    this.setDrafts.update((drafts) => withWorkoutUnit(drafts, workout, unit));
+  }
+
+  /** A workout of one's own just started: it is the one shown, from its first exercise. */
+  private showOwn(played: OwnPlayedWorkout): void {
+    this.selectedSession.set(played.sessionId);
+    this.activeExerciseIndex.set(0);
+    this.workoutUnit.set(this.unitFor(played));
+    this.unitSessionId = played.sessionId;
+    this.settleOwnUnit(played);
+  }
+
+  /** Training closed meanwhile: the page says so, as it does when a set is refused for it. */
+  private async refreshAccess(generation: number): Promise<void> {
+    try {
+      const access = await firstValueFrom(this.api.getMyUpcomingTraining());
+      if (!this.ownsContext(generation) || access.isAllowed) return;
+      this.day.update((day) =>
+        day ? { ...day, isAllowed: false, accessReason: access.accessReason } : day,
+      );
+    } catch {
+      /* The refusal's own words still say what happened. */
+    }
   }
 
   protected async saveSet(workout: ClientWorkoutView, set: ClientSetView): Promise<boolean> {
@@ -682,6 +1110,7 @@ export class TodayTraining implements HoldsUnsavedWork {
     const workout = this.day()?.workouts.find((item) => item.sessionId === sessionId);
     this.workoutUnit.set(workout ? this.unitFor(workout) : null);
     this.unitSessionId = sessionId;
+    this.settleOwnUnit(workout);
   }
 
   /** The unit a workout shows: the one the client chose for it, else where TRN-029 starts it. */
@@ -692,6 +1121,11 @@ export class TodayTraining implements HoldsUnsavedWork {
   }
 
   private workoutHint(workout: ClientWorkoutView, startedFor: string | undefined): string {
+    if (isOwnWorkout(workout)) {
+      return workout.status === 'Completed'
+        ? $localize`Your own · done`
+        : $localize`Your own · in progress`;
+    }
     if (startedFor) {
       return $localize`Started for ${formatDate(startedFor, 'EEE d MMM', this.locale)}`;
     }
@@ -814,14 +1248,19 @@ export class TodayTraining implements HoldsUnsavedWork {
    * for them on the way out: a set is logged only by its ✓.
    */
   async canLeave(): Promise<boolean> {
-    const { sets, note } = this.unsavedWork();
+    const { sets, note, ownNote } = this.unsavedWork();
     if (!sets && !note) return true;
+    // A note on a workout of one's own goes to nobody (TRN-033): it is saved, not sent.
     this.leaveMessage.set(
       sets && note
-        ? $localize`Sets you changed aren’t logged and your note isn’t sent. If you leave now, they are lost.`
+        ? ownNote
+          ? $localize`Sets you changed aren’t logged and your note isn’t saved. If you leave now, they are lost.`
+          : $localize`Sets you changed aren’t logged and your note isn’t sent. If you leave now, they are lost.`
         : sets
           ? $localize`Sets you changed aren’t logged. If you leave now, the changes are lost.`
-          : $localize`Your note to your coach isn’t sent. If you leave now, it is lost.`,
+          : ownNote
+            ? $localize`Your workout note isn’t saved. If you leave now, it is lost.`
+            : $localize`Your note to your coach isn’t sent. If you leave now, it is lost.`,
     );
     const dialog = this.dialogs.open<boolean>(this.leaveDialog(), {
       title: $localize`Leave without saving?`,
@@ -842,18 +1281,20 @@ export class TodayTraining implements HoldsUnsavedWork {
   }
 
   /** Work only this page holds, in workouts still open: a finished one can take neither. */
-  private unsavedWork(): { sets: boolean; note: boolean } {
+  private unsavedWork(): { sets: boolean; note: boolean; ownNote: boolean } {
     const open = (this.day()?.workouts ?? []).filter(
       (workout) => workout.workoutExecutionId && workout.status !== 'Completed',
     );
     const drafts = this.setDrafts();
+    const noted = open.filter((workout) => Boolean(this.workoutNotes[workout.sessionId]?.trim()));
     return {
       sets: open.some((workout) =>
         workout.exercises.some((exercise) =>
           exercise.sets.some((set) => set.performanceId && drafts[set.performanceId]?.dirty),
         ),
       ),
-      note: open.some((workout) => Boolean(this.workoutNotes[workout.sessionId]?.trim())),
+      note: noted.length > 0,
+      ownNote: noted.length > 0 && noted.every(isOwnWorkout),
     };
   }
 
@@ -1256,16 +1697,40 @@ export class TodayTraining implements HoldsUnsavedWork {
         );
         if (!this.ownsLoad(generation, request)) return;
         const upcoming = mapUpcomingTraining(upcomingView);
-        this.upcoming.set(upcoming);
         const allowed = day.isAllowed && upcoming.isAllowed;
-        const combined = {
+        // A workout of one's own in progress comes first (TRN-033). Today's read carries only an
+        // unfinished one, so one shown here that the read no longer carries was finished on another
+        // phone or tab: it stays, read only, as a finished program's workout does.
+        const own = day.ownWorkout ? ownWorkoutAsPlayed(day.ownWorkout) : null;
+        const finishedElsewhere = (this.day()?.workouts ?? [])
+          .filter(isOwnWorkout)
+          .filter((item) => item.workoutExecutionId !== own?.workoutExecutionId)
+          .map((item) =>
+            item.status === 'Completed' ? item : { ...item, status: 'Completed' as const },
+          );
+        const combined: ClientTrainingDayResult = {
           ...day,
+          ownWorkout: null,
           isAllowed: allowed,
           accessReason: !day.isAllowed ? day.accessReason : upcoming.accessReason,
           workouts: allowed
-            ? [...day.workouts, ...upcoming.unfinishedWorkouts.map((item) => item.workout)]
+            ? [
+                ...(own ? [own] : []),
+                ...day.workouts,
+                ...upcoming.unfinishedWorkouts.map((item) => item.workout),
+                ...finishedElsewhere,
+              ]
             : (this.day()?.workouts ?? []),
         };
+        // With no program and nothing to train, who is asking decides the page (CLI-026): asked once.
+        if (allowed && !combined.workouts.length && !upcoming.hasAssignedProgram) {
+          if (this.profile() === null) {
+            const profile = await owner.wait(this.readProfile());
+            if (!this.ownsLoad(generation, request)) return;
+            this.profile.set(profile);
+          }
+        }
+        this.upcoming.set(upcoming);
         this.day.set(combined);
         this.setDrafts.update((drafts) =>
           reconcileWorkoutSetDrafts(combined, drafts, this.chosenUnits),
@@ -1277,6 +1742,7 @@ export class TodayTraining implements HoldsUnsavedWork {
           this.workoutUnit.set(this.unitFor(active));
           this.unitSessionId = active.sessionId;
         }
+        this.settleOwnUnit(active);
         if (showLoading) {
           // The skeleton goes in this render; the player's parts rise in after it (W7).
           afterNextRender(() => playPlayerMoment(this.host.nativeElement, this.motion), {
@@ -1293,6 +1759,16 @@ export class TodayTraining implements HoldsUnsavedWork {
         }
       }
     });
+  }
+
+  /** Whether a trainee of TB Gym's own space asks (CLI-026); 'unknown' when the profile could not say. */
+  private async readProfile(): Promise<'trainee' | 'coached' | 'unknown'> {
+    try {
+      const self = await firstValueFrom(this.api.getSelfProfile());
+      return self.selfDirected === true ? 'trainee' : 'coached';
+    } catch {
+      return 'unknown';
+    }
   }
 
   private async runWrite(command: (generation: number) => Promise<void>): Promise<void> {
@@ -1349,7 +1825,19 @@ export class TodayTraining implements HoldsUnsavedWork {
     this.activeMedia.set(null);
     this.mediaTrigger = null;
     this.upcomingSkip = 0;
+    this.resetOwn();
     this.clearMessages();
+  }
+
+  /** A workout of one's own: the picker and its marks, and who the page was for, start again. */
+  private resetOwn(): void {
+    this.pickerRef?.close();
+    this.pickerRef = null;
+    this.pickerAdded.set(new Map());
+    this.pickerPending.clear();
+    this.pickerAnnouncement.set(null);
+    this.pickerProblem.set(null);
+    this.profile.set(null);
   }
 
   private ownsContext(generation: number): boolean {
@@ -1479,6 +1967,7 @@ export class TodayTraining implements HoldsUnsavedWork {
     this.savingSetIds.set(new Set());
     this.savingWorkoutIds.set(new Set());
     for (const key of Object.keys(this.workoutNotes)) delete this.workoutNotes[key];
+    this.resetOwn();
   }
 }
 

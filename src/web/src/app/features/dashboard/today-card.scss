@@ -191,3 +191,16 @@
   block-size: var(--control-height-48);
   inline-size: 100%;
 }
+
+// A refused start of a workout of one's own (notes plan N9b3), under the button it belongs to, in a box
+// of its own so it reads on the hero's brand colours too.
+.today-card .today-problem {
+  background: var(--tb-danger-soft);
+  border-radius: 8px;
+  color: var(--tb-ink);
+  font-size: var(--text-compact-size);
+  line-height: var(--text-compact-line-height);
+  margin-block-start: calc(-1 * var(--space-8));
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.75rem;
+}

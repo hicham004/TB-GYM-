@@ -2,13 +2,16 @@ import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientAccessStore } from '../../core/access/client-access.store';
 import { ApiClient } from '../../core/api/api-client';
+import type { OwnWorkoutView } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { button, press, settle } from '../../../testing/dom';
+import { finishedProfile } from '../../../testing/intake-fixtures';
+import { ownWorkout } from '../../../testing/own-workout-day-fixtures';
 import { programSummary } from '../../../testing/share-card-fixtures';
 import { fakeShareCardMaker } from '../../../testing/share-card-maker-fake';
 import { fakeClientAccess } from '../../../testing/today-fixtures';
@@ -19,12 +22,15 @@ import {
   programView,
 } from '../../../testing/training-program-fixtures';
 import { ShareCardMaker } from '../share-cards/share-card-maker';
+import { OwnWorkoutApi } from './own-workout-api';
 import { TrainingProgram } from './training-program';
 
 async function render(
   api: Partial<Record<keyof ApiClient, unknown>> = {},
   access = fakeClientAccess(),
   url = '/',
+  /** Overrides any `OwnWorkoutApi` method: a workout of one's own (notes plan N9b3). */
+  own: Record<string, unknown> = {},
 ) {
   const selectedTenantId = signal<string | null>('tenant-1');
   const client = {
@@ -32,11 +38,19 @@ async function render(
     getMyWorkoutHistory: vi.fn(() => of(historyPage())),
     ...api,
   };
+  const ownApi = {
+    // A new workout of one's own, as the server starts it (TRN-033).
+    start: vi.fn((fromWorkoutId?: string | null) =>
+      of(ownWorkout({ workoutExecutionId: fromWorkoutId ? 'own-copy' : 'own-new', version: 1 })),
+    ),
+    ...own,
+  };
   await TestBed.configureTestingModule({
     imports: [TrainingProgram],
     providers: [
       provideRouter([]),
       { provide: ApiClient, useValue: client },
+      { provide: OwnWorkoutApi, useValue: ownApi },
       { provide: TenantStore, useValue: { selectedTenantId } },
       { provide: ClientAccessStore, useValue: access },
       { provide: ShareCardMaker, useValue: fakeShareCardMaker() },
@@ -59,6 +73,7 @@ async function render(
   return {
     host,
     client,
+    ownApi,
     selectedTenantId,
     settle: () => settle(fixture),
     textOf,
@@ -472,6 +487,8 @@ describe('TrainingProgram', () => {
     // The server sends no program (TRN-031), so the page says nothing about what it left out.
     const { host, read } = await render({
       getMyTrainingProgram: vi.fn(() => of(programView({ program: null }))),
+      // A coach's client: with no program, the page asks who reads it (notes plan N9b3).
+      getSelfProfile: vi.fn(() => of(finishedProfile())),
     });
 
     expect(read()).toContain('Nothing assigned yet');
@@ -480,20 +497,28 @@ describe('TrainingProgram', () => {
     const history = host.querySelector('section[aria-labelledby="history-heading"]');
     expect(history).not.toBeNull();
     expect(history!.querySelectorAll('.history-item').length).toBeGreaterThan(0);
+    // A coach's client starts no workout of their own, from here or from a finished one.
+    expect(host.querySelector('[data-start-own]')).toBeNull();
+    expect(host.querySelector('[data-start-from]')).toBeNull();
   });
 
   it('invites a client with nothing assigned to message their coach, when they can', async () => {
     const view = await render({
       getMyTrainingProgram: vi.fn(() => of(programView({ program: null }))),
+      getSelfProfile: vi.fn(() => of(finishedProfile())),
     });
     expect(view.read()).toContain('Nothing assigned yet');
     expect(view.host.querySelector('app-empty-state a[href="/messages"]')).not.toBeNull();
 
     TestBed.resetTestingModule();
     const noChat = await render(
-      { getMyTrainingProgram: vi.fn(() => of(programView({ program: null }))) },
+      {
+        getMyTrainingProgram: vi.fn(() => of(programView({ program: null }))),
+        getSelfProfile: vi.fn(() => of(finishedProfile())),
+      },
       fakeClientAccess({ Messaging: 'NoEntitlement' }),
     );
+    expect(noChat.read()).toContain('Nothing assigned yet');
     expect(noChat.host.querySelector('a[href="/messages"]')).toBeNull();
   });
 
@@ -608,5 +633,328 @@ describe('TrainingProgram', () => {
     await settle();
     expect(getMyTrainingProgram).toHaveBeenCalledTimes(3);
     expect(client.getMyWorkoutHistory).toHaveBeenCalledTimes(2);
+  });
+
+  describe('a trainee of TB Gym’s own space trains on their own (notes plan N9b3, TRN-033)', () => {
+    const noProgram = () => vi.fn(() => of(programView({ program: null })));
+    const trainee = () => vi.fn(() => of(finishedProfile({ selfDirected: true })));
+    /** A finished workout of one's own: no program holds it, and the server names it "Workout". */
+    const ownItem = (overrides: Parameters<typeof historyItem>[0] = {}) =>
+      historyItem({
+        workoutExecutionId: 'own-0',
+        name: 'Workout',
+        programName: '',
+        isOwnWorkout: true,
+        date: '2026-09-29',
+        ...overrides,
+      });
+    /** The trainee's history: their own workout of Tue 29 Sep, then a program's of Mon 28 Sep. */
+    const traineeHistory = () => vi.fn(() => of(historyPage([ownItem(), historyItem()])));
+    const navigation = () => vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const refusal = (code: string, message: string) =>
+      new HttpErrorResponse({ status: 409, error: { code, message } });
+
+    it('offers a trainee with no program a workout of their own, and opens the player on it', async () => {
+      const getSelfProfile = trainee();
+      const { host, ownApi, settle, textOf, read } = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile,
+      });
+      const navigate = navigation();
+      const refresh = vi.mocked(TestBed.inject(CsrfService).refresh);
+
+      const empty = host.querySelector('app-empty-state')!;
+      expect(textOf(empty.querySelector('h2'))).toBe('Train on your own');
+      expect(textOf(empty.querySelector('p'))).toBe(
+        'Start a workout, pick exercises from TB Gym’s pool and log each set. Your finished workouts are below.',
+      );
+      const start = empty.querySelector<HTMLButtonElement>('button[data-start-own]')!;
+      expect(textOf(start)).toBe('Start a workout');
+      expect(start.disabled).toBe(false);
+      expect(read()).not.toContain('Nothing assigned yet');
+      expect(read()).not.toContain('Your coach will put your program here.');
+      // Messaging is open in this plan, and still nothing offers to write to a coach.
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+      expect(getSelfProfile).toHaveBeenCalledTimes(1);
+      refresh.mockClear();
+
+      press(host, 'Start a workout');
+      await settle();
+
+      expect(ownApi.start).toHaveBeenCalledTimes(1);
+      expect(ownApi.start).toHaveBeenCalledWith(null);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+        ownApi.start.mock.invocationCallOrder[0],
+      );
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledWith(['/training/today'], {
+        queryParams: { sessionId: 'own-new' },
+      });
+      expect(host.querySelector('.own-problem')).toBeNull();
+      expect(getSelfProfile).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers to start from each finished workout, their own and a program’s alike', async () => {
+      const { host, ownApi, settle, textOf } = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: trainee(),
+        getMyWorkoutHistory: traineeHistory(),
+      });
+      const navigate = navigation();
+
+      const items = [...host.querySelectorAll('.history-item')];
+      const starts = items.map((item) =>
+        item.querySelector<HTMLButtonElement>('button[data-start-from]')!,
+      );
+      // Each one names its workout for a screen reader; a sighted person reads it beside it.
+      expect(starts.map(textOf)).toEqual([
+        'Start from this workout: Workout, Tue 29 Sep',
+        'Start from this workout: Upper A, Mon 28 Sep',
+      ]);
+      expect(starts.map((start) => textOf(start.querySelector('.tb-visually-hidden')))).toEqual([
+        ': Workout, Tue 29 Sep',
+        ': Upper A, Mon 28 Sep',
+      ]);
+      expect(starts[0].querySelector('.tb-visually-hidden bdi')?.textContent).toBe('Workout');
+      expect(starts[0].classList).toContain('tb-button--outlined');
+
+      starts[1].click();
+      await settle();
+
+      expect(ownApi.start).toHaveBeenCalledTimes(1);
+      expect(ownApi.start).toHaveBeenCalledWith('w-s5');
+      expect(navigate).toHaveBeenCalledWith(['/training/today'], {
+        queryParams: { sessionId: 'own-copy' },
+      });
+    });
+
+    it('starts one at a time: the others wait while one is starting', async () => {
+      const answer = new Subject<OwnWorkoutView>();
+      const { host, ownApi, settle } = await render(
+        {
+          getMyTrainingProgram: noProgram(),
+          getSelfProfile: trainee(),
+          getMyWorkoutHistory: traineeHistory(),
+        },
+        fakeClientAccess(),
+        '/',
+        { start: vi.fn(() => answer) },
+      );
+      const navigate = navigation();
+      const starts = () => [...host.querySelectorAll<HTMLButtonElement>('button[data-start-from]')];
+      const startNew = () => host.querySelector<HTMLButtonElement>('button[data-start-own]')!;
+
+      starts()[0].click();
+      await settle();
+
+      expect(starts()[0].getAttribute('aria-disabled')).toBe('true');
+      expect(starts()[0].classList).toContain('tb-button--loading');
+      expect(starts()[1].disabled).toBe(true);
+      expect(startNew().disabled).toBe(true);
+      expect(ownApi.start).toHaveBeenCalledWith('own-0');
+
+      answer.next(ownWorkout({ workoutExecutionId: 'own-copy' }));
+      answer.complete();
+      await settle();
+
+      expect(ownApi.start).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledWith(['/training/today'], {
+        queryParams: { sessionId: 'own-copy' },
+      });
+      expect(starts()[0].getAttribute('aria-disabled')).toBeNull();
+      expect(starts()[1].disabled).toBe(false);
+      expect(startNew().disabled).toBe(false);
+    });
+
+    it('starts one workout when two starts are pressed before the page redraws', async () => {
+      const { host, ownApi, settle } = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: trainee(),
+        getMyWorkoutHistory: traineeHistory(),
+      });
+      const navigate = navigation();
+
+      host.querySelector<HTMLButtonElement>('button[data-start-from]')!.click();
+      host.querySelector<HTMLButtonElement>('button[data-start-own]')!.click();
+      await settle();
+
+      // The second press neither starts another nor stops the first.
+      expect(ownApi.start).toHaveBeenCalledExactlyOnceWith('own-0');
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledWith(['/training/today'], {
+        queryParams: { sessionId: 'own-copy' },
+      });
+      expect(host.querySelector('.own-problem')).toBeNull();
+    });
+
+    it('says under the workout why it could not start from it, with Carry on when one is already going', async () => {
+      let refused = refusal(
+        'own_workout_in_progress',
+        'You have a workout you have not finished. Carry on with it, or finish it first.',
+      );
+      const { host, settle, textOf } = await render(
+        {
+          getMyTrainingProgram: noProgram(),
+          getSelfProfile: trainee(),
+          getMyWorkoutHistory: traineeHistory(),
+        },
+        fakeClientAccess(),
+        '/',
+        { start: vi.fn(() => throwError(() => refused)) },
+      );
+      const navigate = navigation();
+      const items = [...host.querySelectorAll('.history-item')];
+
+      items[1].querySelector<HTMLButtonElement>('button[data-start-from]')!.click();
+      await settle();
+
+      const problem = items[1].querySelector('.own-problem');
+      expect(problem?.querySelector('[role="alert"]')).not.toBeNull();
+      expect(textOf(problem?.querySelector('[role="alert"]'))).toBe(
+        'You have a workout you haven’t finished. Carry on with it, or finish it first.',
+      );
+      const carryOn = problem?.querySelector('a');
+      expect(textOf(carryOn)).toBe('Carry on');
+      expect(carryOn?.getAttribute('href')).toBe('/training/today');
+      expect(host.querySelectorAll('.own-problem')).toHaveLength(1);
+      expect(navigate).not.toHaveBeenCalled();
+      expect(
+        items[1].querySelector('button[data-start-from]')?.getAttribute('aria-disabled'),
+      ).toBeNull();
+
+      // Another reason, in the server's own words and with nothing to carry on, under its workout.
+      refused = refusal(
+        'own_workout_nothing_to_copy',
+        'None of that workout’s exercises is in the exercise pool now.',
+      );
+      items[0].querySelector<HTMLButtonElement>('button[data-start-from]')!.click();
+      await settle();
+
+      expect(items[1].querySelector('.own-problem')).toBeNull();
+      expect(textOf(items[0].querySelector('.own-problem [role="alert"]'))).toBe(
+        'None of that workout’s exercises is in the exercise pool now.',
+      );
+      expect(items[0].querySelector('.own-problem a')).toBeNull();
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('says under Start a workout why it could not start', async () => {
+      const { host, settle, textOf } = await render(
+        { getMyTrainingProgram: noProgram(), getSelfProfile: trainee() },
+        fakeClientAccess(),
+        '/',
+        {
+          start: vi.fn(() =>
+            throwError(() =>
+              refusal(
+                'own_workout_daily_limit',
+                'You have started 10 workouts today, the most one day holds. Start the next one tomorrow.',
+              ),
+            ),
+          ),
+        },
+      );
+      const navigate = navigation();
+
+      press(host, 'Start a workout');
+      await settle();
+
+      const problem = host.querySelector('app-empty-state + .own-problem');
+      expect(textOf(problem?.querySelector('[role="alert"]'))).toBe(
+        'You’ve started 10 workouts today, the most one day holds. Start the next one tomorrow.',
+      );
+      expect(problem?.querySelector('a')).toBeNull();
+      expect(host.querySelectorAll('.own-problem')).toHaveLength(1);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('names a workout of one’s own as such, never an empty program, with or without a program running', async () => {
+      const running = await render({
+        getMyWorkoutHistory: vi.fn(() => of(historyPage([ownItem()]))),
+      });
+      const meta = running.host.querySelector('.history-meta')!;
+      expect(running.spoken(meta)).toBe('12 of 12 sets, 4,250 kg lifted, 52 min, Your own workout');
+      expect(meta.querySelector('bdi')).toBeNull();
+      // One separator before each part after the first: none left dangling at the end.
+      expect(meta.querySelectorAll('[aria-hidden="true"]')).toHaveLength(3);
+      expect(meta.querySelectorAll('.tb-visually-hidden')).toHaveLength(3);
+      expect(running.textOf(running.host.querySelector('.history-top strong'))).toBe('Workout');
+      TestBed.resetTestingModule();
+
+      const alone = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: trainee(),
+        getMyWorkoutHistory: vi.fn(() => of(historyPage([ownItem({ durationSeconds: 0 })]))),
+      });
+      const own = alone.host.querySelector('.history-meta')!;
+      expect(alone.spoken(own)).toBe('12 of 12 sets, 4,250 kg lifted, Your own workout');
+      expect(own.querySelector('bdi')).toBeNull();
+      expect(own.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+    });
+
+    it('leaves no separator for a program’s workout whose program has no name', async () => {
+      const { host, spoken } = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: trainee(),
+        getMyWorkoutHistory: vi.fn(() => of(historyPage([historyItem({ programName: '' })]))),
+      });
+
+      const meta = host.querySelector('.history-meta')!;
+      expect(spoken(meta)).toBe('12 of 12 sets, 4,250 kg lifted, 52 min');
+      expect(meta.querySelector('bdi')).toBeNull();
+      expect(meta.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+    });
+
+    it('offers nothing of the kind beside a program, and never asks who reads the page', async () => {
+      const getSelfProfile = trainee();
+      const { host } = await render({ getSelfProfile });
+
+      expect(host.querySelector('.hero')).not.toBeNull();
+      expect(host.querySelectorAll('.history-item')).toHaveLength(2);
+      expect(host.querySelector('[data-start-own]')).toBeNull();
+      expect(host.querySelector('[data-start-from]')).toBeNull();
+      expect(getSelfProfile).not.toHaveBeenCalled();
+    });
+
+    it('says only No workouts yet when the profile cannot be read, with nothing to start', async () => {
+      const { host, read, textOf } = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 503 }))),
+      });
+
+      const empty = host.querySelector('app-empty-state')!;
+      expect(textOf(empty.querySelector('h2'))).toBe('No workouts yet');
+      expect(textOf(empty.querySelector('p'))).toBe('Your workouts will start here.');
+      expect(host.querySelector('[data-start-own]')).toBeNull();
+      expect(host.querySelector('[data-start-from]')).toBeNull();
+      expect(read()).not.toContain('Nothing assigned yet');
+      expect(read()).not.toContain('Your coach will put your program here.');
+      // Messaging is open in this plan, and still nothing offers to write to a coach.
+      expect(host.querySelector('a[href="/messages"]')).toBeNull();
+      // The finished workouts stand.
+      expect(host.querySelectorAll('.history-item')).toHaveLength(2);
+    });
+
+    it('asks again in another workspace, where a coach’s client finds nothing to start', async () => {
+      let selfDirected = true;
+      const getSelfProfile = vi.fn(() => of(finishedProfile({ selfDirected })));
+      const { host, read, settle, selectedTenantId } = await render({
+        getMyTrainingProgram: noProgram(),
+        getSelfProfile,
+      });
+      expect(host.querySelector('[data-start-own]')).not.toBeNull();
+      expect(host.querySelectorAll('[data-start-from]')).toHaveLength(2);
+
+      selfDirected = false;
+      selectedTenantId.set('tenant-2');
+      await settle();
+
+      expect(getSelfProfile).toHaveBeenCalledTimes(2);
+      expect(read()).toContain('Nothing assigned yet');
+      expect(host.querySelector('[data-start-own]')).toBeNull();
+      expect(host.querySelector('[data-start-from]')).toBeNull();
+    });
   });
 });

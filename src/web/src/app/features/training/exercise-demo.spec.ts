@@ -91,6 +91,19 @@ describe('ExerciseDemo', () => {
     expect(video.getAttribute('aria-label')).toBe('How to do Back squat');
   });
 
+  it('takes a thumb’s size when asked, as on the trainee’s picker (notes plan N9b3)', async () => {
+    const { fixture, host } = await render(['squat-video'], true);
+    const button = host.querySelector<HTMLButtonElement>('button.demo')!;
+    expect(button.classList.contains('touch')).toBe(false);
+
+    // Written as a bare attribute, as the picker writes it: `compact touch`.
+    fixture.componentRef.setInput('touch', '');
+    await settle(fixture);
+    expect(button.classList.contains('touch')).toBe(true);
+    expect(button.classList.contains('compact')).toBe(true);
+    expect(button.getAttribute('aria-label')).toBe('Watch the Back squat demo');
+  });
+
   it('switches between several demos, a picture among them', async () => {
     const grant = vi.fn((id: string) =>
       of(access(id, id === 'squat-photo' ? { kind: 'Image', contentType: 'image/jpeg' } : {})),

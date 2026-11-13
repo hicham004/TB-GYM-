@@ -6,15 +6,18 @@ import type {
 } from '../../core/api/generated';
 import type { Conversation } from '../messaging/messaging.models';
 import type { NutritionDay } from '../nutrition/nutrition.models';
+import { dayWithOwn, ownWorkout, trainingWeek } from '../../../testing/own-workout-day-fixtures';
 import { day, decision, TODAY, upcoming, workout } from '../../../testing/today-fixtures';
 import {
   checkInRow,
   coachMessage,
+  mapTrainingWeek,
   nutritionRow,
   type ReadState,
   sessionsAreClosed,
   sessionsRow,
   trainingCard,
+  weekDayDone,
 } from './today.models';
 
 describe('Today training card', () => {
@@ -177,6 +180,125 @@ describe('Today training card', () => {
     const outside = day([], false, 'NoEntitlement');
     expect(trainingCard(outside, upcoming(), true)).toEqual({ kind: 'hidden' });
     expect(trainingCard(outside, upcoming(), false)).toEqual({ kind: 'nothing-assigned' });
+  });
+});
+
+describe('Today and workouts of one’s own (notes plan N9b3, TRN-033)', () => {
+  const nothingAssigned = () =>
+    upcoming({
+      hasAssignedProgram: false,
+      todayCoverage: { activeBlock: null, nextBlockStartDate: null },
+    });
+
+  it('carries on a workout of one’s own not finished, with what is logged and the day it was started', () => {
+    const own = ownWorkout();
+    expect(trainingCard(dayWithOwn(own), nothingAssigned(), false)).toEqual({
+      kind: 'own-in-progress',
+      workout: own,
+      summary: { exercises: 1, sets: 2, setsLogged: 1 },
+      startedOn: TODAY,
+    });
+
+    // Started on an earlier day and still empty: the house's day it was started on, nothing to count.
+    const older = ownWorkout({ date: '2026-09-18', exercises: [] });
+    expect(trainingCard(dayWithOwn(older), nothingAssigned(), false)).toEqual({
+      kind: 'own-in-progress',
+      workout: older,
+      summary: { exercises: 0, sets: 0, setsLogged: 0 },
+      startedOn: '2026-09-18',
+    });
+  });
+
+  it('puts a workout of one’s own first: before an earlier unfinished session and today’s', () => {
+    const earlier = workout({
+      sessionId: 'session-a',
+      name: 'Lower A',
+      status: 'InProgress',
+      workoutExecutionId: 'x',
+    });
+    const behindEarlier = trainingCard(
+      dayWithOwn(ownWorkout(), [workout()]),
+      upcoming({
+        unfinishedWorkouts: [{ date: '2026-09-19', workout: earlier, hasMoreNotes: false }],
+      }),
+      false,
+    );
+    expect(behindEarlier.kind).toBe('own-in-progress');
+    expect(
+      behindEarlier.kind === 'own-in-progress' && behindEarlier.workout.workoutExecutionId,
+    ).toBe('own-1');
+
+    expect(trainingCard(dayWithOwn(ownWorkout(), [workout()]), upcoming(), false)).toMatchObject({
+      kind: 'own-in-progress',
+      startedOn: TODAY,
+    });
+    const startedToday = workout({ status: 'InProgress', workoutExecutionId: 'execution-1' });
+    expect(trainingCard(dayWithOwn(ownWorkout(), [startedToday]), upcoming(), false).kind).toBe(
+      'own-in-progress',
+    );
+  });
+
+  it('passes over a workout of one’s own already finished, and a read that carries none', () => {
+    const finished = ownWorkout({ status: 'Completed', completedAtUtc: '2026-09-20T07:10:00Z' });
+    expect(trainingCard(dayWithOwn(finished, [workout()]), upcoming(), false)).toMatchObject({
+      kind: 'scheduled',
+      workout: { sessionId: 'session-b' },
+    });
+    expect(trainingCard(dayWithOwn(finished), nothingAssigned(), false)).toEqual({
+      kind: 'nothing-assigned',
+    });
+    expect(trainingCard(dayWithOwn(null, [workout()]), upcoming(), false).kind).toBe('scheduled');
+    // A read from before workouts of one's own has no `ownWorkout` at all.
+    expect(trainingCard(day(), nothingAssigned(), false)).toEqual({ kind: 'nothing-assigned' });
+  });
+
+  it('still says why while training is closed, whatever the read carries', () => {
+    const closed = { ...dayWithOwn(ownWorkout()), isAllowed: false, accessReason: 'Paused' };
+    expect(trainingCard(closed, upcoming(), false)).toEqual({
+      kind: 'access-closed',
+      reason: 'Paused',
+    });
+  });
+
+  it('reads each day’s workouts of one’s own finished as a number, and none from a read without them', () => {
+    const week = mapTrainingWeek({
+      ...trainingWeek(),
+      days: [
+        { date: '2026-09-14', scheduled: '1', completed: '1', ownCompleted: '2' },
+        { date: '2026-09-15', scheduled: 0, completed: 0, ownCompleted: 1 },
+        { date: '2026-09-16', scheduled: 1, completed: 0 },
+      ],
+    });
+
+    expect(week).toEqual({
+      isAllowed: true,
+      accessReason: 'Granted',
+      localDate: TODAY,
+      weekStart: '2026-09-14',
+      days: [
+        { date: '2026-09-14', scheduled: 1, completed: 1, ownCompleted: 2 },
+        { date: '2026-09-15', scheduled: 0, completed: 0, ownCompleted: 1 },
+        { date: '2026-09-16', scheduled: 1, completed: 0, ownCompleted: 0 },
+      ],
+    });
+  });
+
+  it('calls a day done by its program’s sessions when it has any, and by a workout of one’s own otherwise', () => {
+    const counts = (scheduled: number, completed: number, ownCompleted: number) => ({
+      date: TODAY,
+      scheduled,
+      completed,
+      ownCompleted,
+    });
+
+    expect(weekDayDone(counts(2, 2, 0))).toBe(true);
+    expect(weekDayDone(counts(2, 1, 0))).toBe(false);
+    // A session still to do is not done by a workout of one's own beside it.
+    expect(weekDayDone(counts(1, 0, 3))).toBe(false);
+    expect(weekDayDone(counts(1, 1, 1))).toBe(true);
+    expect(weekDayDone(counts(0, 0, 1))).toBe(true);
+    expect(weekDayDone(counts(0, 0, 2))).toBe(true);
+    expect(weekDayDone(counts(0, 0, 0))).toBe(false);
   });
 });
 

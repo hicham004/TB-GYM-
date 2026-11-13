@@ -30,6 +30,8 @@ import { UiSheet } from '../../ui/sheet';
 import { Skeleton } from '../../ui/skeleton';
 import type { ShareFact } from '../share-cards/share-card.models';
 import { ShareSheet, shareSheetTitle } from '../share-cards/share-sheet';
+import { OwnWorkoutApi } from './own-workout-api';
+import { ownRefusal, startRefusalWords } from './own-workout.models';
 import { trainingReadAccessLabel } from './training-read.models';
 import {
   focusWeek,
@@ -71,10 +73,15 @@ const HISTORY_PREVIEW = 4;
     UiConfirm,
   ],
   templateUrl: './training-program.html',
-  styleUrls: ['./training-program.scss', './training-program-lists.scss'],
+  styleUrls: [
+    './training-program.scss',
+    './training-program-lists.scss',
+    './training-program-own.scss',
+  ],
 })
 export class TrainingProgram {
   private readonly api = inject(ApiClient);
+  private readonly ownApi = inject(OwnWorkoutApi);
   private readonly access = inject(ClientAccessStore);
   private readonly tenants = inject(TenantStore);
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
@@ -148,6 +155,18 @@ export class TrainingProgram {
   protected readonly doItNowMessage = signal('');
   protected readonly doItNowConfirm = $localize`Start workout`;
   protected readonly doItNowCancel = $localize`Not now`;
+  /**
+   * With no program, who reads the page (CLI-026): a trainee of TB Gym's own space starts workouts of
+   * their own here and from their history (notes plan N9b3); 'unknown' when the profile could not say.
+   */
+  protected readonly profile = signal<'trainee' | 'coached' | 'unknown' | null>(null);
+  /** The workout of one's own on its way to starting: 'new', or the finished one it starts from. */
+  protected readonly startingOwn = signal<string | null>(null);
+  protected readonly ownProblem = signal<{
+    readonly from: string;
+    readonly message: string;
+    readonly carryOn: boolean;
+  } | null>(null);
   protected readonly canShowMoreHistory = computed(
     () =>
       (!this.showAllHistory() && this.history().length > HISTORY_PREVIEW) ||
@@ -305,6 +324,10 @@ export class TrainingProgram {
         const read = mapTrainingProgram(
           await owner.wait(firstValueFrom(this.api.getMyTrainingProgram())),
         );
+        // With no program the page is the trainee's or a coach's client's: asked once, before it is drawn.
+        if (read.isAllowed && !read.program && this.profile() === null) {
+          this.profile.set(await owner.wait(this.readProfile()));
+        }
         this.read.set(read);
         this.openWeeks.set(new Set());
         this.followWeekLink();
@@ -314,6 +337,48 @@ export class TrainingProgram {
         }
       } finally {
         if (owner.current) this.loading.set(false);
+      }
+    });
+  }
+
+  private async readProfile(): Promise<'trainee' | 'coached' | 'unknown'> {
+    try {
+      const self = await firstValueFrom(this.api.getSelfProfile());
+      return self.selfDirected === true ? 'trainee' : 'coached';
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  /**
+   * A workout of one's own (TRN-033), empty or from a finished workout of the history, whose exercises
+   * still in the pool come in their order with empty sets; the player opens on it. A refusal is said
+   * where it was asked, with Carry on when one is already in progress.
+   */
+  protected async startOwn(fromWorkoutId: string | null): Promise<void> {
+    // Asked before the lane is taken, since a second press would otherwise cancel the first start; the
+    // action's first line runs at once, in the same call, so no press slips in between.
+    if (this.startingOwn() !== null) return;
+    const from = fromWorkoutId ?? 'new';
+    return this.scope.run('start-own', async (owner) => {
+      this.startingOwn.set(from);
+      this.ownProblem.set(null);
+      try {
+        await owner.wait(this.csrf.refresh());
+        const view = await owner.wait(firstValueFrom(this.ownApi.start(fromWorkoutId)));
+        await this.router.navigate(['/training/today'], {
+          queryParams: { sessionId: view.workoutExecutionId },
+        });
+      } catch (error) {
+        if (owner.current) {
+          this.ownProblem.set({
+            from,
+            message: startRefusalWords(error),
+            carryOn: ownRefusal(error) === 'in-progress',
+          });
+        }
+      } finally {
+        if (owner.current) this.startingOwn.set(null);
       }
     });
   }
@@ -392,5 +457,8 @@ export class TrainingProgram {
     this.shareProblem.set(null);
     this.starting.set(null);
     this.startProblem.set(null);
+    this.profile.set(null);
+    this.startingOwn.set(null);
+    this.ownProblem.set(null);
   }
 }

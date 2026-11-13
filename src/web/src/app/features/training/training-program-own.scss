@@ -1,0 +1,13 @@
+// A trainee's own workouts on Training (notes plan N9b3, TRN-033): Start from this workout under a finished
+// one, and a refused start's reason with Carry on beside it.
+.history-start {
+  justify-self: start;
+  margin-block-start: var(--space-8);
+}
+.own-problem {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-block-start: var(--space-8);
+}

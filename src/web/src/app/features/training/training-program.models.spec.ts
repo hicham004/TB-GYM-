@@ -189,6 +189,30 @@ describe('mapWorkoutHistory', () => {
       mapWorkoutHistory(historyPage([historyItem({ durationSeconds: 40 })])).items[0].minutes,
     ).toBeNull();
   });
+
+  it('tells a workout of one’s own from a program’s, and reads an item with no flag as a program’s (TRN-033)', () => {
+    const items = mapWorkoutHistory(
+      historyPage([
+        historyItem({
+          workoutExecutionId: 'own-1',
+          name: 'Workout',
+          programName: '',
+          isOwnWorkout: true,
+        }),
+        historyItem({ workoutExecutionId: 'w-s3', isOwnWorkout: false }),
+        // A read from before workouts of one's own carries no flag.
+        historyItem({ workoutExecutionId: 'w-s1' }),
+      ]),
+    ).items;
+
+    expect(items.map((item) => [item.id, item.isOwn])).toEqual([
+      ['own-1', true],
+      ['w-s3', false],
+      ['w-s1', false],
+    ]);
+    expect(items[0]).toMatchObject({ name: 'Workout', programName: '', isOwn: true });
+    expect(items[1].programName).toBe('Strength Foundations');
+  });
 });
 
 describe('addDays', () => {
