@@ -141,19 +141,29 @@ internal sealed partial class TrainingApplicationService
                 row.StartDate, row.WeekNumber, row.TimeZoneId, clock.UtcNow,
                 RevealCounts(row.BlockId, row.RevealAllWeeks, row.StartDate, today, shownEarly), true).IsVisible)
             .ToArray();
-        var ids = visible.Select(row => row.Id).ToArray();
+        var ids = visible.Select(row => (Guid?)row.Id).ToArray();
         var completed = await dbContext.WorkoutExecutions.AsNoTracking()
             .Where(item => ids.Contains(item.TrainingSessionId) &&
                            item.Status == WorkoutExecutionStatus.Completed)
-            .Select(item => item.TrainingSessionId)
+            .Select(item => item.TrainingSessionId!.Value)
             .ToListAsync(cancellationToken);
         var completedIds = completed.ToHashSet();
+        // The client's workouts of their own finished this week, on the day each was started (TRN-033).
+        var ownDays = await dbContext.WorkoutExecutions.AsNoTracking()
+            .Where(item => item.ClientProfileId == client.Id &&
+                           item.TrainingSessionId == null &&
+                           item.Status == WorkoutExecutionStatus.Completed &&
+                           item.ScheduledDateSnapshot >= start &&
+                           item.ScheduledDateSnapshot < end)
+            .Select(item => item.ScheduledDateSnapshot)
+            .ToListAsync(cancellationToken);
         var days = Enumerable.Range(0, 7).Select(offset =>
         {
             var date = start.AddDays(offset);
             var sessions = visible.Where(row => row.ScheduledDate == date).ToArray();
             return new ClientTrainingWeekDayView(date, sessions.Length,
-                sessions.Count(row => completedIds.Contains(row.Id)));
+                sessions.Count(row => completedIds.Contains(row.Id)),
+                ownDays.Count(day => day == date));
         }).ToArray();
         return new(true, access.Reason.ToString(), today, start, days);
     }
@@ -173,6 +183,8 @@ internal sealed partial class TrainingApplicationService
             return new ClientTrainingDayResult(false, access.Reason.ToString(), today, []);
         }
 
+        // Carry on (TRN-033): the client's unfinished workout of their own, beside the day's sessions.
+        var ownWorkout = await ReadUnfinishedOwnWorkoutAsync(client.Id, cancellationToken);
         var schedule = await (
             from session in dbContext.TrainingSessions.AsNoTracking()
             join week in dbContext.MesocycleWeeks.AsNoTracking()
@@ -192,10 +204,11 @@ internal sealed partial class TrainingApplicationService
             .ToListAsync(cancellationToken);
         if (schedule.Count == 0)
         {
-            return new ClientTrainingDayResult(true, access.Reason.ToString(), today, []);
+            return new ClientTrainingDayResult(true, access.Reason.ToString(), today, [], ownWorkout);
         }
 
         var sessionIds = schedule.Select(item => item.SessionId).ToArray();
+        var startedSessionIds = sessionIds.Select(item => (Guid?)item).ToArray();
         var sessions = await dbContext.TrainingSessions.AsNoTracking()
             .Where(item => sessionIds.Contains(item.Id))
             .Include(item => item.Exercises).ThenInclude(item => item.Sets)
@@ -208,12 +221,12 @@ internal sealed partial class TrainingApplicationService
             .Select(item => new ScheduledSession(item.MesocycleId, sessions[item.SessionId]))
             .ToArray();
         var executions = await dbContext.WorkoutExecutions.AsNoTracking()
-            .Where(item => sessionIds.Contains(item.TrainingSessionId))
+            .Where(item => startedSessionIds.Contains(item.TrainingSessionId))
             .Include(item => item.Exercises).ThenInclude(item => item.Sets)
             .Include(item => item.Exercises).ThenInclude(item => item.ApprovedAlternatives)
             .Include(item => item.Exercises).ThenInclude(item => item.Media)
             .AsSplitQuery()
-            .ToDictionaryAsync(item => item.TrainingSessionId, cancellationToken);
+            .ToDictionaryAsync(item => item.TrainingSessionId!.Value, cancellationToken);
         var executionIds = executions.Values.Select(item => item.Id).ToArray();
         var notes = await dbContext.WorkoutNotes.AsNoTracking()
             .Where(item => executionIds.Contains(item.WorkoutExecutionId))
@@ -251,7 +264,7 @@ internal sealed partial class TrainingApplicationService
                     previous,
                     weightNotes);
         }).ToArray();
-        return new ClientTrainingDayResult(true, access.Reason.ToString(), today, workouts);
+        return new ClientTrainingDayResult(true, access.Reason.ToString(), today, workouts, ownWorkout);
     }
 
     public async Task<TrainingCommandResult> StartWorkoutAsync(
@@ -464,7 +477,13 @@ internal sealed partial class TrainingApplicationService
             return refusal;
         }
 
-        var mesocycle = await LoadMesocycleBySessionAsync(execution.TrainingSessionId, cancellationToken);
+        // A workout of one's own finishes alone (TRN-033): no program or session marks it done.
+        if (execution.TrainingSessionId is not { } sessionId)
+        {
+            return await CompleteOwnWorkoutAsync(execution, request.Version, cancellationToken);
+        }
+
+        var mesocycle = await LoadMesocycleBySessionAsync(sessionId, cancellationToken);
         if (mesocycle is null)
         {
             return Conflict("workout_state_conflict", "The workout session is unavailable.");
@@ -475,7 +494,7 @@ internal sealed partial class TrainingApplicationService
             dbContext.Entry(execution).Property(item => item.Version).OriginalValue = request.Version;
             execution.Complete(clock.UtcNow);
             var mesocycleCompleted = mesocycle.MarkSessionCompleted(
-                execution.TrainingSessionId,
+                sessionId,
                 clock.UtcNow);
             if (mesocycleCompleted)
             {
@@ -561,6 +580,12 @@ internal sealed partial class TrainingApplicationService
             return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
         }
 
+        // A workout of one's own is the client's own record (TRN-033): the house's staff never write in it.
+        if (authorRole == WorkoutNoteAuthorRole.Coach && execution.IsOwn)
+        {
+            return Conflict("own_workout_staff_note", "Only the client writes notes on a workout of their own.");
+        }
+
         // Staff write on the workout only while they may read it (audit BEA-8): the same shared access
         // decision as the coach's workout page, so a paused or blocked client's workout takes no note.
         if (authorRole == WorkoutNoteAuthorRole.Coach &&
@@ -593,6 +618,12 @@ internal sealed partial class TrainingApplicationService
         {
             return Invalid("note", exception.PersonMessage());
         }
+        catch (DbUpdateException exception) when (
+            request.ExercisePerformanceId is not null && IsForeignKeyViolation(exception))
+        {
+            // The exercise left a workout of one's own between the read and this write (TRN-033).
+            return Invalid("exercisePerformanceId", "The exercise does not belong to this workout.");
+        }
     }
 
     /// <summary>
@@ -604,6 +635,13 @@ internal sealed partial class TrainingApplicationService
         WorkoutNote note,
         CancellationToken cancellationToken)
     {
+        // A workout of one's own names no program or session for a notice to open (TRN-033), and only its client
+        // writes in it: a note there tells nobody.
+        if (execution.MesocycleId is not { } mesocycleId || execution.TrainingSessionId is not { } sessionId)
+        {
+            return;
+        }
+
         var client = await dbContext.ClientProfiles.AsNoTracking()
             .Where(item => item.Id == execution.ClientProfileId)
             .Select(item => new { item.UserId, item.AssignedCoachUserId, item.IsSelfDirected })
@@ -629,8 +667,8 @@ internal sealed partial class TrainingApplicationService
             recipient,
             fromCoach,
             execution.ClientProfileId,
-            execution.MesocycleId,
-            execution.TrainingSessionId,
+            mesocycleId,
+            sessionId,
             execution.Id,
             note.Id,
             clock.UtcNow);
@@ -963,6 +1001,7 @@ internal sealed partial class TrainingApplicationService
             [],
             null);
 
+    /// <summary>A program's workout as the client reads it; a workout of one's own is an <c>OwnWorkoutView</c>.</summary>
     private static ClientWorkoutView ToClientWorkout(
         WorkoutExecution execution,
         IReadOnlyList<WorkoutNote> notes,
@@ -970,14 +1009,14 @@ internal sealed partial class TrainingApplicationService
         IReadOnlyDictionary<Guid, PreviousExercisePerformanceView> previous,
         IReadOnlyDictionary<Guid, ClientWeightNoteView> weightNotes) =>
         new(
-            execution.TrainingSessionId,
-            execution.MesocycleId,
+            execution.TrainingSessionId ?? throw new InvalidOperationException("A workout of one's own has no session."),
+            execution.MesocycleId ?? throw new InvalidOperationException("A workout of one's own has no program."),
             execution.Id,
             execution.SessionNameSnapshot,
             execution.SessionCoachNotesSnapshot,
             execution.Status,
             execution.Exercises.OrderBy(item => item.Position).Select(exercise => new ClientExerciseView(
-                exercise.ExercisePrescriptionId,
+                exercise.ExercisePrescriptionId ?? Guid.Empty,
                 exercise.Id,
                 exercise.PrescribedExerciseId,
                 exercise.PrescribedExerciseName,
@@ -992,7 +1031,9 @@ internal sealed partial class TrainingApplicationService
                 exercise.Media.OrderBy(item => item.DisplayOrder).Select(item => item.MediaAssetId).ToArray(),
                 previous.GetValueOrDefault(exercise.ActualExerciseId),
                 exercise.Sets.OrderBy(item => item.Position).Select(ToClientSet).ToArray(),
-                exercise.WasSubstituted ? null : weightNotes.GetValueOrDefault(exercise.ExercisePrescriptionId))).ToArray(),
+                exercise.WasSubstituted || exercise.ExercisePrescriptionId is not { } prescriptionId
+                    ? null
+                    : weightNotes.GetValueOrDefault(prescriptionId))).ToArray(),
             notes.Select(ToView).ToArray(),
             execution.Version,
             execution.StartedAtUtc,
@@ -1025,7 +1066,7 @@ internal sealed partial class TrainingApplicationService
 
     private static ClientSetView ToClientSet(WorkoutSetPerformance set) =>
         new(
-            set.SetPrescriptionId,
+            set.SetPrescriptionId ?? Guid.Empty,
             set.Id,
             set.Position,
             set.SetTypeSnapshot,

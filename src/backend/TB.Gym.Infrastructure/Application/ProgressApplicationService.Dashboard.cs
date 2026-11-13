@@ -414,7 +414,7 @@ internal sealed partial class ProgressApplicationService
                 on new { week.TenantId, Id = week.MesocycleId }
                 equals new { mesocycle.TenantId, mesocycle.Id }
             join execution in dbContext.WorkoutExecutions.AsNoTracking()
-                on new { session.TenantId, Id = session.Id }
+                on new { session.TenantId, Id = (Guid?)session.Id }
                 equals new { execution.TenantId, Id = execution.TrainingSessionId }
                 into executionGroup
             from execution in executionGroup.DefaultIfEmpty()

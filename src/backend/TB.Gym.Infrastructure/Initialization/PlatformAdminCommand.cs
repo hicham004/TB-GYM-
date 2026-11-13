@@ -259,6 +259,16 @@ public static class PlatformAdminCommand
             return 2;
         }
 
+        // A workout of one's own exists only in the house (TRN-033), and a workout is never deleted, so a client who
+        // logged one keeps the mark with the house: their own workouts never land in an ordinary coach's space.
+        if (await dbContext.WorkoutExecutions.IgnoreQueryFilters()
+                .AnyAsync(workout => workout.TenantId == houseId && workout.TrainingSessionId == null))
+        {
+            await output.WriteLineAsync(
+                $"{house.Name} ({house.Slug}) holds workouts its clients logged on their own and keeps its mark.");
+            return 2;
+        }
+
         // The mark goes, and the house's Free goes off sale with it, in one transaction: an ordinary space sells no plan
         // of the house's, and the name Free is its own again. Marking the space again puts Free back on sale.
         services.GetRequiredService<IMutableTenantContext>().SetTenant(houseId);

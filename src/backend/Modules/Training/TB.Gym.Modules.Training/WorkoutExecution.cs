@@ -39,11 +39,38 @@ public sealed class WorkoutExecution : TenantEntity
         }
     }
 
+    private WorkoutExecution(
+        Guid tenantId,
+        Guid clientProfileId,
+        DateOnly day,
+        DateTimeOffset now)
+        : base(tenantId)
+    {
+        if (clientProfileId == Guid.Empty)
+        {
+            throw new ArgumentException("A client id is required.");
+        }
+
+        ClientProfileId = clientProfileId;
+        ScheduledDateSnapshot = day;
+        SessionNameSnapshot = OwnWorkoutRule.Name;
+        Status = WorkoutExecutionStatus.InProgress;
+        StartedAtUtc = now;
+    }
+
     public Guid ClientProfileId { get; private set; }
 
-    public Guid MesocycleId { get; private set; }
+    /// <summary>The program the workout's session sits in; null on a workout of one's own (TRN-033).</summary>
+    public Guid? MesocycleId { get; private set; }
 
-    public Guid TrainingSessionId { get; private set; }
+    /// <summary>The session the workout was started from; null on a workout of one's own (TRN-033).</summary>
+    public Guid? TrainingSessionId { get; private set; }
+
+    /// <summary>
+    /// A workout of one's own (TRN-033, notes plan N9b2): a client of the house started it with no program behind it,
+    /// so nothing in it was prescribed. Its program and session are empty together, as a database check keeps them.
+    /// </summary>
+    public bool IsOwn => TrainingSessionId is null;
 
     public DateOnly ScheduledDateSnapshot { get; private set; }
 
@@ -70,6 +97,88 @@ public sealed class WorkoutExecution : TenantEntity
         TrainingSession session,
         DateTimeOffset now) =>
         new(tenantId, clientProfileId, mesocycleId, session, now);
+
+    /// <summary>
+    /// Starts a workout of one's own (TRN-033) on the house's day: no program, no session and no exercise yet, under
+    /// the rule's name, since nothing names it.
+    /// </summary>
+    public static WorkoutExecution StartOwn(
+        Guid tenantId,
+        Guid clientProfileId,
+        DateOnly day,
+        DateTimeOffset now) =>
+        new(tenantId, clientProfileId, day, now);
+
+    /// <summary>
+    /// Adds an exercise to a workout of one's own, after the others, with that many empty sets (TRN-033). The caller
+    /// has checked that it is in use in the house's pool. It is its own prescribed exercise, so no swap opens on it.
+    /// </summary>
+    public WorkoutExercisePerformance AddOwnExercise(Guid exerciseId, string exerciseName, int emptySets = 0)
+    {
+        EnsureOwnInProgress();
+        if (emptySets is < 0 or > OwnWorkoutRule.MaximumSetsPerExercise)
+        {
+            throw new ArgumentOutOfRangeException(nameof(emptySets), "An exercise holds at most 20 sets.");
+        }
+
+        if (exercises.Count >= OwnWorkoutRule.MaximumExercises)
+        {
+            throw new OwnWorkoutConflictException(
+                OwnWorkoutConflictException.LimitCode,
+                "A workout holds at most 40 exercises.");
+        }
+
+        var exercise = WorkoutExercisePerformance.CreateOwn(
+            TenantId,
+            Id,
+            exerciseId,
+            exerciseName,
+            exercises.Count == 0 ? 1 : exercises.Max(item => item.Position) + 1);
+        for (var count = 0; count < emptySets; count++)
+        {
+            exercise.AddOwnSet();
+        }
+
+        exercises.Add(exercise);
+        RegisterMutation();
+        return exercise;
+    }
+
+    /// <summary>Adds an empty set after an exercise's others, in a workout of one's own (TRN-033).</summary>
+    public WorkoutSetPerformance AddOwnSet(Guid exercisePerformanceId)
+    {
+        EnsureOwnInProgress();
+        var set = GetExercise(exercisePerformanceId).AddOwnSet();
+        RegisterMutation();
+        return set;
+    }
+
+    /// <summary>
+    /// Takes an exercise added by mistake out of a workout of one's own before it is finished, its sets with it
+    /// (TRN-033): the rows go, as nothing in them was finished. No row of a program's workout ever goes.
+    /// </summary>
+    public WorkoutExercisePerformance RemoveOwnExercise(Guid exercisePerformanceId)
+    {
+        EnsureOwnInProgress();
+        var exercise = GetExercise(exercisePerformanceId);
+        exercises.Remove(exercise);
+        RegisterMutation();
+        return exercise;
+    }
+
+    /// <summary>
+    /// Takes an exercise's last set out of a workout of one's own before it is finished (TRN-033). Only the last, so an
+    /// exercise's sets stay numbered 1, 2, 3 and line up with last time's (TRN-029).
+    /// </summary>
+    public WorkoutSetPerformance RemoveOwnSet(Guid setPerformanceId)
+    {
+        EnsureOwnInProgress();
+        var exercise = exercises.SingleOrDefault(item => item.Sets.Any(set => set.Id == setPerformanceId))
+            ?? throw new ArgumentException("The set performance does not belong to this workout.", nameof(setPerformanceId));
+        var set = exercise.RemoveLastOwnSet(setPerformanceId);
+        RegisterMutation();
+        return set;
+    }
 
     public void Complete(DateTimeOffset now)
     {
@@ -134,6 +243,17 @@ public sealed class WorkoutExecution : TenantEntity
             throw new InvalidOperationException("Completed workout history is immutable.");
         }
     }
+
+    private void EnsureOwnInProgress()
+    {
+        EnsureMutable();
+        if (!IsOwn)
+        {
+            throw new OwnWorkoutConflictException(
+                OwnWorkoutConflictException.NotOwnCode,
+                OwnWorkoutConflictException.NotOwnMessage);
+        }
+    }
 }
 
 public sealed class WorkoutExercisePerformance : TenantEntity
@@ -186,9 +306,33 @@ public sealed class WorkoutExercisePerformance : TenantEntity
         }
     }
 
+    private WorkoutExercisePerformance(
+        Guid tenantId,
+        Guid workoutExecutionId,
+        Guid exerciseId,
+        string exerciseName,
+        int position)
+        : base(tenantId)
+    {
+        if (workoutExecutionId == Guid.Empty || exerciseId == Guid.Empty || position < 1)
+        {
+            throw new ArgumentException("The workout, the exercise and a position are required.");
+        }
+
+        var name = TrainingText.Required(exerciseName, 160, nameof(exerciseName));
+        WorkoutExecutionId = workoutExecutionId;
+        PrescribedExerciseId = exerciseId;
+        PrescribedExerciseName = name;
+        ActualExerciseId = exerciseId;
+        ActualExerciseName = name;
+        Position = position;
+        ModificationPolicySnapshot = PrescriptionModificationPolicy.Locked;
+    }
+
     public Guid WorkoutExecutionId { get; private set; }
 
-    public Guid ExercisePrescriptionId { get; private set; }
+    /// <summary>The prescription it was started from; null on a workout of one's own, where nothing is prescribed.</summary>
+    public Guid? ExercisePrescriptionId { get; private set; }
 
     public Guid PrescribedExerciseId { get; private set; }
 
@@ -219,6 +363,49 @@ public sealed class WorkoutExercisePerformance : TenantEntity
         Guid workoutExecutionId,
         ExercisePrescription prescription) =>
         new(tenantId, workoutExecutionId, prescription);
+
+    /// <summary>
+    /// An exercise of a workout of one's own (TRN-033): its own prescribed exercise, locked, with no coach's notes, no
+    /// approved swap and no demo snapshot (its demos are the house pool's, MED-017).
+    /// </summary>
+    internal static WorkoutExercisePerformance CreateOwn(
+        Guid tenantId,
+        Guid workoutExecutionId,
+        Guid exerciseId,
+        string exerciseName,
+        int position) =>
+        new(tenantId, workoutExecutionId, exerciseId, exerciseName, position);
+
+    internal WorkoutSetPerformance AddOwnSet()
+    {
+        if (sets.Count >= OwnWorkoutRule.MaximumSetsPerExercise)
+        {
+            throw new OwnWorkoutConflictException(
+                OwnWorkoutConflictException.LimitCode,
+                "An exercise holds at most 20 sets.");
+        }
+
+        var set = WorkoutSetPerformance.CreateOwn(
+            TenantId,
+            Id,
+            sets.Count == 0 ? 1 : sets.Max(item => item.Position) + 1);
+        sets.Add(set);
+        return set;
+    }
+
+    internal WorkoutSetPerformance RemoveLastOwnSet(Guid setPerformanceId)
+    {
+        var set = sets.Single(item => item.Id == setPerformanceId);
+        if (set.Position != sets.Max(item => item.Position))
+        {
+            throw new OwnWorkoutConflictException(
+                OwnWorkoutConflictException.NotLastSetCode,
+                "Only an exercise's last set can be taken away.");
+        }
+
+        sets.Remove(set);
+        return set;
+    }
 
     /// <summary>
     /// Records which lift is done (TRN-010). A completed set belongs to the lift it was done as (TRN-012), so
@@ -354,9 +541,26 @@ public sealed class WorkoutSetPerformance : TenantEntity
         UnroundedRecommendedLoadSnapshot = prescription.UnroundedRecommendedLoad;
     }
 
+    private WorkoutSetPerformance(
+        Guid tenantId,
+        Guid workoutExercisePerformanceId,
+        int position)
+        : base(tenantId)
+    {
+        if (workoutExercisePerformanceId == Guid.Empty || position < 1)
+        {
+            throw new ArgumentException("The exercise and a position are required.");
+        }
+
+        WorkoutExercisePerformanceId = workoutExercisePerformanceId;
+        Position = position;
+        SetTypeSnapshot = TrainingSetType.Normal;
+    }
+
     public Guid WorkoutExercisePerformanceId { get; private set; }
 
-    public Guid SetPrescriptionId { get; private set; }
+    /// <summary>The prescription it was started from; null on a workout of one's own, where nothing is prescribed.</summary>
+    public Guid? SetPrescriptionId { get; private set; }
 
     public int Position { get; private set; }
 
@@ -407,6 +611,16 @@ public sealed class WorkoutSetPerformance : TenantEntity
         Guid workoutExercisePerformanceId,
         SetPrescription prescription) =>
         new(tenantId, workoutExercisePerformanceId, prescription);
+
+    /// <summary>
+    /// An empty set of a workout of one's own (TRN-033): an ordinary set with nothing prescribed, no weight choice and
+    /// no calculation, so it holds only what is typed into it.
+    /// </summary>
+    internal static WorkoutSetPerformance CreateOwn(
+        Guid tenantId,
+        Guid workoutExercisePerformanceId,
+        int position) =>
+        new(tenantId, workoutExercisePerformanceId, position);
 
     internal void RecordActual(
         int? repetitions,

@@ -272,7 +272,8 @@ marked as the house, TB Gym's own space, the one a person signs up into with no 
 workspace: its trainees are client profiles under the same tenant filter, write guard and feature access as any
 coach's clients. Only the `platform-admin house set <slug or id>` and `house clear` commands write the mark; a
 unique index refuses a second one, and the database refuses to clear it while the house holds a sign-up or a
-self-directed trainee. Marking a space for the first time opens nothing; a space cleared and marked again keeps
+self-directed trainee; the command also refuses while it holds a plan of the house's tiers (SUB-019) or a workout
+of one's own (TRN-033). Marking a space for the first time opens nothing; a space cleared and marked again keeps
 the settings it was given before (CLI-023's rows are never deleted), and the command says whether sign-up is open.
 
 **CLI-023** The house's settings are data the platform admin enters in the app (`/api/platform-admin/house`), never
@@ -760,7 +761,8 @@ and later weeks start every seven days. Tenant week-start remains a display pref
 
 **TRN-008** Starting a workout creates one execution snapshot per assigned session/client.
 Completion records server time and becomes immutable in Phase 3. A future correction must be
-a separately authorized/audited operation; direct update or delete is prohibited.
+a separately authorized/audited operation; direct update or delete is prohibited. A workout of one's
+own (TRN-033) has no session: a client holds at most one unfinished at a time instead.
 
 **TRN-009** Template/prescription coach notes are snapshotted separately from append-only
 workout notes. Workout notes carry author user, Coach/Client role, optional exercise-performance
@@ -789,7 +791,10 @@ trainee's own workouts, and a program needs another plan.
 
 **TRN-012** Starting execution snapshots exercise identity and every prescribed set. Actual
 reps/load/exertion/completion/note are separate fields. Completed execution and performance
-rows cannot be rewritten even when templates or future prescriptions change.
+rows cannot be rewritten even when templates or future prescriptions change. A workout of one's own
+(TRN-033) snapshots no prescription: each exercise is its own prescribed one and its sets hold nothing
+prescribed. While it runs, an exercise added by mistake (with its sets) or an exercise's last set may be
+deleted: the only workout rows ever deleted, and never a row of a program's workout.
 
 **TRN-013** Planned and Active are derived from the mesocycle dates in its snapshotted time
 zone. Completed and Cancelled are explicit terminal states. Cancellation requires an audit
@@ -1037,6 +1042,30 @@ set's reps box empty and asks for the reps before ✓ (TRN-029), while the serve
 without reps, which STR-019 never counts. Database checks hold the shape, on the sets and on the workout's
 snapshot.
 
+**TRN-033** A workout of one's own (notes plan N9b2; decision 26 as the owner changed it on 11 Nov 2026, 28 and 32;
+ADR 0007). A current client of the house (ADR 0041) with Training open, whatever they are on, starts a workout with
+no program behind it (`POST /api/training/me/workouts`): empty, or from one of their finished workouts, whose
+exercises still in the pool come in their order, each with as many empty sets as were done there (at least one);
+nothing is carried in as prescribed, and a workout with no exercise left to copy is refused. Elsewhere the route
+answers 404, and with Training closed 403. One unfinished at a time (a partial unique index; a second start answers
+409 `own_workout_in_progress`) and at most ten started on one of the house's days (409 `own_workout_daily_limit`),
+and it never closes by itself. While it runs the client adds exercises in use in the house's pool (LIB-006), each its own prescribed one,
+locked, with its demos read from the pool (MED-017), adds empty sets, logs them through the set route (typed
+weights only, each with its unit, TRN-016), and takes away an exercise with its sets, unless a note names it, or an
+exercise's last set; at most 40 exercises and 20 sets an exercise (TRN-024's limits). Every write asks Training
+again and the workout's version. It is finished through the finish route, even with nothing logged, and is then
+as frozen as a program's workout (TRN-012). Its name is "Workout" and its day the house's day it started. It counts
+in history, records (TRN-019, the coach's read and Coach Today's too), last time (TRN-029), the finish summary a
+share card reads (TRN-030), the coach's exercise history (STR-016, whose estimates read its sets), the Clients row's
+last activity and the client page's last workout; never in a program's reads, Progress's planned sessions or where a
+lift stands (STR-019), so no weight is ever worked out from it. Today's read carries the unfinished one; the week's
+read counts each finished one on the day it started. It is the client's own record: the house's staff never write a
+note in it, the client's notes on it tell nobody, and the coach's workout read answers 404 for it. The other routes
+on it answer 404 for another client's workout, or a row not in it, and 409 `own_workout_only` for a program's
+workout. Database checks keep its program and session empty together, its exercises their own and its sets with
+nothing prescribed, and the workout triggers refuse any other shape. The house keeps its mark while it holds one
+(`platform-admin house clear` refuses), so a workout of one's own never sits in an ordinary coach's space.
+
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
 **STR-001** A max observation belongs to tenant, client, exercise, kind (tested 1RM, estimated
@@ -1264,7 +1293,8 @@ and says so; a set with no match last time keeps its own (i); a step past 2,000 
 where no set can step holds. Every answer names the rule and its version and the reason (with the workout
 of a (b) or (g) hold), and last time's sets whenever a finished workout was read. The coach's program read
 (TRN-022), mesocycle read and logged workout read carry the answers, only while the coach's read is open
-(TRN-023); the client's reads never do. Nothing is written: the coach applies it (STR-020).
+(TRN-023); the client's reads never do. Nothing is written: the coach applies it (STR-020). A workout of one's
+own (TRN-033) is never read here: it asked no reps, and no weight is ever worked out from it.
 
 **STR-020** Applying a weight (`LastTimeStep` v1 applied, notes plan N6c; decision 21 of 5 Nov 2026, ADR
 0040). The coach applies where a lift stands (STR-019), never the app or the client: one lift, or every lift
@@ -2619,7 +2649,8 @@ access opens an exercise's media that is ready and linked to one of the house's 
 holding it, through the grant every demo uses, which is checked again on every content request, so a demo archived or
 deleted from the pool closes at once. Only the request's own workspace counts: under a coach's header a client of
 the house opens nothing of it. Nothing else changed: a coach's client opens exercise media only through a program or
-a workout of theirs that holds it (ADR 0011).
+a workout of theirs that holds it (ADR 0011). A workout of one's own (TRN-033) holds no demo of its own: it lists its
+exercises' pool demos, which open by this grant while the exercise is in use.
 
 **LIB-001** Recipe and exercise/video libraries are separate tenant-owned catalogs. Public or
 provider-sourced records, if later added, are copied/referenced under explicit licensing and

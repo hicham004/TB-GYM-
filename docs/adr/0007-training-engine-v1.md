@@ -60,6 +60,17 @@ Completed workouts remain in the client's dated read model for their scheduled l
 even when that completion also makes the mesocycle terminal. Actual load entry requires a
 unit; an unweighted prescription does not create an implicit kg/lb choice.
 
+Amended 13 Nov 2026 (notes plan N9b2, TRN-033): a client of the house may also log a workout of
+their own, from the house's exercise pool, in the same `WorkoutExecution` tables with no program,
+session or prescription behind the row. Those ids are empty together and only together (database
+checks and the workout triggers' insert checks), each exercise is its own prescribed one and locked,
+each set holds nothing prescribed, and one is unfinished at a time per client (a partial unique
+index). History, records and last time keep one source. While such a workout runs, an exercise added
+by mistake (with its sets) or an exercise's last set may be deleted, which the triggers allow for its
+rows alone; a program's workout never gains a deletable row, a workout row is never deleted, and a
+finished workout is frozen. Tables of its own were the other way, at the price of a second copy of
+every read and of the player.
+
 Strength max observations are append-only and distinguish tested 1RM, estimated 1RM, and
 coach working max, with date, unit, source, method key/version, and evidence reference. Every
 calculated lift receives a mesocycle working-max snapshot. Phase 3 deliberately performs no

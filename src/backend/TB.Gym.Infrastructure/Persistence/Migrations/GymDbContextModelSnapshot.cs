@@ -12206,7 +12206,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("MesocycleId")
+                    b.Property<Guid?>("MesocycleId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("MutationSequence")
@@ -12238,7 +12238,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("TrainingSessionId")
+                    b.Property<Guid?>("TrainingSessionId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
@@ -12264,11 +12264,17 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ClientProfileId", "ScheduledDateSnapshot");
 
+                    b.HasIndex(new[] { "TenantId", "ClientProfileId" }, "UX_WorkoutExecutions_OneOwnInProgress")
+                        .IsUnique()
+                        .HasFilter("\"TrainingSessionId\" IS NULL AND \"Status\" = 'InProgress'");
+
                     b.ToTable("WorkoutExecutions", "training", t =>
                         {
                             t.HasCheckConstraint("CK_WorkoutExecutions_CompletedState", "\"Status\" <> 'Completed' OR \"CompletedAtUtc\" IS NOT NULL");
 
                             t.HasCheckConstraint("CK_WorkoutExecutions_MutationSequence", "\"MutationSequence\" >= 0");
+
+                            t.HasCheckConstraint("CK_WorkoutExecutions_ProgramOrOwn", "(\"MesocycleId\" IS NOT NULL AND \"TrainingSessionId\" IS NOT NULL) OR (\"MesocycleId\" IS NULL AND \"TrainingSessionId\" IS NULL AND \"SessionCoachNotesSnapshot\" IS NULL AND \"PrescriptionVersionSnapshot\" = 0)");
                         });
                 });
 
@@ -12400,7 +12406,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ExercisePrescriptionId")
+                    b.Property<Guid?>("ExercisePrescriptionId")
                         .HasColumnType("uuid");
 
                     b.Property<bool>("IsMainLiftSnapshot")
@@ -12454,6 +12460,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("WorkoutExercisePerformances", "training", t =>
                         {
+                            t.HasCheckConstraint("CK_WorkoutExercisePerformances_OwnIsItsOwnPrescription", "\"ExercisePrescriptionId\" IS NOT NULL OR (NOT \"WasSubstituted\" AND \"ActualExerciseId\" = \"PrescribedExerciseId\" AND \"ModificationPolicySnapshot\" = 'Locked' AND NOT \"IsMainLiftSnapshot\" AND \"CoachNotesSnapshot\" IS NULL)");
+
                             t.HasCheckConstraint("CK_WorkoutExercisePerformances_Substitution", "(NOT \"WasSubstituted\" AND \"ActualExerciseId\" = \"PrescribedExerciseId\") OR (\"WasSubstituted\" AND \"ActualExerciseId\" <> \"PrescribedExerciseId\" AND \"ModificationPolicySnapshot\" = 'CoachApprovedSwap')");
                         });
                 });
@@ -12605,7 +12613,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<Guid>("SetPrescriptionId")
+                    b.Property<Guid?>("SetPrescriptionId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("SetTypeSnapshot")
@@ -12651,6 +12659,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_WorkoutSetPerformances_ActualRpe", "\"ActualRpe\" IS NULL OR (\"ActualRpe\" >= 5 AND \"ActualRpe\" <= 10 AND mod(\"ActualRpe\" * 2, 1) = 0)");
 
                             t.HasCheckConstraint("CK_WorkoutSetPerformances_LoadStep", "(\"LoadStrategySnapshot\" IS DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NULL) OR (\"LoadStrategySnapshot\" IS NOT DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NOT NULL AND \"PrescribedLoadStep\" > 0 AND \"PrescribedLoadStep\" <= 50 AND \"PrescribedLoadUnit\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_WorkoutSetPerformances_OwnHasNothingPrescribed", "\"SetPrescriptionId\" IS NOT NULL OR (\"PrescribedRepetitionsMinimum\" IS NULL AND \"PrescribedRepetitionsMaximum\" IS NULL AND \"PrescribedLoad\" IS NULL AND \"PrescribedLoadUnit\" IS NULL AND \"LoadStrategySnapshot\" IS NULL AND \"PrescribedLoadStep\" IS NULL AND \"PrescribedTargetRpe\" IS NULL AND \"PrescribedRestSeconds\" IS NULL AND \"PrescribedTempo\" IS NULL AND \"CoachNotesSnapshot\" IS NULL AND \"CalculationStrategyKeySnapshot\" IS NULL AND \"CalculationStrategyVersionSnapshot\" IS NULL AND \"UnroundedRecommendedLoadSnapshot\" IS NULL)");
                         });
                 });
 
@@ -14999,15 +15009,13 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "MesocycleId")
                         .HasPrincipalKey("TenantId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TB.Gym.Modules.Training.TrainingSession", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "TrainingSessionId")
                         .HasPrincipalKey("TenantId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Training.WorkoutExerciseAlternativeSnapshot", b =>

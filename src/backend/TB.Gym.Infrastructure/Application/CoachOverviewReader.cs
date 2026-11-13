@@ -935,7 +935,7 @@ internal sealed class CoachOverviewReader(
                     on new { week.TenantId, Id = week.MesocycleId }
                     equals new { block.TenantId, block.Id }
                 join execution in dbContext.WorkoutExecutions.AsNoTracking()
-                    on new { session.TenantId, Id = session.Id }
+                    on new { session.TenantId, Id = (Guid?)session.Id }
                     equals new { execution.TenantId, Id = execution.TrainingSessionId }
                     into executions
                 from execution in executions.DefaultIfEmpty()

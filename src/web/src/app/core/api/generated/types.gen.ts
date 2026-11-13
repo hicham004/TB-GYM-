@@ -80,6 +80,11 @@ export type AddNutritionCustomFoodRequest = {
   dailyLogVersion: null | number | string;
 };
 
+export type AddOwnWorkoutExerciseRequest = {
+  exerciseId: string;
+  version: number | string;
+};
+
 export type AddRecipeVersionRequest = {
   instructions: string;
   servings: number | string;
@@ -1129,6 +1134,7 @@ export type ClientTrainingDayResult = {
   accessReason: string;
   localDate: string;
   workouts: Array<ClientWorkoutView>;
+  ownWorkout?: null | OwnWorkoutView;
 };
 
 export type ClientTrainingProgramView = {
@@ -1160,6 +1166,7 @@ export type ClientTrainingWeekDayView = {
   date: string;
   scheduled: number | string;
   completed: number | string;
+  ownCompleted?: number | string;
 };
 
 export type ClientTrainingWeekView = {
@@ -1193,6 +1200,7 @@ export type ClientWorkoutHistoryItemView = {
   volume: Array<WorkoutVolumeView>;
   personalRecords: Array<WorkoutPersonalRecordView>;
   notes: Array<WorkoutNoteView>;
+  isOwnWorkout?: boolean;
 };
 
 export type ClientWorkoutHistoryPage = {
@@ -3322,6 +3330,44 @@ export type OwnSessionView = {
   reason: null | string;
 };
 
+export type OwnWorkoutChangeRequest = {
+  version: number | string;
+};
+
+export type OwnWorkoutExerciseView = {
+  performanceId: string;
+  exerciseId: string;
+  exerciseName: string;
+  position: number | string;
+  mediaAssetIds: Array<string>;
+  previousPerformance: null | PreviousExercisePerformanceView;
+  sets: Array<OwnWorkoutSetView>;
+};
+
+export type OwnWorkoutSetView = {
+  performanceId: string;
+  position: number | string;
+  actualRepetitions: null | number | string;
+  actualLoad: null | number | string;
+  actualLoadUnit: null | TrainingLoadUnit;
+  actualRpe: null | number | string;
+  actualRir: null | number | string;
+  isCompleted: boolean;
+  clientNote: null | string;
+};
+
+export type OwnWorkoutView = {
+  workoutExecutionId: string;
+  name: string;
+  date: string;
+  status: WorkoutExecutionStatus;
+  startedAtUtc: string;
+  completedAtUtc: null | string;
+  version: number | string;
+  exercises: Array<OwnWorkoutExerciseView>;
+  notes: Array<WorkoutNoteView>;
+};
+
 export type PaymentInstructionsView = {
   whishNumber: null | string;
   supportEmail: null | string;
@@ -4448,6 +4494,10 @@ export type StartingWeightView = {
   origin: StartingWeightOrigin;
   version: number | string;
   corrections: Array<StartingWeightCorrectionView>;
+};
+
+export type StartOwnWorkoutRequest = {
+  fromWorkoutId?: null | string;
 };
 
 export type StepsBand = 'Sedentary' | 'LowActive' | 'SomewhatActive' | 'Active' | 'HighlyActive';
@@ -9371,6 +9421,44 @@ export type StartMyWorkoutResponses = {
 
 export type StartMyWorkoutResponse = StartMyWorkoutResponses[keyof StartMyWorkoutResponses];
 
+export type RemoveMyOwnWorkoutSetData = {
+  body: OwnWorkoutChangeRequest;
+  path: {
+    workoutExecutionId: string;
+    setPerformanceId: string;
+  };
+  query?: never;
+  url: '/api/training/me/workouts/{workoutExecutionId}/sets/{setPerformanceId}';
+};
+
+export type RemoveMyOwnWorkoutSetErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RemoveMyOwnWorkoutSetError =
+  RemoveMyOwnWorkoutSetErrors[keyof RemoveMyOwnWorkoutSetErrors];
+
+export type RemoveMyOwnWorkoutSetResponses = {
+  /**
+   * OK
+   */
+  200: OwnWorkoutView;
+};
+
+export type RemoveMyOwnWorkoutSetResponse =
+  RemoveMyOwnWorkoutSetResponses[keyof RemoveMyOwnWorkoutSetResponses];
+
 export type RecordMyTrainingSetData = {
   body: RecordSetActualRequest;
   path: {
@@ -9465,6 +9553,152 @@ export type CompleteMyWorkoutResponses = {
 
 export type CompleteMyWorkoutResponse =
   CompleteMyWorkoutResponses[keyof CompleteMyWorkoutResponses];
+
+export type StartMyOwnWorkoutData = {
+  body?: null | StartOwnWorkoutRequest;
+  path?: never;
+  query?: never;
+  url: '/api/training/me/workouts';
+};
+
+export type StartMyOwnWorkoutErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type StartMyOwnWorkoutError = StartMyOwnWorkoutErrors[keyof StartMyOwnWorkoutErrors];
+
+export type StartMyOwnWorkoutResponses = {
+  /**
+   * OK
+   */
+  200: OwnWorkoutView;
+};
+
+export type StartMyOwnWorkoutResponse =
+  StartMyOwnWorkoutResponses[keyof StartMyOwnWorkoutResponses];
+
+export type AddMyOwnWorkoutExerciseData = {
+  body: AddOwnWorkoutExerciseRequest;
+  path: {
+    workoutExecutionId: string;
+  };
+  query?: never;
+  url: '/api/training/me/workouts/{workoutExecutionId}/exercises';
+};
+
+export type AddMyOwnWorkoutExerciseErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type AddMyOwnWorkoutExerciseError =
+  AddMyOwnWorkoutExerciseErrors[keyof AddMyOwnWorkoutExerciseErrors];
+
+export type AddMyOwnWorkoutExerciseResponses = {
+  /**
+   * OK
+   */
+  200: OwnWorkoutView;
+};
+
+export type AddMyOwnWorkoutExerciseResponse =
+  AddMyOwnWorkoutExerciseResponses[keyof AddMyOwnWorkoutExerciseResponses];
+
+export type RemoveMyOwnWorkoutExerciseData = {
+  body: OwnWorkoutChangeRequest;
+  path: {
+    workoutExecutionId: string;
+    exercisePerformanceId: string;
+  };
+  query?: never;
+  url: '/api/training/me/workouts/{workoutExecutionId}/exercises/{exercisePerformanceId}';
+};
+
+export type RemoveMyOwnWorkoutExerciseErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type RemoveMyOwnWorkoutExerciseError =
+  RemoveMyOwnWorkoutExerciseErrors[keyof RemoveMyOwnWorkoutExerciseErrors];
+
+export type RemoveMyOwnWorkoutExerciseResponses = {
+  /**
+   * OK
+   */
+  200: OwnWorkoutView;
+};
+
+export type RemoveMyOwnWorkoutExerciseResponse =
+  RemoveMyOwnWorkoutExerciseResponses[keyof RemoveMyOwnWorkoutExerciseResponses];
+
+export type AddMyOwnWorkoutSetData = {
+  body: OwnWorkoutChangeRequest;
+  path: {
+    workoutExecutionId: string;
+    exercisePerformanceId: string;
+  };
+  query?: never;
+  url: '/api/training/me/workouts/{workoutExecutionId}/exercises/{exercisePerformanceId}/sets';
+};
+
+export type AddMyOwnWorkoutSetErrors = {
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Conflict
+   */
+  409: ProblemDetails;
+};
+
+export type AddMyOwnWorkoutSetError = AddMyOwnWorkoutSetErrors[keyof AddMyOwnWorkoutSetErrors];
+
+export type AddMyOwnWorkoutSetResponses = {
+  /**
+   * OK
+   */
+  200: OwnWorkoutView;
+};
+
+export type AddMyOwnWorkoutSetResponse =
+  AddMyOwnWorkoutSetResponses[keyof AddMyOwnWorkoutSetResponses];
 
 export type AddWorkoutNoteData = {
   body: AddWorkoutNoteRequest;

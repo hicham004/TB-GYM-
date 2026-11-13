@@ -431,6 +431,10 @@ public sealed partial class GymDbContext
             entity.Property(item => item.MutationSequence);
             entity.HasIndex(item => new { item.TenantId, item.TrainingSessionId }).IsUnique();
             entity.HasIndex(item => new { item.TenantId, item.ClientProfileId, item.ScheduledDateSnapshot });
+            // One unfinished workout of one's own at a time (TRN-033), so two starts at once leave one.
+            entity.HasIndex(item => new { item.TenantId, item.ClientProfileId }, "UX_WorkoutExecutions_OneOwnInProgress")
+                .IsUnique()
+                .HasFilter("\"TrainingSessionId\" IS NULL AND \"Status\" = 'InProgress'");
             entity.HasOne<ClientProfile>()
                 .WithMany()
                 .HasForeignKey(item => new { item.TenantId, item.ClientProfileId })
@@ -457,6 +461,11 @@ public sealed partial class GymDbContext
                     "CK_WorkoutExecutions_CompletedState",
                     "\"Status\" <> 'Completed' OR \"CompletedAtUtc\" IS NOT NULL");
                 table.HasCheckConstraint("CK_WorkoutExecutions_MutationSequence", "\"MutationSequence\" >= 0");
+                // A program's workout names its program and session; a workout of one's own (TRN-033) names neither,
+                // and carries no coach's notes or prescription version, since nothing in it was prescribed.
+                table.HasCheckConstraint(
+                    "CK_WorkoutExecutions_ProgramOrOwn",
+                    "(\"MesocycleId\" IS NOT NULL AND \"TrainingSessionId\" IS NOT NULL) OR (\"MesocycleId\" IS NULL AND \"TrainingSessionId\" IS NULL AND \"SessionCoachNotesSnapshot\" IS NULL AND \"PrescriptionVersionSnapshot\" = 0)");
             });
             ConfigureTenantEntity(entity);
         });
@@ -486,9 +495,17 @@ public sealed partial class GymDbContext
                 .HasForeignKey(item => new { item.TenantId, item.WorkoutExercisePerformanceId })
                 .HasPrincipalKey(item => new { item.TenantId, item.Id })
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.ToTable(table => table.HasCheckConstraint(
-                "CK_WorkoutExercisePerformances_Substitution",
-                "(NOT \"WasSubstituted\" AND \"ActualExerciseId\" = \"PrescribedExerciseId\") OR (\"WasSubstituted\" AND \"ActualExerciseId\" <> \"PrescribedExerciseId\" AND \"ModificationPolicySnapshot\" = 'CoachApprovedSwap')"));
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_WorkoutExercisePerformances_Substitution",
+                    "(NOT \"WasSubstituted\" AND \"ActualExerciseId\" = \"PrescribedExerciseId\") OR (\"WasSubstituted\" AND \"ActualExerciseId\" <> \"PrescribedExerciseId\" AND \"ModificationPolicySnapshot\" = 'CoachApprovedSwap')");
+                // An exercise of a workout of one's own (TRN-033) is its own prescribed one, locked, with nothing a
+                // coach wrote.
+                table.HasCheckConstraint(
+                    "CK_WorkoutExercisePerformances_OwnIsItsOwnPrescription",
+                    "\"ExercisePrescriptionId\" IS NOT NULL OR (NOT \"WasSubstituted\" AND \"ActualExerciseId\" = \"PrescribedExerciseId\" AND \"ModificationPolicySnapshot\" = 'Locked' AND NOT \"IsMainLiftSnapshot\" AND \"CoachNotesSnapshot\" IS NULL)");
+            });
             ConfigureTenantEntity(entity);
         });
 
@@ -546,6 +563,10 @@ public sealed partial class GymDbContext
                 table.HasCheckConstraint(
                     "CK_WorkoutSetPerformances_LoadStep",
                     "(\"LoadStrategySnapshot\" IS DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NULL) OR (\"LoadStrategySnapshot\" IS NOT DISTINCT FROM 'LastTimeStep' AND \"PrescribedLoadStep\" IS NOT NULL AND \"PrescribedLoadStep\" > 0 AND \"PrescribedLoadStep\" <= 50 AND \"PrescribedLoadUnit\" IS NOT NULL)");
+                // A set of a workout of one's own (TRN-033) holds typed weights only: nothing prescribed or worked out.
+                table.HasCheckConstraint(
+                    "CK_WorkoutSetPerformances_OwnHasNothingPrescribed",
+                    "\"SetPrescriptionId\" IS NOT NULL OR (\"PrescribedRepetitionsMinimum\" IS NULL AND \"PrescribedRepetitionsMaximum\" IS NULL AND \"PrescribedLoad\" IS NULL AND \"PrescribedLoadUnit\" IS NULL AND \"LoadStrategySnapshot\" IS NULL AND \"PrescribedLoadStep\" IS NULL AND \"PrescribedTargetRpe\" IS NULL AND \"PrescribedRestSeconds\" IS NULL AND \"PrescribedTempo\" IS NULL AND \"CoachNotesSnapshot\" IS NULL AND \"CalculationStrategyKeySnapshot\" IS NULL AND \"CalculationStrategyVersionSnapshot\" IS NULL AND \"UnroundedRecommendedLoadSnapshot\" IS NULL)");
             });
             ConfigureTenantEntity(entity);
         });

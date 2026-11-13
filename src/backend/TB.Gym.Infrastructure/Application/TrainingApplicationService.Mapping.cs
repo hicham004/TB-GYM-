@@ -842,9 +842,10 @@ internal sealed partial class TrainingApplicationService
         TrainingMesocycle mesocycle,
         CancellationToken cancellationToken)
     {
+        // A program's workouts each name their session; the CHECK keeps a program and a session together.
         var executionIds = await dbContext.WorkoutExecutions.AsNoTracking()
-            .Where(item => item.MesocycleId == mesocycle.Id)
-            .ToDictionaryAsync(item => item.TrainingSessionId, item => item.Id, cancellationToken);
+            .Where(item => item.MesocycleId == mesocycle.Id && item.TrainingSessionId != null)
+            .ToDictionaryAsync(item => item.TrainingSessionId!.Value, item => item.Id, cancellationToken);
         var maxRows = await (
             from snapshot in dbContext.MesocycleWorkingMaxSnapshots.AsNoTracking()
             join exercise in dbContext.Exercises.AsNoTracking()

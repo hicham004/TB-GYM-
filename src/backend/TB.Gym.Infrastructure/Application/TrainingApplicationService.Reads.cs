@@ -70,7 +70,7 @@ internal sealed partial class TrainingApplicationService
         var candidates = await (
             from execution in dbContext.WorkoutExecutions.AsNoTracking()
             join session in dbContext.TrainingSessions.AsNoTracking()
-                on new { execution.TenantId, Id = execution.TrainingSessionId } equals new { session.TenantId, session.Id }
+                on new { execution.TenantId, Id = execution.TrainingSessionId } equals new { session.TenantId, Id = (Guid?)session.Id }
             join week in dbContext.MesocycleWeeks.AsNoTracking()
                 on new { session.TenantId, Id = session.MesocycleWeekId } equals new { week.TenantId, week.Id }
             join block in dbContext.TrainingMesocycles.AsNoTracking()
@@ -127,8 +127,10 @@ internal sealed partial class TrainingApplicationService
         int notesSkip,
         CancellationToken cancellationToken)
     {
+        // A program's workout alone: a workout of one's own (TRN-033) is the client's record, read on their own reads.
         if (!await dbContext.WorkoutExecutions.AsNoTracking().AnyAsync(item =>
-            item.Id == workoutExecutionId && item.ClientProfileId == clientProfileId, cancellationToken))
+            item.Id == workoutExecutionId && item.ClientProfileId == clientProfileId && item.TrainingSessionId != null,
+            cancellationToken))
         {
             return null;
         }
@@ -170,7 +172,9 @@ internal sealed partial class TrainingApplicationService
             .Include(item => item.Exercises).ThenInclude(item => item.ApprovedAlternatives)
             .Include(item => item.Exercises).ThenInclude(item => item.Media)
             .AsSplitQuery().ToDictionaryAsync(item => item.Id, cancellationToken);
-        var blockIds = executions.Values.Select(item => item.MesocycleId).Distinct().ToArray();
+        // Only a program's workouts reach here, each in its program's calendar.
+        var blockIds = executions.Values.Where(item => item.MesocycleId is not null)
+            .Select(item => item.MesocycleId!.Value).Distinct().ToArray();
         var timeZones = await dbContext.TrainingMesocycles.AsNoTracking()
             .Where(item => blockIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, item => item.TimeZoneId, cancellationToken);
@@ -184,7 +188,7 @@ internal sealed partial class TrainingApplicationService
         var details = new List<DatedWorkoutView>();
         foreach (var id in workoutExecutionIds)
         {
-            if (!executions.TryGetValue(id, out var execution)) continue;
+            if (!executions.TryGetValue(id, out var execution) || execution.MesocycleId is not { } blockId) continue;
             // Independent bounded note pages and a historical cutoff specific to each workout.
             var notes = await dbContext.WorkoutNotes.AsNoTracking()
                 .Where(item => item.WorkoutExecutionId == id)
@@ -192,7 +196,7 @@ internal sealed partial class TrainingApplicationService
                 .Skip(notesSkip).Take(WorkoutNotesPageSize + 1).ToListAsync(cancellationToken);
             var previous = await LoadPreviousPerformancesAsync(
                 execution.ClientProfileId, execution.ScheduledDateSnapshot, exerciseIds, cancellationToken);
-            details.Add(new(execution.ScheduledDateSnapshot, timeZones[execution.MesocycleId],
+            details.Add(new(execution.ScheduledDateSnapshot, timeZones[blockId],
                 ToClientWorkout(execution, notes.Take(WorkoutNotesPageSize).ToArray(), names, previous, weightNotes),
                 notes.Count > WorkoutNotesPageSize));
         }

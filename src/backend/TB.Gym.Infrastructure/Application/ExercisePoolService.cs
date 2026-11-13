@@ -78,11 +78,7 @@ internal sealed class ExercisePoolService(
     }
 
     /// <summary>The house's exercises in use (LIB-004), with their muscles; the tenant filter keeps them the house's.</summary>
-    private IQueryable<Exercise> InUse() =>
-        dbContext.Exercises
-            .AsNoTracking()
-            .Include(item => item.Muscles)
-            .Where(item => !item.IsArchived);
+    private IQueryable<Exercise> InUse() => HousePool.InUse(dbContext).Include(item => item.Muscles);
 
     /// <summary>
     /// The caller's Training decision in the house (SUB-009), or null when the workspace in scope is not the house or
@@ -96,8 +92,7 @@ internal sealed class ExercisePoolService(
         }
 
         var tenantId = tenantContext.TenantId;
-        if (!await dbContext.Tenants.AsNoTracking()
-                .AnyAsync(tenant => tenant.Id == tenantId && tenant.IsHouse && tenant.IsActive, cancellationToken))
+        if (!await HousePool.IsOpenHereAsync(dbContext, tenantId, cancellationToken))
         {
             return null;
         }
@@ -115,18 +110,10 @@ internal sealed class ExercisePoolService(
         IReadOnlyList<Exercise> exercises,
         CancellationToken cancellationToken)
     {
-        var exerciseIds = exercises.Select(item => item.Id).ToArray();
-        var demos = (await (
-                from link in dbContext.ExerciseMediaLinks.AsNoTracking()
-                join asset in dbContext.MediaAssets.AsNoTracking()
-                    on new { link.TenantId, Id = link.MediaAssetId }
-                    equals new { asset.TenantId, asset.Id }
-                where exerciseIds.Contains(link.ExerciseId) &&
-                      asset.Status == MediaAssetStatus.Ready &&
-                      asset.Purpose == MediaPurpose.ExerciseMedia
-                select new { link.ExerciseId, link.MediaAssetId, link.DisplayOrder, asset.Source, asset.Kind })
-            .ToListAsync(cancellationToken))
-            .ToLookup(item => item.ExerciseId);
+        var demos = await HousePool.DemosAsync(
+            dbContext,
+            exercises.Select(item => item.Id).ToArray(),
+            cancellationToken);
         return
         [
             .. exercises.Select(item => new PoolExerciseView(
@@ -141,9 +128,7 @@ internal sealed class ExercisePoolService(
                     .ThenBy(link => link.Muscle)
                     .Select(link => new ExerciseMuscleView(link.Muscle, link.Role))],
                 item.Instructions,
-                [.. demos[item.Id]
-                    .OrderBy(demo => demo.DisplayOrder)
-                    .Select(demo => new PoolDemoView(demo.MediaAssetId, KindOf(demo.Source, demo.Kind)))])),
+                [.. demos[item.Id].Select(demo => new PoolDemoView(demo.MediaAssetId, KindOf(demo.Source, demo.Kind)))])),
         ];
     }
 

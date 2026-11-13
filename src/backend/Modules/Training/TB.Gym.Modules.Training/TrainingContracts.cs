@@ -257,6 +257,41 @@ public interface ITrainingApplicationService
         Guid workoutExecutionId,
         AddWorkoutNoteRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Starts a workout of one's own (TRN-033, notes plan N9b2) for the signed-in client of the house: empty, or from
+    /// one of their finished workouts, its exercises still in the pool in their order with empty sets.
+    /// </summary>
+    Task<TrainingCommandResult> StartOwnWorkoutAsync(
+        StartOwnWorkoutRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Adds an exercise in use in the house's pool to the client's workout of their own (TRN-033).</summary>
+    Task<TrainingCommandResult> AddOwnWorkoutExerciseAsync(
+        Guid workoutExecutionId,
+        AddOwnWorkoutExerciseRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Takes an exercise, with its sets, out of the client's unfinished workout of their own (TRN-033).</summary>
+    Task<TrainingCommandResult> RemoveOwnWorkoutExerciseAsync(
+        Guid workoutExecutionId,
+        Guid exercisePerformanceId,
+        OwnWorkoutChangeRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Adds an empty set after an exercise's others in the client's workout of their own (TRN-033).</summary>
+    Task<TrainingCommandResult> AddOwnWorkoutSetAsync(
+        Guid workoutExecutionId,
+        Guid exercisePerformanceId,
+        OwnWorkoutChangeRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Takes an exercise's last set out of the client's unfinished workout of their own (TRN-033).</summary>
+    Task<TrainingCommandResult> RemoveOwnWorkoutSetAsync(
+        Guid workoutExecutionId,
+        Guid setPerformanceId,
+        OwnWorkoutChangeRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ProgramTemplatePage(
@@ -884,11 +919,16 @@ public sealed record ProgramEditPreviewView(
     IReadOnlyList<ProgramEditWeekChangeView> WeekChanges,
     IReadOnlyList<ProgramEditSessionChangeView> SessionChanges);
 
+/// <param name="OwnWorkout">
+/// The client's unfinished workout of their own (TRN-033), whichever day it was started, so Today can offer to carry
+/// on with it; null when there is none or training is closed. <c>Workouts</c> stays the program's sessions of the day.
+/// </param>
 public sealed record ClientTrainingDayResult(
     bool IsAllowed,
     string AccessReason,
     DateOnly LocalDate,
-    IReadOnlyList<ClientWorkoutView> Workouts);
+    IReadOnlyList<ClientWorkoutView> Workouts,
+    OwnWorkoutView? OwnWorkout = null);
 
 public sealed record ClientTrainingWeekView(
     bool IsAllowed,
@@ -897,7 +937,13 @@ public sealed record ClientTrainingWeekView(
     DateOnly WeekStart,
     IReadOnlyList<ClientTrainingWeekDayView> Days);
 
-public sealed record ClientTrainingWeekDayView(DateOnly Date, int Scheduled, int Completed);
+/// <param name="Scheduled">The program's sessions of the day the client can see.</param>
+/// <param name="Completed">Those of them finished.</param>
+/// <param name="OwnCompleted">
+/// The client's workouts of their own finished that were started on the day (TRN-033), which no program planned and
+/// <c>Scheduled</c> never counts.
+/// </param>
+public sealed record ClientTrainingWeekDayView(DateOnly Date, int Scheduled, int Completed, int OwnCompleted = 0);
 
 public sealed record ClientTrainingUpcomingView(
     bool IsAllowed,
@@ -1249,10 +1295,12 @@ public sealed record ClientWorkoutHistoryPage(
     string PersonalRecordRuleKey,
     int PersonalRecordRuleVersion);
 
+/// <param name="ProgramName">The program's name; empty on a workout of one's own, which no program holds.</param>
 /// <param name="Notes">
 /// The notes on the workout, the client's and the coach's, oldest first (TRN-009), so a coach's note on a
 /// finished workout reaches the client after its day (P4).
 /// </param>
+/// <param name="IsOwnWorkout">A workout of one's own (TRN-033), started with no program behind it.</param>
 public sealed record ClientWorkoutHistoryItemView(
     Guid WorkoutExecutionId,
     string Name,
@@ -1264,7 +1312,8 @@ public sealed record ClientWorkoutHistoryItemView(
     int TotalSetCount,
     IReadOnlyList<WorkoutVolumeView> Volume,
     IReadOnlyList<WorkoutPersonalRecordView> PersonalRecords,
-    IReadOnlyList<WorkoutNoteView> Notes);
+    IReadOnlyList<WorkoutNoteView> Notes,
+    bool IsOwnWorkout = false);
 
 public sealed record WorkoutVolumeView(TrainingLoadUnit Unit, decimal LoadTimesRepetitions);
 
@@ -1342,6 +1391,59 @@ public sealed record SubstituteExerciseRequest(Guid ExerciseId, uint Version);
 
 public sealed record CompleteWorkoutRequest(uint Version);
 
+/// <param name="FromWorkoutId">
+/// One of the client's finished workouts to start from (TRN-033): its exercises still in the pool, in their order, each
+/// with as many empty sets as were done there. Null for an empty workout.
+/// </param>
+public sealed record StartOwnWorkoutRequest(Guid? FromWorkoutId = null);
+
+/// <param name="ExerciseId">An exercise in use in the house's pool (LIB-006).</param>
+/// <param name="Version">The workout's version as last read.</param>
+public sealed record AddOwnWorkoutExerciseRequest(Guid ExerciseId, uint Version);
+
+/// <param name="Version">The workout's version as last read.</param>
+public sealed record OwnWorkoutChangeRequest(uint Version);
+
+/// <summary>
+/// A workout of one's own as its player reads it (TRN-033, notes plan N9b2): the exercises from the house's pool in
+/// their order, each set as it was typed, and nothing prescribed.
+/// </summary>
+/// <param name="Name">The rule's name for it (<c>OwnWorkoutRule.Name</c>), since nothing names it.</param>
+/// <param name="Date">The house's day it was started on, which history, records and last time read as its day.</param>
+/// <param name="Version">The version every change to it sends back.</param>
+public sealed record OwnWorkoutView(
+    Guid WorkoutExecutionId,
+    string Name,
+    DateOnly Date,
+    WorkoutExecutionStatus Status,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? CompletedAtUtc,
+    uint Version,
+    IReadOnlyList<OwnWorkoutExerciseView> Exercises,
+    IReadOnlyList<WorkoutNoteView> Notes);
+
+/// <param name="MediaAssetIds">The exercise's demos in the pool that open now (MED-017), in the house's order.</param>
+/// <param name="PreviousPerformance">Last time (TRN-029): the latest earlier day the client did the exercise.</param>
+public sealed record OwnWorkoutExerciseView(
+    Guid PerformanceId,
+    Guid ExerciseId,
+    string ExerciseName,
+    int Position,
+    IReadOnlyList<Guid> MediaAssetIds,
+    PreviousExercisePerformanceView? PreviousPerformance,
+    IReadOnlyList<OwnWorkoutSetView> Sets);
+
+public sealed record OwnWorkoutSetView(
+    Guid PerformanceId,
+    int Position,
+    int? ActualRepetitions,
+    decimal? ActualLoad,
+    TrainingLoadUnit? ActualLoadUnit,
+    decimal? ActualRpe,
+    decimal? ActualRir,
+    bool IsCompleted,
+    string? ClientNote);
+
 public sealed record AddWorkoutNoteRequest(Guid? ExercisePerformanceId, string Text);
 
 public sealed record WorkoutNoteView(
@@ -1390,7 +1492,8 @@ public sealed record TrainingCommandResult(
     string? Message = null,
     ProgramDraftSaveView? Draft = null,
     FinishedProgramsVisibilityView? FinishedPrograms = null,
-    LiftWeightsAppliedView? LiftWeights = null);
+    LiftWeightsAppliedView? LiftWeights = null,
+    OwnWorkoutView? OwnWorkout = null);
 
 public enum TrainingCommandStatus
 {

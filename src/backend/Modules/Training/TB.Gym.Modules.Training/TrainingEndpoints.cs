@@ -679,6 +679,108 @@ public static class TrainingEndpoints
         .Produces<WorkoutExecutionView>()
         .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // A workout of one's own (TRN-033, notes plan N9b2): a client of the house logs it from the pool. Its sets are
+        // saved and it is finished by the two routes above, as a program's workout is.
+        client.MapPost("/workouts", async (
+            StartOwnWorkoutRequest? request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            // An empty start carries nothing, so its body may be left out.
+            return ToResult(await service.StartOwnWorkoutAsync(request ?? new StartOwnWorkoutRequest(), cancellationToken));
+        })
+        .WithName("StartMyOwnWorkout")
+        .Produces<OwnWorkoutView>()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        client.MapPost("/workouts/{workoutExecutionId:guid}/exercises", async (
+            Guid workoutExecutionId,
+            AddOwnWorkoutExerciseRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.AddOwnWorkoutExerciseAsync(workoutExecutionId, request, cancellationToken));
+        })
+        .WithName("AddMyOwnWorkoutExercise")
+        .Produces<OwnWorkoutView>()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        client.MapDelete("/workouts/{workoutExecutionId:guid}/exercises/{exercisePerformanceId:guid}", async (
+            Guid workoutExecutionId,
+            Guid exercisePerformanceId,
+            [FromBody] OwnWorkoutChangeRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.RemoveOwnWorkoutExerciseAsync(
+                workoutExecutionId,
+                exercisePerformanceId,
+                request,
+                cancellationToken));
+        })
+        .WithName("RemoveMyOwnWorkoutExercise")
+        .Produces<OwnWorkoutView>()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        client.MapPost("/workouts/{workoutExecutionId:guid}/exercises/{exercisePerformanceId:guid}/sets", async (
+            Guid workoutExecutionId,
+            Guid exercisePerformanceId,
+            OwnWorkoutChangeRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.AddOwnWorkoutSetAsync(
+                workoutExecutionId,
+                exercisePerformanceId,
+                request,
+                cancellationToken));
+        })
+        .WithName("AddMyOwnWorkoutSet")
+        .Produces<OwnWorkoutView>()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        client.MapDelete("/workouts/{workoutExecutionId:guid}/sets/{setPerformanceId:guid}", async (
+            Guid workoutExecutionId,
+            Guid setPerformanceId,
+            [FromBody] OwnWorkoutChangeRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.RemoveOwnWorkoutSetAsync(
+                workoutExecutionId,
+                setPerformanceId,
+                request,
+                cancellationToken));
+        })
+        .WithName("RemoveMyOwnWorkoutSet")
+        .Produces<OwnWorkoutView>()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         var member = endpoints
             .MapGroup("/api/training/workouts")
             .RequireAuthorization(AuthorizationPolicies.TenantMember)
@@ -808,6 +910,7 @@ public static class TrainingEndpoints
                 (object?)result.Draft ??
                 (object?)result.FinishedPrograms ??
                 (object?)result.LiftWeights ??
+                (object?)result.OwnWorkout ??
                 result.WorkoutExecution),
             TrainingCommandStatus.NotFound => Results.NotFound(),
             TrainingCommandStatus.Forbidden => Results.Forbid(),

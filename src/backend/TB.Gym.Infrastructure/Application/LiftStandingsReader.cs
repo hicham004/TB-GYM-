@@ -243,8 +243,11 @@ internal static class LiftStandingsReader
                     join execution in dbContext.WorkoutExecutions.AsNoTracking()
                         on new { performance.TenantId, Id = performance.WorkoutExecutionId }
                         equals new { execution.TenantId, execution.Id }
+                    // A program's workouts alone: a workout of one's own asked no reps, and nothing is worked out
+                    // from it (TRN-033, STR-019).
                     where performance.PrescribedExerciseId == liftId &&
                           clients.Contains(execution.ClientProfileId) &&
+                          execution.TrainingSessionId != null &&
                           execution.ScheduledDateSnapshot <= through
                     select new { set, performance, execution };
                 if (from is { } floor)

@@ -283,11 +283,12 @@ internal sealed partial class TrainingApplicationService
             ? []
             : execution.Exercises
                 .Where(exercise => !exercise.WasSubstituted &&
+                                   exercise.ExercisePrescriptionId is not null &&
                                    exercise.Sets.Any(set => set.CalculationStrategyKeySnapshot == LastTimeStepRule.Key))
                 .Select(exercise => new WeightNoteCandidate(
-                    exercise.ExercisePrescriptionId,
-                    exercise.Sets.ToDictionary(
-                        set => set.SetPrescriptionId,
+                    exercise.ExercisePrescriptionId!.Value,
+                    exercise.Sets.Where(set => set.SetPrescriptionId is not null).ToDictionary(
+                        set => set.SetPrescriptionId!.Value,
                         set => (set.PrescribedLoad, set.PrescribedLoadUnit))));
 
     private sealed record WeightNoteCandidate(

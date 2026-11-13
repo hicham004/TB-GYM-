@@ -195,10 +195,10 @@ internal sealed partial class TrainingApplicationService
                 SetCount = item.Exercises.SelectMany(exercise => exercise.Sets).Count(),
             })
             .ToListAsync(cancellationToken);
-        var sessionIds = sessions.Select(item => item.Id).ToArray();
+        var sessionIds = sessions.Select(item => (Guid?)item.Id).ToArray();
         var workouts = await dbContext.WorkoutExecutions.AsNoTracking()
             .Where(item => sessionIds.Contains(item.TrainingSessionId))
-            .Select(item => new { item.TrainingSessionId, item.Id, item.Status, item.StartedAtUtc })
+            .Select(item => new { TrainingSessionId = item.TrainingSessionId!.Value, item.Id, item.Status, item.StartedAtUtc })
             .ToDictionaryAsync(item => item.TrainingSessionId, cancellationToken);
         // Each block's history in one read, so a cancel reason is seen again on the Training tab (LOST-6).
         var lifecycle = (await dbContext.MesocycleLifecycleEvents.AsNoTracking()
@@ -293,13 +293,16 @@ internal sealed partial class TrainingApplicationService
 
         // Finished workouts are the client's own immutable facts (TRN-012, TRN-015), so later
         // publishing changes do not hide them; the personal-records read counts them the same way.
+        // A workout of one's own (TRN-033) has no program, so the program is joined when there is one.
         var page = await (
             from execution in dbContext.WorkoutExecutions.AsNoTracking()
             join block in dbContext.TrainingMesocycles.AsNoTracking()
-                on new { execution.TenantId, Id = execution.MesocycleId } equals new { block.TenantId, block.Id }
+                on new { execution.TenantId, Id = execution.MesocycleId }
+                equals new { block.TenantId, Id = (Guid?)block.Id } into blocks
+            from block in blocks.DefaultIfEmpty()
             where execution.ClientProfileId == client.Id && execution.Status == WorkoutExecutionStatus.Completed
             orderby execution.CompletedAtUtc descending, execution.Id descending
-            select new { execution.Id, ProgramName = block.Name })
+            select new { execution.Id, ProgramName = block == null ? null : block.Name })
             .Skip(skip).Take(HistoryPageSize + 1).ToListAsync(cancellationToken);
         var shown = page.Take(HistoryPageSize).ToArray();
         var ids = shown.Select(item => item.Id).ToArray();
@@ -329,7 +332,7 @@ internal sealed partial class TrainingApplicationService
             return new ClientWorkoutHistoryItemView(
                 workout.Id,
                 workout.SessionNameSnapshot,
-                row.ProgramName,
+                row.ProgramName ?? string.Empty,
                 workout.ScheduledDateSnapshot,
                 workout.CompletedAtUtc!.Value,
                 WorkoutDurationSeconds(workout),
@@ -337,7 +340,8 @@ internal sealed partial class TrainingApplicationService
                 summary.TotalSetCount,
                 summary.Volume,
                 summary.PersonalRecords,
-                notes[workout.Id].Select(ToView).ToArray());
+                notes[workout.Id].Select(ToView).ToArray(),
+                workout.IsOwn);
         }).ToArray();
         return new(true, access.Reason.ToString(), items,
             page.Count > HistoryPageSize ? skip + HistoryPageSize : null,
@@ -376,10 +380,10 @@ internal sealed partial class TrainingApplicationService
                 SetCount = item.Exercises.SelectMany(exercise => exercise.Sets).Count(),
             })
             .ToListAsync(cancellationToken);
-        var sessionIds = sessions.Select(item => item.Id).ToArray();
+        var sessionIds = sessions.Select(item => (Guid?)item.Id).ToArray();
         var workouts = await dbContext.WorkoutExecutions.AsNoTracking()
             .Where(item => sessionIds.Contains(item.TrainingSessionId))
-            .Select(item => new { item.TrainingSessionId, item.Id, item.Status, item.StartedAtUtc })
+            .Select(item => new { TrainingSessionId = item.TrainingSessionId!.Value, item.Id, item.Status, item.StartedAtUtc })
             .ToDictionaryAsync(item => item.TrainingSessionId, cancellationToken);
         var views = sessions.Select(item =>
         {

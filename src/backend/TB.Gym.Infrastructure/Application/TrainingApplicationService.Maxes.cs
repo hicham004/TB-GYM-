@@ -668,7 +668,7 @@ internal sealed partial class TrainingApplicationService
             join workout in dbContext.WorkoutExecutions.AsNoTracking()
                 on new { exercise.TenantId, Id = exercise.WorkoutExecutionId } equals new { workout.TenantId, workout.Id }
             join session in dbContext.TrainingSessions.AsNoTracking()
-                on new { workout.TenantId, Id = workout.TrainingSessionId } equals new { session.TenantId, session.Id }
+                on new { workout.TenantId, Id = workout.TrainingSessionId } equals new { session.TenantId, Id = (Guid?)session.Id }
             join week in dbContext.MesocycleWeeks.AsNoTracking()
                 on new { session.TenantId, Id = session.MesocycleWeekId } equals new { week.TenantId, week.Id }
             where setIds.Contains(set.Id) &&
