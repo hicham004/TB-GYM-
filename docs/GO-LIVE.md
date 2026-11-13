@@ -129,6 +129,14 @@ web container after changing any of the three. Write the privacy note yourself; 
   Owner moves an earlier trainee to the Coach one at a time. The Worker removes a sign-up whose email was never confirmed after
   `TraineeSignUps:RemoveUnconfirmedAfterDays` days (2; 1 to 90, or neither process starts) (CLI-022 to CLI-025), and
   renews each trainee's Free on the same hourly tick; `TraineeSignUps:SweepEnabled` switches off the removal alone.
+- **The house's library** (LIB-007): once the clips are bought and converted to MP4 or WebM, put them and their sheet
+  (`exercises.csv`, the form `HouseLibraryCommand` and `ExerciseSheet` describe: a first line naming name, type,
+  equipment, movement, muscles, instructions and clip) in one folder on the server, then check it with
+  `tb run --rm -v /root/library:/library:ro api house-library <the house's slug> /library/exercises.csv --dry-run`
+  and load it with the same line without `--dry-run`. The dry run says what the house stores, its allowance and
+  what the run would upload: fill the House page's media storage first if it would not fit. The same sheet run again
+  changes nothing; a refused line says why and the rest load. It needs uploads on, the photos setup (R2 and the ClamAV
+  scanner, `COMPOSE_PROFILES=photos`), so it cannot load on a server set up without photos, nor on the test copy.
 
 ## Before launch: a test copy on Render
 

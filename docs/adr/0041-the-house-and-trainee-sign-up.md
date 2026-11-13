@@ -70,7 +70,8 @@ their notes, their leaving and a coach's departure reach no inbox; both partners
   the trainee's own profile first and never ask for the staff member the record names. N9b1 starts Free at
   the same confirmation step and at the signed-in join, in their transaction; `house set` also makes the
   house's Free plan, and the house's hourly sweeps renew it (SUB-019). The pool and its demos are the house's
-  alone (LIB-006, MED-017).
+  alone (LIB-006, MED-017). N9b6's `house-library` command loads a bought library into the house alone, named by
+  its slug or id and checked by the mark, as the house's Coach and through the library's own services (LIB-007).
 
 ## Migration and recovery
 

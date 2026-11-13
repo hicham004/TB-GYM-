@@ -2732,6 +2732,26 @@ pool through it: the library's routes stay the staff's. On screen (notes plan N9
 demo, its facts and its instructions, where "Start a workout" (or "Add to your workout" while one is unfinished) adds
 it to a workout of one's own with one empty set (TRN-033); the server answers every refusal.
 
+**LIB-007** The house's library loader (notes plan N9b6; LIB-001: a bought library is kept under its licence, in the house
+alone). The operator's command `house-library <the house's slug or id> <sheet.csv> [--dry-run]` loads a folder of clips
+and a sheet into the house's exercise library and refuses any other workspace, a house not active included. The sheet
+is TB Gym's own form (`ExerciseSheet`): a CSV in UTF-8 whose first line names the columns name, type, equipment,
+movement, muscles, instructions and clip in any order; the words are the API's or the screens', in any case; the first
+muscle is the main one; each clip is an MP4 or WebM named from the sheet's folder (a GIF is converted to an MP4 loop
+first; nothing here converts). Every line goes through the library's and the upload's own services, as the house's
+Coach (the one who joined first, else the Owner), so every library rule, the upload's checks, the scan and the house's
+storage allowance (MED-019) apply, and a line the library would refuse uploads nothing. An exercise is matched by its
+name as the library keeps it unique (trimmed, in capitals): a new name makes an exercise with its clip; a name in use
+takes the sheet's type, equipment, movement, muscles and instructions (an empty cell leaves the instructions) and keeps
+its own name, tags, swaps and other demos; its clip changes only when the file's SHA-256 matches none of its demos, the
+clip the loader uploaded before under the same file name (titled "<name> (library clip)") being replaced in its place
+and deleted as the library deletes one (MED-007), else the clip is put first, the demo the pool plays; a demo the
+house's staff uploaded is never replaced or deleted. An archived exercise of that name, or a change to one whose swap
+is archived, is left as it is and its line refused before anything is uploaded. Nothing is archived or deleted for
+being left out of the sheet, so the same sheet again changes nothing. A refused line is said
+with its reason and the rest load; a full allowance or unavailable storage stops the run at that line. The dry run
+checks the same and writes nothing, and says how much the house stores, its allowance and what the run would upload.
+
 ## 9. Theme and gamification
 
 **GAM-001** A tenant can choose a standard theme, uploaded assets, or generated assets. Media

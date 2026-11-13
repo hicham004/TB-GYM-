@@ -731,10 +731,24 @@ internal sealed class MediaApplicationService(
     /// unsafe direction to be wrong in. Purged bytes are excluded, which is what finally releases
     /// the space. External embeds occupy nothing and are not counted.
     /// </remarks>
-    private async Task<long> MeasureWorkspaceBytesAsync(
+    private Task<long> MeasureWorkspaceBytesAsync(
         CancellationToken cancellationToken,
         IReadOnlyCollection<Guid>? excludedIngestIds = null,
-        IngestAdmissionPriority? admissionPriority = null)
+        IngestAdmissionPriority? admissionPriority = null) =>
+        MeasureWorkspaceBytesAsync(dbContext, excludedIngestIds, admissionPriority, cancellationToken);
+
+    /// <summary>
+    /// The bytes the request's workspace occupies today, counted as its allowance counts them, for a read that only
+    /// says so: the house library's loader prints it before it loads (LIB-007). Admission still measures under its lock.
+    /// </summary>
+    internal static Task<long> StoredBytesAsync(GymDbContext dbContext, CancellationToken cancellationToken) =>
+        MeasureWorkspaceBytesAsync(dbContext, null, null, cancellationToken);
+
+    private static async Task<long> MeasureWorkspaceBytesAsync(
+        GymDbContext dbContext,
+        IReadOnlyCollection<Guid>? excludedIngestIds,
+        IngestAdmissionPriority? admissionPriority,
+        CancellationToken cancellationToken)
     {
         var assetBytes = await dbContext.MediaAssets.AsNoTracking()
             .Where(item =>

@@ -503,6 +503,16 @@ without one, and adding the same link again fills a missing one (MED-015). The o
 title, one at a time, each saved on its own inside its workspace. Nothing from the provider loads in a browser,
 so the CSP is unchanged.
 
+The operator's `house-library` command (`HouseLibraryCommand`, notes plan N9b6, LIB-007) loads a bought library of
+clips into the house's exercise library alone: the house is named by its slug or id and checked by its mark, a sheet in
+the ExerciseLibrary module's own form (`ExerciseSheet`, a CSV read without a package) is read line by line, and each
+line runs in fresh scopes as the house's Coach, the way the demo generator's requests run (`DemoRequests`), writing only
+through `IExerciseLibraryApplicationService` and `IMediaApplicationService`, so the library's rules and the upload's
+checks, scan and locked allowance apply; it reads the exercise of the line's name and its demos' hashes, titles and file
+names from `GymDbContext` itself. A clip is matched by its SHA-256 against the exercise's demos (`MediaAsset.Sha256`) and
+replaced only when the loader uploaded it (its title ends "(library clip)"), a dry run checks what it can without
+writing, and the allowance's measure is read once through `MediaApplicationService.StoredBytesAsync`.
+
 ## 7. Persistence
 
 PostgreSQL 18 is the target database, accessed through EF Core 10 and Npgsql. Functional
@@ -1593,8 +1603,8 @@ Worker start. In Production both processes refuse development settings no adapte
 origins and Npgsql error-detail or parameter logging. The `backup` container dumps PostgreSQL nightly,
 encrypts it to the owner's age public key, uploads it to an S3-compatible bucket, keeps 30 days and
 pings an optional heartbeat; `restore.sh` restores into a new or empty database in one transaction.
-The data loss window is up to a day. Operators run `platform-admin` and `send-test-email` as
-`dotnet TB.Gym.Api.dll` subcommands inside the API container.
+The data loss window is up to a day. Operators run `platform-admin`, `send-test-email`, `video-titles` and
+`house-library` as `dotnet TB.Gym.Api.dll` subcommands inside the API container.
 
 Scale in this order:
 

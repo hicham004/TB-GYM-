@@ -59,6 +59,13 @@ if (PlatformAdminCommand.IsInvocation(args))
     return await PlatformAdminCommand.RunAsync(app.Services, args, Console.Out);
 }
 
+// `house-library <the house's slug> <sheet.csv> [--dry-run]` loads a library of clips into the house's exercise library
+// alone, through the services the coach's screens use, then exits (LIB-007).
+if (HouseLibraryCommand.IsInvocation(args))
+{
+    return await HouseLibraryCommand.RunAsync(app.Services, args, Console.Out);
+}
+
 // `send-test-email you@example.com` proves the configured provider accepts mail, then exits.
 if (SendTestEmailCommand.IsInvocation(args))
 {
