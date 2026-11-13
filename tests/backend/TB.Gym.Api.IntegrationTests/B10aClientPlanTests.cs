@@ -60,7 +60,8 @@ public sealed partial class Phase3TrainingWorkflowTests
                 B10aFieldNames(document.RootElement.GetProperty("plans")[0]));
         }
 
-        B10aAssertNotIn(body, "250", "USD", "Cash");
+        // The price as JSON writes it (250.5 or 250.50): "250" alone also turns up inside a random id now and then.
+        B10aAssertNotIn(body, "250.5", "USD", "Cash");
 
         // A plan keeps the name it was sold under; the description is the plan's as it stands today.
         await A7UpdateProductAsync(coach, product, "Coaching 2027", true, "A new way of working.");
