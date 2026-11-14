@@ -1496,8 +1496,8 @@ internal sealed class MediaApplicationService(
     }
 
     /// <summary>
-    /// A progress photo is readable by the client it depicts, and by an Owner/Coach of the same
-    /// workspace only while the coaching relationship is not blocked. Removed photos stop being
+    /// A progress photo is readable by the client it depicts, and by the Owner or Coach who coaches the
+    /// client (C8, ADR 0026) only while the coaching relationship is not blocked. Removed photos stop being
     /// readable by the coach but remain readable by the client who owns them.
     /// </summary>
     /// <remarks>
@@ -1547,10 +1547,9 @@ internal sealed class MediaApplicationService(
             return false;
         }
 
-        // The Owner sees every client's photos; a Coach only those of their own clients (ADR 0026).
-        return role == TenantRole.Owner ||
-            (role == TenantRole.Coach &&
-             await coachClientScope.IsAssignedCoachAsync(userId, photo.ClientProfileId, cancellationToken));
+        // A photo is the private side (C8): only the client's own coach sees it, the Owner included (ADR 0026).
+        return role is TenantRole.Owner or TenantRole.Coach &&
+            await coachClientScope.MayCoachAsync(userId, photo.ClientProfileId, cancellationToken);
     }
 
     /// <summary>

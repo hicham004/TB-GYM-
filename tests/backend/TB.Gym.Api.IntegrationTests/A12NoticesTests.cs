@@ -113,19 +113,20 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertStatusAsync(paused, HttpStatusCode.OK);
         var pausedVersion = (await RequiredJsonAsync<CoverageEnrollment>(paused)).Version;
 
-        // The coach's read of the workout is closed, and so is writing on it: neither the coach nor the
-        // owner leaves a note, nothing is kept and the client is told of nothing.
+        // The coach's read of the workout is closed, and so is writing on it: the coach leaves no note, nothing is
+        // kept and the client is told of nothing. The owner, who no longer coaches the client, never reaches the
+        // workout at all: it is the private side (C8, notes plan N9d1a).
         var read = await RequiredJsonAsync<A12CoachWorkoutRead>(
             await coach.GetAsync($"/api/training/clients/{scenario.ClientId}/workouts/{execution.Id}"));
         Assert.AreEqual((false, "Paused"), (read.IsAllowed, read.AccessReason));
-        foreach (var staff in new[] { coach, owner })
+        foreach (var (staff, refused) in new[] { (coach, HttpStatusCode.Forbidden), (owner, HttpStatusCode.NotFound) })
         {
             await RefreshCsrfAsync(staff);
             await AssertStatusAsync(
                 await staff.PostAsJsonAsync(
                     $"/api/training/workouts/{execution.Id}/notes",
                     new { exercisePerformanceId = (Guid?)null, text = "Rest that knee" }),
-                HttpStatusCode.Forbidden);
+                refused);
         }
 
         Assert.AreEqual(0L, await P2CountAsync("""SELECT count(*) FROM training."WorkoutNotes" WHERE "WorkoutExecutionId" = @id""", execution.Id));

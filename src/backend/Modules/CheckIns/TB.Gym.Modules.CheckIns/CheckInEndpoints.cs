@@ -207,6 +207,7 @@ public static class CheckInEndpoints
 
         var coach = endpoints.MapGroup("/api/checkins/clients/{clientProfileId:guid}/assignments")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Private)
             .WithTags(CheckInsModule.Name);
 
         coach.MapGet("", async (

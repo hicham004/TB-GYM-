@@ -215,8 +215,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         // unfinished; and the coach archives the carry.
         var his = await N9b2ABuildAsync(karim.Client, new N9b2ALift(library.Squat.Id, [new(5, 80m)]));
         await N9b2AOkAsync<WorkoutExecutionView>(N9b2AFinishAsync(karim.Client, his.WorkoutExecutionId, his.Version));
-        var training = await CreateTrainingResourcesAsync(house.Owner, trainee.ProfileId, 8, 1, today);
-        await AssignAsync(house.Owner, trainee.ProfileId, training, today);
+        // The program is given by the house's Coach, Dalia's coach: the owner coaches her not (C8, notes plan N9d1a).
+        var training = await CreateTrainingResourcesAsync(house.Coach!, trainee.ProfileId, 8, 1, today);
+        await AssignAsync(house.Coach!, trainee.ProfileId, training, today);
         var (program, _) = await A3StartTodayAsync(client);
         await N9b1PSetArchivedAsync(house.Coach!, library.Carry.Id, archived: true, library.Carry.Version);
 
@@ -627,7 +628,8 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     /// <summary>
     /// TRN-033 with TRN-009 and ADR 0036: only the client writes notes on a workout of their own; they are kept, an exercise
-    /// with one stays in the workout, the house's owner and coach write none (own_workout_staff_note), and no note on it
+    /// with one stays in the workout, the house's owner and coach write none (own_workout_staff_note for the coach, 404 for
+    /// the owner, who coaches the trainee not since C8), and no note on it
     /// queues a notice, not even for a client the house invited, whose coach a note on a program's workout would tell.
     /// </summary>
     [TestMethod]
@@ -651,11 +653,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         R31Tick();
         await AssertStatusAsync(await N9b2ANoteAsync(client, id, null, "Short on sleep"), HttpStatusCode.OK);
 
-        // The house's owner and coach, the coach being the one the trainee's record names, write none on it.
-        foreach (var (staff, who) in new[] { (house.Owner, "owner"), (house.Coach!, "coach") })
-        {
-            Assert.AreEqual(N9b2AStaffNote, await A7ConflictAsync(await N9b2ANoteAsync(staff, id, null, "Strong work")), who);
-        }
+        // The house's owner and coach, the coach being the one the trainee's record names, write none on it: the coach is
+        // told why, and the owner, who coaches the trainee not, finds no such workout (C8, notes plan N9d1a).
+        Assert.AreEqual(N9b2AStaffNote, await A7ConflictAsync(await N9b2ANoteAsync(house.Coach!, id, null, "Strong work")), "coach");
+        await AssertStatusAsync(await N9b2ANoteAsync(house.Owner, id, null, "Strong work"), HttpStatusCode.NotFound);
 
         // A note holds its exercise, so the squat stays; the hold, with none, goes.
         workout = await N9b2ACarryOnAsync(client);
@@ -681,8 +682,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var rana = CreateClient();
         var ranaId = await R31InviteAsync(house.Coach!, rana, house.TenantId, "n9b2a-notes-rana@example.test", "Rana", "Haddad");
         Assert.AreEqual((false, house.CoachUserId), await N9b2ACoachedAsync(ranaId));
-        var training = await CreateTrainingResourcesAsync(house.Owner, ranaId, 8, 1, today);
-        await AssignAsync(house.Owner, ranaId, training, today);
+        var training = await CreateTrainingResourcesAsync(house.Coach!, ranaId, 8, 1, today);
+        await AssignAsync(house.Coach!, ranaId, training, today);
         var (program, _) = await A3StartTodayAsync(rana);
         await AssertStatusAsync(await N9b2ANoteAsync(rana, program.Id, null, "Left knee hurt on the last set"), HttpStatusCode.OK);
         Assert.AreEqual(1, await N9b2ANoticesAsync(program.Id), "A note on her program's workout tells her coach.");
@@ -767,8 +768,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             (history.Total, set.WorkoutExecutionId, set.Date, set.Repetitions, set.Load, set.Rpe));
 
         // The same page opens a program's workout of the same client: it is the workout being their own that hides it.
-        var training = await CreateTrainingResourcesAsync(house.Owner, trainee.ProfileId, 8, 1, today);
-        await AssignAsync(house.Owner, trainee.ProfileId, training, today);
+        var training = await CreateTrainingResourcesAsync(coach, trainee.ProfileId, 8, 1, today);
+        await AssignAsync(coach, trainee.ProfileId, training, today);
         var (program, _) = await A3StartTodayAsync(trainee.Client);
         await AssertStatusAsync(
             await coach.GetAsync($"/api/training/clients/{trainee.ProfileId}/workouts/{program.Id}"),

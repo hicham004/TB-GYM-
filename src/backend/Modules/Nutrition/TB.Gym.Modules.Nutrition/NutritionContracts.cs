@@ -108,7 +108,7 @@ public interface INutritionApplicationService
 
     /// <summary>
     /// The caller's current clients whose Nutrition is open, each with their latest targets (critique
-    /// B5c2): a coach's own, every client for the owner (ADR 0026).
+    /// B5c2) that the caller coaches: a coach's own, the owner's own too (ADR 0026, C8).
     /// </summary>
     Task<ClientTargetsList> ListClientTargetsAsync(CancellationToken cancellationToken);
     Task<NutritionCommandResult> OverrideMacrosAsync(Guid clientProfileId, Guid calculationSnapshotId, CreateMacroOverrideRequest request, CancellationToken cancellationToken);
@@ -705,8 +705,8 @@ public sealed record MacroSplitView(
     IReadOnlyList<string> Warnings);
 
 /// <summary>
-/// "Start from a client's targets" (critique B5c2): the caller's current clients (ADR 0026: a coach's
-/// own, every client for the owner) whose Nutrition is open, each with their latest targets, by name.
+/// "Start from a client's targets" (critique B5c2): the current clients the caller coaches (ADR 0026, C8:
+/// a coach's own, the owner's own too) whose Nutrition is open, each with their latest targets, by name.
 /// At most <paramref name="Limit"/> are listed; <paramref name="Total"/> counts them all.
 /// </summary>
 public sealed record ClientTargetsList(IReadOnlyList<ClientTargetsItem> Items, int Total, int Limit);

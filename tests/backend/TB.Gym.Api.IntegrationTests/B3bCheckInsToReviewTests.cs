@@ -40,27 +40,26 @@ public sealed partial class Phase3TrainingWorkflowTests
         R31Tick();
         await B3bSendAsync(rami, ramiAssignment, version);
 
-        // The owner sees both, oldest first, with whose client each is and how late.
+        // The owner sees their own client's, with whose client it is and how late. Each opens the answers, the
+        // private side, so a team coach's client's is the coach's alone (C8, notes plan N9d1a).
         var ownerList = await ReadSliceAsync<CheckInToReviewList>(owner, B3bToReviewUrl);
-        CollectionAssert.AreEqual(
-            new[] { mayaAssignment, ramiAssignment },
-            ownerList.Items.Select(item => item.AssignmentId).ToArray());
-        Assert.AreEqual((2, 500), (ownerList.Total, ownerList.Maximum));
+        CollectionAssert.AreEqual(new[] { mayaAssignment }, ownerList.Items.Select(item => item.AssignmentId).ToArray());
+        Assert.AreEqual((1, 500), (ownerList.Total, ownerList.Maximum));
         var first = ownerList.Items[0];
         Assert.AreEqual(
             ("Maya", "Rahman", mayaId, "Hicham Haddad", "Weekly check-in", 2),
             (first.ClientFirstName, first.ClientLastName, first.ClientProfileId, first.CoachName, first.FormTitle, first.DaysLate));
         Assert.AreEqual(first.DueDate.AddDays(2), first.SentDate);
-        var second = ownerList.Items[1];
-        Assert.AreEqual(("Rami", "Lina Saad", 0), (second.ClientFirstName, second.CoachName, second.DaysLate));
 
-        // A coach sees their own clients' alone (ADR 0026).
+        // A coach sees their own clients' alone (ADR 0026), with whose client it is and how late.
         var coachList = await ReadSliceAsync<CheckInToReviewList>(coach, B3bToReviewUrl);
         Assert.AreEqual((ramiAssignment, 1), (coachList.Items.Single().AssignmentId, coachList.Total));
+        var second = coachList.Items[0];
+        Assert.AreEqual(("Rami", "Lina Saad", 0), (second.ClientFirstName, second.CoachName, second.DaysLate));
 
         // Reviewed, a check-in leaves the list.
         await AssertStatusAsync(await Phase6ReviewAsync(owner, mayaId, mayaAssignment, mayaVersion), HttpStatusCode.OK);
-        Assert.AreEqual(ramiAssignment, (await ReadSliceAsync<CheckInToReviewList>(owner, B3bToReviewUrl)).Items.Single().AssignmentId);
+        Assert.IsEmpty((await ReadSliceAsync<CheckInToReviewList>(owner, B3bToReviewUrl)).Items);
 
         // A client, someone signed out and another coaching space's owner are refused.
         await AssertStatusAsync(await maya.GetAsync(B3bToReviewUrl), HttpStatusCode.Forbidden);
@@ -107,7 +106,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         var rami = await B3bSentAsync(lina, ramiClient, ramiId, version);
         var nour = await B3bSentAsync(lina, nourClient, nourId, version);
         var omar = await B3bSentAsync(lina, omarClient, omarId, version);
-        await B3bAssertToReviewAsync(owner, maya, rami, nour, omar);
+        // Every one is Lina's client, so the owner's list, the clients they coach, holds none (C8, N9d1a).
+        await B3bAssertToReviewAsync(owner);
         await B3bAssertToReviewAsync(lina, maya, rami, nour, omar);
 
         // A blocked relationship closes check-ins on both sides (CHK-011): Maya leaves both lists, and her
@@ -116,7 +116,6 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(owner);
         await AssertStatusAsync(await owner.PostAsJsonAsync($"/api/clients/{mayaId}/relationship/block",
             new { reason = "B3b privacy check", mayaProfile.Version }), HttpStatusCode.OK);
-        await B3bAssertToReviewAsync(owner, rami, nour, omar);
         await B3bAssertToReviewAsync(lina, rami, nour, omar);
         mayaProfile = await RequiredJsonAsync<TeamClientDetails>(await owner.GetAsync($"/api/clients/{mayaId}"));
         await RefreshCsrfAsync(owner);
@@ -126,21 +125,20 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         // A released client is a former client, whose record is read-only: never listed (ADR 0027).
         await ReleaseAsync(owner, ramiId, "Moved away");
-        await B3bAssertToReviewAsync(owner, maya, nour, omar);
         await B3bAssertToReviewAsync(lina, maya, nour, omar);
 
         // A client given to another coach takes their check-in along: Lina no longer sees Nour's, Karim
-        // does, and the owner's row names Karim (ADR 0026).
+        // does, and his row names him (ADR 0026); the owner, who coaches none of them, still lists none.
         await ReassignAsync(owner, nourId, karimUserId, null);
         await B3bAssertToReviewAsync(lina, maya, omar);
-        await B3bAssertToReviewAsync(karim, nour);
-        var ownerList = await B3bAssertToReviewAsync(owner, maya, nour, omar);
-        Assert.AreEqual("Karim Nassar", ownerList.Items[1].CoachName);
+        var karimList = await B3bAssertToReviewAsync(karim, nour);
+        Assert.AreEqual("Karim Nassar", karimList.Items[0].CoachName);
+        await B3bAssertToReviewAsync(owner);
 
         // A week on, Omar's plan still runs but no longer includes check-ins (CHK-014): his row leaves while
         // the others stay.
         RequiredTestClock.Advance(TimeSpan.FromDays(8));
-        await B3bAssertToReviewAsync(owner, maya, nour);
+        await B3bAssertToReviewAsync(karim, nour);
         await B3bAssertToReviewAsync(lina, maya);
 
         // Once every plan has ended, nothing waits for anyone.

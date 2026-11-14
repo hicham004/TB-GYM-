@@ -235,15 +235,20 @@ public sealed partial class Phase3TrainingWorkflowTests
         coach.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
         Assert.AreEqual("antiforgery_token_invalid", (await A10AnswerAsync(await coach.PostAsJsonAsync(url, set), HttpStatusCode.BadRequest)).Code);
 
-        // A released client is read-only for everyone (ADR 0027): the owner is told so, and their coach no longer
-        // reaches them at all.
+        // A released client is read-only for everyone (ADR 0027): their coach no longer reaches them at all, and nor
+        // does the owner, who keeps the record but not the private side of a client another coach had (C8, N9d1a).
         await ReleaseAsync(owner, clientId, "Moved away");
         await RefreshCsrfAsync(owner);
-        Assert.AreEqual("client_released", (await A10AnswerAsync(await owner.PostAsJsonAsync(url, set), HttpStatusCode.Conflict)).Code);
+        await AssertStatusAsync(await owner.PostAsJsonAsync(url, set), HttpStatusCode.NotFound);
         await RefreshCsrfAsync(coach);
         await AssertStatusAsync(await coach.PostAsJsonAsync(url, set), HttpStatusCode.NotFound);
 
-        Assert.AreEqual(0, (await ReadSliceAsync<StrengthMaxPage>(owner, $"/api/strength/clients/{clientId}/maxes")).Total);
+        Assert.AreEqual(
+            0L,
+            await Phase6CountAsync(
+                RequiredDatabaseConnection,
+                """SELECT count(*) FROM strength."MaxHistory" WHERE "ClientProfileId" = @id""",
+                clientId));
     }
 
     [TestMethod]

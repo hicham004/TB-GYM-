@@ -26,7 +26,8 @@ internal sealed class TenantRoleAuthorizationHandler(
 {
     /// <summary>
     /// The route parameters that name a client. A Coach may reach one only when it is assigned to
-    /// them; an integration test asserts no other client-naming route parameter exists.
+    /// them, and the Owner a private-side one only as the client's coach (<see cref="ClientSide"/>);
+    /// an integration test asserts no other client-naming route parameter exists.
     /// </summary>
     public static readonly IReadOnlyList<string> ClientRouteParameters = ["clientProfileId", "clientId"];
 
@@ -63,10 +64,17 @@ internal sealed class TenantRoleAuthorizationHandler(
 
         tenantContext.SetTenant(tenantId);
 
+        // A route that names a client reaches its business side or its private side (C8, ADR 0026): the business side
+        // whoever may manage the client, the private side only the client's own coach, the Owner included. A route
+        // that says neither counts as private. Both refusals answer 404, as for a client that does not exist.
+        // The role is known here, so the Owner's business side costs no query and the private side one.
         var routeClientId = RouteClientId(httpContext);
-        if (membership.Role == TenantRole.Coach &&
+        if (membership.Role is TenantRole.Owner or TenantRole.Coach &&
             routeClientId is { } clientProfileId &&
-            await coachClientScope.ExcludesAsync(clientProfileId, httpContext.RequestAborted))
+            (RouteClientSide(httpContext).IsBusiness
+                ? membership.Role == TenantRole.Coach &&
+                  await coachClientScope.ExcludesFromManagingAsync(clientProfileId, httpContext.RequestAborted)
+                : !await coachClientScope.MayCoachAsync(userId, clientProfileId, httpContext.RequestAborted)))
         {
             context.Fail(new AuthorizationFailureReason(this, ClientNotAssignedFailure));
             return;
@@ -99,6 +107,10 @@ internal sealed class TenantRoleAuthorizationHandler(
 
     private static bool IsReadOnlyMethod(string method) =>
         HttpMethods.IsGet(method) || HttpMethods.IsHead(method) || HttpMethods.IsOptions(method);
+
+    /// <summary>The side of the client the route reaches, private unless the route says business.</summary>
+    internal static ClientSide RouteClientSide(HttpContext httpContext) =>
+        httpContext.GetEndpoint()?.Metadata.GetMetadata<ClientSide>() ?? ClientSide.Private;
 
     private static Guid? RouteClientId(HttpContext httpContext)
     {

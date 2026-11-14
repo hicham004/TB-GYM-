@@ -157,11 +157,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         var lenaId = await R31InviteAsync(owner, lena, tenant, "b5c2-targets-lena@example.test", "Lena", "Haddad");
         await R53dStartNutritionAsync(owner, lenaId);
 
-        // The owner sees every client with targets, by name, each with whose client they are.
+        // The owner sees the clients they coach with targets, by name, each with whose client they are. A client's
+        // targets are the private side, so the coach's Nour is the coach's alone (C8, notes plan N9d1a).
         var ownersList = await ReadSliceAsync<ClientTargetsList>(owner, B5c2ClientTargetsUrl);
-        CollectionAssert.AreEqual(new[] { nourId, ramiId, saraId }, ownersList.Items.Select(item => item.ClientProfileId).ToArray());
-        Assert.AreEqual((3, 500), (ownersList.Total, ownersList.Limit));
-        var ramiItem = ownersList.Items[1];
+        CollectionAssert.AreEqual(new[] { ramiId, saraId }, ownersList.Items.Select(item => item.ClientProfileId).ToArray());
+        Assert.AreEqual((2, 500), (ownersList.Total, ownersList.Limit));
+        Assert.IsFalse(ownersList.Items.Any(item => item.LastName == "Fares"));
+        var ramiItem = ownersList.Items[0];
         Assert.AreEqual(
             (ramis.Id, "Rami", "Khoury", "Hicham Haddad", (decimal?)25m, (decimal?)82m, false),
             (ramiItem.CalculationId, ramiItem.FirstName, ramiItem.LastName, ramiItem.CoachName, ramiItem.FatPercentage, ramiItem.BodyweightKilograms, ramiItem.IsEnergyDeficit));
@@ -171,8 +173,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(ramis.FatGrams, ramiItem.FatGrams, StoredPrecision);
         Assert.IsEmpty(ramiItem.Warnings);
 
-        // Nour's latest targets are her coach's own macros: no share, and she eats below what she burns.
-        var nourItem = ownersList.Items[0];
+        // Nour's latest targets, on her coach's list, are the coach's own macros: no share, and she eats below what
+        // she burns.
+        var nourItem = (await ReadSliceAsync<ClientTargetsList>(coach, B5c2ClientTargetsUrl)).Items.Single();
         Assert.AreEqual(
             (nours.Result.Id, "Lina Saad", (decimal?)null, (decimal?)60m, true, 120m, 160m, 45m),
             (nourItem.CalculationId, nourItem.CoachName, nourItem.FatPercentage, nourItem.BodyweightKilograms, nourItem.IsEnergyDeficit,
@@ -202,7 +205,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         // Sara's one-day plan ends, so her Nutrition is closed: she leaves the list.
         RequiredTestClock.Advance(TimeSpan.FromDays(2));
         CollectionAssert.AreEqual(
-            new[] { nourId, ramiId },
+            new[] { ramiId },
             (await ReadSliceAsync<ClientTargetsList>(owner, B5c2ClientTargetsUrl)).Items.Select(item => item.ClientProfileId).ToArray());
 
         // A released client is a former client (ADR 0027): never listed.
@@ -211,9 +214,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertStatusAsync(
             await owner.PostAsJsonAsync($"/api/clients/{ramiId}/release", new { reason = "Moved away", profile.Version }),
             HttpStatusCode.OK);
+        Assert.IsEmpty((await ReadSliceAsync<ClientTargetsList>(owner, B5c2ClientTargetsUrl)).Items);
         CollectionAssert.AreEqual(
             new[] { nourId },
-            (await ReadSliceAsync<ClientTargetsList>(owner, B5c2ClientTargetsUrl)).Items.Select(item => item.ClientProfileId).ToArray());
+            (await ReadSliceAsync<ClientTargetsList>(coach, B5c2ClientTargetsUrl)).Items.Select(item => item.ClientProfileId).ToArray());
     }
 
     [TestMethod]

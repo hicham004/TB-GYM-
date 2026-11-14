@@ -465,8 +465,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         var house = await N9a1OpenHouseAsync(tag, withCoach: true);
         var library = await N9b1PLibraryAsync(house.Coach!);
         var trainee = await N9a1TraineeAsync(house.TenantId, $"{tag}-dalia@example.test", address: "203.0.113.150");
-        var training = await CreateTrainingResourcesAsync(house.Owner, trainee.ProfileId, 8, 1, today);
-        await AssignAsync(house.Owner, trainee.ProfileId, training, today);
+        // The house's Coach, the trainee's coach, gives the program: the owner coaches none of them (C8, notes plan N9d1a).
+        var training = await CreateTrainingResourcesAsync(house.Coach!, trainee.ProfileId, 8, 1, today);
+        await AssignAsync(house.Coach!, trainee.ProfileId, training, today);
         var (program, day) = await A3StartTodayAsync(trainee.Client);
         var own = await N9b2DOwnWorkoutAsync(trainee.Client, (library.Squat.Id, 2), (library.Hold.Id, 1));
         var exercise = day.Exercises.Single();

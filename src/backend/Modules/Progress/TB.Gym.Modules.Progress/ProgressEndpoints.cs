@@ -258,6 +258,7 @@ public static class ProgressEndpoints
 
         var coach = endpoints.MapGroup("/api/progress/clients/{clientProfileId:guid}")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Private)
             .WithTags(ProgressModule.Name);
 
         coach.MapGet("/span", async (

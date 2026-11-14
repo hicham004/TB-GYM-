@@ -160,10 +160,12 @@ public sealed partial class Phase3TrainingWorkflowTests
             await owner.GetAsync($"/api/clients/{clientId}/coach-assignments"));
         Assert.AreEqual("ClientLeft", history[^1].Reason);
         Assert.AreEqual(coachUserId, history[^1].PreviousCoachUserId);
+        // The owner keeps the record, not its private side: the client left another coach, so the coach's notes answer
+        // as a missing one (C8, notes plan N9d1a) rather than as read-only.
         await RefreshCsrfAsync(owner);
         await AssertStatusAsync(
             await owner.PutAsJsonAsync($"/api/clients/{clientId}/coach-notes", new { notes = "x", version = details.Version }),
-            HttpStatusCode.Conflict);
+            HttpStatusCode.NotFound);
 
         // The owner and the coach are told in-app, naming the client (audit COACH-12); the client, who did
         // it, is not emailed.

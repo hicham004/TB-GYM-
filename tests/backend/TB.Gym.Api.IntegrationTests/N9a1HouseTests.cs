@@ -1171,11 +1171,14 @@ public sealed partial class Phase3TrainingWorkflowTests
             await Phase6EnrollAsync(house.Owner, clientId, "N9a1 check-ins", "CheckIns");
         }
 
+        // The house's form; the Coach, who coaches both, assigns it (the owner, who coaches neither, may not since C8,
+        // notes plan N9d1a).
         var form = await Phase6CreateFormAsync(house.Owner, "Weekly check-in", Phase6ShortText("How was your week?"));
         var version = await Phase6PublishAsync(house.Owner, form.Form.Id, form.Versions[0]);
         var due = Phase6WorkspaceToday().AddDays(2);
-        var ritasCheckIn = await B4aAssignAsync(house.Owner, ritaId, version.Id, due);
-        var traineesCheckIn = await B4aAssignAsync(house.Owner, trainee.ProfileId, version.Id, due);
+        await AssertStatusAsync(await Phase6AssignAsync(house.Owner, ritaId, version.Id, due), HttpStatusCode.NotFound);
+        var ritasCheckIn = await B4aAssignAsync(house.Coach!, ritaId, version.Id, due);
+        var traineesCheckIn = await B4aAssignAsync(house.Coach!, trainee.ProfileId, version.Id, due);
         R31Tick();
         await B4aSendAsync(trainee.Client, traineesCheckIn, version);
         R31Tick();
@@ -1184,14 +1187,28 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         foreach (var (caller, who) in staff)
         {
+            // The Coach reads the invited client's check-in in the feed and opens it from Today; the owner, who does not
+            // coach her, has no feed item and a check-in to review with its count but nothing to open (C8, notes plan N9d1a).
+            var coaches = caller == house.Coach;
             var view = await ReadSliceAsync<CoachTodayView>(caller, CoachTodayUrl);
-            var activity = view.Activity.Single();
-            Assert.AreEqual(
-                (CoachActivityKind.CheckInSubmitted, ritaId, ritasCheckIn),
-                (activity.Kind, activity.Client.ClientProfileId, activity.SubjectId),
-                who);
+            if (coaches)
+            {
+                var activity = view.Activity.Single();
+                Assert.AreEqual(
+                    (CoachActivityKind.CheckInSubmitted, ritaId, ritasCheckIn),
+                    (activity.Kind, activity.Client.ClientProfileId, activity.SubjectId),
+                    who);
+            }
+            else
+            {
+                Assert.IsEmpty(view.Activity, who);
+            }
+
             var toReview = view.Attention.Single(item => item.Kind == CoachAttentionKind.CheckInToReview);
-            Assert.AreEqual((ritaId, (Guid?)ritasCheckIn), (toReview.Client.ClientProfileId, toReview.SubjectId), who);
+            Assert.AreEqual(
+                (ritaId, coaches ? ritasCheckIn : (Guid?)null, (int?)1, coaches),
+                (toReview.Client.ClientProfileId, toReview.SubjectId, toReview.Count, toReview.Client.MayCoach),
+                who);
             Assert.IsFalse(view.Attention.Any(item => item.Client.ClientProfileId == trainee.ProfileId), $"{who}: the trainee raised something.");
             Assert.AreEqual(2, view.ClientCount, who);
 
@@ -1265,15 +1282,16 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var rita = CreateClient();
         var ritaId = await R31InviteAsync(house.Coach!, rita, house.TenantId, "n9a1-note-rita@example.test", "Rita", "Daher");
 
-        // The house's staff give each a training plan and the same program, starting today.
-        var training = await CreateTrainingResourcesAsync(house.Owner, trainee.ProfileId, 8, 1, today);
-        await AssignAsync(house.Owner, trainee.ProfileId, training, today);
+        // The house's Coach, who coaches both, gives each a training plan and the same program, starting today (the
+        // owner, who coaches neither, may not since C8, notes plan N9d1a).
+        var training = await CreateTrainingResourcesAsync(house.Coach!, trainee.ProfileId, 8, 1, today);
+        await AssignAsync(house.Coach!, trainee.ProfileId, training, today);
         var ritas = training with
         {
             Enrollment = await CreateTrainingEnrollmentAsync(house.Owner, ritaId, today, 8),
-            Max = await RecordWorkingMaxAsync(house.Owner, ritaId, training.Exercise.Id, 100m),
+            Max = await RecordWorkingMaxAsync(house.Coach!, ritaId, training.Exercise.Id, 100m),
         };
-        await AssignAsync(house.Owner, ritaId, ritas, today);
+        await AssignAsync(house.Coach!, ritaId, ritas, today);
 
         // Each starts today's workout and leaves a note on it.
         var traineesWorkout = await N9a1NoteOnTodaysWorkoutAsync(trainee.Client, "Felt strong today");
@@ -1323,15 +1341,16 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var rita = CreateClient();
         var ritaId = await R31InviteAsync(house.Coach!, rita, house.TenantId, "n9a1-feed-rita@example.test", "Rita", "Daher");
 
-        // The house's staff give each a training plan and the same program, starting today.
-        var training = await CreateTrainingResourcesAsync(house.Owner, trainee.ProfileId, 8, 1, today);
-        await AssignAsync(house.Owner, trainee.ProfileId, training, today);
+        // The house's Coach, who coaches both, gives each a training plan and the same program, starting today (the
+        // owner, who coaches neither, may not since C8, notes plan N9d1a).
+        var training = await CreateTrainingResourcesAsync(house.Coach!, trainee.ProfileId, 8, 1, today);
+        await AssignAsync(house.Coach!, trainee.ProfileId, training, today);
         var ritas = training with
         {
             Enrollment = await CreateTrainingEnrollmentAsync(house.Owner, ritaId, today, 8),
-            Max = await RecordWorkingMaxAsync(house.Owner, ritaId, training.Exercise.Id, 100m),
+            Max = await RecordWorkingMaxAsync(house.Coach!, ritaId, training.Exercise.Id, 100m),
         };
-        await AssignAsync(house.Owner, ritaId, ritas, today);
+        await AssignAsync(house.Coach!, ritaId, ritas, today);
 
         // Each starts today's workout, logs its one set and finishes it; the trainee's is the newer of the two.
         var ritasWorkout = await R25bFinishTodaysWorkoutAsync(rita, 80m);
@@ -1341,14 +1360,23 @@ public sealed partial class Phase3TrainingWorkflowTests
         var finished = await ReadSliceAsync<TB.Gym.Modules.Training.ClientWorkoutHistoryPage>(trainee.Client, "/api/training/me/history");
         Assert.AreEqual(traineesWorkout, finished.Items.Single().WorkoutExecutionId, "The trainee's own history has the workout.");
 
-        // The Owner, who sees every client, and the Coach, whose name is on both records, read one finished workout
-        // on Today: the invited client's. Nothing of the trainee's is in the feed.
+        // The Coach, whose name is on both records, reads one finished workout on Today: the invited client's. The
+        // Owner, who manages every client but coaches neither, reads none: the feed is the private side (C8, notes plan
+        // N9d1a). Nothing of the trainee's is in either feed.
         foreach (var (caller, who) in new[] { (house.Owner, "the owner"), (house.Coach!, "the Coach") })
         {
             var view = await ReadSliceAsync<CoachTodayView>(caller, CoachTodayUrl);
             Assert.AreEqual(2, view.ClientCount, $"{who} counts the trainee among their clients.");
-            var workout = view.Activity.Single(item => item.Kind == CoachActivityKind.WorkoutCompleted);
-            Assert.AreEqual((ritasWorkout, ritaId), (workout.SubjectId, workout.Client.ClientProfileId), who);
+            if (caller == house.Owner)
+            {
+                Assert.IsEmpty(view.Activity, who);
+            }
+            else
+            {
+                var workout = view.Activity.Single(item => item.Kind == CoachActivityKind.WorkoutCompleted);
+                Assert.AreEqual((ritasWorkout, ritaId), (workout.SubjectId, workout.Client.ClientProfileId), who);
+            }
+
             Assert.IsFalse(
                 view.Activity.Any(item => item.Client.ClientProfileId == trainee.ProfileId || item.SubjectId == traineesWorkout),
                 $"{who}: the trainee's workout is in the activity feed.");

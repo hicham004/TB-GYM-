@@ -292,10 +292,12 @@ public sealed partial class Phase3TrainingWorkflowTests
             (training.OwnWorkoutsCounted, training.RecentOwnCompletedWorkoutCount, training.WindowOwnCompletedWorkoutCount,
                 training.LastOwnCompletedDate));
 
-        // The house's staff read the same counts; a window that ends before today counts only what it holds.
-        var staff = (await ReadSliceAsync<ProgressDashboardView>(house.Owner, $"/api/progress/clients/{trainee.ProfileId}/dashboard"))
-            .Training.Context!;
+        // The house's Coach, the trainee's coach, reads the same counts, and the owner, who coaches the trainee not, finds
+        // no such dashboard (C8, notes plan N9d1a); a window that ends before today counts only what it holds.
+        var staffDashboardUrl = $"/api/progress/clients/{trainee.ProfileId}/dashboard";
+        var staff = (await ReadSliceAsync<ProgressDashboardView>(house.Coach!, staffDashboardUrl)).Training.Context!;
         Assert.AreEqual((1, 2, (DateOnly?)today), (staff.RecentOwnCompletedWorkoutCount, staff.WindowOwnCompletedWorkoutCount, staff.LastOwnCompletedDate));
+        await AssertStatusAsync(await house.Owner.GetAsync(staffDashboardUrl), HttpStatusCode.NotFound);
         var before = (await ReadSliceAsync<ProgressDashboardView>(
             trainee.Client,
             $"{N9b5DashboardUrl}?from={N9b5Day(today.AddDays(-30))}&to={N9b5Day(today)}")).Training.Context!;
@@ -307,8 +309,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         // own: each is counted once, the session against her plan and her own apart, never her session twice.
         using var rana = CreateClient();
         var ranaId = await R31InviteAsync(house.Coach!, rana, house.TenantId, "n9b5-count-rana@example.test", "Rana", "Saad");
-        var resources = await CreateTrainingResourcesAsync(house.Owner, ranaId, 8, 1, today);
-        await AssignAsync(house.Owner, ranaId, resources, today);
+        var resources = await CreateTrainingResourcesAsync(house.Coach!, ranaId, 8, 1, today);
+        await AssignAsync(house.Coach!, ranaId, resources, today);
         var (session, _) = await A3StartTodayAsync(rana);
         await N9b2AOkAsync<WorkoutExecutionView>(N9b2AFinishAsync(rana, session.Id, session.Version));
         await N9b5FinishEmptyWorkoutAsync(rana);

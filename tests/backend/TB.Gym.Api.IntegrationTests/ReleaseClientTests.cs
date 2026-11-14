@@ -69,64 +69,24 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertStatusAsync(await coach.GetAsync("/api/clients/former"), HttpStatusCode.Forbidden);
         Assert.AreEqual(0, (await TeamMembersAsync(owner)).Single(member => member.Role == "Owner").AssignedClientCount);
 
-        // The record is readable and nothing about it changes, however the write reaches it.
-        await AssertStatusAsync(await owner.GetAsync($"/api/clients/{clientId}"), HttpStatusCode.OK);
-        await AssertStatusAsync(await owner.GetAsync($"/api/training/mesocycles/{block.Id}"), HttpStatusCode.OK);
-        Assert.IsTrue((await ReadSliceAsync<TrainingMaxesView>(owner, P2MaxesUrl(block.Id))).IsClosed, "A released client's program reads as closed.");
-        await RefreshCsrfAsync(owner);
-        HttpResponseMessage[] refusals =
-        [
-            await owner.PutAsJsonAsync($"/api/clients/{clientId}/coach-notes", new { notes = "late note", version = released.Version }),
-            await owner.PostAsJsonAsync($"/api/clients/{clientId}/relationship/block", new { reason = "x", version = released.Version }),
-            await owner.PostAsJsonAsync($"/api/clients/{clientId}/release", new { reason = "Again", version = released.Version }),
-            await owner.PostAsJsonAsync(
-                $"/api/progress/clients/{clientId}/bodyweight",
-                new { value = 80m, unit = "Kilogram", measurementDate = TenantToday() }),
-            await owner.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/visibility", new { revealAllWeeks = true, version = block.Version }),
-            await owner.PostAsJsonAsync(
-                P3Url(block.Id, "apply"),
-                new
-                {
-                    sourceWeekIds = new[] { block.Weeks[0].Id },
-                    iterations = 1,
-                    rpeIncrement = 0.5m,
-                    previewHash = new string('a', 64),
-                    mesocycleVersion = block.Version,
-                }),
-            await owner.PostAsJsonAsync(
-                P3bUrl(block.Id, "apply"),
-                new { mesocycleVersion = block.Version, weeks = Array.Empty<object>(), previewHash = new string('a', 64) }),
-            await owner.PostAsJsonAsync(
-                $"/api/training/mesocycles/{block.Id}/training-maxes/apply",
-                new
-                {
-                    mesocycleVersion = block.Version,
-                    changes = new[] { P2Change(resources.Exercise.Id, value: 120m) },
-                    reason = (string?)null,
-                    previewHash = new string('a', 64),
-                    idempotencyKey = Guid.NewGuid(),
-                }),
-            await owner.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/name", new { name = "Late name", version = block.Version }),
-            await owner.PostAsJsonAsync(
-                $"/api/commercial/enrollments/{paid.Id}/payments",
-                new
-                {
-                    amount = 5m,
-                    currencyCode = "USD",
-                    receivedOn = TenantToday(),
-                    method = "Cash",
-                    reference = (string?)null,
-                    note = (string?)null,
-                    idempotencyKey = Guid.NewGuid(),
-                }),
-            await owner.PostAsJsonAsync(
-                $"/api/commercial/enrollments/{paid.Id}/renew",
-                new { offerId = paid.OfferId, startDate = TenantToday().AddDays(28), idempotencyKey = Guid.NewGuid() }),
-        ];
-        foreach (var refused in refusals)
+        // The owner keeps the record, never as its coach (C8, notes plan N9d1a): its business side reads and nothing of
+        // it changes, however the write reaches it (409 client_released); its private side was the coach's, so it is
+        // missing to the owner, as for a client that does not exist, before the release is even looked at (404).
+        var kept = await RequiredJsonAsync<ReleasedDetails>(await owner.GetAsync($"/api/clients/{clientId}"));
+        Assert.IsFalse(kept.MayCoach, "The owner never coached this client.");
+        await AssertStatusAsync(await owner.GetAsync($"/api/training/mesocycles/{block.Id}"), HttpStatusCode.NotFound);
+        await AssertStatusAsync(await owner.GetAsync(P2MaxesUrl(block.Id)), HttpStatusCode.NotFound);
+        foreach (var (route, isPrivate, refused) in await ReleaseWritesAsync(owner, clientId, released.Version, block, resources, paid))
         {
-            await AssertStatusAsync(refused, HttpStatusCode.Conflict);
-            StringAssert.Contains(await refused.Content.ReadAsStringAsync(), "client_released");
+            var body = await refused.Content.ReadAsStringAsync();
+            if (isPrivate)
+            {
+                Assert.AreEqual(HttpStatusCode.NotFound, refused.StatusCode, $"{route}: {body}");
+                continue;
+            }
+
+            Assert.AreEqual(HttpStatusCode.Conflict, refused.StatusCode, $"{route}: {body}");
+            StringAssert.Contains(body, "client_released", route);
         }
 
         // Open work closed through its own audited transitions; money history untouched.
@@ -187,6 +147,30 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.DoesNotContain("Rel Coach", mail.TextBody);
         Assert.DoesNotContain("another gym", mail.TextBody);
         Assert.AreEqual(0, (await SweepWorkspaceNoticesAsync()).Total, "A notice is sent once.");
+
+        // A client the owner coached, released, stays the owner's whole (C8 with ADR 0027): the record reads, the program
+        // reads as closed, and nothing about it changes, however the write reaches it.
+        using var ownClient = CreateClient();
+        var ownId = await InviteAndAcceptAsync(owner, ownClient, "rel-own-client@example.test", true);
+        var ownResources = resources with
+        {
+            Enrollment = await CreateTrainingEnrollmentAsync(owner, ownId, TenantToday(), 8),
+            Max = await RecordWorkingMaxAsync(owner, ownId, resources.Exercise.Id, 100m),
+        };
+        var ownBlock = await AssignAsync(owner, ownId, ownResources, TenantToday());
+        var ownPaid = await CreatePaidMessagingEnrollmentAsync(owner, ownId, 50m);
+        await ReleaseAsync(owner, ownId, "Moved away");
+        var ownKept = await RequiredJsonAsync<ReleasedDetails>(await owner.GetAsync($"/api/clients/{ownId}"));
+        Assert.IsNotNull(ownKept.Release);
+        Assert.AreEqual((ownerUserId, true), (ownKept.AssignedCoachUserId, ownKept.MayCoach));
+        await AssertStatusAsync(await owner.GetAsync($"/api/training/mesocycles/{ownBlock.Id}"), HttpStatusCode.OK);
+        Assert.IsTrue((await ReadSliceAsync<TrainingMaxesView>(owner, P2MaxesUrl(ownBlock.Id))).IsClosed, "A released client's program reads as closed.");
+        foreach (var (route, _, refused) in await ReleaseWritesAsync(owner, ownId, ownKept.Version, ownBlock, ownResources, ownPaid))
+        {
+            var body = await refused.Content.ReadAsStringAsync();
+            Assert.AreEqual(HttpStatusCode.Conflict, refused.StatusCode, $"{route}: {body}");
+            StringAssert.Contains(body, "client_released", route);
+        }
     }
 
     [TestMethod]
@@ -293,6 +277,82 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     // ---------- release helpers ----------
 
+    /// <summary>
+    /// Every write that reaches a released client, by its route or through a row that names them, each with whether it
+    /// touches the client's private side (C8): the coach's notes, a weigh-in and the program.
+    /// </summary>
+    private static async Task<(string Route, bool IsPrivate, HttpResponseMessage Response)[]> ReleaseWritesAsync(
+        HttpClient owner,
+        Guid clientId,
+        uint version,
+        ScenarioMesocycle block,
+        TrainingResources resources,
+        PaidEnrollment paid)
+    {
+        await RefreshCsrfAsync(owner);
+        return
+        [
+            ("coach-notes", true,
+                await owner.PutAsJsonAsync($"/api/clients/{clientId}/coach-notes", new { notes = "late note", version })),
+            ("block", false,
+                await owner.PostAsJsonAsync($"/api/clients/{clientId}/relationship/block", new { reason = "x", version })),
+            ("release", false,
+                await owner.PostAsJsonAsync($"/api/clients/{clientId}/release", new { reason = "Again", version })),
+            ("bodyweight", true,
+                await owner.PostAsJsonAsync(
+                    $"/api/progress/clients/{clientId}/bodyweight",
+                    new { value = 80m, unit = "Kilogram", measurementDate = TenantToday() })),
+            ("visibility", true,
+                await owner.PutAsJsonAsync(
+                    $"/api/training/mesocycles/{block.Id}/visibility", new { revealAllWeeks = true, version = block.Version })),
+            ("next block", true,
+                await owner.PostAsJsonAsync(
+                    P3Url(block.Id, "apply"),
+                    new
+                    {
+                        sourceWeekIds = new[] { block.Weeks[0].Id },
+                        iterations = 1,
+                        rpeIncrement = 0.5m,
+                        previewHash = new string('a', 64),
+                        mesocycleVersion = block.Version,
+                    })),
+            ("program edit", true,
+                await owner.PostAsJsonAsync(
+                    P3bUrl(block.Id, "apply"),
+                    new { mesocycleVersion = block.Version, weeks = Array.Empty<object>(), previewHash = new string('a', 64) })),
+            ("training maxes", true,
+                await owner.PostAsJsonAsync(
+                    $"/api/training/mesocycles/{block.Id}/training-maxes/apply",
+                    new
+                    {
+                        mesocycleVersion = block.Version,
+                        changes = new[] { P2Change(resources.Exercise.Id, value: 120m) },
+                        reason = (string?)null,
+                        previewHash = new string('a', 64),
+                        idempotencyKey = Guid.NewGuid(),
+                    })),
+            ("program name", true,
+                await owner.PutAsJsonAsync($"/api/training/mesocycles/{block.Id}/name", new { name = "Late name", version = block.Version })),
+            ("payment", false,
+                await owner.PostAsJsonAsync(
+                    $"/api/commercial/enrollments/{paid.Id}/payments",
+                    new
+                    {
+                        amount = 5m,
+                        currencyCode = "USD",
+                        receivedOn = TenantToday(),
+                        method = "Cash",
+                        reference = (string?)null,
+                        note = (string?)null,
+                        idempotencyKey = Guid.NewGuid(),
+                    })),
+            ("renewal", false,
+                await owner.PostAsJsonAsync(
+                    $"/api/commercial/enrollments/{paid.Id}/renew",
+                    new { offerId = paid.OfferId, startDate = TenantToday().AddDays(28), idempotencyKey = Guid.NewGuid() })),
+        ];
+    }
+
     private CapturedActionEmailTransport CapturedNoticeMail =>
         RequiredFactory.Services.GetRequiredService<CapturedActionEmailTransport>();
 
@@ -359,6 +419,6 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     private sealed record PaidEnrollment(Guid Id, Guid OfferId);
     private sealed record ReleaseView(DateTimeOffset ReleasedAtUtc, string Reason, Guid? ReleasedByUserId, string ReleasedByName);
-    private sealed record ReleasedDetails(Guid Id, Guid AssignedCoachUserId, uint Version, ReleaseView? Release);
+    private sealed record ReleasedDetails(Guid Id, Guid AssignedCoachUserId, uint Version, ReleaseView? Release, bool MayCoach);
     private sealed record FormerClient(Guid Id, string Email, DateTimeOffset ReleasedAtUtc, string Reason);
 }

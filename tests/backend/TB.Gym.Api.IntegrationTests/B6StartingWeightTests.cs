@@ -216,7 +216,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
-    public async Task B6OnlyTheClientsOwnCoachOrTheOwnerReadsAndCorrectsTheStart()
+    public async Task B6OnlyTheClientsOwnCoachReadsAndCorrectsTheStart()
     {
         var today = R61aStartAtMidday();
         using var owner = CreateClient();
@@ -231,11 +231,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         await B6CompleteOnboardingAsync(rami, "Rami", 88m, "Kilogram", today.AddDays(-21));
         var mayaVersion = (await B6StartAsync(owner, mayaId)).Current!.Version;
 
-        // Another coach's client is not there for Lina (ADR 0026); the owner reads and corrects every client.
+        // Another coach's client is not there for Lina (ADR 0026), nor, since a weigh-in is the private side, for the
+        // owner, who reads and corrects the clients they coach (C8, notes plan N9d1a).
         await AssertStatusAsync(await lina.GetAsync(B6DashboardUrl(mayaId)), HttpStatusCode.NotFound);
         await RefreshCsrfAsync(lina);
         await AssertStatusAsync(await lina.PutAsJsonAsync(B6StartUrl(mayaId), B6Correction(65m, today.AddDays(-21), "Typed wrong", mayaVersion)), HttpStatusCode.NotFound);
-        Assert.AreEqual(88m, (await B6StartAsync(owner, ramiId)).Current!.ValueKilograms);
+        await AssertStatusAsync(await owner.GetAsync(B6DashboardUrl(ramiId)), HttpStatusCode.NotFound);
         Assert.AreEqual(88m, (await B6StartAsync(lina, ramiId)).Current!.ValueKilograms);
 
         // A client never corrects their own start, nor reaches the coach's read.

@@ -3,7 +3,7 @@
 Status: accepted, 2026-09-23; amended 2026-09-24 (a coach can resign, and their clients are told);
 amended 2026-10-20 (the owner's old thread closes too, audit COACH-13); amended 2026-10-29 (money received on
 Today, critique B4b, for the owner to confirm); amended 2026-10-31 (the This month page, critique B10d, for the
-owner to confirm)
+owner to confirm); amended 2026-11-14 (the owner privacy split, C8 decided 2026-10-14, notes plan N9d1a)
 
 ## Context
 
@@ -26,7 +26,18 @@ Business rules, decided by the product owner on 2026-09-23:
   coach has left by the time they accept, with the owner. Existing clients were migrated to the
   owner.
 - **A Coach sees and acts only on their own clients; the Owner sees all.** A solo owner notices no
-  change.
+  change. *Amended 2026-11-14 (C8, N9d1a):* the Owner manages every client and coaches only their own.
+  The business side (name, contact, coach, plan and payment status, enrollments, payments, sessions,
+  renewals, the relationship and its coach history, activity counts) is the Owner's for every client;
+  the private side (training and food logs, programs, maxes, nutrition targets, check-in answers,
+  weigh-ins, measurements, progress photos, intake answers, the health fields, the coach's notes) opens
+  only to the client's own coach, the Owner included. An owner who coaches is simply the coach of their
+  own clients, and one who takes a client by reassigning it to themselves opens its private side. A
+  former client's private side opens only to an Owner who coached them when they left (a release or a
+  leave makes the Owner the keeper, not the coach, and the coach left loses the record), so releasing a
+  coach's client opens nothing. Still to come: a client may wait with no coach when theirs leaves, and
+  every coach change, an owner taking a client included, tells the client (N9d1b); the front desk (C8's
+  slice 2).
 - **Every member of staff reads who is on the team** (critique B3a, 2026-10-28): each active owner
   and coach's name, role and joining day (`GET /api/team/roster`), which a coach opens from Settings.
   Emails, invitations, client counts and every change to the team stay the owner's.
@@ -71,6 +82,9 @@ Mechanism:
   through another row (mesocycle, enrollment, workout note, conversation, progress photo) ask the
   scope after loading it. Another coach's client answers **404**, exactly like a missing one. An
   integration test fails if a route parameter whose name contains "client" uses any other name.
+  Since N9d1a the scope answers may manage and may coach, every client route carries SharedKernel's
+  `ClientSide` (`Business` or `Private`, none counting as private, the business list pinned by a
+  test), and the Owner on another coach's client's private side answers 404 the same way.
 - Database guards: a composite FK from client to membership; deferred constraint triggers refusing
   a coach who is not active staff or a coach change without a matching newest history entry; a
   trigger refusing a staff member leaving while clients are still assigned; append-only and chain

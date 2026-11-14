@@ -67,7 +67,7 @@ public interface ICheckInApplicationService
 
     /// <summary>
     /// Every sent check-in waiting for its review (critique B3b), of the caller's current clients whose
-    /// plan includes check-ins now: a Coach's own, every one for the Owner (ADR 0026), oldest first.
+    /// plan includes check-ins now that the caller coaches (ADR 0026, C8: the Owner's own too), oldest first.
     /// </summary>
     Task<CheckInToReviewList> ListToReviewAsync(CancellationToken cancellationToken);
 }

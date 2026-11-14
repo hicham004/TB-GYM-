@@ -224,12 +224,14 @@ public sealed partial class Phase3TrainingWorkflowTests
             $"/api/progress/clients/{clientId}/photos",
             $"/api/progress/clients/{clientId}/dashboard",
         ];
+        var ownersAnswers = new Dictionary<string, HttpStatusCode>();
         foreach (var url in reads)
         {
             await AssertStatusAsync(await coach.GetAsync(url), HttpStatusCode.NotFound);
+            ownersAnswers[url] = (await owner.GetAsync(url)).StatusCode;
             Assert.AreNotEqual(
                 HttpStatusCode.NotFound,
-                (await owner.GetAsync(url)).StatusCode,
+                ownersAnswers[url],
                 $"The owner must reach {url}, or the refusal above proves nothing.");
         }
 
@@ -297,15 +299,15 @@ public sealed partial class Phase3TrainingWorkflowTests
         await AssertPhotoReadableAsync(coach, photo.MediaAssetId, expected: false);
         await AssertPhotoReadableAsync(owner, photo.MediaAssetId, expected: true);
 
-        // The owner moves the client to the coach; the coach now gets exactly the owner's answer on
-        // every route (a feature the client has no entitlement for is refused to both alike).
+        // The owner moves the client to the coach; the coach now gets exactly the answer the owner had as the
+        // client's coach on every route (a feature the client has no entitlement for is refused alike).
         await ReassignAsync(owner, clientId, coachUserId, "Better schedule fit");
         foreach (var url in reads)
         {
             Assert.AreEqual(
-                (await owner.GetAsync(url)).StatusCode,
+                ownersAnswers[url],
                 (await coach.GetAsync(url)).StatusCode,
-                $"After reassignment the coach and the owner disagree about {url}.");
+                $"After reassignment the coach does not get the answer the owner had about {url}.");
         }
 
         await AssertStatusAsync(await coach.GetAsync($"/api/training/mesocycles/{block.Id}"), HttpStatusCode.OK);
@@ -316,9 +318,13 @@ public sealed partial class Phase3TrainingWorkflowTests
             HttpStatusCode.OK);
         await AssertPhotoReadableAsync(coach, photo.MediaAssetId, expected: true);
 
-        // And the owner still sees everything.
-        await AssertStatusAsync(await owner.GetAsync($"/api/training/mesocycles/{block.Id}"), HttpStatusCode.OK);
-        await AssertPhotoReadableAsync(owner, photo.MediaAssetId, expected: true);
+        // And the owner, who manages the client but no longer coaches them, keeps the business side alone (C8,
+        // notes plan N9d1a): the client's details and plan answer, the program and the photo are the coach's.
+        await AssertStatusAsync(await owner.GetAsync($"/api/clients/{clientId}"), HttpStatusCode.OK);
+        await AssertStatusAsync(await owner.GetAsync($"/api/commercial/clients/{clientId}"), HttpStatusCode.OK);
+        await AssertStatusAsync(await owner.GetAsync($"/api/training/mesocycles/{block.Id}"), HttpStatusCode.NotFound);
+        await AssertStatusAsync(await owner.GetAsync($"/api/progress/clients/{clientId}/photos"), HttpStatusCode.NotFound);
+        await AssertPhotoReadableAsync(owner, photo.MediaAssetId, expected: false);
     }
 
     [TestMethod]

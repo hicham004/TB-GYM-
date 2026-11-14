@@ -506,13 +506,12 @@ internal sealed class CheckInApplicationService(
 
     public async Task<CheckInToReviewList> ListToReviewAsync(CancellationToken cancellationToken)
     {
-        // The caller's current clients (ADR 0026): a Coach's own, every one for the Owner (the owner's
-        // choice of 2026-10-28); never a former client, whose record is read-only (ADR 0027).
-        var clients = dbContext.ClientProfiles.AsNoTracking().Where(client => client.ReleasedAtUtc == null);
-        if (await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId)
-        {
-            clients = clients.Where(client => client.AssignedCoachUserId == coachUserId);
-        }
+        // The clients the caller coaches now (ADR 0026, C8): each item opens the client's answers, the private side, so
+        // the Owner lists their own clients as a Coach does (another coach's waiting check-ins stay counts on Today and
+        // the client's page); never a former client, whose record is read-only (ADR 0027).
+        var staffUserId = await coachClientScope.StaffUserIdAsync(cancellationToken);
+        var clients = dbContext.ClientProfiles.AsNoTracking()
+            .Where(client => client.ReleasedAtUtc == null && client.AssignedCoachUserId == staffUserId);
 
         var sent = await (
             from response in dbContext.CheckInResponses.AsNoTracking()

@@ -601,8 +601,9 @@ internal sealed partial class TrainingApplicationService
                 item.Status == MembershipStatus.Active)
             .Select(item => (TenantRole?)item.Role)
             .SingleOrDefaultAsync(cancellationToken);
-        if (role == TenantRole.Coach &&
-            await coachClientScope.ExcludesAsync(execution.ClientProfileId, cancellationToken))
+        // A workout is the private side (C8): staff write on it only as the client's own coach, the Owner included.
+        if (role is TenantRole.Owner or TenantRole.Coach &&
+            await coachClientScope.ExcludesFromCoachingAsync(execution.ClientProfileId, cancellationToken))
         {
             return NotFound();
         }

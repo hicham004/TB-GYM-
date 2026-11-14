@@ -195,14 +195,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         await JoinAsCoachAsync(owner, omar, "n6d-who-omar@example.test", "Omar Saad");
         using var maya = CreateClient();
         var mayaId = await R31InviteAsync(lea, maya, tenant, "n6d-who-maya@example.test", "Maya", "Rahman");
-        await N6dStepProgramAsync(owner, mayaId, "n6d who", 20m);
+        await N6dStepProgramAsync(lea, mayaId, "n6d who", 20m);
         await N6bTrainTodayAsync(maya, true, new N6bLog(10, 20m), new N6bLog(10, 20m));
 
-        // Lea, Maya's coach, reads it, and so does the owner, who coaches every client (CLI-013), with Lea named.
+        // Lea, Maya's coach, reads it. The owner manages every client but coaches only their own, and where a lift
+        // stands is the private side (CLI-013, C8, notes plan N9d1a): no weights to apply for Lea's client.
         Assert.AreEqual((1, (int?)1), N6dCounts(await N6dItemAsync(lea, mayaId)));
-        var ownersItem = await N6dItemAsync(owner, mayaId)
-            ?? throw new AssertFailedException("The owner reads every client's weights to apply.");
-        Assert.AreEqual("Lea Khoury", ownersItem.Client.AssignedCoachName);
+        Assert.IsNull(await N6dItemAsync(owner, mayaId));
 
         // Omar, who does not coach Maya, reads nothing of her anywhere; Maya never reads a coach's Today.
         Assert.IsNull(await N6dItemAsync(omar, mayaId));

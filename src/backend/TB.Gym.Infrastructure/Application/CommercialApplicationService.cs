@@ -626,7 +626,7 @@ internal sealed partial class CommercialApplicationService(
         var source = await dbContext.ClientEnrollments
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == enrollmentId, cancellationToken);
-        if (source is null || await coachClientScope.ExcludesAsync(source.ClientProfileId, cancellationToken))
+        if (source is null || await coachClientScope.ExcludesFromManagingAsync(source.ClientProfileId, cancellationToken))
         {
             return NotFound();
         }
@@ -973,7 +973,7 @@ internal sealed partial class CommercialApplicationService(
         var enrollment = await dbContext.ClientEnrollments
             .Include(item => item.Entitlements)
             .SingleOrDefaultAsync(item => item.Id == enrollmentId, cancellationToken);
-        if (enrollment is null || await coachClientScope.ExcludesAsync(enrollment.ClientProfileId, cancellationToken))
+        if (enrollment is null || await coachClientScope.ExcludesFromManagingAsync(enrollment.ClientProfileId, cancellationToken))
         {
             return NotFound();
         }
@@ -1652,7 +1652,7 @@ internal sealed partial class CommercialApplicationService(
             return false;
         }
 
-        if (await coachClientScope.ExcludesAsync(id, cancellationToken))
+        if (await coachClientScope.ExcludesFromManagingAsync(id, cancellationToken))
         {
             return true;
         }

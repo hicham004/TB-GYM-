@@ -125,8 +125,19 @@ and nothing else (critique B3a). See
 sent their invitation, or the owner when that coach has left. Every change appends to an
 append-only coach history. Only the owner reassigns a client.
 
-**CLI-013** A Coach sees and acts only on their own clients in every module; the Owner sees every
-client. Another coach's client answers as a missing one. Chats stay private to their participants:
+**CLI-013** A Coach sees and acts only on their own clients in every module. The Owner may manage every
+client and coaches only their own (C8, decided 2026-10-14; notes plan N9d1a, 14 Nov 2026): the business side
+(name, contact, coach, onboarding status, plan and payment status, enrollments, payments, sessions, renewals,
+plan asks, the relationship and its coach history, and activity counts) is the Owner's for every client, while the
+private side (programs, workouts and their records, maxes, food logs and meal plans, nutrition targets, check-ins
+and their answers, weigh-ins, measurements, progress photos, the intake answers, the health fields and the coach's
+notes) opens only to the client's own coach, the Owner included. A former client's private side opens only to an
+Owner who was its coach when it ended: a release or a leave makes the Owner the record's keeper (ADR 0027), never its
+coach, and the coach the client left loses the whole record (CLI-015), so another coach's former client's private side
+is read by nobody. Every
+route that names a client is sorted business or private (`ClientSide`), one that says neither counting as private,
+and another coach's client, or for the Owner the private side of one they do not coach, answers as a missing one.
+Lists and Today follow (CLI-018, CLI-020, CHK-014, NUT-008). Chats stay private to their participants:
 after a reassignment the old coach loses the thread and the client keeps it read-only. The owner is
 no exception (audit COACH-13): a thread is live only between a client and the coach they are assigned
 to, so the owner's own thread closes the same way when they hand the client to a coach, and the owner
@@ -143,7 +154,9 @@ membership ends at once; their running and future plans, programs and meal plans
 owner. A released client is emailed once without the workspace, coach or reason named; when a client
 leaves, the owner and their coach are told in-app instead, naming the client (audit COACH-12), since a
 coach cannot open Former clients to learn who left. The record is kept read-only for the owner
-under Former clients, marked released or left: every change answers 409 `client_released`. There is
+under Former clients, marked released or left: every change answers 409 `client_released`. The owner
+keeps its business side; its private side only when the owner was its coach when it ended (CLI-013), a private
+change on another coach's former client answering 404 as for any client the owner does not coach. There is
 no undo, and a former client is not an active client. See `docs/adr/0027-release-client.md`.
 
 **CLI-016** A former client can be invited back as a client, never as a coach. Accepting starts a new
@@ -160,8 +173,12 @@ unchanged (the workout player asks for its own unit). Values are `Kilogram` or `
 a database check.
 
 **CLI-018** Coach attention v9 (`CoachAttention`; v1 in R3.1, v2 in P4c, v3 in audit A8, v4 in critique B4a, v5 in critique B10c, v6 in critique B13, v7 in notes plan N10a, v8 in notes plan N6d, v9 in notes plan N9a1) is what Coach Today asks a
-coach to act on and the status the client list shows. It covers the clients the caller coaches (CLI-013: a Coach
-their own, the Owner all) and never a former client. A self-directed trainee of the house (v9, CLI-026) raises
+coach to act on and the status the client list shows. It covers the clients the caller may manage (CLI-013: a Coach
+their own, the Owner all) and never a former client. On a client the Owner does not coach (N9d1a) the private
+signals are not read, so Week not shared, No program and Weights to apply are never raised, a check-in to review
+keeps its count without the check-in it would open, and missed sessions keep their count without the day of the last
+workout; the plan, payment and renewal kinds and the counts of check-ins
+waiting and of missed sessions stay, and the status follows from those. The rule itself is unchanged. A self-directed trainee of the house (v9, CLI-026) raises
 none of the kinds below, whatever their signals; their status is their plan's own. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
 check-ins never appear; a weigh-in follows Progress and needs only an unblocked relationship. Ranked
@@ -223,8 +240,9 @@ session that ends while the app is open takes the person to sign-in, says why in
 brings them back to the page and the workspace they were in.
 
 **CLI-020** Coach Today (critique B4b; decided overnight on 2026-10-29, for the owner to confirm) shows, beside Needs
-you (CLI-018, unchanged) and the feed, three parts, all over the clients the caller coaches (CLI-013) and never a
-former client. **This month**: the money received by SUB-016; the active clients, current clients whose plan runs
+you (CLI-018, unchanged) and the feed, three parts, all over the clients the caller may manage (CLI-013: a Coach
+their own, the Owner all) and never a former client. The feed (finished workouts with their records, sent check-ins) is the private side: since N9d1a the
+Owner's lists their own clients alone. **This month**: the money received by SUB-016; the active clients, current clients whose plan runs
 today (any feature granted, a pack's too, SES-010 changing no one's count), out of all their current clients; the 1-on-1 sessions held (SES-008); and for the owner
 alone every active member of staff,
 the owner first as You, then by name, each with their current clients and how many are active. A coach's Today
@@ -636,7 +654,7 @@ plan. My plan says it in a sentence ("7 of 10 sessions with Karim left, until 9 
 says the sentence for the pack a session goes on next, while a pack runs, is to come, is paused or waits for payment,
 and nothing once every pack is over.
 
-**SES-008** What the coach reads of a client's sessions (critique B10c), all over the clients they coach (CLI-013) and,
+**SES-008** What the coach reads of a client's sessions (critique B10c), all over the clients they may manage (CLI-013) and,
 but for the count in This month, read only while sessions are in today's plan, by the shared access decision, so a
 paused, blocked or unpaid pack says nothing here. **Sessions left**: the balance of every pack that is paid and not
 over, one still to come included, added up, on the client's row. **Running out**: 2 sessions left or fewer, or the last
@@ -1601,8 +1619,8 @@ worked out again on every read like the protein one: under 20 % of the calories 
 AMDR's 20 to 35 %), and, when the weight is known, under 0.5 g a kilogram (Kerksick 2018). A share
 typed under 20 % is still worked out. The meal-plan builder's "Fill in fat and carbs" runs this split
 on the server (`GET /api/nutrition/macro-split`, recorded nowhere) from the daily calories, protein and
-a fat share with the 20 / 25 / 30 / 35 picks; "Start from a client's targets" lists the caller's current
-clients whose Nutrition is open (ADR 0026: a coach's own, the owner's every one) with their latest
+a fat share with the 20 / 25 / 30 / 35 picks; "Start from a client's targets" lists the current clients the caller
+coaches whose Nutrition is open (CLI-013: a coach's own, the owner's own too since N9d1a) with their latest
 targets, and the weight they were worked out with feeds the fill's per-kilogram warning.
 
 **NUT-009** If the coach enters no calorie target, calculations use the current approved TDEE
@@ -2511,7 +2529,8 @@ enforced by a unique index over active photos (PRG-012), and exists only once it
 `Ready` — a refused or unscannable upload records no photo and leaves the date and pose free for
 a retry. It is readable
 by the client it depicts while they hold an active membership of that workspace, and, only while
-the coaching relationship is not blocked, by an Owner/Coach of it; it never appears
+the coaching relationship is not blocked, by the Owner or Coach who coaches the client (CLI-013, C8 since N9d1a);
+it never appears
 in the coach exercise-media library. Uploads are images only. Removal is one-way and audited:
 the row and its media association are retained, the coach view loses it, and the owning client
 keeps it in their own history. Uploaded photos are re-encoded from their pixels before permanent
@@ -3146,8 +3165,9 @@ check-in answers, and no stated or implied relationship between an answer and an
 nutrition or bodyweight fact.
 
 **CHK-014** To review (critique B3b) lists every `Submitted` check-in of the caller's current clients
-whose plan includes check-ins now: a Coach's own, every one for the Owner (the owner's choice of
-2026-10-28), never a former client's. Oldest sent first, each with the client, their coach, the form,
+whose plan includes check-ins now that the caller coaches: each opens the client's answers, the private side, so the
+Owner's are their own clients' as a Coach's are (C8, N9d1a; every one for the Owner from 2026-10-28 until then), and
+another coach's waiting check-ins stay counts on Today and the client's page (CLI-018); never a former client's. Oldest sent first, each with the client, their coach, the form,
 the workspace-local day it was sent and how many days after its due day (CHK-012), at most 500 with
 the total. A client whose plan no longer includes check-ins is left out rather than listed to be
 refused; reviewing one (CHK-009) takes it off.

@@ -896,8 +896,34 @@ internal sealed class ClientProfileApplicationService(
             .Where(user => user.Id == client.AssignedCoachUserId)
             .Select(user => user.DisplayName)
             .SingleOrDefaultAsync(cancellationToken);
-        return ToCoachDetails(client, coachName ?? string.Empty, await ReleaseViewAsync(client, cancellationToken));
+        var details = ToCoachDetails(client, coachName ?? string.Empty, await ReleaseViewAsync(client, cancellationToken));
+
+        // The business side to whoever may manage the client; the intake answers, the health fields and the coach's
+        // notes, the private side, only to the client's own coach (C8, ADR 0026).
+        var mayCoach = await coachClientScope.StaffUserIdAsync(cancellationToken) is { } staffUserId &&
+            await coachClientScope.MayCoachAsync(staffUserId, client.Id, cancellationToken);
+        return mayCoach ? details : WithoutPrivateSide(details);
     }
+
+    private static CoachClientDetails WithoutPrivateSide(CoachClientDetails details) =>
+        details with
+        {
+            BirthDate = null,
+            HeightCentimeters = null,
+            HeightEnteredValue = null,
+            HeightEnteredUnit = null,
+            WorkType = null,
+            AverageDailySteps = null,
+            TrainingBackground = null,
+            FoodPreferences = null,
+            FoodAversions = null,
+            Goals = null,
+            Allergies = null,
+            Medications = null,
+            PreviousInjuries = null,
+            CoachNotes = null,
+            MayCoach = false,
+        };
 
     private async Task<ClientReleaseView?> ReleaseViewAsync(ClientProfile client, CancellationToken cancellationToken)
     {

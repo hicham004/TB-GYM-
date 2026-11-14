@@ -76,13 +76,11 @@ internal sealed partial class NutritionApplicationService
 
     public async Task<ClientTargetsList> ListClientTargetsAsync(CancellationToken cancellationToken)
     {
-        // The caller's current clients (ADR 0026): a Coach's own, every one for the Owner; never a former
-        // client, whose Nutrition is closed (ADR 0027).
-        var clients = dbContext.ClientProfiles.AsNoTracking().Where(client => client.ReleasedAtUtc == null);
-        if (await coachClientScope.RestrictedCoachUserIdAsync(cancellationToken) is { } coachUserId)
-        {
-            clients = clients.Where(client => client.AssignedCoachUserId == coachUserId);
-        }
+        // The clients the caller coaches now (ADR 0026, C8): a client's targets are the private side, so the Owner
+        // lists their own clients as a Coach does; never a former client, whose Nutrition is closed (ADR 0027).
+        var staffUserId = await coachClientScope.StaffUserIdAsync(cancellationToken);
+        var clients = dbContext.ClientProfiles.AsNoTracking()
+            .Where(client => client.ReleasedAtUtc == null && client.AssignedCoachUserId == staffUserId);
 
         // Newest first within each client, in the order the calculations read lists them.
         var calculations = await (

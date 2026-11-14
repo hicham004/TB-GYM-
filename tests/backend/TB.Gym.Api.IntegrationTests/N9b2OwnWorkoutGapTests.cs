@@ -236,13 +236,15 @@ public sealed partial class Phase3TrainingWorkflowTests
             house.TenantId, "n9b2g-stand-rami@example.test", "Rami", "Khoury", address: "203.0.113.184");
         var client = trainee.Client;
 
-        // The house's staff give the trainee a program whose pool squat steps 2.5 kg from 100 kg (Last time + step).
+        // The house's staff give the trainee a program whose pool squat steps 2.5 kg from 100 kg (Last time + step): the
+        // owner the plan and the program, the Coach, the trainee's coach, the block (the owner coaches none of them since
+        // C8, notes plan N9d1a).
         var enrollment = await CreateTrainingEnrollmentAsync(house.Owner, trainee.ProfileId, today, 8);
         var template = await PublishProgramAsync(house.Owner, N6aProgram(
             "n9b2g-stand program",
             P2Week("Week 1", library.Squat.Id, N6aStepSet(1, 2.5m, 100m)),
             P2Week("Week 2", library.Squat.Id, N6aStepSet(1, 2.5m, 100m))));
-        var block = await N6bAssignAsync(house.Owner, trainee.ProfileId, enrollment.Id, template, today);
+        var block = await N6bAssignAsync(coach, trainee.ProfileId, enrollment.Id, template, today);
 
         // Week 1's session done at 100 kg for its 10 reps: the coach's reads step the lift to 102.5 kg from that workout.
         var program = await N6bTrainTodayAsync(client, true, new N6bLog(10, 100m));
@@ -359,7 +361,8 @@ public sealed partial class Phase3TrainingWorkflowTests
                     P1Set(1, "Direct", rpe: null, direct: 8m),
                     P1Set(2, "Direct", rpe: null, direct: 8m),
                     P1Set(3, "Direct", rpe: null, direct: 8m)))));
-        var block = await N6bAssignAsync(house.Owner, ranaId, enrollment.Id, template, today);
+        // Her coach assigns it: the owner coaches her not (C8, notes plan N9d1a).
+        var block = await N6bAssignAsync(coach, ranaId, enrollment.Id, template, today);
 
         // She swaps the squat for the box squat and does one set of it, the carry's one set and two of the three raises.
         var (program, day) = await A3StartTodayAsync(rana);

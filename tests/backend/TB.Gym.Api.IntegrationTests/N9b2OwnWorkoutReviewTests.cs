@@ -169,8 +169,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var house = await N9a1OpenHouseAsync("n9b2r-mark", withCoach: true);
         using var rana = CreateClient();
         var ranaId = await R31InviteAsync(house.Coach!, rana, house.TenantId, "n9b2r-mark-rana@example.test", "Rana", "Haddad");
-        var training = await CreateTrainingResourcesAsync(house.Owner, ranaId, 8, 1, today);
-        await AssignAsync(house.Owner, ranaId, training, today);
+        // Her coach gives the program: the owner coaches her not (C8, notes plan N9d1a).
+        var training = await CreateTrainingResourcesAsync(house.Coach!, ranaId, 8, 1, today);
+        await AssignAsync(house.Coach!, ranaId, training, today);
         var hers = await N9b2AOkAsync<OwnWorkoutView>(N9b2AStartAsync(rana));
 
         var (code, said) = await N9a1HouseCommandAsync("clear");

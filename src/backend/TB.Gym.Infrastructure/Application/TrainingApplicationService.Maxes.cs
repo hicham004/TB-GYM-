@@ -29,7 +29,7 @@ internal sealed partial class TrainingApplicationService
         Guid mesocycleId,
         CancellationToken cancellationToken)
     {
-        // A read like every mesocycle read: another coach's client's program is a missing one (ADR 0026).
+        // A read like every mesocycle read: a program the caller does not coach is a missing one (ADR 0026, C8).
         var header = await dbContext.TrainingMesocycles.AsNoTracking()
             .Where(item => item.Id == mesocycleId)
             .Select(item => new
@@ -42,7 +42,7 @@ internal sealed partial class TrainingApplicationService
                 item.TimeZoneId,
             })
             .SingleOrDefaultAsync(cancellationToken);
-        if (header is null || await coachClientScope.ExcludesAsync(header.ClientProfileId, cancellationToken))
+        if (header is null || await coachClientScope.ExcludesFromCoachingAsync(header.ClientProfileId, cancellationToken))
         {
             return null;
         }

@@ -17,6 +17,7 @@ public static class TrainingEndpoints
         var coach = endpoints
             .MapGroup("/api/training")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Private)
             .WithTags(TrainingModule.Name);
 
         coach.MapGet("/templates", async (

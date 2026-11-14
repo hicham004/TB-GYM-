@@ -234,9 +234,10 @@ public sealed class DemoWorkspaceTests
         Assert.AreEqual("Afternoon coffee", mayaMeals.CustomFoods.Single().Name);
         Assert.IsGreaterThan(0m, mayaMeals.SelectedCalories);
 
-        // The owner reads Maya's targets with the words beside the multiplier and what her steps are worth.
+        // Lea, Maya's coach, reads her targets with the words beside the multiplier and what her steps are worth (the
+        // owner may not since C8, notes plan N9d1a: Maya's targets are the private side of Lea's client).
         var mayaTargets = await requests.AsAsync<INutritionApplicationService, ClientNutritionRead<NutritionCalculationRecord[]>>(
-            new DemoActor(people.OwnerId, people.TenantId),
+            new DemoActor(people.LeaId, people.TenantId),
             service => service.ListCalculationsAsync(mayaProfileId, 1, CancellationToken.None));
         var mayaLatest = mayaTargets.Value!.Single().Result;
         Assert.AreEqual(

@@ -106,10 +106,13 @@ internal sealed class CoachOverviewReader(
 
         var rows = states.Select(state =>
         {
-            lastActivity.TryGetValue(state.Client.Id, out var last);
+            // The goals, the birth date and the last activity are the private side (C8): the Owner reads them on their
+            // own clients alone.
+            var mayCoach = state.Client.MayCoach;
+            var last = mayCoach ? lastActivity.GetValueOrDefault(state.Client.Id) : null;
             return new ClientOverviewRow(
                 state.Client.Ref,
-                state.Client.Goals,
+                mayCoach ? state.Client.Goals : null,
                 state.JoinedOn,
                 CoachAttentionPolicy.IsNew(state.JoinedOn, today),
                 state.Client.OnboardingStatus,
@@ -120,7 +123,7 @@ internal sealed class CoachOverviewReader(
                 last?.Kind,
                 last?.AtUtc,
                 state.TrainingIncluded ? Days(state.Sessions, recentFrom, CoachAttentionPolicy.RecentDays) : null,
-                state.Client.BirthDate,
+                mayCoach ? state.Client.BirthDate : null,
                 CoachAttentionPolicy.PlanStatus(state.Flags, state.PlanState),
                 state.PlanEnrollmentId is { } enrollmentId ? plans.GetValueOrDefault(enrollmentId) : null,
                 state.OtherPlanCount,
@@ -167,10 +170,17 @@ internal sealed class CoachOverviewReader(
             endedFrom: null,
             cancellationToken);
         var state = states.Single();
-        var (lastActivity, _) = await LoadLastActivityAsync(scope, cancellationToken);
-        lastActivity.TryGetValue(state.Client.Id, out var last);
+        // The last activity and the last workout are the private side (C8): the Owner reads another coach's client's
+        // plan, attention counts and week of sessions, not what they did.
+        LastActivity? last = null;
+        if (state.Client.MayCoach)
+        {
+            var (lastActivity, _) = await LoadLastActivityAsync(scope, cancellationToken);
+            last = lastActivity.GetValueOrDefault(state.Client.Id);
+        }
+
         var planName = state.RunningPlanName ?? await ReadPlanNameAsync(state.EndedPlan?.EnrollmentId, cancellationToken);
-        var lastWorkout = state.TrainingIncluded
+        var lastWorkout = state.TrainingIncluded && state.Client.MayCoach
             ? await LoadLastWorkoutAsync(scope, state.Client.Id, cancellationToken)
             : null;
 
@@ -227,6 +237,9 @@ internal sealed class CoachOverviewReader(
             query = query.Where(client => client.AssignedCoachUserId == coachUserId);
         }
 
+        // Whom the caller coaches (C8): a Coach every client here, the Owner their own. Of the others the Owner reads
+        // the business side alone: the plan, payments, renewals, sessions and the counts, never what opens the private side.
+        var staffUserId = await coachClientScope.StaffUserIdAsync(cancellationToken);
         var clients = await (
             from client in query
             join coach in dbContext.Users.AsNoTracking() on client.AssignedCoachUserId equals coach.Id
@@ -243,7 +256,8 @@ internal sealed class CoachOverviewReader(
                 client.OnboardingStatus,
                 client.BirthDate,
                 client.Version,
-                client.IsSelfDirected))
+                client.IsSelfDirected,
+                client.AssignedCoachUserId == staffUserId))
             .ToListAsync(cancellationToken);
         var access = await featureAccessService.EvaluateManyAsync(
             tenantContext.TenantId,
@@ -291,13 +305,16 @@ internal sealed class CoachOverviewReader(
         var chats = await ReadChatsAsync(scope.CallerUserId, messaging, cancellationToken);
         var renewals = await ReadRenewalRequestsAsync([.. endedPlans.Keys], today, cancellationToken);
         var plans = await ReadPlanEndsAsync(scope.Ids, today, endedFrom, cancellationToken);
-        var blocks = await ReadOpenBlocksAsync(training, today, cancellationToken);
+        // The program, its weeks and where the lifts stand are the private side (C8): read for the clients the caller
+        // coaches alone, so Week not shared, No program and Weights to apply are raised only for them.
+        var coachedTraining = scope.MayCoach(training);
+        var blocks = await ReadOpenBlocksAsync(coachedTraining, today, cancellationToken);
         var sessions = await ReadSessionsAsync(training, sessionsFrom, sessionsTo, cancellationToken);
         var lastStarts = await ReadLastWorkoutStartsAsync(training, cancellationToken);
-        var latestPrograms = await ReadLatestProgramsAsync(training, cancellationToken);
+        var latestPrograms = await ReadLatestProgramsAsync(coachedTraining, cancellationToken);
         // Weights to apply (notes plan N6d): the answers the client's Training tab lists, for every client at once, from
         // the lifts' last weeks (the workouts before them too only where those cannot settle the typo guard).
-        var standings = await LiftStandingsReader.ReadRecentAsync(dbContext, clock.UtcNow, training, cancellationToken);
+        var standings = await LiftStandingsReader.ReadRecentAsync(dbContext, clock.UtcNow, coachedTraining, cancellationToken);
 
         return scope.Clients.Select(client =>
         {
@@ -443,7 +460,7 @@ internal sealed class CoachOverviewReader(
                 runningPlan?.EndDateExclusive.AddDays(-1),
                 weekToShare is not null,
                 missed,
-                trainingIncluded && clientBlocks.Length == 0,
+                trainingIncluded && client.MayCoach && clientBlocks.Length == 0,
                 joinedOn,
                 late.Length,
                 lastPack is null ? null : paidPacks.Sum(item => item.SessionsLeft),
@@ -493,7 +510,8 @@ internal sealed class CoachOverviewReader(
         {
             // The oldest waiting sets the rank; the newest is what the coach may not have seen yet (CLIENT-19).
             CoachAttentionKind.CheckInToReview => Item(kind, state, since: state.OldestCheckIn?.SubmittedAtUtc,
-                count: state.Signals.CheckInsToReview, subjectId: state.OldestCheckIn?.AssignmentId,
+                count: state.Signals.CheckInsToReview,
+                subjectId: state.Client.MayCoach ? state.OldestCheckIn?.AssignmentId : null,
                 newestAt: state.NewestCheckIn?.SubmittedAtUtc),
             CoachAttentionKind.UnreadMessages => Item(kind, state, since: state.OldestUnread?.OldestUnreadAtUtc,
                 count: (int)Math.Min(int.MaxValue, state.Signals.UnreadMessages),
@@ -510,7 +528,9 @@ internal sealed class CoachOverviewReader(
                 sessionsLeft: state.Signals.SessionsLeft),
             CoachAttentionKind.WeekNotShared => Item(kind, state, date: state.WeekToShare?.StartsOn,
                 weekNumber: state.WeekToShare?.WeekNumber, subjectId: state.WeekToShare?.MesocycleId),
-            CoachAttentionKind.MissedSessions => Item(kind, state, date: state.LastWorkoutOn,
+            // The count is business (C8's sessions done); the day of the last workout is the private side.
+            CoachAttentionKind.MissedSessions => Item(kind, state,
+                date: state.Client.MayCoach ? state.LastWorkoutOn : null,
                 count: state.Signals.MissedSinceLastWorkout),
             CoachAttentionKind.NoProgram => Item(kind, state, date: state.JoinedOn, subjectId: state.LastProgramId),
             CoachAttentionKind.NoPlan => Item(kind, state, date: state.JoinedOn),
@@ -1007,9 +1027,10 @@ internal sealed class CoachOverviewReader(
     {
         var limit = CoachAttentionPolicy.ActivityLimit;
         // What a self-directed trainee logs is theirs alone (CLI-026): the house's feed would otherwise fill
-        // with the workouts of people nobody coaches.
-        var training = scope.Coached(scope.Allowed(CoachingFeature.Training));
-        var checkIns = scope.Coached(scope.Allowed(CoachingFeature.CheckIns));
+        // with the workouts of people nobody coaches. The feed is the private side (C8): the Owner reads their own
+        // clients' workouts and check-ins, not another coach's.
+        var training = scope.CoachedByCaller(scope.Allowed(CoachingFeature.Training));
+        var checkIns = scope.CoachedByCaller(scope.Allowed(CoachingFeature.CheckIns));
         var items = new List<CoachActivityItemView>();
 
         if (training.Length > 0)
@@ -1392,8 +1413,15 @@ internal sealed class CoachOverviewReader(
                 .Where(client => Access[client.Id].Any(decision => decision.Feature == feature && decision.IsAllowed))
                 .Select(client => client.Id)];
 
-        /// <summary>Those of <paramref name="clientIds"/> somebody coaches: every client but a self-directed trainee (CLI-026).</summary>
-        public Guid[] Coached(Guid[] clientIds) => [.. clientIds.Where(id => !byId[id].IsSelfDirected)];
+        /// <summary>
+        /// Those of <paramref name="clientIds"/> the caller coaches (C8): a Coach's every one, the Owner's own, and never a
+        /// self-directed trainee, whom nobody coaches (CLI-026). What opens the private side is read for these alone.
+        /// </summary>
+        public Guid[] CoachedByCaller(Guid[] clientIds) =>
+            [.. clientIds.Where(id => byId[id] is { IsSelfDirected: false, MayCoach: true })];
+
+        /// <summary>Those of <paramref name="clientIds"/> whose private side the caller may open (C8).</summary>
+        public Guid[] MayCoach(Guid[] clientIds) => [.. clientIds.Where(id => byId[id].MayCoach)];
 
         /// <summary>Clients whose progress the coach may read: any relationship that is not blocked.</summary>
         public Guid[] Unblocked => [.. Clients.Where(client => !client.IsCoachBlocked).Select(client => client.Id)];
@@ -1420,14 +1448,16 @@ internal sealed class CoachOverviewReader(
         ClientOnboardingStatus OnboardingStatus,
         DateOnly? BirthDate,
         uint Version,
-        bool IsSelfDirected)
+        bool IsSelfDirected,
+        bool MayCoach)
     {
         public CoachClientRef Ref => new(
             Id,
             FirstName,
             LastName,
             CoachUserId,
-            string.IsNullOrWhiteSpace(CoachName) ? null : CoachName);
+            string.IsNullOrWhiteSpace(CoachName) ? null : CoachName,
+            MayCoach);
     }
 
     private sealed record ClientState(

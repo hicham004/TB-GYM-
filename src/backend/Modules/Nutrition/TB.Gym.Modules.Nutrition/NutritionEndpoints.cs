@@ -17,7 +17,10 @@ public static class NutritionEndpoints
 
     public static IEndpointRouteBuilder MapNutritionModule(this IEndpointRouteBuilder endpoints)
     {
-        var coach = endpoints.MapGroup("/api/nutrition").RequireAuthorization(AuthorizationPolicies.TenantCoach).WithTags(NutritionModule.Name);
+        var coach = endpoints.MapGroup("/api/nutrition")
+            .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Private)
+            .WithTags(NutritionModule.Name);
 
         coach.MapGet("/ai-drafts/availability", (INutritionApplicationService service) => Results.Ok(service.GetAiAvailability()))
             .WithName("GetAiMealDraftAvailability").Produces<AiMealDraftAvailabilityView>();

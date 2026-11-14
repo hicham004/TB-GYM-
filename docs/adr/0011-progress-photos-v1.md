@@ -23,7 +23,8 @@ explicitly and never inferred, because the two purposes have opposite access rul
   theirs that holds it); amended by notes plan N9b1 (MED-017): in the house, also by any current
   client with Training access when it is a demo of an exercise in use in the house's pool;
 - a progress photo is readable by the client it depicts, and by an Owner/Coach of that workspace
-  only while the coaching relationship is not blocked.
+  only while the coaching relationship is not blocked; since 2026-11-14 (ADR 0026's owner privacy
+  split, N9d1a) only by the Owner or Coach who coaches the client.
 
 Routing photos through the exercise rules would have simultaneously exposed them to blocked
 coaches and denied clients their own images, since that path requires a training entitlement and a

@@ -576,14 +576,14 @@ internal sealed partial class TrainingApplicationService
         bool tracking,
         CancellationToken cancellationToken)
     {
-        // Every mesocycle-by-id route comes through here. A Coach reaches another coach's client's
-        // programme only as a missing one (ADR 0026); the Owner and the client themselves pass.
+        // Every mesocycle-by-id route comes through here. A programme is the private side (C8): staff other than the
+        // client's own coach, the Owner included, reach it only as a missing one (ADR 0026); the client passes.
         var clientProfileId = await dbContext.TrainingMesocycles.AsNoTracking()
             .Where(item => item.Id == id)
             .Select(item => (Guid?)item.ClientProfileId)
             .SingleOrDefaultAsync(cancellationToken);
         if (clientProfileId is null ||
-            await coachClientScope.ExcludesAsync(clientProfileId.Value, cancellationToken))
+            await coachClientScope.ExcludesFromCoachingAsync(clientProfileId.Value, cancellationToken))
         {
             return null;
         }

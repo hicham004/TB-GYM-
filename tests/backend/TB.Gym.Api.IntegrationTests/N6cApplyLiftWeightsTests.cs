@@ -639,12 +639,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         await IssueBillingAsync(BillingJuly);
 
         // Seven days past the bill's due date the workspace is read-only for its staff (ADR 0028): the tenant handler refuses
-        // the apply before it reads anything, for the owner and the client's coach alike, and the program still reads.
+        // the client's coach's apply before it reads anything, and the program still reads. The owner, who does not coach
+        // this client, reaches neither: a program is the private side (C8, notes plan N9d1a).
         RequiredTestClock.Set(new DateTimeOffset(2026, 8, 15, 8, 0, 0, TimeSpan.Zero));
         var request = N6cRequestOf(Guid.NewGuid(), new SetWeightRequest(Guid.NewGuid(), 20m, 22m));
-        await AssertReadOnlyAsync(await N6cApplyAsync(owner, clientId, request));
+        await AssertStatusAsync(await N6cApplyAsync(owner, clientId, request), HttpStatusCode.NotFound);
         await AssertReadOnlyAsync(await N6cApplyAsync(coach, clientId, request));
-        await AssertStatusAsync(await owner.GetAsync(R34aProgramUrl(clientId)), HttpStatusCode.OK);
+        await AssertStatusAsync(await owner.GetAsync(R34aProgramUrl(clientId)), HttpStatusCode.NotFound);
         await AssertStatusAsync(await coach.GetAsync(R34aProgramUrl(clientId)), HttpStatusCode.OK);
         Assert.AreEqual(0L, await N6cRowsAsync(clientId));
     }

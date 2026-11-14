@@ -13,6 +13,7 @@ public static class StrengthEndpoints
         var group = endpoints
             .MapGroup("/api/strength")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Private)
             .WithTags(StrengthModule.Name);
 
         group.MapGet("/clients/{clientProfileId:guid}/maxes", async (

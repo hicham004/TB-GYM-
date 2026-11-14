@@ -72,7 +72,7 @@ internal sealed partial class CommercialApplicationService
             .Where(item => item.Id == clientProfileId)
             .Select(item => item.FirstName)
             .SingleOrDefaultAsync(cancellationToken);
-        if (firstName is null || await coachClientScope.ExcludesAsync(clientProfileId, cancellationToken))
+        if (firstName is null || await coachClientScope.ExcludesFromManagingAsync(clientProfileId, cancellationToken))
         {
             return NotFound();
         }
@@ -187,7 +187,7 @@ internal sealed partial class CommercialApplicationService
             .SingleOrDefaultAsync(
                 item => item.Id == entryId && item.ClientProfileId == clientProfileId,
                 cancellationToken);
-        if (entry is null || await coachClientScope.ExcludesAsync(clientProfileId, cancellationToken))
+        if (entry is null || await coachClientScope.ExcludesFromManagingAsync(clientProfileId, cancellationToken))
         {
             return NotFound();
         }

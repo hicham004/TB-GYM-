@@ -48,7 +48,7 @@ internal sealed partial class TrainingApplicationService
         // The tenant handler has already answered another coach's client as missing and refused a released one
         // for this route's client (ADR 0026, ADR 0027); the scope is asked again for whoever it did not judge.
         if (!await dbContext.ClientProfiles.AsNoTracking().AnyAsync(item => item.Id == clientProfileId, cancellationToken) ||
-            await coachClientScope.ExcludesAsync(clientProfileId, cancellationToken))
+            await coachClientScope.ExcludesFromCoachingAsync(clientProfileId, cancellationToken))
         {
             return NotFound();
         }

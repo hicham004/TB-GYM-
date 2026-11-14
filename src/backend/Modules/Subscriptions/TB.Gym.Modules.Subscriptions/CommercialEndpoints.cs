@@ -13,6 +13,7 @@ public static class CommercialEndpoints
         var coachGroup = endpoints
             .MapGroup("/api/commercial")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Business)
             .WithTags(SubscriptionsModule.Name);
 
         coachGroup.MapGet("/products", async (

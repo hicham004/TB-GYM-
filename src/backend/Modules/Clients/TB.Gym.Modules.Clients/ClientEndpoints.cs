@@ -13,6 +13,7 @@ public static class ClientEndpoints
         var coachGroup = endpoints
             .MapGroup("/api/clients")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Private)
             .WithTags(ClientsModule.Name);
 
         coachGroup.MapGet("/", async (
@@ -31,6 +32,7 @@ public static class ClientEndpoints
             return client is null ? Results.NotFound() : Results.Ok(client);
         })
         .WithName("GetClientForCoach")
+        .WithMetadata(ClientSide.Business)
         .Produces<CoachClientDetails>()
         .Produces(StatusCodes.Status404NotFound);
 
@@ -98,6 +100,7 @@ public static class ClientEndpoints
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("BlockClientRelationship")
+        .WithMetadata(ClientSide.Business)
         .Produces<CoachClientDetails>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
@@ -115,6 +118,7 @@ public static class ClientEndpoints
         })
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("UnblockClientRelationship")
+        .WithMetadata(ClientSide.Business)
         .Produces<CoachClientDetails>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
@@ -134,6 +138,7 @@ public static class ClientEndpoints
         .RequireAuthorization(AuthorizationPolicies.TenantOwner)
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("ReassignClientCoach")
+        .WithMetadata(ClientSide.Business)
         .Produces<CoachClientDetails>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
@@ -148,6 +153,7 @@ public static class ClientEndpoints
         })
         .RequireAuthorization(AuthorizationPolicies.TenantOwner)
         .WithName("ListClientCoachAssignments")
+        .WithMetadata(ClientSide.Business)
         .Produces<ClientCoachAssignmentView[]>()
         .Produces(StatusCodes.Status404NotFound);
 
@@ -166,6 +172,7 @@ public static class ClientEndpoints
         .RequireAuthorization(AuthorizationPolicies.TenantOwner)
         .RequireRateLimiting(RateLimitPolicies.SensitiveWrite)
         .WithName("ReleaseClient")
+        .WithMetadata(ClientSide.Business)
         .Produces<CoachClientDetails>()
         .ProducesValidationProblem()
         .ProducesProblem(StatusCodes.Status409Conflict);
@@ -197,6 +204,7 @@ public static class ClientEndpoints
             return view is null ? Results.NotFound() : Results.Ok(view);
         })
         .WithName("GetClientOverview")
+        .WithMetadata(ClientSide.Business)
         .Produces<ClientProfileOverviewView>()
         .Produces(StatusCodes.Status404NotFound);
 

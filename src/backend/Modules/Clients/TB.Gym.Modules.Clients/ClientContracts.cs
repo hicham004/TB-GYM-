@@ -88,6 +88,12 @@ public sealed record ClientSummary(
     Guid AssignedCoachUserId,
     string AssignedCoachName);
 
+/// <summary>
+/// A client as staff read them. <paramref name="MayCoach"/> says whether the caller is the client's own coach
+/// (C8, ADR 0026): when false (the Owner on another coach's client, or on a former client someone else coached), the
+/// private side is withheld, so the birth date, height, work and steps, the intake answers, the health fields and the
+/// coach's notes are null, and only the business side is filled.
+/// </summary>
 public sealed record CoachClientDetails(
     Guid Id,
     Guid? UserId,
@@ -115,7 +121,8 @@ public sealed record CoachClientDetails(
     uint Version,
     Guid AssignedCoachUserId,
     string AssignedCoachName,
-    ClientReleaseView? Release = null);
+    ClientReleaseView? Release = null,
+    bool MayCoach = true);
 
 /// <summary>
 /// When, why and by whom a client's relationship ended: released by the owner or left by the client.

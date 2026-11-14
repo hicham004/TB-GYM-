@@ -4,8 +4,9 @@ namespace TB.Gym.Modules.Clients;
 
 /// <summary>
 /// The coach's overview reads: Coach Today (C1) and the client list (C2) from R3.1, and one client's
-/// own slice of them for the client page (C3, R3.3b). All cover the clients the caller coaches
-/// (ADR 0026: a Coach their own, the Owner all) and leave out former clients. Each training, check-in
+/// own slice of them for the client page (C3, R3.3b). All cover the clients the caller may manage
+/// (ADR 0026: a Coach their own, the Owner all) and leave out former clients; of a client the caller does
+/// not coach they carry the business side alone (C8, notes plan N9d1a: <see cref="CoachClientRef.MayCoach"/>). Each training, check-in
 /// and message signal is read only while the client's plan includes that feature (ADR 0013), and a
 /// weigh-in only while the relationship is not blocked.
 /// </summary>
@@ -125,19 +126,27 @@ public enum CoachActivityLoadUnit
     Pound = 2,
 }
 
-/// <summary>Who an item is about, and who coaches them, so an Owner can tell their team's clients apart.</summary>
+/// <summary>
+/// Who an item is about, and who coaches them, so an Owner can tell their team's clients apart. <paramref name="MayCoach"/>
+/// says whether the caller is this client's own coach (C8, ADR 0026); when false (the Owner on another coach's client)
+/// the item or row carries the business side alone: the plan, payments, renewals, sessions and the counts, with nothing
+/// that opens the private side (no goals, birth date, last activity, last workout or its day, check-in to open, and
+/// never Week not shared, No program or Weights to apply).
+/// </summary>
 public sealed record CoachClientRef(
     Guid ClientProfileId,
     string FirstName,
     string LastName,
     Guid AssignedCoachUserId,
-    string? AssignedCoachName);
+    string? AssignedCoachName,
+    bool MayCoach = true);
 
 /// <summary>
 /// One thing waiting for the coach. Which fields are set depends on <see cref="Kind"/>:
 /// <list type="bullet">
 /// <item><c>CheckInToReview</c>: Count waiting, Since the oldest was sent (the rank), NewestAt the newest (audit
-/// CLIENT-19), SubjectId the oldest's assignment.</item>
+/// CLIENT-19), SubjectId the oldest's assignment (null when <see cref="CoachClientRef.MayCoach"/> is false: it opens
+/// the answers).</item>
 /// <item><c>UnreadMessages</c>: Count unread, Since the oldest unread was sent, SubjectId the conversation.</item>
 /// <item><c>RenewalRequested</c>: Since the client asked, Date the ended plan's last day, SubjectId that enrollment.</item>
 /// <item><c>PlanEndingSoon</c>: Date the plan's last paid day (BEB-7). Count the renewals after it still waiting
@@ -145,7 +154,8 @@ public sealed record CoachClientRef(
 /// otherwise SubjectId the paid enrollment ending last, the plan to renew. SessionsLeft is set when that plan is a pack
 /// standing as the client's plan (ADR 0038), which says its end once, here, rather than as SessionsRunningOut too.</item>
 /// <item><c>WeekNotShared</c>: Date the week starts, WeekNumber, SubjectId the program block.</item>
-/// <item><c>MissedSessions</c>: Count missed since the last workout, Date that workout's day (null if none).</item>
+/// <item><c>MissedSessions</c>: Count missed since the last workout, Date that workout's day (null if none, or when
+/// <see cref="CoachClientRef.MayCoach"/> is false).</item>
 /// <item><c>NoProgram</c>: Date the client joined, SubjectId their latest program not cancelled (null if they never
 /// had one).</item>
 /// <item><c>NoPlan</c>: Date the client joined.</item>

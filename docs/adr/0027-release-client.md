@@ -1,7 +1,7 @@
 # ADR 0027: Release client, client departure and return
 
 Status: accepted, 2026-09-23; amended 2026-09-24 (a client can leave, and a former client can be
-invited back)
+invited back); amended 2026-11-14 (the keeper is not the coach, ADR 0026's owner privacy split, N9d1a)
 
 ## Context
 
@@ -27,7 +27,11 @@ Business rules, decided by the product owner on 2026-09-23 and 2026-09-24:
   a workout in progress is left as it is, because the training rules refuse to cancel one mid-workout.
 - **The owner keeps a read-only record** under "Former clients". The client moves to the owner (a
   `Released` or `ClientLeft` entry in the coach history), so no coach keeps them. Chats keep the ADR
-  0026 privacy rule, and an ended profile's features all answer `MembershipInactive`.
+  0026 privacy rule, and an ended profile's features all answer `MembershipInactive`. Since
+  2026-11-14 (C8, N9d1a) the owner keeps the business side of every former client, and the private side
+  only of one they coached when it ended: such an entry means another coach had the client, so the
+  owner's private requests on that record, reads and writes, answer 404 as for any client they do not
+  coach, and nobody reads that former client's private side.
 - **No undo, but a former client can be invited back** as a new relationship: a new client profile
   with a fresh start, while the old record stays read-only and untouched. They cannot be invited as a
   coach.
@@ -43,7 +47,9 @@ Mechanism:
 - Read-only is enforced server-side: the tenant authorization handler refuses every
   state-changing request that names an ended profile in its route, and writes that reach one through
   another row (enrollment, mesocycle, workout note) call `CoachClientScope.EnsureNotReleasedAsync`.
-  Both answer **409 `client_released`**. The domain also refuses changes to an ended profile.
+  Both answer **409 `client_released`**. The domain also refuses changes to an ended profile. The
+  side check (ADR 0026, C8) runs first, in the handler and in the indirect writes alike, so the Owner's
+  private-side change on a former client another coach had answers 404, not 409.
 - A person keeps one membership row per workspace. Coming back reactivates it with a new profile, so
   "current profile" is the profile linked to the person and not ended: unique indexes on client email
   and user cover current profiles only, and every self-service lookup uses `CurrentFor(userId)`.
@@ -62,7 +68,8 @@ Mechanism:
   must call `EnsureNotReleasedAsync` after loading its row.
 - A new client self-service path must resolve the client with `CurrentFor(userId)`.
 - The owner's former-client page shows the ending, the intake and notes read-only, the progress
-  dashboard, and the plan and payment history. Training, nutrition and detailed progress history
+  dashboard, and the plan and payment history; since N9d1a the intake, notes and dashboard only for a
+  former client the owner coached when it ended. Training, nutrition and detailed progress history
   are kept but not shown there yet.
 - How Step 2 billing counts active clients is decided there.
 - Moving a client and their history to another workspace remains a later, separate feature.

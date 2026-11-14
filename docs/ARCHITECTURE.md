@@ -372,13 +372,19 @@ The SPA uses ASP.NET Core Identity with a same-origin server cookie:
   unavailable, with its reason and no content. Omitting it would be indistinguishable from
   emptiness, and populating it would leak exactly what the entitlement gates.
 
-Within a workspace a Coach acts only on the clients assigned to them; the Owner acts on all (ADR
-0026). `CoachClientScope` in Infrastructure is the one place that decides it. The tenant
-authorization handler applies it to every route parameter named `clientProfileId` or `clientId`,
-and a route that reaches a client through another row (mesocycle, enrollment, workout note,
-conversation, progress photo) asks it after loading that row. Another coach's client answers 404,
-the same as a missing one. An integration test fails if a client-named route parameter uses
-another name.
+Within a workspace a Coach acts only on the clients assigned to them; the Owner may manage all and
+coaches only their own (ADR 0026, C8). `CoachClientScope` in Infrastructure is the one place that
+decides it, with two questions: may manage (the business side) and may coach (the private side, the
+client's own coach alone; of a former client only an Owner who coached them when they left). Every route whose parameter is named
+`clientProfileId` or `clientId` carries SharedKernel's `ClientSide` metadata, `Business` or
+`Private` (a group's default, a route's own last), and the tenant authorization handler asks the
+matching question, a route with neither counting as private. A route that reaches a client through
+another row asks it after loading that row: programs, workout notes and progress photos may coach,
+enrollments and sessions may manage; reads that mix both (a client's details, the client list, a
+client's page, Coach Today) fill the private fields only where the caller coaches and say so in
+`MayCoach`. Another coach's client, or a private route the Owner does not coach, answers 404, the
+same as a missing one. Integration tests fail if a client-named route parameter uses another name,
+lacks a side, or a business route is added without updating the pinned list.
 
 A released or departed client (ADR 0027) is read-only for everyone. The same handler refuses any
 non-GET request whose route names one, and the indirect writes call
@@ -1876,8 +1882,8 @@ is gone; its address redirects to the client's Check-ins it named, or to Clients
 
 Critique B3b adds the one read across clients, `GET /api/checkins/to-review` (staff), where Check-ins
 opens: every sent, unreviewed check-in of the caller's current clients whose plan includes check-ins
-now, oldest first, at most 500 with the total, and nothing a client typed. A Coach's are their own
-clients' (`CoachClientScope`); the Owner's every client's, each with its coach's name (CHK-014).
+now, oldest first, at most 500 with the total, and nothing a client typed. A Coach's and the Owner's are
+the clients they coach (`CoachClientScope.StaffUserIdAsync`, C8), each with its coach's name (CHK-014).
 
 See ADR 0017 for authoring and ADR 0016 for responses.
 

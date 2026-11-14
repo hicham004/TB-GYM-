@@ -7,18 +7,29 @@ using TB.Gym.SharedKernel;
 namespace TB.Gym.Infrastructure.Application;
 
 /// <summary>
-/// Which clients the signed-in person may coach in the current workspace. See ADR 0026.
+/// Which clients the signed-in person may manage and which they may coach in the current workspace. See ADR 0026
+/// and C8 (the owner privacy split, notes plan N9d1a).
 /// </summary>
 /// <remarks>
-/// A Coach sees and acts only on the clients assigned to them. The Owner sees every client, and a
-/// Client is not restricted here at all, because what a client may reach about themselves is decided
-/// by the self-service paths. So the only question this answers is "is the caller a Coach, and is
-/// this client someone else's?".
+/// Two questions, and every client route is sorted into one (<see cref="ClientSide"/>):
+/// <list type="bullet">
+/// <item><b>May manage</b>, the business side (name, coach, plan and payment status, renewals, sessions, activity
+/// counts): the Owner may manage every client of the workspace, a Coach only the clients assigned to them.</item>
+/// <item><b>May coach</b>, the private side (training and food logs, check-in answers, weigh-ins, measurements,
+/// progress photos, intake answers and the health fields): only the client's own coach, the Owner included, so an
+/// Owner who coaches is simply the coach of their own clients. A former client's private side opens only to an Owner
+/// who coached them when they left: a release or a leave hands the record to the Owner as its keeper (ADR 0027),
+/// which never makes the Owner the coach of another coach's client, and that coach loses the record, so nobody reads
+/// another coach's former client's private side.</item>
+/// </list>
+/// A Client is not restricted here at all, because what a client may reach about themselves is decided by the
+/// self-service paths.
 /// <para>
-/// Route parameters named <c>clientProfileId</c> or <c>clientId</c> are checked once, centrally, by
-/// the tenant authorization handler. Routes that reach a client indirectly — through a mesocycle, an
-/// enrollment, a conversation or a photo — ask <see cref="ExcludesAsync"/> themselves after loading
-/// the row that names the client, and answer exactly as they would for a row that does not exist.
+/// Route parameters named <c>clientProfileId</c> or <c>clientId</c> are checked once, centrally, by the tenant
+/// authorization handler, against the route's <see cref="ClientSide"/>. Routes that reach a client indirectly
+/// (through a mesocycle, an enrollment, a workout, a conversation or a photo) ask
+/// <see cref="ExcludesFromManagingAsync"/> or <see cref="ExcludesFromCoachingAsync"/> themselves after loading the
+/// row that names the client, and answer exactly as they would for a row that does not exist.
 /// </para>
 /// </remarks>
 internal sealed class CoachClientScope(
@@ -31,8 +42,9 @@ internal sealed class CoachClientScope(
     private TenantRole? callerRole;
 
     /// <summary>
-    /// The caller's user id when they are an active Coach (not the Owner) of this workspace, so their
-    /// view is limited to their own clients; otherwise null. Resolved once per request.
+    /// The caller's user id when they are an active Coach (not the Owner) of this workspace, so the clients they may
+    /// manage are their own; otherwise null. Resolved once per request. Business reads filter on it; a private read
+    /// filters on <see cref="StaffUserIdAsync"/> instead, which narrows the Owner too.
     /// </summary>
     public async Task<Guid?> RestrictedCoachUserIdAsync(CancellationToken cancellationToken)
     {
@@ -70,10 +82,21 @@ internal sealed class CoachClientScope(
     }
 
     /// <summary>
-    /// True when the caller is a Coach and this client is not assigned to them, including a client
-    /// that does not exist in this workspace. Always false for the Owner and for a Client.
+    /// The caller's user id when they are an active Owner or Coach of this workspace, else null. A private read lists
+    /// only the clients assigned to this id (<c>AssignedCoachUserId == staffUserId</c>, current clients only), so it
+    /// lists nothing for a caller who is not staff.
     /// </summary>
-    public async Task<bool> ExcludesAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    public async Task<Guid?> StaffUserIdAsync(CancellationToken cancellationToken)
+    {
+        await RestrictedCoachUserIdAsync(cancellationToken);
+        return callerRole is TenantRole.Owner or TenantRole.Coach ? currentUser.UserId : null;
+    }
+
+    /// <summary>
+    /// The business side: true when the caller is a Coach and this client is not assigned to them, including a
+    /// client that does not exist in this workspace. Always false for the Owner and for a Client.
+    /// </summary>
+    public async Task<bool> ExcludesFromManagingAsync(Guid clientProfileId, CancellationToken cancellationToken)
     {
         if (await RestrictedCoachUserIdAsync(cancellationToken) is not { } coachUserId)
         {
@@ -86,6 +109,46 @@ internal sealed class CoachClientScope(
                 client => client.Id == clientProfileId && client.AssignedCoachUserId == coachUserId,
                 cancellationToken);
     }
+
+    /// <summary>
+    /// The private side: true when the caller is an Owner or a Coach who may not coach this client
+    /// (<see cref="MayCoachAsync"/>), including a client that does not exist in this workspace. Always false for a
+    /// Client, whose own reads are decided by the self-service paths.
+    /// </summary>
+    public async Task<bool> ExcludesFromCoachingAsync(Guid clientProfileId, CancellationToken cancellationToken)
+    {
+        if (await StaffUserIdAsync(cancellationToken) is not { } staffUserId)
+        {
+            return false;
+        }
+
+        return !await MayCoachAsync(staffUserId, clientProfileId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="staffUserId"/> may open this client's private side: they are an active Owner or Coach
+    /// of this workspace and the client's coach, and for a former client they were its coach when it left. A release
+    /// or a leave records the Owner as the keeper with a <c>Released</c> or <c>ClientLeft</c> history entry only when
+    /// someone else coached the client (ADR 0027), so such an entry means the private side is not the Owner's.
+    /// </summary>
+    public Task<bool> MayCoachAsync(Guid staffUserId, Guid clientProfileId, CancellationToken cancellationToken) =>
+        dbContext.ClientProfiles
+            .AsNoTracking()
+            .AnyAsync(
+                client =>
+                    client.Id == clientProfileId &&
+                    client.AssignedCoachUserId == staffUserId &&
+                    dbContext.TenantMemberships.Any(membership =>
+                        membership.TenantId == tenantContext.TenantId &&
+                        membership.UserId == staffUserId &&
+                        membership.Status == MembershipStatus.Active &&
+                        (membership.Role == TenantRole.Owner || membership.Role == TenantRole.Coach)) &&
+                    (client.ReleasedAtUtc == null ||
+                     !dbContext.ClientCoachAssignments.Any(entry =>
+                         entry.ClientProfileId == client.Id &&
+                         (entry.Reason == ClientCoachAssignmentReason.Released ||
+                          entry.Reason == ClientCoachAssignmentReason.ClientLeft))),
+                cancellationToken);
 
     /// <summary>
     /// Whether the owner released this client (ADR 0027). A released client is always with the owner,

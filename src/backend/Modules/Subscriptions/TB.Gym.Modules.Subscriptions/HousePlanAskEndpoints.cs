@@ -72,6 +72,7 @@ internal static class HousePlanAskEndpoints
         var staff = endpoints
             .MapGroup("/api/commercial/clients/{clientProfileId:guid}/house-plan-asks")
             .RequireAuthorization(AuthorizationPolicies.TenantCoach)
+            .WithMetadata(ClientSide.Business)
             .WithTags(SubscriptionsModule.Name);
 
         staff.MapGet("", async (

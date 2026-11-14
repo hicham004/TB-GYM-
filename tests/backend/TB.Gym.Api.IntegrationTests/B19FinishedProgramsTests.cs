@@ -158,7 +158,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
-    public async Task B19OnlyTheClientsOwnCoachOrTheOwnerChooses()
+    public async Task B19OnlyTheClientsOwnCoachChooses()
     {
         var today = R61aStartAtMidday();
         using var owner = CreateClient();
@@ -195,9 +195,15 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual("antiforgery_token_invalid", noToken.Code);
         Assert.AreEqual(new FinishedProgramsVisibilityView(true, 0), await B19ChoiceAsync(coach, clientId), "Nothing was kept.");
 
-        // The client's own coach, and the owner, who sees every client.
+        // The client's own coach. The owner manages every client but coaches only their own, and a program is the
+        // private side (C8, notes plan N9d1a): another coach's client answers as a missing one, and nothing changes.
         var chosen = await B19SetAsync(coach, clientId, false, 0);
-        var changed = await B19SetAsync(owner, clientId, true, chosen.Version);
+        await RefreshCsrfAsync(owner);
+        await AssertStatusAsync(
+            await owner.PutAsJsonAsync(url, new { canSeeFinishedPrograms = true, version = chosen.Version }),
+            HttpStatusCode.NotFound);
+        Assert.AreEqual(chosen, await B19ChoiceAsync(coach, clientId));
+        var changed = await B19SetAsync(coach, clientId, true, chosen.Version);
         Assert.IsTrue(changed.CanSeeFinishedPrograms);
         Assert.AreNotEqual(chosen.Version, changed.Version);
     }
