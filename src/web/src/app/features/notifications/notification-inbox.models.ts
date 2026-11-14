@@ -64,9 +64,13 @@ export function noticeTarget(item: NotificationItem, isOwner: boolean): NoticeTa
     case 'EnrollmentExpired':
     case 'EnrollmentRenewed':
       return { commands: ['/plan'] };
-    // A plan that has started, as its words say, and their coach leaving: their Today.
+    // A plan that has started, as its words say, their coach leaving, a new coach and a change of who
+    // sees a trainee's training (N9d1b): their Today, which names the coach or says they wait. Never the
+    // client page the payload names: its reader is that client.
     case 'EnrollmentActivated':
     case 'CoachDeparted':
+    case 'CoachAssigned':
+    case 'TraineeStaffChanged':
       return { commands: ['/'] };
     case 'CoachResigned':
       return { commands: ['/clients'] };
@@ -91,6 +95,8 @@ export function noticeIcon(kind: NotificationItem['kind']): IconName {
     case 'CoachDeparted':
     case 'ClientLeft':
     case 'CoachResigned':
+    case 'CoachAssigned':
+    case 'TraineeStaffChanged':
       return 'clients';
     default:
       return 'products';

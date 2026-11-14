@@ -7,14 +7,20 @@ import {
   coachMonth,
   coachOwnTodayView,
   coachTodayView,
+  coachTodayWaitingView,
+  DANA,
   ELIE,
+  HADI_BUSINESS,
   LEA_ID,
   MAYA,
+  MAYA_BUSINESS,
   OWNER_ID,
   plansEndedNotRenewed,
   plansEndingSoon,
   RAMI,
   SARA,
+  waitingForCoach,
+  ZIAD,
 } from '../../../testing/coach-today-fixtures';
 import {
   activeClients,
@@ -29,6 +35,7 @@ import {
   planEndedRow,
   planEndingRow,
   thisMonth,
+  waitingRow,
   type CoachTodayContext,
 } from './coach-today.models';
 
@@ -328,13 +335,14 @@ describe('Coach Today view model', () => {
     ]);
 
     expect(read).toEqual([
+      // Lea coaches Maya: the check-in is withheld, so the owner reads who reviews it and opens her page (N9d2).
       [
         'Maya Fakhoury sent a check-in',
-        'Sent 1 hour ago',
+        'Sent 1 hour ago · Lea Khoury reviews it.',
         'Check-in',
         'review',
-        'Review',
-        '/clients/c-maya/checkins/a-maya',
+        'See client',
+        '/clients/c-maya',
         null,
       ],
       [
@@ -392,17 +400,30 @@ describe('Coach Today view model', () => {
         { action: 'assign' },
       ],
     ]);
-    expect(rows[0].action.forWhom).toBe('for Maya Fakhoury');
+    expect(rows[1].action.forWhom).toBe('for Sara Mansour');
+    expect(rows[0].action.forWhom).toBe('Maya Fakhoury');
     expect(rows[0].initials).toBe('MF');
   });
 
   it("names the coach only on a team member's client", () => {
-    const rows = mapCoachToday(coachTodayView(), context).attention;
+    const renewal = (client: typeof MAYA, userId: string | null) =>
+      attentionRow(
+        attentionItem('RenewalRequested', client, { date: '2026-09-27', subjectId: 'e-1' }),
+        COACH_TODAY,
+        { ...context, userId },
+      );
 
-    expect(rows[0].coach).toBe('Lea Khoury');
-    expect(rows.slice(1).every((row) => row.coach === null)).toBe(true);
-    const asLea = mapCoachToday(coachTodayView(), { ...context, userId: MAYA.assignedCoachUserId });
-    expect(asLea.attention[0].coach).toBeNull();
+    expect(renewal(MAYA_BUSINESS, OWNER_ID).coach).toBe('Lea Khoury');
+    expect(renewal(SARA, OWNER_ID).coach).toBeNull();
+    // Lea reads her own client with no coach named.
+    expect(renewal(MAYA, LEA_ID).coach).toBeNull();
+    const rows = mapCoachToday(coachTodayView(), context).attention;
+    expect(rows.slice(1).every((row) => row.coach === null && !row.waiting)).toBe(true);
+    // A withheld item names Lea in its detail instead (N9d2), never twice.
+    expect([rows[0].coach, rows[0].detail]).toEqual([
+      null,
+      'Sent 1 hour ago · Lea Khoury reviews it.',
+    ]);
   });
 
   it('says when a week started or starts, and when a plan ends, from the workspace date', () => {
@@ -568,13 +589,19 @@ describe('Coach Today view model', () => {
     );
     // A program's day behind the workspace's (after it moved its zone) is still that program's today.
     expect(row({ count: 1, stepUps: 1, date: '2026-09-30' }).detail).toBe('Next workout today');
-    // A team coach's client names its coach to the owner, as every row does.
+    // The server reads weights only for the clients the caller coaches (N9d1a); one reaching another coach's client
+    // would open nothing, so it opens their page (N9d2).
     const theirs = attentionRow(
-      attentionItem('WeightsToApply', MAYA, { count: 1, stepUps: 1, date: '2026-10-02' }),
+      attentionItem('WeightsToApply', MAYA_BUSINESS, { count: 1, stepUps: 1, date: '2026-10-02' }),
       COACH_TODAY,
       context,
     );
-    expect(theirs.coach).toBe('Lea Khoury');
+    expect([theirs.coach, theirs.detail, theirs.action.label, theirs.action.link]).toEqual([
+      null,
+      'Next workout tomorrow · Lea Khoury follows up.',
+      'See client',
+      '/clients/c-maya',
+    ]);
   });
 
   it('lets no row of any kind say that logged sets suggest a max, or offer Review maxes (N10a)', () => {
@@ -657,13 +684,29 @@ describe('Coach Today view model', () => {
         queryParams: null,
         startsChatWith: null,
       });
-      // A team coach's client names its coach to the owner, beside it.
+      // Another coach's client: their check-ins are the private side (N9d1a), so the owner reads who follows up and
+      // opens the client's page (N9d2).
       const theirs = attentionRow(
-        attentionItem('CheckInOverdue', MAYA, { count: 1, date: '2026-09-28', canMessage: false }),
+        attentionItem('CheckInOverdue', MAYA_BUSINESS, {
+          count: 1,
+          date: '2026-09-28',
+          canMessage: false,
+        }),
         COACH_TODAY,
         context,
       );
-      expect([theirs.coach, theirs.action.label]).toEqual(['Lea Khoury', 'See check-ins']);
+      expect([theirs.heading, theirs.detail, theirs.coach]).toEqual([
+        "Maya Fakhoury's check-in is overdue",
+        'It was due Mon 28 Sep · Lea Khoury follows up.',
+        null,
+      ]);
+      expect(theirs.action).toEqual({
+        label: 'See client',
+        forWhom: 'Maya Fakhoury',
+        link: '/clients/c-maya',
+        queryParams: null,
+        startsChatWith: null,
+      });
     });
   });
 
@@ -702,15 +745,235 @@ describe('Coach Today view model', () => {
     ]);
   });
 
+  it('opens a client’s page, not their private side, for a client the caller does not coach (N9d2)', () => {
+    const theirs = (kind: Parameters<typeof attentionItem>[0], fields = {}) =>
+      attentionTarget(attentionItem(kind, MAYA_BUSINESS, fields));
+    const page = '/clients/c-maya';
+
+    // The check-ins and the training are the private side; a waiting client is nobody's yet.
+    for (const kind of [
+      'CheckInToReview',
+      'MissedSessions',
+      'CheckInOverdue',
+      'WeekNotShared',
+      'NoProgram',
+      'WeightsToApply',
+    ] as const) {
+      expect(theirs(kind, { count: 1 })).toEqual({ link: page, queryParams: null });
+      expect(attentionTarget(attentionItem(kind, ZIAD, { count: 1 }))).toEqual({
+        link: '/clients/c-ziad',
+        queryParams: null,
+      });
+    }
+    // The business side opens where it did.
+    expect(theirs('RenewalRequested', { subjectId: 'e-1' })).toEqual({
+      link: `${page}/service`,
+      queryParams: { renew: 'e-1' },
+    });
+    expect(theirs('SessionsRunningOut', { count: 1, subjectId: 'pack-2' })).toEqual({
+      link: `${page}/service`,
+      queryParams: { pay: 'pack-2' },
+    });
+    expect(theirs('NoPlan')).toEqual({ link: `${page}/service`, queryParams: { action: 'start' } });
+    // A missing mayCoach (an older answer) reads as the caller's own client.
+    expect(
+      attentionTarget(attentionItem('CheckInToReview', MAYA, { count: 1, subjectId: 'a-1' })),
+    ).toEqual({ link: `${page}/checkins/a-1`, queryParams: null });
+  });
+
+  describe('a client the caller does not coach (C8, notes plan N9d2)', () => {
+    const row = (
+      kind: Parameters<typeof attentionItem>[0],
+      client = MAYA_BUSINESS,
+      fields: Parameters<typeof attentionItem>[2] = {},
+    ) => attentionRow(attentionItem(kind, client, fields), COACH_TODAY, context);
+
+    it('keeps the sentence, says who reviews or follows up, and offers See client', () => {
+      const review = row('CheckInToReview', MAYA_BUSINESS, {
+        count: 2,
+        since: '2026-09-25T12:00:00Z',
+        newestAt: '2026-10-01T11:55:00Z',
+      });
+      // Several check-ins are "them", as the client's page says (whoActs).
+      expect([review.heading, review.detail, review.tag, review.withheld]).toEqual([
+        'Maya Fakhoury sent 2 check-ins',
+        'The newest came 5 minutes ago, the first 6 days ago · Lea Khoury reviews them.',
+        'Check-in',
+        true,
+      ]);
+      expect(review.action).toMatchObject({ label: 'See client', link: '/clients/c-maya' });
+      const one = row('CheckInToReview', MAYA_BUSINESS, {
+        count: 1,
+        since: '2026-10-01T11:00:00Z',
+      });
+      expect(one.detail).toBe('Sent 1 hour ago · Lea Khoury reviews it.');
+      // A coach the answer leaves unnamed is still their coach, one check-in or several.
+      const unnamed = { ...MAYA_BUSINESS, assignedCoachName: null };
+      expect([
+        row('CheckInToReview', unnamed, { count: 1, since: '2026-10-01T11:00:00Z' }).detail,
+        row('CheckInToReview', unnamed, {
+          count: 3,
+          since: '2026-09-25T12:00:00Z',
+          newestAt: '2026-10-01T11:55:00Z',
+        }).detail,
+      ]).toEqual([
+        'Sent 1 hour ago · Their coach reviews it.',
+        'The newest came 5 minutes ago, the first 6 days ago · Their coach reviews them.',
+      ]);
+      // The caller's own rows and a business row about Lea's client are theirs to act on.
+      expect([row('UnreadMessages', SARA, { count: 1 }).withheld, row('NoPlan').withheld]).toEqual([
+        false,
+        false,
+      ]);
+    });
+
+    it('says nothing of the last workout the server withheld, never “No workout logged yet”', () => {
+      const missed = row('MissedSessions', MAYA_BUSINESS, { count: 3, date: null });
+      expect([missed.heading, missed.detail, missed.coach]).toEqual([
+        'Maya Fakhoury missed 3 workouts in a row',
+        'Lea Khoury follows up.',
+        null,
+      ]);
+      expect(missed.action).toMatchObject({
+        label: 'See client',
+        forWhom: 'Maya Fakhoury',
+        link: '/clients/c-maya',
+        queryParams: null,
+      });
+      // The caller's own client who never trained still says so.
+      expect(row('MissedSessions', SARA, { count: 2, date: null }).detail).toBe(
+        'No workout logged yet',
+      );
+    });
+
+    it('tells the owner a waiting client’s new coach follows up, for each private kind', () => {
+      const waiting = (kind: 'CheckInToReview' | 'MissedSessions' | 'CheckInOverdue') => {
+        const read = row(kind, ZIAD, {
+          count: 1,
+          since: '2026-10-01T11:00:00Z',
+          date: kind === 'CheckInOverdue' ? '2026-09-28' : null,
+        });
+        return [read.detail, read.coach, read.waiting, read.action.label];
+      };
+
+      expect([
+        waiting('CheckInToReview'),
+        waiting('MissedSessions'),
+        waiting('CheckInOverdue'),
+      ]).toEqual([
+        [
+          'Sent 1 hour ago · Their new coach follows up once you choose one.',
+          null,
+          false,
+          'See client',
+        ],
+        ['Their new coach follows up once you choose one.', null, false, 'See client'],
+        [
+          'It was due Mon 28 Sep · Their new coach follows up once you choose one.',
+          null,
+          false,
+          'See client',
+        ],
+      ]);
+    });
+
+    it('marks a waiting client’s business rows as waiting, where a team member’s client names its coach', () => {
+      const joined = row('NoPlan', DANA, { date: COACH_TODAY });
+      expect([joined.coach, joined.waiting, joined.action.label, joined.action.link]).toEqual([
+        null,
+        true,
+        'Start a plan',
+        '/clients/c-dana/service',
+      ]);
+      expect([row('NoPlan', MAYA_BUSINESS).waiting, row('NoPlan', SARA).waiting]).toEqual([
+        false,
+        false,
+      ]);
+      const plans = mapCoachToday(coachTodayWaitingView(), context).plansEnding;
+      expect(plans.map((plan) => [plan.name, plan.coach, plan.waiting])).toEqual([
+        ['Rita Daher', null, false],
+        ['Sara Mansour', null, false],
+        ['Maya Fakhoury', 'Lea Khoury', false],
+        ['Ziad Khalil', null, true],
+      ]);
+      expect(
+        planEndedRow({ ...plansEndedNotRenewed()[0], client: ZIAD }, COACH_TODAY, context).waiting,
+      ).toBe(true);
+      expect(planEndedRow(plansEndedNotRenewed()[1], COACH_TODAY, context)).toMatchObject({
+        name: 'Hadi Nassar',
+        coach: 'Lea Khoury',
+        waiting: false,
+      });
+      expect(plansEndedNotRenewed()[1].client).toEqual(HADI_BUSINESS);
+    });
+  });
+
+  describe('clients waiting for a coach (notes plan N9d1b, N9d2)', () => {
+    it('lists them longest first, since the day on the workspace’s clock, and who coached them before', () => {
+      const today = mapCoachToday(coachTodayWaitingView(), context);
+
+      expect(today.waiting.map((row) => [row.name, row.initials, row.detail])).toEqual([
+        ['Ziad Khalil', 'ZK', 'Since Mon 28 Sep · Coached by Rana Saad before'],
+        // 21:30 UTC on Wed 30 Sep is past midnight in Beirut: Thu 1 Oct, not the UTC day.
+        ['Dana Aoun', 'DA', 'Since Thu 1 Oct · No coach yet'],
+      ]);
+      expect(today.waiting[0]).toMatchObject({ key: 'c-ziad', clientId: 'c-ziad' });
+      // Choose a coach opens the client's Service & access with the coach dialog open.
+      expect(today.waiting[0].action).toEqual({
+        label: 'Choose a coach',
+        forWhom: 'for Ziad Khalil',
+        link: '/clients/c-ziad/service',
+        queryParams: { action: 'coach' },
+        startsChatWith: null,
+      });
+      // Their items are in Needs you as any client's, counted once each.
+      expect(today.needsCount).toBe(9);
+    });
+
+    it('names an earlier year, and treats a blank previous coach as nobody', () => {
+      const [ziad] = waitingForCoach();
+      const view = { today: COACH_TODAY, timeZoneId: 'Asia/Beirut' };
+
+      expect(
+        waitingRow({ ...ziad, waitingSinceUtc: '2025-12-20T10:00:00Z' }, view, 'en-US').detail,
+      ).toBe('Since 20 Dec 2025 · Coached by Rana Saad before');
+      expect(waitingRow({ ...ziad, previousCoachName: '  ' }, view, 'en-US').detail).toBe(
+        'Since Mon 28 Sep · No coach yet',
+      );
+    });
+
+    it('has none for a coach, whose answer has no list, nor while nobody waits', () => {
+      expect(mapCoachToday(coachOwnTodayView(), { ...context, userId: LEA_ID }).waiting).toEqual(
+        [],
+      );
+      expect(mapCoachToday(coachTodayView(), context).waiting).toEqual([]);
+      const older = coachTodayView();
+      delete older.waitingForCoach;
+      expect(mapCoachToday(older, context).waiting).toEqual([]);
+    });
+
+    it('adds a No coach line to This month while clients sit in no member’s row, so the rows add up', () => {
+      expect(mapCoachToday(coachTodayWaitingView(), context).month.noCoach).toBe(
+        '1 of 2 clients active',
+      );
+      expect(mapCoachToday(coachTodayView(), context).month.noCoach).toBeNull();
+      expect(thisMonth(coachMonth({ activeClientCount: 9 }), 13, 'en-US').noCoach).toBe(
+        '0 of 1 client active',
+      );
+      // A coach has no team rows, so nothing to add up.
+      expect(thisMonth(coachMonth({ coaches: null }), 5, 'en-US').noCoach).toBeNull();
+    });
+  });
+
   it('turns a finished workout into a sentence with its first two records', () => {
-    const [rami, maya, rita] = mapCoachToday(coachTodayView(), context).activity;
+    const [rami, nour, rita] = mapCoachToday(coachTodayView(), context).activity;
 
     expect(rami.sentence).toBe('Rami Tabet finished Lower A in 58 min');
     expect(rami.records).toEqual(['Back squat 140 kg × 3', 'Romanian deadlift 107.5 kg × 8']);
     expect(rami.moreRecords).toBe(1);
     expect([rami.ago, rami.link]).toEqual(['35 minutes ago', '/clients/c-rami/training']);
-    expect(maya.sentence).toBe('Maya Fakhoury sent a check-in: Weekly check-in');
-    expect(maya.link).toBe('/clients/c-maya/checkins/a-maya');
+    expect(nour.sentence).toBe('Nour Hamdan sent a check-in: Weekly check-in');
+    expect(nour.link).toBe('/clients/c-nour/checkins/a-nour');
     expect([rita.records, rita.moreRecords, rita.ago]).toEqual([[], 0, 'yesterday']);
   });
 

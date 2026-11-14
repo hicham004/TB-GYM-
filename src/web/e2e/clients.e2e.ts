@@ -1,8 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import type { ClientOverviewView } from '../src/app/core/api/generated';
-import { clientListView } from '../src/testing/client-list-fixtures';
-import { COACH_NOW, OWNER_ID } from '../src/testing/coach-today-fixtures';
+import { clientListView, overviewRow, waitingClient } from '../src/testing/client-list-fixtures';
+import { attentionItem, COACH_NOW, OWNER_ID } from '../src/testing/coach-today-fixtures';
 import {
   expect,
   expectNoHorizontalOverflow,
@@ -17,8 +17,8 @@ import {
 
 /**
  * Clients (R3.3a) in a real browser: Karim, owner of Atlas Performance, on Thu 1 Oct 2026 at 15:00
- * in Beirut, with the twelve clients of the shared fixture. The page clock is pinned so "2 hours
- * ago" stays true.
+ * in Beirut, with the twelve clients of the shared fixture. Lea Khoury coaches Maya, so Karim reads
+ * her row without its private side (N9d1a). The page clock is pinned so "18 hours ago" stays true.
  */
 const owner = { ...SIGNED_IN_USER, id: OWNER_ID, displayName: 'Karim Haddad' };
 
@@ -101,17 +101,23 @@ for (const [width, height] of [
       '12 clients · 6 need attention · 2 plans end soon',
     );
     await expect(page.locator('li.client-row')).toHaveCount(12);
+    const hiba = clientRow(page, 'Hiba Nasser');
+    await expect(hiba).toContainText('Age 37');
+    await expect(hiba).toContainText('Bench 120 kg.');
+    await expect(hiba).toContainText('Trained Upper B · 18 hours ago');
     const maya = clientRow(page, 'Maya Fakhoury');
-    // Critique B4a: the reason as a link of its own, beside the plan's own status.
+    // Critique B4a: the reason as a link of its own, beside the plan's own status. The check-in is
+    // Lea's to review, so it opens Maya's page, the business side the owner reads (N9d1a).
     await expect(
       maya.getByRole('link', { name: 'Maya Fakhoury: 1 check-in to review' }),
-    ).toHaveAttribute('href', '/clients/c-maya/checkins/a-maya');
+    ).toHaveAttribute('href', '/clients/c-maya');
     await expect(maya).toContainText('On track');
-    await expect(maya).toContainText('Age 29');
-    await expect(maya).toContainText('Trained Lower A · 2 hours ago');
     await expect(maya).toContainText('Sent 18 hours ago');
     await expect(maya).toContainText('3 of 4');
     await expect(maya).toContainText('Coached by Lea Khoury');
+    // Her age, goals and last activity are Lea's to see: the row says nothing of them.
+    await expect(maya.locator('.goal')).toHaveCount(0);
+    await expect(maya.locator('.activity')).toHaveCount(0);
     // Critique B4c: the plan's name as it was booked leads its column, or its card's Plan line.
     await expect(maya.locator('.plan-line').first()).toHaveText('Online coaching');
     await expect(clientRow(page, 'Rita Daher').locator('.plan-name')).toHaveText('Postnatal reset');
@@ -177,7 +183,7 @@ test('chips and search narrow the list, and the chip stays in the address', asyn
   await expect(page).toHaveURL(/\/clients\?show=attention$/);
   await expect(page.locator('li.client-row')).toHaveCount(6);
 
-  await page.getByRole('searchbox', { name: 'Search clients' }).fill('wedding');
+  await page.getByRole('searchbox', { name: 'Search clients' }).fill('glutes');
   await expect(page.locator('li.client-row')).toHaveCount(1);
   await expect(page.getByRole('status')).toHaveText('Showing 1 of 12 clients');
 
@@ -190,6 +196,78 @@ test('chips and search narrow the list, and the chip stays in the address', asyn
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('radio', { name: /Ending soon/ })).toBeChecked();
   await expect(page.locator('li.client-row')).toHaveCount(2);
+});
+
+/**
+ * Notes plan N9d1b: Dana's coach left the team, so she waits for a coach. The owner reads it on her row and
+ * lists the clients waiting alone from the Coach filter.
+ */
+function withWaiting(): ClientOverviewView {
+  const view = clientListView();
+  const dana = waitingClient('c-dana', 'Dana', 'Saab');
+  return {
+    ...view,
+    clients: [
+      ...view.clients,
+      overviewRow(dana, {
+        status: 'NeedsAttention',
+        attention: ['RenewalRequested'],
+        attentionItems: [
+          attentionItem('RenewalRequested', dana, {
+            since: '2026-09-30T07:00:00Z',
+            subjectId: 'e-dana',
+          }),
+        ],
+      }),
+    ],
+  };
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`Clients at ${width}px says who waits for a coach and lists them alone`, async ({
+    page,
+  }) => {
+    await openClients(page, width, height, { view: withWaiting() });
+
+    const dana = clientRow(page, 'Dana Saab');
+    await expect(dana.locator('.coach')).toHaveText('Waiting for a coach');
+    await expect(dana.locator('.activity')).toHaveCount(0);
+    await expect(dana.getByRole('link', { name: 'Dana Saab: Asked to renew' })).toHaveAttribute(
+      'href',
+      '/clients/c-dana/service?renew=e-dana',
+    );
+
+    await page.getByRole('button', { name: 'Coach', exact: true }).click();
+    await expect(page.locator('.item-title')).toHaveText([
+      'Every coach',
+      'You',
+      'Lea Khoury',
+      'Waiting for a coach',
+    ]);
+    await page.getByRole('button', { name: 'Waiting for a coach' }).click();
+    await expect(page).toHaveURL(/\/clients\?coach=waiting$/);
+    await expect(page.locator('li.client-row')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Waiting for a coach' })).toBeVisible();
+    await expect(page.locator('.lede')).toHaveText('1 client · 1 needs attention');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: `test-results/n9d2-clients-waiting-${width}.png`,
+      fullPage: true,
+    });
+  });
+}
+
+test('Clients opens on the clients waiting for a coach from its address', async ({ page }) => {
+  await openClients(page, 1440, 900, { url: '/clients?coach=waiting', view: withWaiting() });
+
+  await expect(page.locator('li.client-row')).toHaveCount(1);
+  await expect(clientRow(page, 'Dana Saab')).toBeVisible();
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expectNoHorizontalOverflow(page);
 });
 
 test('Clients follows dark mode', async ({ page }) => {

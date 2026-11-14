@@ -60,7 +60,10 @@
 
 // ---------- the person ----------
 
-.identity-card {
+// The record's cards: the person, the shape of a section while it is read, and why a section is closed.
+.identity-card,
+.panel-bones,
+.why {
   background: var(--tb-surface);
   border: 1px solid var(--tb-line);
   border-radius: var(--tb-radius-card);
@@ -222,11 +225,8 @@ h1 {
   inline-size: 4.5rem;
 }
 
-.panel-bones {
-  background: var(--tb-surface);
-  border: 1px solid var(--tb-line);
-  border-radius: var(--tb-radius-card);
-  box-shadow: var(--tb-shadow-card);
+.panel-bones,
+.why {
   display: grid;
   gap: 0.75rem;
   padding: 1.25rem;
@@ -274,4 +274,25 @@ h1 {
 
 .section-content {
   min-inline-size: 0;
+}
+
+// Why a private section is closed to the reader (N9d1a), in its place, with at most one action.
+.why {
+  justify-items: start;
+}
+
+.why h2,
+.why p {
+  color: var(--tb-ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.why h2 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.why p {
+  max-inline-size: 65ch;
 }

@@ -100,6 +100,23 @@ app-skeleton.panel {
   }
 }
 
+// The clients waiting for a coach (notes plan N9d2): a plan list's rows, full width, first.
+.waiting {
+  container-type: inline-size;
+}
+
+.waiting-lede {
+  color: var(--tb-muted);
+  font-size: 0.84375rem;
+  margin: 0;
+  padding: 0 1.25rem 0.875rem;
+}
+
+// No coach on This month has no face: its words line up with the members' names.
+.no-coach {
+  padding-inline-start: calc(36px + 0.75rem);
+}
+
 // A card around the kit's empty state; its own flex layout does the centring.
 .first-client {
   background: var(--tb-surface);

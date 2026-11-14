@@ -15,7 +15,9 @@ import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
  * A client's intake on their record (C3, R5.3b): the same answers the client sees as My profile, in
- * the same words, each group editable in a sheet unless the client has left (ADR 0027). A client who
+ * the same words, each group editable in a sheet unless the client has left (ADR 0027). Only the
+ * client's own coach reaches it (N9d1a): the record draws why it is closed for anyone else, and the
+ * server refuses their edits, so nothing here is editable for them either. A client who
  * has not finished setting up shows what is still needed and a Finish setting up for their starting
  * weight. Every write is this page's own workspace's: if the coach switches workspace while one is on
  * its way, the answer is dropped, never shown on another client.
@@ -56,7 +58,7 @@ import { ClientWorkspaceContext } from './client-workspace.context';
           [subject]="subject()"
           [today]="today()"
           [firstDay]="firstDay()"
-          [editable]="!context.isFormer()"
+          [editable]="!context.isFormer() && context.mayCoach()"
         />
       </div>
     }

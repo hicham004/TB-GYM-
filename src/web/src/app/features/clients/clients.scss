@@ -206,6 +206,12 @@ h1 {
   margin-block-start: 0.125rem;
 }
 
+// Nobody coaches them yet (N9d1b): the owner's to act on.
+.coach.waiting {
+  color: var(--tb-warm-ink);
+  font-weight: 600;
+}
+
 // ---------- plan, last check-in, last activity ----------
 
 // On a phone a fact's name stands before it, and the value wraps under it when there is no room.

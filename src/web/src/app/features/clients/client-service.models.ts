@@ -629,14 +629,20 @@ export interface SessionStaff {
 
 /**
  * Who the owner can say held a session (critique B12): the client's coach first, then the rest of the
- * team, each once, the signed-in person as You. With nobody else to name there is no choice to offer.
+ * team, each once, the signed-in person as You. A client waiting for a coach (N9d1b) has nobody to put
+ * first, so You lead. With nobody else to name there is no choice to offer.
  */
 export function sessionHolders(
-  coach: SessionStaff,
+  coach: SessionStaff | null,
   team: readonly SessionStaff[],
   me: string,
 ): SelectOption[] {
-  const people = [coach, ...team.filter((member) => member.userId !== coach.userId)];
+  const people = coach
+    ? [coach, ...team.filter((member) => member.userId !== coach.userId)]
+    : [
+        ...team.filter((member) => member.userId === me),
+        ...team.filter((member) => member.userId !== me),
+      ];
   if (people.length < 2) return [];
   return people.map((person) => ({
     value: person.userId,

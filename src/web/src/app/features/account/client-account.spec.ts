@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -54,7 +55,8 @@ async function render(
      * sends itself (notes plan N9a2).
      */
     self?: 'trainee' | 'unreadable' | Subject<ClientSelfProfile>;
-    coach?: 'Lea Haddad' | 'unreadable';
+    /** 'waiting': no coach for now (N9d1b), the server's 404; 'forbidden' its 403. */
+    coach?: 'Lea Haddad' | 'unreadable' | 'waiting' | 'forbidden';
     /** The server's word on the coach's Founding coach badge (notes plan N3b); left out when undefined. */
     founding?: boolean;
     /** The coach's certificate lines the server shows this client (notes plan N4b); left out when undefined. */
@@ -91,11 +93,15 @@ async function render(
     getOwnCoach: vi.fn(() =>
       options.coach === 'unreadable'
         ? throwError(() => new Error('forbidden'))
-        : of({
-            name: 'Lea Haddad',
-            ...(options.founding === undefined ? {} : { foundingCoach: options.founding }),
-            ...(options.lines === undefined ? {} : { lines: options.lines }),
-          }),
+        : options.coach === 'waiting' || options.coach === 'forbidden'
+          ? throwError(
+              () => new HttpErrorResponse({ status: options.coach === 'waiting' ? 404 : 403 }),
+            )
+          : of({
+              name: 'Lea Haddad',
+              ...(options.founding === undefined ? {} : { foundingCoach: options.founding }),
+              ...(options.lines === undefined ? {} : { lines: options.lines }),
+            }),
     ),
   };
   await TestBed.configureTestingModule({
@@ -181,6 +187,36 @@ describe('ClientAccount', () => {
 
     expect(host.querySelector('.coach')).toBeNull();
     expect(alert(host)).toBe('');
+  });
+
+  it('says a client waits for a new coach when they have none for now (N9d1b)', async () => {
+    const { host } = await render({ coach: 'waiting' });
+
+    const card = host.querySelector('[data-waiting-coach]')!;
+    expect(card.matches('div.coach')).toBe(true);
+    // Nothing to write to: not a link, no face, no Message.
+    expect(host.querySelector('a.coach')).toBeNull();
+    expect(card.querySelector('app-avatar')).toBeNull();
+    expect(card.textContent).not.toContain('Message');
+    expect((card.textContent ?? '').replace(/\s+/g, ' ').trim()).toBe(
+      'Your coach, Waiting for a new coach. Your coaching space will tell you when you have one.',
+    );
+    expect(alert(host)).toBe('');
+  });
+
+  it('leaves the coach line out on a refusal, as before (N9d1b)', async () => {
+    const { host } = await render({ coach: 'forbidden' });
+
+    expect(host.querySelector('.coach')).toBeNull();
+    expect(host.querySelector('[data-waiting-coach]')).toBeNull();
+  });
+
+  it('never says a trainee waits for a coach: their coach is never asked for', async () => {
+    const { host, api } = await render({ self: 'trainee', coach: 'waiting' });
+
+    expect(api.getOwnCoach).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-waiting-coach]')).toBeNull();
+    expect(host.querySelector('[data-self-directed]')).not.toBeNull();
   });
 
   it('reads the coach again for another workspace, and never shows the old one meanwhile', async () => {

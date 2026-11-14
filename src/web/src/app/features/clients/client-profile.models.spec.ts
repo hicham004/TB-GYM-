@@ -390,12 +390,72 @@ describe('what needs the coach on a client’s page', () => {
     const fresh = overdue({ count: 1, date: '2026-09-28', canMessage: true });
     expect([fresh.heading, fresh.detail]).toEqual(['Check-in overdue', 'It was due Mon 28 Sep']);
     expect(fresh.action).toMatchObject({ label: 'Remind', startsChat: true });
-    // Messaging not in the plan, or another coach's client (CLI-013): the client's check-ins.
+    // Messaging not in the plan: the client's check-ins.
     expect(overdue({ count: 1, date: '2026-09-28', canMessage: false }).action).toEqual({
       label: 'See check-ins',
       link: `${page}/checkins`,
       queryParams: null,
     });
+  });
+
+  it('says who acts on a private item about a client the reader does not coach, never what is withheld (N9d1a)', () => {
+    const leas = { ...MAYA, mayCoach: false };
+    const waiting = {
+      ...MAYA,
+      assignedCoachUserId: null,
+      assignedCoachName: null,
+      mayCoach: false,
+    };
+    const closed = (client: typeof MAYA, kind: CoachAttentionKind, count = 1) =>
+      needRows(
+        // As the server sends them then: no check-in to open, no last workout's day.
+        [attentionItem(kind, client, { count, since: '2026-10-01T09:00:00Z', date: null })],
+        COACH_TODAY,
+        context,
+      )[0];
+    const seeClient = { label: 'See client', link: page, queryParams: null };
+
+    expect(closed(leas, 'CheckInToReview')).toEqual({
+      key: 'CheckInToReview',
+      kind: 'CheckInToReview',
+      tone: 'review',
+      tag: 'Check-in',
+      heading: 'Check-in ready to review',
+      detail: 'Lea Khoury reviews it.',
+      action: seeClient,
+      elsewhere: true,
+    });
+    expect(closed(leas, 'CheckInToReview', 2)).toMatchObject({
+      heading: '2 check-ins to review',
+      detail: 'Lea Khoury reviews them.',
+    });
+    expect(closed(leas, 'MissedSessions', 3)).toMatchObject({
+      heading: 'Missed 3 workouts in a row',
+      detail: 'Lea Khoury follows up.',
+      action: seeClient,
+      elsewhere: true,
+    });
+    expect(closed(leas, 'CheckInOverdue')).toMatchObject({
+      heading: 'Check-in overdue',
+      detail: 'Lea Khoury follows up.',
+      action: seeClient,
+      elsewhere: true,
+    });
+    for (const kind of ['CheckInToReview', 'MissedSessions', 'CheckInOverdue'] as const) {
+      expect(closed(waiting, kind).detail).toBe('Their new coach follows up once you choose one.');
+    }
+    // The business side keeps its words and its action.
+    expect(closed(leas, 'NoPlan')).toMatchObject({
+      heading: 'No plan yet',
+      action: { label: 'Start a plan', queryParams: { action: 'start' } },
+    });
+    expect(closed(leas, 'NoPlan').elsewhere).toBeUndefined();
+    // A missing flag is the coach's own client, as before.
+    expect(closed(MAYA, 'MissedSessions', 3)).toMatchObject({
+      detail: 'No workout logged yet',
+      action: { label: 'See training', link: `${page}/training` },
+    });
+    expect(closed(MAYA, 'MissedSessions', 3).elsewhere).toBeUndefined();
   });
 
   it('says when an unshared week starts today, tomorrow or already started', () => {

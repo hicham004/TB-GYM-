@@ -22,7 +22,10 @@ export interface ToReviewRow {
   form: string;
   /** "Sent Mon 19 Oct · 1 day late", or "Sent Mon 19 Oct" when it came on time. */
   sent: string;
-  /** "Coached by Lea Khoury" on an owner's team coach's client; null on the reader's own. */
+  /**
+   * "Coached by Lea Khoury" on a client someone else coaches; null on the reader's own. A guard only: since notes plan
+   * N9d1a the server sends every reader, the owner too, their own clients alone (CHK-014).
+   */
   coach: string | null;
   /** What the row's link says after the name, as one sentence for a screen reader. */
   spoken: string;

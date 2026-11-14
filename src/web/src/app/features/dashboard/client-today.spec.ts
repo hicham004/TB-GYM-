@@ -581,6 +581,115 @@ describe('ClientToday', () => {
     });
   });
 
+  describe('waiting for a coach (N9d1b)', () => {
+    /** The server's word for a coached client with no coach for now: the coach's read answers 404. */
+    const waiting = (status = 404) => ({
+      getOwnCoach: vi.fn(() => throwError(() => new HttpErrorResponse({ status }))),
+    });
+
+    it('says the client waits for a coach where the coach’s chip goes, and offers no chat', async () => {
+      const { host, read } = await render({
+        day: day(),
+        upcoming: nothingAssigned(),
+        api: waiting(),
+      });
+
+      const chip = host.querySelector('.today-coach')!;
+      expect(chip.matches('div.today-coach.today-coach--none[data-waiting-coach]')).toBe(true);
+      expect(host.querySelectorAll('.today-coach')).toHaveLength(1);
+      expect(textOf(chip)).toBe('Waiting for a coach');
+      // Not a link and no face: there is nobody to write to yet.
+      expect(chip.closest('a')).toBeNull();
+      expect(chip.querySelector('a, app-avatar, img')).toBeNull();
+      expect(textOf(host.querySelector('#today-training-heading'))).toBe('Nothing assigned yet');
+      expect(read()).toContain(
+        'Your coaching space will give you a new coach, who will put your program here.',
+      );
+      expect(read()).not.toContain('Your coach will put your program here.');
+      expect(host.querySelector('a[href="/messages"].text-link')).toBeNull();
+      expect(read()).not.toContain('Message your coach');
+    });
+
+    it('hides Message and Contact your coach on every card while waiting', async () => {
+      const between = await render({
+        day: day(),
+        upcoming: upcoming({
+          todayCoverage: { activeBlock: null, nextBlockStartDate: '2026-10-05' },
+        }),
+        api: waiting(),
+      });
+      expect(between.read()).toContain('Your next program starts Mon 5 Oct');
+      expect(between.host.querySelector('a[href="/messages"].text-link')).toBeNull();
+      TestBed.resetTestingModule();
+
+      const closed = await render({ day: day([], false, 'Paused'), api: waiting() });
+      expect(closed.read()).toContain('Training is not available');
+      expect(closed.read()).not.toContain('Contact your coach');
+      expect(closed.host.querySelector('[data-waiting-coach]')).not.toBeNull();
+    });
+
+    it('keeps today’s behaviour on a refusal or a failure: no chip, the coach’s words', async () => {
+      const refused = await render({ day: day(), upcoming: nothingAssigned(), api: waiting(403) });
+      expect(refused.host.querySelector('[data-waiting-coach]')).toBeNull();
+      expect(refused.host.querySelector('.today-coach')).toBeNull();
+      expect(refused.read()).toContain('Your coach will put your program here.');
+      TestBed.resetTestingModule();
+
+      const failed = await render({
+        day: day(),
+        upcoming: nothingAssigned(),
+        api: { getOwnCoach: vi.fn(() => throwError(() => new Error('offline'))) },
+      });
+      expect(failed.host.querySelector('[data-waiting-coach]')).toBeNull();
+      expect(failed.read()).toContain('Your coach will put your program here.');
+    });
+
+    it('never says a trainee waits for a coach, nor a client whose profile could not be read', async () => {
+      const house = await render({
+        ...trainee(waiting()),
+        day: day(),
+        upcoming: nothingAssigned(),
+      });
+      expect(house.api.getOwnCoach).not.toHaveBeenCalled();
+      expect(house.host.querySelector('[data-waiting-coach]')).toBeNull();
+      expect(house.host.querySelector('[data-self-directed]')).not.toBeNull();
+      TestBed.resetTestingModule();
+
+      const unknown = await render({
+        day: day(),
+        upcoming: nothingAssigned(),
+        api: { ...waiting(), getSelfProfile: vi.fn(() => throwError(() => new Error('offline'))) },
+      });
+      expect(unknown.host.querySelector('[data-waiting-coach]')).toBeNull();
+    });
+
+    it('names the new coach once one is given, after a workspace switch reads again', async () => {
+      let coach: 'none' | 'Lea Khoury' = 'none';
+      const { fixture, host, tenant } = await render({
+        day: day(),
+        upcoming: nothingAssigned(),
+        api: {
+          getOwnCoach: vi.fn(() =>
+            coach === 'none'
+              ? throwError(() => new HttpErrorResponse({ status: 404 }))
+              : of({ name: coach }),
+          ),
+        },
+      });
+      expect(host.querySelector('[data-waiting-coach]')).not.toBeNull();
+
+      coach = 'Lea Khoury';
+      tenant.set('tenant-2');
+      fixture.detectChanges();
+      // The old state goes at once; only the coach's place is kept while they are read.
+      expect(host.querySelector('[data-waiting-coach]')).toBeNull();
+      await settle(fixture);
+      expect(host.querySelector('[data-waiting-coach]')).toBeNull();
+      expect(textOf(host.querySelector('.today-coach'))).toContain('Lea Khoury');
+      expect(host.querySelector('a[href="/messages"].text-link')).not.toBeNull();
+    });
+  });
+
   describe('in a plan’s last days (critique B14)', () => {
     const endsSoon: RenewalStatus = {
       ...running,

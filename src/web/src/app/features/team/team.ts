@@ -58,11 +58,12 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Settings › Team (C9, R5.2a; ADR 0026): who coaches here, each with a face, their clients and when
  * they joined; inviting a coach in a sheet, which asks before Browser Back, a workspace switch, sign-out
  * or a reload drops what was typed (audit COACH-1); who is still to accept, with a new link or a cancel
- * in each row's menu; and removing a coach, asked first because their clients move to the owner. Days
- * are the workspace's (COACH-6).
+ * in each row's menu; and removing a coach, asked first because their clients then wait for a coach
+ * (N9d1b). Days are the workspace's (COACH-6).
  *
- * Presentation only. The API refuses every call here to anyone but the owner, and moves a removed
- * coach's clients in the same transaction.
+ * Presentation only. The API refuses every call here to anyone but the owner, and leaves a removed
+ * coach's clients and client invitations waiting in the same transaction; Clients lists them under
+ * Waiting for a coach, self-directed trainees included (Today's list leaves them out, CLI-020).
  */
 @Component({
   selector: 'app-team',
@@ -285,10 +286,10 @@ export class Team extends GuardedSheets {
     const clients = member.assignedClientCount;
     const yes = await this.ask(
       clients === 0
-        ? $localize`${member.displayName}:name: loses access right away. Any client invitation they sent lands with you. Nothing is deleted.`
+        ? $localize`${member.displayName}:name: loses access right away. Anyone who accepts a client invitation they sent will wait for a coach. Nothing is deleted.`
         : clients === 1
-          ? $localize`${member.displayName}:name: loses access right away. Their client moves to you with all their history, and any client invitation they sent lands with you. Nothing is deleted, and you can give the client another coach afterwards.`
-          : $localize`${member.displayName}:name: loses access right away. Their ${clients}:count: clients move to you with all their history, and any client invitation they sent lands with you. Nothing is deleted, and you can give each client another coach afterwards.`,
+          ? $localize`${member.displayName}:name: loses access right away. Their client waits for a coach with all their history, and so will anyone who accepts a client invitation they sent. Nothing is deleted. Give the client a coach from Clients, yourself included.`
+          : $localize`${member.displayName}:name: loses access right away. Their ${clients}:count: clients wait for a coach with all their history, and so will anyone who accepts a client invitation they sent. Nothing is deleted. Give each one a coach from Clients, yourself included.`,
       $localize`Remove coach`,
       $localize`Keep them`,
       $localize`Remove ${member.displayName}:name:?`,
@@ -303,13 +304,14 @@ export class Team extends GuardedSheets {
           firstValueFrom(this.api.removeTeamCoach(member.userId, member.version)),
         );
         await owner.wait(this.load());
-        const moved = outcome.reassignedClientCount;
+        // The server's count is of the clients it left waiting (N9d1b), not moved anywhere.
+        const waitingClients = outcome.reassignedClientCount;
         this.toast.show(
-          moved === 0
+          waitingClients === 0
             ? $localize`${member.displayName}:name: left the team.`
-            : moved === 1
-              ? $localize`${member.displayName}:name: left the team. Their client moved to you.`
-              : $localize`${member.displayName}:name: left the team. ${moved}:count: clients moved to you.`,
+            : waitingClients === 1
+              ? $localize`${member.displayName}:name: left the team. Their client is waiting for a coach.`
+              : $localize`${member.displayName}:name: left the team. ${waitingClients}:count: clients are waiting for a coach.`,
           { tone: 'success' },
         );
       } catch (error) {

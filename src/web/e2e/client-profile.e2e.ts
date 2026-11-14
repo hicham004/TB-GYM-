@@ -23,8 +23,10 @@ import {
 
 /**
  * A client's page (R3.3b) in a real browser: Karim, owner of Atlas Performance, on Thu 1 Oct 2026
- * at 15:00 in Beirut, reading Maya Fakhoury's record. The page clock is pinned so "2 hours ago"
- * stays true. Every read the page makes is answered, so the console guard stays meaningful.
+ * at 15:00 in Beirut, reading Maya Fakhoury's record as Maya's coach: only a client's own coach reads
+ * their private side (N9d1a), so the owner reading Lea's Maya sees the business side alone (the cases
+ * at the end). The page clock is pinned so "2 hours ago" stays true. Every read the page makes is
+ * answered, so the console guard stays meaningful.
  */
 const owner = { ...SIGNED_IN_USER, id: OWNER_ID, displayName: 'Karim Haddad' };
 const ID = MAYA.clientProfileId;
@@ -56,8 +58,9 @@ const clientDetails = {
   onboardingCompletedAtUtc: '2026-07-14T09:00:00Z',
   isCoachBlocked: false,
   version: 3,
-  assignedCoachUserId: MAYA.assignedCoachUserId,
-  assignedCoachName: 'Lea Khoury',
+  assignedCoachUserId: OWNER_ID,
+  assignedCoachName: 'Karim Haddad',
+  mayCoach: true,
   release: null,
 };
 
@@ -289,19 +292,43 @@ async function openProfile(
     overview?: ClientProfileOverviewView;
     details?: Record<string, unknown>;
     requests?: string[];
+    /**
+     * Answer the business reads alone, as the server does for a reader who does not coach the client
+     * (N9d1a): a private read would then get the double's 404, which the console guard reports.
+     */
+    businessOnly?: boolean;
     /** More reads and writes for the page under test, answered like the rest. */
     extra?: Handlers;
   } = {},
 ) {
   await page.clock.setFixedTime(new Date(COACH_NOW));
   await page.setViewportSize({ width, height });
-  const reads: Handlers = {
+  const business: Handlers = {
     [`GET /api/clients/${ID}`]: (route) =>
       json(route, 200, { ...clientDetails, ...options.details }),
     [`GET /api/commercial/clients/${ID}`]: (route) => json(route, 200, commercial),
     'GET /api/workspace': (route) => json(route, 200, workspace),
     [`GET /api/clients/${ID}/overview`]: (route) =>
-      json(route, 200, options.overview ?? profileOverview()),
+      json(route, 200, options.overview ?? profileOverview({ client: KARIMS_MAYA })),
+  };
+  const reads: Handlers = options.businessOnly
+    ? { ...business, ...options.extra }
+    : { ...business, ...privateReads(), ...options.extra };
+  if (options.requests) {
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith('/api/')) options.requests!.push(url.pathname);
+    });
+  }
+  await mockSession(page, { memberships: [OWNER_MEMBERSHIP], user: owner, extra: reads });
+  await page.goto(options.path ?? `/clients/${ID}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Maya Fakhoury' })).toBeVisible();
+  await waitForFonts(page);
+}
+
+/** The reads of Maya's private side, answered for her coach. */
+function privateReads(): Handlers {
+  return {
     [`GET /api/progress/clients/${ID}/dashboard`]: (route) => json(route, 200, dashboard),
     [`GET /api/progress/clients/${ID}`]: (route) => json(route, 200, progress),
     [`GET /api/progress/clients/${ID}/span`]: (route) =>
@@ -333,18 +360,7 @@ async function openProfile(
           checkInItem('next', '2026-10-08', null),
         ],
       }),
-    ...options.extra,
   };
-  if (options.requests) {
-    page.on('request', (request) => {
-      const url = new URL(request.url());
-      if (url.pathname.startsWith('/api/')) options.requests!.push(url.pathname);
-    });
-  }
-  await mockSession(page, { memberships: [OWNER_MEMBERSHIP], user: owner, extra: reads });
-  await page.goto(options.path ?? `/clients/${ID}`);
-  await expect(page.getByRole('heading', { level: 1, name: 'Maya Fakhoury' })).toBeVisible();
-  await waitForFonts(page);
 }
 
 async function axe(page: Page) {
@@ -359,20 +375,24 @@ async function axe(page: Page) {
   ).toEqual([]);
 }
 
+/** Maya as Today and the overview name her when Karim coaches her. */
+const KARIMS_MAYA = { ...MAYA, assignedCoachUserId: OWNER_ID, assignedCoachName: 'Karim Haddad' };
+
 const WAITING = profileOverview({
+  client: KARIMS_MAYA,
   status: 'NeedsAttention',
   attention: [
-    attentionItem('CheckInToReview', MAYA, {
+    attentionItem('CheckInToReview', KARIMS_MAYA, {
       count: 1,
       since: '2026-10-01T09:00:00Z',
       subjectId: 'assignment-9',
     }),
-    attentionItem('UnreadMessages', MAYA, {
+    attentionItem('UnreadMessages', KARIMS_MAYA, {
       count: 2,
       since: '2026-10-01T08:00:00Z',
       subjectId: 'conversation-4',
     }),
-    attentionItem('PlanEndingSoon', MAYA, { date: '2026-10-06', subjectId: 'e-1' }),
+    attentionItem('PlanEndingSoon', KARIMS_MAYA, { date: '2026-10-06', subjectId: 'e-1' }),
   ],
 });
 
@@ -389,9 +409,11 @@ for (const [width, height] of [
       'Lose 6 kg and feel strong for my wedding in December.',
     );
     await expect(page.locator('app-status-pill').first()).toHaveText('Active · 73 days left');
-    // Karim owns the workspace but Lea coaches Maya, so her messages go through Lea (COACH-13).
-    await expect(page.locator('.messaging-note')).toHaveText('Messages go through Lea Khoury.');
-    await expect(page.getByRole('button', { name: 'Message Maya' })).toHaveCount(0);
+    // Karim coaches Maya, so Karim messages Maya, and no line names another coach.
+    await expect(page.getByRole('button', { name: 'Message Maya' })).toBeVisible();
+    await expect(page.locator('.messaging-note')).toHaveCount(0);
+    await expect(page.locator('.plan-row')).not.toContainText('Coached by');
+    await expect(page.locator('.notes')).toContainText('Only you see these, as Maya’s coach.');
 
     // What needs the coach comes before anything else, with one filled action.
     const needs = page.locator('.needs');
@@ -494,7 +516,7 @@ for (const width of [390, 1440]) {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     await expectNoHorizontalOverflow(page);
-    await expect(page.locator('.messaging-note')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Message Maya' })).toBeVisible();
     await expect(page.locator('.needs .need')).toHaveCount(3);
   });
 }
@@ -634,5 +656,244 @@ test('a former client’s Overview shows how coaching ended and offers nothing t
     'Progress',
     'Service & access',
   ]);
+  await expect(page.locator('.notes')).toContainText('Only you see these.');
+  await axe(page);
+});
+
+// ---------- the owner on a client they do not coach (N9d1a, N9d1b) ----------
+
+/** Maya as the server sends her to the owner while Lea coaches her: the private side withheld. */
+const LEAS_MAYA = { ...MAYA, mayCoach: false };
+const leasDetails = {
+  ...clientDetails,
+  heightCentimeters: null,
+  heightEnteredValue: null,
+  heightEnteredUnit: null,
+  goals: null,
+  coachNotes: null,
+  assignedCoachUserId: MAYA.assignedCoachUserId,
+  assignedCoachName: 'Lea Khoury',
+  mayCoach: false,
+};
+/** Maya once Lea has left and before the owner gives her a coach: nobody coaches her. */
+const WAITING_MAYA = {
+  ...MAYA,
+  assignedCoachUserId: null,
+  assignedCoachName: null,
+  mayCoach: false,
+};
+const waitingDetails = { ...leasDetails, assignedCoachUserId: null, assignedCoachName: '' };
+
+/** The overview the server answers then: the week kept, the last activity and workout withheld. */
+function businessOverview(
+  client: ClientProfileOverviewView['client'],
+  attention: ClientProfileOverviewView['attention'] = [],
+): ClientProfileOverviewView {
+  return profileOverview({
+    client,
+    lastActivityKind: null,
+    lastActivityAtUtc: null,
+    lastWorkout: null,
+    attention,
+  });
+}
+
+/** A read or write of the client's private side, which only their coach may make. */
+const isPrivate = (path: string) =>
+  /^\/api\/(training|nutrition|progress|strength|checkins)\//.test(path) ||
+  /^\/api\/clients\/[^/]+\/(intake|complete-onboarding|coach-notes)$/.test(path);
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`the owner on Lea’s client at ${width}px sees the business side alone, asks for nothing private and passes axe`, async ({
+    page,
+  }) => {
+    const requests: string[] = [];
+    await openProfile(page, width, height, {
+      details: leasDetails,
+      businessOnly: true,
+      requests,
+      overview: businessOverview(LEAS_MAYA, [
+        attentionItem('CheckInToReview', LEAS_MAYA, { count: 1, since: '2026-10-01T09:00:00Z' }),
+        attentionItem('PlanEndingSoon', LEAS_MAYA, { date: '2026-10-06', subjectId: 'e-1' }),
+      ]),
+    });
+
+    await expect(page.locator('.plan-row')).toContainText('Coached by Lea Khoury');
+    await expect(page.locator('.messaging-note')).toHaveText('Messages go through Lea Khoury.');
+    await expect(page.getByRole('button', { name: 'Message Maya' })).toHaveCount(0);
+    await expect(page.locator('app-section-nav a')).toHaveText(['Overview', 'Service & access']);
+
+    // Why first, then what needs doing and the week's counts, and nothing of the private side.
+    const why = page.locator('.overview > section').first();
+    await expect(why.getByRole('heading', { level: 2 })).toHaveText('Lea Khoury coaches Maya');
+    await expect(why).toContainText(
+      'As the owner you see Maya’s plan, payments and sessions. Their training, nutrition, check-ins and progress open only to their coach.',
+    );
+    await expect(why.getByRole('link', { name: 'Service & access' })).toHaveAttribute(
+      'href',
+      `/clients/${ID}/service`,
+    );
+    const needs = page.locator('.needs');
+    await expect(needs.locator('.need-detail')).toHaveText([
+      'Lea Khoury reviews it.',
+      'Last day Tue 6 Oct',
+    ]);
+    await expect(needs.getByRole('link')).toHaveText(['Renew plan']);
+    await expect(page.locator('.week .week-count')).toContainText('2 of 5');
+    for (const card of ['weight', 'records', 'checkin', 'notes']) {
+      await expect(page.locator(`section.${card}`)).toHaveCount(0);
+    }
+    await expect(page.getByText('Last activity')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Actions' }).click();
+    await expect(page.locator('app-client-actions a.item .item-title')).toHaveText([
+      'Plan and payments',
+    ]);
+    await page.keyboard.press('Escape');
+
+    expect(requests.filter(isPrivate)).toEqual([]);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: `test-results/n9d2-owner-overview-${width}.png`,
+      fullPage: true,
+    });
+  });
+}
+
+test('a private section reached by address says why in its place, and asks for nothing private', async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  // Where a check-in on Today or a bookmark would open.
+  await openProfile(page, 1440, 900, {
+    path: `/clients/${ID}/checkins/assignment-9`,
+    details: leasDetails,
+    businessOnly: true,
+    requests,
+    overview: businessOverview(LEAS_MAYA),
+  });
+
+  const why = page.locator('.section-content section.why');
+  await expect(why.getByRole('heading', { level: 2 })).toHaveText('Lea Khoury coaches Maya');
+  await expect(why.getByRole('link', { name: 'Service & access' })).toHaveAttribute(
+    'href',
+    `/clients/${ID}/service`,
+  );
+  await expect(page.locator('app-client-checkin-review')).toHaveCount(0);
+  await axe(page);
+  await page.screenshot({ path: 'test-results/n9d2-owner-private-section-1440.png' });
+
+  // Leaving it asks nothing of the page that was never drawn.
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/clients/${ID}$`));
+  await expect(page.locator('.overview section.why')).toContainText('Lea Khoury coaches Maya');
+  expect(requests.filter(isPrivate)).toEqual([]);
+});
+
+for (const width of [390, 1440]) {
+  test(`a waiting client at ${width}px says nobody coaches them yet, offers no chat, and the way to choose a coach`, async ({
+    page,
+  }) => {
+    const requests: string[] = [];
+    await openProfile(page, width, 900, {
+      details: waitingDetails,
+      businessOnly: true,
+      requests,
+      overview: businessOverview(WAITING_MAYA, [
+        attentionItem('CheckInOverdue', WAITING_MAYA, { count: 1, date: '2026-09-28' }),
+      ]),
+    });
+
+    await expect(page.locator('.plan-row')).toContainText('Waiting for a coach');
+    await expect(page.locator('.plan-row')).not.toContainText('Coached by');
+    await expect(page.getByRole('button', { name: /Message/ })).toHaveCount(0);
+    await expect(page.locator('.messaging-note')).toHaveCount(0);
+    const why = page.locator('.overview section.why');
+    await expect(why.getByRole('heading', { level: 2 })).toHaveText('Maya is waiting for a coach');
+    await expect(why).toContainText(
+      'Nobody sees Maya’s training, nutrition, check-ins and progress until you give them a coach, yourself included. Their plan keeps running and they can still log.',
+    );
+    await expect(why.getByRole('link', { name: 'Choose a coach' })).toHaveAttribute(
+      'href',
+      `/clients/${ID}/service?action=coach`,
+    );
+    // The one filled action on the page.
+    await expect(page.locator('.client-workspace .tb-button--filled')).toHaveText([
+      'Choose a coach',
+    ]);
+    await expect(page.locator('.need-detail')).toHaveText([
+      'Their new coach follows up once you choose one.',
+    ]);
+
+    expect(requests.filter(isPrivate)).toEqual([]);
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n9d2-waiting-${width}.png`, fullPage: true });
+  });
+}
+
+test('the owner’s side of a waiting client follows dark mode, reflows at 200% text and reads right to left', async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openProfile(page, 390, 844, {
+    path: `/clients/${ID}/progress`,
+    details: waitingDetails,
+    businessOnly: true,
+    overview: businessOverview(WAITING_MAYA),
+  });
+
+  await expect(page.locator('.section-content section.why')).toContainText(
+    'Maya is waiting for a coach',
+  );
+  await expect(page.locator('main')).not.toHaveAttribute('data-mode', 'light');
+  await axe(page);
+  await page.screenshot({
+    path: 'test-results/n9d2-waiting-progress-dark-390.png',
+    fullPage: true,
+  });
+
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expectNoHorizontalOverflow(page);
+  await expect(page.getByRole('link', { name: 'Choose a coach' })).toBeVisible();
+  await useRtl(page);
+  await expectNoHorizontalOverflow(page);
+});
+
+test('a former client the owner did not coach when coaching ended keeps the plan side alone', async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  await openProfile(page, 1440, 900, {
+    details: {
+      ...leasDetails,
+      release: {
+        releasedAtUtc: '2026-09-20T10:00:00Z',
+        reason: 'Moved to Dubai for work.',
+        releasedByName: 'Karim Haddad',
+        departureKind: 'ReleasedByOwner',
+      },
+    },
+    businessOnly: true,
+    requests,
+  });
+
+  await expect(page.locator('app-status-pill').first()).toHaveText('Former client');
+  await expect(page.locator('app-section-nav a')).toHaveText(['Overview', 'Service & access']);
+  // Not even the intake to read, so no Actions at all.
+  await expect(page.getByRole('button', { name: 'Actions' })).toHaveCount(0);
+  await expect(page.locator('.overview h2')).toHaveText(['Former client']);
+  await expect(page.getByText('Coaching ended on Sun 20 Sep 2026 by Karim Haddad.')).toBeVisible();
+  await expect(
+    page.getByText(
+      'You keep Maya’s plan and payments. Their training, check-ins and progress stay closed: you did not coach them when coaching ended.',
+    ),
+  ).toBeVisible();
+  await expect(page.locator('section.notes')).toHaveCount(0);
+  expect(requests.filter(isPrivate)).toEqual([]);
   await axe(page);
 });

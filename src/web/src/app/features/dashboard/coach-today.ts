@@ -167,6 +167,17 @@ export class CoachToday {
     }
     return rows;
   });
+  /**
+   * The one filled button on Today (UI-REDESIGN-PLAN §2): while anybody waits for a coach, the first waiting row's
+   * Choose a coach, the owner's job the page puts first; otherwise the first Needs-you row the caller can act on,
+   * never one that only opens a client they do not coach, nor one sliding out (notes plan N9d2, as the client page's
+   * `primaryNeed`). Waiting rows are keyed `waiting:{id}`, Needs-you rows by their own key.
+   */
+  protected readonly primaryAction = computed(() => {
+    const waiting = this.today()?.waiting ?? [];
+    if (waiting.length > 0) return `waiting:${waiting[0].key}`;
+    return this.attention().find((row) => !row.withheld && !row.leaving)?.key ?? null;
+  });
   private readonly leaves: Stop[] = [];
 
   protected readonly firstName = computed(

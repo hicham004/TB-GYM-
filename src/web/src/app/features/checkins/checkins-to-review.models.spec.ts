@@ -36,6 +36,7 @@ describe('a check-in to review (critique B3b)', () => {
     );
   });
 
+  // A guard: the server sends every reader, the owner too, their own clients alone (CHK-014, N9d1a).
   it('names the coach only of another coach’s client', () => {
     expect(toReviewRow(item(), CONTEXT).coach).toBeNull();
     const other = toReviewRow(

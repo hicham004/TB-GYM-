@@ -206,7 +206,10 @@
                       {{ row.goal }}
                     </p>
                   }
-                  @if (row.coach) {
+                  @if (row.waiting) {
+                    <!-- Nobody coaches them (N9d1b): the owner gives them a coach from their page. -->
+                    <p class="coach waiting" data-waiting i18n>Waiting for a coach</p>
+                  } @else if (row.coach) {
                     <p class="coach" i18n>Coached by {{ row.coach }}</p>
                   }
                 </div>
@@ -286,16 +289,19 @@
                     <span class="fact-value quiet">{{ row.checkIn }}</span>
                   }
                 </p>
-                <p class="fact activity">
-                  <span class="cell-label" i18n>Last activity</span>&ngsp;
-                  @if (row.activityAt) {
-                    <time class="fact-value" [attr.datetime]="row.activityAt" dir="auto">{{
-                      row.activity
-                    }}</time>
-                  } @else {
-                    <span class="fact-value quiet">{{ row.activity }}</span>
-                  }
-                </p>
+                <!-- Withheld for a client the caller does not coach (N9d1a): the row says nothing of it. -->
+                @if (row.activity !== null) {
+                  <p class="fact activity">
+                    <span class="cell-label" i18n>Last activity</span>&ngsp;
+                    @if (row.activityAt) {
+                      <time class="fact-value" [attr.datetime]="row.activityAt" dir="auto">{{
+                        row.activity
+                      }}</time>
+                    } @else {
+                      <span class="fact-value quiet">{{ row.activity }}</span>
+                    }
+                  </p>
+                }
                 <app-icon class="chevron" name="chevron-right" />
               </li>
             }

@@ -15,7 +15,7 @@
           <app-avatar class="face" [initials]="initials()" presentation="client" />
           <div class="who">
             <h1 #heading tabindex="-1" dir="auto">{{ fullName() }}</h1>
-            @if (client.goals) {
+            @if (client.goals && context.mayCoach()) {
               <p class="goal" dir="auto">{{ client.goals }}</p>
             }
             <div class="plan-row">
@@ -36,7 +36,8 @@
             </div>
           </div>
           <div class="header-actions">
-            @if (!context.isFormer()) {
+            <!-- Nobody coaches a waiting client, so nobody messages them yet (N9d1b). -->
+            @if (!context.isFormer() && !context.waitingForCoach()) {
               @if (otherCoach(); as coach) {
                 <p class="messaging-note" dir="auto" i18n>Messages go through {{ coach }}.</p>
               } @else if (messagingIncluded()) {
@@ -57,7 +58,9 @@
                 <p class="messaging-note">{{ note }}</p>
               }
             }
-            <app-client-actions [label]="actionsLabel" [items]="actions()" />
+            @if (actions().length > 0) {
+              <app-client-actions [label]="actionsLabel" [items]="actions()" />
+            }
           </div>
         </div>
 
@@ -113,9 +116,27 @@
       <p role="alert">{{ message }}</p>
       <button appButton type="button" variant="outlined" (click)="retry()" i18n>Retry</button>
     </div>
-  } @else if (profile()) {
+  } @else if (profile(); as client) {
     <div class="section-content">
-      <router-outlet />
+      @if (closedSection(); as why) {
+        <!-- A private section reached by address by someone who does not coach the client (N9d1a):
+             why it is closed stands in its place, and the section is never created. -->
+        <section class="why panel" aria-labelledby="closed-section-title">
+          <h2 id="closed-section-title" dir="auto">{{ why.heading }}</h2>
+          <p dir="auto">{{ why.text }}</p>
+          @if (why.action; as action) {
+            <a
+              appButton
+              [variant]="why.kind === 'waiting' ? 'filled' : 'outlined'"
+              [routerLink]="['/clients', client.id, 'service']"
+              [queryParams]="action.queryParams"
+              >{{ action.label }}</a
+            >
+          }
+        </section>
+      } @else {
+        <router-outlet />
+      }
     </div>
   }
 </div>

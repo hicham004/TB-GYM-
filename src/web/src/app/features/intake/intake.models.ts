@@ -227,12 +227,11 @@ export function stepLede(step: IntakeStepId): string {
 
 /**
  * Who sees the client's health answers, said where they give them: the first-run step and, later,
- * the health sheet on My profile (audit CLIENT-18).
+ * the health sheet on My profile (audit CLIENT-18). Their coach alone (N9d1a): the owner reads them
+ * only while coaching the client, so the owner is not named apart.
  */
-export function healthPrivacy(spaceName: string): string {
-  return spaceName
-    ? $localize`Only you, your coach and the owner of ${spaceName}:space: can see these answers.`
-    : $localize`Only you, your coach and the owner of your coaching space can see these answers.`;
+export function healthPrivacy(): string {
+  return $localize`Only you and your coach can see these answers.`;
 }
 
 /** The short name a step has in the progress list. */

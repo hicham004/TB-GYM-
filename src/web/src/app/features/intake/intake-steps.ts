@@ -73,7 +73,10 @@ export class IntakeSteps {
   readonly firstDay = input<number | null>(null);
   /** The unit the person chose in their account, which the starting weight begins in. */
   readonly weightUnit = input<BodyweightUnit>('Kilogram');
-  /** Named beside the health questions, which only the person, their coach and the owner can read. */
+  /**
+   * The coaching space's name, still passed by the pages. The health questions no longer name it: only
+   * the person and their coach read the answers (N9d1a).
+   */
   readonly spaceName = input('');
   /** Whether something has been typed that has not been saved, for the page's leave warning. */
   readonly dirtyChange = output<boolean>();
@@ -105,7 +108,7 @@ export class IntakeSteps {
   protected readonly kicker = computed(
     () => $localize`Step ${this.index() + 1}:step: of ${INTAKE_STEPS.length}:total:`,
   );
-  protected readonly privacy = computed(() => healthPrivacy(this.spaceName()));
+  protected readonly privacy = computed(() => healthPrivacy());
 
   protected readonly progress = computed(() =>
     INTAKE_STEPS.map((id, position) => ({

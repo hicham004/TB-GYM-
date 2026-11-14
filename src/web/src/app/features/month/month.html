@@ -108,7 +108,7 @@
                           <span class="who-copy">
                             <span class="who-name" dir="auto">{{ row.name }}</span>
                             @if (row.hasLeftTheTeam) {
-                              <span class="who-left" i18n>Left the team</span>
+                              &ngsp;<span class="who-left" i18n>Left the team</span>
                             }
                           </span>
                         </span>
@@ -116,6 +116,26 @@
                       <ng-container
                         [ngTemplateOutlet]="cells"
                         [ngTemplateOutletContext]="{ $implicit: row.numbers }"
+                      />
+                    </tr>
+                  }
+                  <!-- What counted for nobody while a client waited (N9d1b): the rows plus this
+                       line add up to the Total. No face: nobody held it. -->
+                  @if (noCoach(); as numbers) {
+                    <tr role="row" data-no-coach>
+                      <th role="rowheader" scope="row" class="who">
+                        <span class="who-copy">
+                          <!-- The kept space reads "No coach While clients waited…", not run together. -->
+                          <span class="who-name" i18n>No coach</span>&ngsp;<span
+                            class="who-left"
+                            i18n
+                            >While clients waited for a coach</span
+                          >
+                        </span>
+                      </th>
+                      <ng-container
+                        [ngTemplateOutlet]="cells"
+                        [ngTemplateOutletContext]="{ $implicit: numbers }"
                       />
                     </tr>
                   }
@@ -175,9 +195,17 @@
                 </div>
                 <div>
                   <dt i18n>Whose numbers</dt>
-                  <dd i18n>
-                    Everything but a session counts for the coach the client had that day, so a
-                    client who moves on leaves their earlier numbers behind.
+                  <dd>
+                    <ng-container i18n
+                      >Everything but a session counts for the coach the client had that day, so a
+                      client who moves on leaves their earlier numbers behind.</ng-container
+                    >
+                    @if (month.noCoach) {
+                      &ngsp;<ng-container i18n
+                        >While a client waits for a coach, it counts on the No coach
+                        line.</ng-container
+                      >
+                    }
                   </dd>
                 </div>
                 <div>

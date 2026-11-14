@@ -54,7 +54,10 @@ export class TeamApi {
     );
   }
 
-  /** Removes a coach; their clients and pending client invitations move to the owner. */
+  /**
+   * Removes a coach; their clients and pending client invitations wait for a coach (N9d1b), and the
+   * counts name how many were left waiting.
+   */
   removeTeamCoach(coachUserId: string, version: number): Observable<CoachRemoval> {
     return this.http
       .post<CoachRemovalResponse>(`/api/team/members/${coachUserId}/remove`, { version })

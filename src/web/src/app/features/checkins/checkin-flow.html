@@ -291,19 +291,10 @@
                   <h2 id="step-heading" class="step-title" tabindex="-1" #stepHeading i18n>
                     Add this week's photos
                   </h2>
-                  <!-- The owner sees every client's photos too (CLI-013, audit LOST-3), as the intake says. -->
-                  <p class="step-help">
-                    @if (spaceName(); as space) {
-                      <ng-container i18n
-                        >They go straight to your progress photos. Only you, your coach and the
-                        owner of {{ space }} can see them.</ng-container
-                      >
-                    } @else {
-                      <ng-container i18n
-                        >They go straight to your progress photos. Only you, your coach and the
-                        owner of your coaching space can see them.</ng-container
-                      >
-                    }
+                  <!-- Only the client's coach sees their photos (N9d1a): the owner only while coaching
+                       them, so the owner is not named apart, as the intake says. -->
+                  <p class="step-help" i18n>
+                    They go straight to your progress photos. Only you and your coach can see them.
                   </p>
                   <!-- Said before the client tries, on a server with no media storage (critique T25). -->
                   @if (uploadsOff()) {

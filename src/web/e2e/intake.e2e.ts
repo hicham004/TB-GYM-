@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page, Route } from '@playwright/test';
 import type { CoachClientDetails, ClientSelfProfile } from '../src/app/core/api/api.models';
 import {
+  COACH_USER_ID,
   coachView,
   finishedProfile,
   halfwayProfile,
@@ -40,7 +41,6 @@ const RANA = {
   preferredWeightUnit: 'Kilogram',
 };
 const FEATURES = ['Training', 'Nutrition', 'CheckIns', 'Messaging', 'ResourceLibrary'];
-const COACH_ID = '00000000-0000-4000-8000-000000000e01';
 const FIELD_WARNING = 'Check the fields marked above.';
 
 type Handler = (route: Route) => Promise<void> | void;
@@ -183,8 +183,9 @@ test('a new client answers five short steps, each saved as they go, and is told 
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await stepHeading(page, 'Your health');
+  // Only the client's coach reads them, the owner included (N9d1a).
   await expect(page.locator('.privacy')).toHaveText(
-    'Only you, your coach and the owner of Atlas Performance can see these answers.',
+    'Only you and your coach can see these answers.',
   );
   await expectNoHorizontalOverflow(page);
   await axe(page);
@@ -411,7 +412,8 @@ test('right to left: the steps keep their order and nothing overflows', async ({
 // ---------- the coach's view ----------
 
 const CLIENT_ID = 'client-1';
-const OWNER = { ...SIGNED_IN_USER, id: COACH_ID, displayName: 'Karim Haddad' };
+// Karim owns the space and coaches Rana: only a client's own coach reads their intake (N9d1a).
+const OWNER = { ...SIGNED_IN_USER, id: COACH_USER_ID, displayName: 'Karim Haddad' };
 
 async function openClientIntake(
   page: Page,
@@ -559,5 +561,51 @@ test('a former client’s answers are read and not edited', async ({ page }) => 
     page.getByText('Rana is a former client, so these answers can be read but not changed.'),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(0);
+  await axe(page);
+});
+
+test('the owner on another coach’s client is told why the intake is closed, with nothing to edit (N9d1a)', async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date(NOW));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const writes: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/') && request.method() !== 'GET') writes.push(path);
+  });
+  // The server withholds every answer from the owner while Lea coaches Rana.
+  const withheld = {
+    ...coachView(newProfile()),
+    assignedCoachUserId: '00000000-0000-4000-8000-0000000000a2',
+    assignedCoachName: 'Lea Khoury',
+    mayCoach: false,
+  };
+  await mockSession(page, {
+    memberships: [OWNER_MEMBERSHIP],
+    user: OWNER,
+    extra: {
+      [`GET /api/clients/${CLIENT_ID}`]: (route) => json(route, 200, withheld),
+      [`GET /api/clients/${CLIENT_ID}/overview`]: (route) => json(route, 200, { attention: [] }),
+      [`GET /api/commercial/clients/${CLIENT_ID}`]: (route) =>
+        json(route, 200, {
+          clientProfileId: CLIENT_ID,
+          isRelationshipBlocked: false,
+          featureAccess: [],
+          enrollments: [],
+        }),
+      'GET /api/workspace': (route) => json(route, 200, workspace()),
+    },
+  });
+  await page.goto(`/clients/${CLIENT_ID}/intake`);
+
+  const why = page.locator('.section-content section.why');
+  await expect(why.getByRole('heading', { level: 2 })).toHaveText('Lea Khoury coaches Rana');
+  await expect(why).toContainText(
+    'Their training, nutrition, check-ins and progress open only to their coach.',
+  );
+  await expect(page.getByRole('heading', { level: 2, name: 'Client intake' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Edit/ })).toHaveCount(0);
+  expect(writes).toEqual([]);
   await axe(page);
 });

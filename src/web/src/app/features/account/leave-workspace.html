@@ -7,8 +7,9 @@
         coaches aren’t affected.
       </p>
     } @else {
+      <!-- A leaving coach's clients wait for a coach (N9d1b): the owner never gets them by default. -->
       <p class="quiet" i18n>
-        Stop coaching at {{ membership()?.tenantName }}. Your clients move to the owner, who gives
+        Stop coaching at {{ membership()?.tenantName }}. Your clients wait until the owner gives
         them a new coach.
       </p>
     }
@@ -47,9 +48,19 @@
         ></textarea>
       </app-field>
     } @else {
-      <p class="message" i18n>
-        You lose access right away. Your clients and any client invitations you sent move to the
-        owner, and each client is told their coach has changed. The owner can invite you back later.
+      <!-- Words alone: at 200% text the dialog's body scrolls, so the words take focus to be scrolled
+           (axe scrollable-region-focusable, the statuses sheet's remedy). -->
+      <p
+        class="message"
+        tabindex="0"
+        role="region"
+        aria-label="What leaving does"
+        i18n-aria-label
+        i18n
+      >
+        You lose access right away. Your clients wait for a coach, and so will anyone who accepts a
+        client invitation you sent. The owner is told, so they can give each one a coach. The owner
+        can invite you back later.
       </p>
     }
     <p class="leave-error" role="alert">{{ error() }}</p>

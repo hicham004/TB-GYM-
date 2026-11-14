@@ -23,8 +23,9 @@ import {
 
 /**
  * Karim Haddad's client list (C2) on Thu 1 Oct 2026, the same day and people as Coach Today's
- * fixtures: Lea Khoury coaches Maya, Karim everyone else. The last seven days run Fri 25 Sep to
- * today.
+ * fixtures: Lea Khoury coaches Maya, Karim everyone else. Karim owns the space but does not coach
+ * Maya, so her row comes as the server sends it to him (N9d1a): her goals, age, last activity and the
+ * check-in waiting for Lea withheld. The last seven days run Fri 25 Sep to today.
  */
 export const RECENT_FROM = '2026-09-25';
 
@@ -32,6 +33,20 @@ export const KARL = coachClient('c-karl', 'Karl', 'Saade');
 export const TALA = coachClient('c-tala', 'Tala', 'Rizk');
 export const ZIAD = coachClient('c-ziad', 'Ziad', 'Chahine');
 export const HIBA = coachClient('c-hiba', 'Hiba', 'Nasser');
+/** Lea's Maya as the owner reads her: not the owner's to coach (CLI-013, N9d1a). */
+export const LEAS_MAYA: CoachClientRef = { ...MAYA, mayCoach: false };
+
+/** A client waiting for a coach (N9d1b): nobody coaches them, so nobody reads their private side. */
+export function waitingClient(id: string, firstName: string, lastName: string): CoachClientRef {
+  return {
+    clientProfileId: id,
+    firstName,
+    lastName,
+    assignedCoachUserId: null,
+    assignedCoachName: null,
+    mayCoach: false,
+  };
+}
 
 /** Every feature, in the order the plans list them. */
 export const ALL_FEATURES: CoachingFeature[] = ['Training', 'Nutrition', 'CheckIns', 'Messaging'];
@@ -214,25 +229,21 @@ export function clientListView(overrides: Partial<ClientOverviewView> = {}): Cli
           [0, 0],
         ]),
       }),
-      overviewRow(MAYA, {
-        goals: 'Lose 6 kg and feel strong for my wedding in December.',
-        birthDate: '1997-06-18',
+      // Lea coaches Maya: the owner sees her plan, week and check-in days, never her private side.
+      overviewRow(LEAS_MAYA, {
         status: 'NeedsAttention',
         attention: ['CheckInToReview'],
         attentionItems: [
-          item('CheckInToReview', MAYA, {
+          item('CheckInToReview', LEAS_MAYA, {
             count: 1,
             since: '2026-09-30T18:00:00Z',
-            subjectId: 'a-maya',
-            // Lea coaches Maya: the owner reads her client but never messages her (CLI-013).
+            // The check-in is Lea's to review: the owner is told it waits, not which one it is.
+            subjectId: null,
             canMessage: false,
           }),
         ],
         plan: planSummary({ enrollmentId: 'e-maya' }),
         otherPlanCount: 1,
-        lastActivityKind: 'WorkoutCompleted',
-        lastActivityAtUtc: '2026-10-01T10:00:00Z',
-        lastActivityTitle: 'Lower A',
         lastCheckInSentAtUtc: '2026-09-30T18:00:00Z',
         recentSessions: recentDays([
           [1, 1],

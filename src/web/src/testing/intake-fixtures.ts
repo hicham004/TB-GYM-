@@ -74,6 +74,13 @@ export function finishedProfile(overrides: Partial<ClientSelfProfile> = {}): Cli
 }
 
 /**
+ * Karim, the client's coach and the one reading: the mocked session's signed-in user (`SIGNED_IN_USER` in
+ * e2e/support.ts). Only a client's own coach reads the answers and the notes (N9d1a), so the reader is
+ * their coach.
+ */
+export const COACH_USER_ID = '00000000-0000-4000-8000-0000000000aa';
+
+/**
  * What the coach reads: the same answers plus what only a coach holds. `selfDirected` is the client's own
  * read's alone, so it is left out, as the server leaves it out.
  */
@@ -85,8 +92,9 @@ export function coachView(profile: ClientIntakeProfile = finishedProfile()): Coa
     userId: 'user-rana',
     coachNotes: null,
     isCoachBlocked: false,
-    assignedCoachUserId: 'user-karim',
+    assignedCoachUserId: COACH_USER_ID,
     assignedCoachName: 'Karim Haddad',
+    mayCoach: true,
     release: null,
   };
 }

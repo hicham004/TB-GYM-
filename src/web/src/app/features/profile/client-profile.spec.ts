@@ -206,7 +206,8 @@ describe('ClientProfilePage', () => {
 
     expect(textOf(host.querySelector('#intake-step-heading'))).toBe('Your health');
     expect(textOf(host.querySelector('.privacy'))).toBe(
-      'Only you, your coach and the owner of Atlas Performance can see these answers.',
+      // Their coach alone (N9d1a): the owner reads them only while coaching the client.
+      'Only you and your coach can see these answers.',
     );
     await settle(fixture);
   });
@@ -326,7 +327,8 @@ describe('ClientProfilePage', () => {
     (host.querySelector('[data-edit="health"]') as HTMLButtonElement).click();
     await settle(fixture);
     expect(textOf(dialog()!.querySelector('.privacy'))).toBe(
-      'Only you, your coach and the owner of Atlas Performance can see these answers.',
+      // Their coach alone (N9d1a): the owner reads them only while coaching the client.
+      'Only you and your coach can see these answers.',
     );
     press(dialog()!, 'Not now');
     await settle(fixture);

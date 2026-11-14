@@ -1,5 +1,28 @@
 @if (profile(); as client) {
   <div class="overview">
+    @if (closed(); as why) {
+      @if (why.kind !== 'former') {
+        <!-- Why the private side is closed to this reader (N9d1a), first. A former client says it in
+             their own panel below. -->
+        <section class="panel why" aria-labelledby="why-title">
+          <header class="panel-head">
+            <h2 id="why-title" dir="auto">{{ why.heading }}</h2>
+          </header>
+          <div class="panel-body prose">
+            <p dir="auto">{{ why.text }}</p>
+            @if (why.action; as action) {
+              <a
+                appButton
+                [variant]="why.kind === 'waiting' ? 'filled' : 'outlined'"
+                [routerLink]="['/clients', client.id, 'service']"
+                [queryParams]="action.queryParams"
+                >{{ action.label }}</a
+              >
+            }
+          </div>
+        </section>
+      }
+    }
     @if (client.release; as release) {
       <!-- A former client (ADR 0027): the record is kept and read-only. The API refuses every change. -->
       <section class="panel" aria-labelledby="former-title">
@@ -20,13 +43,20 @@
             <span class="muted" i18n>Reason</span>
             <span dir="auto">{{ release.reason }}</span>
           </p>
-          <p class="muted" i18n>
-            Training, nutrition and detailed progress records are kept but are not shown for former
-            clients.
-          </p>
+          @if (closed(); as why) {
+            <!-- Not coached by this reader when coaching ended: the private side stays closed (N9d1a). -->
+            <p dir="auto">{{ why.text }}</p>
+          } @else {
+            <p class="muted" i18n>
+              Training, nutrition and detailed progress records are kept but are not shown for
+              former clients.
+            </p>
+          }
         </div>
       </section>
-      <ng-container [ngTemplateOutlet]="notes" />
+      @if (mayCoach()) {
+        <ng-container [ngTemplateOutlet]="notes" />
+      }
     } @else if (blocked()) {
       <!-- A blocked relationship closes training, progress and check-ins (ADR 0009), so none is read. -->
       <section class="panel" aria-labelledby="blocked-title">
@@ -34,16 +64,25 @@
           <h2 id="blocked-title" i18n>Access blocked</h2>
         </header>
         <div class="panel-body prose">
-          <p dir="auto" i18n>
-            {{ client.firstName }}’s access is blocked. Their training, progress and check-ins stay
-            closed to you until you unblock them.
-          </p>
+          @if (mayCoach()) {
+            <p dir="auto" i18n>
+              {{ client.firstName }}’s access is blocked. Their training, progress and check-ins
+              stay closed to you until you unblock them.
+            </p>
+          } @else {
+            <!-- Unblocking opens nothing private to a reader who does not coach the client. -->
+            <p dir="auto" i18n>
+              {{ client.firstName }}’s access is blocked until you unblock them.
+            </p>
+          }
           <a appButton variant="outlined" [routerLink]="['/clients', client.id, 'service']" i18n
             >Open Service &amp; access</a
           >
         </div>
       </section>
-      <ng-container [ngTemplateOutlet]="notes" />
+      @if (mayCoach()) {
+        <ng-container [ngTemplateOutlet]="notes" />
+      }
     } @else if (!drawn()) {
       <!-- The overview's shape until every part has answered, then drawn in one frame (audit UIQ-5). -->
       <span class="tb-visually-hidden" role="status">{{ loadingLabel }}</span>
@@ -61,33 +100,37 @@
             </header>
             <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="4" /></div>
           </section>
-          <section class="panel weight">
-            <header class="panel-head">
-              <h2 i18n>Weight</h2>
-            </header>
-            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="3" /></div>
-          </section>
-          <section class="panel records">
-            <header class="panel-head">
-              <h2 i18n>Strength records</h2>
-            </header>
-            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="3" /></div>
-          </section>
+          @if (mayCoach()) {
+            <section class="panel weight">
+              <header class="panel-head">
+                <h2 i18n>Weight</h2>
+              </header>
+              <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="3" /></div>
+            </section>
+            <section class="panel records">
+              <header class="panel-head">
+                <h2 i18n>Strength records</h2>
+              </header>
+              <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="3" /></div>
+            </section>
+          }
         </div>
-        <div class="rail">
-          <section class="panel checkin">
-            <header class="panel-head">
-              <h2 i18n>Check-in</h2>
-            </header>
-            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="2" /></div>
-          </section>
-          <section class="panel notes">
-            <header class="panel-head">
-              <h2 i18n>Coach notes</h2>
-            </header>
-            <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="2" /></div>
-          </section>
-        </div>
+        @if (mayCoach()) {
+          <div class="rail">
+            <section class="panel checkin">
+              <header class="panel-head">
+                <h2 i18n>Check-in</h2>
+              </header>
+              <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="2" /></div>
+            </section>
+            <section class="panel notes">
+              <header class="panel-head">
+                <h2 i18n>Coach notes</h2>
+              </header>
+              <div class="panel-body"><app-skeleton [label]="loadingLabel" [lines]="2" /></div>
+            </section>
+          </div>
+        }
       </div>
     } @else {
       <!-- What needs the coach: the same read as Today and Clients, so the three always agree. -->
@@ -117,20 +160,22 @@
           @default {
             @if (needs().length > 0) {
               <ul class="rows" role="list">
-                @for (row of needs(); track row.key; let first = $first) {
+                @for (row of needs(); track row.key) {
                   <li class="need" [attr.data-kind]="row.kind">
                     <div class="need-copy">
                       <p class="need-heading" dir="auto">{{ row.heading }}</p>
-                      <p class="need-detail">{{ row.detail }}</p>
+                      <p class="need-detail" dir="auto">{{ row.detail }}</p>
                     </div>
                     <span class="tag" [attr.data-tone]="row.tone">{{ row.tag }}</span>
-                    @if (row.action.startsChat) {
+                    @if (row.elsewhere) {
+                      <!-- Their coach's to act on (N9d1a): the row says who, and this page is the client's. -->
+                    } @else if (row.action.startsChat) {
                       <!-- Remind with no chat yet: starts it, then opens it (critique B4a). -->
                       <button
                         appButton
                         type="button"
                         class="need-action"
-                        [variant]="first ? 'filled' : 'outlined'"
+                        [variant]="row.key === primaryNeed() ? 'filled' : 'outlined'"
                         [loading]="reminding()"
                         (click)="remind()"
                       >
@@ -140,7 +185,7 @@
                       <a
                         appButton
                         class="need-action"
-                        [variant]="first ? 'filled' : 'outlined'"
+                        [variant]="row.key === primaryNeed() ? 'filled' : 'outlined'"
                         [routerLink]="row.action.link"
                         [queryParams]="row.action.queryParams"
                         >{{ row.action.label }}</a
@@ -222,206 +267,222 @@
                   } @else {
                     <p class="muted" dir="auto">{{ weekClosed() }}</p>
                   }
-                  <dl class="facts">
-                    <div>
-                      <dt i18n>Last activity</dt>
-                      <dd>{{ lastActivity() }}</dd>
-                    </div>
-                    @if (nutrition(); as eaten) {
+                  <!-- The last activity and the food log are the coach's to read (N9d1a). -->
+                  @if (mayCoach()) {
+                    <dl class="facts">
                       <div>
-                        <dt i18n>Nutrition</dt>
-                        <dd>{{ eaten.text }}</dd>
+                        <dt i18n>Last activity</dt>
+                        <dd>{{ lastActivity() }}</dd>
                       </div>
-                    }
-                  </dl>
+                      @if (nutrition(); as eaten) {
+                        <div>
+                          <dt i18n>Nutrition</dt>
+                          <dd>{{ eaten.text }}</dd>
+                        </div>
+                      }
+                    </dl>
+                  }
                 }
               }
             </div>
           </section>
 
-          <section class="panel weight" aria-labelledby="weight-heading">
-            <header class="panel-head">
-              <h2 id="weight-heading" i18n>Weight</h2>
-              <a class="panel-link" [routerLink]="['/clients', client.id, 'progress']" i18n
-                >Open progress</a
-              >
-            </header>
-            <div class="panel-body">
-              @switch (dashboard().state) {
-                @case ('loading') {
-                  <app-skeleton [label]="loadingLabel" [lines]="2" />
-                }
-                @case ('error') {
-                  <div class="load-failed">
-                    <p role="alert" i18n>Weight could not be loaded.</p>
-                    <button
-                      appButton
-                      type="button"
-                      variant="outlined"
-                      (click)="loadDashboard()"
-                      i18n
-                    >
-                      Try again
-                    </button>
-                  </div>
-                }
-                @default {
-                  @if (weight(); as story) {
-                    <div class="weight-row">
-                      <div class="weight-copy">
-                        <p class="figure">
-                          <strong>{{ story.value }}</strong>
-                          <span class="unit">{{ story.unit }}</span>
-                        </p>
-                        <p class="delta">{{ story.context }}</p>
-                        <p class="weight-note">
-                          <ng-container i18n>Weekly average</ng-container>
-                          @if (story.lastWeighed) {
-                            · {{ story.lastWeighed }}
-                          }
-                        </p>
-                      </div>
-                      @if (story.values.length > 1) {
-                        <app-sparkline
-                          class="spark"
-                          [values]="story.values"
-                          [summary]="story.summary"
-                        />
-                      }
-                    </div>
-                  } @else {
-                    <p class="muted" dir="auto" i18n>
-                      No weigh-ins in the last 8 weeks. {{ client.firstName }} logs them from their
-                      Progress page.
-                    </p>
+          @if (mayCoach()) {
+            <section class="panel weight" aria-labelledby="weight-heading">
+              <header class="panel-head">
+                <h2 id="weight-heading" i18n>Weight</h2>
+                <a class="panel-link" [routerLink]="['/clients', client.id, 'progress']" i18n
+                  >Open progress</a
+                >
+              </header>
+              <div class="panel-body">
+                @switch (dashboard().state) {
+                  @case ('loading') {
+                    <app-skeleton [label]="loadingLabel" [lines]="2" />
                   }
-                  <!-- Where they started, however long ago (critique B6, PRG-014). -->
-                  @if (start(); as story) {
-                    <div class="start" data-start>
-                      <ul class="start-lines" role="list">
-                        @for (line of story.lines; track line.key) {
-                          <li>{{ line.text }}</li>
+                  @case ('error') {
+                    <div class="load-failed">
+                      <p role="alert" i18n>Weight could not be loaded.</p>
+                      <button
+                        appButton
+                        type="button"
+                        variant="outlined"
+                        (click)="loadDashboard()"
+                        i18n
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  }
+                  @default {
+                    @if (weight(); as story) {
+                      <div class="weight-row">
+                        <div class="weight-copy">
+                          <p class="figure">
+                            <strong>{{ story.value }}</strong>
+                            <span class="unit">{{ story.unit }}</span>
+                          </p>
+                          <p class="delta">{{ story.context }}</p>
+                          <p class="weight-note">
+                            <ng-container i18n>Weekly average</ng-container>
+                            @if (story.lastWeighed) {
+                              · {{ story.lastWeighed }}
+                            }
+                          </p>
+                        </div>
+                        @if (story.values.length > 1) {
+                          <app-sparkline
+                            class="spark"
+                            [values]="story.values"
+                            [summary]="story.summary"
+                          />
+                        }
+                      </div>
+                    } @else {
+                      <p class="muted" dir="auto" i18n>
+                        No weigh-ins in the last 8 weeks. {{ client.firstName }} logs them from
+                        their Progress page.
+                      </p>
+                    }
+                    <!-- Where they started, however long ago (critique B6, PRG-014). -->
+                    @if (start(); as story) {
+                      <div class="start" data-start>
+                        <ul class="start-lines" role="list">
+                          @for (line of story.lines; track line.key) {
+                            <li>{{ line.text }}</li>
+                          }
+                        </ul>
+                        @if (story.sinceStart; as since) {
+                          <p class="since-start">{{ since }}</p>
+                        }
+                      </div>
+                    }
+                  }
+                }
+              </div>
+            </section>
+
+            <section class="panel records" aria-labelledby="records-heading">
+              <header class="panel-head">
+                <h2 id="records-heading" i18n>Strength records</h2>
+                <a class="panel-link" [routerLink]="['/clients', client.id, 'progress']" i18n
+                  >All records</a
+                >
+              </header>
+              <div class="panel-body">
+                @switch (records().state) {
+                  @case ('loading') {
+                    <app-skeleton [label]="loadingLabel" [lines]="3" />
+                  }
+                  @case ('error') {
+                    <div class="load-failed">
+                      <p role="alert" i18n>Records could not be loaded.</p>
+                      <button
+                        appButton
+                        type="button"
+                        variant="outlined"
+                        (click)="loadRecords()"
+                        i18n
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  }
+                  @default {
+                    @if (recordList().length > 0) {
+                      <ul class="record-list" role="list">
+                        @for (record of recordList(); track record.key) {
+                          <li class="record">
+                            <span class="pr" aria-hidden="true">PR</span>
+                            <span class="record-name" dir="auto">{{ record.exercise }}</span>
+                            <strong class="record-amount">{{ record.amount }}</strong>
+                            <time class="record-date" [attr.datetime]="record.isoDate">
+                              {{ record.date }}
+                            </time>
+                          </li>
                         }
                       </ul>
-                      @if (story.sinceStart; as since) {
-                        <p class="since-start">{{ since }}</p>
-                      }
-                    </div>
+                    } @else if (records().value?.isAllowed === false) {
+                      <p class="muted" dir="auto">{{ recordsClosed() }}</p>
+                    } @else {
+                      <p class="muted" dir="auto" i18n>
+                        No records yet. Each one appears here when {{ client.firstName }} lifts more
+                        than before at the same number of reps.
+                      </p>
+                    }
                   }
                 }
-              }
-            </div>
-          </section>
-
-          <section class="panel records" aria-labelledby="records-heading">
-            <header class="panel-head">
-              <h2 id="records-heading" i18n>Strength records</h2>
-              <a class="panel-link" [routerLink]="['/clients', client.id, 'progress']" i18n
-                >All records</a
-              >
-            </header>
-            <div class="panel-body">
-              @switch (records().state) {
-                @case ('loading') {
-                  <app-skeleton [label]="loadingLabel" [lines]="3" />
-                }
-                @case ('error') {
-                  <div class="load-failed">
-                    <p role="alert" i18n>Records could not be loaded.</p>
-                    <button appButton type="button" variant="outlined" (click)="loadRecords()" i18n>
-                      Try again
-                    </button>
-                  </div>
-                }
-                @default {
-                  @if (recordList().length > 0) {
-                    <ul class="record-list" role="list">
-                      @for (record of recordList(); track record.key) {
-                        <li class="record">
-                          <span class="pr" aria-hidden="true">PR</span>
-                          <span class="record-name" dir="auto">{{ record.exercise }}</span>
-                          <strong class="record-amount">{{ record.amount }}</strong>
-                          <time class="record-date" [attr.datetime]="record.isoDate">
-                            {{ record.date }}
-                          </time>
-                        </li>
-                      }
-                    </ul>
-                  } @else if (records().value?.isAllowed === false) {
-                    <p class="muted" dir="auto">{{ recordsClosed() }}</p>
-                  } @else {
-                    <p class="muted" dir="auto" i18n>
-                      No records yet. Each one appears here when {{ client.firstName }} lifts more
-                      than before at the same number of reps.
-                    </p>
-                  }
-                }
-              }
-            </div>
-          </section>
+              </div>
+            </section>
+          }
         </div>
 
-        <div class="rail">
-          <section class="panel checkin" aria-labelledby="checkin-heading">
-            <header class="panel-head">
-              <h2 id="checkin-heading" i18n>Check-in</h2>
-              @if (checkIn()?.pill; as pill) {
-                <app-status-pill [label]="pill.label" [tone]="pill.tone" />
-              }
-            </header>
-            <div class="panel-body">
-              @switch (checkIns().state) {
-                @case ('loading') {
-                  <app-skeleton [label]="loadingLabel" [lines]="2" />
+        @if (mayCoach()) {
+          <div class="rail">
+            <section class="panel checkin" aria-labelledby="checkin-heading">
+              <header class="panel-head">
+                <h2 id="checkin-heading" i18n>Check-in</h2>
+                @if (checkIn()?.pill; as pill) {
+                  <app-status-pill [label]="pill.label" [tone]="pill.tone" />
                 }
-                @case ('denied') {
-                  <p class="muted" dir="auto">{{ checkInDenied() }}</p>
-                }
-                @case ('error') {
-                  <div class="load-failed">
-                    <p role="alert" i18n>Check-ins could not be loaded.</p>
-                    <button
-                      appButton
-                      type="button"
-                      variant="outlined"
-                      (click)="loadCheckIns()"
-                      i18n
-                    >
-                      Try again
-                    </button>
-                  </div>
-                }
-                @default {
-                  @if (checkIn(); as card) {
-                    <p class="checkin-title" dir="auto">{{ card.heading }}</p>
-                    @if (card.detail) {
-                      <p class="muted">{{ card.detail }}</p>
-                    }
-                    @if (card.next; as next) {
-                      <p class="checkin-next" [class.late]="next.late">{{ next.text }}</p>
-                    }
-                    <div class="checkin-actions">
-                      @if (card.action; as action) {
-                        <a
-                          appButton
-                          variant="outlined"
-                          [routerLink]="action.link"
-                          [queryParams]="action.queryParams"
-                          >{{ action.label }}</a
-                        >
-                      }
-                      <a class="panel-link" [routerLink]="['/clients', client.id, 'checkins']" i18n
-                        >All check-ins</a
+              </header>
+              <div class="panel-body">
+                @switch (checkIns().state) {
+                  @case ('loading') {
+                    <app-skeleton [label]="loadingLabel" [lines]="2" />
+                  }
+                  @case ('denied') {
+                    <p class="muted" dir="auto">{{ checkInDenied() }}</p>
+                  }
+                  @case ('error') {
+                    <div class="load-failed">
+                      <p role="alert" i18n>Check-ins could not be loaded.</p>
+                      <button
+                        appButton
+                        type="button"
+                        variant="outlined"
+                        (click)="loadCheckIns()"
+                        i18n
                       >
+                        Try again
+                      </button>
                     </div>
                   }
+                  @default {
+                    @if (checkIn(); as card) {
+                      <p class="checkin-title" dir="auto">{{ card.heading }}</p>
+                      @if (card.detail) {
+                        <p class="muted">{{ card.detail }}</p>
+                      }
+                      @if (card.next; as next) {
+                        <p class="checkin-next" [class.late]="next.late">{{ next.text }}</p>
+                      }
+                      <div class="checkin-actions">
+                        @if (card.action; as action) {
+                          <a
+                            appButton
+                            variant="outlined"
+                            [routerLink]="action.link"
+                            [queryParams]="action.queryParams"
+                            >{{ action.label }}</a
+                          >
+                        }
+                        <a
+                          class="panel-link"
+                          [routerLink]="['/clients', client.id, 'checkins']"
+                          i18n
+                          >All check-ins</a
+                        >
+                      </div>
+                    }
+                  }
                 }
-              }
-            </div>
-          </section>
+              </div>
+            </section>
 
-          <ng-container [ngTemplateOutlet]="notes" />
-        </div>
+            <ng-container [ngTemplateOutlet]="notes" />
+          </div>
+        }
       </div>
     }
   </div>
@@ -430,7 +491,14 @@
     <section class="panel notes" aria-labelledby="notes-heading">
       <header class="panel-head">
         <h2 id="notes-heading" i18n>Coach notes</h2>
-        <span class="panel-span" i18n>Private to your team</span>
+        <!-- Only the client's coach reads or writes them (N9d1a), the owner included. -->
+        @if (client.release) {
+          <span class="panel-span" i18n>Only you see these.</span>
+        } @else {
+          <span class="panel-span" dir="auto" i18n
+            >Only you see these, as {{ client.firstName }}’s coach.</span
+          >
+        }
       </header>
       <div class="panel-body">
         @if (editingNote()) {

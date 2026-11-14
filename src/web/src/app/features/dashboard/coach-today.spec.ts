@@ -23,12 +23,16 @@ import {
   coachMonth,
   coachOwnTodayView,
   coachTodayView,
+  coachTodayWaitingView,
+  ELIE,
   emptyCoachTodayView,
   JAD,
   LEA_ID,
-  MAYA,
+  MAYA_BUSINESS,
   OWNER_ID,
   SARA,
+  waitingForCoach,
+  ZIAD,
 } from '../../../testing/coach-today-fixtures';
 import { FormerClientsApi } from '../clients/former-clients-api';
 import { ConversationStarter } from '../messaging/conversation-starter';
@@ -113,6 +117,17 @@ function sections(host: HTMLElement): string[] {
   ].map((name) => squash(name.textContent).replace(/\s*\d+$/, ''));
 }
 
+/** The look of each action in `selector`, in reading order: Today fills one alone (UI-REDESIGN-PLAN §2). */
+function variants(host: HTMLElement, selector = 'li.need .need-action'): string[] {
+  return [...host.querySelectorAll<HTMLElement>(selector)].map((action) =>
+    action.classList.contains('tb-button--filled')
+      ? 'filled'
+      : action.classList.contains('tb-button--outlined')
+        ? 'outlined'
+        : 'other',
+  );
+}
+
 /** A plan row's two lines, as read: the client (and their coach), then the plan and its day. */
 function planLines(row: HTMLElement): string[] {
   return [...row.querySelectorAll('.plan-copy p')].map((line) => squash(line.textContent));
@@ -178,6 +193,158 @@ describe('CoachToday', () => {
     expect(host.querySelector('.bars, .week')).toBeNull();
     expect(host.querySelector('app-disclosure')).toBeNull();
     expect(squash(host.querySelector('section.feed .panel-span')?.textContent)).toBe('Last 7 days');
+    // Nobody waits for a coach: no list of them, and no word of it.
+    expect(host.querySelector('section.waiting')).toBeNull();
+    expect(squash(host.querySelector('.needs')?.textContent)).not.toContain('waiting');
+  });
+
+  describe('clients waiting for a coach (C8, notes plan N9d2)', () => {
+    it('lists them first for the owner, since when and who coached them before, each with Choose a coach', async () => {
+      const { host } = await render(() => of(coachTodayWaitingView()));
+
+      expect(sections(host)).toEqual([
+        'Waiting for a coach',
+        'Needs you',
+        'This month',
+        'Plans ending soon',
+        'Ended, not renewed',
+        'What your clients did',
+      ]);
+      const panel = host.querySelector<HTMLElement>('section.waiting')!;
+      expect(panel.nextElementSibling?.matches('.columns')).toBe(true);
+      expect(squash(panel.querySelector('h2')?.textContent)).toBe('Waiting for a coach 2');
+      expect(squash(panel.querySelector('.waiting-lede')?.textContent)).toBe(
+        'Nobody sees their training until you give them a coach. Their plan keeps running and they can still log.',
+      );
+      const rows = [...panel.querySelectorAll<HTMLElement>('li.waiting-row')];
+      expect(rows.map(planLines)).toEqual([
+        ['Ziad Khalil', 'Since Mon 28 Sep · Coached by Rana Saad before'],
+        ['Dana Aoun', 'Since Thu 1 Oct · No coach yet'],
+      ]);
+      expect(rows.map((row) => squash(row.querySelector('app-avatar')?.textContent))).toEqual([
+        'ZK',
+        'DA',
+      ]);
+      expect(rows[0].querySelector('.plan-name')?.getAttribute('dir')).toBe('auto');
+      // One action each: the client's Service & access, where the coach dialog opens (builder C's address).
+      const actions = rows.map((row) => [...row.querySelectorAll<HTMLElement>('a, button')]);
+      expect(
+        actions.map((list) =>
+          list.map((action) => [squash(action.textContent), action.getAttribute('href')]),
+        ),
+      ).toEqual([
+        [['Choose a coach for Ziad Khalil', '/clients/c-ziad/service?action=coach']],
+        [['Choose a coach for Dana Aoun', '/clients/c-dana/service?action=coach']],
+      ]);
+    });
+
+    it('says a waiting client is waiting where a team member’s client names its coach, and who follows up their check-in', async () => {
+      const { host } = await render(() => of(coachTodayWaitingView()));
+
+      const dana = host.querySelector<HTMLElement>('li.need[data-key="NoPlan:c-dana"]')!;
+      expect(squash(dana.querySelector('.need-detail')?.textContent)).toBe(
+        'Today · no plan yet · Waiting for a coach',
+      );
+      expect(dana.querySelector('a.need-action')?.getAttribute('href')).toBe(
+        '/clients/c-dana/service?action=start',
+      );
+      const ziad = host.querySelector<HTMLElement>('li.need[data-key="CheckInOverdue:c-ziad"]')!;
+      expect(squash(ziad.querySelector('.need-heading')?.textContent)).toBe(
+        "Ziad Khalil's check-in is overdue",
+      );
+      expect(squash(ziad.querySelector('.need-detail')?.textContent)).toBe(
+        'It was due Mon 28 Sep · Their new coach follows up once you choose one.',
+      );
+      const see = ziad.querySelector<HTMLAnchorElement>('a.need-action')!;
+      expect([squash(see.textContent), see.getAttribute('href')]).toEqual([
+        'See client Ziad Khalil',
+        '/clients/c-ziad',
+      ]);
+      const ending = host.querySelectorAll<HTMLElement>('section.plan-list')[0];
+      expect(planLines([...ending.querySelectorAll<HTMLElement>('li')].at(-1)!)).toEqual([
+        'Ziad Khalil · Waiting for a coach',
+        'Online coaching · Ends Mon 12 Oct',
+      ]);
+    });
+
+    it('says how many wait after the Needs you sentence, and alone when nothing else needs the owner', async () => {
+      const both = await render(() => of(coachTodayWaitingView()));
+      expect(squash(both.host.querySelector('.needs')?.textContent)).toBe(
+        '9 clients have something for you today, listed under Needs you. 2 clients are waiting for a coach.',
+      );
+      TestBed.resetTestingModule();
+
+      const alone = await render(() =>
+        of(
+          coachTodayWaitingView({ attention: [], waitingForCoach: waitingForCoach().slice(0, 1) }),
+        ),
+      );
+      const needs = alone.host.querySelector<HTMLElement>('.needs')!;
+      expect(squash(needs.textContent)).toBe(
+        '1 client is waiting for a coach. Give them a coach below.',
+      );
+      expect(squash(needs.querySelector('strong')?.textContent)).toBe(
+        '1 client is waiting for a coach.',
+      );
+      expect(squash(needs.textContent)).not.toContain('Nothing needs you today.');
+      TestBed.resetTestingModule();
+
+      // Several, and nothing else: each one is given a coach.
+      const several = await render(() => of(coachTodayWaitingView({ attention: [] })));
+      const theirs = several.host.querySelector<HTMLElement>('.needs')!;
+      expect(squash(theirs.textContent)).toBe(
+        '2 clients are waiting for a coach. Give each one a coach below.',
+      );
+      expect(squash(theirs.querySelector('strong')?.textContent)).toBe(
+        '2 clients are waiting for a coach.',
+      );
+      TestBed.resetTestingModule();
+
+      const one = await render(() =>
+        of(
+          coachTodayWaitingView({
+            attention: [
+              attentionItem('UnreadMessages', SARA, { count: 1, since: '2026-10-01T11:00:00Z' }),
+            ],
+          }),
+        ),
+      );
+      expect(squash(one.host.querySelector('.needs')?.textContent)).toBe(
+        '1 client has something for you today, listed under Needs you. 2 clients are waiting for a coach.',
+      );
+    });
+
+    it('draws no list for a coach, whose answer has none, nor for an owner while nobody waits', async () => {
+      const coach = await render(() => of(coachOwnTodayView()), 'Coach', undefined, {
+        user: { id: LEA_ID, displayName: 'Lea Khoury' },
+      });
+      expect(coach.host.querySelector('section.waiting')).toBeNull();
+      expect(sections(coach.host)[0]).toBe('Needs you');
+      TestBed.resetTestingModule();
+
+      const owner = await render(() => of(coachTodayWaitingView({ waitingForCoach: [] })));
+      expect(owner.host.querySelector('section.waiting')).toBeNull();
+      expect(squash(owner.host.querySelector('.needs')?.textContent)).not.toContain('waiting');
+    });
+
+    it('adds No coach to This month’s coaches, so the rows add up to every client', async () => {
+      const { host } = await render(() => of(coachTodayWaitingView()));
+      const month = host.querySelector<HTMLElement>('section.month')!;
+
+      expect(squash(month.querySelector('.month-value')?.textContent)).toBe('10 of 14 clients');
+      expect(
+        [...month.querySelectorAll('.staff-row')].map((row) => [
+          squash(row.querySelector('app-avatar')?.textContent),
+          squash(row.querySelector('.staff-copy')?.textContent),
+        ]),
+      ).toEqual([
+        ['KH', 'You 7 of 10 clients active'],
+        ['LK', 'Lea Khoury 2 of 2 clients active'],
+        ['OS', 'Omar Saleh No clients yet'],
+        ['', 'No coach 1 of 2 clients active'],
+      ]);
+      expect(month.querySelector('.staff-row.no-coach app-avatar')).toBeNull();
+    });
   });
 
   it('shows the owner this month’s money per currency, the active clients and the team', async () => {
@@ -419,17 +586,112 @@ describe('CoachToday', () => {
       'NoProgram',
     ]);
     const actions = rows.map((row) => row.querySelector<HTMLAnchorElement>('a.need-action')!);
-    expect(actions[0].classList).toContain('tb-button--filled');
-    expect(
-      actions.slice(1).every((action) => action.classList.contains('tb-button--outlined')),
-    ).toBe(true);
-    expect(actions[0].textContent?.replace(/\s+/g, ' ').trim()).toBe('Review for Maya Fakhoury');
-    expect(actions[0].getAttribute('href')).toBe('/clients/c-maya/checkins/a-maya');
+    // One filled action, on the first row the owner can act on: Maya's only opens her page (N9d2).
+    expect(variants(host)).toEqual([
+      'outlined',
+      'filled',
+      'outlined',
+      'outlined',
+      'outlined',
+      'outlined',
+      'outlined',
+    ]);
+    // Lea coaches Maya (C8): the owner reads who reviews her check-in and opens her page, never the
+    // check-in the server withheld (notes plan N9d2).
+    expect(squash(actions[0].textContent)).toBe('See client Maya Fakhoury');
+    expect(actions[0].getAttribute('href')).toBe('/clients/c-maya');
+    expect(host.querySelector('li.need a[href*="/checkins"]')).toBeNull();
     expect(actions[1].getAttribute('href')).toBe('/messages?conversation=conv-sara');
     expect(actions[2].getAttribute('href')).toBe('/clients/c-elie/service?renew=e-elie');
-    expect(rows[0].textContent).toContain('Coached by Lea Khoury');
+    // The device's clock measures "Sent … ago" here; the model's spec pins it.
+    expect(squash(rows[0].querySelector('.need-detail')?.textContent)).toMatch(
+      /^Sent .+ ago · Lea Khoury reviews it\.$/,
+    );
+    expect(rows[0].textContent).not.toContain('Coached by');
     expect(rows[1].textContent).not.toContain('Coached by');
     expect(host.querySelector('#needs-heading .badge')?.textContent?.trim()).toBe('7');
+  });
+
+  describe('one filled action (UI-REDESIGN-PLAN §2, notes plan N9d2)', () => {
+    it('fills the first waiting client’s Choose a coach while anybody waits, and no Needs you action', async () => {
+      const { host } = await render(() => of(coachTodayWaitingView()));
+
+      expect(variants(host, 'li.waiting-row a')).toEqual(['filled', 'outlined']);
+      expect(variants(host)).not.toContain('filled');
+      // End coaching's closed dialogs hold their own filled submit, out of sight.
+      const drawn = [...host.querySelectorAll('.coach-today .tb-button--filled')].filter(
+        (button) => button.closest('dialog') === null,
+      );
+      expect(drawn.map((button) => squash(button.textContent))).toEqual([
+        'Choose a coach for Ziad Khalil',
+      ]);
+    });
+
+    it('passes over a row that only opens a client the owner does not coach', async () => {
+      // Lea's Maya ranks first, and Ziad, who waits, is the owner's next; nobody is on the waiting list.
+      const view = coachTodayView({
+        attention: [
+          attentionItem('CheckInToReview', MAYA_BUSINESS, {
+            count: 1,
+            since: '2026-10-01T10:24:00Z',
+          }),
+          attentionItem('CheckInOverdue', ZIAD, { count: 1, date: '2026-09-28' }),
+          attentionItem('RenewalRequested', ELIE, { date: '2026-09-27', subjectId: 'e-elie' }),
+        ],
+      });
+      const { host } = await render(() => of(view));
+
+      expect(variants(host)).toEqual(['outlined', 'outlined', 'filled']);
+      expect(squash(host.querySelector('.need-action.tb-button--filled')?.textContent)).toBe(
+        'Renew plan for Elie Azar',
+      );
+    });
+
+    it('keeps the first Needs you action filled when the owner can act on each row and nobody waits', async () => {
+      const { host } = await render(() =>
+        of(coachTodayView({ attention: coachTodayView().attention.slice(1) })),
+      );
+
+      expect(variants(host)).toEqual([
+        'filled',
+        'outlined',
+        'outlined',
+        'outlined',
+        'outlined',
+        'outlined',
+      ]);
+      expect(squash(host.querySelector('.need-action.tb-button--filled')?.textContent)).toBe(
+        'Reply for Sara Mansour',
+      );
+    });
+  });
+
+  it('opens the check-in itself for the client’s own coach', async () => {
+    const { host } = await render(() => of(coachOwnTodayView()), 'Coach', undefined, {
+      user: { id: LEA_ID, displayName: 'Lea Khoury' },
+    });
+
+    const review = host.querySelector<HTMLAnchorElement>('li.need a.need-action')!;
+    expect(squash(review.textContent)).toBe('Review for Maya Fakhoury');
+    expect(review.getAttribute('href')).toBe('/clients/c-maya/checkins/a-maya');
+    expect(squash(host.querySelector('li.need .need-detail')?.textContent)).toMatch(
+      /^Sent .+ ago$/,
+    );
+  });
+
+  it('says only who follows up missed workouts of a client the owner does not coach', async () => {
+    const view = coachTodayView({
+      attention: [attentionItem('MissedSessions', MAYA_BUSINESS, { count: 3, date: null })],
+    });
+    const { host } = await render(() => of(view));
+    const row = host.querySelector<HTMLElement>('li.need')!;
+
+    expect(squash(row.querySelector('.need-heading')?.textContent)).toBe(
+      'Maya Fakhoury missed 3 workouts in a row',
+    );
+    expect(squash(row.querySelector('.need-detail')?.textContent)).toBe('Lea Khoury follows up.');
+    expect(squash(row.textContent)).not.toContain('No workout logged yet');
+    expect(row.querySelector('a.need-action')?.getAttribute('href')).toBe('/clients/c-maya');
   });
 
   it('reminds about an overdue check-in in the coach’s own chat, starting it when there is none (critique B4a)', async () => {
@@ -443,7 +705,11 @@ describe('CoachToday', () => {
           canMessage: true,
           subjectId: 'conv-sara',
         }),
-        attentionItem('CheckInOverdue', MAYA, { count: 1, date: '2026-09-28', canMessage: false }),
+        attentionItem('CheckInOverdue', MAYA_BUSINESS, {
+          count: 1,
+          date: '2026-09-28',
+          canMessage: false,
+        }),
       ],
     });
     const { fixture, host } = await render(() => of(view), 'Owner', starter);
@@ -465,11 +731,14 @@ describe('CoachToday', () => {
     expect(rows[1].querySelector('a.need-action')?.getAttribute('href')).toBe(
       '/messages?conversation=conv-sara',
     );
-    // Lea coaches Maya: the owner is sent to her check-ins and told whose client she is (CLI-013).
+    // Lea coaches Maya: her check-ins are Lea's (C8), so the owner is told who follows up and opens
+    // her page, never her check-ins (notes plan N9d2).
     const maya = rows[2].querySelector('a.need-action');
-    expect(squash(maya?.textContent)).toBe('See check-ins for Maya Fakhoury');
-    expect(maya?.getAttribute('href')).toBe('/clients/c-maya/checkins');
-    expect(rows[2].textContent).toContain('Coached by Lea Khoury');
+    expect(squash(maya?.textContent)).toBe('See client Maya Fakhoury');
+    expect(maya?.getAttribute('href')).toBe('/clients/c-maya');
+    expect(squash(rows[2].querySelector('.need-detail')?.textContent)).toBe(
+      'It was due Mon 28 Sep · Lea Khoury follows up.',
+    );
   });
 
   it('says so when Remind cannot open the chat', async () => {
@@ -501,6 +770,10 @@ describe('CoachToday', () => {
     const sheet = document.querySelector<HTMLElement>('[role="dialog"]');
     expect(squash(sheet?.querySelector('h2')?.textContent)).toBe('How these statuses work');
     expect(squash(sheet?.textContent)).toContain('A check-in was due 2 to 13 days ago');
+    // What an owner reads for a client they do not coach, or one waiting for a coach (C8, notes plan N9d2).
+    expect(squash(sheet?.textContent)).toContain(
+      'For a client you don’t coach, their coach follows up check-ins, missed workouts and overdue check-ins, or the coach you choose for a client waiting for one, so those tags open the client’s page. Week not shared, No program yet and Lifts ready to step up show only for clients you coach.',
+    );
   });
 
   it('writes the feed as sentences with records and links to the client', async () => {
@@ -722,15 +995,15 @@ describe('CoachToday', () => {
       await pass(fixture, 0);
     }
 
-    /** A workout Maya finished half a minute ago, as the feed's newest row. */
+    /** A workout Sara finished half a minute ago, as the feed's newest row. */
     function justFinished() {
       const base = coachTodayView();
       return coachTodayView({
         activity: [
           {
             ...base.activity[0],
-            client: MAYA,
-            subjectId: 'w-maya-now',
+            client: SARA,
+            subjectId: 'w-sara-now',
             title: 'Lower A',
             durationSeconds: 2520,
             occurredAtUtc: new Date(Date.now() - 30_000).toISOString(),
@@ -777,23 +1050,23 @@ describe('CoachToday', () => {
       const strip = host.querySelector<HTMLElement>('.arrival')!;
       expect(strip).not.toBeNull();
       expect(strip.previousElementSibling?.matches('[role="status"]')).toBe(true);
-      expect(squash(strip.querySelector('app-avatar')?.textContent)).toBe('MF');
+      expect(squash(strip.querySelector('app-avatar')?.textContent)).toBe('SM');
       expect(squash(strip.querySelector('.arrival-copy')?.textContent)).toBe(
-        'Just now: Maya Fakhoury finished Lower A in 42 min · 1 record',
+        'Just now: Sara Mansour finished Lower A in 42 min · 1 record',
       );
       expect(strip.querySelector('a.arrival-link')?.getAttribute('href')).toBe(
-        '/clients/c-maya/training',
+        '/clients/c-sara/training',
       );
       expect(strip.querySelector('button.arrival-dismiss')?.getAttribute('aria-label')).toBe(
         'Dismiss',
       );
       expect(squash(host.querySelector('[role="status"]')?.textContent)).toBe(
-        'Maya Fakhoury finished Lower A in 42 min · 1 record',
+        'Sara Mansour finished Lower A in 42 min · 1 record',
       );
       const row = host.querySelector<HTMLElement>('li.event')!;
-      expect(row.dataset['key']).toBe('WorkoutCompleted:w-maya-now');
+      expect(row.dataset['key']).toBe('WorkoutCompleted:w-sara-now');
       expect(row.classList).toContain('arrived');
-      expect(squash(row.textContent)).toContain('Maya Fakhoury finished Lower A in 42 min');
+      expect(squash(row.textContent)).toContain('Sara Mansour finished Lower A in 42 min');
 
       // The next read knows the row: nothing is raised again.
       await pass(fixture, 4000);
@@ -941,6 +1214,35 @@ describe('CoachToday', () => {
       }
     });
 
+    it('hands the filled action to the next row while a resolved one slides out (N9d2)', async () => {
+      Object.defineProperty(Element.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: vi.fn(() => ({ finished: new Promise<void>(() => undefined), cancel: vi.fn() })),
+      });
+      try {
+        let reads = 0;
+        const mine = coachTodayView().attention.slice(1);
+        const { fixture, host } = await render(
+          () => of(coachTodayView({ attention: ++reads >= 3 ? mine.slice(1) : mine })),
+          'Owner',
+          undefined,
+          { motionAllowed: true },
+        );
+        await listen(fixture);
+        expect(variants(host)[0]).toBe('filled');
+
+        // Sara's messages were read: her row leaves, outlined, and Elie's renewal takes the fill.
+        await pass(fixture, 4000);
+        const rows = host.querySelectorAll<HTMLElement>('li.need');
+        expect(rows[0].classList).toContain('leaving');
+        expect(rows[0].dataset['kind']).toBe('UnreadMessages');
+        expect(variants(host).slice(0, 3)).toEqual(['outlined', 'filled', 'outlined']);
+      } finally {
+        delete (Element.prototype as { animate?: unknown }).animate;
+      }
+    });
+
     it('closes the list over a resolved row at once where motion is not allowed', async () => {
       let reads = 0;
       const base = coachTodayView();
@@ -1056,6 +1358,39 @@ describe('CoachToday', () => {
       await settle(fixture);
       expect(risen(motion)).toEqual([
         [
+          'section.panel.queue',
+          'app-disclosure.feed-fold.panel',
+          'section.month.panel',
+          'section.panel.plan-list',
+          'section.panel.plan-list',
+        ],
+      ]);
+    });
+
+    it('rises the clients waiting for a coach first, the six parts of a wide screen and a phone (N9d2)', async () => {
+      const wide = await render(() => of(coachTodayWaitingView()), 'Owner', undefined, {
+        motionAllowed: true,
+      });
+      expect(risen(wide.motion)).toEqual([
+        [
+          'section.panel.waiting',
+          'section.panel.queue',
+          'section.month.panel',
+          'section.panel.plan-list',
+          'section.panel.plan-list',
+          'section.feed.panel',
+        ],
+      ]);
+      TestBed.resetTestingModule();
+      resetBuildMoment();
+
+      stubWidth(true);
+      const phone = await render(() => of(coachTodayWaitingView()), 'Owner', undefined, {
+        motionAllowed: true,
+      });
+      expect(risen(phone.motion)).toEqual([
+        [
+          'section.panel.waiting',
           'section.panel.queue',
           'app-disclosure.feed-fold.panel',
           'section.month.panel',

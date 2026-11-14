@@ -1,40 +1,50 @@
-@if (members().length > 1) {
+@if (shown()) {
   <div class="coach-line">
     <div class="coach-copy">
       <h3 i18n>Coach</h3>
-      <p class="coach-name" dir="auto">{{ client().assignedCoachName }}</p>
+      @if (waiting()) {
+        <p class="coach-name waiting" data-coach-waiting i18n>Waiting for a coach</p>
+      } @else {
+        <p class="coach-name" dir="auto">{{ client().assignedCoachName }}</p>
+      }
     </div>
-    <button #reassignTrigger appButton variant="outlined" type="button" (click)="open()" i18n>
-      Reassign coach
-    </button>
-    <p class="coach-notice" role="status">{{ notice() }}</p>
+    @if (canChange()) {
+      <button #reassignTrigger appButton variant="outlined" type="button" (click)="open()">
+        @if (waiting()) {
+          <ng-container i18n>Choose a coach</ng-container>
+        } @else {
+          <ng-container i18n>Reassign coach</ng-container>
+        }
+      </button>
+    }
+    <!-- Focused after a save that leaves no change to make (a solo owner taking a waiting client). -->
+    <p #coachNotice class="coach-notice" role="status" tabindex="-1">{{ notice() }}</p>
   </div>
 
   <dialog
     #reassignDialog
     class="tb-dialog tb-theme"
     aria-labelledby="reassign-dialog-title"
+    aria-describedby="reassign-dialog-change"
     (cancel)="cancel($event)"
   >
-    <h2 id="reassign-dialog-title" class="tb-text-section-title" dir="auto" i18n>
-      Reassign {{ client().firstName }}
+    <h2 id="reassign-dialog-title" class="tb-text-section-title" dir="auto">
+      @if (waiting()) {
+        <ng-container i18n>Choose a coach for {{ client().firstName }}</ng-container>
+      } @else {
+        <ng-container i18n>Reassign {{ client().firstName }}</ng-container>
+      }
     </h2>
-    @if (ownerIsCoach()) {
-      <p class="tb-text-compact" i18n>
-        The new coach sees this client and all their history right away. You still see the client as
-        the owner, but your chat with them stays readable to the client only.
-      </p>
-    } @else {
-      <p class="tb-text-compact" i18n>
-        The new coach sees this client and all their history right away. The current coach loses
-        access, and their chat with the client stays readable to the client only.
-      </p>
-    }
+    <!-- What the change does, following the choice (C8): said again as it changes. -->
+    <p id="reassign-dialog-change" class="tb-text-compact" dir="auto" aria-live="polite">
+      {{ sentence() }}
+    </p>
     <form class="reassign-form" [formGroup]="form" (ngSubmit)="reassign()" novalidate>
       <app-select
         label="New coach"
         i18n-label
-        [options]="coachOptions()"
+        [options]="candidates()"
+        [errors]="coachErrors()"
         formControlName="coachUserId"
       />
       <app-field
@@ -84,7 +94,13 @@
         </button>
         <button appButton type="submit" [loading]="saving()">
           @if (saving()) {
-            <ng-container i18n>Reassigning…</ng-container>
+            @if (waiting()) {
+              <ng-container i18n>Saving…</ng-container>
+            } @else {
+              <ng-container i18n>Reassigning…</ng-container>
+            }
+          } @else if (waiting()) {
+            <ng-container i18n>Choose</ng-container>
           } @else {
             <ng-container i18n>Reassign</ng-container>
           }

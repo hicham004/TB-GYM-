@@ -84,6 +84,25 @@ export class ClientWorkspace {
     ),
     { initialValue: false },
   );
+  /**
+   * The open section is on the client’s private side (route data `side: 'private'`). Read from the
+   * record’s own snapshot, which already holds its section while the record is built, and again
+   * each time a navigation ends.
+   */
+  private readonly privateSection = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => this.onPrivateSide()),
+    ),
+    { initialValue: this.onPrivateSide() },
+  );
+  /**
+   * Why the open section is closed to the caller (N9d1a), drawn in its place. Its component is then
+   * never created, so nothing it would read is asked for.
+   */
+  protected readonly closedSection = computed(() =>
+    this.privateSection() ? this.context.closedSide() : null,
+  );
   protected readonly profile = this.context.profile;
   protected readonly startingConversation = signal(false);
   /** The breadcrumb's last item until the record has loaded. */
@@ -178,11 +197,16 @@ export class ClientWorkspace {
     return [plan.productName, plan.offerLabel, when].filter(Boolean).join(' · ');
   });
 
-  /** The owner sees whose client this is when it is a team member's. */
+  /**
+   * The owner sees whose client this is when it is a team member's, and that nobody coaches them
+   * yet while the client waits for a coach (N9d1b).
+   */
   protected readonly coachLine = computed(() => {
     const profile = this.profile();
     const me = this.auth.user()?.id;
-    return this.tenants.isOwner() && profile && me && profile.assignedCoachUserId !== me
+    if (!this.tenants.isOwner() || !profile || !me) return '';
+    if (this.context.waitingForCoach()) return $localize`Waiting for a coach`;
+    return profile.assignedCoachUserId !== null && profile.assignedCoachUserId !== me
       ? $localize`Coached by ${profile.assignedCoachName}:coach:`
       : '';
   });
@@ -215,11 +239,15 @@ export class ClientWorkspace {
       : '',
   );
 
-  /** What else a coach does from here. Assigning a program opens its sheet on the Training section. */
+  /**
+   * What else a coach does from here. Assigning a program opens its sheet on the Training section.
+   * The program and the intake are the client's private side, offered only to their coach (N9d1a).
+   */
   protected readonly actions = computed<ClientAction[]>(() => {
     const base = `/clients/${this.clientId}`;
+    const mayCoach = this.context.mayCoach();
     if (this.context.isFormer()) {
-      return [{ label: $localize`View intake`, link: `${base}/intake` }];
+      return mayCoach ? [{ label: $localize`View intake`, link: `${base}/intake` }] : [];
     }
     const workspace = this.context.workspace();
     const plans = this.context.plans();
@@ -245,6 +273,7 @@ export class ClientWorkspace {
           hint: $localize`Plans, receipts and access`,
           link: `${base}/service`,
         };
+    if (!mayCoach) return [service];
     return [
       {
         label: $localize`Assign program`,
@@ -263,13 +292,16 @@ export class ClientWorkspace {
 
   /**
    * Training, nutrition and check-ins are not shown for a former client (ADR 0027), so their
-   * sections are not offered. Their records are kept.
+   * sections are not offered. Their records are kept. Someone who does not coach the client (the
+   * owner on a team member's client or a waiting one, or on a former client they did not coach when
+   * coaching ended) has the business side alone (N9d1a).
    */
   protected readonly sections = computed<SectionLink[]>(() => {
     const base = `/clients/${this.clientId}`;
     const overview = { label: $localize`Overview`, link: base };
     const progress = { label: $localize`Progress`, link: `${base}/progress` };
     const service = { label: $localize`Service & access`, link: `${base}/service` };
+    if (!this.context.mayCoach()) return [overview, service];
     return this.context.isFormer()
       ? [overview, progress, service]
       : [
@@ -330,6 +362,10 @@ export class ClientWorkspace {
         }
       }
     });
+  }
+
+  private onPrivateSide(): boolean {
+    return this.route.snapshot.firstChild?.data['side'] === 'private';
   }
 
   private resetTenantState(): void {

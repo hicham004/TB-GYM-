@@ -1,8 +1,23 @@
-import { Routes } from '@angular/router';
-import { confirmBeforeLeaving, confirmSheetLeave } from '../../core/forms/leave-guard';
+import type { CanDeactivateFn, Routes } from '@angular/router';
+import {
+  confirmBeforeLeaving,
+  confirmSheetLeave,
+  type HoldsUnsavedWork,
+} from '../../core/forms/leave-guard';
 import { REDESIGNED } from '../../core/theme/redesigned-route';
 
 const sections = () => import('./client-workspace-sections');
+
+/**
+ * A section of the client's private side (N9d1a: training, nutrition, check-ins, progress, the
+ * intake), opened only to the client's own coach. The record draws why it is closed in its place,
+ * and never creates it, for anyone else.
+ */
+const PRIVATE = { ...REDESIGNED, side: 'private' };
+
+/** A private page the record never drew (its why panel stood there) holds no work to ask about. */
+export const confirmPageLeave: CanDeactivateFn<HoldsUnsavedWork | null> = (page, ...rest) =>
+  page ? confirmBeforeLeaving(page, ...rest) : confirmSheetLeave(page, ...rest);
 
 export const clientRoutes: Routes = [
   {
@@ -39,7 +54,7 @@ export const clientRoutes: Routes = [
         path: 'training',
         canDeactivate: [confirmSheetLeave],
         title: $localize`Client training | TB Gym`,
-        data: REDESIGNED,
+        data: PRIVATE,
         loadComponent: () => sections().then((module) => module.ClientTrainingSection),
       },
       {
@@ -47,15 +62,15 @@ export const clientRoutes: Routes = [
         // reviews and applies the edit, so leaving with changes asks first.
         path: 'training/:mesocycleId/edit',
         title: $localize`Edit weeks | TB Gym`,
-        data: REDESIGNED,
-        canDeactivate: [confirmBeforeLeaving],
+        data: PRIVATE,
+        canDeactivate: [confirmPageLeave],
         loadComponent: () => import('./program-edit').then((module) => module.ProgramEditPage),
       },
       {
         path: 'nutrition',
         canDeactivate: [confirmSheetLeave],
         title: $localize`Client nutrition | TB Gym`,
-        data: REDESIGNED,
+        data: PRIVATE,
         loadComponent: () => sections().then((module) => module.ClientNutritionSection),
       },
       {
@@ -63,7 +78,7 @@ export const clientRoutes: Routes = [
         path: 'checkins',
         canDeactivate: [confirmSheetLeave],
         title: $localize`Client check-ins | TB Gym`,
-        data: REDESIGNED,
+        data: PRIVATE,
         loadComponent: () => import('./client-checkins').then((module) => module.ClientCheckIns),
       },
       {
@@ -71,8 +86,8 @@ export const clientRoutes: Routes = [
         // Message steps back (`replyOnPage`), and an unsent reply is asked about before leaving.
         path: 'checkins/:assignmentId',
         title: $localize`Check-in review | TB Gym`,
-        data: { ...REDESIGNED, replyOnPage: true },
-        canDeactivate: [confirmBeforeLeaving],
+        data: { ...PRIVATE, replyOnPage: true },
+        canDeactivate: [confirmPageLeave],
         loadComponent: () =>
           import('./client-checkin-review').then((module) => module.ClientCheckInReview),
       },
@@ -80,7 +95,7 @@ export const clientRoutes: Routes = [
         path: 'progress',
         canDeactivate: [confirmSheetLeave],
         title: $localize`Client progress | TB Gym`,
-        data: REDESIGNED,
+        data: PRIVATE,
         loadComponent: () => sections().then((module) => module.ClientProgressSection),
       },
       {
@@ -94,7 +109,7 @@ export const clientRoutes: Routes = [
         path: 'intake',
         canDeactivate: [confirmSheetLeave],
         title: $localize`Client intake | TB Gym`,
-        data: REDESIGNED,
+        data: PRIVATE,
         loadComponent: () => import('./client-intake').then((module) => module.ClientIntake),
       },
     ],

@@ -415,7 +415,17 @@ describe('Notifications', () => {
       { ...item('p1', at, false, 'Your coach set up a new program'), kind: 'ProgramAssigned' },
       { ...item('l1', at, false, 'Maya Rahman left your coaching space'), kind: 'ClientLeft' },
       { ...item('e1', at, false, 'Your plan has ended'), kind: 'EnrollmentExpired' },
-      { ...item('d1', at, false, 'Your coach has changed'), kind: 'CoachDeparted' },
+      { ...item('d1', at, false, 'Your coach has left'), kind: 'CoachDeparted' },
+      {
+        ...item('a1', at, false, 'You have a new coach'),
+        kind: 'CoachAssigned',
+        clientProfileId: 'client-maya',
+      },
+      {
+        ...item('s1', at, false, 'Who can see your training changed'),
+        kind: 'TraineeStaffChanged',
+        clientProfileId: 'client-rima',
+      },
       { ...item('t1', at, false, 'A coach left your team'), kind: 'CoachResigned' },
       {
         ...item('h1', at, false, 'Rima Aboud asked for a plan'),
@@ -446,7 +456,10 @@ describe('Notifications', () => {
     // left the team.
     expect(href('Maya Rahman left your coaching space')).toBe('/clients');
     expect(href('Your plan has ended')).toBe('/plan');
-    expect(href('Your coach has changed')).toBe('/');
+    expect(href('Your coach has left')).toBe('/');
+    // A new coach, and who sees a trainee's training (N9d1b): their Today, never a client page.
+    expect(href('You have a new coach')).toBe('/');
+    expect(href('Who can see your training changed')).toBe('/');
     expect(href('A coach left your team')).toBe('/clients');
     // A house trainee's ask for a plan, and their word that they paid, on their Service & access (SUB-020).
     expect(href('Rima Aboud asked for a plan')).toBe('/clients/client-rima/service');

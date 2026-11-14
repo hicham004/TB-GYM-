@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, Subject, throwError, type Observable } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
   ClientCommercialOverview,
@@ -34,6 +34,7 @@ import {
 import { installDialogSupport } from '../../../testing/dialog';
 import {
   button,
+  chooseOption,
   field,
   fill,
   formSummary,
@@ -59,6 +60,14 @@ const PROFILE = {
   assignedCoachName: 'Lea Khoury',
   version: 3,
   release: null,
+} as unknown as CoachClientDetails;
+
+/** Maya waiting for a coach (N9d1b): nobody named, the name empty, nobody coaching her. */
+const WAITING = {
+  ...PROFILE,
+  assignedCoachUserId: null,
+  assignedCoachName: '',
+  mayCoach: false,
 } as unknown as CoachClientDetails;
 
 const FORMER = {
@@ -91,6 +100,8 @@ interface Options {
   releaseClient?: ReturnType<typeof vi.fn>;
   /** The team's read; nobody by default. */
   getTeamMembers?: () => Observable<TeamMember[]>;
+  /** The rest of the team API: the coach history and the change of coach. */
+  teamApi?: Record<string, unknown>;
   /** Who is signed in; nobody by default. */
   user?: { id: string; displayName: string };
   /** The house's asks API (SUB-020); a fake that answers no asks by default. */
@@ -143,7 +154,11 @@ async function render(options: Options = {}) {
       { provide: CsrfService, useValue: { refresh: vi.fn().mockResolvedValue(undefined) } },
       {
         provide: TeamApi,
-        useValue: { getTeamMembers: vi.fn(options.getTeamMembers ?? (() => of([]))) },
+        useValue: {
+          getTeamMembers: vi.fn(options.getTeamMembers ?? (() => of([]))),
+          getCoachAssignments: vi.fn(() => of([])),
+          ...options.teamApi,
+        },
       },
       ...(options.user ? [{ provide: AuthStore, useValue: { user: signal(options.user) } }] : []),
       { provide: FormerClientsApi, useValue: { releaseClient: options.releaseClient ?? vi.fn() } },
@@ -417,6 +432,107 @@ describe('a client’s Service & access', () => {
     expect(all(coach.host, '.setting button').map(textOf)).toEqual(['Block access']);
   });
 
+  describe('giving a client waiting for a coach a coach (N9d1b, N9d2)', () => {
+    const team = [
+      { userId: 'owner-1', displayName: 'Karim Haddad' },
+      { userId: 'coach-1', displayName: 'Lea Khoury' },
+    ] as TeamMember[];
+    const signedIn = { id: 'owner-1', displayName: 'Karim Haddad' };
+    const coachDialog = (host: HTMLElement) =>
+      host.querySelector<HTMLDialogElement>('app-client-coach dialog');
+    let uninstall: () => void = () => undefined;
+
+    beforeEach(() => {
+      uninstall = installDialogSupport();
+    });
+
+    // The page goes first: it closes the dialog it leaves open.
+    afterEach(() => {
+      TestBed.resetTestingModule();
+      uninstall();
+    });
+
+    it('shows a solo owner the client waiting, with the way to choose a coach', async () => {
+      const { host } = await render({
+        profile: WAITING,
+        getTeamMembers: () => of([team[0]]),
+        user: signedIn,
+      });
+
+      const panel = host.querySelector<HTMLElement>('app-client-coach')!;
+      expect(textOf(panel.querySelector('.coach-name'))).toBe('Waiting for a coach');
+      expect(textOf(panel.querySelector('button'))).toBe('Choose a coach');
+    });
+
+    it('opens the coach dialog on arrival from Today, once, then takes it out of the address', async () => {
+      const { harness, host, router } = await render({
+        profile: WAITING,
+        getTeamMembers: () => of(team),
+        user: signedIn,
+        url: '/clients/client-1/service?action=coach',
+      });
+      await settle(harness.fixture);
+
+      expect(coachDialog(host)?.open).toBe(true);
+      expect(textOf(coachDialog(host)?.querySelector('h2'))).toBe('Choose a coach for Maya');
+      expect(router.url).toBe('/clients/client-1/service');
+    });
+
+    it('takes the coach the owner chose into the record every tab reads', async () => {
+      const reassignClientCoach = vi.fn(() =>
+        of({
+          ...WAITING,
+          version: 4,
+          assignedCoachUserId: 'owner-1',
+          assignedCoachName: 'Karim Haddad',
+          mayCoach: true,
+        }),
+      );
+      const { harness, host, context } = await render({
+        profile: WAITING,
+        getTeamMembers: () => of(team),
+        user: signedIn,
+        url: '/clients/client-1/service?action=coach',
+        teamApi: { reassignClientCoach },
+      });
+      await settle(harness.fixture);
+
+      await chooseOption(harness.fixture, coachDialog(host)!, 'New coach', 'You');
+      press(coachDialog(host)!, 'Choose');
+      await settle(harness.fixture);
+
+      expect(reassignClientCoach).toHaveBeenCalledWith('client-1', 'owner-1', null, 3);
+      expect(context.profile()).toMatchObject({ assignedCoachUserId: 'owner-1', mayCoach: true });
+      expect(textOf(host.querySelector('app-client-coach .coach-notice'))).toBe(
+        'You now coach Maya.',
+      );
+      expect(textOf(host.querySelector('app-client-coach .coach-name'))).toBe('Karim Haddad');
+    });
+
+    it('opens nothing for a coach, or for a former client, and still cleans the address', async () => {
+      const coach = await render({
+        isOwner: false,
+        profile: WAITING,
+        user: { id: 'coach-1', displayName: 'Lea Khoury' },
+        url: '/clients/client-1/service?action=coach',
+      });
+      await settle(coach.harness.fixture);
+      expect(coachDialog(coach.host)).toBeNull();
+      expect(coach.router.url).toBe('/clients/client-1/service');
+
+      TestBed.resetTestingModule();
+      const former = await render({
+        profile: FORMER,
+        getTeamMembers: () => of(team),
+        user: signedIn,
+        url: '/clients/client-1/service?action=coach',
+      });
+      await settle(former.harness.fixture);
+      expect(coachDialog(former.host)).toBeNull();
+      expect(former.router.url).toBe('/clients/client-1/service');
+    });
+  });
+
   it('ends coaching and says no goodbye email went out when this server sends none', async () => {
     const uninstall = installDialogSupport();
     try {
@@ -634,6 +750,23 @@ describe('a client’s Service & access', () => {
             assignedCoachName: 'Karim Haddad',
           },
         });
+
+        expect(textOf(dialog())).not.toContain('Who held it');
+      });
+
+      it('offers a client waiting for a coach the team, You first (N9d1b)', async () => {
+        const { harness } = await openSheet({
+          getTeamMembers: () => of(team),
+          user: signedIn,
+          profile: WAITING,
+        });
+
+        expect(await choices(harness)).toEqual(['You', 'Lea Khoury', 'Omar Saleh']);
+        expect(textOf(field(dialog()!, 'Who held it'))).toContain('You');
+      });
+
+      it('asks an owner on their own nothing for a client waiting for a coach', async () => {
+        await openSheet({ getTeamMembers: () => of([team[0]]), user: signedIn, profile: WAITING });
 
         expect(textOf(dialog())).not.toContain('Who held it');
       });

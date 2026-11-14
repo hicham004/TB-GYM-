@@ -130,21 +130,29 @@ export class ClientOverview {
   });
   protected readonly loadingLabel = $localize`Loading…`;
 
-  /** Every part's read, for drawing them together. */
-  private readonly parts = [
-    this.overview,
-    this.dashboard,
-    this.records,
-    this.checkIns,
-    this.blocks,
-  ];
+  /**
+   * Whether the reader coaches this client (N9d1a). When not, the page reads and shows the business
+   * side alone: what needs doing and this week's workout counts, never the weight, the records, the
+   * check-ins, the program, the coach notes or the last activity (the server withholds and refuses
+   * them all).
+   */
+  protected readonly mayCoach = this.context.mayCoach;
+  /** Why the private side is closed to the reader, said first; null when they coach the client. */
+  protected readonly closed = this.context.closedSide;
+
+  /** Every part this page reads, for drawing them together: the overview alone for the business side. */
+  private readonly parts = computed(() =>
+    this.mayCoach()
+      ? [this.overview, this.dashboard, this.records, this.checkIns, this.blocks]
+      : [this.overview],
+  );
   /**
    * The parts are drawn in one frame once all have answered, so none pushes the others down as it
    * lands (audit UIQ-5); one still out after a moment shows its own skeleton instead of holding them.
    */
   protected readonly drawn = drawnTogether(
-    () => this.parts.some((part) => part().state !== 'loading'),
-    () => this.parts.every((part) => part().state !== 'loading'),
+    () => this.parts().some((part) => part().state !== 'loading'),
+    () => this.parts().every((part) => part().state !== 'loading'),
   );
 
   protected readonly firstName = computed(() => this.profile()?.firstName ?? '');
@@ -171,6 +179,16 @@ export class ClientOverview {
     const view = this.overview().value;
     return view ? needRows(view.attention, view.today, this.profileContext()) : [];
   });
+
+  /**
+   * The one filled action among the needs (plan §2 rule 5): the first the reader can act on, unless
+   * choosing a coach for a waiting client already holds it above them.
+   */
+  protected readonly primaryNeed = computed(() =>
+    this.closed()?.kind === 'waiting'
+      ? null
+      : (this.needs().find((row) => !row.elsewhere)?.key ?? null),
+  );
 
   /** The workspace week as seven marks; null when training is not in the plan. */
   protected readonly week = computed(() => {
@@ -261,9 +279,11 @@ export class ClientOverview {
       const clientId = this.context.clientId();
       const workspace = this.context.workspace();
       const former = this.context.isFormer();
+      // Taking the client on as their coach opens the private side, which is then read.
+      const side = this.mayCoach() ? 'coach' : 'business';
       const key =
         tenantId && clientId && workspace && !former
-          ? `${tenantId}:${clientId}:${workspace.currentDate}`
+          ? `${tenantId}:${clientId}:${workspace.currentDate}:${side}`
           : null;
       if (key && key !== this.loadedKey) {
         this.loadedKey = key;
@@ -282,6 +302,9 @@ export class ClientOverview {
     }
 
     void this.loadOverview();
+    // The rest is the client's private side, read only by their coach (N9d1a): anyone else would be
+    // answered 404.
+    if (!this.mayCoach()) return;
     void this.loadDashboard();
     void this.loadRecords();
     void this.loadCheckIns();
@@ -409,7 +432,7 @@ export class ClientOverview {
 
   protected async saveNote(): Promise<void> {
     const profile = this.profile();
-    if (!profile || this.noteForm.invalid) {
+    if (!profile || !this.mayCoach() || this.noteForm.invalid) {
       this.noteForm.markAllAsTouched();
       return;
     }

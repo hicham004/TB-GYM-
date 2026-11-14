@@ -225,11 +225,9 @@ export class AddPhotos extends EntrySheet {
   protected readonly privacy = computed(() => {
     const audience = this.audience();
     if (!audience.coach) {
-      // The owner sees every client's record and photos too (CLI-013, audit LOST-3), as the intake says.
-      const space = this.tenants.selectedMembership()?.tenantName;
-      return space
-        ? $localize`Your coach and the owner of ${space}:space: can see these photos. If you remove one later, it disappears from their view.`
-        : $localize`Your coach and the owner of your coaching space can see these photos. If you remove one later, it disappears from their view.`;
+      // Only the client's coach sees their photos (N9d1a): the owner only while coaching them, so the
+      // owner is not named apart, as the intake says.
+      return $localize`Your coach can see these photos. If you remove one later, it disappears from their view.`;
     }
     return audience.firstName
       ? $localize`${audience.firstName}:name: can see these photos too. Removing one takes it out of your view, and they keep it.`

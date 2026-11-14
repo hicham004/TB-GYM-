@@ -11,7 +11,9 @@ import type {
   CoachPlanEndedView,
   CoachPlanEndingView,
   CoachTodayView,
+  CoachWaitingClientView,
 } from '../../core/api/generated';
+import { dayInZone, houseDay } from '../../core/i18n/house-dates';
 import { initialsOf } from '../../shell/initials';
 import { money, sessionsLeft } from '../clients/client-service.models';
 
@@ -48,8 +50,27 @@ export interface AttentionRow {
   detail: string;
   /** The client's coach, shown to an Owner for a team member's client; null for the caller's own. */
   coach: string | null;
+  /** A client with no coach (CLI-012, notes plan N9d1b), said where a team member's client names theirs. */
+  waiting: boolean;
+  /**
+   * A private item about a client the caller does not coach (notes plan N9d1a): its action only opens the client's
+   * page, so it never holds Today's one filled button.
+   */
+  withheld: boolean;
   tag: string;
   tone: AttentionTone;
+  action: CoachAction;
+}
+
+/** A client waiting for a coach (C8, notes plan N9d2): the owner's alone, first on Today. */
+export interface WaitingRow {
+  key: string;
+  clientId: string;
+  name: string;
+  initials: string;
+  /** "Since Mon 9 Nov · Coached by Lea Khoury before", or "Since Mon 9 Nov · No coach yet". */
+  detail: string;
+  /** Choose a coach: the client's Service & access with the coach dialog open. */
   action: CoachAction;
 }
 
@@ -100,6 +121,11 @@ export interface CoachMonth {
   sessions: { held: string; by: string } | null;
   /** The owner's team, the owner first as "You"; null for a coach, who never sees it. */
   staff: StaffRow[] | null;
+  /**
+   * The owner's clients in no member's row, those with no coach (notes plan N9d1b), so the rows add up to every
+   * client: "1 of 2 clients active"; null for a coach, and while every client has one.
+   */
+  noCoach: string | null;
 }
 
 /** What ending a client's coaching asks for (ADR 0027): who, and the version the owner saw. */
@@ -120,6 +146,8 @@ export interface PlanRow {
   initials: string;
   /** The client's coach, shown to an Owner for a team member's client; null for the caller's own. */
   coach: string | null;
+  /** A client with no coach (notes plan N9d1b), said where a team member's client names theirs. */
+  waiting: boolean;
   /** The plan's name as it was sold, in the coach's own words; empty when it has none. */
   plan: string;
   /** When it ends or ended, then anything else to know: "Ended Sun 27 Sep · Asked to renew on …". */
@@ -139,6 +167,11 @@ export interface CoachToday {
   clientCount: number;
   /** Distinct clients with anything in the queue. */
   needsCount: number;
+  /**
+   * The clients waiting for a coach, longest waiting first, as the server ordered them (notes plan N9d1b): the
+   * owner's alone, empty for a coach and while nobody waits.
+   */
+  waiting: WaitingRow[];
   attention: AttentionRow[];
   month: CoachMonth;
   /** The soonest end first, as the server ordered them. */
@@ -168,6 +201,7 @@ export function mapCoachToday(view: CoachTodayView, context: CoachTodayContext):
     partOfDay: partOfDay(context.now, view.timeZoneId),
     clientCount,
     needsCount: new Set(attention.map((row) => row.clientId)).size,
+    waiting: (view.waitingForCoach ?? []).map((item) => waitingRow(item, view, context.locale)),
     attention,
     month: thisMonth(view.month, clientCount, context.locale),
     plansEnding: view.plansEndingSoon.map((item) => planEndingRow(item, view.today, context)),
@@ -192,7 +226,24 @@ export function thisMonth(month: CoachMonthView, clientCount: number, locale: st
     active: activeClients(Number(month.activeClientCount), clientCount),
     sessions: sessionsHeld(month, owner, locale),
     staff: month.coaches?.map((member) => staffRow(member)) ?? null,
+    noCoach: noCoach(month, clientCount),
   };
+}
+
+/**
+ * The clients in no member's row (notes plan N9d1b): the rows are every active member's clients and the totals every
+ * client's, both counted over the same clients, so what is left is exact: the clients with no coach, a trainee of the
+ * house among them (who is not on the waiting list). Null while every client is in a row.
+ */
+function noCoach(month: CoachMonthView, clientCount: number): string | null {
+  const coaches = month.coaches;
+  if (!coaches) return null;
+  const sum = (count: (member: CoachClientCountView) => number | string) =>
+    coaches.reduce((total, member) => total + Number(count(member)), 0);
+  const total = clientCount - sum((member) => member.clientCount);
+  if (total <= 0) return null;
+  const active = Number(month.activeClientCount) - sum((member) => member.activeClientCount);
+  return clientsActive(Math.min(Math.max(0, active), total), total);
 }
 
 function sessionsHeld(
@@ -225,7 +276,6 @@ export function activeClients(active: number, total: number): string {
 }
 
 function staffRow(member: CoachClientCountView): StaffRow {
-  const active = Number(member.activeClientCount);
   const total = Number(member.clientCount);
   return {
     key: member.coachUserId,
@@ -234,10 +284,15 @@ function staffRow(member: CoachClientCountView): StaffRow {
     clients:
       total === 0
         ? $localize`No clients yet`
-        : total === 1
-          ? $localize`${active}:active: of 1 client active`
-          : $localize`${active}:active: of ${total}:total: clients active`,
+        : clientsActive(Number(member.activeClientCount), total),
   };
+}
+
+/** "4 of 5 clients active", a member's row or the clients with no coach. */
+function clientsActive(active: number, total: number): string {
+  return total === 1
+    ? $localize`${active}:active: of 1 client active`
+    : $localize`${active}:active: of ${total}:total: clients active`;
 }
 
 /**
@@ -324,7 +379,40 @@ function planBase(client: CoachClientRef, plan: string, context: CoachTodayConte
     name,
     initials: initialsOf(name),
     coach: coachOf(client, context),
+    waiting: isWaiting(client),
     plan: plan.trim(),
+  };
+}
+
+/**
+ * A client waiting for a coach (notes plan N9d1b): since when, on the workspace's clock, and who coached them
+ * before, if anybody did. Choose a coach opens their Service & access with the coach dialog open, where the owner
+ * gives them one, themselves included (C8).
+ */
+export function waitingRow(
+  item: CoachWaitingClientView,
+  view: Pick<CoachTodayView, 'today' | 'timeZoneId'>,
+  locale: string,
+): WaitingRow {
+  const client = item.client;
+  const name = fullName(client);
+  const since = houseDay(dayInZone(item.waitingSinceUtc, view.timeZoneId), locale, view.today);
+  const before = item.previousCoachName?.trim();
+  return {
+    key: client.clientProfileId,
+    clientId: client.clientProfileId,
+    name,
+    initials: initialsOf(name),
+    detail: before
+      ? $localize`Since ${since}:date: · Coached by ${before}:coach: before`
+      : $localize`Since ${since}:date: · No coach yet`,
+    action: {
+      label: $localize`Choose a coach`,
+      forWhom: $localize`for ${name}:name:`,
+      link: `/clients/${client.clientProfileId}/service`,
+      queryParams: { action: 'coach' },
+      startsChatWith: null,
+    },
   };
 }
 
@@ -354,11 +442,84 @@ function coachOf(client: CoachClientRef, context: CoachTodayContext): string | n
     : null;
 }
 
+/** No coach (CLI-012, notes plan N9d1b): nobody coaches them until the owner gives them one. */
+function isWaiting(client: CoachClientRef): boolean {
+  return !client.assignedCoachUserId;
+}
+
+/**
+ * The kinds whose place is the client's private side (C8, notes plan N9d1a): their check-ins and their training. The
+ * server sends an Owner the first three for a client they do not coach, with what would open them withheld, and the
+ * other three only for the clients they coach; any of them reaching such a client opens the client's page instead.
+ */
+const PRIVATE_KINDS: ReadonlySet<CoachAttentionKind> = new Set<CoachAttentionKind>([
+  'CheckInToReview',
+  'MissedSessions',
+  'CheckInOverdue',
+  'WeekNotShared',
+  'NoProgram',
+  'WeightsToApply',
+]);
+
+/** An item the caller cannot act on: about a client they do not coach, and of a private kind (notes plan N9d1a). */
+function isWithheld(item: CoachAttentionItemView): boolean {
+  return item.client.mayCoach === false && PRIVATE_KINDS.has(item.kind);
+}
+
+/**
+ * Who deals with a withheld item: the client's coach by name, or, for a client waiting for a coach, whoever the owner
+ * gives them (notes plan N9d2). Several check-ins are "them", in the client page's words (`whoActs`).
+ */
+function whoFollowsUp(item: CoachAttentionItemView, count: number): string {
+  if (isWaiting(item.client)) return $localize`Their new coach follows up once you choose one.`;
+  const coach = item.client.assignedCoachName?.trim();
+  if (item.kind === 'CheckInToReview') {
+    if (count > 1) {
+      return coach
+        ? $localize`${coach}:coach: reviews them.`
+        : $localize`Their coach reviews them.`;
+    }
+    return coach ? $localize`${coach}:coach: reviews it.` : $localize`Their coach reviews it.`;
+  }
+  return coach ? $localize`${coach}:coach: follows up.` : $localize`Their coach follows up.`;
+}
+
 function shortDay(date: string, locale: string): string {
   return formatDate(date, 'EEE d MMM', locale);
 }
 
+/**
+ * One Needs-you item in coach words. An item about a client the caller does not coach, of a kind whose place is the
+ * client's private side (C8, notes plan N9d1a), keeps its sentence and what the server still says, says who deals
+ * with it in place of the coach's name, and opens the client's page: the server sends nothing there to open.
+ */
 export function attentionRow(
+  item: CoachAttentionItemView,
+  today: string,
+  context: CoachTodayContext,
+): AttentionRow {
+  const row = phrasedRow(item, today, context);
+  if (!isWithheld(item)) return row;
+  const target = attentionTarget(item);
+  return {
+    ...row,
+    coach: null,
+    waiting: false,
+    withheld: true,
+    detail: [row.detail, whoFollowsUp(item, Number(item.count ?? 0))]
+      .filter((part) => part !== '')
+      .join(' · '),
+    action: {
+      label: $localize`See client`,
+      forWhom: row.name,
+      link: target.link,
+      queryParams: target.queryParams,
+      startsChatWith: null,
+    },
+  };
+}
+
+function phrasedRow(
   item: CoachAttentionItemView,
   today: string,
   context: CoachTodayContext,
@@ -375,6 +536,8 @@ export function attentionRow(
     name,
     initials: initialsOf(name),
     coach: coachOf(client, context),
+    waiting: isWaiting(client),
+    withheld: false,
   };
   const forWhom = $localize`for ${name}:name:`;
   // Where the item is handled, which the Clients table's tag for it opens too.
@@ -479,9 +642,12 @@ export function attentionRow(
       return {
         ...base,
         heading: $localize`${name}:name: missed ${count}:count: workouts in a row`,
+        // The day is the private side: withheld, it was not missing, so nothing is said of it (notes plan N9d1a).
         detail: item.date
           ? $localize`Last trained ${date(item.date)}:date:`
-          : $localize`No workout logged yet`,
+          : isWithheld(item)
+            ? ''
+            : $localize`No workout logged yet`,
         tag: $localize`Missed`,
         tone: 'missed',
         action: go($localize`See training`),
@@ -591,7 +757,9 @@ export function weightsDetail(today: string, date: string | null, locale: string
 /**
  * Where an attention item is handled (CLI-018): what Today's action and the client page's open, and
  * what the Clients table's tag for it links to (critique B4a). An overdue check-in's tag opens the
- * client's check-ins, what it names; Remind is Today's and the client page's own action.
+ * client's check-ins, what it names; Remind is Today's and the client page's own action. For a client the caller
+ * does not coach (`mayCoach` false: an owner on another coach's client or a waiting one, C8), a check-in or training
+ * item opens the client's page, their business side: the private side would answer as missing (notes plan N9d1a).
  */
 export function attentionTarget(item: CoachAttentionItemView): {
   link: string;
@@ -600,6 +768,7 @@ export function attentionTarget(item: CoachAttentionItemView): {
   const page = `/clients/${item.client.clientProfileId}`;
   const count = Number(item.count ?? 0);
   const subject = item.subjectId;
+  if (isWithheld(item)) return { link: page, queryParams: null };
   switch (item.kind) {
     case 'CheckInToReview':
       // One waiting opens straight at its review; several open the client's list of check-ins.

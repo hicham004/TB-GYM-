@@ -331,7 +331,11 @@ describe('Settings › Team', () => {
     await choose(fixture, host, 'More for Cara Nassar', 'Remove from the team');
     expect(api.removeTeamCoach).not.toHaveBeenCalled();
     expect(textOf(dialog()?.querySelector('h2'))).toBe('Remove Cara Nassar?');
-    expect(textOf(dialog())).toContain('Their 2 clients move to you with all their history');
+    expect(textOf(dialog())).toContain(
+      'Cara Nassar loses access right away. Their 2 clients wait for a coach with all their history, and so will anyone who accepts a client invitation they sent. Nothing is deleted. Give each one a coach from Clients, yourself included.',
+    );
+    // Nobody gets the clients automatically now (N9d1b), the owner included.
+    expect(textOf(dialog())).not.toContain('to you');
 
     press(dialog()!, 'Remove coach');
     await settle(fixture);
@@ -339,9 +343,10 @@ describe('Settings › Team', () => {
     expect(api.removeTeamCoach).toHaveBeenCalledWith('coach-1', 21);
     // The team is read again so the counts and the list follow the removal.
     expect(api.getTeamMembers).toHaveBeenCalledTimes(2);
-    expect(toast.show).toHaveBeenCalledWith('Cara Nassar left the team. 2 clients moved to you.', {
-      tone: 'success',
-    });
+    expect(toast.show).toHaveBeenCalledWith(
+      'Cara Nassar left the team. 2 clients are waiting for a coach.',
+      { tone: 'success' },
+    );
   });
 
   it('says one client in the singular when a coach with one client is removed', async () => {
@@ -351,15 +356,33 @@ describe('Settings › Team', () => {
     });
 
     await choose(fixture, host, 'More for Cara Nassar', 'Remove from the team');
-    // Never "Their 1 clients move to you" (COACH-18).
-    expect(textOf(dialog())).toContain('Their client moves to you with all their history');
+    // Never "Their 1 clients wait" (COACH-18).
+    expect(textOf(dialog())).toContain(
+      'Cara Nassar loses access right away. Their client waits for a coach with all their history, and so will anyone who accepts a client invitation they sent. Nothing is deleted. Give the client a coach from Clients, yourself included.',
+    );
     expect(textOf(dialog())).not.toContain('1 clients');
     press(dialog()!, 'Remove coach');
     await settle(fixture);
     expect(toast.show).toHaveBeenCalledWith(
-      'Cara Nassar left the team. Their client moved to you.',
+      'Cara Nassar left the team. Their client is waiting for a coach.',
       { tone: 'success' },
     );
+  });
+
+  it('names only the invitations when a coach with no clients is removed (N9d1b)', async () => {
+    const { fixture, host, toast } = await render({
+      getTeamMembers: vi.fn(() => of([{ ...CARA, assignedClientCount: 0 }, member()])),
+      removeTeamCoach: vi.fn(() => of({ reassignedClientCount: 0, reassignedInvitationCount: 1 })),
+    });
+
+    await choose(fixture, host, 'More for Cara Nassar', 'Remove from the team');
+    expect(textOf(dialog())).toContain(
+      'Cara Nassar loses access right away. Anyone who accepts a client invitation they sent will wait for a coach. Nothing is deleted.',
+    );
+    expect(textOf(dialog())).not.toContain('lands with you');
+    press(dialog()!, 'Remove coach');
+    await settle(fixture);
+    expect(toast.show).toHaveBeenCalledWith('Cara Nassar left the team.', { tone: 'success' });
   });
 
   it('asks before Browser Back, a workspace switch or sign-out drops a half-typed invitation', async () => {
@@ -441,15 +464,19 @@ describe('Settings › Team', () => {
       'Just you so far · 1 seat this month',
     );
     expect(textOf(host.querySelector('app-empty-state h2'))).toBe('Coach with a team');
+    // The owner's side of another coach's client is the business side alone (N9d1a).
+    expect(textOf(host.querySelector('app-empty-state'))).toContain(
+      'Invite a coach and give them their own clients. They see only the clients you give them. You see every client’s plan and payments, and their training only when you coach them.',
+    );
   });
 
   it('says how a team works in three lines, and that each coach invited is a seat (critique B3a)', async () => {
     const { fixture, host } = await render();
 
     expect(Array.from(host.querySelectorAll('[data-how] li')).map(textOf)).toEqual([
-      'One coach per client, given from the client’s profile.',
-      'You see every client and all their data, and a coach only their own. Chats stay between a client and their coach, even from you.',
-      'A leaving coach’s clients come back to you, and they are told.',
+      'At most one coach per client, given from the client’s profile.',
+      'You see every client’s plan, payments and sessions, and their training, nutrition, check-ins and progress only when you coach them yourself. A coach sees only their own clients. Chats stay between a client and their coach, even from you.',
+      'When a coach leaves, their clients wait for a coach. Clients lists them under Waiting for a coach, so you can give each one a coach, yourself included.',
     ]);
     // A page of its own now, out of the Settings column.
     expect(host.querySelector('app-settings-frame')).toBeNull();

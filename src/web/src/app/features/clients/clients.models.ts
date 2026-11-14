@@ -99,7 +99,12 @@ export interface ClientRow {
   link: string;
   /** The client's coach, shown to an Owner for a team member's client; null for the caller's own. */
   coach: string | null;
-  /** Who coaches the client, the caller included: what the owner's Coach filter keeps (B3a). */
+  /** Nobody coaches the client (N9d1b): the row says "Waiting for a coach" where a coach is named. */
+  waiting: boolean;
+  /**
+   * Who coaches the client, the caller included: what the owner's Coach filter keeps (B3a), and
+   * `WAITING_FOR_COACH` for a client waiting for one.
+   */
   coachId: string;
   /**
    * What waits for the coach, in Today's order, each a link to where it is handled. A plan's end
@@ -121,7 +126,11 @@ export interface ClientRow {
   /** "Sent 2 days ago", "None sent yet", or "Not in plan" while check-ins are not in today's plan. */
   checkIn: string;
   checkInAt: string | null;
-  activity: string;
+  /**
+   * What the client last did; null for a client the caller does not coach (CLI-013, N9d1a), whose
+   * activity the server withholds, so the row says nothing of it rather than "No activity yet".
+   */
+  activity: string | null;
   activityAt: string | null;
   filters: ReadonlySet<ClientFilter>;
   /** Name and goal, lower-cased and without accents, for the search box. */
@@ -177,6 +186,9 @@ export function clientRow(
   const goal = row.goals?.trim() || null;
   const years = ageOn(row.birthDate, today);
   const filters = new Set<ClientFilter>(['all']);
+  const waiting = client.assignedCoachUserId === null;
+  // A missing flag is the old rule: the caller coaches every client listed (CLI-013).
+  const coaches = client.mayCoach !== false;
   if (row.status === 'NeedsAttention') filters.add('attention');
   if (row.status === 'EndingSoon' || row.attention.includes('PlanEndingSoon')) {
     filters.add('ending');
@@ -192,10 +204,11 @@ export function clientRow(
     goal,
     link: `/clients/${client.clientProfileId}`,
     coach:
-      context.userId !== null && client.assignedCoachUserId !== context.userId
+      !waiting && context.userId !== null && client.assignedCoachUserId !== context.userId
         ? client.assignedCoachName
         : null,
-    coachId: client.assignedCoachUserId,
+    waiting,
+    coachId: client.assignedCoachUserId ?? WAITING_FOR_COACH,
     tags: row.attentionItems
       .filter((item) => !NOT_TAGS.has(item.kind))
       .map((item) => ({ kind: item.kind, label: attentionReason(item), ...attentionTarget(item) })),
@@ -206,8 +219,8 @@ export function clientRow(
     plan: planCell(row, today, context.locale),
     checkIn: lastCheckIn(row, context),
     checkInAt: row.featuresToday.includes('CheckIns') ? row.lastCheckInSentAtUtc : null,
-    activity: activityLabel(row, context),
-    activityAt: row.lastActivityAtUtc,
+    activity: coaches ? activityLabel(row, context) : null,
+    activityAt: coaches ? row.lastActivityAtUtc : null,
     filters,
     searchText: searchable(`${name} ${goal ?? ''}`),
   };
@@ -248,10 +261,14 @@ export function listSummary(counts: Record<ClientFilter, number>): string {
   return [clients, attention, ending].filter((part) => part !== null).join(' · ');
 }
 
-/** The coach the owner narrowed the list to: their name, or "your" when it is the owner. */
+/**
+ * The coach the owner narrowed the list to: their name, or "your" when it is the owner, or the clients
+ * waiting for a coach (N9d1b).
+ */
 export interface ChosenCoach {
   readonly name: string;
   readonly isYou: boolean;
+  readonly isWaiting?: boolean;
 }
 
 export interface EmptyList {
@@ -276,9 +293,11 @@ export function emptyList(
       heading:
         coach === null
           ? $localize`No client matches “${typed}:search:”`
-          : coach.isYou
-            ? $localize`None of your clients matches “${typed}:search:”`
-            : $localize`None of ${coach.name}:coach:’s clients matches “${typed}:search:”`,
+          : coach.isWaiting
+            ? $localize`Nobody waiting for a coach matches “${typed}:search:”`
+            : coach.isYou
+              ? $localize`None of your clients matches “${typed}:search:”`
+              : $localize`None of ${coach.name}:coach:’s clients matches “${typed}:search:”`,
       description: $localize`Search looks at names and goals.`,
       action: $localize`Clear search`,
     };
@@ -293,6 +312,20 @@ export function emptyList(
       new: $localize`No new clients in the last 14 days`,
     };
     return { heading: headings[filter], description, action: $localize`Show all clients` };
+  }
+  if (coach.isWaiting) {
+    const headings: Record<ClientFilter, string> = {
+      all: '',
+      attention: $localize`Nobody waiting for a coach needs attention right now`,
+      ending: $localize`Nobody waiting for a coach has a plan ending in the next 14 days`,
+      paused: $localize`Nobody waiting for a coach has a paused plan`,
+      new: $localize`Nobody waiting for a coach joined in the last 14 days`,
+    };
+    return {
+      heading: headings[filter],
+      description,
+      action: $localize`Show everyone waiting for a coach`,
+    };
   }
   if (coach.isYou) {
     const headings: Record<ClientFilter, string> = {
@@ -330,9 +363,13 @@ export interface CoachChip {
   readonly items: readonly UiMenuItem[];
 }
 
+/** The Coach filter's value for the clients waiting for a coach (N9d1b), who have no coach id. */
+export const WAITING_FOR_COACH = 'waiting';
+
 /**
- * One choice per coach with clients here: you first, then the others by name. A list with one coach,
- * as every coach's own list is, has nothing to filter by, so it has no chip.
+ * One choice per coach with clients here: you first, then the others by name, then the clients waiting
+ * for a coach (N9d1b, `?coach=waiting`). A list with one coach, as every coach's own list is, has nothing
+ * to filter by, so it has no chip; a coach with no name to show is no choice either, so no item is blank.
  */
 export function coachChip(
   rows: readonly ClientRow[],
@@ -340,28 +377,35 @@ export function coachChip(
   me: string | null,
   locale: string,
 ): CoachChip | null {
+  const you = $localize`You`;
+  const waiting = $localize`Waiting for a coach`;
   const coaches = new Map<string, string>();
   for (const row of rows) {
-    if (!coaches.has(row.coachId)) coaches.set(row.coachId, row.coach ?? '');
+    if (coaches.has(row.coachId)) continue;
+    const label = row.waiting ? waiting : row.coachId === me ? you : row.coach?.trim();
+    if (label) coaches.set(row.coachId, label);
   }
   if (coaches.size < 2) return null;
 
-  const you = $localize`You`;
   const others = [...coaches]
-    .filter(([id]) => id !== me)
+    .filter(([id]) => id !== me && id !== WAITING_FOR_COACH)
     .sort(([, a], [, b]) => a.localeCompare(b, locale));
   const items: UiMenuItem[] = [
     { label: $localize`Every coach`, action: '' },
     ...(me !== null && coaches.has(me) ? [{ label: you, action: me }] : []),
     ...others.map(([id, name]) => ({ label: name, action: id })),
+    ...(coaches.has(WAITING_FOR_COACH) ? [{ label: waiting, action: WAITING_FOR_COACH }] : []),
   ];
-  const isYou = chosen === me && coaches.has(chosen);
-  const chosenName = isYou ? you : coaches.get(chosen);
+  const chosenName = coaches.get(chosen);
+  if (chosenName === undefined) {
+    return { name: $localize`Coach`, active: false, chosen: null, items };
+  }
+  const isWaiting = chosen === WAITING_FOR_COACH;
   return {
-    name: chosenName === undefined ? $localize`Coach` : $localize`Coach: ${chosenName}:coach:`,
-    active: chosenName !== undefined,
-    chosen:
-      chosenName === undefined ? null : { name: isYou ? you : (coaches.get(chosen) ?? ''), isYou },
+    // "Coach: Waiting for a coach" would say coach twice.
+    name: isWaiting ? waiting : $localize`Coach: ${chosenName}:coach:`,
+    active: true,
+    chosen: { name: chosenName, isYou: chosen === me, isWaiting },
     items,
   };
 }

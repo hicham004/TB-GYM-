@@ -3,13 +3,17 @@ import { fakeMotion } from '../../../testing/motion-fake';
 import { EASE, type Motion } from '../../core/motion/motion';
 import { BUILD_MOMENT, buildCoachToday, claimFirstBuild, resetBuildMoment } from './build-moment';
 
-/** Coach Today as drawn after its first read, at a desk's width or a phone's. */
-function page(phone: boolean): HTMLElement {
+/**
+ * Coach Today as drawn after its first read, at a desk's width or a phone's, with the owner's clients
+ * waiting for a coach first or not (notes plan N9d2).
+ */
+function page(phone: boolean, waiting = false): HTMLElement {
   const host = document.createElement('div');
   host.innerHTML = `
     <section class="coach-today">
       <header class="top"><h1>Good morning, Lea.</h1><p class="needs">2 clients</p></header>
       <p class="tb-visually-hidden" role="status"></p>
+      ${waiting ? '<section class="panel waiting"><ul class="rows"><li class="plan-row waiting-row">Ziad</li></ul></section>' : ''}
       <div class="columns">
         <section class="panel queue"><ul class="rows"><li class="need">Maya</li><li class="need">Sara</li></ul></section>
         ${phone ? '<app-disclosure class="feed-fold panel">What your clients did</app-disclosure>' : ''}
@@ -59,6 +63,29 @@ describe('Coach Today builds itself (W12)', () => {
     const motion = fakeMotion({ allowed: true });
     buildCoachToday(page(true), motion as unknown as Motion);
     expect(risen(motion)[0]).toEqual([
+      'section.panel queue',
+      'app-disclosure.feed-fold panel',
+      'section.panel month',
+      'section.panel plan-list',
+      'section.panel plan-list',
+    ]);
+  });
+
+  it('rises the clients waiting for a coach first, six parts with the feed or its fold, its rows riding inside', () => {
+    const wide = fakeMotion({ allowed: true });
+    buildCoachToday(page(false, true), wide as unknown as Motion);
+    expect(risen(wide)[0]).toEqual([
+      'section.panel waiting',
+      'section.panel queue',
+      'section.panel month',
+      'section.panel plan-list',
+      'section.panel plan-list',
+      'section.panel feed',
+    ]);
+    const phone = fakeMotion({ allowed: true });
+    buildCoachToday(page(true, true), phone as unknown as Motion);
+    expect(risen(phone)[0]).toEqual([
+      'section.panel waiting',
       'section.panel queue',
       'app-disclosure.feed-fold panel',
       'section.panel month',

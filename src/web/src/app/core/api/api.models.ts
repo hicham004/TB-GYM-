@@ -128,9 +128,9 @@ export interface ClientSummary {
   onboardingStatus: ClientOnboardingStatus;
   isCoachBlocked: boolean;
   version: number;
-  /** The one Owner or Coach who coaches this client (ADR 0026). */
-  assignedCoachUserId: string;
-  assignedCoachName: string;
+  /** The Owner or Coach who coaches this client, or null while they wait for a coach (ADR 0026: at most one). */
+  assignedCoachUserId: string | null;
+  assignedCoachName: string | null;
 }
 
 /** An active Owner or Coach of the workspace, as the owner's team page lists them. */
@@ -184,8 +184,15 @@ export interface CoachClientDetails extends ClientIntakeProfile {
   userId: string | null;
   coachNotes: string | null;
   isCoachBlocked: boolean;
-  assignedCoachUserId: string;
+  /** Null while the client waits for a coach; the name is then empty (ADR 0026: at most one). */
+  assignedCoachUserId: string | null;
   assignedCoachName: string;
+  /**
+   * Whether the caller coaches this client (CLI-013, N9d1a). When false the private side (the intake answers, the
+   * health fields, the coach notes) comes back empty and every private route answers 404: the caller is an owner
+   * reading another coach's client, or a client waiting for a coach.
+   */
+  mayCoach: boolean;
   /** Present only on a former client: the record is then read-only (ADR 0027). */
   release: ClientRelease | null;
 }

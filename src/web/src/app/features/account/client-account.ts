@@ -1,4 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   Component,
@@ -103,6 +104,11 @@ export class ClientAccount {
   protected readonly coachLines = signal<readonly string[]>([]);
   /** The coach's name is on its way: their card's place is kept, so the groups below do not move (audit UIQ-5). */
   protected readonly coachLoading = signal(false);
+  /**
+   * A coached client with no coach for now (N9d1b): their profile read and the coach's read answered
+   * 404. The card says they wait, with nothing to write to.
+   */
+  protected readonly waitingForCoach = signal(false);
   protected readonly preferenceError = signal<string | null>(null);
 
   protected readonly displayName = computed(() => this.auth.user()?.displayName ?? '');
@@ -150,6 +156,7 @@ export class ClientAccount {
       this.coachFounding.set(false);
       this.coachLines.set([]);
       this.coachLoading.set(false);
+      this.waitingForCoach.set(false);
     });
     effect(() => {
       this.scope.epoch();
@@ -161,6 +168,7 @@ export class ClientAccount {
         this.selfDirected.set(false);
         this.coachFounding.set(false);
         this.coachLines.set([]);
+        this.waitingForCoach.set(false);
         this.coachLoading.set(tenantId !== null);
         if (tenantId !== null) void this.loadCoach();
       });
@@ -214,8 +222,9 @@ export class ClientAccount {
   }
 
   /**
-   * A coach who cannot be read (a released client has none) leaves the coach line out, never an error.
-   * The client's own profile is read first, so a self-directed trainee's never asks for the coach.
+   * A coach who cannot be read (a 403, a failure) leaves the coach line out, never an error; a 404 after
+   * the profile read means the client waits for a coach (N9d1b), and the card says so. The client's own
+   * profile is read first, so a self-directed trainee's never asks for the coach.
    */
   private async loadCoach(): Promise<void> {
     return this.scope.run('coach', async (owner) => {
@@ -225,7 +234,14 @@ export class ClientAccount {
           if (owner.current) this.selfDirected.set(true);
           return;
         }
-        const coach = await owner.wait(firstValueFrom(this.api.getOwnCoach()));
+        const coach = await owner
+          .wait(firstValueFrom(this.api.getOwnCoach()))
+          .catch((error: unknown) => {
+            if (owner.current && error instanceof HttpErrorResponse && error.status === 404) {
+              this.waitingForCoach.set(true);
+            }
+            throw error;
+          });
         if (owner.current) {
           this.coachName.set(coach.name);
           this.coachFounding.set(coach.foundingCoach === true);

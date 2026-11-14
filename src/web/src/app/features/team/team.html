@@ -16,12 +16,18 @@
   </header>
 
   <ul class="how" role="list" aria-label="How a team works" i18n-aria-label data-how>
-    <li i18n>One coach per client, given from the client’s profile.</li>
+    <!-- The owner's side of a client (N9d1a): the plan, payments and sessions of every client, the
+         private side only for the clients they coach; a leaving coach's clients wait (N9d1b). -->
+    <li i18n>At most one coach per client, given from the client’s profile.</li>
     <li i18n>
-      You see every client and all their data, and a coach only their own. Chats stay between a
-      client and their coach, even from you.
+      You see every client’s plan, payments and sessions, and their training, nutrition, check-ins
+      and progress only when you coach them yourself. A coach sees only their own clients. Chats
+      stay between a client and their coach, even from you.
     </li>
-    <li i18n>A leaving coach’s clients come back to you, and they are told.</li>
+    <li i18n>
+      When a coach leaves, their clients wait for a coach. Clients lists them under Waiting for a
+      coach, so you can give each one a coach, yourself included.
+    </li>
   </ul>
 
   @switch (state()) {
@@ -80,7 +86,7 @@
           <app-empty-state
             class="invite-empty"
             heading="Coach with a team"
-            description="Invite a coach and give them their own clients. They see only the clients you give them, and you see everyone’s."
+            description="Invite a coach and give them their own clients. They see only the clients you give them. You see every client’s plan and payments, and their training only when you coach them."
             i18n-heading
             i18n-description
           >

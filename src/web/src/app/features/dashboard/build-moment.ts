@@ -15,11 +15,13 @@ import { EASE, type Motion, type Stop } from '../../core/motion/motion';
 export const BUILD_MOMENT = 'W12';
 
 /**
- * The parts that rise, in reading order: Needs you, the feed's fold on a phone, This month, the
- * plans ending soon, the plans ended and the feed on a wider screen; or the first client's card.
+ * The parts that rise, in reading order: the owner's clients waiting for a coach while anybody waits
+ * (notes plan N9d2), Needs you, the feed's fold on a phone, This month, the plans ending soon, the
+ * plans ended and the feed on a wider screen; or the first client's card. Six with the waiting list
+ * either way, the cap.
  */
 export const BUILD_PARTS =
-  '.coach-today > .columns > .panel, .coach-today > .columns > .feed-fold, .coach-today > .plans > .panel, .coach-today > .feed, .coach-today > .first-client';
+  '.coach-today > .waiting, .coach-today > .columns > .panel, .coach-today > .columns > .feed-fold, .coach-today > .plans > .panel, .coach-today > .feed, .coach-today > .first-client';
 
 let built = false;
 

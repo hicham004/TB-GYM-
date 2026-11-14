@@ -131,6 +131,75 @@ export function coachOwnMonthReport(): CoachMonthReportView {
   return { ...whole, thisMonth: lea.thisMonth, lastMonth: lea.lastMonth, coaches: null };
 }
 
+/**
+ * The same month with clients who waited for a coach (N9d1b, MonthNumbers v3): a plan sold and a
+ * payment in October and a payment in September counted on the No coach line, taken from Lea's and
+ * Hadi's rows, so the rows plus the No coach line still add up to the same totals. A session never
+ * counts for nobody.
+ */
+export function waitingMonthReport(): CoachMonthReportView {
+  const whole = coachMonthReport();
+  const [karim, lea, omar, hadi] = whole.coaches!;
+  return {
+    ...whole,
+    coaches: [
+      karim,
+      {
+        ...lea,
+        thisMonth: {
+          ...lea.thisMonth,
+          moneyReceived: [
+            { currency: 'LBP', amount: '4500000.00', paymentCount: 1 },
+            { currency: 'USD', amount: '1140.00', paymentCount: 3 },
+          ],
+          plansSold: 1,
+        },
+      },
+      omar,
+      {
+        ...hadi,
+        lastMonth: monthNumbers({
+          moneyReceived: [{ currency: 'EUR', amount: '90.50', paymentCount: 1 }],
+        }),
+      },
+    ],
+    noCoach: {
+      thisMonth: monthNumbers({
+        moneyReceived: [{ currency: 'USD', amount: '300.00', paymentCount: 1 }],
+        plansSold: 1,
+      }),
+      lastMonth: monthNumbers({
+        moneyReceived: [{ currency: 'USD', amount: '280.00', paymentCount: 1 }],
+      }),
+    },
+    monthRuleVersion: 3,
+  };
+}
+
+/** The owner alone, with a paying trainee who waited for a coach: one row, and the No coach line. */
+export function ownerAloneWaitingMonthReport(): CoachMonthReportView {
+  const whole = waitingMonthReport();
+  const noCoach = whole.noCoach!;
+  const karim = whole.coaches![0];
+  return {
+    ...whole,
+    thisMonth: monthNumbers({
+      moneyReceived: [{ currency: 'USD', amount: '1200.00', paymentCount: 4 }],
+      sessionsHeld: 4,
+      plansSold: 2,
+      packsSold: 1,
+      clientsStarted: 1,
+    }),
+    lastMonth: monthNumbers({
+      moneyReceived: [{ currency: 'USD', amount: '980.00', paymentCount: 3 }],
+      sessionsHeld: 3,
+      plansSold: 1,
+    }),
+    coaches: [karim],
+    noCoach,
+  };
+}
+
 /** A coaching space with nothing to count yet. */
 export function emptyMonthReport(): CoachMonthReportView {
   return coachMonthReport({

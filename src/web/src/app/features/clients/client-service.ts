@@ -175,6 +175,8 @@ export class ClientService extends GuardedSheets {
   protected readonly askBusy = signal(false);
   /** The server said the ask was booked or closed meanwhile: the asks are read again once its surface closes. */
   private asksStale = false;
+  /** `?action=coach` asked for the coach dialog; the coach panel opens it and sets this back (N9d2). */
+  protected readonly coachAsked = signal(false);
 
   protected readonly startSheet = viewChild.required<TemplateRef<unknown>>('startSheet');
   protected readonly sessionSheet = viewChild.required<TemplateRef<unknown>>('sessionSheet');
@@ -280,14 +282,17 @@ export class ClientService extends GuardedSheets {
 
   /**
    * Who the owner can say held a session (critique B12). The API refuses another name from a coach, and
-   * a failed read still leaves the client's coach and the owner to choose from.
+   * a failed read still leaves the client's coach and the owner to choose from. A client waiting for a
+   * coach (N9d1b) offers the team, You first, and nothing to an owner on their own.
    */
   protected readonly holders = computed(() => {
     const client = this.context.profile();
     const me = this.auth.user();
     if (!client || !me || !this.context.isOwner()) return [];
     return sessionHolders(
-      { userId: client.assignedCoachUserId, displayName: client.assignedCoachName },
+      client.assignedCoachUserId === null
+        ? null
+        : { userId: client.assignedCoachUserId, displayName: client.assignedCoachName },
       this.members() ?? [{ userId: me.id, displayName: me.displayName }],
       me.id,
     );
@@ -329,13 +334,15 @@ export class ClientService extends GuardedSheets {
 
     // The Overview's and the header's "Renew plan" arrive as `?renew=<plan id>`, Coach Today's "Record
     // payment" for a renewal still unpaid (BEB-7) as `?pay=<plan id>`, and its "Start a plan" for a new
-    // client with none (COACH-9) as `?action=start`: open that sheet once the page has loaded, then take
-    // it out of the address so Back and a reload do not reopen it.
+    // client with none (COACH-9) as `?action=start`, and its and the Overview's "Choose a coach" for a
+    // client waiting for one (N9d2) as `?action=coach`: open that sheet or dialog once the page has
+    // loaded, then take it out of the address so Back and a reload do not reopen it.
     effect(() => {
       const renew = this.query().get('renew');
       const pay = this.query().get('pay');
       const start = this.query().get('action') === 'start';
-      if ((!renew && !pay && !start) || this.state() !== 'ready') return;
+      const coach = this.query().get('action') === 'coach';
+      if ((!renew && !pay && !start && !coach) || this.state() !== 'ready') return;
       // Untracked: picking the plan changes what the page reads, which must not run this again.
       untracked(() => {
         void this.router.navigate([], {
@@ -346,6 +353,8 @@ export class ClientService extends GuardedSheets {
         });
         if (this.context.isFormer()) return;
         if (start) return this.openStart();
+        // The owner's alone; the coach panel opens it once it is drawn, if it is shown at all.
+        if (coach) return this.coachAsked.set(this.context.isOwner());
         const plan = this.plans().find((item) => item.id === (pay ?? renew));
         if (!plan) return;
         this.picked.set(plan.id);
@@ -741,6 +750,7 @@ export class ClientService extends GuardedSheets {
     this.asks.set({ kind: 'none' });
     this.askSubject.set(null);
     this.retryingAsks.set(false);
+    this.coachAsked.set(false);
     this.clearAskWork();
   }
 }

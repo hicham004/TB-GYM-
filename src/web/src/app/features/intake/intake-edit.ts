@@ -140,7 +140,10 @@ export class IntakeEdit {
   readonly today = input.required<IsoDate>();
   readonly firstDay = input<number | null>(null);
   readonly weightUnit = input<BodyweightUnit>('Kilogram');
-  /** The coaching space's name, for who sees the client's own health answers. */
+  /**
+   * The coaching space's name, still passed by the pages. Who sees the client's own health answers no
+   * longer names it: only they and their coach do (N9d1a).
+   */
   readonly spaceName = input('');
   /** Whether it was saved: the sheet closes either way. */
   readonly closed = output<boolean>();
@@ -153,9 +156,7 @@ export class IntakeEdit {
   protected readonly refusal = signal<string | null>(null);
   /** The client editing their own health answers is told who sees them, as on the first run (CLIENT-18). */
   protected readonly privacy = computed(() =>
-    this.step() === 'health' && this.subject().kind === 'self'
-      ? healthPrivacy(this.spaceName())
-      : null,
+    this.step() === 'health' && this.subject().kind === 'self' ? healthPrivacy() : null,
   );
 
   private readonly saved = computed(() =>

@@ -318,7 +318,11 @@
             </header>
             <div class="panel-body settings">
               @if (context.isOwner()) {
-                <app-client-coach [client]="client" (profileChanged)="context.setProfile($event)" />
+                <app-client-coach
+                  [client]="client"
+                  [(openRequested)]="coachAsked"
+                  (profileChanged)="context.setProfile($event)"
+                />
               }
               <div class="setting">
                 <div class="setting-copy">

@@ -150,6 +150,16 @@ describe('noticeTarget', () => {
     }
   });
 
+  it('opens a new coach and a change of who sees a trainee’s training on their Today (N9d1b)', () => {
+    for (const kind of ['CoachAssigned', 'TraineeStaffChanged'] as const) {
+      // The payload names the reader's own profile; a client page is never theirs to open.
+      expect(noticeTarget(notice(kind, at, { kind, clientProfileId: 'c-1' }), false)).toEqual({
+        commands: ['/'],
+      });
+      expect(noticeTarget(notice(kind, at, { kind }), false)).toEqual({ commands: ['/'] });
+    }
+  });
+
   it('opens nothing only for a notice whose own target is missing', () => {
     expect(noticeTarget(notice('r', at, { kind: 'RenewalRequested' }), true)).toBeNull();
     expect(
@@ -176,6 +186,8 @@ describe('noticeIcon', () => {
     expect(noticeIcon('WeeksChanged')).toBe('training');
     expect(noticeIcon('ClientWorkoutNote')).toBe('messages');
     expect(noticeIcon('CoachResigned')).toBe('clients');
+    expect(noticeIcon('CoachAssigned')).toBe('clients');
+    expect(noticeIcon('TraineeStaffChanged')).toBe('clients');
     expect(noticeIcon('EnrollmentEndingSoon')).toBe('products');
     expect(noticeIcon('HousePlanMoneySent')).toBe('products');
   });

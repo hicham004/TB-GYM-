@@ -1715,6 +1715,10 @@ limited to the coach's assigned clients.
   "Next workout tomorrow", the Weights tag in the share tone and Review weights, which opens the client's Training at
   Weights to apply; never Needs attention. The Clients row carries it as a tag, a client's page and the chat's panel
   as a row, and "How these statuses work" gives its line.
+- Notes plan N9d2 (C8; CLI-013, CLI-020, ADR 0026 as N9d1a and N9d1b built them): an owner's Today lists the clients
+  waiting for a coach first, each with Choose a coach (the client's Service & access, `?action=coach`); an item about a
+  client the owner does not coach names who follows up and opens the client's page; a client the owner does not coach
+  shows Overview and Service & access only, with a line on why the rest is their coach's.
 
 **C2. Clients**
 - Job: "How is everyone doing, and who is slipping?"

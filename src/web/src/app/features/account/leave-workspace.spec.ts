@@ -49,6 +49,7 @@ async function render(
 
 /** The dialog, which the CDK draws outside the page. */
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+const squash = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
 
 describe('LeaveWorkspace', () => {
   afterEach(() => {
@@ -67,10 +68,17 @@ describe('LeaveWorkspace', () => {
     const { fixture, host, api, load, navigate } = await render('Coach');
 
     expect(host.textContent).toContain('Leave Cedar Gym');
+    // A leaving coach's clients wait for a coach (N9d1b); the owner never gets them by default.
+    expect(squash(host.textContent)).toContain(
+      'Stop coaching at Cedar Gym. Your clients wait until the owner gives them a new coach.',
+    );
     press(host, 'Leave Cedar Gym');
     await settle(fixture);
     expect(dialog()?.querySelector('h2')?.textContent?.trim()).toBe('Leave Cedar Gym?');
-    expect(dialog()?.textContent).toContain('each client is told their coach has changed');
+    expect(squash(dialog()?.textContent)).toContain(
+      'You lose access right away. Your clients wait for a coach, and so will anyone who accepts a client invitation you sent. The owner is told, so they can give each one a coach. The owner can invite you back later.',
+    );
+    expect(dialog()?.textContent).not.toContain('move to the owner');
     expect(dialog()?.querySelector('textarea')).toBeNull();
     press(dialog()!, 'Leave permanently');
     await settle(fixture);

@@ -61,7 +61,8 @@ const FILTER_LABELS: Record<ClientFilter, string> = {
 /**
  * Clients (C2, critique B4a): how everyone is doing and who is slipping, as a table of columns on a
  * wide screen and a card per client on a phone. One read, `GET /api/clients/overview`, already limited
- * to the clients this person coaches (CLI-013) and carrying each one's status, reasons and plan
+ * to the clients this person may see (CLI-013: a coach their own; the owner everyone, with the private
+ * side of a client they do not coach withheld, N9d1a) and carrying each one's status, reasons and plan
  * (CLI-018); the screen phrases it, filters and searches it, and links every row to the client and
  * every reason to where it is handled. The owner's `/clients/former` shows released clients (ADR 0027).
  */
@@ -129,7 +130,10 @@ export class Clients {
    */
   protected readonly filter = signal<ClientFilter>(initialFilter(this.route));
   protected readonly search = signal('');
-  /** The owner's Coach filter (critique B3a), kept in the address too (`?coach=<user id>`). */
+  /**
+   * The owner's Coach filter (critique B3a), kept in the address too (`?coach=<user id>`, or
+   * `?coach=waiting` for the clients waiting for a coach, N9d1b).
+   */
   protected readonly coach = signal(this.route.snapshot.queryParamMap.get('coach') ?? '');
   // The owner's alone: a coach's list holds only their own clients (CLI-013).
   protected readonly coachChip = computed(() =>

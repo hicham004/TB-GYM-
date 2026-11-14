@@ -1545,6 +1545,8 @@ export function toCoachClient(value: ContractCoachClientDetails): CoachClientDet
     averageDailySteps: toNullableNumber(value.averageDailySteps),
     version: toNumber(value.version),
     release: value.release ?? null,
+    // The server always sends it; a missing value (an older answer or a test double) reads as the old rule.
+    mayCoach: value.mayCoach !== false,
   };
 }
 

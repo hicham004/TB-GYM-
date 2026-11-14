@@ -696,4 +696,15 @@ describe('who the owner can say held a session', () => {
       { value: 'owner', label: 'You' },
     ]);
   });
+
+  /** N9d1b: a client whose coach left has nobody to put first; nobody is left blank. */
+  it('offers the team for a client waiting for a coach, You first, and nothing to an owner alone', () => {
+    expect(sessionHolders(null, [lea, owner, omar], 'owner')).toEqual([
+      { value: 'owner', label: 'You' },
+      { value: 'lea', label: 'Lea Khoury' },
+      { value: 'omar', label: 'Omar Saleh' },
+    ]);
+    expect(sessionHolders(null, [owner], 'owner')).toEqual([]);
+    expect(sessionHolders(null, [], 'owner')).toEqual([]);
+  });
 });

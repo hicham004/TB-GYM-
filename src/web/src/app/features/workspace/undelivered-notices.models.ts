@@ -96,8 +96,9 @@ export function noticeAbout(kind: CommercialNotificationKind): string {
       return $localize`A plan that ended`;
     case 'EnrollmentRenewed':
       return $localize`A plan renewed`;
+    // A coach leaving now leaves their clients waiting (N9d1b); a new coach is its own notice.
     case 'CoachDeparted':
-      return $localize`A change of coach`;
+      return $localize`A client’s coach leaving`;
     case 'ClientLeft':
       return $localize`A client who left`;
     case 'CoachResigned':
@@ -118,6 +119,10 @@ export function noticeAbout(kind: CommercialNotificationKind): string {
       return $localize`An ask for a plan`;
     case 'HousePlanMoneySent':
       return $localize`A trainee saying they paid`;
+    case 'CoachAssigned':
+      return $localize`A new coach for a client`;
+    case 'TraineeStaffChanged':
+      return $localize`A change of who sees a trainee’s training`;
     default:
       return $localize`A notice`;
   }
@@ -140,6 +145,8 @@ export function noticeAudience(kind: CommercialNotificationKind): string | null 
     case 'WeeksShared':
     case 'WeeksChanged':
     case 'CoachWorkoutNote':
+    case 'CoachAssigned':
+    case 'TraineeStaffChanged':
       return $localize`For a client`;
     case 'CoachResigned':
       return $localize`For you`;

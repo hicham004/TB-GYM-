@@ -85,6 +85,11 @@ export class ThisMonth {
   protected readonly rows = computed(() =>
     (this.month()?.coaches ?? []).map((row) => ({ ...row, numbers: this.numbersOf(row) })),
   );
+  /** The No coach line's numbers for the month shown, switching with the rows. */
+  protected readonly noCoach = computed(() => {
+    const line = this.month()?.noCoach;
+    return line ? this.numbersOf(line) : null;
+  });
   protected readonly total = computed(() => {
     const month = this.month();
     return month ? this.numbersOf(month.total) : null;

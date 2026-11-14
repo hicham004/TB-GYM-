@@ -119,6 +119,12 @@ describe('ClientIntake (the coach’s view)', () => {
     expect(textOf(host)).toContain('Rice, chicken, labneh');
   });
 
+  it('offers no Edit to someone who does not coach the client, should it ever be drawn (N9d1a)', async () => {
+    const { host } = await render({ ...coachView(), mayCoach: false });
+
+    expect(host.querySelectorAll('[data-edit]')).toHaveLength(0);
+  });
+
   it('corrects one group in a sheet and keeps the page in step with what the server returned', async () => {
     const { fixture, host, api, context } = await render();
 

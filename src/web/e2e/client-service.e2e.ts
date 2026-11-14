@@ -31,8 +31,9 @@ import {
 
 /**
  * A client's Service & access (R3.4b) in a real browser: Karim, owner of Atlas Performance, on Thu 1
- * Oct 2026, looking after Maya Fakhoury's plans. The page clock is pinned and every read the page
- * makes is answered, so the console guard stays meaningful.
+ * Oct 2026, looking after Maya Fakhoury's plans. Lea Khoury coaches Maya, so Karim reads her record
+ * as the server sends it to him: the business side, the private side withheld (N9d1a). The page
+ * clock is pinned and every read the page makes is answered, so the console guard stays meaningful.
  */
 const owner = { ...SIGNED_IN_USER, id: OWNER_ID, displayName: 'Karim Haddad' };
 const ID = MAYA.clientProfileId;
@@ -45,15 +46,15 @@ const clientDetails = {
   email: 'maya.fakhoury@mail.example',
   phoneNumber: null,
   birthDate: null,
-  heightCentimeters: 166,
-  heightEnteredValue: 166,
-  heightEnteredUnit: 'Centimetre',
+  heightCentimeters: null,
+  heightEnteredValue: null,
+  heightEnteredUnit: null,
   workType: null,
   averageDailySteps: null,
   trainingBackground: null,
   foodPreferences: null,
   foodAversions: null,
-  goals: 'Lose 6 kg and feel strong for my wedding in December.',
+  goals: null,
   allergies: null,
   medications: null,
   previousInjuries: null,
@@ -64,8 +65,12 @@ const clientDetails = {
   version: 3,
   assignedCoachUserId: LEA_ID,
   assignedCoachName: 'Lea Khoury',
+  mayCoach: false,
   release: null,
 };
+
+/** Maya waiting for a coach (N9d1b): Lea left the team, so nobody is named and nobody coaches her. */
+const WAITING = { assignedCoachUserId: null, assignedCoachName: '', mayCoach: false };
 
 const workspace = {
   id: OWNER_MEMBERSHIP.tenantId,
@@ -126,6 +131,8 @@ interface OpenOptions {
   asked?: boolean;
   extra?: Handlers;
   requests?: { method: string; path: string; body: unknown }[];
+  /** The address's query, as Today's and the Overview's links add it: `?action=coach`. */
+  query?: string;
 }
 
 async function openService(page: Page, width: number, height: number, options: OpenOptions = {}) {
@@ -173,7 +180,7 @@ async function openService(page: Page, width: number, height: number, options: O
     });
   }
   await mockSession(page, { memberships: [OWNER_MEMBERSHIP], user: owner, extra: handlers });
-  await page.goto(`/clients/${ID}/service`);
+  await page.goto(`/clients/${ID}/service${options.query ?? ''}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Maya Fakhoury' })).toBeVisible();
   await expect(page.locator('.service .panel').first()).toBeVisible();
   await waitForFonts(page);
@@ -234,6 +241,118 @@ for (const [width, height] of [
     await page.screenshot({ path: `test-results/r34b-service-${width}.png`, fullPage: true });
   });
 }
+
+/** Maya's coach history: Lea took her on, then left the team, and she waits for a coach (N9d1b). */
+const HISTORY = [
+  {
+    id: 'h-1',
+    sequence: 1,
+    coachUserId: LEA_ID,
+    coachName: 'Lea Khoury',
+    previousCoachUserId: null,
+    previousCoachName: null,
+    reason: 'Invitation',
+    note: null,
+    assignedAtUtc: '2026-07-14T09:00:00Z',
+    assignedByUserId: null,
+  },
+  {
+    id: 'h-2',
+    sequence: 2,
+    coachUserId: null,
+    coachName: null,
+    previousCoachUserId: LEA_ID,
+    previousCoachName: 'Lea Khoury',
+    reason: 'CoachResigned',
+    note: null,
+    assignedAtUtc: '2026-09-28T09:00:00Z',
+    assignedByUserId: LEA_ID,
+  },
+];
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`Choose a coach from Today opens on arrival at ${width}px, and the owner takes Maya`, async ({
+    page,
+  }) => {
+    const requests: NonNullable<OpenOptions['requests']> = [];
+    await openService(page, width, height, {
+      profile: WAITING,
+      query: '?action=coach',
+      requests,
+      extra: {
+        [`GET /api/clients/${ID}/coach-assignments`]: (route) => json(route, 200, HISTORY),
+        [`POST /api/clients/${ID}/coach`]: (route) =>
+          json(route, 200, {
+            ...clientDetails,
+            version: 4,
+            assignedCoachUserId: OWNER_ID,
+            assignedCoachName: 'Karim Haddad',
+            mayCoach: true,
+          }),
+      },
+    });
+
+    const dialog = page.getByRole('dialog', { name: 'Choose a coach for Maya' });
+    await expect(dialog).toBeVisible();
+    // The arrival is not kept: Back and a reload do not open it again.
+    await expect(page).toHaveURL(new RegExp(`/clients/${ID}/service$`));
+    // Nobody is chosen for the owner (C8): they pick, themselves included.
+    await expect(kitSelect(dialog, 'New coach').locator('button.trigger')).toContainText('Choose…');
+    await expect(dialog.locator('#reassign-dialog-change')).toHaveText(
+      'The coach you choose sees Maya and all their history right away. Maya is told of the change.',
+    );
+    await dialog.getByText('Coach history (2)').click();
+    await expect(dialog.locator('.history-rows li').first()).toContainText('Waiting for a coach');
+    await expect(dialog.locator('.history-rows li').first()).toContainText(
+      'Lea Khoury left the team',
+    );
+    await chooseOption(dialog, 'New coach', 'You');
+    await expect(dialog.locator('#reassign-dialog-change')).toHaveText(
+      'You become Maya’s coach and see their training, nutrition, check-ins and progress right away. Maya is told of the change.',
+    );
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n9d2-choose-coach-${width}.png`, fullPage: true });
+
+    await dialog.getByRole('button', { name: 'Choose', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    expect(requests).toEqual([
+      {
+        method: 'POST',
+        path: `/api/clients/${ID}/coach`,
+        body: { coachUserId: OWNER_ID, note: null, version: 3 },
+      },
+    ]);
+    const panel = page.locator('app-client-coach');
+    await expect(panel.locator('.coach-notice')).toHaveText('You now coach Maya.');
+    await expect(panel.locator('.coach-name')).toHaveText('Karim Haddad');
+    await expect(panel.getByRole('button', { name: 'Reassign coach' })).toBeFocused();
+  });
+}
+
+test('the Reassign dialog says what moving Lea’s client to the owner does', async ({ page }) => {
+  await openService(page, 1440, 900, {
+    extra: {
+      [`GET /api/clients/${ID}/coach-assignments`]: (route) => json(route, 200, [HISTORY[0]]),
+    },
+  });
+
+  const panel = page.locator('app-client-coach');
+  await expect(panel.locator('.coach-name')).toHaveText('Lea Khoury');
+  await panel.getByRole('button', { name: 'Reassign coach' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Reassign Maya' });
+  // The only other member is the owner, as You, chosen already.
+  await expect(kitSelect(dialog, 'New coach').locator('button.trigger')).toContainText('You');
+  await expect(dialog.locator('#reassign-dialog-change')).toHaveText(
+    'You become Maya’s coach and see their training, nutrition, check-ins and progress right away. Lea Khoury loses access, and their chat with Maya stays readable to Maya only. Maya is told of the change.',
+  );
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expectNoHorizontalOverflow(page);
+  await axe(page);
+});
 
 test('a plan that ran out says the client asked to renew, and renewing is the one button', async ({
   page,

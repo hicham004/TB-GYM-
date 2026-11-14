@@ -10,7 +10,7 @@ import {
   plannedBlock,
   runningBlock,
 } from '../src/testing/client-program-fixtures';
-import { COACH_NOW, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
+import { COACH_NOW, LEA_ID, MAYA, OWNER_ID } from '../src/testing/coach-today-fixtures';
 import {
   library,
   maxPage,
@@ -53,8 +53,9 @@ import { docsPicture } from './docs-pictures';
 
 /**
  * A client's Training (R3.4a) in a real browser: Karim, owner of Atlas Performance, on Thu 1 Oct
- * 2026 at 15:00 in Beirut, reading Maya Fakhoury's program. The page clock is pinned. Every read the
- * page makes is answered, so the console guard stays meaningful.
+ * 2026 at 15:00 in Beirut, reading Maya Fakhoury's program as Maya's coach: only a client's own coach
+ * reads their training (N9d1a). The page clock is pinned. Every read the page makes is answered, so
+ * the console guard stays meaningful.
  */
 const owner = { ...SIGNED_IN_USER, id: OWNER_ID, displayName: 'Karim Haddad' };
 const ID = MAYA.clientProfileId;
@@ -87,8 +88,9 @@ const clientDetails = {
   onboardingCompletedAtUtc: '2026-07-14T09:00:00Z',
   isCoachBlocked: false,
   version: 3,
-  assignedCoachUserId: MAYA.assignedCoachUserId,
-  assignedCoachName: 'Lea Khoury',
+  assignedCoachUserId: OWNER_ID,
+  assignedCoachName: 'Karim Haddad',
+  mayCoach: true,
   release: null,
 };
 
@@ -2706,3 +2708,43 @@ for (const mode of ['light', 'dark'] as const) {
     await docsPicture(page, `r53d2-history-${mode === 'dark' ? 'dark-' : ''}390.png`);
   });
 }
+
+test('the owner on Lea’s client is told why Training is closed, and nothing of it is read (N9d1a)', async ({
+  page,
+}) => {
+  const reads: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/')) reads.push(path);
+  });
+  await openTraining(page, 1440, 900, {
+    extra: {
+      // The server withholds the private side from the owner while Lea coaches Maya.
+      [`GET /api/clients/${ID}`]: (route) =>
+        json(route, 200, {
+          ...clientDetails,
+          goals: null,
+          assignedCoachUserId: LEA_ID,
+          assignedCoachName: 'Lea Khoury',
+          mayCoach: false,
+        }),
+    },
+  });
+
+  await expect(page).toHaveTitle('Client training | TB Gym');
+  const why = page.locator('.section-content section.why');
+  await expect(why.getByRole('heading', { level: 2 })).toHaveText('Lea Khoury coaches Maya');
+  await expect(why.getByRole('link', { name: 'Service & access' })).toHaveAttribute(
+    'href',
+    `/clients/${ID}/service`,
+  );
+  await expect(page.locator('app-client-program')).toHaveCount(0);
+  await expect(page.locator('app-section-nav a')).toHaveText(['Overview', 'Service & access']);
+  // Neither the program nor the maxes, nor Assign program behind Actions.
+  expect(reads.filter((path) => /^\/api\/(training|strength)\//.test(path))).toEqual([]);
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await expect(page.locator('app-client-actions a.item .item-title')).toHaveText([
+    'Plan and payments',
+  ]);
+  await axe(page);
+});

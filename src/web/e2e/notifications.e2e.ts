@@ -113,7 +113,7 @@ function coachInbox(): Notice[] {
       'c5',
       'CoachResigned',
       'A coach left your team',
-      'Their clients and client invitations are yours now. You can reassign them from Clients.',
+      'Their clients now wait for a coach, as will anyone who accepts one of their invitations. Give each one a coach from Clients, yourself included.',
       at(12, 10, 0),
       true,
     ),
@@ -139,6 +139,16 @@ function clientInbox(): Notice[] {
       at(0, 7, 55),
       false,
       { sessionId: 'session-3', workoutExecutionId: 'workout-3' },
+    ),
+    // A coach given after waiting for one (N9d1b): it opens their Today, never a client page.
+    notice(
+      'm6',
+      'CoachAssigned',
+      'You have a new coach',
+      'Open Today to see who coaches you now. Your plan and history stay as they are.',
+      at(0, 6, 30),
+      true,
+      { clientProfileId: '00000000-0000-4000-8000-0000000000c1' },
     ),
     notice(
       'm3',
@@ -306,6 +316,10 @@ for (const width of [390, 1440]) {
       await expect(
         page.getByRole('link', { name: /Your coach left a note on Lower A/ }),
       ).toHaveAttribute('href', '/training/program?workout=workout-3');
+      await expect(page.getByRole('link', { name: /You have a new coach/ })).toHaveAttribute(
+        'href',
+        '/',
+      );
       // A plan notice opens My plan (critique B14), once its folded day is opened (audit UIQ-21).
       const ended = page.getByRole('link', { name: /Your plan ends soon/ });
       await expect(ended).toBeHidden();

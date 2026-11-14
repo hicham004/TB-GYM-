@@ -490,9 +490,9 @@ describe('CheckInFlow', () => {
 
     press(host, 'Edit: progress photos');
     await settle();
-    // Who sees them, the owner included (CLI-013, audit LOST-3).
+    // Who sees them: their coach alone (N9d1a), the owner only while coaching them.
     expect(query(host, '.step-help').textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      'They go straight to your progress photos. Only you, your coach and the owner of Atlas Performance can see them.',
+      'They go straight to your progress photos. Only you and your coach can see them.',
     );
     const [front, side, back] = Array.from(host.querySelectorAll<HTMLInputElement>('.pose-input'));
     expect(front.disabled).toBe(true);

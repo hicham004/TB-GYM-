@@ -291,6 +291,8 @@ async function openToday(
     ending?: boolean;
     /** What `GET /api/client-plan/me` answers, for a client with sessions in their plan. */
     plans?: object[];
+    /** No coach for now (N9d1b): the coach's read answers 404 after the profile's. */
+    waitingForCoach?: boolean;
   } = {},
 ) {
   const state = options.ended
@@ -314,7 +316,9 @@ async function openToday(
       // The client's own profile comes first: a coach's client is not self-directed (notes plan N9a2).
       'GET /api/client-profile/me': (route: Route) => json(route, 200, finishedProfile()),
       'GET /api/client-profile/me/coach': (route: Route) =>
-        json(route, 200, { name: 'Hicham Haddad' }),
+        options.waitingForCoach
+          ? json(route, 404, { title: 'Not Found' })
+          : json(route, 200, { name: 'Hicham Haddad' }),
       'GET /api/nutrition/me/day': (route: Route) => json(route, 200, nutritionDay),
       'GET /api/checkins/me/assignments': (route: Route) => json(route, 200, checkIns),
       'GET /api/messaging/conversations': (route: Route) => json(route, 200, conversations),
@@ -775,6 +779,66 @@ test('a coach’s client with nothing assigned still reads that their coach will
   await expect(page.locator('.today-coach .tb-visually-hidden')).toHaveText('Coached by');
   // A coach's client is never offered a workout of their own (notes plan N9b3).
   await expect(page.locator('[data-start-own]')).toHaveCount(0);
+});
+
+// Notes plan N9d1b: a coached client whose coach left waits for a new one. The coach's read answers 404,
+// Today says so where the coach's chip goes, and no link leads to a chat nobody reads.
+test.describe('a client waiting for a coach', () => {
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [/status of 404 .*\/api\/client-profile\/me\/coach/],
+    },
+  });
+
+  for (const [width, height] of [
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    test(`at ${width}px Today says Waiting for a coach where the coach goes, and offers no chat`, async ({
+      page,
+    }) => {
+      await openToday(page, { state: 'nothing assigned', width, height, waitingForCoach: true });
+
+      const chip = page.locator('.today-coach[data-waiting-coach]');
+      await expect(chip).toBeVisible();
+      await expect(chip).toHaveText('Waiting for a coach');
+      await expect(page.locator('.today-coach')).toHaveCount(1);
+      await expect(chip.locator('app-avatar')).toHaveCount(0);
+      await expect(page.locator('a.today-coach, .today-coach a')).toHaveCount(0);
+      // The heading and the bell stay where they were: nothing in the header spills sideways.
+      const header = await page.locator('.today-header').boundingBox();
+      const box = await chip.boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(header!.x + header!.width + 1);
+      await expect(
+        page.getByText(
+          'Your coaching space will give you a new coach, who will put your program here.',
+        ),
+      ).toBeVisible();
+      await expect(page.getByText('Your coach will put your program here.')).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Message your coach' })).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9d2-today-waiting-${width}.png`),
+        fullPage: true,
+      });
+    });
+  }
+
+  test('closed training offers no Contact your coach while waiting', async ({ page }) => {
+    await openToday(page, { state: 'access closed', waitingForCoach: true });
+
+    await expect(page.locator('.today-coach[data-waiting-coach]')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Contact your coach' })).toHaveCount(0);
+  });
+
+  test('200% text keeps the chip inside the page', async ({ page }) => {
+    await openToday(page, { state: 'nothing assigned', waitingForCoach: true });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    await expect(page.locator('.today-coach[data-waiting-coach]')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
 });
 
 // Notes plan N9b3, TRN-033: a trainee of TB Gym's own space starts a workout of their own from Today,

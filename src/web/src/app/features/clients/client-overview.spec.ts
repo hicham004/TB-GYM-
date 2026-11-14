@@ -11,6 +11,7 @@ import type {
   FeatureAccessDecision,
   WorkspaceDetails,
 } from '../../core/api/api.models';
+import type { CoachAttentionItemView, CoachClientRef } from '../../core/api/generated';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import {
@@ -622,8 +623,10 @@ describe('ClientOverview', () => {
     expect(said(host)).toContain('Followed her coach');
     expect(said(host)).toContain('You can invite them back as a new client.');
     expect(said(host)).not.toContain('This week');
-    // Their notes are kept, read-only.
+    // Their notes are kept, read-only, and still read only by the owner who coached them.
     expect(said(host)).toContain('Wedding in mid-December.');
+    expect(said(host.querySelector('section.notes')!)).toContain('Coach notes Only you see these.');
+    expect(said(host)).not.toContain('as Maya’s coach');
     expect(
       Array.from(host.querySelectorAll('button')).map((item) => item.textContent?.trim()),
     ).not.toContain('Edit notes');
@@ -653,6 +656,217 @@ describe('ClientOverview', () => {
 
     expect(said(host)).toContain('Left on Mon 21 Sep 2026.');
     expect(said(host)).not.toContain('Coaching ended on');
+  });
+
+  it('tells the client’s coach that only they see the notes', async () => {
+    const { host } = await render();
+
+    expect(said(host.querySelector('section.notes')!)).toContain(
+      'Coach notes Only you see these, as Maya’s coach.',
+    );
+    expect(said(host)).not.toContain('Private to your team');
+  });
+
+  describe('for an owner who does not coach the client (N9d1a)', () => {
+    /** Lea's client, read by the owner: the server withholds the private side and its notes. */
+    const LEAS = {
+      ...PROFILE,
+      coachNotes: null,
+      assignedCoachUserId: MAYA.assignedCoachUserId,
+      assignedCoachName: 'Lea Khoury',
+      mayCoach: false,
+    } as CoachClientDetails;
+    const LEAS_REF = { ...MAYA, mayCoach: false };
+    const WAITING = {
+      ...LEAS,
+      assignedCoachUserId: null,
+      assignedCoachName: '',
+    } as CoachClientDetails;
+    const WAITING_REF = {
+      ...MAYA,
+      assignedCoachUserId: null,
+      assignedCoachName: null,
+      mayCoach: false,
+    };
+    const PRIVATE_READS = [
+      'getClientProgressDashboard',
+      'getClientTrainingPersonalRecords',
+      'listClientMesocycles',
+      'listClientCheckInAssignments',
+    ] as const;
+
+    /** The overview as the server answers it then: no last activity or workout, and the week kept. */
+    function businessOverview(client: CoachClientRef, attention: CoachAttentionItemView[] = []) {
+      return profileOverview({
+        client,
+        lastActivityKind: null,
+        lastActivityAtUtc: null,
+        lastWorkout: null,
+        attention,
+      });
+    }
+
+    it('says why first, reads the business side alone, and shows only what needs doing and the week', async () => {
+      const { host, api } = await render({
+        profile: LEAS,
+        api: { getClientOverview: vi.fn(() => of(businessOverview(LEAS_REF))) },
+      });
+
+      const first = host.querySelector('.overview > section');
+      expect(first?.classList).toContain('why');
+      expect(said(first as HTMLElement)).toBe(
+        'Lea Khoury coaches Maya As the owner you see Maya’s plan, payments and sessions. Their training, nutrition, check-ins and progress open only to their coach. Service & access',
+      );
+      const service = link(first!, 'Service & access');
+      expect(service.getAttribute('href')).toBe(`/clients/${MAYA.clientProfileId}/service`);
+      expect(service.classList.contains('tb-button--outlined')).toBe(true);
+
+      expect(api.getClientOverview).toHaveBeenCalledTimes(1);
+      for (const read of PRIVATE_READS) expect(api[read]).not.toHaveBeenCalled();
+
+      const text = said(host);
+      expect(text).toContain('2 of 5 workouts done');
+      expect(text).toContain('Nothing needs you right now.');
+      // No program line, no last activity, no food log, and none of the private cards.
+      expect(text).not.toContain('Lean & Strong');
+      expect(text).not.toContain('Last activity');
+      expect(text).not.toContain('No activity yet');
+      expect(text).not.toContain('Nutrition');
+      for (const card of ['weight', 'records', 'checkin', 'notes']) {
+        expect(host.querySelector(`section.${card}`)).toBeNull();
+      }
+      expect(host.querySelector('.rail')).toBeNull();
+    });
+
+    it('keeps only the needs and the week in its shape while the overview is read', async () => {
+      const overview = new Subject<ReturnType<typeof businessOverview>>();
+      const { fixture, host } = await render({
+        profile: LEAS,
+        api: { getClientOverview: vi.fn(() => overview) },
+      });
+
+      expect(host.querySelector('.overview > [role="status"]')?.textContent).toBe('Loading…');
+      expect(host.querySelector('section.why')).not.toBeNull();
+      expect(host.querySelectorAll('section.needs, section.week')).toHaveLength(2);
+      for (const card of ['weight', 'records', 'checkin', 'notes']) {
+        expect(host.querySelector(`section.${card}`)).toBeNull();
+      }
+
+      // Drawn as soon as its one read answers, with nothing else to wait for.
+      overview.next(businessOverview(LEAS_REF));
+      overview.complete();
+      await settle(fixture);
+      expect(host.querySelector('#needs-heading')).not.toBeNull();
+    });
+
+    it('says who acts on a private item, never what was withheld, and links nowhere private', async () => {
+      const { host } = await render({
+        profile: LEAS,
+        api: {
+          getClientOverview: vi.fn(() =>
+            of(
+              businessOverview(LEAS_REF, [
+                attentionItem('CheckInToReview', LEAS_REF, {
+                  count: 1,
+                  since: '2026-10-01T09:00:00Z',
+                }),
+                attentionItem('MissedSessions', LEAS_REF, { count: 3 }),
+                attentionItem('CheckInOverdue', LEAS_REF, { count: 1, date: '2026-09-28' }),
+                attentionItem('PlanEndingSoon', LEAS_REF, {
+                  date: '2026-10-06',
+                  subjectId: 'e-1',
+                }),
+              ]),
+            ),
+          ),
+        },
+      });
+
+      const needs = host.querySelector<HTMLElement>('.needs')!;
+      expect(Array.from(needs.querySelectorAll('li.need')).map((row) => said(row))).toEqual([
+        'Check-in ready to review Lea Khoury reviews it. Check-in',
+        'Missed 3 workouts in a row Lea Khoury follows up. Missed',
+        'Check-in overdue Lea Khoury follows up. Overdue',
+        'Plan ends in 5 days Last day Tue 6 Oct Ending soon Renew plan',
+      ]);
+      expect(said(needs)).not.toContain('No workout logged yet');
+      const hrefs = Array.from(needs.querySelectorAll('a')).map((a) => a.getAttribute('href'));
+      expect(hrefs).toEqual([`/clients/${MAYA.clientProfileId}/service?renew=e-1`]);
+      // The one filled action is the first the owner can take.
+      expect(link(needs, 'Renew plan').classList.contains('tb-button--filled')).toBe(true);
+    });
+
+    it('tells the owner a waiting client needs a coach, with that the one filled action', async () => {
+      const { host } = await render({
+        profile: WAITING,
+        api: {
+          getClientOverview: vi.fn(() =>
+            of(
+              businessOverview(WAITING_REF, [
+                attentionItem('CheckInOverdue', WAITING_REF, { count: 2, date: '2026-09-28' }),
+                attentionItem('PlanEndingSoon', WAITING_REF, {
+                  date: '2026-10-06',
+                  subjectId: 'e-1',
+                }),
+              ]),
+            ),
+          ),
+        },
+      });
+
+      const first = host.querySelector<HTMLElement>('.overview > section.why')!;
+      expect(said(first)).toBe(
+        'Maya is waiting for a coach Nobody sees Maya’s training, nutrition, check-ins and progress until you give them a coach, yourself included. Their plan keeps running and they can still log. Choose a coach',
+      );
+      const choose = link(first, 'Choose a coach');
+      expect(choose.getAttribute('href')).toBe(
+        `/clients/${MAYA.clientProfileId}/service?action=coach`,
+      );
+      expect(host.querySelectorAll('.tb-button--filled')).toHaveLength(1);
+      expect(choose.classList.contains('tb-button--filled')).toBe(true);
+      expect(said(host.querySelector('li.need[data-kind="CheckInOverdue"]')!)).toBe(
+        '2 check-ins overdue Their new coach follows up once you choose one. Overdue',
+      );
+      expect(link(host, 'Renew plan').classList.contains('tb-button--outlined')).toBe(true);
+    });
+
+    it('says a block is lifted from Service & access, with no promise about the private side', async () => {
+      const { host, api } = await render({
+        profile: LEAS,
+        plans: plans({ isRelationshipBlocked: true }),
+      });
+
+      expect(said(host)).toContain('Lea Khoury coaches Maya');
+      expect(said(host)).toContain('Maya’s access is blocked until you unblock them.');
+      expect(said(host)).not.toContain('stay closed to you until you unblock them');
+      expect(host.querySelector('section.notes')).toBeNull();
+      for (const read of PRIVATE_READS) expect(api[read]).not.toHaveBeenCalled();
+    });
+
+    it('says in a former client’s own panel why their private side stays closed', async () => {
+      const { host } = await render({
+        profile: {
+          ...LEAS,
+          release: {
+            releasedAtUtc: '2026-09-20T10:00:00Z',
+            reason: 'Followed her coach',
+            releasedByName: 'Karim Haddad',
+            departureKind: 'ReleasedByOwner',
+          },
+        } as CoachClientDetails,
+      });
+
+      // One panel, not a second "Former client" above it.
+      expect(Array.from(host.querySelectorAll('h2')).map((h2) => h2.textContent?.trim())).toEqual([
+        'Former client',
+      ]);
+      expect(said(host)).toContain('Coaching ended on Sun 20 Sep 2026 by Karim Haddad.');
+      expect(said(host)).toContain(
+        'You keep Maya’s plan and payments. Their training, check-ins and progress stay closed: you did not coach them when coaching ended.',
+      );
+      expect(said(host)).not.toContain('Training, nutrition and detailed progress records');
+      expect(host.querySelector('section.notes')).toBeNull();
+    });
   });
 
   it('says the day coaching ended on the workspace’s calendar, not the device’s (audit WEB-17)', async () => {

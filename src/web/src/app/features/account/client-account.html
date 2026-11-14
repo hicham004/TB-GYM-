@@ -44,6 +44,17 @@
           />
         </div>
       }
+    } @else if (waitingForCoach()) {
+      <!-- Their coach left and nobody has been given yet (N9d1b): no face and nothing to write to. -->
+      <div class="coach coach--none" data-waiting-coach>
+        <span class="coach-text">
+          <span class="coach-label" i18n>Your coach</span><span class="tb-visually-hidden">, </span>
+          <strong i18n>Waiting for a new coach</strong><span class="tb-visually-hidden">. </span>
+          <small class="coach-line" i18n
+            >Your coaching space will tell you when you have one.</small
+          >
+        </span>
+      </div>
     } @else if (coachLoading()) {
       <!-- The coach's card while their name is read, so the groups below do not move. -->
       <div class="coach coach--waiting" aria-hidden="true">

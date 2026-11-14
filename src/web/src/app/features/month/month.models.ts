@@ -67,8 +67,16 @@ export interface MonthPage {
   /** One line per currency either month held, in currency order. */
   money: MonthMoney[];
   counts: MonthCount[];
-  /** Each coach's row, the owner's alone and only with someone to tell apart. */
+  /**
+   * Each coach's row, the owner's alone and only with someone to tell apart: another coach, or the
+   * No coach line.
+   */
   coaches: CoachRow[] | null;
+  /**
+   * What counted while a client waited for a coach (N9d1b, MonthNumbers v3), the owner's alone; null
+   * when nothing did in either month. The rows plus this line add up to the Total.
+   */
+  noCoach: { thisMonth: RowNumbers; lastMonth: RowNumbers } | null;
   /** The owner's Total row, the same numbers as the top of the page. */
   total: { thisMonth: RowNumbers; lastMonth: RowNumbers };
   /** Nothing to count in either month. */
@@ -85,6 +93,14 @@ export function monthPage(view: CoachMonthReportView, locale: string): MonthPage
     value: whole(value(now), locale),
     last: $localize`${lastMonth}:month:: ${whole(value(before), locale)}:count:`,
   });
+  // Only beside the owner's rows: a coach's own report never has one.
+  const noCoach =
+    view.coaches !== null && view.noCoach
+      ? {
+          thisMonth: rowNumbers(view.noCoach.thisMonth, locale),
+          lastMonth: rowNumbers(view.noCoach.lastMonth, locale),
+        }
+      : null;
   return {
     soFar: $localize`${formatDate(view.thisMonthFrom, 'MMMM', locale)}:month: so far`,
     lastMonth,
@@ -98,9 +114,10 @@ export function monthPage(view: CoachMonthReportView, locale: string): MonthPage
       count('ended', $localize`Clients ended`, (month) => month.clientsEnded),
     ],
     coaches:
-      view.coaches !== null && view.coaches.length > 1
+      view.coaches !== null && (view.coaches.length > 1 || noCoach !== null)
         ? view.coaches.map((row) => coachRow(row, locale))
         : null,
+    noCoach,
     total: { thisMonth: rowNumbers(now, locale), lastMonth: rowNumbers(before, locale) },
     empty: isEmpty(now) && isEmpty(before),
   };

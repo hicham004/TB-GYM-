@@ -4,6 +4,8 @@ import {
   coachOwnMonthReport,
   emptyMonthReport,
   monthNumbers,
+  ownerAloneWaitingMonthReport,
+  waitingMonthReport,
 } from '../../../testing/month-fixtures';
 import { monthPage } from './month.models';
 
@@ -73,8 +75,57 @@ describe('monthPage', () => {
 
   it('gives a coach no rows, and an owner alone none either', () => {
     expect(page(coachOwnMonthReport()).coaches).toBeNull();
+    expect(page(coachOwnMonthReport()).noCoach).toBeNull();
     const alone = coachMonthReport();
     expect(page({ ...alone, coaches: alone.coaches!.slice(0, 1) }).coaches).toBeNull();
+    expect(page({ ...alone, coaches: alone.coaches!.slice(0, 1) }).noCoach).toBeNull();
+  });
+
+  it('gives the owner a No coach line for what counted while clients waited (N9d1b)', () => {
+    const month = page(waitingMonthReport());
+
+    expect(month.noCoach).toEqual({
+      thisMonth: {
+        money: ['USD 300'],
+        sessions: '0',
+        plans: '1',
+        packs: '0',
+        started: '0',
+        ended: '0',
+      },
+      lastMonth: {
+        money: ['USD 280'],
+        sessions: '0',
+        plans: '0',
+        packs: '0',
+        started: '0',
+        ended: '0',
+      },
+    });
+    // The line stands apart from the coaches' rows: nobody is its coach.
+    expect(month.coaches!.map((row) => row.name)).toEqual([
+      'You',
+      'Lea Khoury',
+      'Omar Saleh',
+      'Hadi Nasr',
+    ]);
+  });
+
+  it('shows an owner alone their row beside the No coach line, so the two add up to the total', () => {
+    const month = page(ownerAloneWaitingMonthReport());
+
+    expect(month.coaches!.map((row) => row.name)).toEqual(['You']);
+    expect(month.noCoach!.thisMonth.money).toEqual(['USD 300']);
+    expect(month.total.thisMonth.money).toEqual(['USD 1,200']);
+    expect(month.coaches![0].thisMonth.money).toEqual(['USD 900']);
+  });
+
+  it('leaves a No coach line out of a coach’s own page, even if one were sent', () => {
+    const own = coachOwnMonthReport();
+    const month = page({ ...own, noCoach: waitingMonthReport().noCoach });
+
+    expect(month.coaches).toBeNull();
+    expect(month.noCoach).toBeNull();
   });
 
   it('keeps the total the server sent, the same as the top of the page', () => {

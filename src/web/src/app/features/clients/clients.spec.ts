@@ -10,8 +10,16 @@ import type { ClientOverviewView } from '../../core/api/generated';
 import { AuthStore } from '../../core/auth/auth.store';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { WorkspaceCalendar } from '../../core/tenancy/workspace-calendar';
-import { COACH_NOW, LEA_ID, OWNER_ID } from '../../../testing/coach-today-fixtures';
-import { clientListView, KARL, overviewRow, TALA } from '../../../testing/client-list-fixtures';
+import { attentionItem, COACH_NOW, LEA_ID, OWNER_ID } from '../../../testing/coach-today-fixtures';
+import {
+  clientListView,
+  KARL,
+  LEAS_MAYA,
+  overviewRow,
+  TALA,
+  waitingClient,
+} from '../../../testing/client-list-fixtures';
+import { attentionTarget } from '../dashboard/coach-today.models';
 import { click, fill, menuChoices, press, query, settle, tick } from '../../../testing/dom';
 import { fakeMotion, provideFakeMotion, type FakeMotion } from '../../../testing/motion-fake';
 import { ClientListApi } from './client-list-api';
@@ -119,36 +127,66 @@ describe('Clients', () => {
     const { host } = await render();
 
     expect(names(host)).toHaveLength(12);
-    const maya = row(host, 'Maya Fakhoury');
-    expect(squash(maya.querySelector('app-avatar')?.textContent)).toBe('MF');
-    expect(squash(maya.querySelector('.goal')?.textContent)).toBe(
-      'Age 29 · Lose 6 kg and feel strong for my wedding in December.',
+    const hiba = row(host, 'Hiba Nasser');
+    expect(squash(hiba.querySelector('app-avatar')?.textContent)).toBe('HN');
+    expect(squash(hiba.querySelector('.goal')?.textContent)).toBe('Age 37 · Bench 120 kg.');
+    // The plan's own status, then the last 7 days with its words for screen readers.
+    expect(squash(hiba.querySelector('app-status-pill')?.textContent)).toBe('On track');
+    expect(hiba.querySelectorAll('.strip app-day-mark')).toHaveLength(7);
+    expect(squash(hiba.querySelector('.week')?.textContent)).toContain(
+      '3 of 3 workouts done in the last 7 days',
     );
-    // The reason and the plan's own status, then the last 7 days with its words for screen readers.
+    expect(squash(hiba.querySelector('.plan')?.textContent)).toBe(
+      'Plan Online coaching Training, Nutrition, Check-ins, Messaging 16 weeks · USD 440 Ends 15 Jan 2027',
+    );
+    expect(squash(hiba.querySelector('.checkin')?.textContent)).toBe(
+      'Last check-in Sent 4 days ago',
+    );
+    expect(squash(hiba.querySelector('.activity')?.textContent)).toBe(
+      'Last activity Trained Upper B · 18 hours ago',
+    );
+    expect(hiba.querySelector('app-icon.chevron')).not.toBeNull();
+
+    // A reason goes before the plan's own status. The name's link covers the row; each reason is its
+    // own link above it.
+    const maya = row(host, 'Maya Fakhoury');
     expect(squash(maya.querySelector('.reason-tag')?.textContent)).toBe(
       'Maya Fakhoury: 1 check-in to review',
     );
     expect(squash(maya.querySelector('app-status-pill')?.textContent)).toBe('On track');
-    expect(maya.querySelectorAll('.strip app-day-mark')).toHaveLength(7);
-    expect(squash(maya.querySelector('.week')?.textContent)).toContain(
-      '3 of 4 workouts done in the last 7 days',
-    );
     expect(squash(maya.querySelector('.plan')?.textContent)).toBe(
       'Plan Online coaching Training, Nutrition, Check-ins, Messaging 12 weeks · USD 330 Ends Sun 20 Dec +1 more plan',
+    );
+    const review = attentionTarget(
+      attentionItem('CheckInToReview', LEAS_MAYA, { count: 1, subjectId: null }),
+    );
+    expect(Array.from(maya.querySelectorAll('a')).map((link) => link.getAttribute('href'))).toEqual(
+      ['/clients/c-maya', review.link],
+    );
+    expect(squash(query(host, '.lede').textContent)).toBe(
+      '12 clients · 6 need attention · 2 plans end soon',
+    );
+  });
+
+  it('keeps off the row what the owner does not see of a client they do not coach (N9d1a)', async () => {
+    const { host } = await render({ isOwner: true });
+
+    // Lea coaches Maya: the server withholds her age, goals and activity from the owner.
+    const maya = row(host, 'Maya Fakhoury');
+    expect(maya.querySelector('.goal')).toBeNull();
+    expect(maya.querySelector('.activity')).toBeNull();
+    expect(maya.textContent).not.toContain('No activity');
+    // Her plan, her week and when she last sent a check-in are the owner's to see.
+    expect(squash(maya.querySelector('.coach')?.textContent)).toBe('Coached by Lea Khoury');
+    expect(squash(maya.querySelector('.week')?.textContent)).toContain(
+      '3 of 4 workouts done in the last 7 days',
     );
     expect(squash(maya.querySelector('.checkin')?.textContent)).toBe(
       'Last check-in Sent 18 hours ago',
     );
-    expect(squash(maya.querySelector('.activity')?.textContent)).toBe(
-      'Last activity Trained Lower A · 2 hours ago',
-    );
-    // The name's link covers the row; each reason is its own link above it; a chevron ends the row.
-    expect(Array.from(maya.querySelectorAll('a')).map((link) => link.getAttribute('href'))).toEqual(
-      ['/clients/c-maya', '/clients/c-maya/checkins/a-maya'],
-    );
-    expect(maya.querySelector('app-icon.chevron')).not.toBeNull();
-    expect(squash(query(host, '.lede').textContent)).toBe(
-      '12 clients · 6 need attention · 2 plans end soon',
+    // A client of the owner's own with nothing logged still says so.
+    expect(squash(row(host, 'Lynn Bou Khalil').querySelector('.activity')?.textContent)).toBe(
+      'Last activity No activity yet',
     );
   });
 
@@ -310,6 +348,98 @@ describe('Clients', () => {
       'Coached by Lea Khoury',
     );
     expect(row(host, 'Rami Tabet').querySelector('.coach')).toBeNull();
+  });
+
+  describe('clients waiting for a coach (N9d1b)', () => {
+    const dana = waitingClient('c-dana', 'Dana', 'Saab');
+    const omar = waitingClient('c-omar', 'Omar', 'Nasr');
+    const withWaiting = (): ClientOverviewView => {
+      const view = clientListView();
+      return {
+        ...view,
+        clients: [
+          ...view.clients,
+          overviewRow(dana, {
+            status: 'NeedsAttention',
+            attention: ['RenewalRequested'],
+            attentionItems: [
+              attentionItem('RenewalRequested', dana, {
+                since: '2026-09-30T07:00:00Z',
+                subjectId: 'e-dana',
+              }),
+            ],
+          }),
+          overviewRow(omar, { planState: 'Paused', planPausedSince: '2026-09-25' }),
+        ],
+      };
+    };
+
+    it('says a client waits for a coach where a coach is named, and nothing of their activity', async () => {
+      const { host } = await render({ isOwner: true, getOverview: () => of(withWaiting()) });
+
+      const row1 = row(host, 'Dana Saab');
+      expect(squash(row1.querySelector('.coach')?.textContent)).toBe('Waiting for a coach');
+      expect(row1.querySelector('[data-waiting]')).not.toBeNull();
+      expect(row1.querySelector('.activity')).toBeNull();
+      expect(row1.textContent).not.toContain('Coached by');
+      // What the owner acts on still opens where it is handled.
+      expect(
+        Array.from(row1.querySelectorAll<HTMLAnchorElement>('.reason-tag a')).map((tag) => [
+          squash(tag.textContent),
+          tag.getAttribute('href'),
+        ]),
+      ).toEqual([['Dana Saab: Asked to renew', '/clients/c-dana/service?renew=e-dana']]);
+      expect(row(host, 'Rami Tabet').querySelector('.coach')).toBeNull();
+    });
+
+    it('lists them alone from the Coach filter, after the coaches, kept in the address', async () => {
+      const { host, harness } = await render({
+        isOwner: true,
+        getOverview: () => of(withWaiting()),
+      });
+      const trigger = query<HTMLButtonElement>(host, 'app-menu.coach-filter button');
+
+      trigger.click();
+      await settle(harness.fixture);
+      const choices = menuChoices(trigger);
+      expect(
+        choices.map((choice) => squash(choice.querySelector('.item-title')?.textContent)),
+      ).toEqual(['Every coach', 'You', 'Lea Khoury', 'Waiting for a coach']);
+      choices[3].click();
+      await settle(harness.fixture);
+
+      expect(names(host)).toEqual(['Dana Saab', 'Omar Nasr']);
+      expect(TestBed.inject(Router).url).toBe('/clients?coach=waiting');
+      expect(squash(query(host, 'app-menu.coach-filter button').textContent)).toBe(
+        'Waiting for a coach',
+      );
+      expect(squash(query(host, '.lede').textContent)).toBe('2 clients · 1 needs attention');
+    });
+
+    it('opens on them from the address, and speaks for them when none matches', async () => {
+      const { host, harness } = await render({
+        isOwner: true,
+        url: '/clients?coach=waiting&show=ending',
+        getOverview: () => of(withWaiting()),
+      });
+
+      expect(names(host)).toEqual([]);
+      expect(squash(host.querySelector('app-empty-state h2')?.textContent)).toBe(
+        'Nobody waiting for a coach has a plan ending in the next 14 days',
+      );
+      press(host, 'Show everyone waiting for a coach');
+      await settle(harness.fixture);
+
+      expect(names(host)).toEqual(['Dana Saab', 'Omar Nasr']);
+      expect(TestBed.inject(Router).url).toBe('/clients?coach=waiting');
+    });
+
+    it('narrows nothing from an address asking for them once nobody waits', async () => {
+      const { host } = await render({ isOwner: true, url: '/clients?coach=waiting' });
+
+      expect(names(host)).toHaveLength(12);
+      expect(squash(query(host, 'app-menu.coach-filter button').textContent)).toBe('Coach');
+    });
   });
 
   it('says when training is not in the plan instead of drawing an empty week', async () => {

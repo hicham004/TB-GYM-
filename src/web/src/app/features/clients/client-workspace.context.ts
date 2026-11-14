@@ -31,6 +31,48 @@ export function otherCoachName(
 }
 
 /**
+ * Why the private side of a client's record (training, nutrition, check-ins, progress, the intake and
+ * the coach notes) is closed to the person reading it, or null when it is open (N9d1a: only the
+ * client's own coach opens it, the owner included). Said first on the Overview and in place of a
+ * private tab reached by address. The server already withholds and refuses all of it.
+ */
+export interface ClosedSide {
+  kind: 'coached' | 'waiting' | 'former';
+  heading: string;
+  text: string;
+  /** Where to go about it, in the client's Service & access; `queryParams` opens a dialog there. */
+  action: { label: string; queryParams: Record<string, string> | null } | null;
+}
+
+export function closedSide(profile: CoachClientDetails | null): ClosedSide | null {
+  // A missing flag (an older answer) reads as open, as the server's default does.
+  if (profile === null || profile.mayCoach !== false) return null;
+  const name = profile.firstName;
+  if (profile.release != null) {
+    return {
+      kind: 'former',
+      heading: $localize`Former client`,
+      text: $localize`You keep ${name}:name:’s plan and payments. Their training, check-ins and progress stay closed: you did not coach them when coaching ended.`,
+      action: null,
+    };
+  }
+  if (profile.assignedCoachUserId === null) {
+    return {
+      kind: 'waiting',
+      heading: $localize`${name}:name: is waiting for a coach`,
+      text: $localize`Nobody sees ${name}:name:’s training, nutrition, check-ins and progress until you give them a coach, yourself included. Their plan keeps running and they can still log.`,
+      action: { label: $localize`Choose a coach`, queryParams: { action: 'coach' } },
+    };
+  }
+  return {
+    kind: 'coached',
+    heading: $localize`${profile.assignedCoachName}:coach: coaches ${name}:name:`,
+    text: $localize`As the owner you see ${name}:name:’s plan, payments and sessions. Their training, nutrition, check-ins and progress open only to their coach.`,
+    action: { label: $localize`Service & access`, queryParams: null },
+  };
+}
+
+/**
  * What every tab of one client's record shares: the client, their plans and the workspace
  * calendar, plus the page-level messages. Provided by `ClientWorkspace`, so each record gets its
  * own instance and it is gone when the coach leaves the record. The API decides everything; this
@@ -69,6 +111,18 @@ export class ClientWorkspaceContext {
 
   /** A former client's record (ADR 0027) is read-only; the API refuses every change regardless. */
   readonly isFormer = computed(() => this.profile()?.release != null);
+  /**
+   * The caller coaches this client, so the private side is theirs to read (N9d1a). Presentation
+   * only: the server withholds that side and refuses its routes (404) for anyone else.
+   */
+  readonly mayCoach = computed(() => this.profile()?.mayCoach !== false);
+  /** Nobody coaches this current client (N9d1b): only the owner reaches them, to give them one. */
+  readonly waitingForCoach = computed(() => {
+    const profile = this.profile();
+    return profile !== null && profile.release == null && profile.assignedCoachUserId === null;
+  });
+  /** Why the private side is closed to the caller, or null when they coach the client. */
+  readonly closedSide = computed(() => closedSide(this.profile()));
   /** Presentation only: the API decides who may reassign or release a client. */
   readonly isOwner = this.tenants.isOwner;
 

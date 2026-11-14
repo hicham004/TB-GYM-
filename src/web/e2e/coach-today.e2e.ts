@@ -6,10 +6,12 @@ import {
   COACH_NOW,
   coachMonth,
   coachTodayView,
+  coachTodayWaitingView,
   emptyCoachTodayView,
   LYNN,
-  MAYA,
+  MAYA_BUSINESS,
   OWNER_ID,
+  RAMI,
 } from '../src/testing/coach-today-fixtures';
 import {
   expect,
@@ -72,14 +74,20 @@ for (const [width, height] of [
     const rows = page.locator('li.need');
     await expect(rows).toHaveCount(7);
     await expect(rows.first()).toContainText('Maya Fakhoury sent a check-in');
-    await expect(page.getByRole('link', { name: 'Review for Maya Fakhoury' })).toHaveAttribute(
+    // Lea coaches Maya (C8): the owner reads who reviews it and opens her page (notes plan N9d2).
+    await expect(rows.first()).toContainText('Lea Khoury reviews it.');
+    await expect(page.getByRole('link', { name: 'See client Maya Fakhoury' })).toHaveAttribute(
       'href',
-      '/clients/c-maya/checkins/a-maya',
+      '/clients/c-maya',
     );
     await expect(page.getByRole('link', { name: 'Reply for Sara Mansour' })).toHaveAttribute(
       'href',
       '/messages?conversation=conv-sara',
     );
+    // One filled button, on the first row the owner can act on, not See client (N9d2).
+    await expect(page.locator('.coach-today .tb-button--filled:visible')).toHaveText([
+      /Reply\s*for Sara Mansour/,
+    ]);
     // This month: each currency on its own line, never added together (critique B4b, SUB-016).
     await expect(page.locator('section.month .money-line')).toHaveText([
       /LBP 4,500,000\s*1 payment/,
@@ -120,7 +128,7 @@ for (const [width, height] of [
       height,
       coachTodayView({
         attention: [
-          attentionItem('SessionsRunningOut', MAYA, {
+          attentionItem('SessionsRunningOut', MAYA_BUSINESS, {
             sessionsLeft: 2,
             date: '2026-10-29',
             subjectId: 'pack-maya',
@@ -153,12 +161,13 @@ for (const [width, height] of [
   test(`Coach Today at ${width}px puts weights to apply last, dark and light (N6d)`, async ({
     page,
   }) => {
-    // Maya did every set of three step lifts, and one of Lynn's two weights keeps last time's: the
+    // Rami did every set of three step lifts, and one of Lynn's two weights keeps last time's: the
     // coach's weekly homework, after everything else, each opening the client's Weights to apply.
+    // Both are Karim's: weights are read only for the clients the caller coaches (notes plan N9d1a).
     const view = coachTodayView();
     const attention = [
       ...view.attention,
-      attentionItem('WeightsToApply', MAYA, { count: 3, stepUps: 3, date: '2026-10-02' }),
+      attentionItem('WeightsToApply', RAMI, { count: 3, stepUps: 3, date: '2026-10-02' }),
       attentionItem('WeightsToApply', LYNN, { count: 2, stepUps: 1, date: '2026-10-06' }),
     ];
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -166,13 +175,14 @@ for (const [width, height] of [
 
     const rows = page.locator('li.need');
     await expect(rows).toHaveCount(9);
-    const maya = rows.nth(7);
-    await expect(maya).toContainText('Maya Fakhoury has 3 lifts ready to step up');
-    await expect(maya).toContainText('Next workout tomorrow');
-    await expect(maya.locator('.tag')).toHaveText('Weights');
-    await expect(
-      maya.getByRole('link', { name: 'Review weights for Maya Fakhoury' }),
-    ).toHaveAttribute('href', '/clients/c-maya/training?action=weights');
+    const rami = rows.nth(7);
+    await expect(rami).toContainText('Rami Tabet has 3 lifts ready to step up');
+    await expect(rami).toContainText('Next workout tomorrow');
+    await expect(rami.locator('.tag')).toHaveText('Weights');
+    await expect(rami.getByRole('link', { name: 'Review weights for Rami Tabet' })).toHaveAttribute(
+      'href',
+      '/clients/c-rami/training?action=weights',
+    );
     const lynn = rows.nth(8);
     await expect(lynn).toContainText('Lynn Bou Khalil has 2 weights to apply');
     await expect(lynn).toContainText('Next workout Tue 6 Oct');
@@ -333,6 +343,87 @@ for (const width of [390, 1440]) {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     await expectNoHorizontalOverflow(page);
-    await expect(page.getByRole('link', { name: 'Review for Maya Fakhoury' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'See client Maya Fakhoury' })).toBeVisible();
+  });
+}
+
+for (const [width, height] of [
+  [390, 844],
+  [1440, 900],
+] as const) {
+  test(`Coach Today at ${width}px lists the clients waiting for a coach first, dark and light (N9d2)`, async ({
+    page,
+  }) => {
+    // Rana Saad left the team, so Ziad waits for a coach, and Dana accepted her invitation after she
+    // had gone (C8, notes plan N9d1b): the owner gives each one a coach from here.
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await openToday(page, width, height, coachTodayWaitingView());
+
+    await expect(page.locator('.needs')).toHaveText(
+      '9 clients have something for you today, listed under Needs you. 2 clients are waiting for a coach.',
+    );
+    const panels = page.locator('.coach-today section.panel');
+    const waiting = panels.first();
+    await expect(waiting.locator('h2')).toHaveText(/Waiting for a coach\s*2/);
+    await expect(waiting).toContainText(
+      'Nobody sees their training until you give them a coach. Their plan keeps running and they can still log.',
+    );
+    const rows = waiting.locator('li');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Ziad Khalil');
+    await expect(rows.nth(0)).toContainText('Since Mon 28 Sep · Coached by Rana Saad before');
+    await expect(rows.nth(1)).toContainText('Dana Aoun');
+    await expect(rows.nth(1)).toContainText('Since Thu 1 Oct · No coach yet');
+    await expect(
+      page.getByRole('link', { name: 'Choose a coach for Ziad Khalil', exact: true }),
+    ).toHaveAttribute('href', '/clients/c-ziad/service?action=coach');
+    await expect(
+      page.getByRole('link', { name: 'Choose a coach for Dana Aoun', exact: true }),
+    ).toHaveAttribute('href', '/clients/c-dana/service?action=coach');
+    // The first Choose a coach is Today's one filled button while anybody waits (N9d2).
+    await expect(page.locator('.coach-today .tb-button--filled:visible')).toHaveText([
+      /Choose a coach\s*for Ziad Khalil/,
+    ]);
+    await expect(panels.nth(1).locator('h2')).toContainText('Needs you');
+
+    // A waiting client's items: who follows up the private one, and Waiting for a coach on the rest.
+    const overdue = page.locator('li.need[data-key="CheckInOverdue:c-ziad"]');
+    await expect(overdue).toContainText(
+      'It was due Mon 28 Sep · Their new coach follows up once you choose one.',
+    );
+    await expect(overdue.getByRole('link', { name: 'See client Ziad Khalil' })).toHaveAttribute(
+      'href',
+      '/clients/c-ziad',
+    );
+    await expect(page.locator('li.need[data-key="NoPlan:c-dana"]')).toContainText(
+      'Today · no plan yet · Waiting for a coach',
+    );
+    await expect(page.locator('section.month .no-coach')).toHaveText(
+      /No coach\s*1 of 2 clients active/,
+    );
+
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({ path: `test-results/n9d2-coach-today-waiting-dark-${width}.png` });
+
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect(waiting).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expectNoHorizontalOverflow(page);
+    await axe(page);
+    await page.screenshot({
+      path: `test-results/n9d2-coach-today-waiting-${width}.png`,
+      fullPage: true,
+    });
+  });
+
+  test(`Coach Today's waiting list reflows at 200% text at ${width}px (N9d2)`, async ({ page }) => {
+    await openToday(page, width, height, coachTodayWaitingView());
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+    await expectNoHorizontalOverflow(page);
+    await expect(
+      page.getByRole('link', { name: 'Choose a coach for Dana Aoun', exact: true }),
+    ).toBeVisible();
+    await page.screenshot({ path: `test-results/n9d2-coach-today-waiting-200-${width}.png` });
   });
 }

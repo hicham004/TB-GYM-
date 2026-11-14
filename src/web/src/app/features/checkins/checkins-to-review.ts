@@ -29,8 +29,9 @@ import { limitNote, matchesName, reviewCount, toReviewRow } from './checkins-to-
 
 /**
  * Check-ins to review (critique B3b), where Check-ins opens: one row per sent check-in waiting for its
- * review, oldest first, each opening its review on the client's record. A coach reads their own
- * clients'; the owner every client's, a team coach's named (CHK-014, the owner's choice of 2026-10-28).
+ * review, oldest first, each opening its review on the client's record. Every reader, the owner too,
+ * reads only the clients they coach (CHK-014, since notes plan N9d1a); a row's coach line stays as a
+ * guard for a client someone else coaches, which the server never sends today.
  */
 @Component({
   selector: 'app-checkins-to-review',

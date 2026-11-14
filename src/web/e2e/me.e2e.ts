@@ -651,6 +651,47 @@ test.describe('a client whose coach cannot be read', () => {
   });
 });
 
+test.describe('a client waiting for a coach (N9d1b)', () => {
+  test.use({
+    allowedConsoleErrors: {
+      patterns: [/status of 404 .*\/api\/client-profile\/me\/coach/],
+    },
+  });
+
+  for (const [width, height, mode] of [
+    [390, 844, 'system'],
+    [1440, 900, 'dark'],
+  ] as const) {
+    test(`reads Waiting for a new coach, with nothing to write to, at ${width}px, ${mode}`, async ({
+      page,
+    }) => {
+      await openMe(page, {
+        width,
+        height,
+        user: { preferredThemeMode: mode },
+        extra: {
+          // No coach for now: the server's 404 after the profile read.
+          'GET /api/client-profile/me/coach': (route) => json(route, 404, { title: 'Not Found' }),
+        },
+      });
+
+      const card = page.locator('[data-waiting-coach]');
+      await expect(card).toHaveText(
+        /Your coach\s*,?\s*Waiting for a new coach\.?\s*Your coaching space will tell you when you have one\./,
+      );
+      await expect(page.locator('a.coach')).toHaveCount(0);
+      await expect(card.locator('app-avatar')).toHaveCount(0);
+      await expect(page.getByRole('alert')).toHaveText('');
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await page.screenshot({
+        path: test.info().outputPath(`n9d2-me-waiting-${width}-${mode}.png`),
+        fullPage: true,
+      });
+    });
+  }
+});
+
 test('light or dark is chosen on Me and applies at once', async ({ page }) => {
   let user: User = { ...MAYA };
   await openMe(page, {

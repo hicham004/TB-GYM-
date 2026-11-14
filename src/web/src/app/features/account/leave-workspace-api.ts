@@ -10,7 +10,7 @@ import { map, Observable } from 'rxjs';
 export class LeaveWorkspaceApi {
   private readonly http = inject(HttpClient);
 
-  /** A coach leaves the team; their clients move to the owner and are told. */
+  /** A coach leaves the team; their clients wait for a coach, and the owner is told (N9d1b). */
   resignFromTeam(): Observable<void> {
     return this.http.post('/api/team/me/resign', {}).pipe(map(() => undefined));
   }

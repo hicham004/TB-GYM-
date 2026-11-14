@@ -46,6 +46,12 @@
           <span class="tb-visually-hidden" i18n>Coached by </span>
           <span dir="auto">{{ coach }}</span>
         </div>
+      } @else if (waitingForCoach()) {
+        <!-- Their coach left and nobody has been given yet (N9d1b): words where the coach's face would
+             be, not a link, since there is nobody to write to. -->
+        <div class="today-coach today-coach--none" data-waiting-coach>
+          <span i18n>Waiting for a coach</span>
+        </div>
       } @else if (coachLoading()) {
         <!-- The coach's place while their name is read, so the heading beside it does not rewrap. -->
         <span class="today-coach today-coach--waiting" aria-hidden="true">
@@ -463,7 +469,13 @@
                 <h2 id="today-training-heading" #trainingHeading tabindex="-1" i18n>
                   Nothing assigned yet
                 </h2>
-                <p i18n>Your coach will put your program here.</p>
+                @if (waitingForCoach()) {
+                  <p data-waiting-coach i18n>
+                    Your coaching space will give you a new coach, who will put your program here.
+                  </p>
+                } @else {
+                  <p i18n>Your coach will put your program here.</p>
+                }
                 @if (canMessage()) {
                   <a class="text-link" routerLink="/messages" i18n>Message your coach</a>
                 }

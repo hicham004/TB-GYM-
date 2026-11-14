@@ -10,6 +10,8 @@ import {
   coachMonthReport,
   coachOwnMonthReport,
   emptyMonthReport,
+  ownerAloneWaitingMonthReport,
+  waitingMonthReport,
 } from '../../../testing/month-fixtures';
 import { ThisMonth } from './month';
 import { MonthApi } from './month-api';
@@ -91,6 +93,51 @@ describe('ThisMonth', () => {
     expect(lines(leas as HTMLElement, 'td')).toEqual(['USD 1,000', '6', '1', '1', '1', '0']);
     expect(lines(host, 'tfoot td')).toEqual(['EUR 90.50USD 1,980', '9', '2', '1', '1', '0']);
     expect(lines(host, 'tbody tr:nth-child(4) td')[0]).toBe('EUR 90.50USD 280');
+  });
+
+  it('adds a No coach line before the total, switching with the month (N9d1b)', async () => {
+    const { fixture, host } = await render(() => of(waitingMonthReport()));
+
+    const noCoach = host.querySelector<HTMLElement>('tbody tr[data-no-coach]')!;
+    // Last among the rows, before the Total; no face, since nobody held it.
+    expect(host.querySelector('tbody tr:last-child')).toBe(noCoach);
+    expect(noCoach.querySelector('app-avatar')).toBeNull();
+    expect(squash(noCoach.querySelector('th')?.textContent)).toBe(
+      'No coach While clients waited for a coach',
+    );
+    expect(lines(noCoach, 'td')).toEqual(['USD 300', '0', '1', '0', '0', '0']);
+    // The rows plus No coach add up to the Total.
+    expect(lines(host, 'tfoot td')).toEqual(['LBP 4,500,000USD 2,340', '12', '3', '2', '2', '1']);
+
+    segment(host, 'Month shown', 'September').click();
+    await settle(fixture);
+
+    expect(lines(noCoach, 'td')).toEqual(['USD 280', '0', '0', '0', '0', '0']);
+    expect(lines(host, 'tfoot td')).toEqual(['EUR 90.50USD 1,980', '9', '2', '1', '1', '0']);
+  });
+
+  it('shows an owner alone the table once something counted for no coach', async () => {
+    const { host } = await render(() => of(ownerAloneWaitingMonthReport()));
+
+    expect(lines(host, 'tbody tr')).toEqual([
+      expect.stringContaining('You'),
+      expect.stringContaining('No coach'),
+    ]);
+    expect(lines(host, 'tfoot td')[0]).toBe('USD 1,200');
+  });
+
+  it('says in Whose numbers where a waiting client counts, only beside the No coach line', async () => {
+    const waiting = await render(() => of(waitingMonthReport()));
+    await toggleFold(waiting.fixture, waiting.host, 'How these are counted');
+    expect(squash(waiting.host.querySelector('.how')?.textContent)).toContain(
+      'client who moves on leaves their earlier numbers behind. While a client waits for a coach, it counts on the No coach line.',
+    );
+    TestBed.resetTestingModule();
+
+    const { fixture, host } = await render();
+    await toggleFold(fixture, host, 'How these are counted');
+    expect(host.querySelector('tbody tr[data-no-coach]')).toBeNull();
+    expect(squash(host.querySelector('.how')?.textContent)).not.toContain('No coach line');
   });
 
   it('labels each number for the card it becomes on a phone', async () => {

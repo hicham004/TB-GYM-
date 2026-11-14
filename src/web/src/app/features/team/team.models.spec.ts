@@ -154,7 +154,7 @@ describe('Settings › Team: the people', () => {
     expect(cara.menu).toEqual([
       {
         label: 'Remove from the team',
-        hint: 'Their clients move to you',
+        hint: 'Their clients wait for a coach',
         action: 'remove',
         danger: true,
       },

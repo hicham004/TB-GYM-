@@ -67,6 +67,11 @@ export interface NeedRow {
   heading: string;
   detail: string;
   action: PageAction;
+  /**
+   * The client's own coach acts on it, or the coach still to be chosen, never the reader (N9d1a): the
+   * detail says who, and `action` only opens the client's page, which the client's page itself drops.
+   */
+  elsewhere?: boolean;
 }
 
 /** What waits for the coach on this client, in the server's order, each with its one action. */
@@ -86,6 +91,16 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
     value ? formatDate(value, 'EEE d MMM', context.locale) : '';
   const since = elapsed(item.since, context);
   const base = { key: item.kind, kind: item.kind };
+  // A client the reader does not coach (N9d1a): the server withholds what a private item points at
+  // (the check-in, the last workout's day), so its row says who acts on it, never what is missing,
+  // and offers only the client's page, which the private links would answer with a 404.
+  const elsewhere = (detail: string) => ({
+    detail,
+    action: { label: $localize`See client`, link: page, queryParams: null },
+    elsewhere: true,
+  });
+  // A missing flag (an older answer, a test double) is the reader's own client.
+  const closed = item.client?.mayCoach === false;
 
   switch (item.kind) {
     case 'CheckInToReview':
@@ -97,22 +112,26 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
           count > 1
             ? $localize`${count}:count: check-ins to review`
             : $localize`Check-in ready to review`,
-        // The newest is the one the coach may not have seen yet (CLIENT-19).
-        detail:
-          count > 1 && item.newestAt
-            ? $localize`The newest was sent ${elapsed(item.newestAt, context)}:newest:, the first ${since}:ago:`
-            : count > 1
-              ? $localize`The first was sent ${since}:ago:`
-              : $localize`Sent ${since}:ago:`,
-        // One waiting opens straight at its review; several open the list, where each can be read.
-        action:
-          item.subjectId && count <= 1
-            ? {
-                label: $localize`Review`,
-                link: `${page}/checkins/${item.subjectId}`,
-                queryParams: null,
-              }
-            : { label: $localize`Review`, link: `${page}/checkins`, queryParams: null },
+        ...(closed
+          ? elsewhere(whoActs(item, 'review', count))
+          : {
+              // The newest is the one the coach may not have seen yet (CLIENT-19).
+              detail:
+                count > 1 && item.newestAt
+                  ? $localize`The newest was sent ${elapsed(item.newestAt, context)}:newest:, the first ${since}:ago:`
+                  : count > 1
+                    ? $localize`The first was sent ${since}:ago:`
+                    : $localize`Sent ${since}:ago:`,
+              // One waiting opens straight at its review; several open the list, where each can be read.
+              action:
+                item.subjectId && count <= 1
+                  ? {
+                      label: $localize`Review`,
+                      link: `${page}/checkins/${item.subjectId}`,
+                      queryParams: null,
+                    }
+                  : { label: $localize`Review`, link: `${page}/checkins`, queryParams: null },
+            }),
       };
     case 'UnreadMessages':
       return {
@@ -213,29 +232,45 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
         tone: 'missed',
         tag: $localize`Missed`,
         heading: $localize`Missed ${count}:count: workouts in a row`,
-        detail: item.date
-          ? $localize`Last trained ${date(item.date)}:date:`
-          : $localize`No workout logged yet`,
-        action: { label: $localize`See training`, link: `${page}/training`, queryParams: null },
+        ...(closed
+          ? elsewhere(whoActs(item, 'follow', count))
+          : {
+              detail: item.date
+                ? $localize`Last trained ${date(item.date)}:date:`
+                : $localize`No workout logged yet`,
+              action: {
+                label: $localize`See training`,
+                link: `${page}/training`,
+                queryParams: null,
+              },
+            }),
       };
     case 'CheckInOverdue':
       // Never sent, so there is nothing to read (CHK-015). Only the client's own coach messages them,
-      // while messaging is in the plan; anyone else is sent to the client's check-ins (CLI-013).
+      // while messaging is in the plan, else they are sent to the client's check-ins (CLI-013).
       return {
         ...base,
         tone: 'missed',
         tag: $localize`Overdue`,
         heading:
           count > 1 ? $localize`${count}:count: check-ins overdue` : $localize`Check-in overdue`,
-        detail: overdueDetail(count, date(item.date)),
-        action: item.canMessage
-          ? {
-              label: $localize`Remind`,
-              link: '/messages',
-              queryParams: item.subjectId ? { conversation: item.subjectId } : null,
-              startsChat: !item.subjectId,
-            }
-          : { label: $localize`See check-ins`, link: `${page}/checkins`, queryParams: null },
+        ...(closed
+          ? elsewhere(whoActs(item, 'follow', count))
+          : {
+              detail: overdueDetail(count, date(item.date)),
+              action: item.canMessage
+                ? {
+                    label: $localize`Remind`,
+                    link: '/messages',
+                    queryParams: item.subjectId ? { conversation: item.subjectId } : null,
+                    startsChat: !item.subjectId,
+                  }
+                : {
+                    label: $localize`See check-ins`,
+                    link: `${page}/checkins`,
+                    queryParams: null,
+                  },
+            }),
       };
     case 'NoProgram':
       return {
@@ -281,6 +316,19 @@ function needRow(item: CoachAttentionItemView, today: string, context: ProfileCo
         },
       };
   }
+}
+
+/**
+ * Who acts on a private item about a client the reader does not coach: their coach by name, or, while
+ * the client waits for one (N9d1b), the coach the owner is still to choose.
+ */
+function whoActs(item: CoachAttentionItemView, act: 'review' | 'follow', count: number): string {
+  const coach = item.client.assignedCoachUserId !== null ? item.client.assignedCoachName : null;
+  if (!coach) return $localize`Their new coach follows up once you choose one.`;
+  if (act === 'follow') return $localize`${coach}:coach: follows up.`;
+  return count > 1
+    ? $localize`${coach}:coach: reviews them.`
+    : $localize`${coach}:coach: reviews it.`;
 }
 
 function renewAction(page: string, enrollmentId: string | null): PageAction {

@@ -1,15 +1,20 @@
 import {
+  afterNextRender,
   Component,
   computed,
   effect,
   ElementRef,
   inject,
+  Injector,
   input,
   LOCALE_ID,
+  model,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { TeamApi } from '../team/team-api';
@@ -24,16 +29,23 @@ import { UiDisclosure, UiDisclosureContent } from '../../ui/disclosure';
 import { Control, Field } from '../../ui/field';
 import { FormSummary } from '../../ui/form-summary';
 import { UiSelect, type SelectOption } from '../../ui/select';
-import { coachHistoryRows, type CoachHistoryRow } from './client-coach.models';
+import {
+  coachChangeSentence,
+  coachHistoryRows,
+  type CoachHistoryRow,
+  type CurrentCoach,
+} from './client-coach.models';
 import { ClientWorkspaceContext } from './client-workspace.context';
 
 /**
- * The client's coach, and the owner's action to move the client to another one (ADR 0026).
+ * The client's coach, and the owner's action to give the client one or move them to another (ADR 0026: at
+ * most one; C8: a client may wait with none).
  *
- * Owner-only, and silent in a workspace with nobody else to move a client to, so a solo coach sees
- * no change. The dialog shows the coach history its note is kept in (audit COACH-16), read when it
- * opens. The API is the authority: it refuses a reassignment from anyone but the owner, to anyone
- * who is not active staff, or against a stale client version.
+ * Owner-only. Silent in a workspace with nobody else to move a client to, so a solo coach sees no change,
+ * unless the client waits for a coach: then even a solo owner can take them. Nothing is chosen for a waiting
+ * client, the owner included (C8: the owner never gets a client automatically). The dialog shows the coach
+ * history its note is kept in (audit COACH-16), read when it opens. The API is the authority: it refuses a
+ * change from anyone but the owner, to anyone who is not active staff, or against a stale client version.
  */
 @Component({
   selector: 'app-client-coach',
@@ -57,46 +69,106 @@ export class ClientCoach {
   private readonly formBuilder = inject(FormBuilder);
   private readonly tenants = inject(TenantStore);
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
   private readonly record = inject(ClientWorkspaceContext, { optional: true });
   private readonly scope = new TenantAsyncScope(() => this.tenants.selectedTenantId());
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('reassignDialog');
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('reassignTrigger');
+  private readonly noticeLine = viewChild<ElementRef<HTMLElement>>('coachNotice');
   private readonly summary = viewChild(FormSummary);
+  private readonly coachSelect = viewChild(UiSelect);
   private loadedTenant: string | null = null;
 
   readonly client = input.required<CoachClientDetails>();
+  /**
+   * Set by the page that arrived with `?action=coach` (Today's and the Overview's Choose a coach): the
+   * dialog opens once the team is read, if a change is possible, and this is set back to false either way.
+   */
+  readonly openRequested = model(false);
   readonly profileChanged = output<CoachClientDetails>();
 
   protected readonly members = signal<TeamMember[]>([]);
+  /** The team's read has answered, or failed: an asked-for dialog may open. */
+  private readonly teamRead = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  /** A Choose pressed with nothing chosen: the select then says so. */
+  private readonly tried = signal(false);
   /** The coach history, read each time the dialog opens; null while it is read or if it failed. */
   protected readonly history = signal<readonly CoachHistoryRow[] | null>(null);
   protected readonly historyFailed = signal(false);
+
+  private readonly me = computed(() => this.auth.user()?.id ?? null);
+  /** Nobody coaches the client (N9d1b): their coach left, or they arrived with none. */
+  protected readonly waiting = computed(() => this.client().assignedCoachUserId === null);
+  /** A team of one has nobody to move a client to, but a waiting client still needs a coach. */
+  protected readonly canChange = computed(() => this.members().length > 1 || this.waiting());
   /**
-   * The owner is this client's coach: they keep the record, as the owner sees every client, but their
-   * chat closes like any coach's (ADR 0026, audit COACH-13).
+   * The panel, while a change is possible or after one made here: a solo owner who takes a waiting
+   * client keeps the coach line and its notice, with no way left to change it.
    */
-  protected readonly ownerIsCoach = computed(
-    () => this.client().assignedCoachUserId === this.auth.user()?.id,
-  );
-  /** Everyone the client could be moved to: the rest of the team. */
-  protected readonly candidates = computed(() =>
-    this.members().filter((member) => member.userId !== this.client().assignedCoachUserId),
-  );
-  protected readonly coachOptions = computed<SelectOption[]>(() =>
-    this.candidates().map((member) => ({ value: member.userId, label: member.displayName })),
-  );
+  protected readonly shown = computed(() => this.canChange() || this.notice() !== null);
+  /** Who the client has now, for the dialog's sentence. */
+  private readonly current = computed<CurrentCoach>(() => {
+    const coach = this.client().assignedCoachUserId;
+    if (coach === null) return { kind: 'waiting' };
+    return coach === this.me()
+      ? { kind: 'you' }
+      : { kind: 'other', name: this.client().assignedCoachName };
+  });
+  /**
+   * Everyone the client could go to: the rest of the team, the caller as You and last, so a choice made
+   * in haste is not the owner's own (C8). With the team unread, a waiting client can still go to the
+   * caller, who is staff.
+   */
+  protected readonly candidates = computed<SelectOption[]>(() => {
+    const me = this.auth.user();
+    const coach = this.client().assignedCoachUserId;
+    const team =
+      this.members().length > 0 || !me
+        ? this.members()
+        : [{ userId: me.id, displayName: me.displayName }];
+    const others = team
+      .filter((member) => member.userId !== coach && member.userId !== me?.id)
+      .map((member) => ({ value: member.userId, label: member.displayName }))
+      .sort((a, b) => a.label.localeCompare(b.label, this.locale));
+    const you =
+      me && coach !== me.id && team.some((member) => member.userId === me.id)
+        ? [{ value: me.id, label: $localize`You` }]
+        : [];
+    return [...others, ...you];
+  });
   protected readonly form = this.formBuilder.nonNullable.group({
     coachUserId: ['', Validators.required],
     note: ['', Validators.maxLength(500)],
   });
+  private readonly chosenId = toSignal(this.form.controls.coachUserId.valueChanges, {
+    initialValue: this.form.controls.coachUserId.value,
+  });
+  /** What the change does, following the choice. */
+  protected readonly sentence = computed(() => {
+    const chosen = this.chosenId();
+    const option = this.candidates().find((candidate) => candidate.value === chosen);
+    return coachChangeSentence(
+      this.client().firstName,
+      this.current(),
+      !option
+        ? null
+        : option.value === this.me()
+          ? { kind: 'you' }
+          : { kind: 'other', name: option.label },
+    );
+  });
+  protected readonly coachErrors = computed(() =>
+    this.tried() && !this.chosenId() ? [$localize`Choose a coach.`] : null,
+  );
 
   constructor() {
     this.scope.onReset(() => {
       this.loadedTenant = null;
       this.members.set([]);
+      this.teamRead.set(false);
       this.saving.set(false);
       this.error.set(null);
       this.notice.set(null);
@@ -110,11 +182,22 @@ export class ClientCoach {
         void this.loadTeam();
       }
     });
+    // An arrival that asks for the dialog: opened once the panel it belongs to is drawn.
+    effect(() => {
+      if (!this.openRequested() || !this.teamRead()) return;
+      untracked(() => {
+        this.openRequested.set(false);
+        if (this.canChange()) afterNextRender(() => this.open(), { injector: this.injector });
+      });
+    });
   }
 
   protected open(): void {
-    const first = this.candidates()[0];
-    this.form.reset({ coachUserId: first?.userId ?? '', note: '' });
+    // A client with a coach keeps the quick path: the first other coach is chosen already. A waiting
+    // client starts with nobody chosen.
+    const first = this.waiting() ? undefined : this.candidates()[0];
+    this.form.reset({ coachUserId: first?.value ?? '', note: '' });
+    this.tried.set(false);
     this.error.set(null);
     this.notice.set(null);
     const dialog = this.dialog()?.nativeElement;
@@ -148,11 +231,16 @@ export class ClientCoach {
   }
 
   protected async reassign(): Promise<void> {
-    if (this.form.invalid || this.saving()) {
+    if (this.saving()) return;
+    if (this.form.invalid) {
+      this.tried.set(true);
       this.form.markAllAsTouched();
+      // The select says what is missing; focus goes there so it is heard.
+      if (!this.chosenId()) this.coachSelect()?.focus();
       return;
     }
 
+    const waiting = this.waiting();
     return this.scope.run('reassign', async (owner) => {
       this.saving.set(true);
       this.error.set(null);
@@ -171,17 +259,24 @@ export class ClientCoach {
         );
         this.profileChanged.emit(updated);
         this.notice.set(
-          $localize`${updated.firstName}:name: now has ${updated.assignedCoachName}:coach: as their coach.`,
+          updated.assignedCoachUserId !== null && updated.assignedCoachUserId === this.me()
+            ? $localize`You now coach ${updated.firstName}:name:.`
+            : $localize`${updated.firstName}:name: now has ${updated.assignedCoachName}:coach: as their coach.`,
         );
         this.closeDialog();
-        this.trigger()?.nativeElement.focus();
+        // Once the new profile is drawn: the trigger, or the notice where no change is left to make.
+        afterNextRender(() => (this.trigger() ?? this.noticeLine())?.nativeElement.focus(), {
+          injector: this.injector,
+        });
         await owner.wait(this.loadTeam());
       } catch (error) {
         if (!owner.current) return;
         this.error.set(
           apiErrorMessage(
             error,
-            $localize`The client could not be reassigned. Reload the page and try again.`,
+            waiting
+              ? $localize`The coach could not be saved. Reload the page and try again.`
+              : $localize`The client could not be reassigned. Reload the page and try again.`,
           ),
         );
         this.summary()?.focus();
@@ -198,6 +293,8 @@ export class ClientCoach {
       } catch {
         // The coach line is a convenience beside the profile; the page stays usable without it.
         if (owner.current) this.members.set([]);
+      } finally {
+        if (owner.current) this.teamRead.set(true);
       }
     });
   }

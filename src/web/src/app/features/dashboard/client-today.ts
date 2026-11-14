@@ -1,4 +1,5 @@
 import { DatePipe, DOCUMENT, formatNumber } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   Component,
@@ -117,6 +118,11 @@ export class ClientToday {
   protected readonly selfUnknown = signal(false);
   /** The coach's name is on its way: their place in the header is kept, so the heading does not rewrap. */
   protected readonly coachLoading = signal(true);
+  /**
+   * A coached client with no coach for now (N9d1b): their profile read, and the coach's read answered
+   * 404, the only sign the server gives. Today says they wait, and offers no coach to write to.
+   */
+  protected readonly waitingForCoach = signal(false);
   /** The day's training has answered once in this workspace; a Retry later keeps the page drawn. */
   private readonly trainingAnswered = signal(false);
   protected readonly weekFailed = signal(false);
@@ -175,9 +181,16 @@ export class ClientToday {
     );
   });
 
-  /** "Message your coach" is offered only while messaging is open. */
+  /**
+   * "Message your coach" is offered only while messaging is open and there is a coach to write to: a
+   * client waiting for one would land on a thread nobody reads (N9d1b). Asked once the coach answered,
+   * so the link never shows and then goes.
+   */
   protected readonly canMessage = computed(
-    () => this.access.decision('Messaging')?.isAllowed ?? false,
+    () =>
+      (this.access.decision('Messaging')?.isAllowed ?? false) &&
+      !this.coachLoading() &&
+      !this.waitingForCoach(),
   );
 
   /**
@@ -246,6 +259,7 @@ export class ClientToday {
       this.selfDirected.set(false);
       this.selfUnknown.set(false);
       this.coachLoading.set(true);
+      this.waitingForCoach.set(false);
       this.trainingAnswered.set(false);
       this.weekFailed.set(false);
       this.upcoming.set(null);
@@ -436,7 +450,15 @@ export class ClientToday {
           if (owner.current) this.selfDirected.set(true);
           return;
         }
-        const coach = await owner.wait(firstValueFrom(this.api.getOwnCoach()));
+        const coach = await owner
+          .wait(firstValueFrom(this.api.getOwnCoach()))
+          .catch((error: unknown) => {
+            // No coach for now (N9d1b); a 403 or any other failure still just names nobody.
+            if (owner.current && error instanceof HttpErrorResponse && error.status === 404) {
+              this.waitingForCoach.set(true);
+            }
+            throw error;
+          });
         if (owner.current) this.coachName.set(coach.name);
       } catch {
         if (owner.current) this.coachName.set(null);
@@ -485,6 +507,7 @@ export class ClientToday {
     this.selfDirected.set(false);
     this.selfUnknown.set(false);
     this.coachLoading.set(true);
+    this.waitingForCoach.set(false);
     this.trainingAnswered.set(false);
     this.weekFailed.set(false);
     this.upcoming.set(null);

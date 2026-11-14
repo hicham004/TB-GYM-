@@ -782,8 +782,8 @@ export type ClientCoachAssignmentReason =
 export type ClientCoachAssignmentView = {
   id: string;
   sequence: number | string;
-  coachUserId: string;
-  coachName: string;
+  coachUserId: null | string;
+  coachName: null | string;
   previousCoachUserId: null | string;
   previousCoachName: null | string;
   reason: ClientCoachAssignmentReason;
@@ -1123,8 +1123,8 @@ export type ClientSummary = {
   onboardingStatus: ClientOnboardingStatus;
   isCoachBlocked: boolean;
   version: number | string;
-  assignedCoachUserId: string;
-  assignedCoachName: string;
+  assignedCoachUserId: null | string;
+  assignedCoachName: null | string;
 };
 
 export type ClientTargetsItem = {
@@ -1438,9 +1438,10 @@ export type CoachClientDetails = {
   onboardingCompletedAtUtc: null | string;
   isCoachBlocked: boolean;
   version: number | string;
-  assignedCoachUserId: string;
+  assignedCoachUserId: null | string;
   assignedCoachName: string;
   release?: null | ClientReleaseView;
+  mayCoach?: boolean;
 };
 
 export type CoachClientProgramView = {
@@ -1458,8 +1459,9 @@ export type CoachClientRef = {
   clientProfileId: string;
   firstName: string;
   lastName: string;
-  assignedCoachUserId: string;
+  assignedCoachUserId: null | string;
   assignedCoachName: null | string;
+  mayCoach?: boolean;
 };
 
 export type CoachingFeature =
@@ -1483,6 +1485,11 @@ export type CoachMoneyReceivedView = {
   paymentCount: number | string;
 };
 
+export type CoachMonthNoCoachView = {
+  thisMonth: CoachMonthNumbersView;
+  lastMonth: CoachMonthNumbersView;
+};
+
 export type CoachMonthNumbersView = {
   moneyReceived: Array<CoachMoneyReceivedView>;
   sessionsHeld: number | string;
@@ -1503,6 +1510,7 @@ export type CoachMonthReportView = {
   monthRuleVersion: number | string;
   moneyRuleKey: string;
   moneyRuleVersion: number | string;
+  noCoach?: null | CoachMonthNoCoachView;
 };
 
 export type CoachMonthRowView = {
@@ -1619,6 +1627,14 @@ export type CoachTodayView = {
   attentionRuleVersion: number | string;
   trainingRuleKey: string;
   trainingRuleVersion: number | string;
+  waitingForCoach?: null | Array<CoachWaitingClientView>;
+};
+
+export type CoachWaitingClientView = {
+  client: CoachClientRef;
+  waitingSinceUtc: string;
+  previousCoachName: null | string;
+  clientVersion: number | string;
 };
 
 export type CoachWeekView = {
@@ -1653,7 +1669,9 @@ export type CommercialNotificationKind =
   | 'CoachWorkoutNote'
   | 'ClientWorkoutNote'
   | 'HousePlanAsked'
-  | 'HousePlanMoneySent';
+  | 'HousePlanMoneySent'
+  | 'CoachAssigned'
+  | 'TraineeStaffChanged';
 
 export type CompleteClientOnboardingRequest = {
   intake: UpdateClientIntakeRequest;

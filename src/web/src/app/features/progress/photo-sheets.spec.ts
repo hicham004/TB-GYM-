@@ -82,9 +82,9 @@ describe('Add photos', () => {
       'Side',
       'Back',
     ]);
-    // The owner sees them too (CLI-013, audit LOST-3), named as the intake names them.
+    // Their coach alone (N9d1a): the owner only while coaching them, as the intake says.
     expect(textOf(host.querySelector('p.muted'))).toBe(
-      'Your coach and the owner of Atlas Performance can see these photos. If you remove one later, it disappears from their view.',
+      'Your coach can see these photos. If you remove one later, it disappears from their view.',
     );
   });
 

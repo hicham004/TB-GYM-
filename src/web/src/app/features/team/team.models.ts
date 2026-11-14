@@ -57,7 +57,7 @@ export function memberRows(
           : [
               {
                 label: $localize`Remove from the team`,
-                hint: $localize`Their clients move to you`,
+                hint: $localize`Their clients wait for a coach`,
                 action: 'remove',
                 danger: true,
               },

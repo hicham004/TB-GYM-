@@ -193,6 +193,10 @@ a.coach:focus-visible {
 .coach-line {
   margin-block-start: var(--space-4);
 }
+// Waiting for a coach (N9d1b): no face, so the words keep the card's inner margin on both sides.
+.coach--none {
+  padding-inline-start: var(--space-16);
+}
 .coach-action {
   align-items: center;
   color: var(--tb-accent);

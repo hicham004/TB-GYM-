@@ -89,3 +89,9 @@
   color: var(--tb-ink);
   font-style: italic;
 }
+
+// A client waiting for a coach (N9d1b): the owner's to act on, so it reads warm.
+.coach-name.waiting {
+  color: var(--tb-warm-ink);
+  font-weight: 600;
+}

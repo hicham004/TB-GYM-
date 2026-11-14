@@ -9,10 +9,13 @@ import {
 } from '../../../testing/coach-today-fixtures';
 import {
   clientListView,
+  LEAS_MAYA,
   overviewRow,
   planSummary,
   recentDays,
+  waitingClient,
 } from '../../../testing/client-list-fixtures';
+import { attentionTarget } from '../dashboard/coach-today.models';
 import {
   activityLabel,
   attentionReason,
@@ -31,6 +34,7 @@ import {
   planLabel,
   type ClientListContext,
   type ClientRow,
+  WAITING_FOR_COACH,
 } from './clients.models';
 
 describe('the owner’s Coach filter (critique B3a)', () => {
@@ -85,6 +89,62 @@ describe('the owner’s Coach filter (critique B3a)', () => {
     expect(matches(rows[2], 'all', '', 'lea')).toBe(false);
     expect(matches(rows[2], 'all', '')).toBe(true);
   });
+
+  /** N9d1b: a client whose coach left waits for one; the owner can list them alone. */
+  const waiting = {
+    coachId: WAITING_FOR_COACH,
+    coach: null,
+    waiting: true,
+    filters: new Set(['all']),
+    searchText: '',
+  } as unknown as ClientRow;
+
+  it('offers the clients waiting for a coach after the coaches, never as a blank choice', () => {
+    const chip = coachChip([waiting, ...rows], '', 'me', 'en-US');
+
+    expect(chip?.items).toEqual([
+      { label: 'Every coach', action: '' },
+      { label: 'You', action: 'me' },
+      { label: 'Adam Sabbagh', action: 'adam' },
+      { label: 'Lea Khoury', action: 'lea' },
+      { label: 'Waiting for a coach', action: 'waiting' },
+    ]);
+    expect(chip?.items.every((item) => item.label.trim() !== '')).toBe(true);
+    // Your own clients and the waiting ones are two choices already.
+    expect(coachChip([row('me', null), waiting], '', 'me', 'en-US')?.items).toEqual([
+      { label: 'Every coach', action: '' },
+      { label: 'You', action: 'me' },
+      { label: 'Waiting for a coach', action: 'waiting' },
+    ]);
+    // A list of waiting clients alone has nothing to filter by.
+    expect(coachChip([waiting, waiting], '', 'me', 'en-US')).toBeNull();
+  });
+
+  it('names the chip for the waiting clients without saying coach twice, and keeps only them', () => {
+    expect(coachChip([waiting, ...rows], 'waiting', 'me', 'en-US')).toMatchObject({
+      name: 'Waiting for a coach',
+      active: true,
+      chosen: { name: 'Waiting for a coach', isYou: false, isWaiting: true },
+    });
+    expect(matches(waiting, 'all', '', WAITING_FOR_COACH)).toBe(true);
+    expect(matches(rows[0], 'all', '', WAITING_FOR_COACH)).toBe(false);
+    // An address asking for them on a list where nobody waits narrows nothing.
+    expect(coachChip(rows, 'waiting', 'me', 'en-US')).toMatchObject({
+      name: 'Coach',
+      active: false,
+    });
+  });
+
+  it('skips a coach with no name to show rather than offering a blank choice', () => {
+    const chip = coachChip(
+      [row('me', null), row('lea', 'Lea Khoury'), row('x', ' ')],
+      '',
+      'me',
+      'en-US',
+    );
+
+    expect(chip?.items.map((item) => item.label)).toEqual(['Every coach', 'You', 'Lea Khoury']);
+  });
 });
 
 const context: ClientListContext = {
@@ -120,9 +180,11 @@ describe('client list (C2, critique B4a)', () => {
   });
 
   it('says the age for the workspace’s today, and nothing without a birth date (CLI-005)', () => {
-    const { Maya, Hiba, Tala, Lynn } = rows();
+    const { Maya, Hiba, Tala, Lynn, Elie } = rows();
 
-    expect(Maya.age).toBe('Age 29');
+    expect(Elie.age).toBe('Age 36');
+    // Lea's Maya: the server withholds her birth date from the owner (N9d1a).
+    expect([Maya.age, Maya.goal]).toEqual([null, null]);
     // Born in November: not 38 until then.
     expect(Hiba.age).toBe('Age 37');
     // Born on this very day of 1996.
@@ -175,7 +237,11 @@ describe('client list (C2, critique B4a)', () => {
     const { Elie, Jad, Lynn, Maya, Nour, Sara, Rita, Rami } = rows();
     const read = (row: ClientRow) => row.tags.map((tag) => [tag.label, tag.link, tag.queryParams]);
 
-    expect(read(Maya)).toEqual([['1 check-in to review', '/clients/c-maya/checkins/a-maya', null]]);
+    // The check-in is Lea's to review: the tag goes where the shared Today rule sends it (N9d1a).
+    const mayas = attentionTarget(
+      attentionItem('CheckInToReview', LEAS_MAYA, { count: 1, subjectId: null }),
+    );
+    expect(read(Maya)).toEqual([['1 check-in to review', mayas.link, mayas.queryParams]]);
     expect(read(Sara)).toEqual([['2 unread messages', '/messages', { conversation: 'conv-sara' }]]);
     expect(read(Elie)).toEqual([
       ['Asked to renew', '/clients/c-elie/service', { renew: 'e-elie' }],
@@ -372,9 +438,9 @@ describe('client list (C2, critique B4a)', () => {
   });
 
   it('names a finished workout in the last activity, and phrases the rest by what it was', () => {
-    const { Maya, Hiba, Jad, Sara, Elie, Lynn, Ziad } = rows();
+    const { Rami, Hiba, Jad, Sara, Elie, Lynn, Ziad } = rows();
 
-    expect(Maya.activity).toBe('Trained Lower A · 2 hours ago');
+    expect(Rami.activity).toBe('Trained Lower A · 35 minutes ago');
     expect(Hiba.activity).toBe('Trained Upper B · 18 hours ago');
     expect(Jad.activity).toBe('Trained Push day · 6 days ago');
     expect(Sara.activity).toBe('Sent a check-in 19 hours ago');
@@ -518,10 +584,64 @@ describe('client list (C2, critique B4a)', () => {
   it("names the coach only on a team member's client", () => {
     const { Maya, Rami } = rows();
 
-    expect(Maya.coach).toBe('Lea Khoury');
-    expect(Rami.coach).toBeNull();
+    expect([Maya.coach, Maya.waiting]).toEqual(['Lea Khoury', false]);
+    expect([Rami.coach, Rami.waiting]).toEqual([null, false]);
     const signedOut = mapClientList(clientListView(), { ...context, userId: null });
     expect(signedOut.rows.every((row) => row.coach === null)).toBe(true);
+  });
+
+  it('says nothing of the activity of a client the owner does not coach, never “No activity yet”', () => {
+    const { Maya, Lynn } = rows();
+
+    // Lea's Maya: the server withholds her activity from the owner (CLI-013, N9d1a).
+    expect([Maya.activity, Maya.activityAt]).toEqual([null, null]);
+    // The business side stays: her plan, her last seven days and when she last sent a check-in.
+    expect(Maya.week?.value).toBe('3 of 4');
+    expect(Maya.checkIn).toBe('Sent 18 hours ago');
+    // A client of your own with nothing logged still says so.
+    expect(Lynn.activity).toBe('No activity yet');
+    // An older answer without the flag reads as the old rule: the caller coaches the client.
+    const unflagged = clientRow(
+      overviewRow(coachClient('c-u', 'Ali', 'Fares'), {
+        lastActivityKind: 'WeighInLogged',
+        lastActivityAtUtc: '2026-10-01T10:00:00Z',
+      }),
+      COACH_TODAY,
+      context,
+    );
+    expect(unflagged.activity).toBe('Weighed in 2 hours ago');
+  });
+
+  it('says a client waits for a coach where a coach is named, and keeps them for the Coach filter (N9d1b)', () => {
+    const dana = waitingClient('c-dana', 'Dana', 'Saab');
+    const row = clientRow(
+      overviewRow(dana, {
+        attention: ['RenewalRequested'],
+        attentionItems: [
+          attentionItem('RenewalRequested', dana, { since: COACH_NOW, subjectId: 'e-dana' }),
+        ],
+        lastActivityKind: null,
+        lastActivityAtUtc: null,
+      }),
+      COACH_TODAY,
+      context,
+    );
+
+    expect(row).toMatchObject({
+      coach: null,
+      waiting: true,
+      coachId: WAITING_FOR_COACH,
+      activity: null,
+      activityAt: null,
+    });
+    // The business side still asks the owner: the renewal opens the plan to renew.
+    expect(row.tags.map((tag) => [tag.label, tag.link, tag.queryParams])).toEqual([
+      ['Asked to renew', '/clients/c-dana/service', { renew: 'e-dana' }],
+    ]);
+    // Signed out or not, nobody is named as their coach.
+    expect(clientRow(overviewRow(dana), COACH_TODAY, { ...context, userId: null }).waiting).toBe(
+      true,
+    );
   });
 
   it('puts a plan ending soon under Ending soon even when something else needs attention', () => {
@@ -533,13 +653,16 @@ describe('client list (C2, critique B4a)', () => {
   });
 
   it('searches names and goals, ignoring case, accents and word order', () => {
-    const { Maya, Nour } = rows();
+    const { Maya, Nour, Tala } = rows();
     const elie = clientRow(overviewRow(coachClient('c-e', 'Élie', 'Azar')), COACH_TODAY, context);
 
-    expect(matches(Maya, 'all', 'wedding MAYA')).toBe(true);
-    expect(matches(Maya, 'all', 'maya pull-up')).toBe(false);
+    expect(matches(Tala, 'all', 'marathon TALA')).toBe(true);
+    expect(matches(Tala, 'all', 'tala pull-up')).toBe(false);
     expect(matches(Nour, 'all', '  glutes ')).toBe(true);
     expect(matches(elie, 'all', 'elie')).toBe(true);
+    // Lea's Maya by name: the owner never reads her goals (N9d1a).
+    expect(matches(Maya, 'all', 'maya')).toBe(true);
+    expect(matches(Maya, 'all', 'wedding')).toBe(false);
     expect(matches(Maya, 'paused', '')).toBe(false);
   });
 
@@ -631,6 +754,29 @@ describe('an empty filtered list (review of B3a)', () => {
     });
     expect(emptyList('all', 'zzz', lea)).toMatchObject({
       heading: 'None of Lea Khoury’s clients matches “zzz”',
+      action: 'Clear search',
+    });
+  });
+
+  it('speaks for the clients waiting for a coach, whose list its action keeps (N9d1b)', () => {
+    const waiting = { name: 'Waiting for a coach', isYou: false, isWaiting: true };
+
+    expect(emptyList('attention', '', waiting)).toEqual({
+      heading: 'Nobody waiting for a coach needs attention right now',
+      description: 'Clients will show up here when this changes.',
+      action: 'Show everyone waiting for a coach',
+    });
+    expect(emptyList('ending', '', waiting).heading).toBe(
+      'Nobody waiting for a coach has a plan ending in the next 14 days',
+    );
+    expect(emptyList('paused', '', waiting).heading).toBe(
+      'Nobody waiting for a coach has a paused plan',
+    );
+    expect(emptyList('new', '', waiting).heading).toBe(
+      'Nobody waiting for a coach joined in the last 14 days',
+    );
+    expect(emptyList('all', 'zzz', waiting)).toMatchObject({
+      heading: 'Nobody waiting for a coach matches “zzz”',
       action: 'Clear search',
     });
   });

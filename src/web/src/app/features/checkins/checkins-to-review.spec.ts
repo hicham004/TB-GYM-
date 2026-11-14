@@ -41,8 +41,6 @@ const RAMI = item({
   clientProfileId: 'client-rami',
   clientFirstName: 'Rami',
   clientLastName: 'Saliba',
-  coachUserId: LEA,
-  coachName: 'Lea Khoury',
   formTitle: 'Monthly review',
   sentAtUtc: '2026-10-21T09:00:00Z',
   sentDate: '2026-10-21',
@@ -131,7 +129,8 @@ describe('Check-ins to review (critique B3b)', () => {
     expect(sections[0].getAttribute('aria-current')).toBe('page');
     expect(textOf(host.querySelector('.count'))).toBe('3 check-ins to review');
 
-    // The owner reads a team coach's client with whose it is; their own name no coach.
+    // The owner's list holds only the owner's own clients, as a coach's does (CHK-014, notes plan
+    // N9d1a): no row names a coach.
     expect(rowParts(host)).toEqual([
       {
         initials: 'MR',
@@ -145,7 +144,7 @@ describe('Check-ins to review (critique B3b)', () => {
         link: '/clients/client-rami/checkins/assignment-2',
         name: 'Rami Saliba',
         line: 'Monthly review Sent Wed 21 Oct',
-        coach: 'Coached by Lea Khoury',
+        coach: '',
       },
       {
         initials: 'ÉN',
@@ -161,14 +160,17 @@ describe('Check-ins to review (critique B3b)', () => {
     const { host } = await render(() => of(list([RAMI])));
 
     expect(textOf(host.querySelector('a.row-link'))).toBe(
-      'Rami Saliba, Monthly review, Sent Wed 21 Oct, Coached by Lea Khoury',
+      'Rami Saliba, Monthly review, Sent Wed 21 Oct',
     );
     expect(host.querySelector('.row-line')?.getAttribute('aria-hidden')).toBe('true');
-    expect(host.querySelector('.row-coach')?.getAttribute('aria-hidden')).toBe('true');
+    expect(host.querySelector('.row-coach')).toBeNull();
   });
 
   it('names no coach on a coach’s own list', async () => {
-    const { host } = await render(() => of(list([RAMI])), LEA);
+    const { host } = await render(
+      () => of(list([{ ...RAMI, coachUserId: LEA, coachName: 'Lea Khoury' }])),
+      LEA,
+    );
 
     expect(rowParts(host).map((row) => row.coach)).toEqual(['']);
   });

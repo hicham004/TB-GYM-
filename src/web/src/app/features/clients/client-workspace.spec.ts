@@ -1,10 +1,10 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router, type Routes } from '@angular/router';
+import { provideRouter, Router, type Route, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of, Subject, throwError } from 'rxjs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../core/api/api-client';
 import type {
   ClientCommercialOverview,
@@ -17,9 +17,11 @@ import { AuthStore } from '../../core/auth/auth.store';
 import { CsrfService } from '../../core/security/csrf.service';
 import { TenantStore } from '../../core/tenancy/tenant.store';
 import { press, settle } from '../../../testing/dom';
+import { confirmBeforeLeaving } from '../../core/forms/leave-guard';
 import { ConversationLaunch } from '../messaging/conversation-launch';
 import { ClientWorkspace } from './client-workspace';
 import { ClientWorkspaceContext } from './client-workspace.context';
+import { clientRoutes } from './clients.routes';
 
 @Component({ selector: 'app-section-stub', template: 'section' })
 class SectionStub {}
@@ -66,6 +68,68 @@ const PROFILE = {
   release: null,
 } as unknown as CoachClientDetails;
 
+/**
+ * Lea's client, read by the owner (N9d1a): the server withholds the private side. The goal is left in,
+ * as a leaky double would, to show the page does not draw it either.
+ */
+const LEAS = {
+  ...PROFILE,
+  assignedCoachUserId: 'coach-lea',
+  assignedCoachName: 'Lea Khoury',
+  mayCoach: false,
+} as CoachClientDetails;
+
+/** A client whose coach left (N9d1b): nobody coaches them, so nobody opens their private side. */
+const WAITING = {
+  ...LEAS,
+  goals: null,
+  assignedCoachUserId: null,
+  assignedCoachName: '',
+} as CoachClientDetails;
+
+/** Each private section created, so a test can see one never was. */
+const created: string[] = [];
+
+@Component({ selector: 'app-private-stub', template: 'private section' })
+class PrivateStub {
+  constructor() {
+    created.push('private');
+  }
+
+  /** As Edit weeks and the review do: a drawn page holding no work lets the person go. */
+  canLeave(): boolean {
+    return true;
+  }
+}
+
+/** The record's sections as `clients.routes.ts` declares them (N9d1a), each with its marker and guards. */
+const CLIENT_SECTIONS: Routes = clientRoutes.find((route) => route.path === ':clientId')!.children!;
+
+const isPrivate = (section: Route) => section.data?.['side'] === 'private';
+
+/**
+ * The real sections, their markers and leave guards kept and each page stubbed: a private one counts
+ * itself created, so a test sees a page the record must never draw.
+ */
+const SIDED_SECTIONS: Routes = CLIENT_SECTIONS.map((section) => ({
+  path: section.path,
+  pathMatch: section.pathMatch,
+  data: section.data,
+  canDeactivate: section.canDeactivate,
+  component: isPrivate(section) ? PrivateStub : SectionStub,
+}));
+
+/** Each private section's address, its parameters filled in. */
+const PRIVATE_ADDRESSES: Record<string, string> = {
+  training: 'training',
+  'training/:mesocycleId/edit': 'training/mesocycle-1/edit',
+  nutrition: 'nutrition',
+  checkins: 'checkins',
+  'checkins/:assignmentId': 'checkins/assignment-1',
+  progress: 'progress',
+  intake: 'intake',
+};
+
 function plan(overrides: Partial<ClientEnrollment> = {}): ClientEnrollment {
   return {
     id: 'enrollment-1',
@@ -107,6 +171,8 @@ async function render(
     sections?: Routes;
     /** The last day the server flags as ending soon (CLI-018), when it flags one. */
     endingSoon?: string | null;
+    /** Where the record is opened: its Overview unless a test opens a section by address. */
+    url?: string;
   } = {},
 ) {
   const overview: ClientCommercialOverview = {
@@ -163,7 +229,7 @@ async function render(
     ],
   });
   const harness = await RouterTestingHarness.create();
-  await harness.navigateByUrl('/clients/client-1');
+  await harness.navigateByUrl(options.url ?? '/clients/client-1');
   await settle(harness.fixture);
   return { harness, host: harness.routeNativeElement as HTMLElement, api };
 }
@@ -403,7 +469,8 @@ describe('ClientWorkspace', () => {
   });
 
   it('names the coach to an owner when the client is a team member’s, and not otherwise', async () => {
-    const theirs = await render({ userId: 'coach-9' });
+    // The owner reads a team member's client, whose private side is closed to them (N9d1a).
+    const theirs = await render({ userId: 'coach-9', profile: { ...PROFILE, mayCoach: false } });
     expect(theirs.host.textContent).toContain('Coached by Karim Haddad');
 
     TestBed.resetTestingModule();
@@ -417,7 +484,7 @@ describe('ClientWorkspace', () => {
   });
 
   it('tells an owner who messages a team member’s client instead of offering a chat (COACH-13)', async () => {
-    const theirs = await render({ userId: 'coach-9' });
+    const theirs = await render({ userId: 'coach-9', profile: { ...PROFILE, mayCoach: false } });
     expect(theirs.host.textContent).not.toContain('Message Maya');
     expect(theirs.host.querySelector('.messaging-note')?.textContent?.trim()).toBe(
       'Messages go through Karim Haddad.',
@@ -596,6 +663,226 @@ describe('ClientWorkspace', () => {
     expect(host.querySelector('app-section-nav')).toBeNull();
     expect(host.querySelector('app-section-stub')).toBeNull();
     expect(getClient).toHaveBeenCalledTimes(1);
+  });
+
+  describe('for an owner who does not coach the client (N9d1a)', () => {
+    beforeEach(() => {
+      created.length = 0;
+    });
+
+    function why(host: HTMLElement) {
+      const panel = host.querySelector<HTMLElement>('.section-content section.why');
+      const link = panel?.querySelector<HTMLAnchorElement>('a') ?? null;
+      return {
+        panel,
+        heading: panel?.querySelector('h2')?.textContent?.trim(),
+        text: panel?.querySelector('p')?.textContent?.trim(),
+        link: link && {
+          name: link.textContent?.trim(),
+          href: link.getAttribute('href'),
+          filled: link.classList.contains('tb-button--filled'),
+        },
+      };
+    }
+
+    it('marks every section of the private side, and only those, as clients.routes.ts declares them', () => {
+      expect(CLIENT_SECTIONS.filter(isPrivate).map((section) => section.path)).toEqual([
+        'training',
+        'training/:mesocycleId/edit',
+        'nutrition',
+        'checkins',
+        'checkins/:assignmentId',
+        'progress',
+        'intake',
+      ]);
+      expect(
+        CLIENT_SECTIONS.filter((section) => !isPrivate(section)).map((section) => section.path),
+      ).toEqual(['', 'service']);
+      // A private page may never be drawn, so its guard must not ask a page that is not there.
+      for (const section of CLIENT_SECTIONS.filter(isPrivate)) {
+        expect(section.canDeactivate ?? []).not.toContain(confirmBeforeLeaving);
+      }
+    });
+
+    it.each(Object.entries(PRIVATE_ADDRESSES))(
+      'says why in place of %s reached by address, creates nothing and lets the owner leave',
+      async (_path, address) => {
+        const { host } = await render({
+          profile: LEAS,
+          sections: SIDED_SECTIONS,
+          url: `/clients/client-1/${address}`,
+        });
+
+        expect(why(host).heading).toBe('Lea Khoury coaches Maya');
+        expect(host.querySelector('app-private-stub')).toBeNull();
+        expect(created).toEqual([]);
+
+        const router = TestBed.inject(Router);
+        await expect(router.navigateByUrl('/clients/client-1')).resolves.toBe(true);
+        expect(router.url).toBe('/clients/client-1');
+        expect(created).toEqual([]);
+      },
+    );
+
+    it('offers the business side alone: the Overview, Service & access and Plan and payments', async () => {
+      const { host, harness } = await render({ profile: LEAS, sections: SIDED_SECTIONS });
+
+      expect(sectionNames(host)).toEqual(['Overview', 'Service & access']);
+      expect(host.querySelector('.plan-row')?.textContent).toContain('Coached by Lea Khoury');
+      expect(host.querySelector('.messaging-note')?.textContent?.trim()).toBe(
+        'Messages go through Lea Khoury.',
+      );
+      expect(host.textContent).not.toContain('Message Maya');
+      // Their goal is their coach's to read.
+      expect(host.querySelector('.goal')).toBeNull();
+      press(host, 'Actions');
+      await settle(harness.fixture);
+      expect(menuLabels(host)).toEqual(['Plan and payments']);
+    });
+
+    it('says why in place of a private section reached by address, and never creates it', async () => {
+      const { host, harness } = await render({
+        profile: LEAS,
+        sections: SIDED_SECTIONS,
+        url: '/clients/client-1/training',
+      });
+
+      const closed = why(host);
+      expect(closed.heading).toBe('Lea Khoury coaches Maya');
+      expect(closed.text).toBe(
+        'As the owner you see Maya’s plan, payments and sessions. Their training, nutrition, check-ins and progress open only to their coach.',
+      );
+      expect(closed.link).toEqual({
+        name: 'Service & access',
+        href: '/clients/client-1/service',
+        filled: false,
+      });
+      expect(closed.panel?.getAttribute('aria-labelledby')).toBe('closed-section-title');
+      // The section is never created, so nothing it would read is asked for.
+      expect(host.querySelector('app-private-stub')).toBeNull();
+      expect(created).toEqual([]);
+
+      // A business section draws as ever.
+      await harness.navigateByUrl('/clients/client-1/service');
+      await settle(harness.fixture);
+      expect(why(host).panel).toBeNull();
+      expect(host.querySelector('app-section-stub')).not.toBeNull();
+    });
+
+    it('leaves a private page it never drew without asking that page anything', async () => {
+      const { harness, host } = await render({
+        profile: LEAS,
+        sections: SIDED_SECTIONS,
+        url: '/clients/client-1/checkins/assignment-1',
+      });
+      expect(why(host).heading).toBe('Lea Khoury coaches Maya');
+
+      await harness.navigateByUrl('/clients/client-1/service');
+      await settle(harness.fixture);
+
+      expect(TestBed.inject(Router).url).toBe('/clients/client-1/service');
+      expect(created).toEqual([]);
+    });
+
+    it('tells the owner a waiting client has no coach yet, offers no chat, and the way to choose one', async () => {
+      const { host } = await render({
+        profile: WAITING,
+        sections: SIDED_SECTIONS,
+        url: '/clients/client-1/training',
+      });
+
+      expect(host.querySelector('.plan-row')?.textContent).toContain('Waiting for a coach');
+      expect(host.textContent).not.toContain('Coached by');
+      // Nobody coaches them, so nobody messages them yet, and nothing says otherwise.
+      expect(host.textContent).not.toContain('Message Maya');
+      expect(host.querySelector('.messaging-note')).toBeNull();
+      expect(sectionNames(host)).toEqual(['Overview', 'Service & access']);
+      const closed = why(host);
+      expect(closed.heading).toBe('Maya is waiting for a coach');
+      expect(closed.text).toBe(
+        'Nobody sees Maya’s training, nutrition, check-ins and progress until you give them a coach, yourself included. Their plan keeps running and they can still log.',
+      );
+      expect(closed.link).toEqual({
+        name: 'Choose a coach',
+        href: '/clients/client-1/service?action=coach',
+        filled: true,
+      });
+      expect(created).toEqual([]);
+    });
+
+    it('closes a former client’s private side to an owner who did not coach them when it ended', async () => {
+      const { host } = await render({
+        profile: {
+          ...LEAS,
+          release: {
+            releasedAtUtc: '2026-09-20T10:00:00Z',
+            reason: 'Moved',
+            releasedByName: 'Lea Khoury',
+            departureKind: 'ReleasedByOwner',
+          },
+        } as CoachClientDetails,
+        sections: SIDED_SECTIONS,
+        url: '/clients/client-1/training',
+      });
+
+      // No Progress either: it is their coach's to read.
+      expect(sectionNames(host)).toEqual(['Overview', 'Service & access']);
+      // Not even View intake, so no Actions at all.
+      expect(host.querySelector('app-client-actions')).toBeNull();
+      const closed = why(host);
+      expect(closed.heading).toBe('Former client');
+      expect(closed.text).toBe(
+        'You keep Maya’s plan and payments. Their training, check-ins and progress stay closed: you did not coach them when coaching ended.',
+      );
+      expect(closed.link).toBeNull();
+      expect(created).toEqual([]);
+    });
+
+    it('follows a change of coach without a reload: the sections, the actions and the open section', async () => {
+      const { host, harness } = await render({
+        profile: LEAS,
+        sections: SIDED_SECTIONS,
+        url: '/clients/client-1/training',
+      });
+      expect(created).toEqual([]);
+
+      // The coach panel saves the owner as Maya's coach and hands the record its answer.
+      harness.routeDebugElement!.injector.get(ClientWorkspaceContext).setProfile({
+        ...LEAS,
+        assignedCoachUserId: OWNER_ID,
+        assignedCoachName: 'Karim Haddad',
+        mayCoach: true,
+      });
+      await settle(harness.fixture);
+
+      expect(sectionNames(host)).toEqual([
+        'Overview',
+        'Training',
+        'Nutrition',
+        'Check-ins',
+        'Progress',
+        'Service & access',
+      ]);
+      expect(why(host).panel).toBeNull();
+      expect(host.querySelector('app-private-stub')).not.toBeNull();
+      expect(created).toEqual(['private']);
+      expect(host.textContent).toContain('Message Maya');
+      expect(host.textContent).not.toContain('Coached by');
+      press(host, 'Actions');
+      await settle(harness.fixture);
+      expect(menuLabels(host)).toEqual(['Assign program', 'Plan and payments', 'Edit intake']);
+    });
+
+    it('draws a private section for the client’s own coach, and a missing flag counts as theirs', async () => {
+      const { host } = await render({
+        sections: SIDED_SECTIONS,
+        url: '/clients/client-1/training',
+      });
+
+      expect(why(host).panel).toBeNull();
+      expect(host.querySelector('app-private-stub')).not.toBeNull();
+      expect(created).toEqual(['private']);
+    });
   });
 
   it('keeps Retry for a failure that may pass, such as a server error', async () => {
