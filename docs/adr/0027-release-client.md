@@ -29,7 +29,7 @@ Business rules, decided by the product owner on 2026-09-23 and 2026-09-24:
   `Released` or `ClientLeft` entry in the coach history), so no coach keeps them. Chats keep the ADR
   0026 privacy rule, and an ended profile's features all answer `MembershipInactive`. Since
   2026-11-14 (C8, N9d1a) the owner keeps the business side of every former client, and the private side
-  only of one they coached when it ended: such an entry means another coach had the client, so the
+  only of one they coached when it ended: such an entry means another coach had the client, or nobody after a wait (N9d1b), so the
   owner's private requests on that record, reads and writes, answer 404 as for any client they do not
   coach, and nobody reads that former client's private side.
 - **No undo, but a former client can be invited back** as a new relationship: a new client profile

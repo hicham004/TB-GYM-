@@ -12,7 +12,7 @@ public sealed class ClientProfile : TenantEntity
     private ClientProfile(
         Guid tenantId,
         Guid userId,
-        Guid assignedCoachUserId,
+        Guid? assignedCoachUserId,
         string firstName,
         string lastName,
         string email,
@@ -34,11 +34,17 @@ public sealed class ClientProfile : TenantEntity
     public Guid? UserId { get; private set; }
 
     /// <summary>
-    /// The one active Owner or Coach of this workspace who coaches this client. A Coach sees and acts
-    /// only on the clients assigned to them; the Owner sees every client. Every change appends a
-    /// <see cref="ClientCoachAssignment"/>, and the database refuses a change that does not.
+    /// The one active Owner or Coach of this workspace who coaches this client, or nobody while the client waits for
+    /// a coach (CLI-012, C8): their coach left the team, the coach who invited them had left by the time they joined,
+    /// or the house had no Coach when they signed up. A Coach sees and acts only on the clients assigned to them; the
+    /// Owner manages every client and coaches only their own (CLI-013), so nobody opens a waiting client's private
+    /// side. Every change appends a <see cref="ClientCoachAssignment"/>, and the database refuses a change that does
+    /// not. A released client always names the Owner, as the record's keeper (ADR 0027).
     /// </summary>
-    public Guid AssignedCoachUserId { get; private set; }
+    public Guid? AssignedCoachUserId { get; private set; }
+
+    /// <summary>Nobody coaches this client now; the Owner gives them a coach by reassigning them (CLI-012).</summary>
+    public bool IsWaitingForCoach => AssignedCoachUserId is null;
 
     public string FirstName { get; private set; } = string.Empty;
 
@@ -82,9 +88,9 @@ public sealed class ClientProfile : TenantEntity
 
     /// <summary>
     /// A trainee who signed up into the house with no invitation and trains as their own coach (CLI-026, ADR 0041).
-    /// The record still names a member of the house's staff, as every client's does (ADR 0026), but nobody coaches
-    /// this person: they raise nothing on Coach Today and their notes and leaving reach no staff inbox. A database
-    /// trigger refuses the mark anywhere but in the house.
+    /// The record names the member of the house's staff who may read their private side, or nobody while the house
+    /// has no Coach (ADR 0026), but nobody coaches this person: they raise nothing on Coach Today and their notes and
+    /// leaving reach no staff inbox. A database trigger refuses the mark anywhere but in the house.
     /// </summary>
     public bool IsSelfDirected { get; private set; }
 
@@ -121,10 +127,14 @@ public sealed class ClientProfile : TenantEntity
     /// <summary>The address an anonymised record carries: unique to the record, and naming nobody.</summary>
     public static string ClosedAddress(Guid clientProfileId) => $"closed-{clientProfileId:N}@{ClosedAddressDomain}";
 
+    /// <summary>
+    /// The profile of someone who accepted an invitation: with the coach who sent it, or waiting for a coach when
+    /// <paramref name="assignedCoachUserId"/> is null because that coach left the team before they accepted (CLI-012).
+    /// </summary>
     public static ClientProfile CreateForAcceptedInvitation(
         Guid tenantId,
         Guid userId,
-        Guid assignedCoachUserId,
+        Guid? assignedCoachUserId,
         string firstName,
         string lastName,
         string email,
@@ -138,7 +148,9 @@ public sealed class ClientProfile : TenantEntity
 
         if (assignedCoachUserId == Guid.Empty || assignedCoachUserId == userId)
         {
-            throw new ArgumentException("A client is assigned to a coach other than themselves.", nameof(assignedCoachUserId));
+            throw new ArgumentException(
+                "A client is assigned to a coach other than themselves, or to nobody.",
+                nameof(assignedCoachUserId));
         }
 
         var names = ValidateNames(firstName, lastName);
@@ -157,12 +169,13 @@ public sealed class ClientProfile : TenantEntity
     /// <summary>
     /// The profile of someone who signed up into the house (CLI-024): self-directed from its first day, with the
     /// name and date of birth they typed. Whether they are old enough was decided before this, against the house's
-    /// own age.
+    /// own age. <paramref name="assignedCoachUserId"/> is the house's Coach, or null while the house has none, and
+    /// the trainee then waits for one (CLI-024).
     /// </summary>
     public static ClientProfile CreateForHouseSignUp(
         Guid tenantId,
         Guid userId,
-        Guid assignedCoachUserId,
+        Guid? assignedCoachUserId,
         string firstName,
         string lastName,
         string email,
@@ -292,8 +305,8 @@ public sealed class ClientProfile : TenantEntity
     }
 
     /// <summary>
-    /// Moves this client to another coach. Returns false when they already have that coach, so a
-    /// repeated request records no history.
+    /// Moves this client to another coach, or gives them one while they wait. Returns false when they already have
+    /// that coach, so a repeated request records no history.
     /// </summary>
     public bool AssignCoach(Guid coachUserId)
     {
@@ -313,13 +326,29 @@ public sealed class ClientProfile : TenantEntity
     }
 
     /// <summary>
+    /// Leaves this client waiting for a coach, because theirs left the team (C8: the Owner never gets a departing
+    /// coach's clients automatically). Returns false when they already wait, so a repeat records no history.
+    /// </summary>
+    public bool WaitForCoach()
+    {
+        EnsureNotReleased();
+        if (AssignedCoachUserId is null)
+        {
+            return false;
+        }
+
+        AssignedCoachUserId = null;
+        return true;
+    }
+
+    /// <summary>
     /// Ends this client's relationship with the workspace, whether the owner released them or they
     /// left. Nothing is deleted; the caller also ends the membership, closes open plans and programs,
     /// and records who ended it and why.
     /// </summary>
     /// <remarks>
     /// The client must already be with the owner, so a former client never keeps a coach's list
-    /// populated or stops that coach being removed later.
+    /// populated or stops that coach being removed later. A waiting client is moved to the owner first too.
     /// </remarks>
     public void Release(Guid ownerUserId, DateTimeOffset now)
     {

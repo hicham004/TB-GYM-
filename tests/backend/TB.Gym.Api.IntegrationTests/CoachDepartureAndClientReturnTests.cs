@@ -41,26 +41,32 @@ public sealed partial class Phase3TrainingWorkflowTests
         await RefreshCsrfAsync(coach);
         await AssertStatusAsync(await coach.PostAsync("/api/team/me/resign", null), HttpStatusCode.Forbidden);
 
-        // The client moves to the owner, recorded as a resignation by the coach themselves.
+        // The client waits for a coach (N9d1b, C8: never handed to the owner), recorded as a resignation by the coach
+        // themselves.
         var history = await RequiredJsonAsync<TeamAssignment[]>(
             await owner.GetAsync($"/api/clients/{clientId}/coach-assignments"));
         Assert.AreEqual("CoachResigned", history[^1].Reason);
         Assert.AreEqual(coachUserId, history[^1].PreviousCoachUserId);
-        Assert.AreEqual(ownerUserId, history[^1].CoachUserId);
+        Assert.IsNull(history[^1].CoachUserId);
         Assert.AreEqual(coachUserId, history[^1].AssignedByUserId);
+        Assert.AreEqual(0, (await TeamMembersAsync(owner)).Single(member => member.UserId == ownerUserId).AssignedClientCount);
 
         // Told in-app ...
         await SweepDepartureNotificationsAsync();
         var inbox = await RequiredJsonAsync<DepartureInbox>(await client.GetAsync("/api/notifications"));
         var told = inbox.Items.Single(item => item.Kind == "CoachDeparted");
-        Assert.AreEqual("Your coach has changed", told.Title);
-        StringAssert.Contains(told.Body, "Another coach looks after you now");
+        Assert.AreEqual("Your coach has left", told.Title);
+        Assert.AreEqual(
+            "Your coaching space will give you a new coach and tell you when it does. Your plan and history stay as they are.",
+            told.Body);
 
         // The owner is told too, once, without the coach being named.
         var ownerInbox = await RequiredJsonAsync<DepartureInbox>(await owner.GetAsync("/api/notifications"));
         var resignedNotice = ownerInbox.Items.Single(item => item.Kind == "CoachResigned");
         Assert.AreEqual("A coach left your team", resignedNotice.Title);
-        StringAssert.Contains(resignedNotice.Body, "are yours now");
+        Assert.AreEqual(
+            "Their clients now wait for a coach, as will anyone who accepts one of their invitations. Give each one a coach from Clients, yourself included.",
+            resignedNotice.Body);
         Assert.DoesNotContain("Rhea", resignedNotice.Body);
         Assert.IsFalse(inbox.Items.Any(item => item.Kind == "CoachResigned"), "Only the owner hears of a resignation.");
 

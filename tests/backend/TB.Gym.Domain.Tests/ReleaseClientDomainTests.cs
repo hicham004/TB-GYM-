@@ -171,13 +171,25 @@ public sealed class ReleaseClientDomainTests
     [TestMethod]
     public void ACoachResignationAndAClientLeavingAreTheirOwnHistoryReasons()
     {
-        var resigned = ClientCoachAssignment.ForChange(
-            TenantId, Guid.NewGuid(), 2, CoachUserId, OwnerUserId, ClientCoachAssignmentReason.CoachResigned, null, Now);
+        // Since notes plan N9d1b (C8) a resigning coach's client waits for a coach: the entry names the coach who left
+        // and nobody after them, and a change that names the owner is never a resignation.
+        var resigned = ClientCoachAssignment.ForDeparture(
+            TenantId, Guid.NewGuid(), 2, CoachUserId, ClientCoachAssignmentReason.CoachResigned, Now);
         var left = ClientCoachAssignment.ForChange(
             TenantId, Guid.NewGuid(), 2, CoachUserId, OwnerUserId, ClientCoachAssignmentReason.ClientLeft, null, Now);
+        var leftWhileWaiting = ClientCoachAssignment.ForChange(
+            TenantId, Guid.NewGuid(), 3, null, OwnerUserId, ClientCoachAssignmentReason.ClientLeft, null, Now);
 
         Assert.AreEqual(ClientCoachAssignmentReason.CoachResigned, resigned.Reason);
+        Assert.IsNull(resigned.CoachUserId);
+        Assert.AreEqual(CoachUserId, resigned.PreviousCoachUserId);
         Assert.AreEqual(ClientCoachAssignmentReason.ClientLeft, left.Reason);
+        Assert.AreEqual(OwnerUserId, left.CoachUserId);
+        Assert.AreEqual(ClientCoachAssignmentReason.ClientLeft, leftWhileWaiting.Reason);
+        Assert.IsNull(leftWhileWaiting.PreviousCoachUserId, "A waiting client who leaves had nobody before the owner.");
+        Assert.AreEqual(OwnerUserId, leftWhileWaiting.CoachUserId, "The owner keeps the record, as for any client who left.");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ClientCoachAssignment.ForChange(
+            TenantId, Guid.NewGuid(), 2, CoachUserId, OwnerUserId, ClientCoachAssignmentReason.CoachResigned, null, Now));
         Assert.Throws<ArgumentOutOfRangeException>(() => ClientCoachAssignment.ForChange(
             TenantId, Guid.NewGuid(), 2, CoachUserId, OwnerUserId, ClientCoachAssignmentReason.Invitation, null, Now));
     }
@@ -214,7 +226,13 @@ public sealed class ReleaseClientDomainTests
     [TestMethod]
     public void WorkspaceNotificationKindsAreInAppOnlyServiceNotices()
     {
-        foreach (var kind in new[] { CommercialNotificationKind.CoachDeparted, CommercialNotificationKind.ClientLeft })
+        foreach (var kind in new[]
+        {
+            CommercialNotificationKind.CoachDeparted,
+            CommercialNotificationKind.ClientLeft,
+            CommercialNotificationKind.CoachAssigned,
+            CommercialNotificationKind.TraineeStaffChanged,
+        })
         {
             Assert.IsTrue(NotificationPurposeCatalog.IsWorkspaceKind(kind));
             Assert.AreEqual(NotificationPurpose.ServiceTransactional, NotificationPurposeCatalog.For(kind));

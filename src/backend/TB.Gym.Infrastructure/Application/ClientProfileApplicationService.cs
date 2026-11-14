@@ -36,9 +36,11 @@ internal sealed class ClientProfileApplicationService(
             query = query.Where(client => client.AssignedCoachUserId == coachUserId);
         }
 
+        // A left join: a client waiting for a coach (CLI-012) stays on the Owner's list, with no coach.
         return await (
             from client in query
-            join coach in dbContext.Users.AsNoTracking() on client.AssignedCoachUserId equals coach.Id
+            join coach in dbContext.Users.AsNoTracking() on client.AssignedCoachUserId equals coach.Id into coaches
+            from coach in coaches.DefaultIfEmpty()
             orderby client.FirstName, client.LastName
             select new ClientSummary(
                 client.Id,
@@ -50,7 +52,7 @@ internal sealed class ClientProfileApplicationService(
                 client.IsCoachBlocked,
                 client.Version,
                 client.AssignedCoachUserId,
-                coach.DisplayName))
+                coach == null ? null : coach.DisplayName))
             .ToListAsync(cancellationToken);
     }
 
@@ -90,19 +92,21 @@ internal sealed class ClientProfileApplicationService(
 
                 // Shares the target coach's membership row with other assignments and conflicts with
                 // a concurrent removal of that coach, which locks it for update. Whichever commits
-                // second sees the other: a removal waits and then moves this client too, or this
-                // request waits and then finds the coach no longer active.
+                // second sees the other: a removal waits and then leaves this client waiting too, or
+                // this request waits and then finds the coach no longer active.
                 if (!await CoachTeam.LockActiveStaffAsync(dbContext, tenantContext.TenantId, request.CoachUserId, cancellationToken))
                 {
                     return Invalid("coachUserId", "Choose an active coach of this workspace.");
                 }
 
                 dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Version;
+                // Null while the client waits for a coach: the owner gives them one here, themselves included.
                 var previousCoachUserId = profile.AssignedCoachUserId;
                 if (profile.AssignCoach(request.CoachUserId))
                 {
+                    var now = clock.UtcNow;
                     var sequence = await CoachTeam.NextAssignmentSequenceAsync(dbContext, profile.Id, cancellationToken);
-                    dbContext.ClientCoachAssignments.Add(ClientCoachAssignment.ForChange(
+                    var entry = ClientCoachAssignment.ForChange(
                         profile.TenantId,
                         profile.Id,
                         sequence,
@@ -110,7 +114,30 @@ internal sealed class ClientProfileApplicationService(
                         request.CoachUserId,
                         ClientCoachAssignmentReason.Reassigned,
                         request.Note,
-                        clock.UtcNow));
+                        now);
+                    dbContext.ClientCoachAssignments.Add(entry);
+                    // Every coach change is told to the client, the owner taking them included (C8, CLI-014), in
+                    // the same unit of work and once per history entry, since it changes who may read their private
+                    // side. A self-directed trainee trains as their own coach (CLI-026), so they are told in words of
+                    // their own: who on the team can now see their training.
+                    if (profile.UserId is { } clientUserId)
+                    {
+                        var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(
+                            dbContext,
+                            profile.TenantId,
+                            cancellationToken);
+                        if (profile.IsSelfDirected)
+                        {
+                            WorkspaceRelationshipNotices.TraineeStaffChanged(
+                                dbContext, profile.TenantId, timeZoneId, clientUserId, profile.Id, entry.Id, now);
+                        }
+                        else
+                        {
+                            WorkspaceRelationshipNotices.CoachAssigned(
+                                dbContext, profile.TenantId, timeZoneId, clientUserId, profile.Id, entry.Id, now);
+                        }
+                    }
+
                     await dbContext.SaveChangesAsync(cancellationToken);
                 }
                 else if (profile.Version != request.Version)
@@ -216,8 +243,9 @@ internal sealed class ClientProfileApplicationService(
     /// profile is marked ended and the reason recorded as a release or a departure; their membership
     /// ends, which cuts every client route at once; open or future plans, programs and meal plans are
     /// cancelled through their own audited transitions, payments untouched; and the notices are
-    /// queued — an email to a released client, in-app notices to the owner and their coach when a
-    /// client leaves. A program with a workout in progress is left as it is, because the training
+    /// queued — an email to a released client, in-app notices to the owner and their coach, if they
+    /// have one, when a client leaves. A client waiting for a coach moves to the owner the same way, from
+    /// nobody. A program with a workout in progress is left as it is, because the training
     /// rules refuse to cancel one mid-workout and ending a relationship must not fail for that.
     /// </remarks>
     private async Task<ClientCommandResult> EndRelationshipAsync(
@@ -297,6 +325,7 @@ internal sealed class ClientProfileApplicationService(
         var tenantId = tenantContext.TenantId;
         var ownerUserId = await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
         await CoachTeam.LockActiveStaffAsync(dbContext, tenantId, ownerUserId, cancellationToken);
+        // Null while the client waits for a coach: the owner becomes the record's keeper from nobody.
         var previousCoachUserId = profile.AssignedCoachUserId;
         if (profile.AssignCoach(ownerUserId))
         {
@@ -347,7 +376,8 @@ internal sealed class ClientProfileApplicationService(
         if (!releasedByOwner && !profile.IsSelfDirected)
         {
             var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
-            foreach (var staffUserId in new[] { ownerUserId, previousCoachUserId }.Distinct())
+            // A waiting client had no coach to tell, so the owner alone hears it.
+            foreach (var staffUserId in new[] { ownerUserId, previousCoachUserId }.OfType<Guid>().Distinct())
             {
                 WorkspaceRelationshipNotices.ClientLeft(dbContext, tenantId, timeZoneId, staffUserId, profile.Id, now);
             }
@@ -459,9 +489,10 @@ internal sealed class ClientProfileApplicationService(
             .Where(item => item.ClientProfileId == clientId)
             .OrderBy(item => item.Sequence)
             .ToListAsync(cancellationToken);
+        // An entry that names nobody is a wait for a coach (CLI-012): it has no name to read.
         var userIds = history
-            .SelectMany(item => new[] { item.CoachUserId, item.PreviousCoachUserId ?? Guid.Empty })
-            .Where(id => id != Guid.Empty)
+            .SelectMany(item => new[] { item.CoachUserId, item.PreviousCoachUserId })
+            .OfType<Guid>()
             .Distinct()
             .ToList();
         var names = await dbContext.Users
@@ -473,7 +504,7 @@ internal sealed class ClientProfileApplicationService(
                 item.Id,
                 item.Sequence,
                 item.CoachUserId,
-                names.GetValueOrDefault(item.CoachUserId, string.Empty),
+                item.CoachUserId is { } coach ? names.GetValueOrDefault(coach, string.Empty) : null,
                 item.PreviousCoachUserId,
                 item.PreviousCoachUserId is { } previous ? names.GetValueOrDefault(previous, string.Empty) : null,
                 item.Reason,
@@ -503,9 +534,10 @@ internal sealed class ClientProfileApplicationService(
             .CurrentFor(userId)
             .Select(item => new { item.TenantId, item.AssignedCoachUserId })
             .SingleOrDefaultAsync(cancellationToken);
-        if (profile is null) return null;
+        // A client waiting for a coach (CLI-012) has none to show, as a client with no coach never had.
+        if (profile?.AssignedCoachUserId is not { } coachUserId) return null;
         var name = await dbContext.Users.AsNoTracking()
-            .Where(item => item.Id == profile.AssignedCoachUserId)
+            .Where(item => item.Id == coachUserId)
             .Select(item => item.DisplayName)
             .SingleOrDefaultAsync(cancellationToken);
         if (name is null) return null;
@@ -515,8 +547,8 @@ internal sealed class ClientProfileApplicationService(
         // coach shows (notes plan N4b) come from the Identity record the same way.
         return new OwnCoachView(
             name,
-            await FoundingReader.ShowsBadgeToClientsAsync(dbContext, profile.TenantId, profile.AssignedCoachUserId, cancellationToken),
-            await CoachCertificateReader.ShownToClientsAsync(dbContext, profile.TenantId, profile.AssignedCoachUserId, cancellationToken));
+            await FoundingReader.ShowsBadgeToClientsAsync(dbContext, profile.TenantId, coachUserId, cancellationToken),
+            await CoachCertificateReader.ShownToClientsAsync(dbContext, profile.TenantId, coachUserId, cancellationToken));
     }
 
     public Task<ClientCommandResult> UpdateForCoachAsync(
@@ -891,11 +923,14 @@ internal sealed class ClientProfileApplicationService(
         ClientProfile client,
         CancellationToken cancellationToken)
     {
-        var coachName = await dbContext.Users
-            .AsNoTracking()
-            .Where(user => user.Id == client.AssignedCoachUserId)
-            .Select(user => user.DisplayName)
-            .SingleOrDefaultAsync(cancellationToken);
+        // A client waiting for a coach (CLI-012) names nobody: an empty name, as the screens already read one.
+        var coachName = client.AssignedCoachUserId is { } coachUserId
+            ? await dbContext.Users
+                .AsNoTracking()
+                .Where(user => user.Id == coachUserId)
+                .Select(user => user.DisplayName)
+                .SingleOrDefaultAsync(cancellationToken)
+            : null;
         var details = ToCoachDetails(client, coachName ?? string.Empty, await ReleaseViewAsync(client, cancellationToken));
 
         // The business side to whoever may manage the client; the intake answers, the health fields and the coach's

@@ -1116,6 +1116,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         var today = N9b1FStartAtMidday();
         using var house = await N9a1OpenHouseAsync("n9b1f-program");
         using var trainee = await N9a1TraineeAsync(house.TenantId, "n9b1f-program-nadia@example.test", "Nadia", "Fares");
+        // The house has no Coach, so the trainee waits for one (N9d1b); the Owner takes them to coach them.
+        await ReassignAsync(house.Owner, trainee.ProfileId, house.OwnerUserId, null);
         var free = (await N9b1FRowsAsync(trainee.ProfileId)).Single();
         var squat = await CreateExerciseAsync(house.Owner, "N9b1 Goblet squat", [], []);
         var program = await PublishProgramAsync(house.Owner, N9b1FProgram(squat.Id));

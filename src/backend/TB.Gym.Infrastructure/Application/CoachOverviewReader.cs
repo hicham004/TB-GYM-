@@ -53,6 +53,9 @@ internal sealed class CoachOverviewReader(
     /// <summary>Names the read of each client's latest program, which No program names (N10a), for the test that counts it.</summary>
     internal const string LatestProgramsTag = "Coach overview: each client's latest program";
 
+    /// <summary>Names the read of when each of the Owner's waiting clients began to wait (notes plan N9d1b).</summary>
+    internal const string WaitingForCoachTag = "Coach overview: the clients waiting for a coach";
+
     public async Task<CoachTodayView> GetTodayAsync(CancellationToken cancellationToken)
     {
         var scope = await LoadScopeAsync(null, cancellationToken);
@@ -84,7 +87,58 @@ internal sealed class CoachOverviewReader(
             CoachAttentionPolicy.Key,
             CoachAttentionPolicy.Version,
             TrainingAttentionPolicy.Key,
-            TrainingAttentionPolicy.Version);
+            TrainingAttentionPolicy.Version,
+            await ReadWaitingForCoachAsync(scope, cancellationToken));
+    }
+
+    /// <summary>
+    /// The Owner's clients waiting for a coach (CLI-012, CLI-020; notes plan N9d1b), longest waiting first, from the
+    /// scope already read and, only when somebody waits, one read of when each wait began and who it followed. Null
+    /// for a Coach. A self-directed trainee is left out: they train as their own coach (CLI-026).
+    /// </summary>
+    private async Task<IReadOnlyList<CoachWaitingClientView>?> ReadWaitingForCoachAsync(
+        Scope scope,
+        CancellationToken cancellationToken)
+    {
+        if (!scope.IsOwner)
+        {
+            return null;
+        }
+
+        Guid[] waiting = [.. scope.Clients
+            .Where(client => client.CoachUserId is null && !client.IsSelfDirected)
+            .Select(client => client.Id)];
+        if (waiting.Length == 0)
+        {
+            return [];
+        }
+
+        // Each waiting client's newest entry, the one that names nobody, and the coach it followed.
+        var rows = await (
+                from entry in dbContext.ClientCoachAssignments.AsNoTracking()
+                where waiting.Contains(entry.ClientProfileId) &&
+                      !dbContext.ClientCoachAssignments.Any(later =>
+                          later.ClientProfileId == entry.ClientProfileId && later.Sequence > entry.Sequence)
+                join user in dbContext.Users.AsNoTracking() on entry.PreviousCoachUserId equals user.Id into previous
+                from before in previous.DefaultIfEmpty()
+                select new
+                {
+                    entry.ClientProfileId,
+                    entry.AssignedAtUtc,
+                    PreviousCoachName = before == null ? null : before.DisplayName,
+                })
+            .TagWith(WaitingForCoachTag)
+            .ToListAsync(cancellationToken);
+        return [.. rows
+            .Select(row => new CoachWaitingClientView(
+                scope.Client(row.ClientProfileId).Ref,
+                row.AssignedAtUtc,
+                string.IsNullOrWhiteSpace(row.PreviousCoachName) ? null : row.PreviousCoachName,
+                scope.Client(row.ClientProfileId).Version))
+            .OrderBy(row => row.WaitingSinceUtc)
+            .ThenBy(row => row.Client.LastName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(row => row.Client.FirstName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(row => row.Client.ClientProfileId)];
     }
 
     public async Task<ClientOverviewView> ListAsync(CancellationToken cancellationToken)
@@ -239,10 +293,13 @@ internal sealed class CoachOverviewReader(
 
         // Whom the caller coaches (C8): a Coach every client here, the Owner their own. Of the others the Owner reads
         // the business side alone: the plan, payments, renewals, sessions and the counts, never what opens the private side.
+        // A left join keeps a client waiting for a coach (CLI-012) in the Owner's scope, coached by nobody: with no
+        // caller, nobody's equality must not match them either, as a null on both sides would.
         var staffUserId = await coachClientScope.StaffUserIdAsync(cancellationToken);
         var clients = await (
             from client in query
-            join coach in dbContext.Users.AsNoTracking() on client.AssignedCoachUserId equals coach.Id
+            join coach in dbContext.Users.AsNoTracking() on client.AssignedCoachUserId equals coach.Id into coaches
+            from coach in coaches.DefaultIfEmpty()
             orderby client.LastName, client.FirstName, client.Id
             select new ScopedClient(
                 client.Id,
@@ -250,14 +307,14 @@ internal sealed class CoachOverviewReader(
                 client.LastName,
                 client.Goals,
                 client.AssignedCoachUserId,
-                coach.DisplayName,
+                coach == null ? null : coach.DisplayName,
                 client.CreatedAtUtc,
                 client.IsCoachBlocked,
                 client.OnboardingStatus,
                 client.BirthDate,
                 client.Version,
                 client.IsSelfDirected,
-                client.AssignedCoachUserId == staffUserId))
+                staffUserId != null && client.AssignedCoachUserId == staffUserId))
             .ToListAsync(cancellationToken);
         var access = await featureAccessService.EvaluateManyAsync(
             tenantContext.TenantId,
@@ -1441,7 +1498,7 @@ internal sealed class CoachOverviewReader(
         string FirstName,
         string LastName,
         string? Goals,
-        Guid CoachUserId,
+        Guid? CoachUserId,
         string? CoachName,
         DateTimeOffset CreatedAtUtc,
         bool IsCoachBlocked,

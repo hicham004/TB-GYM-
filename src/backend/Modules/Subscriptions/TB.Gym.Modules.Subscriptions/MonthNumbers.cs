@@ -8,12 +8,14 @@ namespace TB.Gym.Modules.Subscriptions;
 /// cancelled, which is not covered. Nothing else covers days (SUB-008), and a gap, however short, ends one stint and
 /// starts another. Each counts for the coach the client had that day (ADR 0026), read as money received reads it; a
 /// session counts for who held it, where v1 said who recorded it (SES-003). Past months move with what is recorded
-/// late, as money and sessions do: the day decides, not the day it was typed.
+/// late, as money and sessions do: the day decides, not the day it was typed. v3 (notes plan N9d1b) counts what happened
+/// while a client waited for a coach (CLI-012) for nobody, on the owner's line of its own (<see cref="CountForNobody"/>),
+/// so the owner's rows still add up to the totals; nothing that counted for a coach moves.
 /// </summary>
 public static class MonthNumbersPolicy
 {
     public const string Key = "MonthNumbers";
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>
     /// The numbers of <c>[from, toExclusive)</c>: the whole workspace's (<paramref name="coachUserId"/> null), or only
@@ -26,10 +28,32 @@ public static class MonthNumbersPolicy
         DateOnly toExclusive,
         DateOnly today,
         TimeZoneInfo workspaceZone,
-        Guid? coachUserId)
+        Guid? coachUserId) =>
+        Count(facts, from, toExclusive, today, workspaceZone, coach => coachUserId is null || coach == coachUserId);
+
+    /// <summary>
+    /// What counted for nobody in <c>[from, toExclusive)</c>: money received, plans and packs sold, and clients started
+    /// or ended while the client waited for a coach (CLI-012, notes plan N9d1b). A session always names who held it, so
+    /// none is here. Added to every coach's numbers, it makes the workspace's.
+    /// </summary>
+    public static MonthNumbers CountForNobody(
+        MonthFacts facts,
+        DateOnly from,
+        DateOnly toExclusive,
+        DateOnly today,
+        TimeZoneInfo workspaceZone) =>
+        Count(facts, from, toExclusive, today, workspaceZone, coach => coach is null);
+
+    private static MonthNumbers Count(
+        MonthFacts facts,
+        DateOnly from,
+        DateOnly toExclusive,
+        DateOnly today,
+        TimeZoneInfo workspaceZone,
+        Func<Guid?, bool> countsFor)
     {
         bool InMonth(DateOnly day) => day >= from && day < toExclusive;
-        bool CountsFor(Guid? coach) => coachUserId is null || coach == coachUserId;
+        bool CountsFor(Guid? coach) => countsFor(coach);
 
         var sold = facts.Plans
             .Where(plan => IsSold(plan) &&
@@ -42,7 +66,7 @@ public static class MonthNumbersPolicy
             .ToArray();
 
         return new MonthNumbers(
-            MoneyReceivedPolicy.Totals(facts.Payments, from, toExclusive, workspaceZone, coachUserId),
+            MoneyReceivedPolicy.Totals(facts.Payments, from, toExclusive, workspaceZone, countsFor),
             facts.Sessions.Count(session => InMonth(session.Day) && CountsFor(session.CoachUserId)),
             sold.Count(plan => !plan.IsSessionPack),
             sold.Count(plan => plan.IsSessionPack),
@@ -105,16 +129,20 @@ public static class MonthNumbersPolicy
         return stints;
     }
 
-    /// <summary>Everyone the facts could count for, so nobody who has left the team falls out of the owner's rows.</summary>
+    /// <summary>
+    /// Everyone the facts could count for, so nobody who has left the team falls out of the owner's rows. An entry that
+    /// names nobody (a client waiting for a coach) adds nobody: what it counts is on <see cref="CountForNobody"/>'s line.
+    /// </summary>
     public static IReadOnlySet<Guid> CoachesIn(MonthFacts facts) =>
         facts.Sessions.Select(session => session.CoachUserId)
-            .Concat(facts.Plans.SelectMany(plan => plan.CoachHistory).Select(entry => entry.CoachUserId))
-            .Concat(facts.Payments.SelectMany(payment => payment.CoachHistory).Select(entry => entry.CoachUserId))
+            .Concat(facts.Plans.SelectMany(plan => plan.CoachHistory).Select(entry => entry.CoachUserId).OfType<Guid>())
+            .Concat(facts.Payments.SelectMany(payment => payment.CoachHistory).Select(entry => entry.CoachUserId).OfType<Guid>())
             .ToHashSet();
 
     /// <summary>
-    /// The coach the client had as <paramref name="day"/> began. Ending a client's coaching moves them to the owner first
-    /// (ADR 0027), so read any later that day it would take the ended client off the coach who had them.
+    /// The coach the client had as <paramref name="day"/> began, or nobody while they waited for one. Ending a client's
+    /// coaching moves them to the owner first (ADR 0027), so read any later that day it would take the ended client off
+    /// the coach who had them.
     /// </summary>
     private static Guid? CoachOn(DateOnly day, IEnumerable<CoachHistoryEntry> history, TimeZoneInfo workspaceZone) =>
         MoneyReceivedPolicy.CoachAt(MoneyReceivedPolicy.StartOfDayUtc(day, workspaceZone), history);

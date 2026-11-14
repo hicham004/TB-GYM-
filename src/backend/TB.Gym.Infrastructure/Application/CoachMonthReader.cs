@@ -64,7 +64,26 @@ internal sealed class CoachMonthReader(
             MonthNumbersPolicy.Key,
             MonthNumbersPolicy.Version,
             MoneyReceivedPolicy.Key,
-            MoneyReceivedPolicy.Version);
+            MoneyReceivedPolicy.Version,
+            isOwner ? NoCoach(facts, thisFrom, toExclusive, lastFrom, today, zone) : null);
+    }
+
+    /// <summary>
+    /// The Owner's line for what counted for nobody, this month and last: what happened while a client waited for a
+    /// coach (CLI-012, SUB-018 v3), from the facts already read, so the rows and it add up to the totals. Null when
+    /// nothing did in either month.
+    /// </summary>
+    private static CoachMonthNoCoachView? NoCoach(
+        MonthFacts facts,
+        DateOnly thisFrom,
+        DateOnly toExclusive,
+        DateOnly lastFrom,
+        DateOnly today,
+        TimeZoneInfo zone)
+    {
+        var thisMonth = MonthNumbersPolicy.CountForNobody(facts, thisFrom, toExclusive, today, zone);
+        var lastMonth = MonthNumbersPolicy.CountForNobody(facts, lastFrom, thisFrom, today, zone);
+        return thisMonth.IsEmpty && lastMonth.IsEmpty ? null : new CoachMonthNoCoachView(View(thisMonth), View(lastMonth));
     }
 
     private async Task<IReadOnlyList<HeldSession>> ReadSessionsAsync(

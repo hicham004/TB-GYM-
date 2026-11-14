@@ -180,9 +180,9 @@ Each coach or gym gets a private workspace. Inside it, one product serves four k
 
 - Owner, Coach and Client roles, one coach per client, and a coach reaches only their own clients.
 - A **Team** page for the owner: each coach with their clients and join date, invitations still waiting, and a note that each coach is a seat on the bill.
-- Invite a coach, or remove one, and their clients move to the owner. Move a client to another coach with their history in view.
+- Invite a coach, or remove one, and their clients wait for a coach until the owner gives each one a coach, themselves included; the client is told. Move a client to another coach with their history in view.
 - **End coaching** with a required reason. A former client's record stays read-only, and a returning client starts a new relationship.
-- **Leaving is allowed too**: a client can stop on their own with an optional reason, and a coach can resign, which moves their clients to the owner.
+- **Leaving is allowed too**: a client can stop on their own with an optional reason, and a coach can resign, which leaves their clients waiting for a coach.
 - One account across several workspaces, with a separate role and data in each.
 - Workspace name, time zone, first day of the week and currency.
 - **Brand settings**: four presets or two colours of your own and a logo, with a preview of the coach's and the client's screens before saving.

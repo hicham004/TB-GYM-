@@ -259,10 +259,11 @@ public sealed partial class Phase3TrainingWorkflowTests
         CollectionAssert.AreEquivalent(new[] { house.OwnerUserId, coachId }, await N9c1RecipientsAsync("HousePlanAsked", talia.ProfileId));
         CollectionAssert.AreEquivalent(new[] { house.OwnerUserId, coachId }, await N9c1RecipientsAsync("HousePlanAsked", corin.ProfileId));
 
-        // Before the notices go out, Corin leaves the house and its Coach leaves the team, so Talia moves to the Owner.
+        // Before the notices go out, Corin leaves the house and its Coach leaves the team, so Talia waits for a coach
+        // (N9d1b).
         await N9a1LeaveAsync(corin.Client, "Moving to another city");
         await RemoveCoachForBillingAsync(house.Owner, coachId);
-        Assert.AreEqual(house.OwnerUserId, (await N9a1PersonAsync("n9c1-still-talia@example.test")).Profiles.Single().AssignedCoachUserId);
+        Assert.IsNull((await N9a1PersonAsync("n9c1-still-talia@example.test")).Profiles.Single().AssignedCoachUserId);
         await Step3SweepNotificationsAsync();
 
         // The Owner reads Talia's ask alone; nobody reads Corin's, and the Coach who left reads nothing.
@@ -274,7 +275,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             """SELECT count(*) FROM notifications."Notifications" WHERE "RecipientUserId" = @id AND "Kind" IN ('HousePlanAsked', 'HousePlanMoneySent')""",
             coachId));
 
-        // Talia, now the Owner's, says the money is sent: the Owner alone is told.
+        // Talia, waiting for a coach, says the money is sent: the Owner alone is told.
         await AssertStatusAsync(await N9c1SayMoneySentAsync(talia.Client, ask.Id), HttpStatusCode.OK);
         CollectionAssert.AreEqual(new[] { house.OwnerUserId }, await N9c1RecipientsAsync("HousePlanMoneySent", talia.ProfileId));
     }
@@ -328,7 +329,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var talia = await N9a1TraineeAsync(house.TenantId, "n9c1-twice-talia@example.test", "Talia", "Wexford");
         using var corin = await N9a1TraineeAsync(house.TenantId, "n9c1-twice-corin@example.test", "Corin", "Ashgrove");
 
-        // A double tap: the second answers the first's ask. The Owner is the trainee's coach too, so told once.
+        // A double tap: the second answers the first's ask. The trainee waits for a coach (no house Coach), so the Owner
+        // alone is told, once.
         var first = await N9c1AskAsync(talia.Client, space.OfferId);
         await AssertStatusAsync(first, HttpStatusCode.Created);
         var second = await N9c1AskAsync(talia.Client, space.OfferId);
@@ -1246,7 +1248,9 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c1TheMigrationRevertsWhileNoTraineeAskedAndRefusesOnceOneDid()
     {
         N9b1FStartAtMidday();
-        using var space = await N9c1OpenAsync("migration");
+        // With a house Coach, so Talia has one: the way back passes WaitingForACoach's Down first, which refuses while a
+        // client waits.
+        using var space = await N9c1OpenAsync("migration", withCoach: true);
         using var talia = await N9a1TraineeAsync(space.House.TenantId, "n9c1-migration-talia@example.test", "Talia", "Wexford");
         Assert.AreEqual(N9c1SchemaObjects, await A7ScalarAsync(N9c1SchemaSql));
 

@@ -806,7 +806,9 @@ public sealed partial class Phase3TrainingWorkflowTests
             ("23514", "A started program names the list entry of its program"),
             (wrongListing.SqlState, wrongListing.MessageText));
 
-        // A program the staff put under a plan without a tier is no start under Pro+.
+        // A program the staff put under a plan without a tier is no start under Pro+. The house has no Coach, so Corin
+        // waits for one (N9d1b) until the Owner takes them to coach them.
+        await ReassignAsync(house.Owner, corin.ProfileId, house.OwnerUserId, null);
         var untiered = await N9b1FProductAsync(house.Owner, "N9c3S Untiered Pass", 4, 0m, null);
         var enrolled = await N9c1EnrollAsync(house.Owner, corin.ProfileId, untiered.Offers[0].Id, today, Guid.NewGuid());
         await AssertStatusAsync(enrolled, HttpStatusCode.OK);
@@ -997,7 +999,9 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3STheMigrationRefusesToRevertOnceATraineeHasStartedAProgram()
     {
         var today = N9b1FStartAtMidday();
-        using var space = await N9c1OpenAsync("n9c3s-revert");
+        // With a house Coach, so Talia has one: the way back passes WaitingForACoach's Down first, which refuses while a
+        // client waits.
+        using var space = await N9c1OpenAsync("n9c3s-revert", withCoach: true);
         var house = space.House;
         using var talia = await N9a1TraineeAsync(house.TenantId, "n9c3s-revert-talia@example.test", "Talia", "Wexford");
         await N9c1AskAndBookAsync(space, talia);

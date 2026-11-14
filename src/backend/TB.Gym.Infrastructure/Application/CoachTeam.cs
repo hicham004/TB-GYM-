@@ -12,9 +12,9 @@ namespace TB.Gym.Infrastructure.Application;
 /// The race these locks close: an owner removes a coach while one of that coach's clients accepts an
 /// invitation, or while the owner reassigns somebody to them. Assigning takes a shared lock on the
 /// coach's membership row; removal takes an exclusive one. Under read committed, whichever runs second
-/// waits for the first to commit and then sees its result — removal then moves the newly assigned
-/// client too, or the assignment finds the coach no longer active. Deferred database triggers refuse
-/// any outcome that still ends with a client assigned to somebody who is not active staff.
+/// waits for the first to commit and then sees its result — removal then leaves the newly assigned
+/// client waiting for a coach too, or the assignment finds the coach no longer active. Deferred database
+/// triggers refuse any outcome that still ends with a client assigned to somebody who is not active staff.
 /// </remarks>
 internal static class CoachTeam
 {
@@ -65,25 +65,19 @@ internal static class CoachTeam
             .SingleAsync(cancellationToken);
 
     /// <summary>
-    /// The coach a newly accepted client starts with: the one the invitation names while they are
-    /// still active staff, otherwise the owner. Locks the chosen membership like any assignment.
+    /// The coach a newly accepted client starts with: the one the invitation (or the house) names while
+    /// they are still active staff, locked like any assignment; otherwise nobody, and the client waits for a
+    /// coach (CLI-012; C8: the owner never gets clients automatically).
     /// </summary>
-    public static async Task<Guid> ResolveStartingCoachAsync(
+    public static async Task<Guid?> ResolveStartingCoachAsync(
         GymDbContext dbContext,
         Guid tenantId,
         Guid? invitedFor,
-        CancellationToken cancellationToken)
-    {
-        if (invitedFor is { } coachUserId &&
-            await LockActiveStaffAsync(dbContext, tenantId, coachUserId, cancellationToken))
-        {
-            return coachUserId;
-        }
-
-        var ownerUserId = await OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
-        await LockActiveStaffAsync(dbContext, tenantId, ownerUserId, cancellationToken);
-        return ownerUserId;
-    }
+        CancellationToken cancellationToken) =>
+        invitedFor is { } coachUserId &&
+        await LockActiveStaffAsync(dbContext, tenantId, coachUserId, cancellationToken)
+            ? coachUserId
+            : null;
 
     /// <summary>The next history number for one client. Unique per client, so a racer conflicts.</summary>
     public static async Task<int> NextAssignmentSequenceAsync(

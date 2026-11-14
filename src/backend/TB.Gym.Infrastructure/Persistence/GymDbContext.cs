@@ -528,8 +528,9 @@ public sealed partial class GymDbContext(
                 .WithMany()
                 .HasForeignKey(client => client.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
-            // The assigned coach is a member of this same workspace. Active Owner/Coach status is a
-            // deferred trigger, because it depends on the membership row's current state.
+            // The assigned coach is a member of this same workspace, or nobody while the client waits for a
+            // coach (CLI-012). Active Owner/Coach status is a deferred trigger, because it depends on the
+            // membership row's current state.
             entity.HasIndex(client => new { client.TenantId, client.AssignedCoachUserId });
             entity.HasOne<TenantMembership>()
                 .WithMany()
@@ -549,6 +550,10 @@ public sealed partial class GymDbContext(
                 table.HasCheckConstraint(
                     "CK_ClientProfiles_CompletedOnboarding",
                     "\"OnboardingStatus\" <> 'Completed' OR \"AnonymisedAtUtc\" IS NOT NULL OR (\"BirthDate\" IS NOT NULL AND \"HeightCentimeters\" IS NOT NULL AND \"Goals\" IS NOT NULL AND \"OnboardingCompletedAtUtc\" IS NOT NULL)");
+                // A released record always keeps the Owner as its keeper (ADR 0027), never nobody.
+                table.HasCheckConstraint(
+                    "CK_ClientProfiles_ReleasedHasKeeper",
+                    "\"ReleasedAtUtc\" IS NULL OR \"AssignedCoachUserId\" IS NOT NULL");
             });
             ConfigureAuditable(entity);
         });
@@ -596,13 +601,19 @@ public sealed partial class GymDbContext(
                 tenantContext.HasTenant && item.TenantId == tenantContext.TenantId);
             entity.ToTable(table =>
             {
-                // Entry 1 is where a client started and names no predecessor; every later entry is a
-                // change and names the different coach it replaced. A trigger checks that it names
-                // the coach of the entry before it.
+                // Entry 1 is where a client started and names no predecessor: with a coach, or waiting for one
+                // when nobody could take them (an invitation whose coach had left, a house sign-up with no
+                // Coach). Every later entry names the coach it replaced, never the one it names: a coach
+                // leaving names them and leaves the client waiting (nobody), while a reassignment, a release
+                // and a leave always name somebody and may follow a wait (CLI-012). Every term is total, so
+                // no NULL lets a row through. A trigger checks that each entry names the coach of the one
+                // before it, nobody included.
                 table.HasCheckConstraint(
                     "CK_ClientCoachAssignments_Chain",
-                    "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration', 'SignUp')) OR " +
-                    "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved', 'Released', 'CoachResigned', 'ClientLeft'))");
+                    "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND (\"Reason\" IN ('Invitation', 'SignUp') OR (\"Reason\" = 'Migration' AND \"CoachUserId\" IS NOT NULL))) OR " +
+                    "(\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS DISTINCT FROM \"CoachUserId\" AND " +
+                    "((\"Reason\" IN ('CoachRemoved', 'CoachResigned') AND \"PreviousCoachUserId\" IS NOT NULL) OR " +
+                    "(\"Reason\" IN ('Reassigned', 'Released', 'ClientLeft') AND \"CoachUserId\" IS NOT NULL)))");
             });
             ConfigureAuditable(entity);
         });

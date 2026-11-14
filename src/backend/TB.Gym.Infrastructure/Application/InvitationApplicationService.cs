@@ -666,8 +666,8 @@ internal sealed class InvitationApplicationService(
             }
 
             // Lock the coach this client would join before deciding anything. A removal of that coach
-            // already in flight commits first, and the reload then sees its hand-over to the owner
-            // instead of failing on the invitation row it changed; a later removal waits for us.
+            // already in flight commits first, and the reload then sees the invitation waiting for a
+            // coach instead of failing on the invitation row it changed; a later removal waits for us.
             if (invitation.Kind == InvitationKind.Client && invitation.AssignedCoachUserId is { } invitedFor)
             {
                 await CoachTeam.LockActiveStaffAsync(dbContext, invitation.TenantId, invitedFor, cancellationToken);
@@ -843,7 +843,8 @@ internal sealed class InvitationApplicationService(
             }
             else
             {
-                // The coach who sent the invitation, or the owner when that coach has since left.
+                // The coach who sent the invitation, or nobody when that coach has since left: the client lands
+                // waiting for a coach (CLI-012), and the owner gives them one.
                 var coachUserId = await CoachTeam.ResolveStartingCoachAsync(
                     dbContext,
                     invitation.TenantId,

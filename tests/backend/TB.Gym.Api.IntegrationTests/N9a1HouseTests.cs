@@ -1385,7 +1385,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
-    public async Task N9a1WhenTheHousesCoachIsRemovedATraineeMovesToTheOwnerAndIsToldNothing()
+    public async Task N9a1WhenTheHousesCoachIsRemovedATraineeWaitsAndIsToldNothing()
     {
         using var house = await N9a1OpenHouseAsync("gone", withCoach: true);
         using var trainee = await N9a1TraineeAsync(house.TenantId, "n9a1-gone-trainee@example.test");
@@ -1395,29 +1395,32 @@ public sealed partial class Phase3TrainingWorkflowTests
         var coachId = house.CoachUserId!.Value;
         foreach (var listed in await N9a1ClientsAsync(house.Owner))
         {
-            Assert.AreEqual(coachId, listed.AssignedCoachUserId, "Both records name the house's Coach.");
+            Assert.AreEqual((Guid?)coachId, listed.AssignedCoachUserId, "Both records name the house's Coach.");
         }
 
         await RemoveCoachForBillingAsync(house.Owner, coachId);
 
-        // Both records move to the owner, each with its entry in the coach history; the trainee stays self-directed.
+        // Both records wait for a coach (N9d1b, C8: never handed to the owner), each with its entry in the coach
+        // history; the trainee stays self-directed.
         foreach (var (clientId, firstReason) in new[] { (trainee.ProfileId, "SignUp"), (ritaId, "Invitation") })
         {
             var history = await RequiredJsonAsync<TeamAssignment[]>(
                 await house.Owner.GetAsync($"/api/clients/{clientId}/coach-assignments"));
             Assert.HasCount(2, history, firstReason);
-            Assert.AreEqual((1, coachId, firstReason), (history[0].Sequence, history[0].CoachUserId, history[0].Reason));
             Assert.AreEqual(
-                (2, house.OwnerUserId, (Guid?)coachId, "CoachRemoved"),
+                (1, (Guid?)coachId, firstReason),
+                (history[0].Sequence, history[0].CoachUserId, history[0].Reason));
+            Assert.AreEqual(
+                (2, (Guid?)null, (Guid?)coachId, "CoachRemoved"),
                 (history[1].Sequence, history[1].CoachUserId, history[1].PreviousCoachUserId, history[1].Reason),
                 firstReason);
         }
 
         var moved = (await N9a1PersonAsync("n9a1-gone-trainee@example.test")).Profiles.Single();
-        Assert.AreEqual((house.OwnerUserId, true), (moved.AssignedCoachUserId, moved.IsSelfDirected));
+        Assert.AreEqual(((Guid?)null, true), (moved.AssignedCoachUserId, moved.IsSelfDirected));
         foreach (var listed in await N9a1ClientsAsync(house.Owner))
         {
-            Assert.AreEqual(house.OwnerUserId, listed.AssignedCoachUserId);
+            Assert.IsNull(listed.AssignedCoachUserId);
         }
 
         // The invited client is told, in-app and by one email; nothing was queued for the trainee.
@@ -1446,7 +1449,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9a1ATraineesIntakeKeepsToTheHousesAgeAndAnInvitedClientsDoesNot()
     {
         // The house's own age here is 23.
-        using var house = await N9a1OpenHouseAsync("intake", minimumAge: "23");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), and nobody opens their intake.
+        using var house = await N9a1OpenHouseAsync("intake", withCoach: true, minimumAge: "23");
         using var trainee = await N9a1TraineeAsync(house.TenantId, "n9a1-intake-trainee@example.test", birthDate: "1991-08-23");
         var houseToday = N9a1HouseToday();
         var twentyThreeToday = houseToday.AddYears(-23);
@@ -1462,7 +1466,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual("This coaching space is open to people aged 23 or older.", problem.Errors["intake"].Single());
         // The house's staff, saving the trainee's intake for them, are held to it as well.
         var byStaff = await N9a1SaveIntakeAsync(
-            house.Owner, $"/api/clients/{trainee.ProfileId}/intake", twentyThreeToday.AddDays(1), self.Version, N9a1HealthMarkers);
+            house.Coach!, $"/api/clients/{trainee.ProfileId}/intake", twentyThreeToday.AddDays(1), self.Version, N9a1HealthMarkers);
         await AssertStatusAsync(byStaff, HttpStatusCode.BadRequest);
         CollectionAssert.AreEqual(N9a1IntakeField, (await RequiredJsonAsync<N9a1Problem>(byStaff)).Errors.Keys.ToArray());
         // Finishing the profile's set-up with that date is refused too.

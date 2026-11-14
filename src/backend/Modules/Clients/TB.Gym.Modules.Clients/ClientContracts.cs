@@ -76,6 +76,10 @@ public interface IClientProfileApplicationService
     Task<IReadOnlyList<FormerClientSummary>> ListFormerAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A current client on staff's list. The coach and their name are null while the client waits for a coach
+/// (CLI-012).
+/// </summary>
 public sealed record ClientSummary(
     Guid Id,
     string FirstName,
@@ -85,14 +89,15 @@ public sealed record ClientSummary(
     ClientOnboardingStatus OnboardingStatus,
     bool IsCoachBlocked,
     uint Version,
-    Guid AssignedCoachUserId,
-    string AssignedCoachName);
+    Guid? AssignedCoachUserId,
+    string? AssignedCoachName);
 
 /// <summary>
 /// A client as staff read them. <paramref name="MayCoach"/> says whether the caller is the client's own coach
 /// (C8, ADR 0026): when false (the Owner on another coach's client, or on a former client someone else coached), the
 /// private side is withheld, so the birth date, height, work and steps, the intake answers, the health fields and the
-/// coach's notes are null, and only the business side is filled.
+/// coach's notes are null, and only the business side is filled. While the client waits for a coach (CLI-012) the
+/// coach is null and their name empty, and nobody may coach them.
 /// </summary>
 public sealed record CoachClientDetails(
     Guid Id,
@@ -119,7 +124,7 @@ public sealed record CoachClientDetails(
     DateTimeOffset? OnboardingCompletedAtUtc,
     bool IsCoachBlocked,
     uint Version,
-    Guid AssignedCoachUserId,
+    Guid? AssignedCoachUserId,
     string AssignedCoachName,
     ClientReleaseView? Release = null,
     bool MayCoach = true);
@@ -255,11 +260,15 @@ public sealed record ReleaseClientRequest(string Reason, uint Version);
 /// </summary>
 public sealed record LeaveWorkspaceRequest(string? Reason, uint Version);
 
+/// <summary>
+/// One entry of a client's coach history. The coach and their name are null on an entry that left the client waiting
+/// for a coach, and the previous coach is null on the entry that ended a wait (CLI-012).
+/// </summary>
 public sealed record ClientCoachAssignmentView(
     Guid Id,
     int Sequence,
-    Guid CoachUserId,
-    string CoachName,
+    Guid? CoachUserId,
+    string? CoachName,
     Guid? PreviousCoachUserId,
     string? PreviousCoachName,
     ClientCoachAssignmentReason Reason,

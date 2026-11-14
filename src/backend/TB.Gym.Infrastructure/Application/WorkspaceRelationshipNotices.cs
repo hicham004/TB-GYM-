@@ -21,8 +21,8 @@ internal static class WorkspaceRelationshipNotices
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// Tells a client, in-app and by one email, that their coach left and the workspace will assign a
-    /// new one. <paramref name="coachAssignmentId"/> is the history entry that moved them to the owner.
+    /// Tells a client, in-app and by one email, that their coach left and the workspace will give them a
+    /// new one. <paramref name="coachAssignmentId"/> is the history entry that left them waiting for a coach.
     /// </summary>
     public static void CoachDeparted(
         GymDbContext dbContext,
@@ -52,6 +52,54 @@ internal static class WorkspaceRelationshipNotices
             now));
     }
 
+    /// <summary>
+    /// Tells a client, in-app only, that the owner gave them a coach: another one, or one at all after a wait, the
+    /// owner themselves included (C8, CLI-014). Names nobody; their own screens say who.
+    /// <paramref name="coachAssignmentId"/> is the history entry of the change, so each change is told once.
+    /// </summary>
+    public static void CoachAssigned(
+        GymDbContext dbContext,
+        Guid tenantId,
+        string tenantTimeZoneId,
+        Guid clientUserId,
+        Guid clientProfileId,
+        Guid coachAssignmentId,
+        DateTimeOffset now) =>
+        ScheduleInApp(
+            dbContext,
+            tenantId,
+            tenantTimeZoneId,
+            clientUserId,
+            coachAssignmentId,
+            CommercialNotificationKind.CoachAssigned,
+            Payload(new WorkspaceNotificationPayload(clientProfileId)),
+            $"coach-assigned:{coachAssignmentId:N}:v1",
+            now);
+
+    /// <summary>
+    /// Tells a self-directed trainee of the house (CLI-026), in-app only, that the owner gave their record to another
+    /// member of the house's team, who may now read their training and progress (C8). Names nobody.
+    /// <paramref name="coachAssignmentId"/> is the history entry of the change, so each change is told once.
+    /// </summary>
+    public static void TraineeStaffChanged(
+        GymDbContext dbContext,
+        Guid tenantId,
+        string tenantTimeZoneId,
+        Guid traineeUserId,
+        Guid clientProfileId,
+        Guid coachAssignmentId,
+        DateTimeOffset now) =>
+        ScheduleInApp(
+            dbContext,
+            tenantId,
+            tenantTimeZoneId,
+            traineeUserId,
+            coachAssignmentId,
+            CommercialNotificationKind.TraineeStaffChanged,
+            Payload(new WorkspaceNotificationPayload(clientProfileId)),
+            $"trainee-staff-changed:{coachAssignmentId:N}:v1",
+            now);
+
     /// <summary>Tells a staff member, in-app only, that a client left the workspace.</summary>
     public static void ClientLeft(
         GymDbContext dbContext,
@@ -72,7 +120,7 @@ internal static class WorkspaceRelationshipNotices
             now);
 
     /// <summary>
-    /// Tells the owner, in-app only, that a coach resigned and their clients are now the owner's. A
+    /// Tells the owner, in-app only, that a coach resigned and their clients wait for a coach. A
     /// coach who rejoins and resigns again is a new departure, so the key carries its instant.
     /// </summary>
     public static void CoachResigned(
@@ -95,8 +143,9 @@ internal static class WorkspaceRelationshipNotices
             now);
 
     /// <summary>
-    /// Tells a client's coach, in-app only, that the client asked to renew (ADR 0029). The payload
-    /// holds only the client's id; the dispatcher reads the name when it writes the inbox row.
+    /// Tells a client's coach, or the owner while the client waits for one, in-app only, that the client
+    /// asked to renew (ADR 0029). The payload holds only the client's id; the dispatcher reads the name
+    /// when it writes the inbox row.
     /// </summary>
     public static void RenewalRequested(
         GymDbContext dbContext,

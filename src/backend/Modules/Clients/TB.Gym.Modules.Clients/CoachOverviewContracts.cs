@@ -131,13 +131,14 @@ public enum CoachActivityLoadUnit
 /// says whether the caller is this client's own coach (C8, ADR 0026); when false (the Owner on another coach's client)
 /// the item or row carries the business side alone: the plan, payments, renewals, sessions and the counts, with nothing
 /// that opens the private side (no goals, birth date, last activity, last workout or its day, check-in to open, and
-/// never Week not shared, No program or Weights to apply).
+/// never Week not shared, No program or Weights to apply). The coach and their name are null while the client waits
+/// for a coach (CLI-012), whom nobody may coach.
 /// </summary>
 public sealed record CoachClientRef(
     Guid ClientProfileId,
     string FirstName,
     string LastName,
-    Guid AssignedCoachUserId,
+    Guid? AssignedCoachUserId,
     string? AssignedCoachName,
     bool MayCoach = true);
 
@@ -233,6 +234,13 @@ public sealed record CoachActivityItemView(
 /// nothing after it but, at most, a plan waiting for payment (<see cref="CoachAttentionPolicy.IsLapsed"/>), the
 /// latest end first, then by name. Never a cancelled plan, and never a former client.
 /// </param>
+/// <param name="WaitingForCoach">
+/// The Owner's alone, null for a Coach (CLI-013, CLI-020; notes plan N9d1b): each current client with no coach
+/// (CLI-012), the longest waiting first, then by name; empty when nobody waits. Never a former client, and never a
+/// self-directed trainee of the house, who trains as their own coach and raises nothing on Today (CLI-026). The
+/// business side alone, since nobody coaches them: who, since when, who coached them before, and the client version a
+/// reassignment asks for.
+/// </param>
 public sealed record CoachTodayView(
     DateOnly Today,
     string TimeZoneId,
@@ -248,7 +256,24 @@ public sealed record CoachTodayView(
     string AttentionRuleKey,
     int AttentionRuleVersion,
     string TrainingRuleKey,
-    int TrainingRuleVersion);
+    int TrainingRuleVersion,
+    IReadOnlyList<CoachWaitingClientView>? WaitingForCoach = null);
+
+/// <summary>
+/// A client waiting for a coach (CLI-012, notes plan N9d1b): the Owner gives them one, themselves included, through
+/// the reassignment (<c>POST /api/clients/{clientId}/coach</c>), and the client is told (CLI-014).
+/// </summary>
+/// <param name="WaitingSinceUtc">When the newest entry of their coach history, the one that names nobody, was written.</param>
+/// <param name="PreviousCoachName">
+/// Who coached them before the wait; null when nobody did (an invitation accepted after its coach left, a house
+/// sign-up while the house had no Coach).
+/// </param>
+/// <param name="ClientVersion">The client version the reassignment asks for.</param>
+public sealed record CoachWaitingClientView(
+    CoachClientRef Client,
+    DateTimeOffset WaitingSinceUtc,
+    string? PreviousCoachName,
+    uint ClientVersion);
 
 /// <summary>
 /// This month on Coach Today (critique B4b), for the workspace's calendar month <c>[From, ToExclusive)</c>, of which

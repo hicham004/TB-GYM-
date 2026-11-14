@@ -20,7 +20,12 @@ public interface ICoachMonthService
 /// <param name="LastMonth">The same, for the month before.</param>
 /// <param name="Coaches">
 /// The Owner's alone, null for a Coach (CLI-013): every active member of staff, the Owner first as You, then by name,
-/// and after them anyone who left the team with a number in either month, so the rows add up to the totals.
+/// and after them anyone who left the team with a number in either month, so the rows, with
+/// <paramref name="NoCoach"/>, add up to the totals.
+/// </param>
+/// <param name="NoCoach">
+/// The Owner's alone, null for a Coach (SUB-018 v3, notes plan N9d1b): what counted for nobody, this month and last,
+/// because the client was waiting for a coach when it happened (CLI-012); null when nothing did in either month.
 /// </param>
 public sealed record CoachMonthReportView(
     DateOnly Today,
@@ -32,7 +37,11 @@ public sealed record CoachMonthReportView(
     string MonthRuleKey,
     int MonthRuleVersion,
     string MoneyRuleKey,
-    int MoneyRuleVersion);
+    int MoneyRuleVersion,
+    CoachMonthNoCoachView? NoCoach = null);
+
+/// <summary>What counted for nobody while clients waited for a coach, on the Owner's page (SUB-018 v3).</summary>
+public sealed record CoachMonthNoCoachView(CoachMonthNumbersView ThisMonth, CoachMonthNumbersView LastMonth);
 
 /// <summary>
 /// One month's numbers (SUB-018). Money received keeps one total per currency, in currency order, empty with none:

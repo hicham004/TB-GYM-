@@ -509,7 +509,13 @@ internal sealed class CheckInApplicationService(
         // The clients the caller coaches now (ADR 0026, C8): each item opens the client's answers, the private side, so
         // the Owner lists their own clients as a Coach does (another coach's waiting check-ins stay counts on Today and
         // the client's page); never a former client, whose record is read-only (ADR 0027).
-        var staffUserId = await coachClientScope.StaffUserIdAsync(cancellationToken);
+        // Nobody coaches a client waiting for a coach (CLI-012), so none is listed; and with no caller nothing matches,
+        // rather than every waiting client, as a null on both sides would.
+        if (await coachClientScope.StaffUserIdAsync(cancellationToken) is not { } staffUserId)
+        {
+            return new CheckInToReviewList([], 0, MaximumToReview);
+        }
+
         var clients = dbContext.ClientProfiles.AsNoTracking()
             .Where(client => client.ReleasedAtUtc == null && client.AssignedCoachUserId == staffUserId);
 

@@ -66,8 +66,10 @@ public static class MoneyReceivedPolicy
     /// The coach a receipt counts for: the client's coach when it was received, by the newest history entry assigned
     /// at or before its instant (SUB-007 stamps the moment it was recorded for today, the workspace's midday for an
     /// earlier day). A receipt dated before the client's first entry counts for that entry's coach: whoever invited
-    /// them, or the owner who had every client before assignment shipped. Null only with no history at all, which
-    /// the database does not allow.
+    /// them, or the owner who had every client before assignment shipped. Null with no history at all, which the
+    /// database does not allow, and when the entry in force names nobody: the client was waiting for a coach
+    /// (CLI-012, notes plan N9d1b), so the receipt counts in the workspace's total and for nobody, never for the
+    /// coach who left before the wait.
     /// </summary>
     public static Guid? CoachAt(DateTimeOffset receivedAtUtc, IEnumerable<CoachHistoryEntry> history)
     {
@@ -77,8 +79,7 @@ public static class MoneyReceivedPolicy
             return null;
         }
 
-        return entries.LastOrDefault(entry => entry.AssignedAtUtc <= receivedAtUtc)?.CoachUserId
-            ?? entries[0].CoachUserId;
+        return (entries.LastOrDefault(entry => entry.AssignedAtUtc <= receivedAtUtc) ?? entries[0]).CoachUserId;
     }
 
     /// <summary>
@@ -92,18 +93,33 @@ public static class MoneyReceivedPolicy
         DateOnly toExclusive,
         TimeZoneInfo workspaceZone,
         Guid? coachUserId) =>
+        Totals(payments, from, toExclusive, workspaceZone, coach => coachUserId is null || coach == coachUserId);
+
+    /// <summary>
+    /// Money received in <c>[from, toExclusive)</c> that counts for whoever <paramref name="countsFor"/> accepts, the
+    /// coach of <see cref="CoachAt"/> being null for a receipt that counted for nobody.
+    /// </summary>
+    public static IReadOnlyList<MoneyReceivedTotal> Totals(
+        IEnumerable<ReceivedPayment> payments,
+        DateOnly from,
+        DateOnly toExclusive,
+        TimeZoneInfo workspaceZone,
+        Func<Guid?, bool> countsFor) =>
         [.. payments
             .Where(payment =>
                 payment.Operation == PaymentOperation.Receipt &&
                 IsReceivedIn(payment.ReceivedAtUtc, from, toExclusive, workspaceZone) &&
-                (coachUserId is null || CoachAt(payment.ReceivedAtUtc, payment.CoachHistory) == coachUserId))
+                countsFor(CoachAt(payment.ReceivedAtUtc, payment.CoachHistory)))
             .GroupBy(payment => payment.CurrencyCode, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => new MoneyReceivedTotal(group.Key, group.Sum(payment => payment.Amount), group.Count()))];
 }
 
-/// <summary>One entry of a client's coach history (ADR 0026): who coaches them from that instant.</summary>
-public sealed record CoachHistoryEntry(int Sequence, Guid CoachUserId, DateTimeOffset AssignedAtUtc);
+/// <summary>
+/// One entry of a client's coach history (ADR 0026): who coaches them from that instant, or nobody while they wait for
+/// a coach (CLI-012).
+/// </summary>
+public sealed record CoachHistoryEntry(int Sequence, Guid? CoachUserId, DateTimeOffset AssignedAtUtc);
 
 /// <summary>A payment as money received reads it, with the coach history of the client it was for.</summary>
 public sealed record ReceivedPayment(

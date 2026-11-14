@@ -836,7 +836,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ClientProfileId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("CoachUserId")
+                    b.Property<Guid?>("CoachUserId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
@@ -890,7 +890,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
 
                     b.ToTable("ClientCoachAssignments", "clients", t =>
                         {
-                            t.HasCheckConstraint("CK_ClientCoachAssignments_Chain", "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND \"Reason\" IN ('Invitation', 'Migration', 'SignUp')) OR (\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS NOT NULL AND \"PreviousCoachUserId\" <> \"CoachUserId\" AND \"Reason\" IN ('Reassigned', 'CoachRemoved', 'Released', 'CoachResigned', 'ClientLeft'))");
+                            t.HasCheckConstraint("CK_ClientCoachAssignments_Chain", "(\"Sequence\" = 1 AND \"PreviousCoachUserId\" IS NULL AND (\"Reason\" IN ('Invitation', 'SignUp') OR (\"Reason\" = 'Migration' AND \"CoachUserId\" IS NOT NULL))) OR (\"Sequence\" > 1 AND \"PreviousCoachUserId\" IS DISTINCT FROM \"CoachUserId\" AND ((\"Reason\" IN ('CoachRemoved', 'CoachResigned') AND \"PreviousCoachUserId\" IS NOT NULL) OR (\"Reason\" IN ('Reassigned', 'Released', 'ClientLeft') AND \"CoachUserId\" IS NOT NULL)))");
                         });
                 });
 
@@ -907,7 +907,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("AnonymisedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("AssignedCoachUserId")
+                    b.Property<Guid?>("AssignedCoachUserId")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("AverageDailySteps")
@@ -1059,6 +1059,8 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_ClientProfiles_CompletedOnboarding", "\"OnboardingStatus\" <> 'Completed' OR \"AnonymisedAtUtc\" IS NOT NULL OR (\"BirthDate\" IS NOT NULL AND \"HeightCentimeters\" IS NOT NULL AND \"Goals\" IS NOT NULL AND \"OnboardingCompletedAtUtc\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_ClientProfiles_HeightCentimeters", "\"HeightCentimeters\" IS NULL OR (\"HeightCentimeters\" >= 50 AND \"HeightCentimeters\" <= 300)");
+
+                            t.HasCheckConstraint("CK_ClientProfiles_ReleasedHasKeeper", "\"ReleasedAtUtc\" IS NULL OR \"AssignedCoachUserId\" IS NOT NULL");
                         });
                 });
 
@@ -4858,7 +4860,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_NotificationOutboxItems_Cancellation", "(\"Status\" = 'Cancelled') = (\"CancelledAtUtc\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_NotificationOutboxItems_Vocabulary", "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested', 'ProgramAssigned', 'WeeksShared', 'WeeksChanged', 'CoachWorkoutNote', 'ClientWorkoutNote', 'HousePlanAsked', 'HousePlanMoneySent')");
+                            t.HasCheckConstraint("CK_NotificationOutboxItems_Vocabulary", "\"Status\" IN ('Scheduled', 'Cancelled') AND \"Purpose\" = 'ServiceTransactional' AND \"Kind\" IN ('PaymentRequired', 'EnrollmentActivated', 'EnrollmentEndingSoon', 'EnrollmentExpired', 'EnrollmentRenewed', 'CoachDeparted', 'ClientLeft', 'CoachResigned', 'RenewalRequested', 'ProgramAssigned', 'WeeksShared', 'WeeksChanged', 'CoachWorkoutNote', 'ClientWorkoutNote', 'HousePlanAsked', 'HousePlanMoneySent', 'CoachAssigned', 'TraineeStaffChanged')");
                         });
                 });
 
@@ -13487,8 +13489,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "CoachUserId")
                         .HasPrincipalKey("TenantId", "UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TB.Gym.Modules.Tenancy.TenantMembership", null)
                         .WithMany()
@@ -13514,8 +13515,7 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "AssignedCoachUserId")
                         .HasPrincipalKey("TenantId", "UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("TB.Gym.Modules.Clients.ClientProfileChange", b =>

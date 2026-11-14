@@ -16,8 +16,9 @@ public interface ITeamApplicationService
     Task<IReadOnlyList<TeamRosterMember>> ListRosterAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Removes a coach. Their clients move to the owner in the same transaction, and their pending
-    /// client invitations will land with the owner too. Nothing about the clients is deleted.
+    /// Removes a coach. Their clients and pending client invitations are left waiting for a coach in the
+    /// same transaction (C8, CLI-014): the owner does not get them automatically, and nothing about the
+    /// clients is deleted. The result counts those left waiting.
     /// </summary>
     Task<CoachRemovalResult> RemoveCoachAsync(
         Guid coachUserId,
@@ -26,7 +27,7 @@ public interface ITeamApplicationService
 
     /// <summary>
     /// The signed-in coach leaves the team themselves (ADR 0027). The same effect as a removal —
-    /// their clients and pending client invitations move to the owner — recorded as a resignation.
+    /// their clients and pending client invitations wait for a coach — recorded as a resignation.
     /// The owner cannot resign; a workspace always has one.
     /// </summary>
     Task<CoachRemovalResult> ResignAsync(CancellationToken cancellationToken);
@@ -50,11 +51,16 @@ public sealed record TeamRosterMember(string DisplayName, TenantRole Role, DateT
 /// <summary>The membership version the owner saw, so a stale screen conflicts instead of acting.</summary>
 public sealed record RemoveCoachRequest(uint Version);
 
+/// <summary>
+/// How a coach's leaving went. The counts are of the clients and pending client invitations it left waiting for a
+/// coach (CLI-014); their names predate waiting and stay, since the web reads them.
+/// </summary>
 public sealed record CoachRemovalResult(
     CoachRemovalStatus Status,
     int ReassignedClientCount = 0,
     int ReassignedInvitationCount = 0);
 
+/// <summary>The clients and pending client invitations a coach's leaving left waiting for a coach (CLI-014).</summary>
 public sealed record CoachRemovalResponse(int ReassignedClientCount, int ReassignedInvitationCount);
 
 public enum CoachRemovalStatus

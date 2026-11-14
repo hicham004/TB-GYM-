@@ -54,9 +54,9 @@ owner's figure): its row is deleted and its account emptied (no name, no
 address anyone can reach, no password, every link spent), which frees the email. The emptied account row
 stays, because its mail history and acceptances name it and are never deleted; it identifies nobody (CLI-025).
 
-**Self-directed** (CLI-026) is a flag on the profile, the house's alone (a trigger). The record still names
-one member of the house's staff, as ADR 0026 requires until the owner privacy split makes it "at most one":
-the house's Coach who joined first, else the Owner. Coach attention v9 raises nothing for such a profile, and
+**Self-directed** (CLI-026) is a flag on the profile, the house's alone (a trigger). The record names the
+house's Coach who joined first, or nobody while the house has none, and the trainee then waits until the Owner
+gives them one (ADR 0026 as amended for C8, CLI-012, CLI-024; notes plan N9d1b). Coach attention v9 raises nothing for such a profile, and
 their notes, their leaving and a coach's departure reach no inbox; both partners keep them on Clients. Their money
 asks are the exception (N9c1, SUB-020): asking for a plan and saying its money was sent tell the Owner and their coach.
 

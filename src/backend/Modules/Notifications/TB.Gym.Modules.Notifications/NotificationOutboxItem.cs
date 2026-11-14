@@ -164,7 +164,10 @@ public enum CommercialNotificationKind
     // in-app only. The first two carry a WorkspaceNotificationPayload and CoachResigned a
     // CoachNotificationPayload, rather than an enrollment.
 
-    /// <summary>To a client: their coach resigned or was removed, and a new one will be assigned.</summary>
+    /// <summary>
+    /// To a client: their coach resigned or was removed, and they wait for a new one (CLI-014); CoachAssigned tells
+    /// them when they have one.
+    /// </summary>
     CoachDeparted = 6,
 
     /// <summary>
@@ -173,7 +176,7 @@ public enum CommercialNotificationKind
     /// </summary>
     ClientLeft = 7,
 
-    /// <summary>To the owner: a coach resigned, and their clients are now the owner's.</summary>
+    /// <summary>To the owner: a coach resigned, and their clients wait for a coach (CLI-014).</summary>
     CoachResigned = 8,
 
     /// <summary>
@@ -219,6 +222,21 @@ public enum CommercialNotificationKind
     /// names the trainee, read when it is delivered; never the Whish name or number.
     /// </summary>
     HousePlanMoneySent = 16,
+
+    /// <summary>
+    /// To a client: the owner gave them a coach, another one or one at all after a wait, the owner themselves
+    /// included (C8, CLI-014; notes plan N9d1b). A workspace kind: in-app only, with a WorkspaceNotificationPayload,
+    /// its aggregate the coach history entry of the change. Names nobody; a self-directed trainee is told
+    /// <see cref="TraineeStaffChanged"/> instead.
+    /// </summary>
+    CoachAssigned = 17,
+
+    /// <summary>
+    /// To a self-directed trainee of the house (CLI-026): the owner gave their record to another member of the house's
+    /// team, who may now read their training and progress (C8: every change is told; notes plan N9d1b). They train as
+    /// their own coach, so CoachAssigned's words would not be true for them. In-app only, like CoachAssigned.
+    /// </summary>
+    TraineeStaffChanged = 18,
 }
 
 /// <summary>

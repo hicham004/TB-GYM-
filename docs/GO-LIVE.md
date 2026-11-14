@@ -125,8 +125,8 @@ web container after changing any of the three. Write the privacy note yourself; 
   renamed; clearing takes Free off sale and is refused while a plan of the house's tiers is booked. Sign-up stays
   closed until the platform admin fills the house's two settings in the app, new sign-ups a week and the
   age that may sign up. Before filling them, have the house's Coach accept their team invitation: a
-  trainee's record names the Coach who had joined when their email was confirmed, else the Owner, and the
-  Owner moves an earlier trainee to the Coach one at a time. The Worker removes a sign-up whose email was never confirmed after
+  trainee's record names the Coach who had joined when their email was confirmed, else nobody: the trainee
+  waits for a coach, nobody opens their training, and the Owner gives each one a coach one at a time. The Worker removes a sign-up whose email was never confirmed after
   `TraineeSignUps:RemoveUnconfirmedAfterDays` days (2; 1 to 90, or neither process starts) (CLI-022 to CLI-025), and
   renews each trainee's Free on the same hourly tick; `TraineeSignUps:SweepEnabled` switches off the removal alone.
 - **The house's library** (LIB-007): once the clips are bought and converted to MP4 or WebM, put them and their sheet

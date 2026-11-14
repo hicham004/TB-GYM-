@@ -44,7 +44,10 @@ public sealed class RenewalRequest : TenantEntity
     /// <summary>The plan they asked about, as their renewal status named it: one that ran out or is about to.</summary>
     public Guid EndedEnrollmentId { get; private set; }
 
-    /// <summary>The coach who was told: the client's assigned coach at the time.</summary>
+    /// <summary>
+    /// The member of staff who was told: the client's assigned coach at the time, or the owner while the client
+    /// waited for a coach (CLI-012, notes plan N9d1b).
+    /// </summary>
     public Guid CoachUserId { get; private set; }
 
     /// <summary>The workspace's calendar date when the client asked.</summary>

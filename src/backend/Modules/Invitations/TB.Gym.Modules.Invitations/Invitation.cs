@@ -66,8 +66,9 @@ public sealed class ClientInvitation : TenantEntity
 
     /// <summary>
     /// For a client invitation, the coach the client will be assigned to: whoever sent it. Empty for a
-    /// coach invitation, and for invitations sent before coach assignment existed; acceptance falls back
-    /// to the owner whenever this coach is no longer an active member.
+    /// coach invitation, for one whose coach has left the team, and for invitations sent before coach
+    /// assignment existed; a client who accepts one with no coach, or whose coach is no longer an active
+    /// member, lands waiting for a coach (CLI-012).
     /// </summary>
     public Guid? AssignedCoachUserId { get; private set; }
 
@@ -147,27 +148,23 @@ public sealed class ClientInvitation : TenantEntity
         Build(tenantId, InvitationKind.Coach, null, email, firstName, lastName, null, null, expiresAtUtc, now);
 
     /// <summary>
-    /// The coach this pending client invitation was sent for has left the team; the client will land
-    /// with <paramref name="coachUserId"/> instead. The link in their mailbox keeps working.
+    /// The coach this pending client invitation was sent for has left the team: the client will land waiting for a
+    /// coach (C8, CLI-014), and the Owner gives them one. The link in their mailbox keeps working. Returns false when
+    /// it already names nobody.
     /// </summary>
-    public bool HandOverTo(Guid coachUserId)
+    public bool WaitForCoach()
     {
         if (Kind != InvitationKind.Client || Status != InvitationStatus.Pending)
         {
-            throw new InvalidOperationException("Only a pending client invitation can be handed to another coach.");
+            throw new InvalidOperationException("Only a pending client invitation can wait for a coach.");
         }
 
-        if (coachUserId == Guid.Empty)
-        {
-            throw new ArgumentException("A coach id is required.", nameof(coachUserId));
-        }
-
-        if (AssignedCoachUserId == coachUserId)
+        if (AssignedCoachUserId is null)
         {
             return false;
         }
 
-        AssignedCoachUserId = coachUserId;
+        AssignedCoachUserId = null;
         return true;
     }
 

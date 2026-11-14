@@ -689,7 +689,7 @@ internal sealed class TraineeSignUpService(
 
     /// <summary>
     /// The membership, the self-directed profile and the first entry of its coach history, added to the caller's
-    /// unit of work. The record names the house's Coach, as every client's names one member of staff (ADR 0026).
+    /// unit of work. The record names the house's Coach, or nobody while the house has none (ADR 0026, CLI-024).
     /// </summary>
     private async Task<ClientProfile> JoinAsync(
         Guid houseId,
@@ -743,10 +743,11 @@ internal sealed class TraineeSignUpService(
     }
 
     /// <summary>
-    /// The house's Coach: the active Coach who joined its team first, or the Owner while it has none (ADR 0026's
-    /// own fallback). Locked like any assignment, so a removal under way commits first or waits.
+    /// The house's Coach: the active Coach who joined its team first, or nobody while it has none, and the trainee
+    /// waits for one (CLI-024; C8: the Owner never gets clients automatically). Locked like any assignment, so a
+    /// removal under way commits first or waits, and one that took that Coach leaves the trainee waiting too.
     /// </summary>
-    private async Task<Guid> HouseCoachAsync(Guid houseId, CancellationToken cancellationToken)
+    private async Task<Guid?> HouseCoachAsync(Guid houseId, CancellationToken cancellationToken)
     {
         var coachUserId = await dbContext.TenantMemberships
             .AsNoTracking()

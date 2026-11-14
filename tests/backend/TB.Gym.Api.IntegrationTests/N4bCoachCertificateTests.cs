@@ -562,7 +562,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         using var omar = CreateClient();
         var omarId = await JoinAsCoachAsync(owner, omar, "n4b-left-omar@example.test", "Omar Nassar");
         using var leasClient = CreateClient();
-        await InviteAndAcceptAsync(lea, leasClient, "n4b-left-client-of-lea@example.test", true);
+        var leasClientId = await InviteAndAcceptAsync(lea, leasClient, "n4b-left-client-of-lea@example.test", true);
         using var omarsClient = CreateClient();
         await InviteAndAcceptAsync(omar, omarsClient, "n4b-left-client-of-omar@example.test", true);
         using var admin = await SignInPlatformAdminAsync("n4b-left-admin@example.test");
@@ -575,16 +575,22 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The admin's page says what clients read, as the server decides it.
         Assert.IsTrue((await N4aLineAsync(admin, leaId, spaceId, leasLine.Id)).ShownToClients);
 
-        // The owner removes Lea and Omar resigns: their clients move to the owner, whose line is the one they read.
+        // The owner removes Lea and Omar resigns: their clients wait for a coach (N9d1b), so they have no coach to read,
+        // and no line of anybody's.
         await RemoveCoachForBillingAsync(owner, leaId);
         await RefreshCsrfAsync(omar);
         await AssertStatusAsync(await omar.PostAsync("/api/team/me/resign", null), HttpStatusCode.OK);
-        foreach (var movedClient in new[] { leasClient, omarsClient })
+        foreach (var waitingClient in new[] { leasClient, omarsClient })
         {
-            var coach = await N4bOwnCoachAsync(movedClient);
-            Assert.AreEqual("Karim Haddad", coach.Name);
-            CollectionAssert.AreEqual(new[] { N4bCoachLineOf(ownersLine) }, coach.Lines);
+            await AssertStatusAsync(await waitingClient.GetAsync(N4bCoachUrl), HttpStatusCode.NotFound);
         }
+
+        // The owner takes Lea's client, whose coach is then the owner, with the owner's line; Omar's still waits.
+        await ReassignAsync(owner, leasClientId, ownerId, null);
+        var taken = await N4bOwnCoachAsync(leasClient);
+        Assert.AreEqual("Karim Haddad", taken.Name);
+        CollectionAssert.AreEqual(new[] { N4bCoachLineOf(ownersLine) }, taken.Lines);
+        await AssertStatusAsync(await omarsClient.GetAsync(N4bCoachUrl), HttpStatusCode.NotFound);
 
         // Their lines are kept as they were, confirmed and switched on, and they can no longer reach them; the
         // admin's page reads them as shown to no client, as the server decides it.

@@ -228,7 +228,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
-    public async Task N9a1WithNoCoachTheOwnerKeepsTheRecordAndTwoConfirmationsAtOnceLeaveOneProfile()
+    public async Task N9a1WithNoCoachTheTraineeWaitsAndTwoConfirmationsAtOnceLeaveOneProfile()
     {
         const string email = "n9a1-twice-person@example.test";
         using var house = await N9a1OpenHouseAsync("twice");
@@ -252,9 +252,10 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual((house.TenantId, "Client", "Active"), joined.Memberships.Single());
         var profile = joined.Profiles.Single();
         Assert.IsTrue(profile.IsSelfDirected);
-        // A house with no Coach: the Owner is the member of staff the record names (ADR 0026's fallback).
-        Assert.AreEqual(house.OwnerUserId, profile.AssignedCoachUserId);
-        Assert.AreEqual((profile.Id, 1, house.OwnerUserId, (Guid?)null, "SignUp"), joined.Assignments.Single());
+        // A house with no Coach: the record names nobody and the trainee waits for a coach (N9d1b, CLI-024; C8: the
+        // Owner never gets clients automatically).
+        Assert.IsNull(profile.AssignedCoachUserId);
+        Assert.AreEqual((profile.Id, 1, (Guid?)null, (Guid?)null, "SignUp"), joined.Assignments.Single());
         Assert.AreEqual((profile.Id, "SignUp"), joined.Changes.Single());
         Assert.AreEqual(profile.Id, joined.SignUps.Single().ClientProfileId);
         Assert.AreEqual(1, await N9a1ProfilesInAsync(house.TenantId));
@@ -687,7 +688,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(house.TenantId, profile.TenantId);
         Assert.AreEqual(("Tarek", "Abboud", secondEmail), (profile.FirstName, profile.LastName, profile.Email));
         Assert.AreEqual(new DateOnly(1989, 4, 27), profile.BirthDate);
-        Assert.AreEqual((profile.Id, 1, house.OwnerUserId, (Guid?)null, "SignUp"), joined.Assignments.Single());
+        Assert.AreEqual((profile.Id, 1, (Guid?)null, (Guid?)null, "SignUp"), joined.Assignments.Single());
         Assert.AreEqual((profile.Id, "SignUp"), joined.Changes.Single());
         var confirmed = joined.SignUps.Single();
         Assert.AreEqual((row.Id, (Guid?)profile.Id), (confirmed.Id, confirmed.ClientProfileId));
@@ -982,7 +983,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         var own = person.Profiles.Single(item => item.TenantId == house.TenantId);
         Assert.AreEqual((coachedProfileId, false), (coached.Id, coached.IsSelfDirected));
         Assert.IsTrue(own.IsSelfDirected);
-        Assert.AreEqual(house.OwnerUserId, own.AssignedCoachUserId);
+        Assert.IsNull(own.AssignedCoachUserId, "A house with no Coach: the trainee waits for one.");
 
         var spaces = await RequiredJsonAsync<N9a1Membership[]>(await client.GetAsync("/api/tenants"));
         CollectionAssert.AreEqual(N9a1ClientTwice, spaces.Select(item => item.Role).ToArray());
@@ -1089,7 +1090,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreNotEqual(ended.Id, current.Id);
         Assert.IsTrue(current.IsSelfDirected);
         Assert.AreEqual(("Lina", "Saad-Khoury", (DateOnly?)new DateOnly(1996, 1, 30)), (current.FirstName, current.LastName, current.BirthDate));
-        Assert.AreEqual((current.Id, 1, house.OwnerUserId, (Guid?)null, "SignUp"), back.Assignments.Single(item => item.ClientProfileId == current.Id));
+        // A house with no Coach: the new record waits for one too (N9d1b), and the ended one left from waiting, its
+        // coach history closed with the owner as the record's keeper.
+        Assert.AreEqual(
+            (current.Id, 1, (Guid?)null, (Guid?)null, "SignUp"),
+            back.Assignments.Single(item => item.ClientProfileId == current.Id));
+        Assert.AreEqual(
+            (ended.Id, 2, (Guid?)house.OwnerUserId, (Guid?)null, "ClientLeft"),
+            back.Assignments.Single(item => item.ClientProfileId == ended.Id && item.Sequence == 2));
         Assert.HasCount(2, back.SignUps);
         CollectionAssert.AreEquivalent(
             new Guid?[] { ended.Id, current.Id },
@@ -2031,9 +2039,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         uint Version,
         bool SelfDirected);
 
-    private sealed record N9a1Client(Guid Id, string FirstName, string LastName, string Email, Guid AssignedCoachUserId);
+    private sealed record N9a1Client(Guid Id, string FirstName, string LastName, string Email, Guid? AssignedCoachUserId);
 
-    private sealed record N9a1Assignment(int Sequence, Guid CoachUserId, Guid? PreviousCoachUserId, string Reason);
+    private sealed record N9a1Assignment(int Sequence, Guid? CoachUserId, Guid? PreviousCoachUserId, string Reason);
 
     private sealed record N9a1LegalDocument(Guid Id, string Kind, string Context, bool IsAccepted);
 
@@ -2049,7 +2057,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         N9a1SignUpRow[] SignUps,
         (Guid TenantId, string Role, string Status)[] Memberships,
         N9a1ProfileRow[] Profiles,
-        (Guid ClientProfileId, int Sequence, Guid CoachUserId, Guid? PreviousCoachUserId, string Reason)[] Assignments,
+        (Guid ClientProfileId, int Sequence, Guid? CoachUserId, Guid? PreviousCoachUserId, string Reason)[] Assignments,
         (Guid ClientProfileId, string Source)[] Changes);
 
     private sealed record N9a1SignUpRow(
@@ -2064,7 +2072,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     private sealed record N9a1ProfileRow(
         Guid Id,
         Guid TenantId,
-        Guid AssignedCoachUserId,
+        Guid? AssignedCoachUserId,
         string FirstName,
         string LastName,
         string Email,

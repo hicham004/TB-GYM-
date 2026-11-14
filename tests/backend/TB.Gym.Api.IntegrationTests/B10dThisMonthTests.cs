@@ -90,10 +90,12 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(
             (new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 1), new DateOnly(2026, 9, 1)),
             (leas.Today, leas.ThisMonthFrom, leas.LastMonthFrom));
-        Assert.AreEqual(("MonthNumbers", 2, "MoneyReceived", 1), (leas.MonthRuleKey, leas.MonthRuleVersion, leas.MoneyRuleKey, leas.MoneyRuleVersion));
+        // v3 (notes plan N9d1b): what happened while a client waited for a coach counts for nobody, on the owner's line.
+        Assert.AreEqual(("MonthNumbers", 3, "MoneyReceived", 1), (leas.MonthRuleKey, leas.MonthRuleVersion, leas.MoneyRuleKey, leas.MoneyRuleVersion));
         Assert.AreEqual("USD 400.00 3 | held 2 | plans 1 | packs 1 | started 1 | ended 0", B10dSay(leas.ThisMonth));
         Assert.AreEqual("USD 100.00 1 | held 0 | plans 1 | packs 0 | started 1 | ended 0", B10dSay(leas.LastMonth));
         Assert.IsNull(leas.Coaches);
+        Assert.IsNull(leas.NoCoach, "A Coach never reads what counted for nobody.");
 
         var omars = await ReadSliceAsync<CoachMonthReportView>(omar, CoachMonthUrl);
         Assert.AreEqual("none | held 0 | plans 0 | packs 0 | started 0 | ended 1", B10dSay(omars.ThisMonth));
@@ -196,12 +198,14 @@ public sealed partial class Phase3TrainingWorkflowTests
                 HttpStatusCode.OK);
         }
 
-        // Maya is the owner's now, and what she does from here on counts for them.
+        // Maya waits for a coach now (N9d1b). A session counts for who held it, so the one the owner holds for her
+        // counts for the owner, not for nobody.
         B4aSetWorkspaceClock(new DateOnly(2026, 10, 7), new TimeOnly(12, 0));
         await B10bRecordAsync(owner, mayaId, new DateOnly(2026, 10, 7));
 
         var page = await ReadSliceAsync<CoachMonthReportView>(owner, CoachMonthUrl);
         Assert.AreEqual("Hicham Haddad False, Lea Khoury True", string.Join(", ", page.Coaches!.Select(row => $"{row.Name} {row.HasLeftTheTeam}")));
+        Assert.IsNull(page.NoCoach, "Nothing counted for nobody: the only thing in Maya's wait is a session, and it has its holder.");
         Assert.AreEqual("none | held 1 | plans 0 | packs 0 | started 0 | ended 0", B10dSay(page.Coaches![0].ThisMonth));
         Assert.AreEqual("USD 300.00 1 | held 1 | plans 0 | packs 1 | started 1 | ended 0", B10dSay(page.Coaches[1].ThisMonth));
         B10dAssertRowsAddUp(page);
@@ -333,17 +337,25 @@ public sealed partial class Phase3TrainingWorkflowTests
     private static string B10dSay(CoachMonthNumbersView numbers) =>
         $"{(numbers.MoneyReceived.Count == 0 ? "none" : B4bSay(numbers.MoneyReceived))} | held {numbers.SessionsHeld} | plans {numbers.PlansSold} | packs {numbers.PacksSold} | started {numbers.ClientsStarted} | ended {numbers.ClientsEnded}";
 
-    /// <summary>Every row adds up to the owner's totals: nothing counts twice, and nothing falls out of the rows.</summary>
+    /// <summary>
+    /// Every row, with what counted for nobody (notes plan N9d1b), adds up to the owner's totals: nothing counts twice,
+    /// and nothing falls out of the rows.
+    /// </summary>
     private static void B10dAssertRowsAddUp(CoachMonthReportView page)
     {
         var rows = page.Coaches ?? throw new AssertFailedException("The owner reads each coach.");
-        foreach (var (total, month) in new (CoachMonthNumbersView Total, Func<CoachMonthRowView, CoachMonthNumbersView> Month)[]
+        foreach (var (total, month, nobody) in new (CoachMonthNumbersView Total, Func<CoachMonthRowView, CoachMonthNumbersView> Month, CoachMonthNumbersView? Nobody)[]
                  {
-                     (page.ThisMonth, row => row.ThisMonth),
-                     (page.LastMonth, row => row.LastMonth),
+                     (page.ThisMonth, row => row.ThisMonth, page.NoCoach?.ThisMonth),
+                     (page.LastMonth, row => row.LastMonth, page.NoCoach?.LastMonth),
                  })
         {
-            var parts = rows.Select(month).ToArray();
+            var parts = rows.Select(month).ToList();
+            if (nobody is not null)
+            {
+                parts.Add(nobody);
+            }
+
             var added = parts
                 .SelectMany(part => part.MoneyReceived)
                 .GroupBy(line => line.Currency)

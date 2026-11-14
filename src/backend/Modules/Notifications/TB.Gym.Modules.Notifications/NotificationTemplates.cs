@@ -98,6 +98,9 @@ public static class NotificationTemplateCatalog
     /// <summary>A client may ask before the end, so the coach's notice no longer says the plan has ended (critique B14).</summary>
     private const int AskBeforeTheEndVersion = 2;
 
+    /// <summary>A departing coach's clients wait for a coach instead of moving to the owner (C8, notes plan N9d1b).</summary>
+    private const int WaitingVersion = 3;
+
     private static readonly Dictionary<CommercialNotificationKind, NotificationTemplate> English = new()
     {
         // The plan notices go to the client and open My plan, which says where the plan stands and offers Ask to renew;
@@ -134,13 +137,14 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             "Your coach set up your next plan",
             "It follows on from this one. Open My plan to see where your plan stands."),
-        // To the client, naming nobody (CLI-014): the owner has them until they are reassigned.
+        // To the client, naming nobody (CLI-014): they wait for a coach until the owner gives them one, and are told
+        // then (CoachAssigned). No promise to train on: a blocked client or one whose plan ended is told this too.
         [CommercialNotificationKind.CoachDeparted] = new NotificationTemplate(
             "workspace.coach-departed",
-            GlossaryVersion,
+            WaitingVersion,
             DefaultCulture,
-            "Your coach has changed",
-            "Your coach has left. Another coach looks after you now, and your plan and history stay as they are."),
+            "Your coach has left",
+            "Your coaching space will give you a new coach and tell you when it does. Your plan and history stay as they are."),
         // To the owner and the client's coach, naming the client: a coach cannot open Former clients
         // to find out who left.
         [CommercialNotificationKind.ClientLeft] = new NotificationTemplate(
@@ -149,13 +153,14 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             $"{ClientNameToken} left your coaching space",
             "Their record is kept, read-only, under Former clients."),
-        // To the owner. Names nobody, like the coach-departure notice; the clients are on the owner's list.
+        // To the owner. Names nobody, like the coach-departure notice; the waiting clients are on Clients and Today, and
+        // nothing gives a pending invitation a coach, so the words promise none.
         [CommercialNotificationKind.CoachResigned] = new NotificationTemplate(
             "workspace.coach-resigned",
-            GlossaryVersion,
+            WaitingVersion,
             DefaultCulture,
             "A coach left your team",
-            "Their clients and client invitations are yours now. You can reassign them from Clients."),
+            "Their clients now wait for a coach, as will anyone who accepts one of their invitations. Give each one a coach from Clients, yourself included."),
         // To the client's coach, naming the client (ADR 0029); the inbox links to the client's page.
         [CommercialNotificationKind.RenewalRequested] = new NotificationTemplate(
             "workspace.renewal-requested",
@@ -209,6 +214,22 @@ public static class NotificationTemplateCatalog
             DefaultCulture,
             $"{ClientNameToken} says the money is sent",
             "Check the Whish account, then book the plan from the client's page."),
+        // To the client on every coach change the owner makes, the owner taking them included (C8, CLI-014). Names
+        // nobody, like the departure notice: the client's own screens say who coaches them now.
+        [CommercialNotificationKind.CoachAssigned] = new NotificationTemplate(
+            "workspace.coach-assigned",
+            FirstVersion,
+            DefaultCulture,
+            "You have a new coach",
+            "Open Today to see who coaches you now. Your plan and history stay as they are."),
+        // To a self-directed trainee of the house (CLI-026), who trains as their own coach: what changed is who on the
+        // team may read their training (C8, CLI-013). Names nobody.
+        [CommercialNotificationKind.TraineeStaffChanged] = new NotificationTemplate(
+            "workspace.trainee-staff-changed",
+            FirstVersion,
+            DefaultCulture,
+            "Who can see your training changed",
+            "Another member of your coaching space's team can now see your training and progress. Your plan and history stay as they are."),
     };
 
     /// <summary>The plan notices as a session pack hears them (SES-009), in English like the rest.</summary>

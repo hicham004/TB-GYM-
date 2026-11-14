@@ -2361,7 +2361,9 @@ dead-letter view.
 A third queue, `tenancy."NoticeMailRequests"` (ADR 0027), carries plain workspace notices — "your
 access to a workspace has ended" to a released client, and "your coach has changed" to each client of
 a coach who resigned or was removed. The in-app side of those events uses the notification outbox as
-in-app-only intents (`CoachDeparted`, `ClientLeft`, and `CoachResigned` to the owner). The notice queue is tenant-owned like the
+in-app-only intents (`CoachDeparted`, `ClientLeft`, `CoachResigned` to the owner, `CoachAssigned` to a client the
+owner gives a coach and `TraineeStaffChanged` to a self-directed trainee whose record goes to someone else on the
+team, notes plan N9d1b). The notice queue is tenant-owned like the
 invitation queue and shares its claim, attempt, retry and dead-letter lifecycle, but mints no token
 and carries no link. Its recipient is a membership row, current or former, and eligibility is the
 notice's own fact re-checked before sending, not an active membership. The same Worker loop sweeps it.

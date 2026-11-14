@@ -830,7 +830,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         [.. items.Where(item => item.Client.ClientProfileId == clientId).Select(item => item.Kind)];
 
     /// <summary>What a client's record carries whoever may manage them: the same for the coach and the owner.</summary>
-    private static (Guid, Guid?, string, string, string, string?, ClientOnboardingStatus, DateTimeOffset?, bool, uint, Guid, string)
+    private static (Guid, Guid?, string, string, string, string?, ClientOnboardingStatus, DateTimeOffset?, bool, uint, Guid?, string)
         N9d1aBusinessSide(CoachClientDetails details) =>
         (details.Id, details.UserId, details.FirstName, details.LastName, details.Email, details.PhoneNumber,
             details.OnboardingStatus, details.OnboardingCompletedAtUtc, details.IsCoachBlocked, details.Version,

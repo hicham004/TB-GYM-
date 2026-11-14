@@ -32,7 +32,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         // The trainee joined 200 days ago and finished a workout of their own that day.
         var today = N9a1HouseToday();
         N9b1FSetHouseDay(today.AddDays(-200));
-        using var house = await N9a1OpenHouseAsync("n9b5-reach");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose progress nobody opens.
+        using var house = await N9a1OpenHouseAsync("n9b5-reach", withCoach: true);
         using var trainee = await N9a1TraineeAsync(house.TenantId, "n9b5-reach-maya@example.test", "Maya", "Rahman");
         var oldWorkout = await N9b5FinishEmptyWorkoutAsync(trainee.Client);
         N9b1FSetHouseDay(today);
@@ -145,18 +146,18 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         // The house's staff read the same trainee whole: the limit is the trainee's plan, not what the house keeps.
         var staffUrl = $"/api/progress/clients/{trainee.ProfileId}";
-        var staff = await ReadSliceAsync<ProgressDashboardView>(house.Owner, $"{staffUrl}/dashboard{year}");
+        var staff = await ReadSliceAsync<ProgressDashboardView>(house.Coach!, $"{staffUrl}/dashboard{year}");
         Assert.AreEqual((today.AddDays(-365), 6, (ProgressReach?)null), (staff.From, staff.Bodyweight.ObservedDayCount, staff.Reach));
-        var staffWeights = await ReadSliceAsync<ProgressView>(house.Owner, staffUrl + year);
+        var staffWeights = await ReadSliceAsync<ProgressView>(house.Coach!, staffUrl + year);
         Assert.AreEqual(
             (today.AddDays(-365), 6, (ProgressReach?)null),
             (staffWeights.From, staffWeights.Days.Count(day => day.Observation is not null), staffWeights.Reach));
         Assert.AreEqual(
             new BodyweightHistorySpanView(today.AddDays(-100), today),
-            await ReadSliceAsync<BodyweightHistorySpanView>(house.Owner, $"{staffUrl}/span"));
-        Assert.AreEqual(3, (await ReadSliceAsync<BodyMeasurementsView>(house.Owner, $"{staffUrl}/measurements{year}"))
+            await ReadSliceAsync<BodyweightHistorySpanView>(house.Coach!, $"{staffUrl}/span"));
+        Assert.AreEqual(3, (await ReadSliceAsync<BodyMeasurementsView>(house.Coach!, $"{staffUrl}/measurements{year}"))
             .Days.Count(day => day.Measurements.Count > 0));
-        Assert.HasCount(2, (await ReadSliceAsync<ProgressPhotosView>(house.Owner, $"{staffUrl}/photos{year}")).Photos);
+        Assert.HasCount(2, (await ReadSliceAsync<ProgressPhotosView>(house.Coach!, $"{staffUrl}/photos{year}")).Photos);
 
         // Nothing was removed: emptying the window shows every day again.
         await N9a1SettingAsync(house.Admin, N9b5WindowSetting, null);

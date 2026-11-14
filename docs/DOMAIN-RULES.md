@@ -121,9 +121,14 @@ active owner and coach's name, role and joining day (for a coach invited back, t
 and nothing else (critique B3a). See
 `docs/adr/0026-coach-team-and-client-assignment.md`.
 
-**CLI-012** Every client has exactly one coach, an active Owner or Coach of the workspace: whoever
-sent their invitation, or the owner when that coach has left. Every change appends to an
-append-only coach history. Only the owner reassigns a client.
+**CLI-012** Every client has at most one coach, an active Owner or Coach of the workspace: whoever
+sent their invitation, or nobody when that coach had left by the time they accepted, and the client then
+waits for a coach (C8, decided 2026-10-14; notes plan N9d1b, 14 Nov 2026). A house trainee starts with the
+house's Coach, or waits while the house has none (CLI-024). Nobody opens a waiting client's private side
+(CLI-013); their plans, programs and meal plans keep running and they can still log. The owner gives a waiting
+client a coach, themselves included, by reassigning them as any client is reassigned, and never gets one
+automatically. Every change appends to an append-only coach history, a wait as an entry that names nobody.
+Only the owner reassigns a client.
 
 **CLI-013** A Coach sees and acts only on their own clients in every module. The Owner may manage every
 client and coaches only their own (C8, decided 2026-10-14; notes plan N9d1a, 14 Nov 2026): the business side
@@ -143,16 +148,24 @@ no exception (audit COACH-13): a thread is live only between a client and the co
 to, so the owner's own thread closes the same way when they hand the client to a coach, and the owner
 starts a thread only with their own clients.
 
-**CLI-014** Removing a coach, or a coach resigning themselves, moves all their clients and pending
-client invitations to the owner in one transaction and deletes nothing. Each of those clients with
-access is told in-app and by one email that the workspace will assign a new coach, naming nobody.
-When a coach resigns, the owner is told in-app, naming nobody. The owner cannot resign.
+**CLI-014** Removing a coach, or a coach resigning themselves, leaves all their clients and pending
+client invitations waiting for a coach in one transaction and deletes nothing (C8; notes plan N9d1b): each
+client's coach becomes empty with a waiting entry in the coach history, each invitation names no coach, and a
+client who accepts one later lands waiting. Clients the owner holds from a departure before 14 Nov 2026 stay
+the owner's. Each of those clients with access, a self-directed trainee aside (CLI-026), is told in-app and by
+one email that the coaching space will give them a new coach, naming nobody. When a coach resigns, the owner
+is told in-app, naming nobody, that their clients wait for a coach. Every reassignment that changes a client's
+coach, the owner taking them included, tells the client in-app that they have a new coach, naming nobody, and a
+self-directed trainee that someone else on the team can now see their training (CLI-026); each is said only while
+no later change has followed it. While a client waits, their Ask
+to renew tells the owner (SUB-014). The owner cannot resign.
 
 **CLI-015** The owner releases a client with a reason, or a client leaves with an optional one. Their
 membership ends at once; their running and future plans, programs and meal plans are cancelled
 (payments kept, no refund; a program with a workout in progress stays as it is); they move to the
-owner. A released client is emailed once without the workspace, coach or reason named; when a client
-leaves, the owner and their coach are told in-app instead, naming the client (audit COACH-12), since a
+owner, from nobody when they were waiting for a coach (CLI-012). A released client is emailed once without the
+workspace, coach or reason named; when a client leaves, the owner and their coach, if they have one, are told
+in-app instead, naming the client (audit COACH-12), since a
 coach cannot open Former clients to learn who left. The record is kept read-only for the owner
 under Former clients, marked released or left: every change answers 409 `client_released`. The owner
 keeps its business side; its private side only when the owner was its coach when it ended (CLI-013), a private
@@ -259,7 +272,11 @@ and a renewal request from the last 30 days is shown. A cancelled plan is never 
 ran out a pack is neither the plan listed nor the plan to pay (SES-010), except a pack that just ended with none left
 to run, once that coaching plan is too old to list. Ending a client's coaching
 (CLI-015) stays the owner's, so only the owner's rows carry the client's version it asks for. The workspace week's
-sessions left Today; a client's page keeps its week.
+sessions left Today; a client's page keeps its week. **Waiting for a coach** (notes plan N9d1b): for the owner
+alone, each current client with no coach (CLI-012), the longest waiting first, then by name, with when the wait
+began, who coached them before and the client's version the reassignment asks for; never a former client or a
+self-directed trainee (CLI-026), and a Coach's Today carries none. A waiting client is in no member of staff's
+count on This month's team.
 
 **CLI-021** Coach certificate lines (decision 7, 5 Nov 2026; notes plan N4a, ADR 0039). TB Gym's record of what a
 coach showed as proof is one text-only line per proof about a coach in one coaching space, kept by the platform admin
@@ -325,8 +342,8 @@ profile are created when that email is confirmed, in the confirmation's transact
 taken: until then the house's staff see nobody and nothing can be attached to the person. A confirmation into a
 week that has filled, or a sign-up closed since, still confirms the email and leaves the sign-up waiting; the
 person then joins with the form while signed in, once there is room. The profile is self-directed (CLI-026) and
-names the house's Coach who joined first, else its Owner (ADR 0026); its coach history starts with the reason
-`SignUp`. An email that already has an account signs in first (409 `existing_account_sign_in_required`) and then
+names the house's Coach who joined first, or nobody while the house has none, and the trainee then waits for a
+coach (ADR 0026, CLI-012; notes plan N9d1b); its coach history starts with the reason `SignUp`. An email that already has an account signs in first (409 `existing_account_sign_in_required`) and then
 joins at once with only the new membership and profile, as an invitation does; a current client of another coach
 joins the same way and neither space learns of the other (CLI-001). Someone who left the house may sign up again
 and gets a new profile beside the ended one (CLI-016), once in a house week (409 `trainee_sign_up_once_a_week`);
@@ -350,8 +367,9 @@ off alone: Free's renewal runs on the same tick regardless (SUB-019).
 **CLI-026** A self-directed trainee is a client of the house who trains as their own coach (decision 25): the mark
 is on the profile, set at sign-up, and a trigger refuses it in any other workspace. They raise nothing on Coach
 Today, the client list or their own page (CLI-018 v9), Today's activity feed and "Ended, not renewed" leave them
-out, their workout notes and their leaving reach no staff inbox, and a departing coach's hand-over tells them
-nothing. Their money asks are the only staff notices they raise: asking for a plan and saying its money was sent,
+out, their workout notes and their leaving reach no staff inbox, and a departing coach's leaving them waiting tells them
+nothing, while a reassignment tells them in words of their own that someone else on the team can now see their
+training (CLI-014); a trainee with no coach is not on Today's waiting list (CLI-020). Their money asks are the only staff notices they raise: asking for a plan and saying its money was sent,
 to the house's Owner and their coach (SUB-020); a coach's Ask to renew is never theirs (SUB-014). They stay on Clients, where their row says so: the Owner
 sees every one, and the Coach those whose record names them (CLI-013), which is every trainee confirmed after the
 Coach joined the house's team (decision 33; the Coach therefore joins before sign-up is opened). The trainee's own
@@ -513,7 +531,8 @@ coach. A released client's receipts still count, for the coach they had then, an
 leaves their earlier receipts with the earlier coach. A coach reads only the totals that count for them, the owner
 the whole workspace's, and each coach's on the This month page (SUB-018); each total is one currency's, exact, with how many
 payments made it up, never added, netted or converted across currencies, never called profit or earnings, and no
-client is named beside it.
+client is named beside it. While the client waited for a coach (CLI-012) the entry in force names nobody, so a receipt
+then counts in the workspace's total and for nobody, never for the coach who left before the wait (notes plan N9d1b).
 
 **SUB-017** A client's own plans (critique B10a, `GET /api/client-plan/me`, read through `CurrentFor`, so a returning
 client reads their new profile's plans alone). Every plan not over shows, in the order they start; once none is left,
@@ -527,9 +546,9 @@ runs: a plan that is over reads as over. No price, payment or reason the coach t
 read, the one exception being the reason a session was charged, which is written for them (SES-007), and it decides
 no access (SUB-009).
 
-**SUB-018** Month numbers v2 (`MonthNumbers`, critique B10d; decided by the plan's chat on 2026-10-31, for the owner
+**SUB-018** Month numbers v3 (`MonthNumbers`, critique B10d; decided by the plan's chat on 2026-10-31, for the owner
 to confirm; v2, critique B12, counts a session for who held it where v1 said who recorded it, the same on any session
-from before) is what the This month page counts (`GET /api/coach-month`): this month so far beside the whole of last
+from before; v3, notes plan N9d1b, counts what happened while a client waited for a coach for nobody) is what the This month page counts (`GET /api/coach-month`): this month so far beside the whole of last
 month, each `[first day, first day of next month)` of the workspace's calendar, with no percentage and no client
 named. **Money received** is SUB-016's and **1-on-1 sessions held** SES-008's, each session for who held it.
 **Coaching plans sold** and **session packs sold** count what was booked on a workspace day of the month, a renewal
@@ -544,8 +563,9 @@ that has passed, or the day the plan was cancelled, ending coaching included (CL
 profile starts again (CLI-016). Each counts for the coach the client had as that day began, so ending a client's
 coaching, which moves them to the owner first, counts for the coach who had them. A former client's numbers stay.
 A coach reads what counts for them. The owner reads the workspace's and each coach's: every active member of staff,
-the owner first as You, then by name, then anyone who left the team with a number in either month, so the rows add
-up to the totals. Last month can still move, as money and sessions recorded late count on their own day. It decides
+the owner first as You, then by name, then anyone who left the team with a number in either month, and a No coach
+line of what counted for nobody because the client was waiting for a coach (CLI-012), shown when either month has
+one, so the rows and it add up to the totals. A session always counts for who held it, never for nobody. Last month can still move, as money and sessions recorded late count on their own day. It decides
 no access.
 
 **SUB-019** Free and the house's tiers (notes plan N9b1; decisions 26 and 30 as the owner changed them on 11 Nov
@@ -2128,7 +2148,11 @@ version 2 of the plan, team and note notices in the screens' words, and every no
 Today, where the first workout is, a client leaving to Former clients for the owner and Clients for a coach,
 a coach leaving to Clients). Critique B14 published version 3 of the next-plan notice and version 2 of its
 session pack twin, which name My plan, and version 2 of the renewal request, which no longer says the plan
-has ended, as a client may ask before it does. A pack's notices share these kinds and open the same pages.
+has ended, as a client may ask before it does. A pack's notices share these kinds and open the same pages. Notes
+plan N9d1b published version 3 of the coach-departure notice and of the owner's resignation notice, since a
+departing coach's clients wait for a coach (CLI-014), and two new in-app notices (version 1), to a client given a
+coach and to a self-directed trainee whose record went to someone else on the team, which name nobody and open
+nothing until the screens link them (N9d2).
 
 **NOT-007** A notification belongs to one recipient in one workspace. Only that recipient may list
 or mark it, and workspace membership alone — including the owner's — grants no access to another
@@ -2943,7 +2967,7 @@ At minimum, later migrations should enforce:
 | One working draft per person and recipe; an AI suggestion only on a new recipe's (NUT-014)                           | Filtered unique `(TenantId, OwnerUserId, RecipeId)`, check `CK_RecipeDrafts_Suggestion`, composite FK |
 | Tenant-safe child relationship                                                                                       | Composite FK including `TenantId` where practical                                                     |
 | One active owner per workspace                                                                                       | Partial unique `(TenantId)` where `Role = 'Owner' AND Status = 'Active'`                              |
-| A client's coach is active staff, and a coach change is recorded in the history                                      | Composite FK to memberships plus deferred constraint triggers on the client and the membership       |
+| A client's coach is active staff or nobody, and every coach change, a wait included, is recorded in the history     | Composite FK to memberships plus deferred constraint triggers on the client and the membership       |
 | Append-only, gap-free client coach history                                                                           | Unique `(TenantId, ClientProfileId, Sequence)`, chain check and trigger, append-only trigger          |
 | Concurrency                                                                                                          | PostgreSQL `xmin` token plus conflict handling                                                        |
 | Immutable published check-in version and its questions/options                                                       | PostgreSQL trigger refusing update and delete                                                         |

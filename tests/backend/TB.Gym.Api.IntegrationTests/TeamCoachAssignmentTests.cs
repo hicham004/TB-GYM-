@@ -454,7 +454,7 @@ public sealed partial class Phase3TrainingWorkflowTests
     }
 
     [TestMethod]
-    public async Task TeamRemovingACoachMovesTheirClientsAndPendingInvitationsToTheOwner()
+    public async Task TeamRemovingACoachLeavesTheirClientsAndPendingInvitationsWaiting()
     {
         using var owner = CreateClient();
         var tenant = await RegisterCoachAsync(owner, "rm-owner@example.test", "Owner", "Removal Gym");
@@ -483,22 +483,25 @@ public sealed partial class Phase3TrainingWorkflowTests
             await owner.PostAsJsonAsync($"/api/team/members/{coachUserId}/remove", new { version = member.Version }),
             HttpStatusCode.NotFound);
 
-        // The coach is out of the workspace immediately; the client and their data stay.
+        // The coach is out of the workspace immediately; the client and their data stay, the client waiting for a
+        // coach (N9d1b, C8: the owner never gets a departing coach's clients automatically).
         await AssertStatusAsync(await coach.GetAsync("/api/clients"), HttpStatusCode.Forbidden);
         Assert.HasCount(1, await TeamMembersAsync(owner));
         var details = await RequiredJsonAsync<TeamClientDetails>(await owner.GetAsync($"/api/clients/{clientId}"));
-        Assert.AreEqual(ownerUserId, details.AssignedCoachUserId);
+        Assert.IsNull(details.AssignedCoachUserId);
+        Assert.AreEqual(string.Empty, details.AssignedCoachName);
         var history = await RequiredJsonAsync<TeamAssignment[]>(
             await owner.GetAsync($"/api/clients/{clientId}/coach-assignments"));
         Assert.AreEqual("CoachRemoved", history[^1].Reason);
         Assert.AreEqual(coachUserId, history[^1].PreviousCoachUserId);
+        Assert.IsNull(history[^1].CoachUserId);
         await AssertStatusAsync(await client.GetAsync("/api/client-profile/me"), HttpStatusCode.OK);
 
-        // The pending invitation still works and lands with the owner.
+        // The pending invitation still works and lands waiting for a coach.
         using var late = CreateClient();
         var lateClientId = await AcceptClientLinkAsync(late, pendingLink);
         var lateDetails = await RequiredJsonAsync<TeamClientDetails>(await owner.GetAsync($"/api/clients/{lateClientId}"));
-        Assert.AreEqual(ownerUserId, lateDetails.AssignedCoachUserId);
+        Assert.IsNull(lateDetails.AssignedCoachUserId);
 
         // A removed coach can be invited back; their old clients stay where the owner put them.
         await RefreshCsrfAsync(owner);
@@ -626,7 +629,18 @@ public sealed partial class Phase3TrainingWorkflowTests
             await AssertStatusAsync(await acceptance, HttpStatusCode.OK);
             var clientId = (await RequiredJsonAsync<TeamAcceptance>(await acceptance)).ClientProfileId!.Value;
             var details = await RequiredJsonAsync<TeamClientDetails>(await owner.GetAsync($"/api/clients/{clientId}"));
-            Assert.AreEqual(ownerUserId, details.AssignedCoachUserId, $"Round {round}: the client landed with a removed coach.");
+            // Whichever commits first, the client ends waiting for a coach (N9d1b), never with the removed one.
+            Assert.IsNull(details.AssignedCoachUserId, $"Round {round}: the client landed with a removed coach.");
+            Assert.AreEqual(
+                1L,
+                await Phase6CountAsync(
+                    RequiredDatabaseConnection,
+                    """
+                    SELECT count(*) FROM clients."ClientCoachAssignments"
+                    WHERE "ClientProfileId" = @id AND "CoachUserId" IS NULL
+                    """,
+                    clientId),
+                $"Round {round}: the client's history holds exactly one waiting entry.");
         }
 
         Assert.AreEqual(
@@ -635,14 +649,16 @@ public sealed partial class Phase3TrainingWorkflowTests
                 RequiredDatabaseConnection,
                 """
                 SELECT count(*) FROM clients."ClientProfiles" AS client
-                WHERE @id = @id AND NOT EXISTS (
+                WHERE @id = @id AND client."AssignedCoachUserId" IS NOT NULL AND NOT EXISTS (
                     SELECT 1 FROM tenancy."Memberships" AS membership
                     WHERE membership."TenantId" = client."TenantId"
                       AND membership."UserId" = client."AssignedCoachUserId"
                       AND membership."Status" = 'Active')
                 """,
                 Guid.Empty),
-            "Every client's coach is active staff.");
+            "Every client's coach is active staff or nobody.");
+        // A waiting client is nobody's, so the team page counts none of them for the owner.
+        Assert.AreEqual(0, (await TeamMembersAsync(owner)).Single(member => member.UserId == ownerUserId).AssignedClientCount);
     }
 
     [TestMethod]
@@ -877,14 +893,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         uint Version,
         DateTimeOffset JoinedAtUtc = default);
     private sealed record TeamRosterMember(string DisplayName, string Role, DateTimeOffset JoinedAtUtc, bool IsYou);
-    private sealed record TeamClient(Guid Id, Guid AssignedCoachUserId, string AssignedCoachName);
-    private sealed record TeamClientDetails(Guid Id, Guid? UserId, Guid AssignedCoachUserId, string AssignedCoachName, uint Version);
+    private sealed record TeamClient(Guid Id, Guid? AssignedCoachUserId, string? AssignedCoachName);
+    private sealed record TeamClientDetails(Guid Id, Guid? UserId, Guid? AssignedCoachUserId, string? AssignedCoachName, uint Version);
     private sealed record TeamInvitation(Guid Id, string Email, string Kind, uint Version, string? DevelopmentActionUrl);
     private sealed record TeamPublicInvitation(string WorkspaceName, string Kind);
     private sealed record TeamAcceptance(Guid TenantId, Guid? ClientProfileId, bool SignedIn, string Kind);
     private sealed record TeamAssignment(
         int Sequence,
-        Guid CoachUserId,
+        Guid? CoachUserId,
         Guid? PreviousCoachUserId,
         string Reason,
         string? Note,

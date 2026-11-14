@@ -419,6 +419,6 @@ public sealed partial class Phase3TrainingWorkflowTests
 
     private sealed record PaidEnrollment(Guid Id, Guid OfferId);
     private sealed record ReleaseView(DateTimeOffset ReleasedAtUtc, string Reason, Guid? ReleasedByUserId, string ReleasedByName);
-    private sealed record ReleasedDetails(Guid Id, Guid AssignedCoachUserId, uint Version, ReleaseView? Release, bool MayCoach);
+    private sealed record ReleasedDetails(Guid Id, Guid? AssignedCoachUserId, uint Version, ReleaseView? Release, bool MayCoach);
     private sealed record FormerClient(Guid Id, string Email, DateTimeOffset ReleasedAtUtc, string Reason);
 }

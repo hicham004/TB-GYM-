@@ -23,8 +23,9 @@ public sealed class TeamCoachAssignmentDomainTests
     }
 
     [TestMethod]
-    public void AClientCannotBeTheirOwnCoachOrHaveNone()
+    public void AClientCannotBeTheirOwnCoachOrHaveAnEmptyOne()
     {
+        // An empty id is no coach and no "nobody" either: a client waiting for a coach names null (notes plan N9d1b).
         Assert.Throws<ArgumentException>(() => CreateProfile(ClientUserId));
         Assert.Throws<ArgumentException>(() => CreateProfile(Guid.Empty));
 
@@ -32,6 +33,7 @@ public sealed class TeamCoachAssignmentDomainTests
         Assert.Throws<ArgumentException>(() => profile.AssignCoach(ClientUserId));
         Assert.Throws<ArgumentException>(() => profile.AssignCoach(Guid.Empty));
         Assert.AreEqual(OwnerUserId, profile.AssignedCoachUserId);
+        Assert.IsFalse(profile.IsWaitingForCoach);
     }
 
     [TestMethod]
@@ -130,12 +132,13 @@ public sealed class TeamCoachAssignmentDomainTests
         Assert.IsNull(invitation.AssignedCoachUserId);
         Assert.IsNull(invitation.PhoneNumber);
         Assert.IsNull(invitation.BirthDate);
-        Assert.Throws<InvalidOperationException>(() => invitation.HandOverTo(OwnerUserId));
+        Assert.Throws<InvalidOperationException>(() => invitation.WaitForCoach());
     }
 
     [TestMethod]
-    public void APendingClientInvitationIsHandedToTheOwnerWhenItsCoachLeaves()
+    public void APendingClientInvitationWaitsForACoachWhenItsCoachLeaves()
     {
+        // Notes plan N9d1b (C8): the owner never gets a departing coach's invitations; whoever accepts one waits.
         var invitation = ClientInvitation.Create(
             TenantId,
             "client@example.com",
@@ -149,12 +152,13 @@ public sealed class TeamCoachAssignmentDomainTests
         Assert.AreEqual(InvitationKind.Client, invitation.Kind);
         Assert.AreEqual(CoachUserId, invitation.AssignedCoachUserId);
 
-        Assert.IsTrue(invitation.HandOverTo(OwnerUserId));
-        Assert.IsFalse(invitation.HandOverTo(OwnerUserId));
-        Assert.AreEqual(OwnerUserId, invitation.AssignedCoachUserId);
+        Assert.IsTrue(invitation.WaitForCoach());
+        Assert.IsNull(invitation.AssignedCoachUserId);
+        Assert.IsFalse(invitation.WaitForCoach(), "It names nobody already: nothing to save.");
+        Assert.IsNull(invitation.AssignedCoachUserId);
 
         invitation.Revoke(Now.AddMinutes(1));
-        Assert.Throws<InvalidOperationException>(() => invitation.HandOverTo(CoachUserId));
+        Assert.Throws<InvalidOperationException>(() => invitation.WaitForCoach());
         Assert.Throws<ArgumentException>(() => ClientInvitation.Create(
             TenantId, "other@example.com", "A", "B", null, null, Now.AddDays(7), Now, Guid.Empty));
     }
@@ -172,7 +176,7 @@ public sealed class TeamCoachAssignmentDomainTests
         Assert.Contains("https://tbgym.test/invite?token=x", coach.Body);
     }
 
-    private static ClientProfile CreateProfile(Guid coachUserId) =>
+    private static ClientProfile CreateProfile(Guid? coachUserId) =>
         ClientProfile.CreateForAcceptedInvitation(
             TenantId,
             ClientUserId,

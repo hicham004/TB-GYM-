@@ -371,7 +371,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3AATraineeTypesTheirOwnMaxOnlyUnderAPassWithinItsBoundsAndTheReadThenStartsFromIt()
     {
         var today = N9b1FStartAtMidday();
-        using var house = await N9c3AOpenAsync("max");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose maxes nobody opens.
+        using var house = await N9c3AOpenAsync("max", withCoach: true);
         var baseOne = await PublishProgramAsync(house.Owner, N9c3AProgram("N9c3 Base One", 2, house.SquatId, house.RowId));
         var listing = await N9c3AOfferedAsync(house.Owner, baseOne.TemplateId, "Lifters with a year of squatting");
         using var trainee = await N9a1TraineeAsync(house.TenantId, "n9c3a-max-talia@example.test", "Talia", "Wexford");
@@ -438,13 +439,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         Assert.AreEqual(1100m, (await N9c3ATypedAsync(trainee.Client, house.RowId, 1100m, "Pound")).Value);
 
         // The house's staff read them among the trainee's maxes.
-        var squats = await ReadSliceAsync<StrengthMaxPage>(house.Owner, $"/api/strength/clients/{trainee.ProfileId}/maxes?exerciseId={house.SquatId}");
+        var squats = await ReadSliceAsync<StrengthMaxPage>(house.House.Coach!, $"/api/strength/clients/{trainee.ProfileId}/maxes?exerciseId={house.SquatId}");
         CollectionAssert.AreEquivalent(new[] { typed.Id, pounds.Id }, squats.Items.Select(item => item.Id).ToArray());
         var kept = squats.Items.Single(item => item.Id == typed.Id);
         Assert.AreEqual(
             (StrengthMaxKind.CoachWorkingMax, 110m, StrengthLoadUnit.Kilogram, today, StrengthMaxSource.Manual, "TraineeTyped"),
             (kept.Kind, kept.Value, kept.Unit, kept.EffectiveDate, kept.Source, kept.MethodKey));
-        Assert.AreEqual(4, (await ReadSliceAsync<StrengthMaxPage>(house.Owner, $"/api/strength/clients/{trainee.ProfileId}/maxes")).Total);
+        Assert.AreEqual(4, (await ReadSliceAsync<StrengthMaxPage>(house.House.Coach!, $"/api/strength/clients/{trainee.ProfileId}/maxes")).Total);
         Assert.AreEqual(4L, await N9c3AMaxesOfAsync(trainee.ProfileId));
 
         // Whoever writes, a max is never changed.
@@ -467,7 +468,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3AStartMakesTheTraineesOwnProgramFromTodayEveryWeekShownWeightsFromTheirMaxAndNoNotice()
     {
         var today = N9b1FStartAtMidday();
-        using var house = await N9c3AOpenAsync("start");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose programs nobody opens.
+        using var house = await N9c3AOpenAsync("start", withCoach: true);
         var owner = house.Owner;
         // Two weeks, the second left unshared in the program as the house wrote it.
         var baseOne = await PublishProgramAsync(owner, N9c3AProgram("N9c3 Base One", 2, house.SquatId, house.RowId, hiddenWeek: 2));
@@ -505,7 +507,7 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         // As the house's staff read it: the trainee's copy of the version under the pass, in kg, with the listing's
         // rounding and their max. 70 % of 110 kg is 77 kg, rounded to the listing's 5 kg step: 75 kg.
-        var block = await N9c3ABlockAsync(owner, started.ProgramId);
+        var block = await N9c3ABlockAsync(house.House.Coach!, started.ProgramId);
         Assert.AreEqual(
             (trainee.ProfileId, passId, baseOne.TemplateId, baseOne.Id, today, today.AddDays(14), MesocycleKind.Primary),
             (block.ClientProfileId, block.EnrollmentId, block.SourceTemplateId, block.SourceTemplateVersionId, block.StartDate, block.EndDateExclusive, block.Kind));
@@ -677,7 +679,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3AANewVersionOrAWithdrawalStopsAStartAndNeverChangesAStartedProgram()
     {
         N9b1FStartAtMidday();
-        using var house = await N9c3AOpenAsync("change");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose programs nobody opens.
+        using var house = await N9c3AOpenAsync("change", withCoach: true);
         var owner = house.Owner;
         var first = await PublishProgramAsync(owner, N9c3AProgram("N9c3 Base One", 2, house.SquatId, house.RowId));
         var listing = await N9c3AOfferedAsync(owner, first.TemplateId, "Lifters with a year of squatting", loadIncrement: 5m);
@@ -687,13 +690,13 @@ public sealed partial class Phase3TrainingWorkflowTests
         var key = Guid.NewGuid();
         var started = await N9c3AStartedAsync(trainee.Client, listing.ListingId, first.Id, key);
         var shares = Enumerable.Repeat(((decimal?)70m, (decimal?)77m, (decimal?)75m), 4).ToArray();
-        CollectionAssert.AreEqual(shares, N9c3AShares(await N9c3ABlockAsync(owner, started.ProgramId), house.SquatId));
+        CollectionAssert.AreEqual(shares, N9c3AShares(await N9c3ABlockAsync(house.House.Coach!, started.ProgramId), house.SquatId));
 
         // The house publishes a heavier version: the list offers it, and the program the trainee started stays theirs.
         var second = await PublishProgramAsync(owner, N9c3AProgram("N9c3 Base One", 2, house.SquatId, house.RowId, share: 80m), first, 1);
         Assert.AreEqual(second.Id, (await N9c3AReadAsync(trainee.Client)).Programs.Single().TemplateVersionId);
         Assert.AreEqual((Guid?)second.Id, (await N9c3AListingsAsync(owner)).Single().TemplateVersionId);
-        var block = await N9c3ABlockAsync(owner, started.ProgramId);
+        var block = await N9c3ABlockAsync(house.House.Coach!, started.ProgramId);
         Assert.AreEqual(first.Id, block.SourceTemplateVersionId);
         CollectionAssert.AreEqual(shares, N9c3AShares(block, house.SquatId));
 
@@ -733,7 +736,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             await A7FieldErrorAsync(await N9c3AOfferAsync(owner, first.TemplateId, "Lifters", version: withdrawn.Version), "templateId"));
 
         // Their program is as it was started, and it is still their only one.
-        block = await N9c3ABlockAsync(owner, started.ProgramId);
+        block = await N9c3ABlockAsync(house.House.Coach!, started.ProgramId);
         Assert.AreEqual((first.Id, 1), (block.SourceTemplateVersionId, block.Lifecycle.Count));
         CollectionAssert.AreEqual(shares, N9c3AShares(block, house.SquatId));
         Assert.AreEqual((1L, 1L), (await N9c3AProgramsOfAsync(trainee.ProfileId), await N9c3AStartsOfAsync(trainee.ProfileId)));
@@ -783,7 +786,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3ATheNextBlockOfARunOpensOnceTheBlockBeforeHasEndedAndStartsFromItsMax()
     {
         var today = N9b1FStartAtMidday();
-        using var house = await N9c3AOpenAsync("run");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose programs nobody opens.
+        using var house = await N9c3AOpenAsync("run", withCoach: true);
         var one = await PublishProgramAsync(house.Owner, N9c3AProgram("N9c3 Base Block 1", 1, house.SquatId, house.RowId));
         var two = await PublishProgramAsync(house.Owner, N9c3AProgram("N9c3 Base Block 2", 1, house.SquatId, house.RowId, share: 75m));
         var blockOne = await N9c3AOfferedAsync(house.Owner, one.TemplateId, "Lifters", "Base", 1);
@@ -826,8 +830,8 @@ public sealed partial class Phase3TrainingWorkflowTests
         var secondBlock = await N9c3AStartedAsync(trainee.Client, blockTwo.ListingId, two.Id, Guid.NewGuid());
         Assert.AreEqual((today.AddDays(7), today.AddDays(14)), (secondBlock.StartDate, secondBlock.EndDateExclusive));
 
-        var carriedFrom = (await N9c3ABlockAsync(house.Owner, firstBlock.ProgramId)).WorkingMaxes.Single();
-        var carried = (await N9c3ABlockAsync(house.Owner, secondBlock.ProgramId)).WorkingMaxes.Single();
+        var carriedFrom = (await N9c3ABlockAsync(house.House.Coach!, firstBlock.ProgramId)).WorkingMaxes.Single();
+        var carried = (await N9c3ABlockAsync(house.House.Coach!, secondBlock.ProgramId)).WorkingMaxes.Single();
         Assert.AreEqual(
             (house.SquatId, 110m, TrainingLoadUnit.Kilogram, TrainingMaxSource.PreviousProgram),
             (carried.ExerciseId, carried.Value, carried.Unit, carried.Source));
@@ -979,7 +983,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3AOneTraineesStartsProgramAndMaxesNeverReachAnotherTrainee()
     {
         var today = N9b1FStartAtMidday();
-        using var house = await N9c3AOpenAsync("apart");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose programs nobody opens.
+        using var house = await N9c3AOpenAsync("apart", withCoach: true);
         var one = await PublishProgramAsync(house.Owner, N9c3AProgram("N9c3 Base Block 1", 1, house.SquatId, house.RowId));
         var two = await PublishProgramAsync(house.Owner, N9c3AProgram("N9c3 Base Block 2", 1, house.SquatId, house.RowId, share: 75m));
         var blockOne = await N9c3AOfferedAsync(house.Owner, one.TemplateId, "Lifters", "Base", 1);
@@ -1029,9 +1034,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         var corinBlock = await N9c3AStartedAsync(corin.Client, blockOne.ListingId, one.Id, Guid.NewGuid());
         Assert.AreEqual((today, today.AddDays(7)), (corinBlock.StartDate, corinBlock.EndDateExclusive));
         Assert.AreNotEqual(taliaBlock.ProgramId, corinBlock.ProgramId);
-        var corinWorking = (await N9c3ABlockAsync(house.Owner, corinBlock.ProgramId)).WorkingMaxes.Single();
+        var corinWorking = (await N9c3ABlockAsync(house.House.Coach!, corinBlock.ProgramId)).WorkingMaxes.Single();
         Assert.AreEqual(((Guid?)corinMax.Id, 120m), (corinWorking.SourceMaxRecordId, corinWorking.Value));
-        var taliaWorking = (await N9c3ABlockAsync(house.Owner, taliaBlock.ProgramId)).WorkingMaxes.Single();
+        var taliaWorking = (await N9c3ABlockAsync(house.House.Coach!, taliaBlock.ProgramId)).WorkingMaxes.Single();
         Assert.AreEqual(((Guid?)taliaMax.Id, 110m), (taliaWorking.SourceMaxRecordId, taliaWorking.Value));
 
         // Each reads their own program and their own start; the staff count both.
@@ -1090,7 +1095,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3AAListingsRoundingReachesTheWeightsOfTheProgramStartedFromIt()
     {
         var today = N9b1FStartAtMidday();
-        using var house = await N9c3AOpenAsync("round");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose programs nobody opens.
+        using var house = await N9c3AOpenAsync("round", withCoach: true);
         // 72.5 % of 110 kg is 79.75 kg: 80 kg to the nearest 2.5 kg, 77.5 kg rounded down. 71 % is 78.1 kg: 77.5 kg to
         // the nearest, 80 kg rounded up. Each listing's way differs from the nearest step.
         var down = await PublishProgramAsync(house.Owner, N9c3AProgram("N9c3 Rounded Down", 1, house.SquatId, house.RowId, share: 72.5m));
@@ -1118,7 +1124,7 @@ public sealed partial class Phase3TrainingWorkflowTests
         foreach (var (started, mode, share, unrounded, prescribed) in rounded)
         {
             Assert.AreEqual(today, started.StartDate, mode.ToString());
-            var block = await N9c3ABlockAsync(house.Owner, started.ProgramId);
+            var block = await N9c3ABlockAsync(house.House.Coach!, started.ProgramId);
             Assert.AreEqual(
                 (TrainingLoadUnit.Kilogram, 2.5m, mode),
                 (block.LoadUnit, block.LoadIncrement, block.LoadRoundingMode),
@@ -1134,7 +1140,8 @@ public sealed partial class Phase3TrainingWorkflowTests
     public async Task N9c3ATheMaxRouteTakesAnArchivedLiftOfTheHouseAndNeverAnotherSpacesLift()
     {
         var today = N9b1FStartAtMidday();
-        using var house = await N9c3AOpenAsync("archived");
+        // With a house Coach: a trainee of a house with none waits for a coach (N9d1b), whose programs nobody opens.
+        using var house = await N9c3AOpenAsync("archived", withCoach: true);
         var front = await CreateExerciseAsync(house.Owner, "N9c3 Front Squat", [], []);
         var program = await PublishProgramAsync(house.Owner, N9c3AProgram("N9c3 Front Block", 1, front.Id, house.RowId));
         await N9c3AOfferedAsync(house.Owner, program.TemplateId, "Lifters who front squat");
@@ -1176,7 +1183,7 @@ public sealed partial class Phase3TrainingWorkflowTests
             entry.Maxes.Single());
         Assert.AreEqual((true, (string?)null), (entry.CanStart, entry.Refusal));
         var started = await N9c3AStartedAsync(trainee.Client, entry.ListingId, program.Id, Guid.NewGuid());
-        var block = await N9c3ABlockAsync(house.Owner, started.ProgramId);
+        var block = await N9c3ABlockAsync(house.House.Coach!, started.ProgramId);
         var max = block.WorkingMaxes.Single();
         Assert.AreEqual((front.Id, (Guid?)typed.Id, 100m), (max.ExerciseId, max.SourceMaxRecordId, max.Value));
         CollectionAssert.AreEqual(

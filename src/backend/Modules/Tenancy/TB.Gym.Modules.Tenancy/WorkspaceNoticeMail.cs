@@ -117,7 +117,7 @@ public sealed class WorkspaceNoticeMailRequest : TenantEntity
             releasedByUserId,
             releasedAtUtc);
 
-    /// <summary>The notice that a client's coach left the workspace and the client moved to the owner.</summary>
+    /// <summary>The notice that a client's coach left the workspace and the client waits for a new one (CLI-014).</summary>
     public static WorkspaceNoticeMailRequest CoachDeparted(
         Guid tenantId,
         Guid clientUserId,

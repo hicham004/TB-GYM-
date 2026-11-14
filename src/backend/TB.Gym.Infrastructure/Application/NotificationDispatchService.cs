@@ -630,7 +630,8 @@ internal sealed class NotificationDispatchService(
     /// </summary>
     /// <remarks>
     /// A coach departure is still worth saying while the client is a current member with that same
-    /// profile and the history entry that moved them exists. A client leaving is worth saying to staff
+    /// profile and the history entry that left them waiting exists; a new coach (CoachAssigned) while that
+    /// entry is still the client's newest. A client leaving is worth saying to staff
     /// who are still active staff, while that relationship is still ended. A coach resigning is worth
     /// saying to the active owner while that coach is still gone. All are in-app only.
     /// </remarks>
@@ -679,11 +680,15 @@ internal sealed class NotificationDispatchService(
             return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
         }
 
-        if (item.Kind == CommercialNotificationKind.CoachDeparted)
+        if (item.Kind is CommercialNotificationKind.CoachDeparted
+            or CommercialNotificationKind.CoachAssigned
+            or CommercialNotificationKind.TraineeStaffChanged)
         {
-            if (!await context.ClientCoachAssignments.AsNoTracking().AnyAsync(
-                    entry => entry.Id == item.AggregateId && entry.ClientProfileId == payload.ClientProfileId,
-                    cancellationToken))
+            var sequence = await context.ClientCoachAssignments.AsNoTracking()
+                .Where(entry => entry.Id == item.AggregateId && entry.ClientProfileId == payload.ClientProfileId)
+                .Select(entry => (int?)entry.Sequence)
+                .SingleOrDefaultAsync(cancellationToken);
+            if (sequence is null)
             {
                 return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
             }
@@ -699,6 +704,17 @@ internal sealed class NotificationDispatchService(
             }
 
             if (client.ReleasedAtUtc is not null)
+            {
+                return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
+            }
+
+            // "You have a new coach" (and a trainee's "who can see your training changed") is true only while no later
+            // change followed: another reassignment tells the client again, and that coach leaving tells them they
+            // left. A departure stays worth saying, as before.
+            if ((item.Kind is CommercialNotificationKind.CoachAssigned or CommercialNotificationKind.TraineeStaffChanged) &&
+                await context.ClientCoachAssignments.AsNoTracking().AnyAsync(
+                    entry => entry.ClientProfileId == payload.ClientProfileId && entry.Sequence > sequence.Value,
+                    cancellationToken))
             {
                 return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
             }
@@ -784,8 +800,8 @@ internal sealed class NotificationDispatchService(
     }
 
     /// <summary>
-    /// To the coach who was assigned the client when they asked to renew (ADR 0029), while they still
-    /// are and while the client has not left. The title names the client, read now rather than kept
+    /// To the coach who was assigned the client when they asked to renew (ADR 0029), or the owner while the
+    /// client waited for a coach, while that is still so and while the client has not left. The title names the client, read now rather than kept
     /// in the payload, so a renamed client is named as they are today and the payload holds no name.
     /// </summary>
     private static async Task<Eligibility> EvaluateRenewalRequestedAsync(
@@ -816,7 +832,10 @@ internal sealed class NotificationDispatchService(
             return Eligibility.Permanent(NotificationFailureCodes.AggregateMismatch);
         }
 
-        if (client.ReleasedAtUtc is not null || client.AssignedCoachUserId != item.RecipientUserId)
+        // Still theirs: the client's coach, or the owner while the client waits for one (CLI-012), who heard the ask.
+        var stillTheirs = client.AssignedCoachUserId == item.RecipientUserId ||
+            (client.AssignedCoachUserId is null && audience.RecipientRole == TenantRole.Owner);
+        if (client.ReleasedAtUtc is not null || !stillTheirs)
         {
             return Eligibility.Suppress(NotificationSuppressionCodes.StateChanged);
         }

@@ -600,12 +600,13 @@ internal sealed class HousePlanAskService(
 
     /// <summary>
     /// Whom the house's money notices tell: its Owner, who sees every trainee, and the trainee's coach, whose
-    /// client the trainee is (ADR 0026); one notice each, the same person once.
+    /// client the trainee is (ADR 0026); one notice each, the same person once. A trainee waiting for a coach
+    /// (CLI-012) tells the Owner alone.
     /// </summary>
     private async Task<IReadOnlyList<Guid>> StaffToTellAsync(ClientProfile trainee, CancellationToken cancellationToken)
     {
         var owner = await CoachTeam.OwnerUserIdAsync(dbContext, tenantContext.TenantId, cancellationToken);
-        return new[] { owner, trainee.AssignedCoachUserId }.Distinct().ToArray();
+        return new[] { owner, trainee.AssignedCoachUserId }.OfType<Guid>().Distinct().ToArray();
     }
 
     /// <summary>The house's Pro+ plans a trainee may ask for, each option on sale, by plan name, length and price.</summary>

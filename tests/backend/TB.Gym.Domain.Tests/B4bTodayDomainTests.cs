@@ -237,6 +237,67 @@ public sealed class B4bTodayDomainTests
     }
 
     [TestMethod]
+    public void AReceiptWhileTheClientWaitsCountsForNobodyNotTheCoachWhoLeft()
+    {
+        // Notes plan N9d1b (CLI-012): Lea invited the client on 1 Sep, the owner removed her from the team at 10:00 UTC
+        // on 10 Oct, so the client waited for a coach, and the owner gave them Omar at 10:00 UTC on 20 Oct.
+        CoachHistoryEntry[] history =
+        [
+            Entry(1, Lea, Utc(2026, 9, 1, 9, 0)),
+            Entry(2, null, Utc(2026, 10, 10, 10, 0)),
+            Entry(3, Omar, Utc(2026, 10, 20, 10, 0)),
+        ];
+        Assert.AreEqual(Lea, MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 10, 9, 59), history), "A minute before Lea left.");
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 10, 10, 0), history), "As Lea left: nobody, never Lea.");
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 15, 9, 0), history), "While the client waits.");
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 20, 9, 59), history), "A minute before Omar.");
+        Assert.AreEqual(Omar, MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 20, 10, 0), history), "At the assignment: Omar.");
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 15, 9, 0), [.. history.Reverse()]), "Read in numbered order.");
+
+        // 50 before the wait, 30 during it and 70 after: the wait's 30 counts in the workspace's total and for nobody.
+        ReceivedPayment[] october =
+        [
+            Paid(50m, "USD", Utc(2026, 10, 5, 9, 0), history),
+            Paid(30m, "USD", Utc(2026, 10, 15, 9, 0), history),
+            Paid(70m, "USD", Utc(2026, 10, 25, 9, 0), history),
+        ];
+        Assert.AreEqual("USD 50.00 1", Say(Totals(october, coach: Lea)), "Lea keeps only what came while she coached.");
+        Assert.AreEqual("USD 70.00 1", Say(Totals(october, coach: Omar)));
+        Assert.IsEmpty(Totals(october, coach: Owner), "The owner never gets the wait's money as a coach.");
+        Assert.AreEqual("USD 150.00 3", Say(Totals(october)), "The workspace's total keeps it: the money arrived.");
+        Assert.AreEqual(
+            "USD 30.00 1",
+            Say(MoneyReceivedPolicy.Totals(october, October, November, Beirut, coach => coach is null)),
+            "What counted for nobody.");
+    }
+
+    [TestMethod]
+    public void AReceiptBeforeAFirstEntryNamingNobodyCountsForNobody()
+    {
+        // The client paid on 2 Oct and accepted an invitation on 5 Oct after its coach had left, so they joined waiting;
+        // the owner gave them Omar on 12 Oct. Before the first entry the first entry's coach counts: here nobody, never
+        // the later Omar.
+        CoachHistoryEntry[] joinedWaiting = [Entry(1, null, Utc(2026, 10, 5, 9, 0)), Entry(2, Omar, Utc(2026, 10, 12, 9, 0))];
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 2, 9, 0), joinedWaiting));
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 5, 9, 0), joinedWaiting));
+        Assert.AreEqual(Omar, MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 12, 9, 0), joinedWaiting));
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 2, 9, 0), [.. joinedWaiting.Reverse()]));
+        Assert.IsNull(MoneyReceivedPolicy.CoachAt(Utc(2026, 10, 2, 9, 0), [Entry(1, null, Utc(2026, 10, 5, 9, 0))]));
+
+        ReceivedPayment[] october =
+        [
+            Paid(20m, "USD", Utc(2026, 10, 2, 9, 0), joinedWaiting),
+            Paid(45m, "USD", Utc(2026, 10, 13, 9, 0), joinedWaiting),
+        ];
+        Assert.AreEqual("USD 45.00 1", Say(Totals(october, coach: Omar)));
+        Assert.IsEmpty(Totals(october, coach: Owner));
+        Assert.AreEqual("USD 65.00 2", Say(Totals(october)));
+        Assert.AreEqual(
+            "USD 20.00 1",
+            Say(MoneyReceivedPolicy.Totals(october, October, November, Beirut, coach => coach is null)));
+    }
+
+    [TestMethod]
     public void APlanThatRanOutInTheLastThirtyDaysIsListed()
     {
         // The reference cases, in days since the plan's last day: 0 (still running) no, 1 yes, 29 yes, 30 no.
@@ -317,7 +378,7 @@ public sealed class B4bTodayDomainTests
         IReadOnlyList<CoachHistoryEntry>? history = null) =>
         new(amount, currency, receivedAtUtc, PaymentOperation.Receipt, history ?? [Entry(1, Owner, Utc(2026, 1, 1, 9, 0))]);
 
-    private static CoachHistoryEntry Entry(int sequence, Guid coach, DateTimeOffset assignedAtUtc) =>
+    private static CoachHistoryEntry Entry(int sequence, Guid? coach, DateTimeOffset assignedAtUtc) =>
         new(sequence, coach, assignedAtUtc);
 
     private static FeatureAccessDecision[] Decisions(params FeatureAccessReason[] reasons) =>

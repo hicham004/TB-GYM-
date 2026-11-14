@@ -39,11 +39,12 @@ internal sealed class TeamApplicationService(
                 membership.Version,
             })
             .ToListAsync(cancellationToken);
-        // Current clients only: a released client stays with the owner as a record, not as work.
+        // Current clients only: a released client stays with the owner as a record, not as work. A client
+        // waiting for a coach is nobody's (CLI-012), so no row counts them; Today lists them for the owner.
         var counts = await dbContext.ClientProfiles
             .AsNoTracking()
-            .Where(client => client.ReleasedAtUtc == null)
-            .GroupBy(client => client.AssignedCoachUserId)
+            .Where(client => client.ReleasedAtUtc == null && client.AssignedCoachUserId != null)
+            .GroupBy(client => client.AssignedCoachUserId!.Value)
             .Select(group => new { CoachUserId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.CoachUserId, item => item.Count, cancellationToken);
 
@@ -118,8 +119,10 @@ internal sealed class TeamApplicationService(
 
     /// <summary>
     /// A coach leaves the team, removed by the owner or of their own accord. Their clients and pending
-    /// client invitations move to the owner, and each client with access is told in-app and by email
-    /// that the workspace will assign a new coach (ADR 0027).
+    /// client invitations wait for a coach (C8, CLI-014: the owner never gets them automatically), each
+    /// client with a waiting entry in their coach history and nothing deleted, and each client with access
+    /// is told in-app and by email that the workspace will give them a new coach (ADR 0027). The counts the
+    /// result carries are of the clients and invitations left waiting.
     /// </summary>
     private async Task<CoachRemovalResult> DepartAsync(
         Guid coachUserId,
@@ -154,7 +157,6 @@ internal sealed class TeamApplicationService(
                     return new CoachRemovalResult(CoachRemovalStatus.Conflict);
                 }
 
-                var ownerUserId = await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
                 var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
                 var now = clock.UtcNow;
 
@@ -172,19 +174,20 @@ internal sealed class TeamApplicationService(
                     .ToListAsync(cancellationToken);
                 foreach (var client in clients)
                 {
-                    client.AssignCoach(ownerUserId);
-                    var entry = ClientCoachAssignment.ForChange(
+                    // One change of the coach per profile in this transaction: the deferred coach trigger reads
+                    // each update's own row against the newest history entry at commit.
+                    client.WaitForCoach();
+                    var entry = ClientCoachAssignment.ForDeparture(
                         tenantId,
                         client.Id,
                         await CoachTeam.NextAssignmentSequenceAsync(dbContext, client.Id, cancellationToken),
                         coachUserId,
-                        ownerUserId,
                         reason,
-                        null,
                         now);
                     dbContext.ClientCoachAssignments.Add(entry);
-                    // A self-directed trainee has no coach to lose (CLI-026): their record moves like any other
-                    // and they are told nothing about it.
+                    // Their programs and meal plans keep running and they can still log; nobody opens their
+                    // private side until the owner gives them a coach (CLI-013). A self-directed trainee has no
+                    // coach to lose (CLI-026): their record waits like any other and they are told nothing about it.
                     if (client.UserId is { } clientUserId && activeClientUserIds.Contains(clientUserId) && !client.IsSelfDirected)
                     {
                         WorkspaceRelationshipNotices.CoachDeparted(
@@ -199,7 +202,7 @@ internal sealed class TeamApplicationService(
                     }
                 }
 
-                // Their pending client invitations stay valid; the client will land with the owner.
+                // Their pending client invitations stay valid; a client who accepts one lands waiting too.
                 var invitations = await dbContext.ClientInvitations
                     .Where(invitation =>
                         invitation.Kind == InvitationKind.Client &&
@@ -208,7 +211,7 @@ internal sealed class TeamApplicationService(
                     .ToListAsync(cancellationToken);
                 foreach (var invitation in invitations)
                 {
-                    invitation.HandOverTo(ownerUserId);
+                    invitation.WaitForCoach();
                 }
 
                 membership.RemoveCoach();
@@ -220,7 +223,7 @@ internal sealed class TeamApplicationService(
                         dbContext,
                         tenantId,
                         timeZoneId,
-                        ownerUserId,
+                        await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken),
                         membership.Id,
                         coachUserId,
                         now);

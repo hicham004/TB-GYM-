@@ -1185,7 +1185,7 @@ public sealed class N9a1HouseSignUpDomainTests
         Assert.AreEqual(Day(2001, 5, 3), profile.BirthDate);
         Assert.AreEqual(HouseId, profile.TenantId);
         Assert.AreEqual(TraineeUserId, profile.UserId);
-        Assert.AreEqual(HouseCoachUserId, profile.AssignedCoachUserId, "The record still names a member of the house's staff (ADR 0026).");
+        Assert.AreEqual(HouseCoachUserId, profile.AssignedCoachUserId, "With a Coach in the house, the record names them (ADR 0026); with none it names nobody (N9d1b).");
         Assert.AreEqual(ClientOnboardingStatus.NotStarted, profile.OnboardingStatus);
         Assert.IsFalse(profile.IsReleased);
         Assert.IsFalse(profile.IsCoachBlocked);
@@ -1251,10 +1251,11 @@ public sealed class N9a1HouseSignUpDomainTests
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Change(ClientCoachAssignmentReason.SignUp));
 
-        // The three ways a record starts are refused as a change; the five ways it moves are taken. A trainee whose
-        // coach leaves the house moves to its owner like any client.
+        // The three ways a record starts are refused as a change, and so are the two departures: since notes plan N9d1b
+        // (C8) a trainee whose coach leaves the house waits for a coach like any client, which ForDeparture records. The
+        // three ways it moves to a named member of staff are taken.
         Assert.AreEqual(
-            "Reassigned, CoachRemoved, Released, CoachResigned, ClientLeft",
+            "Reassigned, Released, ClientLeft",
             string.Join(", ", Enum.GetValues<ClientCoachAssignmentReason>().Where(reason =>
             {
                 try
@@ -1267,10 +1268,13 @@ public sealed class N9a1HouseSignUpDomainTests
                 }
             })));
 
-        var moved = Change(ClientCoachAssignmentReason.CoachResigned);
-        Assert.AreEqual(2, moved.Sequence);
-        Assert.AreEqual(HouseOwnerUserId, moved.CoachUserId);
-        Assert.AreEqual(HouseCoachUserId, moved.PreviousCoachUserId);
+        var waiting = ClientCoachAssignment.ForDeparture(
+            HouseId, ProfileId, 2, HouseCoachUserId, ClientCoachAssignmentReason.CoachResigned, Now);
+        Assert.AreEqual(2, waiting.Sequence);
+        Assert.IsNull(waiting.CoachUserId, "Nobody gets the trainee automatically, the house's owner included.");
+        Assert.AreEqual(HouseCoachUserId, waiting.PreviousCoachUserId);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ClientCoachAssignment.ForDeparture(
+            HouseId, ProfileId, 2, HouseCoachUserId, ClientCoachAssignmentReason.SignUp, Now));
     }
 
     // ---- TB Gym is for adults: the house's lowest age and the intake's (CLI-004) ----

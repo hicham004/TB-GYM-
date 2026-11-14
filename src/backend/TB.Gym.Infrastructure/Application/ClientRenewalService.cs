@@ -57,10 +57,13 @@ internal sealed class ClientRenewalService(
         }
 
         var now = clock.UtcNow;
-        var request = RenewalRequest.Create(tenantId, client.Id, plan.EnrollmentId, client.AssignedCoachUserId, today, now);
+        // While the client waits for a coach (CLI-012) the owner hears the ask: renewals are the business side (C8).
+        var toldUserId = client.AssignedCoachUserId
+            ?? await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
+        var request = RenewalRequest.Create(tenantId, client.Id, plan.EnrollmentId, toldUserId, today, now);
         dbContext.RenewalRequests.Add(request);
         WorkspaceRelationshipNotices.RenewalRequested(
-            dbContext, tenantId, timeZoneId, client.AssignedCoachUserId, client.Id, request.Id, now);
+            dbContext, tenantId, timeZoneId, toldUserId, client.Id, request.Id, now);
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);

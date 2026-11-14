@@ -134,6 +134,8 @@ public static class NotificationPurposeCatalog
         CommercialNotificationKind.ClientWorkoutNote => NotificationPurpose.ServiceTransactional,
         CommercialNotificationKind.HousePlanAsked => NotificationPurpose.ServiceTransactional,
         CommercialNotificationKind.HousePlanMoneySent => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.CoachAssigned => NotificationPurpose.ServiceTransactional,
+        CommercialNotificationKind.TraineeStaffChanged => NotificationPurpose.ServiceTransactional,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), "An unclassified notification kind cannot be planned."),
     };
 
@@ -141,7 +143,8 @@ public static class NotificationPurposeCatalog
     /// The workspace-relationship kinds (ADR 0027, 0029): in-app only, because a coach departure is also
     /// emailed through the workspace notice queue, and a client leaving, a coach resigning, a client
     /// asking to renew or a house trainee asking for a plan or saying its money was sent (SUB-020)
-    /// concerns only staff.
+    /// concerns only staff, and a client given a coach (CLI-014) reads who on their Today, as a self-directed
+    /// trainee whose record went to another of the house's team needs nothing outside the app either.
     /// </summary>
     public static bool IsWorkspaceKind(CommercialNotificationKind kind) =>
         kind is CommercialNotificationKind.CoachDeparted
@@ -149,7 +152,9 @@ public static class NotificationPurposeCatalog
             or CommercialNotificationKind.CoachResigned
             or CommercialNotificationKind.RenewalRequested
             or CommercialNotificationKind.HousePlanAsked
-            or CommercialNotificationKind.HousePlanMoneySent;
+            or CommercialNotificationKind.HousePlanMoneySent
+            or CommercialNotificationKind.CoachAssigned
+            or CommercialNotificationKind.TraineeStaffChanged;
 
     /// <summary>
     /// The training kinds (ADR 0036): in-app only, because they are frequent, never urgent, and say
