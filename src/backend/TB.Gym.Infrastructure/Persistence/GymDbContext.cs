@@ -351,6 +351,7 @@ public sealed partial class GymDbContext(
         ConfigureMediaInventory(builder);
         ConfigureStrength(builder);
         ConfigureTraining(builder);
+        ConfigureHousePrograms(builder);
         ConfigureNutrition(builder);
         ConfigureCheckIns(builder);
         ConfigureMessaging(builder);
@@ -1057,6 +1058,7 @@ public sealed partial class GymDbContext(
         RejectAppendOnlyMutations<ClientCoachAssignment>("Client coach assignment history is append-only.");
         RejectAppendOnlyMutations<LegalConsentAcceptance>("Legal consent acceptances are append-only.");
         RejectAppendOnlyMutations<AccountClosure>("Account closures are append-only.");
+        RejectAppendOnlyMutations<HouseProgramStart>("Programs started from the house's list are append-only.");
         RejectLegalDocumentWordChanges();
         RejectCoachCertificateLineMutations();
         RejectAppendOnlyMutations<StrengthMaxRecord>("Strength max history is append-only.");

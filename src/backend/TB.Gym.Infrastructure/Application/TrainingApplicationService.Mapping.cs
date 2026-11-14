@@ -391,6 +391,7 @@ internal sealed partial class TrainingApplicationService
         Guid clientProfileId,
         AssignMesocycleRequest request,
         ProgramTemplateVersion templateVersion,
+        string selectedReason,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request.WorkingMaxes);
@@ -521,7 +522,7 @@ internal sealed partial class TrainingApplicationService
                 ToStrengthUnit(selection.Unit),
                 1,
                 null,
-                "Assignment working-max snapshot selected by coach."));
+                selectedReason));
         }
 
         return result;
@@ -732,15 +733,8 @@ internal sealed partial class TrainingApplicationService
                       snapshot.Value == decimal.Round(value, 3, MidpointRounding.AwayFromZero))));
     }
 
-    private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken)
-    {
-        var timeZone = await dbContext.Tenants.AsNoTracking()
-            .Where(item => item.Id == tenantContext.TenantId)
-            .Select(item => item.TimeZoneId)
-            .SingleAsync(cancellationToken);
-        var local = TimeZoneInfo.ConvertTime(clock.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(timeZone));
-        return DateOnly.FromDateTime(local.DateTime);
-    }
+    private async Task<DateOnly> GetTenantTodayAsync(CancellationToken cancellationToken) =>
+        (await CalendarAsync(cancellationToken)).Today;
 
     private static LoadRoundingPolicy CreateRoundingPolicy(
         TrainingLoadUnit unit,

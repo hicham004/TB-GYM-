@@ -14,11 +14,9 @@ internal sealed partial class TrainingApplicationService
         int skip,
         CancellationToken cancellationToken)
     {
-        var timeZoneId = await dbContext.Tenants.AsNoTracking()
-            .Where(item => item.Id == tenantContext.TenantId).Select(item => item.TimeZoneId)
-            .SingleAsync(cancellationToken);
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.UtcNow,
-            TimeZoneInfo.FindSystemTimeZoneById(timeZoneId)).DateTime);
+        var calendar = await CalendarAsync(cancellationToken);
+        var timeZoneId = calendar.TimeZoneId;
+        var today = calendar.Today;
         var through = today.AddDays(UpcomingLookAheadDays);
         var client = await FindSelfClientAsync(cancellationToken);
         var access = client is null ? null : await GetTrainingAccessAsync(client.Id, cancellationToken);
@@ -28,10 +26,15 @@ internal sealed partial class TrainingApplicationService
                 today, timeZoneId, false, false, through, null, [], null, null);
         }
 
-        var hasProgram = await dbContext.TrainingMesocycles.AsNoTracking().AnyAsync(item =>
-            item.ClientProfileId == client.Id && item.EndDateExclusive > today &&
-            item.Status != MesocycleStatus.Cancelled && item.Status != MesocycleStatus.Completed,
-            cancellationToken);
+        // A house program whose own plan no longer grants is neither had nor coming (TRN-034).
+        var openPrograms = await dbContext.TrainingMesocycles.AsNoTracking()
+            .Where(item => item.ClientProfileId == client.Id && item.EndDateExclusive > today &&
+                item.Status != MesocycleStatus.Cancelled && item.Status != MesocycleStatus.Completed)
+            .Select(item => item.Id)
+            .Take(8)
+            .ToArrayAsync(cancellationToken);
+        var closedPrograms = await HouseProgramsClosedAsync(openPrograms, cancellationToken);
+        var hasProgram = openPrograms.Any(id => !closedPrograms.Contains(id));
         var coverage = hasProgram
             ? await GetTodayCoverageAsync(client.Id, today, cancellationToken)
             : new TodayTrainingCoverageView(null, null);
@@ -49,6 +52,10 @@ internal sealed partial class TrainingApplicationService
             select new { week.Id, BlockId = block.Id, block.StartDate, block.EndDateExclusive, week.WeekNumber,
                 block.TimeZoneId, block.RevealAllWeeks })
             .Take(128).ToListAsync(cancellationToken);
+        // A house program whose own plan no longer grants has nothing coming (TRN-034).
+        var closedBlocks = await HouseProgramsClosedAsync(
+            weeks.Select(item => item.BlockId).Distinct().ToArray(), cancellationToken);
+        weeks = weeks.Where(item => !closedBlocks.Contains(item.BlockId)).ToList();
         var shownEarly = await ProgramsShownEarlyAsync(client.Id, access, today,
             weeks.Select(item => (item.BlockId, item.RevealAllWeeks, item.StartDate, item.EndDateExclusive)),
             cancellationToken);
@@ -79,9 +86,11 @@ internal sealed partial class TrainingApplicationService
                 execution.ScheduledDateSnapshot < today && block.Status != MesocycleStatus.Cancelled &&
                 block.Status != MesocycleStatus.Completed && week.IsPublished
             orderby execution.ScheduledDateSnapshot, execution.Id
-            select new { execution.Id, block.StartDate, week.WeekNumber, block.TimeZoneId, block.RevealAllWeeks })
+            select new { execution.Id, BlockId = block.Id, block.StartDate, week.WeekNumber, block.TimeZoneId, block.RevealAllWeeks })
             .Skip(skip).Take(UnfinishedPageSize + 1).ToListAsync(cancellationToken);
-        var visibleIds = candidates.Take(UnfinishedPageSize).Where(candidate =>
+        var closedUnfinished = await HouseProgramsClosedAsync(
+            candidates.Take(UnfinishedPageSize).Select(item => item.BlockId).Distinct().ToArray(), cancellationToken);
+        var visibleIds = candidates.Take(UnfinishedPageSize).Where(candidate => !closedUnfinished.Contains(candidate.BlockId) &&
             TrainingCalendarPolicy.GetWeekAvailability(candidate.StartDate, candidate.WeekNumber,
                 candidate.TimeZoneId, clock.UtcNow, candidate.RevealAllWeeks, true).IsVisible)
             .Select(item => item.Id).ToArray();
@@ -104,6 +113,8 @@ internal sealed partial class TrainingApplicationService
             .Take(8)
             .Select(item => new { item.Id, item.Name, item.Kind, item.Status, item.StartDate, item.EndDateExclusive })
             .ToListAsync(cancellationToken);
+        var closed = await HouseProgramsClosedAsync(blocks.Select(item => item.Id).ToArray(), cancellationToken);
+        blocks = blocks.Where(item => !closed.Contains(item.Id)).ToList();
         var coveringIds = blocks.Where(item => item.StartDate <= today).Select(item => item.Id).ToArray();
         var publishedWeeks = await dbContext.MesocycleWeeks.AsNoTracking()
             .Where(item => coveringIds.Contains(item.MesocycleId) && item.IsPublished)

@@ -8,10 +8,68 @@ namespace TB.Gym.Infrastructure.Application;
 internal sealed class StrengthApplicationService(
     GymDbContext dbContext,
     ITenantContext tenantContext,
-    IClock clock)
+    IClock clock,
+    ICurrentUser currentUser,
+    ICoachingFeatureAccessService featureAccessService)
     : IStrengthApplicationService
 {
     private const string ManualMethodVersion = "1.0";
+
+    public async Task<StrengthCommandResult> RecordOwnAsync(
+        RecordOwnMaxRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var calendar = await WorkspaceCalendarReader.ReadAsync(dbContext, clock, tenantContext.TenantId, cancellationToken);
+        var client = !calendar.IsHouse || currentUser.UserId is not { } userId
+            ? null
+            : await dbContext.ClientProfiles.AsNoTracking().CurrentFor(userId).SingleOrDefaultAsync(cancellationToken);
+        // The house's own trainee alone: a coach's client, or one the house invited, has a coach to type it (STR-021).
+        if (client is not { IsSelfDirected: true })
+        {
+            return new StrengthCommandResult(StrengthCommandStatus.NotFound);
+        }
+
+        // Any lift of the house, an archived one too: a program on the list may still work its weights out from it.
+        var exerciseName = await dbContext.Exercises.AsNoTracking()
+            .Where(item => item.Id == request.ExerciseId)
+            .Select(item => item.Name)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (exerciseName is null)
+        {
+            return new StrengthCommandResult(StrengthCommandStatus.NotFound);
+        }
+
+        var access = await featureAccessService.EvaluateAsync(
+            tenantContext.TenantId, client.Id, CoachingFeature.Training, cancellationToken);
+        if (!access.IsAllowed)
+        {
+            return new StrengthCommandResult(StrengthCommandStatus.Forbidden);
+        }
+
+        // Typing one's max is for a program, which needs Pro+ (TRN-034); Free has no calculations (decision 26).
+        if (await HouseProgramPlans.GrantingPassAsync(dbContext, client.Id, calendar.Today, cancellationToken) is null)
+        {
+            return new StrengthCommandResult(
+                StrengthCommandStatus.Conflict,
+                Code: "house_program_needs_pass",
+                Message: "Typing your max is for a program, which needs Pro+.");
+        }
+
+        var problems = TraineeMaxRule.Problems(request.Value, request.Unit);
+        if (problems.Count > 0)
+        {
+            return new StrengthCommandResult(
+                StrengthCommandStatus.Invalid,
+                Errors: problems.ToDictionary(item => item.Key, item => new[] { item.Value }, StringComparer.Ordinal));
+        }
+
+        var record = TraineeMaxRule.Record(
+            tenantContext.TenantId, client.Id, request.ExerciseId, request.Value, request.Unit, calendar.Today);
+        dbContext.StrengthMaxRecords.Add(record);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new StrengthCommandResult(StrengthCommandStatus.Success, ToView(record, exerciseName));
+    }
     private const string ProgramMaxMethodKey = "ProgramMax";
 
     public async Task<StrengthMaxPage?> ListAsync(

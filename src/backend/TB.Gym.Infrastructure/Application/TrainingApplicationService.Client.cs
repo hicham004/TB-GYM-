@@ -134,6 +134,9 @@ internal sealed partial class TrainingApplicationService
             select new { session.Id, session.ScheduledDate, BlockId = block.Id, block.StartDate,
                 block.EndDateExclusive, week.WeekNumber, block.TimeZoneId, block.RevealAllWeeks })
             .Take(50).ToListAsync(cancellationToken);
+        // A house program whose own plan no longer grants has nothing to do this week (TRN-034).
+        var closedBlocks = await HouseProgramsClosedAsync(rows.Select(row => row.BlockId).ToArray(), cancellationToken);
+        rows = rows.Where(row => !closedBlocks.Contains(row.BlockId)).ToList();
         var shownEarly = await ProgramsShownEarlyAsync(client.Id, access, today,
             rows.Select(row => (row.BlockId, row.RevealAllWeeks, row.StartDate, row.EndDateExclusive)),
             cancellationToken);
@@ -202,6 +205,39 @@ internal sealed partial class TrainingApplicationService
             orderby session.Position
             select new TodayScheduleRow(mesocycle.Id, session.Id))
             .ToListAsync(cancellationToken);
+        if (client.IsSelfDirected)
+        {
+            // A session of this week a self-directed trainee started before its day (TRN-020) is on today's list while
+            // its workout is open, and once finished on the day it was done: Carry on finds it (TRN-034).
+            var since = clock.UtcNow.AddHours(-36);
+            var early = await (
+                from execution in dbContext.WorkoutExecutions.AsNoTracking()
+                join session in dbContext.TrainingSessions.AsNoTracking()
+                    on new { execution.TenantId, Id = execution.TrainingSessionId }
+                    equals new { session.TenantId, Id = (Guid?)session.Id }
+                join week in dbContext.MesocycleWeeks.AsNoTracking()
+                    on new { session.TenantId, Id = session.MesocycleWeekId }
+                    equals new { week.TenantId, week.Id }
+                join mesocycle in dbContext.TrainingMesocycles.AsNoTracking()
+                    on new { week.TenantId, Id = week.MesocycleId }
+                    equals new { mesocycle.TenantId, mesocycle.Id }
+                where execution.ClientProfileId == client.Id &&
+                      mesocycle.Status != MesocycleStatus.Cancelled &&
+                      session.ScheduledDate > today &&
+                      (execution.Status == WorkoutExecutionStatus.InProgress || execution.StartedAtUtc >= since)
+                orderby session.ScheduledDate, session.Position
+                select new { MesocycleId = mesocycle.Id, SessionId = session.Id, execution.Status, execution.StartedAtUtc, mesocycle.TimeZoneId })
+                .ToListAsync(cancellationToken);
+            schedule.AddRange(early
+                .Where(item => item.Status == WorkoutExecutionStatus.InProgress ||
+                    ClientSessionStatePolicy.StartedOn(item.StartedAtUtc, item.TimeZoneId) == today)
+                .Select(item => new TodayScheduleRow(item.MesocycleId, item.SessionId)));
+        }
+
+        // A house program whose own plan no longer grants is not on today's list (TRN-034).
+        var closedPrograms = await HouseProgramsClosedAsync(
+            schedule.Select(item => item.MesocycleId).ToArray(), cancellationToken);
+        schedule = schedule.Where(item => !closedPrograms.Contains(item.MesocycleId)).ToList();
         if (schedule.Count == 0)
         {
             return new ClientTrainingDayResult(true, access.Reason.ToString(), today, [], ownWorkout);
@@ -314,9 +350,17 @@ internal sealed partial class TrainingApplicationService
             return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
         }
 
-        if (session.ScheduledDate > today)
+        // A self-directed trainee may start any session of the program's current week before its day (TRN-020, TRN-034).
+        if (session.ScheduledDate > today &&
+            !(client.IsSelfDirected && HouseProgramRules.InCurrentWeek(mesocycle.StartDate, session.ScheduledDate, today)))
         {
             return Conflict("session_not_due", "This session is not due yet. It opens on its day.");
+        }
+
+        // In the house, Free opens Training beside every plan: a program opens only while its own plan grants (TRN-034).
+        if (access.IsAllowed && await HouseProgramPlanClosedAsync(mesocycle.EnrollmentId, cancellationToken))
+        {
+            return ProgramPlanClosed();
         }
 
         var existing = await dbContext.WorkoutExecutions.AsNoTracking().SingleOrDefaultAsync(
@@ -472,7 +516,9 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
-        if (await ClientExecutionRefusalAsync(execution, cancellationToken) is { } refusal)
+        // A workout already started may be finished with what was logged, even once its program's plan has stopped
+        // granting (TRN-034): that is what lets the program close and free its days.
+        if (await ClientExecutionRefusalAsync(execution, finishing: true, cancellationToken) is { } refusal)
         {
             return refusal;
         }
@@ -792,8 +838,14 @@ internal sealed partial class TrainingApplicationService
     /// workout answers as a missing one (audit SEC-7, ADR 0026); their own is refused only while their
     /// training is closed.
     /// </summary>
+    private Task<TrainingCommandResult?> ClientExecutionRefusalAsync(
+        WorkoutExecution execution,
+        CancellationToken cancellationToken) =>
+        ClientExecutionRefusalAsync(execution, finishing: false, cancellationToken);
+
     private async Task<TrainingCommandResult?> ClientExecutionRefusalAsync(
         WorkoutExecution execution,
+        bool finishing,
         CancellationToken cancellationToken)
     {
         var client = await FindSelfClientAsync(cancellationToken);
@@ -802,9 +854,23 @@ internal sealed partial class TrainingApplicationService
             return NotFound();
         }
 
-        return (await GetTrainingAccessAsync(client.Id, cancellationToken)).IsAllowed
-            ? null
-            : new TrainingCommandResult(TrainingCommandStatus.Forbidden);
+        if (!(await GetTrainingAccessAsync(client.Id, cancellationToken)).IsAllowed)
+        {
+            return new TrainingCommandResult(TrainingCommandStatus.Forbidden);
+        }
+
+        // A program's workout in the house stays shut once the program's own plan stops granting (TRN-034).
+        if (!finishing && execution.MesocycleId is { } mesocycleId &&
+            await dbContext.TrainingMesocycles.AsNoTracking()
+                .Where(item => item.Id == mesocycleId)
+                .Select(item => (Guid?)item.EnrollmentId)
+                .SingleOrDefaultAsync(cancellationToken) is { } enrollmentId &&
+            await HouseProgramPlanClosedAsync(enrollmentId, cancellationToken))
+        {
+            return ProgramPlanClosed();
+        }
+
+        return null;
     }
 
     private async Task<TrainingMesocycle?> LoadMesocycleBySessionAsync(
@@ -845,6 +911,12 @@ internal sealed partial class TrainingApplicationService
         IReadOnlyList<Guid> exerciseIds,
         CancellationToken cancellationToken)
     {
+        var calendar = await CalendarAsync(cancellationToken);
+        var timeZoneId = calendar.TimeZoneId;
+        var beforeStartUtc = StartOfDayUtc(beforeDate, timeZoneId);
+        // Only a self-directed trainee, in the house, starts a session before its day (TRN-020): elsewhere a workout's
+        // day is its session's day, and the lift's latest one is found in one query, as before.
+        var earlyPossible = calendar.IsHouse;
         var candidates =
             from performance in dbContext.WorkoutExercisePerformances.AsNoTracking()
             join execution in dbContext.WorkoutExecutions.AsNoTracking()
@@ -852,7 +924,9 @@ internal sealed partial class TrainingApplicationService
                 equals new { execution.TenantId, execution.Id }
             where execution.ClientProfileId == clientProfileId &&
                   execution.Status == WorkoutExecutionStatus.Completed &&
-                  execution.ScheduledDateSnapshot < beforeDate &&
+                  // A session a self-directed trainee did before its day counts from the day it was done (TRN-020);
+                  // nobody else starts a session before its day, so for them this is the scheduled day alone.
+                  (execution.ScheduledDateSnapshot < beforeDate || (earlyPossible && execution.StartedAtUtc < beforeStartUtc)) &&
                   exerciseIds.Contains(performance.ActualExerciseId)
             select new { Performance = performance, Execution = execution };
         var latestDates =
@@ -864,15 +938,87 @@ internal sealed partial class TrainingApplicationService
                 ExerciseId = grouped.Key,
                 Date = grouped.Max(item => item.Execution.ScheduledDateSnapshot),
             };
+        // A workout's day is the earlier of its session's day and the day it was done: the session's day for everyone
+        // who waits for it, the day it was done for a session a self-directed trainee started early (TRN-020). Such a
+        // session is at most six days early, so the latest workout lies within six days of the latest session day.
+        if (!earlyPossible)
+        {
+            var single = await (
+                from item in candidates
+                join latest in latestDates
+                    on new
+                    {
+                        ExerciseId = item.Performance.ActualExerciseId,
+                        Date = item.Execution.ScheduledDateSnapshot,
+                    }
+                    equals new { latest.ExerciseId, latest.Date }
+                let best = item.Performance.Sets
+                    .Where(set => set.IsCompleted && set.ActualLoad != null)
+                    .OrderByDescending(set => set.ActualLoad)
+                    .ThenByDescending(set => set.ActualRepetitions)
+                    .FirstOrDefault()
+                where best != null
+                orderby item.Execution.Id descending
+                select new
+                {
+                    item.Performance.ActualExerciseId,
+                    item.Execution.ScheduledDateSnapshot,
+                    best!.ActualLoad,
+                    best.ActualLoadUnit,
+                    best.ActualRepetitions,
+                    best.ActualRpe,
+                    Sets = item.Performance.Sets
+                        .Where(set => set.IsCompleted)
+                        .OrderBy(set => set.Position)
+                        .Select(set => new PreviousSetPerformanceView(
+                            set.Position, set.ActualRepetitions, set.ActualLoad,
+                            set.ActualLoadUnit, set.ActualRpe))
+                        .ToArray(),
+                })
+                .ToListAsync(cancellationToken);
+            return single.GroupBy(item => item.ActualExerciseId)
+                .ToDictionary(
+                    group => group.Key,
+                    group =>
+                    {
+                        var item = group.First();
+                        return new PreviousExercisePerformanceView(
+                            item.ScheduledDateSnapshot,
+                            item.ActualLoad,
+                            item.ActualLoadUnit,
+                            item.ActualRepetitions,
+                            item.ActualRpe,
+                            item.Sets);
+                    });
+        }
+
+        var latestDays = await latestDates.ToDictionaryAsync(item => item.ExerciseId, item => item.Date, cancellationToken);
+        if (latestDays.Count == 0)
+        {
+            return new Dictionary<Guid, PreviousExercisePerformanceView>();
+        }
+
+        var floor = latestDays.Values.Min().AddDays(-6);
+        var window = await (
+            from item in candidates
+            where item.Execution.ScheduledDateSnapshot >= floor
+            select new { item.Performance.ActualExerciseId, item.Execution.ScheduledDateSnapshot, item.Execution.StartedAtUtc })
+            .ToListAsync(cancellationToken);
+        var dayOf = (DateOnly scheduled, DateTimeOffset startedAtUtc) =>
+            Earlier(scheduled, ClientSessionStatePolicy.StartedOn(startedAtUtc, timeZoneId));
+        var lastDays = window
+            .Where(item => item.ScheduledDateSnapshot >= latestDays[item.ActualExerciseId].AddDays(-6))
+            .GroupBy(item => item.ActualExerciseId)
+            .ToDictionary(group => group.Key, group => group.Max(item => dayOf(item.ScheduledDateSnapshot, item.StartedAtUtc)));
+        var scheduledDays = window
+            .Where(item => lastDays.TryGetValue(item.ActualExerciseId, out var day) &&
+                dayOf(item.ScheduledDateSnapshot, item.StartedAtUtc) == day)
+            .Select(item => item.ScheduledDateSnapshot)
+            .Distinct()
+            .ToArray();
         var rows = await (
             from item in candidates
-            join latest in latestDates
-                on new
-                {
-                    ExerciseId = item.Performance.ActualExerciseId,
-                    Date = item.Execution.ScheduledDateSnapshot,
-                }
-                equals new { latest.ExerciseId, latest.Date }
+            where scheduledDays.Contains(item.Execution.ScheduledDateSnapshot)
             let best = item.Performance.Sets
                 .Where(set => set.IsCompleted && set.ActualLoad != null)
                 .OrderByDescending(set => set.ActualLoad)
@@ -884,6 +1030,7 @@ internal sealed partial class TrainingApplicationService
             {
                 item.Performance.ActualExerciseId,
                 item.Execution.ScheduledDateSnapshot,
+                item.Execution.StartedAtUtc,
                 best!.ActualLoad,
                 best.ActualLoadUnit,
                 best.ActualRepetitions,
@@ -897,7 +1044,11 @@ internal sealed partial class TrainingApplicationService
                     .ToArray(),
             })
             .ToListAsync(cancellationToken);
-        var latestRows = rows.GroupBy(item => item.ActualExerciseId)
+        // The lift's latest workout by that day, newest first on a tie; none when it holds no logged weight.
+        var latestRows = rows
+            .Where(item => lastDays.TryGetValue(item.ActualExerciseId, out var day) &&
+                dayOf(item.ScheduledDateSnapshot, item.StartedAtUtc) == day)
+            .GroupBy(item => item.ActualExerciseId)
             .Select(group => group.First()).ToArray();
         return latestRows.GroupBy(item => item.ActualExerciseId)
             .ToDictionary(
@@ -906,7 +1057,7 @@ internal sealed partial class TrainingApplicationService
                 {
                     var item = group.First();
                     return new PreviousExercisePerformanceView(
-                        item.ScheduledDateSnapshot,
+                        lastDays[item.ActualExerciseId],
                         item.ActualLoad,
                         item.ActualLoadUnit,
                         item.ActualRepetitions,
@@ -1145,6 +1296,19 @@ internal sealed partial class TrainingApplicationService
                 WorkoutPersonalRecordRule.Version));
 
     private sealed record TodayScheduleRow(Guid MesocycleId, Guid SessionId);
+
+    /// <summary>The instant a day of the workspace begins: its first valid local minute, in UTC.</summary>
+    private static DateTimeOffset StartOfDayUtc(DateOnly day, string timeZoneId)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var local = day.ToDateTime(TimeOnly.MinValue);
+        while (zone.IsInvalidTime(local))
+        {
+            local = local.AddMinutes(30);
+        }
+
+        return new DateTimeOffset(local, zone.GetUtcOffset(local)).ToUniversalTime();
+    }
 
     private sealed record ScheduledSession(Guid MesocycleId, TrainingSession Session);
 }

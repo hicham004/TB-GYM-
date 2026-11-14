@@ -313,50 +313,16 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
                 return await PrimaryOverlapConflictAsync(clientProfileId, request.StartDate, endDate, null, cancellationToken);
             }
 
-            var timeZoneId = await dbContext.Tenants.AsNoTracking()
-                .Where(item => item.Id == tenantContext.TenantId)
-                .Select(item => item.TimeZoneId)
-                .SingleAsync(cancellationToken);
-            var mesocycleId = Guid.CreateVersion7();
-            var workingMaxes = await CreateWorkingMaxSnapshotsAsync(
-                mesocycleId,
+            var (mesocycle, timeZoneId) = await AddMesocycleSnapshotAsync(
                 clientProfileId,
                 request,
                 templateVersion,
+                name,
+                new MesocycleSnapshotTerms(
+                    PublishEveryWeek: false,
+                    LifecycleReason: "Assigned from a published program template.",
+                    WorkingMaxReason: "Assignment working-max snapshot selected by coach."),
                 cancellationToken);
-            var snapshot = await BuildAssignmentBlueprintAsync(
-                templateVersion,
-                request,
-                workingMaxes,
-                cancellationToken);
-            var mesocycle = TrainingMesocycle.CreateSnapshot(
-                tenantContext.TenantId,
-                clientProfileId,
-                request.EnrollmentId,
-                templateVersion.TemplateId,
-                templateVersion.Id,
-                string.IsNullOrEmpty(name) ? templateVersion.NameSnapshot : name,
-                request.StartDate,
-                timeZoneId,
-                request.Kind,
-                request.LoadUnit,
-                request.LoadIncrement,
-                request.LoadRoundingMode,
-                request.IdempotencyKey,
-                snapshot,
-                mesocycleId,
-                request.RevealAllWeeks);
-
-            dbContext.MesocycleWorkingMaxSnapshots.AddRange(workingMaxes.Values);
-            dbContext.TrainingMesocycles.Add(mesocycle);
-            dbContext.MesocycleLifecycleEvents.Add(MesocycleLifecycleEvent.Record(
-                tenantContext.TenantId,
-                mesocycle.Id,
-                MesocycleLifecycleEventType.Assigned,
-                null,
-                mesocycle.GetEffectiveStatus(clock.UtcNow),
-                "Assigned from a published program template.",
-                clock.UtcNow));
             // The client hears of it in-app (ADR 0036), in the same transaction as the program itself.
             if (await dbContext.ClientProfiles.AsNoTracking()
                     .Where(item => item.Id == clientProfileId)
@@ -392,6 +358,77 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
             return Conflict("assignment_conflict", "The assignment conflicts with an existing request.");
         }
     }
+
+    /// <summary>
+    /// Adds a client's program, its first maxes and its Assigned event to the context, unsaved: the snapshot of a
+    /// published version both Assign program and a trainee's Start make (TRN-001, TRN-003, TRN-034).
+    /// </summary>
+    private async Task<(TrainingMesocycle Mesocycle, string TimeZoneId)> AddMesocycleSnapshotAsync(
+        Guid clientProfileId,
+        AssignMesocycleRequest request,
+        ProgramTemplateVersion templateVersion,
+        string? name,
+        MesocycleSnapshotTerms terms,
+        CancellationToken cancellationToken)
+    {
+        var timeZoneId = await dbContext.Tenants.AsNoTracking()
+            .Where(item => item.Id == tenantContext.TenantId)
+            .Select(item => item.TimeZoneId)
+            .SingleAsync(cancellationToken);
+        var mesocycleId = Guid.CreateVersion7();
+        var workingMaxes = await CreateWorkingMaxSnapshotsAsync(
+            mesocycleId,
+            clientProfileId,
+            request,
+            templateVersion,
+            terms.WorkingMaxReason,
+            cancellationToken);
+        var snapshot = await BuildAssignmentBlueprintAsync(
+            templateVersion,
+            request,
+            workingMaxes,
+            cancellationToken);
+        if (terms.PublishEveryWeek)
+        {
+            snapshot = snapshot with
+            {
+                Weeks = snapshot.Weeks.Select(week => week with { IsPublished = true }).ToArray(),
+            };
+        }
+
+        var mesocycle = TrainingMesocycle.CreateSnapshot(
+            tenantContext.TenantId,
+            clientProfileId,
+            request.EnrollmentId,
+            templateVersion.TemplateId,
+            templateVersion.Id,
+            string.IsNullOrEmpty(name) ? templateVersion.NameSnapshot : name,
+            request.StartDate,
+            timeZoneId,
+            request.Kind,
+            request.LoadUnit,
+            request.LoadIncrement,
+            request.LoadRoundingMode,
+            request.IdempotencyKey,
+            snapshot,
+            mesocycleId,
+            request.RevealAllWeeks);
+
+        dbContext.MesocycleWorkingMaxSnapshots.AddRange(workingMaxes.Values);
+        dbContext.TrainingMesocycles.Add(mesocycle);
+        dbContext.MesocycleLifecycleEvents.Add(MesocycleLifecycleEvent.Record(
+            tenantContext.TenantId,
+            mesocycle.Id,
+            MesocycleLifecycleEventType.Assigned,
+            null,
+            mesocycle.GetEffectiveStatus(clock.UtcNow),
+            terms.LifecycleReason,
+            clock.UtcNow));
+        return (mesocycle, timeZoneId);
+    }
+
+    /// <summary>How a program's snapshot is made: every week shown, and the words its records keep.</summary>
+    private sealed record MesocycleSnapshotTerms(bool PublishEveryWeek, string LifecycleReason, string WorkingMaxReason);
 
     public Task<TrainingCommandResult> UpdateMesocycleVisibilityAsync(
         Guid mesocycleId,

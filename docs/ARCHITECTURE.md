@@ -458,6 +458,15 @@ Asking for one of the house's plans (SUB-020, notes plan N9c1) is the Subscripti
 first, and a booking writes the enrollment, its receipt and the outcome in one transaction, never through the
 two-step staff routes. The account closing erases the Whish details through the same DbContext.
 
+The house's programs for trainees (TRN-034, notes plan N9c3) are the Training module's: its records (`HouseProgramListing`,
+the staff's entry for a published program; `HouseProgramStart`, append-only, a trainee's start), its rule
+(`HouseProgramRules`) and its routes (`/api/training/house-programs` and `.../templates/{templateId}/house-listing` for
+the staff, `/api/training/me/house-programs` for the trainee). Start runs in `TrainingApplicationService` under the
+trainee's profile row lock and makes the program through the same snapshot step as Assign program; the Pro+ pass and
+the gate on a program's sessions read the commercial records through `HouseProgramPlans` in Infrastructure, so
+Training references no other module. A trainee's own max (STR-021) is the Strength module's route
+(`/api/strength/me/maxes`), composed the same way.
+
 Closing an account (CLI-027, notes plan N9e) is Identity's route, record (`identity."AccountClosures"`) and port
 (`IAccountClosureService`), composed by `AccountClosureService` in Infrastructure, because it reaches every module that
 holds the person. It is the one operation that writes in several workspaces at once, and it does so in one database

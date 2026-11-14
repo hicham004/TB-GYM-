@@ -531,10 +531,86 @@ public static class TrainingEndpoints
         .Produces<PreviousProgramMaxesView>()
         .Produces(StatusCodes.Status404NotFound);
 
+        // The house's programs for its trainees (TRN-034, notes plan N9c3): its staff offer published programs, each
+        // with whom it suits and its place in a run of blocks. Every route answers 404 outside the house.
+        coach.MapGet("/house-programs", async (
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var listings = await service.ListHouseProgramsAsync(cancellationToken);
+            return listings is null ? Results.NotFound() : Results.Ok(listings);
+        })
+        .WithName("ListHousePrograms")
+        .Produces<IReadOnlyList<HouseProgramListingView>>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        coach.MapPut("/templates/{templateId:guid}/house-listing", async (
+            Guid templateId,
+            OfferHouseProgramRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.OfferHouseProgramAsync(templateId, request, cancellationToken));
+        })
+        .WithName("OfferHouseProgram")
+        .Produces<HouseProgramListingView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
+        coach.MapPost("/templates/{templateId:guid}/house-listing/withdraw", async (
+            Guid templateId,
+            WithdrawHouseProgramRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.WithdrawHouseProgramAsync(templateId, request, cancellationToken));
+        })
+        .WithName("WithdrawHouseProgram")
+        .Produces<HouseProgramListingView>()
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         var client = endpoints
             .MapGroup("/api/training/me")
             .RequireAuthorization(AuthorizationPolicies.TenantClient)
             .WithTags(TrainingModule.Name);
+
+        // A self-directed trainee of the house reads its programs and starts one under a Pro+ pass (TRN-034).
+        client.MapGet("/house-programs", async (
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            var programs = await service.GetHouseProgramsAsync(cancellationToken);
+            return programs is null ? Results.NotFound() : Results.Ok(programs);
+        })
+        .WithName("GetMyHousePrograms")
+        .Produces<HouseProgramsView>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        client.MapPost("/house-programs/{listingId:guid}/start", async (
+            Guid listingId,
+            StartHouseProgramRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ITrainingApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return ToResult(await service.StartHouseProgramAsync(listingId, request, cancellationToken));
+        })
+        .WithName("StartMyHouseProgram")
+        .Produces<HouseProgramStartedView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
 
         coach.MapGet("/clients/{clientProfileId:guid}/workouts/{workoutExecutionId:guid}", async (
             Guid clientProfileId,
@@ -911,6 +987,8 @@ public static class TrainingEndpoints
                 (object?)result.FinishedPrograms ??
                 (object?)result.LiftWeights ??
                 (object?)result.OwnWorkout ??
+                (object?)result.HouseListing ??
+                (object?)result.HouseProgramStarted ??
                 result.WorkoutExecution),
             TrainingCommandStatus.NotFound => Results.NotFound(),
             TrainingCommandStatus.Forbidden => Results.Forbid(),

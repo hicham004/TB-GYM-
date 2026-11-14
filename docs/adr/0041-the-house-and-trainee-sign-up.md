@@ -76,7 +76,11 @@ asks are the exception (N9c1, SUB-020): asking for a plan and saying its money w
   N9c1 adds the house's Whish number to its settings (empty keeps asks closed) and the asks for a paid plan
   (SUB-020): the Subscriptions module's records, routes and rule, composed in Infrastructure by `HousePlanAskService`,
   which reads the mark and the Whish number from Tenancy and books through the commercial records; a trigger keeps
-  the asks in the house alone. A coach's Ask to renew is never a trainee's (SUB-014).
+  the asks in the house alone. A coach's Ask to renew is never a trainee's (SUB-014). N9c3 adds the house's programs
+  for trainees (TRN-034): the Training module's list entries and started-program records, kept in the house alone by
+  triggers and composed in Infrastructure with the Pro+ pass read from the commercial records; Start makes the same
+  snapshot as Assign program. A trainee's own max (STR-021) is the Strength module's, behind the same pass. In the
+  house a program's sessions follow the plan it sits under, since Free opens Training beside every plan.
 
 ## Migration and recovery
 
@@ -85,4 +89,5 @@ their checks and triggers, and `SignUp` as a first coach-history reason. It reve
 marked; once a house, a setting, a sign-up, a self-directed profile or a consumer terms document exists,
 its `Down` stops with "roll forward", since those are facts the earlier schema cannot hold. Since N9b1, `house set`
 also makes the house's Free plan, which `house clear` takes off sale but keeps, so `HouseFreePlan`'s own `Down` refuses
-first once a space has been marked.
+first once a space has been marked. N9c3's `HousePrograms` reverts while no trainee has started a program; after that
+its `Down` stops with "roll forward" too.

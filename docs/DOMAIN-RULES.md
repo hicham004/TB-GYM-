@@ -545,8 +545,8 @@ for a self-directed trainee who has none, and renews on the hourly house tick th
 not stop. The trainee's plan read names Free apart, with the day it started and no end (the access read still
 carries the covering row's dates). Free raises no plan notice, is never the plan to renew (SUB-014), never names the
 client's plan on the Clients row or page reads while another plan or a pack runs, and never covers a program
-(TRN-011): a program needs another plan of the house, which it sells as Pro+ or Max. Until N9c3, a program's sessions
-ask only whether Training is open, whatever opens it. Nobody books, renews, pauses, resumes, cancels, edits or
+(TRN-011): a program needs another plan of the house, which it sells as Pro+ or Max. Since notes plan N9c3 a program's
+sessions in the house open only while the plan it sits under grants (TRN-034), not whenever Training is open. Nobody books, renews, pauses, resumes, cancels, edits or
 reprices Free by hand (409 `house_free_plan`); it ends only with the relationship (ADR 0027), and someone who comes
 back through sign-up gets a new profile and a new Free, while one the house invites back gets none, as no client it
 invites does. `house clear` takes Free off sale with the mark, and is refused while a plan of a tier is booked. Which tier a trainee is on is read on the server from the house's plans that grant today, as feature access
@@ -843,7 +843,8 @@ other choices then, saying why. Choosing the lift already chosen changes nothing
 authorize zero or multiple sequential mesocycles. A mesocycle must fit fully inside that
 enrollment. Phase 3 rejects overlapping primary mesocycles in application code and PostgreSQL;
 supplemental mesocycles are reserved but disabled. The house's Free never covers a program (SUB-019): it holds a
-trainee's own workouts, and a program needs another plan.
+trainee's own workouts, and a program needs another plan. A self-directed trainee starts a program themselves only
+under the Pro+ plan that grants that day, wholly inside its dates (TRN-034).
 
 **TRN-012** Starting execution snapshots exercise identity and every prescribed set. Actual
 reps/load/exertion/completion/note are separate fields. Completed execution and performance
@@ -919,7 +920,11 @@ session's own day (`IsLate`), so each says it was done late. A workout started o
 after midnight is not late. The start refuses a session whose day has not come with 409
 `session_not_due`, a program shown early included (TRN-023) even while its plan has not begun, and a
 missed one once the program's last day has passed with 409 `program_ended` (the coach closes it,
-TRN-013); a week the client cannot see stays a bare 403.
+TRN-013); a week the client cannot see stays a bare 403. Since notes plan N9c3 a self-directed trainee (CLI-026) may
+start a session of the program's current week (the seven days from that week's first day, TRN-007) before its day,
+and the program read marks such a session `CanStartEarly`; a later week still answers `session_not_due`, and a coach's
+client still waits for the day (TRN-034). Today lists such a session while its workout is open, and on the day it was
+done once finished, and "last time" (TRN-029) counts it from the day it was done.
 
 **TRN-021** Training signals v1 (`MissedSinceLastWorkoutAndUnsharedWeek`, R3.1) tell a coach about a
 client's training. Missed sessions are those TRN-020 calls Missed, scheduled after the day the
@@ -1127,6 +1132,49 @@ screen (notes plan N9b3) a self-directed trainee's Today and Training offer "Sta
 is unfinished, and history "Start from this workout"; the player shows nothing prescribed, its sets starting at last
 time's numbers in the unit the workout shows (TRN-029, which nothing prescribed leaves open; once known, the unit holds
 for every set as a chosen one does), and asks before a finish with nothing logged. The server answers every refusal.
+
+**TRN-034** The house's programs and Start (notes plan N9c3; decisions 29 and 30, and the fix of 11 Nov 2026: a long
+program is written as blocks). The house's Owner or Coach offers a published program to its self-directed trainees
+(CLI-026) with a line on whom it suits (one line, at most 200 characters), an optional place in a named run of blocks
+(runs matched by name trimmed, single-spaced and case-blind; places 1 to 52, one offered program a place, 409
+`house_program_run_position_taken`) and the rounding a trainee's weights take (2.5 to the nearest by default, as Assign
+program offers). A program that is archived, never published or mixing kg and lb in its loaded sets is refused. The
+list (`GET /api/training/house-programs`, `PUT /api/training/templates/{templateId}/house-listing`, `.../withdraw`) is
+the house's alone (404 elsewhere), each change under the entry's version; withdrawing changes nothing a trainee started.
+A trainee reads the offered programs (`GET /api/training/me/house-programs`): whom each suits, its run and place, its
+weeks and unit, week 1 as a sample (each session's lifts, set count and reps), each lift that works its weight out from
+a max with the max it would start from, whether it can start today and Start's code if not, the day a block before it
+or a running program frees it, and the last day it can start inside the Pro+ pass that grants today (none when the block
+is longer than the pass); while Training is closed every program reads `training_closed`. Start (`POST
+/api/training/me/house-programs/{listingId}/start`, with the version read and an idempotency key bound to the trainee,
+the entry and that version) copies the latest published version as the trainee's own program, as Assign program does
+(TRN-001, TRN-003): from the house's today, under the Pro+ plan that grants today (TRN-011: Free, a plan waiting for its
+money, paused or ended never), every week published and shown (TRN-006), in the version's unit, never converted. It
+raises no program-assigned notice (NOT-035), and its Assigned event says the trainee started it. It is refused in this
+order: Training closed (403); the entry withdrawn, the program archived or unpublished (409
+`house_program_not_offered`); no Pro+ pass (`house_program_needs_pass`); the version read no longer the latest
+(`house_program_changed`); kg and lb mixed (`house_program_unit`); a run's later block before the trainee started the
+block before it, or before that program's dates have ended (`house_program_block_not_open`: the block before is the
+program offered at the place before, whatever the run is called now, or one started under the run's name at that place;
+the next block opens the day after the last day of the one before, finished or not, or on the day its pass was
+cancelled; a block the staff cancelled while its pass ran does not count; a later block never comes first); a program of
+theirs holding the dates (`mesocycle_overlap`: one at a time, and a finished program keeps its dates, TRN-013); a block
+that would end after its pass (`house_program_does_not_fit`, naming the last day it could start); a lift with no max in
+the program's unit (`house_program_needs_maxes`, naming the lifts). A started block whose Pro+ pass was cancelled holds
+no days for the next one: Start closes it first, in its own transaction, kept as cancelled with that reason, or answers
+`mesocycle_overlap` while a workout of it is still open, which the trainee may finish. Each lift starts from the newer
+(a later day, or the same day recorded after it) of the maxes recorded for the trainee in that unit (the newest training
+max, else the newest of any kind) and the max in use of their latest program not cancelled (STR-014), the carried one on
+an exact tie.
+Starts are serialized by the trainee's row lock and recorded append-only (`training."HouseProgramStarts"`: the run and
+place they had then, the plan and the version), which a trigger checks to name the trainee's own program of that
+version under their own Pro+ plan; a run's next block opens from these rows. In the house, a program's sessions open
+only while the plan it sits under grants Training (active, covering the day, paid in full): Free grants Training beside
+every plan, so starting a session, logging, swapping and the client's notes on a program's workout answer 409
+`program_plan_closed` once that plan has ended, been paused or been cancelled (a workout already started may still be
+finished, with what was logged), and Today, Upcoming and the week leave out the sessions of such a program once it has
+begun (one still to begin waits for its plan's first day, TRN-023). What was logged stays the trainee's, readable in
+history (TRN-012); a coaching space is unchanged.
 
 ## 5. Strength, 1RM, RPE, RIR, and progression
 
@@ -1383,6 +1431,15 @@ refused (ADR 0027), closed with the coach's training read (TRN-023, 403), and re
 read-only for an unpaid bill (PBL-005). What waits to be applied is the coach's weekly homework on Coach Today, the
 client list and a client's page (CLI-018 v8, notes plan N6d), which open the Training tab at it (`?action=weights`);
 nothing is applied from there.
+
+**STR-021** A trainee's own max (notes plan N9c3). A self-directed trainee of the house (CLI-026) types their training
+max for a lift of the house (an archived one too, which a program may still use) while a Pro+ pass grants (`POST /api/strength/me/maxes`: the lift, the number, kg or
+lb): more than 0, at most 500 kg or 1,100 lb, two decimals at most, dated the house's today, never converted. It is
+recorded as a coach's training max is (STR-001: a training max, typed, append-only) under the method `TraineeTyped` 1.0,
+so the coach's max history says who typed it. Elsewhere, for a client the house invited, or for a lift not of the house,
+the route answers 404; with Training closed 403; on Free 409 `house_program_needs_pass` (Free has no calculations,
+decision 26). A program the trainee starts reads it (TRN-034); a program already running keeps its maxes (STR-002), so a
+new max reaches the next block.
 
 ## 6. Nutrition, recipes, and calorie targets
 

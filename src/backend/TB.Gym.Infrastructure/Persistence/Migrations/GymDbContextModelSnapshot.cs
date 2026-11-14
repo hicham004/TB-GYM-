@@ -11134,6 +11134,171 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TB.Gym.Modules.Training.HouseProgramListing", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsOffered")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("LoadIncrement")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)");
+
+                    b.Property<string>("LoadRoundingMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("RunKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("RunName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int?>("RunPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Suits")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "TenantId", "RunKey", "RunPosition" }, "UX_HouseProgramListings_OfferedRunPlace")
+                        .IsUnique()
+                        .HasFilter("\"IsOffered\" AND \"RunKey\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "TenantId", "TemplateId" }, "UX_HouseProgramListings_Template")
+                        .IsUnique();
+
+                    b.ToTable("HouseProgramListings", "training", t =>
+                        {
+                            t.HasCheckConstraint("CK_HouseProgramListings_LoadIncrement", "\"LoadIncrement\" > 0 AND \"LoadIncrement\" <= 50");
+
+                            t.HasCheckConstraint("CK_HouseProgramListings_Run", "(\"RunName\" IS NULL AND \"RunKey\" IS NULL AND \"RunPosition\" IS NULL) OR (\"RunName\" IS NOT NULL AND \"RunKey\" IS NOT NULL AND \"RunPosition\" IS NOT NULL AND \"RunPosition\" BETWEEN 1 AND 52)");
+
+                            t.HasCheckConstraint("CK_HouseProgramListings_Suits", "length(btrim(\"Suits\")) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Training.HouseProgramStart", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ListingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MesocycleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RunKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("RunName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int?>("RunPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TemplateVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("TenantId", "Id");
+
+                    b.HasIndex("TenantId", "EnrollmentId");
+
+                    b.HasIndex("TenantId", "ListingId");
+
+                    b.HasIndex("TenantId", "TemplateVersionId");
+
+                    b.HasIndex("TenantId", "ClientProfileId", "RunKey", "RunPosition");
+
+                    b.HasIndex(new[] { "TenantId", "MesocycleId" }, "UX_HouseProgramStarts_Mesocycle")
+                        .IsUnique();
+
+                    b.ToTable("HouseProgramStarts", "training", t =>
+                        {
+                            t.HasCheckConstraint("CK_HouseProgramStarts_Run", "(\"RunName\" IS NULL AND \"RunKey\" IS NULL AND \"RunPosition\" IS NULL) OR (\"RunName\" IS NOT NULL AND \"RunKey\" IS NOT NULL AND \"RunPosition\" IS NOT NULL AND \"RunPosition\" BETWEEN 1 AND 52)");
+                        });
+                });
+
             modelBuilder.Entity("TB.Gym.Modules.Training.LiftWeightApplication", b =>
                 {
                     b.Property<Guid>("Id")
@@ -15171,6 +15336,54 @@ namespace TB.Gym.Infrastructure.Persistence.Migrations
                     b.HasOne("TB.Gym.Modules.Media.MediaAsset", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "MediaAssetId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Training.HouseProgramListing", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Training.ProgramTemplate", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "TemplateId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TB.Gym.Modules.Training.HouseProgramStart", b =>
+                {
+                    b.HasOne("TB.Gym.Modules.Clients.ClientProfile", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ClientProfileId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Subscriptions.ClientEnrollment", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "EnrollmentId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Training.HouseProgramListing", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ListingId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Training.TrainingMesocycle", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "MesocycleId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TB.Gym.Modules.Training.ProgramTemplateVersion", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "TemplateVersionId")
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

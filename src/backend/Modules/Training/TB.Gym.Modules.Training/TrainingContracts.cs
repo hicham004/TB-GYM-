@@ -292,7 +292,145 @@ public interface ITrainingApplicationService
         Guid setPerformanceId,
         OwnWorkoutChangeRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>The house's programs for trainees, offered or withdrawn, for its staff (TRN-034); null outside the house.</summary>
+    Task<IReadOnlyList<HouseProgramListingView>?> ListHouseProgramsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Offers a published program to the house's trainees, or changes its terms (TRN-034).</summary>
+    Task<TrainingCommandResult> OfferHouseProgramAsync(
+        Guid templateId,
+        OfferHouseProgramRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Stops offering a program to the house's trainees; what they started stays theirs (TRN-034).</summary>
+    Task<TrainingCommandResult> WithdrawHouseProgramAsync(
+        Guid templateId,
+        WithdrawHouseProgramRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The house's programs as a self-directed trainee reads them (TRN-034): each with whom it suits, a sample week,
+    /// the maxes it needs and whether it can be started today. Null outside the house and for anyone else.
+    /// </summary>
+    Task<HouseProgramsView?> GetHouseProgramsAsync(CancellationToken cancellationToken);
+
+    /// <summary>A self-directed trainee starts one of the house's programs under their Pro+ pass (TRN-034).</summary>
+    Task<TrainingCommandResult> StartHouseProgramAsync(
+        Guid listingId,
+        StartHouseProgramRequest request,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>A listing's terms (TRN-034). <c>Version</c> is the listing's as read; absent or 0 for a new listing.</summary>
+public sealed record OfferHouseProgramRequest(
+    string? Suits,
+    string? RunName = null,
+    int? RunPosition = null,
+    decimal? LoadIncrement = null,
+    TrainingLoadRoundingMode? LoadRoundingMode = null,
+    uint? Version = null);
+
+public sealed record WithdrawHouseProgramRequest(uint Version);
+
+/// <summary>
+/// A program the house offers its trainees, as its staff read it (TRN-034). <c>TemplateVersionId</c>, <c>Weeks</c>
+/// and <c>LoadUnit</c> are the latest published version's, which a trainee's Start copies; <c>MixesUnits</c> says its
+/// loaded sets mix kilograms and pounds, so it cannot be started.
+/// </summary>
+public sealed record HouseProgramListingView(
+    Guid ListingId,
+    Guid TemplateId,
+    string TemplateName,
+    Guid? TemplateVersionId,
+    int? Weeks,
+    TrainingLoadUnit? LoadUnit,
+    bool MixesUnits,
+    string Suits,
+    string? RunName,
+    int? RunPosition,
+    decimal LoadIncrement,
+    TrainingLoadRoundingMode LoadRoundingMode,
+    bool IsOffered,
+    int TimesStarted,
+    uint Version);
+
+/// <summary>Start: the version the trainee read, and a key bound to the trainee, the listing and that version.</summary>
+public sealed record StartHouseProgramRequest(Guid TemplateVersionId, Guid IdempotencyKey);
+
+public sealed record HouseProgramStartedView(
+    Guid ProgramId,
+    Guid ListingId,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDateExclusive);
+
+/// <summary>
+/// The house's programs for a self-directed trainee (TRN-034). <c>Pass</c> is the Pro+ plan that grants today (none
+/// on Free); <c>Running</c> the program of theirs that holds today or a later day, which a Start must wait for.
+/// </summary>
+public sealed record HouseProgramsView(
+    DateOnly Today,
+    HouseProgramPassView? Pass,
+    HouseProgramRunningView? Running,
+    IReadOnlyList<HouseProgramView> Programs);
+
+public sealed record HouseProgramPassView(
+    Guid EnrollmentId,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDateExclusive);
+
+public sealed record HouseProgramRunningView(
+    Guid ProgramId,
+    string Name,
+    DateOnly StartDate,
+    DateOnly EndDateExclusive);
+
+/// <summary>
+/// One program on the house's list. <c>Refusal</c> is the code Start would answer today (null when it can start),
+/// <c>OpensOn</c> the day a block before it or a running program frees it, <c>LastStartDay</c> the last day it can
+/// start inside the pass that grants today. <c>Maxes</c> lists each lift that works its weight out from a max, with
+/// the max it would start from in the program's unit, or none yet.
+/// </summary>
+public sealed record HouseProgramView(
+    Guid ListingId,
+    Guid TemplateId,
+    Guid TemplateVersionId,
+    string Name,
+    string? Description,
+    string Suits,
+    string? RunName,
+    int? RunPosition,
+    int Weeks,
+    TrainingLoadUnit LoadUnit,
+    IReadOnlyList<HouseProgramSampleSessionView> SampleWeek,
+    IReadOnlyList<HouseProgramMaxView> Maxes,
+    bool CanStart,
+    string? Refusal,
+    DateOnly? OpensOn,
+    DateOnly? LastStartDay,
+    int TimesStarted);
+
+public sealed record HouseProgramSampleSessionView(
+    string Name,
+    int DayOffset,
+    IReadOnlyList<HouseProgramSampleExerciseView> Exercises);
+
+public sealed record HouseProgramSampleExerciseView(
+    Guid ExerciseId,
+    string Name,
+    bool IsMainLift,
+    int Sets,
+    int? RepetitionsMinimum,
+    int? RepetitionsMaximum);
+
+public sealed record HouseProgramMaxView(
+    Guid ExerciseId,
+    string ExerciseName,
+    TrainingLoadUnit Unit,
+    decimal? Value,
+    HouseProgramMaxSource? From,
+    DateOnly? On);
 
 public sealed record ProgramTemplatePage(
     int Total,
@@ -1208,7 +1346,8 @@ public sealed record ClientProgramSessionView(
     int ExerciseCount,
     int SetCount,
     DateOnly? StartedOn = null,
-    bool IsLate = false);
+    bool IsLate = false,
+    bool CanStartEarly = false);
 
 /// <summary>
 /// A client's programs as their coach reads them (R3.4a, TRN-022): the newest blocks first, each with
@@ -1493,7 +1632,9 @@ public sealed record TrainingCommandResult(
     ProgramDraftSaveView? Draft = null,
     FinishedProgramsVisibilityView? FinishedPrograms = null,
     LiftWeightsAppliedView? LiftWeights = null,
-    OwnWorkoutView? OwnWorkout = null);
+    OwnWorkoutView? OwnWorkout = null,
+    HouseProgramListingView? HouseListing = null,
+    HouseProgramStartedView? HouseProgramStarted = null);
 
 public enum TrainingCommandStatus
 {

@@ -62,6 +62,18 @@ internal static class DatabaseConstraintNames
     public const string OneHousePlanTransfer =
         "UX_HousePlanTransfers_Ask";
 
+    /// <summary>One listing a program in the house's list for trainees (TRN-034).</summary>
+    public const string OneHouseProgramListing =
+        "UX_HouseProgramListings_Template";
+
+    /// <summary>One offered block at each place of a run (TRN-034); a second is refused with its own code.</summary>
+    public const string OneOfferedBlockPerRunPlace =
+        "UX_HouseProgramListings_OfferedRunPlace";
+
+    /// <summary>A trainee's program is started from the house's list once (TRN-034).</summary>
+    public const string OneHouseProgramStartPerProgram =
+        "UX_HouseProgramStarts_Mesocycle";
+
     /// <summary>
     /// One update of a program's training maxes per idempotency key (STR-002). A retry that loses the
     /// race to the first answers with the first one's result.

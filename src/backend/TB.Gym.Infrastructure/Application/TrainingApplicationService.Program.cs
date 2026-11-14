@@ -56,14 +56,19 @@ internal sealed partial class TrainingApplicationService
             ? null
             : await ReadProgramAsync(described, described == current ? ClientProgramPhase.Current
                 : described.StartDate > today ? ClientProgramPhase.Upcoming : ClientProgramPhase.Finished,
-                today, cancellationToken);
+                today,
+                // A self-directed trainee starts a session of the current week before its day (TRN-020, TRN-034),
+                // while the program's own plan grants.
+                client.IsSelfDirected && described == current &&
+                    !(await HouseProgramsClosedAsync([described.Id], cancellationToken)).Contains(described.Id),
+                cancellationToken);
         var nextShown = early.FirstOrDefault(item => item != described);
         return new(access.IsAllowed, access.Reason.ToString(), today, program,
             access.IsAllowed ? next?.StartDate : described?.StartDate,
             ClientSessionStatePolicy.Key, ClientSessionStatePolicy.Version,
             nextShown is null
                 ? null
-                : await ReadProgramAsync(nextShown, ClientProgramPhase.Upcoming, today, cancellationToken));
+                : await ReadProgramAsync(nextShown, ClientProgramPhase.Upcoming, today, false, cancellationToken));
     }
 
     /// <summary>
@@ -352,6 +357,7 @@ internal sealed partial class TrainingApplicationService
         ProgramBlockRow block,
         ClientProgramPhase phase,
         DateOnly today,
+        bool startsEarly,
         CancellationToken cancellationToken)
     {
         var weeks = await dbContext.MesocycleWeeks.AsNoTracking()
@@ -400,7 +406,9 @@ internal sealed partial class TrainingApplicationService
                 item.ExerciseCount,
                 item.SetCount,
                 startedOn,
-                ClientSessionStatePolicy.IsLate(item.ScheduledDate, startedOn)));
+                ClientSessionStatePolicy.IsLate(item.ScheduledDate, startedOn),
+                startsEarly && workout is null && item.ScheduledDate > today &&
+                    HouseProgramRules.InCurrentWeek(block.StartDate, item.ScheduledDate, today)));
         }).ToArray();
 
         var weekCount = weeks.Count;

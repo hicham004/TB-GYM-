@@ -134,6 +134,37 @@ public static class StrengthEndpoints
             .Produces<RpeChartMaxEstimateView>()
             .ProducesValidationProblem();
 
+        // A self-directed trainee of the house types their own training max before a program needs it (STR-021).
+        var client = endpoints
+            .MapGroup("/api/strength/me")
+            .RequireAuthorization(AuthorizationPolicies.TenantClient)
+            .WithTags(StrengthModule.Name);
+
+        client.MapPost("/maxes", async (
+            RecordOwnMaxRequest request,
+            HttpContext context,
+            IAntiforgery antiforgery,
+            IStrengthApplicationService service,
+            CancellationToken cancellationToken) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var result = await service.RecordOwnAsync(request, cancellationToken);
+            return result.Status switch
+            {
+                StrengthCommandStatus.Success => Results.Ok(result.Record),
+                StrengthCommandStatus.NotFound => Results.NotFound(),
+                StrengthCommandStatus.Forbidden => Results.Forbid(),
+                StrengthCommandStatus.Conflict => Results.Conflict(new { code = result.Code, message = result.Message }),
+                _ => Results.ValidationProblem(result.Errors ?? new Dictionary<string, string[]>()),
+            };
+        })
+        .WithName("RecordMyStrengthMax")
+        .Produces<StrengthMaxView>()
+        .ProducesValidationProblem()
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .ProducesProblem(StatusCodes.Status409Conflict);
+
         return endpoints;
     }
 

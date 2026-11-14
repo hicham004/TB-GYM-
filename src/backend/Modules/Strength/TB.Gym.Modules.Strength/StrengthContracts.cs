@@ -24,6 +24,14 @@ public interface IStrengthApplicationService
         RecordMaxFromSetRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A self-directed trainee of the house records their own training max for a lift while a Pro+ pass grants
+    /// (STR-021, notes plan N9c3); answers as missing outside the house and for anyone else.
+    /// </summary>
+    Task<StrengthCommandResult> RecordOwnAsync(
+        RecordOwnMaxRequest request,
+        CancellationToken cancellationToken);
+
     OneRepMaxEstimateView Estimate(EstimateOneRepMaxRequest request);
 
     RpeChartMaxEstimateView EstimateFromRpeChart(EstimateRpeChartMaxRequest request);
@@ -139,11 +147,18 @@ public sealed record RpeChartMaxEstimateView(
 public sealed record StrengthCommandResult(
     StrengthCommandStatus Status,
     StrengthMaxView? Record = null,
-    IReadOnlyDictionary<string, string[]>? Errors = null);
+    IReadOnlyDictionary<string, string[]>? Errors = null,
+    string? Code = null,
+    string? Message = null);
 
 public enum StrengthCommandStatus
 {
     Success = 1,
     NotFound = 2,
     Invalid = 3,
+    Forbidden = 4,
+    Conflict = 5,
 }
+
+/// <summary>A trainee's own training max (STR-021): the lift, the number and its unit; the day is the house's today.</summary>
+public sealed record RecordOwnMaxRequest(Guid ExerciseId, decimal Value, LoadUnit Unit);
