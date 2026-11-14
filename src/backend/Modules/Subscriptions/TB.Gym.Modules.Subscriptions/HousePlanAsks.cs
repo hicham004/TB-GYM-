@@ -22,7 +22,8 @@ public sealed class HousePlanAsk : TenantEntity
         ProductOffer offer,
         Guid askedByUserId,
         DateOnly askedOn,
-        DateTimeOffset askedAtUtc)
+        DateTimeOffset askedAtUtc,
+        bool maxOpen = false)
         : base(tenantId)
     {
         ArgumentNullException.ThrowIfNull(product);
@@ -37,7 +38,7 @@ public sealed class HousePlanAsk : TenantEntity
             throw new ArgumentException("An ask names one of the house's own plans and one of its options.");
         }
 
-        if (!HousePlanAskRule.IsAskable(product, offer))
+        if (!HousePlanAskRule.IsAskable(product, offer, maxOpen))
         {
             throw new ArgumentException(HousePlanAskRule.NotOnSaleMessage);
         }
@@ -74,8 +75,9 @@ public sealed class HousePlanAsk : TenantEntity
         ProductOffer offer,
         Guid askedByUserId,
         DateOnly askedOn,
-        DateTimeOffset askedAtUtc) =>
-        new(tenantId, clientProfileId, product, offer, askedByUserId, askedOn, askedAtUtc);
+        DateTimeOffset askedAtUtc,
+        bool maxOpen = false) =>
+        new(tenantId, clientProfileId, product, offer, askedByUserId, askedOn, askedAtUtc, maxOpen);
 }
 
 /// <summary>
@@ -364,15 +366,21 @@ public static class HousePlanAskRule
     public const string ReferenceRefusal = "Keep the reference to 200 characters or fewer.";
 
     /// <summary>
-    /// Whether a trainee may ask for this option of this plan: one of the house's paid tiers on sale, priced above
-    /// nothing. Max stays closed until its places exist (notes plan N9c5): an empty number of places closes it.
+    /// Whether a trainee may ask for this option of this plan while Max is closed: Pro+ alone (see the overload).
     /// </summary>
-    public static bool IsAskable(CoachingProduct product, ProductOffer offer)
+    public static bool IsAskable(CoachingProduct product, ProductOffer offer) => IsAskable(product, offer, maxOpen: false);
+
+    /// <summary>
+    /// Whether a trainee may ask for this option of this plan: one of the house's paid tiers on sale, priced above
+    /// nothing. Max only while <paramref name="maxOpen"/>, that is while the house's Max places are filled and above
+    /// zero (SUB-021); an ask for Max is stored even when every place is taken, since a place is held from a booking.
+    /// </summary>
+    public static bool IsAskable(CoachingProduct product, ProductOffer offer, bool maxOpen)
     {
         ArgumentNullException.ThrowIfNull(product);
         ArgumentNullException.ThrowIfNull(offer);
         return product.Kind == ProductKind.CoachingPlan &&
-            product.HouseTier == HouseTier.ProPlus &&
+            (product.HouseTier == HouseTier.ProPlus || (maxOpen && product.HouseTier == HouseTier.Max)) &&
             product.IsActive &&
             offer.IsActive &&
             offer.ProductId == product.Id &&

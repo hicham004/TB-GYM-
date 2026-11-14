@@ -317,6 +317,11 @@ public static class ClientEndpoints
             ClientCommandStatus.NotFound => Results.NotFound(),
             ClientCommandStatus.Invalid => Results.ValidationProblem(
                 result.Errors ?? new Dictionary<string, string[]>()),
+            ClientCommandStatus.HealthStepClosed => Results.Conflict(new
+            {
+                code = "health_step_closed",
+                message = HealthStepClosedException.Sentence,
+            }),
             _ => Results.Conflict(new
             {
                 code = "concurrency_conflict",

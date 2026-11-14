@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Invitations;
+using TB.Gym.Modules.Subscriptions;
 using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
@@ -14,7 +15,9 @@ internal sealed class TeamApplicationService(
     GymDbContext dbContext,
     IClock clock,
     ICurrentUser currentUser,
-    ITenantContext tenantContext)
+    ITenantContext tenantContext,
+    ICoachingFeatureAccessService featureAccess,
+    HouseTierReader houseTiers)
     : ITeamApplicationService
 {
     public async Task<IReadOnlyList<TeamMemberSummary>> ListMembersAsync(CancellationToken cancellationToken)
@@ -121,8 +124,9 @@ internal sealed class TeamApplicationService(
     /// A coach leaves the team, removed by the owner or of their own accord. Their clients and pending
     /// client invitations wait for a coach (C8, CLI-014: the owner never gets them automatically), each
     /// client with a waiting entry in their coach history and nothing deleted, and each client with access
-    /// is told in-app and by email that the workspace will give them a new coach (ADR 0027). The counts the
-    /// result carries are of the clients and invitations left waiting.
+    /// is told in-app and by email that the workspace will give them a new coach (ADR 0027), a trainee of the
+    /// house only while Max coaches them (notes plan N9c5). The counts the result carries are of the clients
+    /// and invitations left waiting.
     /// </summary>
     private async Task<CoachRemovalResult> DepartAsync(
         Guid coachUserId,
@@ -172,6 +176,7 @@ internal sealed class TeamApplicationService(
                         item.Status == MembershipStatus.Active)
                     .Select(item => item.UserId)
                     .ToListAsync(cancellationToken);
+                var coachedOnMax = await CoachedOnMaxAsync(tenantId, clients, cancellationToken);
                 foreach (var client in clients)
                 {
                     // One change of the coach per profile in this transaction: the deferred coach trigger reads
@@ -187,8 +192,11 @@ internal sealed class TeamApplicationService(
                     dbContext.ClientCoachAssignments.Add(entry);
                     // Their programs and meal plans keep running and they can still log; nobody opens their
                     // private side until the owner gives them a coach (CLI-013). A self-directed trainee has no
-                    // coach to lose (CLI-026): their record waits like any other and they are told nothing about it.
-                    if (client.UserId is { } clientUserId && activeClientUserIds.Contains(clientUserId) && !client.IsSelfDirected)
+                    // coach to lose (CLI-026): their record waits like any other and they are told nothing about it,
+                    // unless Max coaches them today (notes plan N9c5), when they are told as a coach's client is.
+                    if (client.UserId is { } clientUserId &&
+                        activeClientUserIds.Contains(clientUserId) &&
+                        (!client.IsSelfDirected || coachedOnMax.Contains(client.Id)))
                     {
                         WorkspaceRelationshipNotices.CoachDeparted(
                             dbContext,
@@ -240,5 +248,32 @@ internal sealed class TeamApplicationService(
             dbContext.ChangeTracker.Clear();
             return new CoachRemovalResult(CoachRemovalStatus.Conflict);
         }
+    }
+
+    /// <summary>
+    /// Those of a departing coach's clients the house coaches today (<see cref="HouseTierRule.CoachesTheTrainee"/>): its
+    /// trainees on Max, read before anything changes, from one batched access evaluation and one read of the house's
+    /// plans however many there are, and with nothing read when none of the clients is a trainee of the house.
+    /// </summary>
+    private async Task<HashSet<Guid>> CoachedOnMaxAsync(
+        Guid tenantId,
+        IReadOnlyList<ClientProfile> clients,
+        CancellationToken cancellationToken)
+    {
+        Guid[] trainees = [.. clients.Where(client => client.IsSelfDirected).Select(client => client.Id)];
+        if (trainees.Length == 0)
+        {
+            return [];
+        }
+
+        var calendar = await WorkspaceCalendarReader.ReadAsync(dbContext, clock, tenantId, cancellationToken);
+        if (!calendar.IsHouse)
+        {
+            return [];
+        }
+
+        var decisions = await featureAccess.EvaluateManyAsync(tenantId, trainees, cancellationToken);
+        var tiers = await houseTiers.TiersAsync(trainees, decisions, calendar.Today, cancellationToken);
+        return [.. tiers.Where(tier => HouseTierRule.CoachesTheTrainee(tier.Value)).Select(tier => tier.Key)];
     }
 }

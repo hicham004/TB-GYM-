@@ -237,9 +237,10 @@ public sealed record CoachActivityItemView(
 /// <param name="WaitingForCoach">
 /// The Owner's alone, null for a Coach (CLI-013, CLI-020; notes plan N9d1b): each current client with no coach
 /// (CLI-012), the longest waiting first, then by name; empty when nobody waits. Never a former client, and never a
-/// self-directed trainee of the house, who trains as their own coach and raises nothing on Today (CLI-026). The
-/// business side alone, since nobody coaches them: who, since when, who coached them before, and the client version a
-/// reassignment asks for.
+/// self-directed trainee of the house while they train as their own coach and raise nothing on Today (CLI-026); a
+/// trainee on Max is coached while Max grants (notes plan N9c5), so with no coach they are listed. The business side
+/// alone, since nobody coaches them: who, since when, who coached them before, and the client version a reassignment
+/// asks for.
 /// </param>
 public sealed record CoachTodayView(
     DateOnly Today,
@@ -409,7 +410,9 @@ public sealed record CoachPlanEndedView(
 /// null with no pack running, as for a paused, blocked or unpaid one.
 /// </param>
 /// <param name="SelfDirected">
-/// The client signed up into the house and trains as their own coach (CLI-026), which is why the row raises nothing.
+/// The client signed up into the house and trains as their own coach today (CLI-026), which is why the row raises
+/// nothing. False for a trainee on Max while Max grants (notes plan N9c5): the house coaches them, and their row raises
+/// what a coach's client's does, a plan ending soon aside.
 /// </param>
 public sealed record ClientOverviewRow(
     CoachClientRef Client,

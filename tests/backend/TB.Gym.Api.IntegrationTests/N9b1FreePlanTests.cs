@@ -1096,7 +1096,19 @@ public sealed partial class Phase3TrainingWorkflowTests
 
         // In the house, Pro+ and Max are sold, and every plan in the list carries its tier: none elsewhere.
         var proPlus = await N9b1FProductAsync(house.Owner, "Pro+ Programs", 4, 45m, "ProPlus");
-        var max = await N9b1FProductAsync(house.Owner, "Max Coaching", 4, 120m, "Max");
+        // A Max plan covers Training, Nutrition, Check-ins and Messaging, all four (notes plan N9c5).
+        await RefreshCsrfAsync(house.Owner);
+        var maxMade = await house.Owner.PostAsJsonAsync(
+            A7ProductsUrl,
+            new
+            {
+                name = "Max Coaching",
+                description = (string?)null,
+                initialOffer = B4aOfferRequest(4, 120m, "USD", "Training", "Nutrition", "CheckIns", "Messaging"),
+                houseTier = "Max",
+            });
+        await AssertStatusAsync(maxMade, HttpStatusCode.OK);
+        var max = await ReadSlicePayloadAsync<CoachingProductView>(maxMade);
         var plain = await N9b1FProductAsync(house.Owner, "Gym Floor", 4, 20m, houseTier: null);
         var listed = (await ReadSliceAsync<ProductCatalog>(house.Owner, A7ProductsUrl)).Products.ToDictionary(item => item.Id, item => item.HouseTier);
         Assert.HasCount(4, listed);

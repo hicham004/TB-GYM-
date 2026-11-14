@@ -701,8 +701,11 @@ internal sealed partial class TrainingApplicationService
         }
 
         // A self-directed trainee's note is their own record (CLI-026): nobody coaches them, so it reaches no
-        // staff inbox. A note the house's staff write still reaches the trainee.
-        if (!fromCoach && client.IsSelfDirected)
+        // staff inbox, unless Max coaches them today (notes plan N9c5), when it reaches their coach as a coach's
+        // client's does. Only a trainee's own note pays for that read. A note the house's staff write still reaches
+        // the trainee.
+        if (!fromCoach && client.IsSelfDirected &&
+            !await houseTiers.CoachedOnMaxAsync(execution.ClientProfileId, isSelfDirected: true, cancellationToken))
         {
             return;
         }

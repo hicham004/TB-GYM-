@@ -15,7 +15,8 @@ internal sealed class ClientProfileApplicationService(
     IClock clock,
     ICurrentUser currentUser,
     ITenantContext tenantContext,
-    CoachClientScope coachClientScope)
+    CoachClientScope coachClientScope,
+    HouseTierReader houseTiers)
     : IClientProfileApplicationService
 {
     /// <summary>What a release writes on each plan and program it closes.</summary>
@@ -100,6 +101,9 @@ internal sealed class ClientProfileApplicationService(
                 }
 
                 dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Version;
+                // Whether the house coaches this trainee today (CLI-026, SUB-021), read before anything changes; no read
+                // for anyone who is not self-directed.
+                var coachedOnMax = await houseTiers.CoachedOnMaxAsync(profile.Id, profile.IsSelfDirected, cancellationToken);
                 // Null while the client waits for a coach: the owner gives them one here, themselves included.
                 var previousCoachUserId = profile.AssignedCoachUserId;
                 if (profile.AssignCoach(request.CoachUserId))
@@ -119,14 +123,15 @@ internal sealed class ClientProfileApplicationService(
                     // Every coach change is told to the client, the owner taking them included (C8, CLI-014), in
                     // the same unit of work and once per history entry, since it changes who may read their private
                     // side. A self-directed trainee trains as their own coach (CLI-026), so they are told in words of
-                    // their own: who on the team can now see their training.
+                    // their own: who on the team can now see their training. One the house coaches on Max hears they
+                    // have a new coach, as a coach's client does.
                     if (profile.UserId is { } clientUserId)
                     {
                         var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(
                             dbContext,
                             profile.TenantId,
                             cancellationToken);
-                        if (profile.IsSelfDirected)
+                        if (profile.IsSelfDirected && !coachedOnMax)
                         {
                             WorkspaceRelationshipNotices.TraineeStaffChanged(
                                 dbContext, profile.TenantId, timeZoneId, clientUserId, profile.Id, entry.Id, now);
@@ -150,7 +155,7 @@ internal sealed class ClientProfileApplicationService(
                 await transaction.CommitAsync(cancellationToken);
                 return new ClientCommandResult(
                     ClientCommandStatus.Success,
-                    CoachDetails: await ToCoachDetailsAsync(profile, cancellationToken));
+                    CoachDetails: await ToCoachDetailsAsync(profile, coachedOnMax, cancellationToken));
             });
         }
         catch (ArgumentException exception)
@@ -323,6 +328,10 @@ internal sealed class ClientProfileApplicationService(
     {
         var releasedByOwner = kind == ClientDepartureKind.ReleasedByOwner;
         var tenantId = tenantContext.TenantId;
+        // Whether the house coaches this trainee today (CLI-026, SUB-021), read before anything changes: the ending
+        // below cancels their Max. Only a leaving tells staff, so a release reads nothing, nor does a coach's client.
+        var coachedOnMax = !releasedByOwner &&
+            await houseTiers.CoachedOnMaxAsync(profile.Id, profile.IsSelfDirected, cancellationToken);
         var ownerUserId = await CoachTeam.OwnerUserIdAsync(dbContext, tenantId, cancellationToken);
         await CoachTeam.LockActiveStaffAsync(dbContext, tenantId, ownerUserId, cancellationToken);
         // Null while the client waits for a coach: the owner becomes the record's keeper from nobody.
@@ -372,8 +381,9 @@ internal sealed class ClientProfileApplicationService(
             }
         }
 
-        // A self-directed trainee's leaving tells no staff inbox (CLI-026); the history above keeps it.
-        if (!releasedByOwner && !profile.IsSelfDirected)
+        // A self-directed trainee's leaving tells no staff inbox (CLI-026); the history above keeps it. One the house
+        // coaches on Max tells the owner and their coach, as a coach's client does, closing their account included.
+        if (!releasedByOwner && (!profile.IsSelfDirected || coachedOnMax))
         {
             var timeZoneId = await WorkspaceRelationshipNotices.TenantTimeZoneAsync(dbContext, tenantId, cancellationToken);
             // A waiting client had no coach to tell, so the owner alone hears it.
@@ -524,7 +534,7 @@ internal sealed class ClientProfileApplicationService(
         var client = await dbContext.ClientProfiles
             .AsNoTracking()
             .CurrentFor(userId).SingleOrDefaultAsync(cancellationToken);
-        return client is null ? null : ToSelfProfile(client);
+        return client is null ? null : await ToSelfProfileAsync(client, coachedOnMax: null, cancellationToken);
     }
 
     public async Task<OwnCoachView?> GetOwnCoachAsync(CancellationToken cancellationToken)
@@ -716,8 +726,13 @@ internal sealed class ClientProfileApplicationService(
                 return Invalid("intake", refusal);
             }
 
+            // After the house's age, whose refusal is about a value: the Health step's is about the plan (CLI-028).
+            var coachedOnMax = await houseTiers.CoachedOnMaxAsync(profile.Id, profile.IsSelfDirected, cancellationToken);
             dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Version;
-            var changedFields = profile.UpdateIntake(request.ToInput(), tenantToday);
+            var changedFields = profile.UpdateIntake(
+                request.ToInput(),
+                tenantToday,
+                HealthStepOpen(profile, coachedOnMax));
             if (changedFields.Count > 0)
             {
                 dbContext.ClientProfileChanges.Add(ClientProfileChange.Create(
@@ -728,7 +743,11 @@ internal sealed class ClientProfileApplicationService(
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            return await SuccessAsync(profile, returnSelf, cancellationToken);
+            return await SuccessAsync(profile, returnSelf, coachedOnMax, cancellationToken);
+        }
+        catch (HealthStepClosedException)
+        {
+            return new ClientCommandResult(ClientCommandStatus.HealthStepClosed);
         }
         catch (ArgumentException exception)
         {
@@ -773,7 +792,7 @@ internal sealed class ClientProfileApplicationService(
                     : RecordedMassUnit.Pound);
             return existingObservation.MeasurementDate == request.MeasurementDate &&
                    decimal.Abs(existingObservation.ValueKilograms - requestedKilograms) < 0.001m
-                ? await SuccessAsync(profile, returnSelf, cancellationToken)
+                ? await SuccessAsync(profile, returnSelf, coachedOnMax: null, cancellationToken)
                 : new ClientCommandResult(ClientCommandStatus.Conflict);
         }
 
@@ -804,11 +823,14 @@ internal sealed class ClientProfileApplicationService(
                 return Invalid("onboarding", refusal);
             }
 
+            // After the house's age, as the intake's own save weighs them (CLI-028).
+            var coachedOnMax = await houseTiers.CoachedOnMaxAsync(profile.Id, profile.IsSelfDirected, cancellationToken);
             dbContext.Entry(profile).Property(client => client.Version).OriginalValue = request.Intake.Version;
             var changedFields = profile.CompleteOnboarding(
                 request.Intake.ToInput(),
                 tenantToday,
-                clock.UtcNow);
+                clock.UtcNow,
+                HealthStepOpen(profile, coachedOnMax));
             var unit = request.InitialBodyweightUnit == BodyweightUnit.Kilogram
                 ? RecordedMassUnit.Kilogram
                 : RecordedMassUnit.Pound;
@@ -843,7 +865,11 @@ internal sealed class ClientProfileApplicationService(
                 ClientChangeSource.OnboardingCompletion,
                 changedFields.Append("InitialBodyweight")));
             await dbContext.SaveChangesAsync(cancellationToken);
-            return await SuccessAsync(profile, returnSelf, cancellationToken);
+            return await SuccessAsync(profile, returnSelf, coachedOnMax, cancellationToken);
+        }
+        catch (HealthStepClosedException)
+        {
+            return new ClientCommandResult(ClientCommandStatus.HealthStepClosed);
         }
         catch (ArgumentException exception)
         {
@@ -909,18 +935,61 @@ internal sealed class ClientProfileApplicationService(
         return DateOnly.FromDateTime(localNow.DateTime);
     }
 
+    /// <summary>
+    /// The answer of an intake or set-up save: the person's own profile, or the staff's view of the client. A tier the
+    /// save already read is passed on, so a request reads it once.
+    /// </summary>
     private async Task<ClientCommandResult> SuccessAsync(
         ClientProfile profile,
         bool returnSelf,
+        bool? coachedOnMax,
         CancellationToken cancellationToken) =>
         returnSelf
-            ? new ClientCommandResult(ClientCommandStatus.Success, SelfProfile: ToSelfProfile(profile))
+            ? new ClientCommandResult(
+                ClientCommandStatus.Success,
+                SelfProfile: await ToSelfProfileAsync(profile, coachedOnMax, cancellationToken))
             : new ClientCommandResult(
                 ClientCommandStatus.Success,
-                CoachDetails: await ToCoachDetailsAsync(profile, cancellationToken));
+                CoachDetails: await ToCoachDetailsAsync(profile, coachedOnMax, cancellationToken));
 
+    /// <summary>
+    /// The Health step opens on Max alone (CLI-028, decision 33): always for a coach's client and a client the house
+    /// invited, and for a house trainee only while the house coaches them on Max today.
+    /// </summary>
+    private static bool HealthStepOpen(ClientProfile profile, bool coachedOnMax) =>
+        !profile.IsSelfDirected || coachedOnMax;
+
+    /// <summary>
+    /// The person's own profile, with whether the house coaches them today and whether their Health step is open
+    /// (CLI-026, CLI-028): read from the house's plans for a self-directed trainee alone, unless the caller read it.
+    /// </summary>
+    private async Task<ClientSelfProfile> ToSelfProfileAsync(
+        ClientProfile client,
+        bool? coachedOnMax,
+        CancellationToken cancellationToken)
+    {
+        var coached = coachedOnMax ??
+            await houseTiers.CoachedOnMaxAsync(client.Id, client.IsSelfDirected, cancellationToken);
+        return ToSelfProfile(client) with
+        {
+            CoachedByTheHouse = coached,
+            HealthStepOpen = HealthStepOpen(client, coached),
+        };
+    }
+
+    private Task<CoachClientDetails> ToCoachDetailsAsync(
+        ClientProfile client,
+        CancellationToken cancellationToken) =>
+        ToCoachDetailsAsync(client, coachedOnMax: null, cancellationToken);
+
+    /// <summary>
+    /// The staff's view of a client: the business side to whoever may manage them, the private side to their coach
+    /// alone, and whether the Health step is open, a fact of the plan the house reads for a self-directed trainee alone
+    /// (unless the caller read it), so a coach's client costs nothing more.
+    /// </summary>
     private async Task<CoachClientDetails> ToCoachDetailsAsync(
         ClientProfile client,
+        bool? coachedOnMax,
         CancellationToken cancellationToken)
     {
         // A client waiting for a coach (CLI-012) names nobody: an empty name, as the screens already read one.
@@ -931,7 +1000,12 @@ internal sealed class ClientProfileApplicationService(
                 .Select(user => user.DisplayName)
                 .SingleOrDefaultAsync(cancellationToken)
             : null;
-        var details = ToCoachDetails(client, coachName ?? string.Empty, await ReleaseViewAsync(client, cancellationToken));
+        var coached = coachedOnMax ??
+            await houseTiers.CoachedOnMaxAsync(client.Id, client.IsSelfDirected, cancellationToken);
+        var details = ToCoachDetails(client, coachName ?? string.Empty, await ReleaseViewAsync(client, cancellationToken)) with
+        {
+            HealthStepOpen = HealthStepOpen(client, coached),
+        };
 
         // The business side to whoever may manage the client; the intake answers, the health fields and the coach's
         // notes, the private side, only to the client's own coach (C8, ADR 0026).

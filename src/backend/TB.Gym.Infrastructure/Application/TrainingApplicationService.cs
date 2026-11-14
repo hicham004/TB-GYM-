@@ -16,6 +16,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
     private readonly ITenantContext tenantContext;
     private readonly ICoachingFeatureAccessService featureAccessService;
     private readonly CoachClientScope coachClientScope;
+    private readonly HouseTierReader houseTiers;
     private readonly StrengthLoadRecommendationStrategy loadRecommendation = new();
     private readonly RpeChartLoadStrategy rpeChartRecommendation = new();
 
@@ -25,7 +26,8 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         ICurrentUser currentUser,
         ITenantContext tenantContext,
         ICoachingFeatureAccessService featureAccessService,
-        CoachClientScope coachClientScope)
+        CoachClientScope coachClientScope,
+        HouseTierReader houseTiers)
     {
         this.dbContext = dbContext;
         this.clock = clock;
@@ -33,6 +35,7 @@ internal sealed partial class TrainingApplicationService : ITrainingApplicationS
         this.tenantContext = tenantContext;
         this.featureAccessService = featureAccessService;
         this.coachClientScope = coachClientScope;
+        this.houseTiers = houseTiers;
     }
 
     public async Task<ProgramTemplatePage> ListTemplatesAsync(

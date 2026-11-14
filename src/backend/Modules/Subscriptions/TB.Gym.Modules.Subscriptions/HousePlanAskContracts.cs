@@ -17,7 +17,10 @@ public interface IHousePlanAskService
     /// <summary>Asks for a plan. The same plan asked for again while its ask is open answers the open ask.</summary>
     Task<HousePlanAskResult> AskAsync(AskForHousePlanRequest request, CancellationToken cancellationToken);
 
-    /// <summary>Says the ask's money was sent by Whish, from the name and number given. Once an ask.</summary>
+    /// <summary>
+    /// Says the ask's money was sent by Whish, from the name and number given. Once an ask; for Max, only while the
+    /// ask's place is open (SUB-021).
+    /// </summary>
     Task<HousePlanAskResult> SayMoneySentAsync(
         Guid askId,
         HousePlanMoneySentRequest request,
@@ -26,7 +29,10 @@ public interface IHousePlanAskService
     /// <summary>A trainee's asks for the house's staff, newest first; null outside the house or for no such client.</summary>
     Task<IReadOnlyList<HousePlanAskView>?> ListForClientAsync(Guid clientProfileId, CancellationToken cancellationToken);
 
-    /// <summary>Books the asked plan from the house's day and records its receipt, the exact price, in one step.</summary>
+    /// <summary>
+    /// Books the asked plan from the house's day and records its receipt, the exact price, in one step. Max takes a
+    /// place, unless the trainee holds one already; none is booked while Max is closed or every place is taken.
+    /// </summary>
     Task<HousePlanAskResult> BookAsync(
         Guid clientProfileId,
         Guid askId,
@@ -66,7 +72,10 @@ public sealed record CloseHousePlanAskRequest(string? Reason);
 /// Whether a plan may be asked for now: the house's Whish number is filled and the house has not blocked the trainee.
 /// </param>
 /// <param name="WhishNumber">The number to send the money to; null while asks are closed.</param>
-/// <param name="Plans">The plans on sale that may be asked for; none while asks are closed.</param>
+/// <param name="Plans">
+/// The plans on sale that may be asked for: Pro+, and Max while its places are open (SUB-021); none while asks are
+/// closed.
+/// </param>
 /// <param name="Asks">Every ask of the trainee's, newest first.</param>
 public sealed record HousePlansView(
     DateOnly Today,
@@ -76,6 +85,10 @@ public sealed record HousePlansView(
     IReadOnlyList<HousePlanAskView> Asks);
 
 /// <summary>One option of a plan on sale, with the words and figures the house's staff typed in Plans you sell.</summary>
+/// <param name="PlaceOpen">
+/// For a Max option, whether an ask from this trainee would have a place now (SUB-021): they hold one, or more places
+/// are free than other trainees' asks wait for. Null for Pro+.
+/// </param>
 public sealed record HousePlanOfferView(
     Guid OfferId,
     Guid ProductId,
@@ -87,9 +100,18 @@ public sealed record HousePlanOfferView(
     string PriceCurrency,
     int DurationCount,
     OfferDurationUnit DurationUnit,
-    IReadOnlyList<CoachingFeature> Features);
+    IReadOnlyList<CoachingFeature> Features,
+    bool? PlaceOpen = null);
 
 /// <summary>An ask, with the plan and option it named, what was said since and how it ended.</summary>
+/// <param name="PlaceOpen">
+/// For an open ask for Max, whether it has a place now (SUB-021): its trainee holds one, or its place in the line is
+/// within the places free. Null for Pro+ and for an ask booked or closed.
+/// </param>
+/// <param name="PlaceInLine">
+/// For the house's staff, an open ask for Max's 1-based place in the line, the open asks of trainees holding no place
+/// in the order asked; null for a trainee who holds a place, for any other ask, and always on the trainee's own read.
+/// </param>
 public sealed record HousePlanAskView(
     Guid Id,
     Guid OfferId,
@@ -103,7 +125,9 @@ public sealed record HousePlanAskView(
     DateOnly AskedOn,
     HousePlanAskState State,
     HousePlanTransferView? MoneySent,
-    HousePlanAskOutcomeView? Outcome);
+    HousePlanAskOutcomeView? Outcome,
+    bool? PlaceOpen = null,
+    int? PlaceInLine = null);
 
 /// <param name="WhishName">Null once the account was closed.</param>
 /// <param name="WhishNumber">Null once the account was closed.</param>
@@ -172,4 +196,16 @@ public static class HousePlanAskCodes
     public const string Overlap = "entitlement_overlap";
 
     public const string Changed = "house_plan_ask_changed";
+
+    /// <summary>Max is closed: its places are empty or zero (SUB-021).</summary>
+    public const string MaxClosed = "house_max_closed";
+
+    /// <summary>Every place on Max is taken, and the trainee holds none (SUB-021).</summary>
+    public const string MaxFull = "house_max_full";
+
+    /// <summary>The trainee's ask for Max has no place open yet, so no money is to be sent (SUB-021).</summary>
+    public const string MaxPlaceNotOpen = "house_max_place_not_open";
+
+    /// <summary>A Max plan through the coaches' ordinary booking or renewal: Max is booked from the trainee's ask.</summary>
+    public const string MaxByAsk = "house_max_by_ask";
 }

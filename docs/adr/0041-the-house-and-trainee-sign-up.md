@@ -59,6 +59,10 @@ house's Coach who joined first, or nobody while the house has none, and the trai
 gives them one (ADR 0026 as amended for C8, CLI-012, CLI-024; notes plan N9d1b). Coach attention v9 raises nothing for such a profile, and
 their notes, their leaving and a coach's departure reach no inbox; both partners keep them on Clients. Their money
 asks are the exception (N9c1, SUB-020): asking for a plan and saying its money was sent tell the Owner and their coach.
+Since N9c5, while a trainee's Max plan grants the house coaches them as a coach's client (CLI-026): that is read from
+the house's plans on each request (`HouseTierReader`, `HouseTierRule.CoachesTheTrainee`), never by clearing the mark,
+which four triggers and the asks keep, so the trainee is their own coach again the day Max stops granting with nothing
+written. Their Health step opens only then (CLI-028).
 
 ## Consequences
 
@@ -81,6 +85,8 @@ asks are the exception (N9c1, SUB-020): asking for a plan and saying its money w
   triggers and composed in Infrastructure with the Pro+ pass read from the commercial records; Start makes the same
   snapshot as Assign program. A trainee's own max (STR-021) is the Strength module's, behind the same pass. In the
   house a program's sessions follow the plan it sits under, since Free opens Training beside every plan.
+  N9c5 adds Max's places to the settings (empty keeps Max closed) and their rule (SUB-021) to the Subscriptions module,
+  kept by `HousePlanAskService` under a house-wide lock of its own; no migration.
 
 ## Migration and recovery
 

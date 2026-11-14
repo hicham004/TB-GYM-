@@ -384,6 +384,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 new N9a1HouseSetting("FreeProgressDays", null, 0, null, null, null),
                 new N9a1HouseSetting("MediaStorageGigabytes", null, 0, null, null, null),
                 new N9a1HouseSetting("WhishNumber", null, 0, null, null, null),
+                new N9a1HouseSetting("MaxPlaces", null, 0, null, null, null),
             },
             empty.Settings);
         Assert.AreEqual("Closed", empty.SignUp!.Status);
@@ -458,6 +459,7 @@ public sealed partial class Phase3TrainingWorkflowTests
                 new N9a1HouseSetting("FreeProgressDays", null, 0, null, null, null),
                 new N9a1HouseSetting("MediaStorageGigabytes", null, 0, null, null, null),
                 new N9a1HouseSetting("WhishNumber", null, 0, null, null, null),
+                new N9a1HouseSetting("MaxPlaces", null, 0, null, null, null),
             },
             (await N9a1HouseReadAsync(rami)).Settings);
     }
@@ -1456,8 +1458,9 @@ public sealed partial class Phase3TrainingWorkflowTests
         var twentyThreeToday = houseToday.AddYears(-23);
         var born = new DateOnly(1991, 8, 23);
 
-        // A day short of 23 on the house's day: refused in the house's own words, and nothing changes. Every save
-        // here carries health details too, in words found nowhere else, for the log's check at the end.
+        // A day short of 23 on the house's day: refused in the house's own words, and nothing changes. Every refused
+        // save here carries health details too, in words found nowhere else, for the log's check at the end: the
+        // house's age is weighed before the Health step (CLI-028), so each stays the form's 400.
         var self = await RequiredJsonAsync<N9a1Self>(await trainee.Client.GetAsync("/api/client-profile/me"));
         var young = await N9a1SaveIntakeAsync(trainee.Client, "/api/client-profile/me/intake", twentyThreeToday.AddDays(1), self.Version, N9a1HealthMarkers);
         await AssertStatusAsync(young, HttpStatusCode.BadRequest);
@@ -1478,13 +1481,14 @@ public sealed partial class Phase3TrainingWorkflowTests
         var nothingKept = await RequiredJsonAsync<N9a1Health>(await trainee.Client.GetAsync("/api/client-profile/me"));
         Assert.AreEqual(new N9a1Health(null, null, null), nothingKept, "A refused save keeps none of what it carried.");
 
-        // 23 today, the birthday itself: accepted, with the health details it carried.
+        // 23 today, the birthday itself: accepted. Off Max a trainee's Health step is closed (CLI-028, notes plan
+        // N9c5), so this save carries no health details; N9c5H's tests weigh those.
         await AssertStatusAsync(
-            await N9a1SaveIntakeAsync(trainee.Client, "/api/client-profile/me/intake", twentyThreeToday, self.Version, N9a1HealthMarkers),
+            await N9a1SaveIntakeAsync(trainee.Client, "/api/client-profile/me/intake", twentyThreeToday, self.Version),
             HttpStatusCode.OK);
         var saved = await RequiredJsonAsync<N9a1Self>(await trainee.Client.GetAsync("/api/client-profile/me"));
         Assert.AreEqual((DateOnly?)twentyThreeToday, saved.BirthDate);
-        Assert.AreEqual(N9a1HealthMarkers, await RequiredJsonAsync<N9a1Health>(await trainee.Client.GetAsync("/api/client-profile/me")));
+        Assert.AreEqual(new N9a1Health(null, null, null), await RequiredJsonAsync<N9a1Health>(await trainee.Client.GetAsync("/api/client-profile/me")));
 
         // The admin raises the age to 27. The date the trainee already has is kept as it is when they save again;
         // a new date is weighed against the new age.
@@ -1521,8 +1525,8 @@ public sealed partial class Phase3TrainingWorkflowTests
             Assert.AreEqual((DateOnly?)houseToday.AddYears(-20), now.BirthDate, where);
         }
 
-        // The health details the trainee sent were kept on the profile and in no log line: neither the save that was
-        // accepted nor the three refused for the age wrote an allergy, a medication or an injury where an operator reads.
+        // The health details the trainee sent reached no log line: none of the three saves refused for the age wrote an
+        // allergy, a medication or an injury where an operator reads.
         var logged = RequiredEveryLogLine.Text;
         foreach (var marker in new[] { N9a1HealthMarkers.Allergies!, N9a1HealthMarkers.Medications!, N9a1HealthMarkers.PreviousInjuries! })
         {

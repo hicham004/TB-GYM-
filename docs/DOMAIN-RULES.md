@@ -152,11 +152,13 @@ starts a thread only with their own clients.
 client invitations waiting for a coach in one transaction and deletes nothing (C8; notes plan N9d1b): each
 client's coach becomes empty with a waiting entry in the coach history, each invitation names no coach, and a
 client who accepts one later lands waiting. Clients the owner holds from a departure before 14 Nov 2026 stay
-the owner's. Each of those clients with access, a self-directed trainee aside (CLI-026), is told in-app and by
+the owner's. Each of those clients with access, a self-directed trainee aside unless Max coaches them that day
+(CLI-026), is told in-app and by
 one email that the coaching space will give them a new coach, naming nobody. When a coach resigns, the owner
 is told in-app, naming nobody, that their clients wait for a coach. Every reassignment that changes a client's
 coach, the owner taking them included, tells the client in-app that they have a new coach, naming nobody, and a
-self-directed trainee that someone else on the team can now see their training (CLI-026); each is said only while
+self-directed trainee whom Max does not coach that day that someone else on the team can now see their training
+(CLI-026); each is said only while
 no later change has followed it. While a client waits, their Ask
 to renew tells the owner (SUB-014). The owner cannot resign.
 
@@ -192,7 +194,8 @@ signals are not read, so Week not shared, No program and Weights to apply are ne
 keeps its count without the check-in it would open, and missed sessions keep their count without the day of the last
 workout; the plan, payment and renewal kinds and the counts of check-ins
 waiting and of missed sessions stay, and the status follows from those. The rule itself is unchanged. A self-directed trainee of the house (v9, CLI-026) raises
-none of the kinds below, whatever their signals; their status is their plan's own. Each signal is read only while the client's
+none of the kinds below, whatever their signals, unless Max coaches them that day, when they raise them as any client
+does without the plan and renewal kinds (notes plan N9c5); their status is their plan's own. Each signal is read only while the client's
 plan includes its feature, decided by the shared access service, so a lapsed plan's training or
 check-ins never appear; a weigh-in follows Progress and needs only an unblocked relationship. Ranked
 most urgent first: a submitted check-in not reviewed (several rank by the oldest and also name the newest,
@@ -275,7 +278,7 @@ to run, once that coaching plan is too old to list. Ending a client's coaching
 sessions left Today; a client's page keeps its week. **Waiting for a coach** (notes plan N9d1b): for the owner
 alone, each current client with no coach (CLI-012), the longest waiting first, then by name, with when the wait
 began, who coached them before and the client's version the reassignment asks for; never a former client or a
-self-directed trainee (CLI-026), and a Coach's Today carries none. A waiting client is in no member of staff's
+self-directed trainee whom Max does not coach that day (CLI-026), and a Coach's Today carries none. A waiting client is in no member of staff's
 count on This month's team.
 
 **CLI-021** Coach certificate lines (decision 7, 5 Nov 2026; notes plan N4a, ADR 0039). TB Gym's record of what a
@@ -321,7 +324,9 @@ sign-ups a week (0 to 10,000; empty or 0 keeps sign-up closed) and the age that 
 trainee's Progress reaches (1 to 3,650 days; empty means no limit, PRG-015) and the house's media storage (1 to
 10,240 whole gigabytes; empty leaves the platform's allowance, MED-019). Since notes plan N9c1: the Whish number a
 trainee sends a paid plan's money to (6 to 20 digits, an optional + in front and single spaces between groups, 40
-characters at most; empty keeps asks for a paid plan closed, SUB-020). Sign-up reads its own two alone. The rows
+characters at most; empty keeps asks for a paid plan closed, SUB-020). Since notes plan N9c5: Max's places, how many
+trainees Max coaches at a time, the trainer partner's hours (0 to 1,000; empty or 0 keeps Max closed, SUB-021).
+Sign-up reads its own two alone. The rows
 are the house's alone: a trigger refuses one for any other workspace.
 
 **CLI-024** Trainee sign-up v1 (`TraineeSignUp`; decisions 24, 25 and 34). `POST /api/auth/register/trainee` is
@@ -374,6 +379,16 @@ to the house's Owner and their coach (SUB-020); a coach's Ask to renew is never 
 sees every one, and the Coach those whose record names them (CLI-013), which is every trainee confirmed after the
 Coach joined the house's team (decision 33; the Coach therefore joins before sign-up is opened). The trainee's own
 profile read says so too, so their screens name the coaching space, not a coach.
+While a trainee's Max plan grants (SUB-019's tier, SUB-021; notes plan N9c5, the owner's word of 11 Nov 2026: Max is
+TB Gym coaching them) the house coaches them as a coach's client is coached, read on the server each time from the
+house's day and never stored: Coach attention v9 reads them as any client (without the plan lines: a house plan is
+renewed by its own ask and never chased on Today), Today's activity feed shows them to their coach, a Max trainee with
+no coach is on the Owner's waiting list (CLI-020), their workout notes reach their coach, a departing coach's leaving
+tells them (CLI-014), a reassignment tells them "You have a new coach", and leaving the house or closing their account
+tells the Owner and their coach (CLI-015, CLI-027). The day Max stops granting (it ended, or is paused, cancelled or
+unpaid) they are their own coach again, with nothing written. The mark itself never changes: on Max they are still
+the house's trainee (the pool, workouts of their own, the programs page, the house's asks, a session started early in
+its week), and their own profile read says `coachedByTheHouse` beside `selfDirected`.
 
 **CLI-027** Closing an account (notes plan N9e; `AccountClosure`). A client closes their own TB Gym account from Me,
 or from Password and security once they have no coaching space left (`POST /api/auth/account/close`, their password
@@ -395,6 +410,15 @@ records, maxes, check-ins, messages, notes, weigh-ins and every append-only hist
 A closed account takes nothing new: the database refuses, at commit, an active membership, a client record or an
 upload for it, so a join, an invitation's acceptance or an upload under way when it closed cannot put the person back.
 How long each kind is kept is the lawyer's list (not built).
+
+**CLI-028** The Health step opens only on Max (decision 33; notes plan N9c5). A house trainee's intake may add or
+change their allergies, medications or previous injuries only while their Max plan grants (CLI-026); otherwise a
+save that adds or changes one is refused before anything changes (409 `health_step_closed`), on the trainee's own
+intake and onboarding routes and on the staff's, while an answer kept as it is, an answer emptied and every other
+field save as before. Answers saved on Max are kept when it ends, read by the trainee and by the coach who coaches
+them, never by an Owner who does not (CLI-013). A coach's client is never affected. The trainee's own profile read and
+the staff's read of a client say `healthStepOpen`, so the screens leave the step out. The health consent is not asked
+on Max (ADR 0041; the lawyer's question).
 
 ## 3. Products, enrollments, payments, programs, and access
 
@@ -598,7 +622,7 @@ off). A self-directed trainee (CLI-026) reads the house's Pro+ plans on sale (`G
 priced above nothing, with the name, words, price, currency and length the house's staff typed in Plans you sell,
 the house's Whish number, and every ask of theirs), asks for one (`POST /api/house-plans/me/asks`), and then says
 they sent its money by Whish, from a name and number they type (`.../asks/{askId}/money-sent`, once an ask). Max
-is not asked for until its places exist (notes plan N9c5). While the house's Whish number (CLI-023) is empty, or the
+is asked for the same way while its places are filled, and keeps to them (SUB-021). While the house's Whish number (CLI-023) is empty, or the
 trainee is blocked, the read offers nothing and an ask is refused (409 `house_plan_asks_closed`, `client_blocked`).
 An ask books nothing: Free runs on, no paid day passes, and nothing a trainee taps ends, locks or shortens what they
 have. One ask is open at a time: the same option asked again answers the open ask; any other option, of that plan or
@@ -617,6 +641,25 @@ raises no plan notice to the trainee. The staff may instead close an ask with a 
 name the trainee's own plan of the option asked for and a receipt of its whole price; the Whish details are erased
 when the account closes (CLI-027). One paid plan of the house at a time: an exclusion constraint keeps a trainee's
 Pro+ and Max rows that are not cancelled apart, Free underneath.
+
+**SUB-021** Max's places (notes plan N9c5; decision 30 and the owner's word of 11 Nov 2026: Max is the trainer
+partner's hours; 12 Nov 2026: built switched off). Max opens only while CLI-023's Max places are filled and above
+zero; until then the house's read offers no Max and an ask for it is refused (409 `house_plan_not_on_sale`), and a
+Max ask already stored cannot be booked or paid (409 `house_max_closed`). Max places v1 (`MaxPlaces` 1.0): a place is
+held from the booking, by each trainee with a Max plan of the house that is not cancelled and ends after the house's
+today (running, paused or booked to start later), and a trainee holding one keeps it for their next pass; an ask holds
+none until its trainee says its money was sent, which they may only while its place is open: from then the place is
+theirs until the ask is booked or closed, so neither a later booking nor the end of their running pass takes it. While
+every place is taken an ask for Max is still stored, and the other open Max asks stand in line in the order they were
+asked; an ask's place is open when its trainee holds one or its turn is within the places free. The trainee's read says, for each Max option and each Max ask, whether a place is open; the staff's
+read says each waiting ask's turn. "Money sent" on a Max ask is refused while its place is not open (409
+`house_max_place_not_open`), so nobody pays for a place that is not there. A booking of Max takes a house-wide lock
+after the trainee's row lock and is refused when the trainee holds no place and none is free (409 `house_max_full`);
+the turn is not enforced there, since an ask whose money was not said sent holds no place. A Max plan is made only by booking an ask: the
+staff's ordinary routes refuse to book or renew one (409 `house_max_by_ask`), and its options cover Training,
+Nutrition, Check-ins and Messaging, all four (the row's rule: what a coach's client gets). Fewer places never end a
+running plan; they only refuse new bookings until enough end. What a month of Max holds is the partners' words, typed
+on the offer.
 
 ### Session packs (1-on-1 sessions, critique B10b, ADR 0038)
 

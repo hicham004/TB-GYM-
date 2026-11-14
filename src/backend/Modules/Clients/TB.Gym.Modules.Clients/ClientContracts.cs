@@ -127,7 +127,8 @@ public sealed record CoachClientDetails(
     Guid? AssignedCoachUserId,
     string AssignedCoachName,
     ClientReleaseView? Release = null,
-    bool MayCoach = true);
+    bool MayCoach = true,
+    bool HealthStepOpen = true);
 
 /// <summary>
 /// When, why and by whom a client's relationship ended: released by the owner or left by the client.
@@ -168,8 +169,18 @@ public sealed record OwnCoachView(string Name, bool FoundingCoach, IReadOnlyList
 public sealed record OwnCoachLineView(string Text, string What, DateOnly ShownOn);
 
 /// <param name="SelfDirected">
-/// The person signed up into the house and trains as their own coach (CLI-026): their screens name the coaching
-/// space, not a coach.
+/// The person signed up into the house (CLI-026): the house's own screens are theirs (the exercise pool, workouts of
+/// their own, the programs page), and while <paramref name="CoachedByTheHouse"/> is false they train as their own
+/// coach, so their screens name the coaching space, not a coach.
+/// </param>
+/// <param name="CoachedByTheHouse">
+/// A self-directed trainee whose Max plan grants today (CLI-026, SUB-021): the house coaches them as a coach's client
+/// is coached, their coach card and Messages included; false again the day Max stops granting. Always false for
+/// anyone else.
+/// </param>
+/// <param name="HealthStepOpen">
+/// Whether the intake's health answers may be added or changed (CLI-028): always for a coach's client, and for a house
+/// trainee only while Max grants. Answers already saved are kept and read either way.
 /// </param>
 public sealed record ClientSelfProfile(
     Guid Id,
@@ -193,7 +204,9 @@ public sealed record ClientSelfProfile(
     ClientOnboardingStatus OnboardingStatus,
     DateTimeOffset? OnboardingCompletedAtUtc,
     uint Version,
-    bool SelfDirected = false);
+    bool SelfDirected = false,
+    bool CoachedByTheHouse = false,
+    bool HealthStepOpen = true);
 
 public sealed record UpdateClientIntakeRequest(
     string FirstName,
@@ -288,6 +301,12 @@ public enum ClientCommandStatus
     NotFound = 2,
     Invalid = 3,
     Conflict = 4,
+
+    /// <summary>
+    /// An intake added or changed a health answer while the Health step is closed (CLI-028); nothing was saved. The API
+    /// answers 409 <c>health_step_closed</c>.
+    /// </summary>
+    HealthStepClosed = 5,
 }
 
 public enum BodyweightUnit

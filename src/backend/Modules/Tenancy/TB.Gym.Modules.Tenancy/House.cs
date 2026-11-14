@@ -70,6 +70,12 @@ public enum HouseSetting
     /// trainee pays before the company's Whish account exists (notes plan N9c1, decisions 3 and 13).
     /// </summary>
     WhishNumber = 5,
+
+    /// <summary>
+    /// How many trainees Max coaches at a time (SUB-021), the trainer partner's hours. Empty or zero keeps Max closed
+    /// (notes plan N9c5: built switched off); a booked Max plan holds a place until it ends.
+    /// </summary>
+    MaxPlaces = 6,
 }
 
 /// <summary>What a setting's typed value comes to: the stored form, or why it is refused.</summary>
@@ -126,6 +132,12 @@ public static class HouseSettingRule
     public const string WhishNumberRefusal =
         "Enter the Whish number trainees send money to: 6 to 20 digits, with a + in front if you like and spaces between groups. Or leave it empty, which keeps asks for a paid plan closed.";
 
+    /// <summary>A thousand trainees at a time: past it the figure is a typing slip, not a coach's hours.</summary>
+    public const int MaximumMaxPlaces = 1_000;
+
+    public const string MaxPlacesRefusal =
+        "Enter a whole number of places from 0 to 1,000, or leave it empty. Empty or 0 keeps Max closed.";
+
     public const string UnknownSettingRefusal = "Choose one of the house's settings.";
 
     /// <summary>The value as it is stored: trimmed, empty as none, a number without leading zeros.</summary>
@@ -150,6 +162,7 @@ public static class HouseSettingRule
             HouseSetting.MediaStorageGigabytes =>
                 WholeNumber(text, 1, MaximumMediaStorageGigabytes, MediaStorageGigabytesRefusal),
             HouseSetting.WhishNumber => WhishNumber(text),
+            HouseSetting.MaxPlaces => WholeNumber(text, 0, MaximumMaxPlaces, MaxPlacesRefusal),
             _ => HouseSettingValue.Refused(UnknownSettingRefusal),
         };
     }
@@ -207,7 +220,8 @@ public sealed record HouseSettings(
     int? MinimumSignUpAge,
     int? FreeProgressDays = null,
     int? MediaStorageGigabytes = null,
-    string? WhishNumber = null)
+    string? WhishNumber = null,
+    int? MaxPlaces = null)
 {
     public static HouseSettings Empty { get; } = new(null, null);
 
@@ -223,7 +237,8 @@ public sealed record HouseSettings(
             HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MinimumSignUpAge)),
             HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.FreeProgressDays)),
             HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MediaStorageGigabytes)),
-            values.GetValueOrDefault(HouseSetting.WhishNumber));
+            values.GetValueOrDefault(HouseSetting.WhishNumber),
+            HouseSettingRule.Number(values.GetValueOrDefault(HouseSetting.MaxPlaces)));
     }
 }
 

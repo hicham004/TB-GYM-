@@ -462,7 +462,11 @@ Asking for one of the house's plans (SUB-020, notes plan N9c1) is the Subscripti
 `HousePlanAskService` in Infrastructure composes them with the house's mark and Whish number (Tenancy), the trainee's
 `CurrentFor` profile (Clients) and the staff notices (Notifications); every write takes the trainee's profile row lock
 first, and a booking writes the enrollment, its receipt and the outcome in one transaction, never through the
-two-step staff routes. The account closing erases the Whish details through the same DbContext.
+two-step staff routes. The account closing erases the Whish details through the same DbContext. Max's places
+(SUB-021, notes plan N9c5) are the Subscriptions module's rule (`MaxPlacesRule`) fed by the same service from the
+house's setting and the commercial records; a Max booking takes a house-wide advisory lock after the trainee's row
+lock. Whether the house coaches a trainee today (CLI-026, a Max plan granting) is `HouseTierReader`'s answer, one
+tagged query for a whole Coach Today scope, and the Clients module sees only the resulting flag.
 
 The house's programs for trainees (TRN-034, notes plan N9c3) are the Training module's: its records (`HouseProgramListing`,
 the staff's entry for a published program; `HouseProgramStart`, append-only, a trainee's start), its rule
@@ -2362,7 +2366,8 @@ A third queue, `tenancy."NoticeMailRequests"` (ADR 0027), carries plain workspac
 access to a workspace has ended" to a released client, and "your coach has changed" to each client of
 a coach who resigned or was removed. The in-app side of those events uses the notification outbox as
 in-app-only intents (`CoachDeparted`, `ClientLeft`, `CoachResigned` to the owner, `CoachAssigned` to a client the
-owner gives a coach and `TraineeStaffChanged` to a self-directed trainee whose record goes to someone else on the
+owner gives a coach (and, since notes plan N9c5, to a self-directed trainee whom Max coaches that day) and
+`TraineeStaffChanged` to any other self-directed trainee whose record goes to someone else on the
 team, notes plan N9d1b). The notice queue is tenant-owned like the
 invitation queue and shares its claim, attempt, retry and dead-letter lifecycle, but mints no token
 and carries no link. Its recipient is a membership row, current or former, and eligibility is the

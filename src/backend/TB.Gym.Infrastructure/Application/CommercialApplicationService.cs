@@ -835,6 +835,12 @@ internal sealed partial class CommercialApplicationService(
             return HouseFreePlanConflict();
         }
 
+        // Max is booked from the trainee's ask alone, where its places are counted under the house's lock (SUB-021).
+        if (product.HouseTier == HouseTier.Max)
+        {
+            return Conflict(HousePlanAskCodes.MaxByAsk, MaxPlanRule.ByAskRefusal);
+        }
+
         if (!product.IsActive || !offer.IsActive)
         {
             return Invalid("offerId", "Only an active product and offer can be assigned.");
@@ -1024,6 +1030,13 @@ internal sealed partial class CommercialApplicationService(
         if (request.Features.Count != request.Features.Select(item => item.Feature).Distinct().Count())
         {
             throw new ArgumentException("Each coaching feature may appear only once.", nameof(request));
+        }
+
+        // Max is TB Gym coaching the trainee: every option covers the four things a coach's client gets (notes plan N9c5).
+        if (product.HouseTier == HouseTier.Max &&
+            !MaxPlanRule.CoversItsFour(request.Features.Select(item => item.Feature)))
+        {
+            throw new ArgumentException(MaxPlanRule.FeaturesRefusal, nameof(request));
         }
 
         var isPack = product.Kind == ProductKind.SessionPack;

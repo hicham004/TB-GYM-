@@ -4,18 +4,20 @@ using Npgsql;
 using TB.Gym.Infrastructure.Persistence;
 using TB.Gym.Modules.Clients;
 using TB.Gym.Modules.Subscriptions;
+using TB.Gym.Modules.Tenancy;
 using TB.Gym.SharedKernel;
 
 namespace TB.Gym.Infrastructure.Application;
 
 /// <summary>
 /// The house's asks for a paid plan (SUB-020, notes plan N9c1). A trainee asks for one of the house's Pro+ plans on
-/// sale, which books nothing, then says the money was sent by Whish; each tells the house's Owner and the trainee's
-/// coach in-app, in the same transaction. Once the money is there, one staff step books the plan from the house's
-/// day, or from the day the paid plan still running ends, and records its receipt, the exact price only, in one
-/// transaction under the staff's idempotency key. Every write of one trainee's asks takes the trainee's record's row
-/// lock first, so two taps, two staff or a tap and a booking are told apart one after the other. Asks are closed while
-/// the house's Whish number is empty (switched off, 12 Nov 2026).
+/// sale, or Max while its places are open (SUB-021, notes plan N9c5), which books nothing, then says the money was sent
+/// by Whish; each tells the house's Owner and the trainee's coach in-app, in the same transaction. Once the money is
+/// there, one staff step books the plan from the house's day, or from the day the paid plan still running ends, and
+/// records its receipt, the exact price only, in one transaction under the staff's idempotency key. Every write of one
+/// trainee's asks takes the trainee's record's row lock first, so two taps, two staff or a tap and a booking are told
+/// apart one after the other; a Max booking or "I've paid" then takes the house's Max lock, so two of them never both
+/// count the last place as theirs. Asks are closed while the house's Whish number is empty (switched off, 12 Nov 2026).
 /// </summary>
 internal sealed class HousePlanAskService(
     GymDbContext dbContext,
@@ -25,6 +27,13 @@ internal sealed class HousePlanAskService(
     ILogger<HousePlanAskService> logger)
     : IHousePlanAskService
 {
+    /// <summary>
+    /// The house's Max places, one lock for the whole house ("TBMAXPL1"). Every holder takes it last, after the trainee's
+    /// record's row lock, and takes no row lock under it, so it never closes a cycle; it is never the sign-up's key,
+    /// which Free's renewal takes before a trainee's record.
+    /// </summary>
+    internal const long MaxPlacesLockKey = 0x5442_4D41_5850_4C31L;
+
     private static readonly Action<ILogger, Guid, Exception?> LogAsked = LoggerMessage.Define<Guid>(
         LogLevel.Information,
         new EventId(6416, "HousePlanAsked"),
@@ -59,14 +68,25 @@ internal sealed class HousePlanAskService(
             return null;
         }
 
-        var whishNumber = await WhishNumberAsync(cancellationToken);
-        var open = whishNumber is not null && !trainee.IsCoachBlocked;
+        var settings = await HouseReader.SettingsAsync(dbContext, tenantContext.TenantId, cancellationToken);
+        var open = settings.WhishNumber is not null && !trainee.IsCoachBlocked;
+        var plans = open ? await AskablePlansAsync(settings, cancellationToken) : [];
+        MaxPlaces? places = null;
+        if (plans.Any(plan => plan.Tier == HouseTier.Max))
+        {
+            // Whether an ask of theirs would have a place now: the trainee reads that alone, never a count.
+            var read = await MaxPlacesAsync(settings.MaxPlaces, calendar.Today, cancellationToken);
+            places = read;
+            plans = [.. plans.Select(plan =>
+                plan.Tier == HouseTier.Max ? plan with { PlaceOpen = read.WouldHaveAPlace(trainee.Id) } : plan)];
+        }
+
         return new HousePlansView(
             calendar.Today,
             open,
-            open ? whishNumber : null,
-            open ? await AskablePlansAsync(cancellationToken) : [],
-            await AskViewsAsync(trainee.Id, askId: null, forStaff: false, cancellationToken));
+            open ? settings.WhishNumber : null,
+            plans,
+            await AskViewsAsync(trainee.Id, askId: null, forStaff: false, cancellationToken, places));
     }
 
     public async Task<HousePlanAskResult> AskAsync(AskForHousePlanRequest request, CancellationToken cancellationToken)
@@ -112,7 +132,8 @@ internal sealed class HousePlanAskService(
                     "TB Gym's coaching space has paused your access, so a plan can't be asked for now."), null);
             }
 
-            if (await WhishNumberAsync(cancellationToken) is null)
+            var settings = await HouseReader.SettingsAsync(dbContext, tenantId, cancellationToken);
+            if (settings.WhishNumber is null)
             {
                 return (Conflict(
                     HousePlanAskCodes.AsksClosed,
@@ -125,7 +146,9 @@ internal sealed class HousePlanAskService(
                 ? null
                 : await dbContext.CoachingProducts.AsNoTracking()
                     .SingleOrDefaultAsync(item => item.Id == offer.ProductId, cancellationToken);
-            if (offer is null || product is null || !HousePlanAskRule.IsAskable(product, offer))
+            // Max is asked for while its places are open, even when every place is taken: an ask holds none (SUB-021).
+            var maxOpen = MaxPlacesRule.IsOpen(settings.MaxPlaces);
+            if (offer is null || product is null || !HousePlanAskRule.IsAskable(product, offer, maxOpen))
             {
                 return (Conflict(HousePlanAskCodes.NotOnSale, HousePlanAskRule.NotOnSaleMessage), null);
             }
@@ -151,7 +174,7 @@ internal sealed class HousePlanAskService(
             }
 
             var now = clock.UtcNow;
-            var ask = HousePlanAsk.Create(tenantId, trainee.Id, product, offer, userId, calendar.Today, now);
+            var ask = HousePlanAsk.Create(tenantId, trainee.Id, product, offer, userId, calendar.Today, now, maxOpen);
             dbContext.HousePlanAsks.Add(ask);
             WorkspaceRelationshipNotices.HousePlanAsked(
                 dbContext,
@@ -246,6 +269,26 @@ internal sealed class HousePlanAskService(
                 return Conflict(
                     HousePlanAskCodes.MoneyAlreadySent,
                     "You already said you sent this money, from other Whish details. TB Gym looks for it with the details you gave first.");
+            }
+
+            // Max (SUB-021): money is sent only for an ask whose place is open, counted under the house's Max lock so
+            // two trainees are never both told the last place is theirs.
+            if (ask.Tier == HouseTier.Max)
+            {
+                await LockMaxPlacesAsync(cancellationToken);
+                var places = await MaxPlacesAsync(
+                    (await HouseReader.SettingsAsync(dbContext, tenantId, cancellationToken)).MaxPlaces,
+                    calendar.Today,
+                    cancellationToken);
+                if (!places.IsOpen)
+                {
+                    return Conflict(HousePlanAskCodes.MaxClosed, MaxPlacesRule.ClosedForTraineeMessage);
+                }
+
+                if (places.PlaceOf(ask.Id) is not { PlaceOpen: true })
+                {
+                    return Conflict(HousePlanAskCodes.MaxPlaceNotOpen, MaxPlacesRule.PlaceNotOpenMessage);
+                }
             }
 
             var now = clock.UtcNow;
@@ -393,6 +436,27 @@ internal sealed class HousePlanAskService(
                     return Invalid(
                         "amount",
                         $"Record the plan's exact price, {HousePlanAskRule.Money(offer.PriceAmount, offer.PriceCurrency)}. A part books nothing: wait for the rest, or close the ask.");
+                }
+
+                // Max (SUB-021): the booking takes a place, counted under the house's Max lock with the places in force
+                // now. A trainee holding one keeps it for their next pass; the line's order is told to the staff, not
+                // enforced here, since an unpaid earlier ask holds no place.
+                if (ask.Tier == HouseTier.Max)
+                {
+                    await LockMaxPlacesAsync(cancellationToken);
+                    var places = await MaxPlacesAsync(
+                        (await HouseReader.SettingsAsync(dbContext, tenantId, cancellationToken)).MaxPlaces,
+                        calendar.Today,
+                        cancellationToken);
+                    if (!places.IsOpen)
+                    {
+                        return Conflict(HousePlanAskCodes.MaxClosed, MaxPlacesRule.ClosedForStaffMessage);
+                    }
+
+                    if (!places.MayBook(clientProfileId))
+                    {
+                        return Conflict(HousePlanAskCodes.MaxFull, MaxPlacesRule.FullMessage);
+                    }
                 }
 
                 // The plans the new one cannot run beside, as the database weighs them: the trainee's other Pro+ or Max
@@ -587,9 +651,6 @@ internal sealed class HousePlanAskService(
         return profile is { IsSelfDirected: true } ? profile : null;
     }
 
-    private async Task<string?> WhishNumberAsync(CancellationToken cancellationToken) =>
-        (await HouseReader.SettingsAsync(dbContext, tenantContext.TenantId, cancellationToken)).WhishNumber;
-
     /// <summary>The trainee's ask still open, if any: one with no outcome. At most one at a time (SUB-020).</summary>
     private Task<HousePlanAsk?> OpenAskAsync(Guid clientProfileId, CancellationToken cancellationToken) =>
         dbContext.HousePlanAsks.AsNoTracking()
@@ -609,11 +670,64 @@ internal sealed class HousePlanAskService(
         return new[] { owner, trainee.AssignedCoachUserId }.OfType<Guid>().Distinct().ToArray();
     }
 
-    /// <summary>The house's Pro+ plans a trainee may ask for, each option on sale, by plan name, length and price.</summary>
-    private async Task<IReadOnlyList<HousePlanOfferView>> AskablePlansAsync(CancellationToken cancellationToken)
+    /// <summary>Takes the house's Max lock for the rest of the transaction (see <see cref="MaxPlacesLockKey"/>).</summary>
+    private async Task LockMaxPlacesAsync(CancellationToken cancellationToken) =>
+        await dbContext.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock({MaxPlacesLockKey}) /* house-max-places */",
+            cancellationToken);
+
+    /// <summary>
+    /// Max's places on the house's day (SUB-021): the house's Max plans not cancelled and still to end, and the open
+    /// asks for Max of its current trainees in the order asked, ordered by the database (time asked, then id) since
+    /// PostgreSQL and .NET order ids differently. A trainee who left keeps no ask in the line: theirs can be neither
+    /// booked nor closed.
+    /// </summary>
+    private async Task<MaxPlaces> MaxPlacesAsync(int? places, DateOnly today, CancellationToken cancellationToken)
     {
+        var plans = await dbContext.ClientEnrollments.AsNoTracking()
+            .Where(item =>
+                item.HouseTier == HouseTier.Max &&
+                item.Status != EnrollmentStatus.Cancelled &&
+                item.EndDateExclusive > today)
+            .Select(item => new MaxPlacePlan(item.ClientProfileId, item.Status, item.EndDateExclusive))
+            .ToListAsync(cancellationToken);
+        var line = await dbContext.HousePlanAsks.AsNoTracking()
+            .Where(ask =>
+                ask.Tier == HouseTier.Max &&
+                !dbContext.HousePlanAskOutcomes.Any(outcome => outcome.AskId == ask.Id) &&
+                dbContext.ClientProfiles.Any(profile => profile.Id == ask.ClientProfileId && profile.ReleasedAtUtc == null))
+            .OrderBy(ask => ask.AskedAtUtc)
+            .ThenBy(ask => ask.Id)
+            .Select(ask => new MaxPlaceAsk(
+                ask.Id,
+                ask.ClientProfileId,
+                dbContext.HousePlanTransfers.Any(transfer => transfer.AskId == ask.Id)))
+            .ToListAsync(cancellationToken);
+        return MaxPlacesRule.On(places, plans, line, today);
+    }
+
+    /// <summary>Max's places as they stand now, on the house's day with its setting in force.</summary>
+    private async Task<MaxPlaces> CurrentMaxPlacesAsync(CancellationToken cancellationToken)
+    {
+        var tenantId = tenantContext.TenantId;
+        var calendar = await WorkspaceCalendarReader.ReadAsync(dbContext, clock, tenantId, cancellationToken);
+        var settings = await HouseReader.SettingsAsync(dbContext, tenantId, cancellationToken);
+        return await MaxPlacesAsync(settings.MaxPlaces, calendar.Today, cancellationToken);
+    }
+
+    /// <summary>
+    /// The house's paid plans a trainee may ask for, each option on sale, by plan name, length and price: Pro+, and
+    /// Max while it is open (SUB-021).
+    /// </summary>
+    private async Task<IReadOnlyList<HousePlanOfferView>> AskablePlansAsync(
+        HouseSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var maxOpen = MaxPlacesRule.IsOpen(settings.MaxPlaces);
         var products = await dbContext.CoachingProducts.AsNoTracking()
-            .Where(product => product.HouseTier == HouseTier.ProPlus && product.IsActive)
+            .Where(product =>
+                (product.HouseTier == HouseTier.ProPlus || (maxOpen && product.HouseTier == HouseTier.Max)) &&
+                product.IsActive)
             .ToListAsync(cancellationToken);
         var productIds = products.Select(product => product.Id).ToArray();
         var offers = await dbContext.ProductOffers.AsNoTracking()
@@ -622,7 +736,7 @@ internal sealed class HousePlanAskService(
             .ToListAsync(cancellationToken);
         var byId = products.ToDictionary(product => product.Id);
         return offers
-            .Where(offer => HousePlanAskRule.IsAskable(byId[offer.ProductId], offer))
+            .Where(offer => HousePlanAskRule.IsAskable(byId[offer.ProductId], offer, maxOpen))
             .Select(offer => (Offer: offer, Product: byId[offer.ProductId]))
             .OrderBy(item => item.Product.Name, StringComparer.CurrentCulture)
             .ThenBy(item => item.Offer.DurationUnit == OfferDurationUnit.Week ? item.Offer.DurationCount * 7 : item.Offer.DurationCount)
@@ -643,12 +757,17 @@ internal sealed class HousePlanAskService(
             .ToArray();
     }
 
-    /// <summary>A trainee's asks, newest first, or the one named; who decided is named for the staff alone.</summary>
+    /// <summary>
+    /// A trainee's asks, newest first, or the one named; who decided, and an open ask for Max's place in the line, are
+    /// named for the staff alone. Max's places are read only for an open ask for Max, unless <paramref name="places"/>
+    /// were read already.
+    /// </summary>
     private async Task<IReadOnlyList<HousePlanAskView>> AskViewsAsync(
         Guid clientProfileId,
         Guid? askId,
         bool forStaff,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MaxPlaces? places = null)
     {
         var asks = await dbContext.HousePlanAsks.AsNoTracking()
             .Where(ask => ask.ClientProfileId == clientProfileId && (askId == null || ask.Id == askId))
@@ -689,6 +808,10 @@ internal sealed class HousePlanAskService(
                 .Where(user => deciderIds.Contains(user.Id))
                 .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken)
             : [];
+        if (places is null && asks.Any(ask => ask.Tier == HouseTier.Max && !outcomes.ContainsKey(ask.Id)))
+        {
+            places = await CurrentMaxPlacesAsync(cancellationToken);
+        }
 
         return asks.Select(ask =>
         {
@@ -696,6 +819,8 @@ internal sealed class HousePlanAskService(
             var transfer = transfers.GetValueOrDefault(ask.Id);
             var outcome = outcomes.GetValueOrDefault(ask.Id);
             var plan = outcome?.EnrollmentId is { } enrollmentId ? plans.GetValueOrDefault(enrollmentId) : null;
+            var openForMax = ask.Tier == HouseTier.Max && outcome is null;
+            var place = openForMax ? places?.PlaceOf(ask.Id) : null;
             return new HousePlanAskView(
                 ask.Id,
                 ask.OfferId,
@@ -718,7 +843,9 @@ internal sealed class HousePlanAskService(
                         outcome.EnrollmentId,
                         plan?.StartDate,
                         plan?.EndDateExclusive.AddDays(-1),
-                        forStaff ? deciders.GetValueOrDefault(outcome.DecidedByUserId) : null));
+                        forStaff ? deciders.GetValueOrDefault(outcome.DecidedByUserId) : null),
+                openForMax ? place?.PlaceOpen ?? false : null,
+                forStaff ? place?.PlaceInLine : null);
         }).ToArray();
     }
 

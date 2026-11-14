@@ -118,6 +118,13 @@ public static class HouseTierRule
         return highest;
     }
 
+    /// <summary>
+    /// Whether the house coaches a self-directed trainee on a day (CLI-026 as notes plan N9c5 amends it): while Max
+    /// grants, the four things a coach's client gets, and their own coach again the day it stops. Free and Pro+ leave
+    /// them their own coach, and so does no tier at all.
+    /// </summary>
+    public static bool CoachesTheTrainee(HouseTier? tierToday) => tierToday == HouseTier.Max;
+
     private static bool Grants(HouseTierCandidate candidate, DateOnly today) =>
         candidate.StartDate <= today &&
         today < candidate.EndDateExclusive &&

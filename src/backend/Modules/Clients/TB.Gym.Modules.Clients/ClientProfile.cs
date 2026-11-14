@@ -90,7 +90,9 @@ public sealed class ClientProfile : TenantEntity
     /// A trainee who signed up into the house with no invitation and trains as their own coach (CLI-026, ADR 0041).
     /// The record names the member of the house's staff who may read their private side, or nobody while the house
     /// has no Coach (ADR 0026), but nobody coaches this person: they raise nothing on Coach Today and their notes and
-    /// leaving reach no staff inbox. A database trigger refuses the mark anywhere but in the house.
+    /// leaving reach no staff inbox, unless a Max plan grants today, when the house coaches them as a coach's client is
+    /// coached and their Health step is open (CLI-026, CLI-028). That is read from the house's plans at the time, so the
+    /// mark itself never changes. A database trigger refuses the mark anywhere but in the house.
     /// </summary>
     public bool IsSelfDirected { get; private set; }
 
@@ -194,7 +196,18 @@ public sealed class ClientProfile : TenantEntity
         return profile;
     }
 
-    public IReadOnlyList<string> UpdateIntake(ClientIntakeInput input, DateOnly tenantToday)
+    /// <summary>
+    /// Saves the whole intake, field by field, and names the fields it changed (never their values).
+    /// </summary>
+    /// <param name="input">Every answer, as the form or the coach's sheet sends it.</param>
+    /// <param name="tenantToday">The workspace's day, for the platform's adult age.</param>
+    /// <param name="healthStepOpen">
+    /// Whether the Health step is open (CLI-028): false for a house trainee off Max, worked out by the caller from the
+    /// house's plans. While closed, a health answer that is added or changed is refused with
+    /// <see cref="HealthStepClosedException"/> before anything changes; an unchanged answer, re-sent with the rest of
+    /// the form, and an emptied one pass.
+    /// </param>
+    public IReadOnlyList<string> UpdateIntake(ClientIntakeInput input, DateOnly tenantToday, bool healthStepOpen = true)
     {
         ArgumentNullException.ThrowIfNull(input);
         EnsureNotReleased();
@@ -205,6 +218,11 @@ public sealed class ClientProfile : TenantEntity
         {
             throw new ArgumentException(
                 "Birth date, height and at least one goal stay required once the profile is set up.");
+        }
+
+        if (!healthStepOpen)
+        {
+            EnsureHealthStepAllows(input);
         }
 
         var changed = new List<string>();
@@ -269,12 +287,16 @@ public sealed class ClientProfile : TenantEntity
         return changed;
     }
 
+    /// <summary>
+    /// Saves the intake as <see cref="UpdateIntake"/> does, the Health step's rule included, and finishes the set-up.
+    /// </summary>
     public IReadOnlyList<string> CompleteOnboarding(
         ClientIntakeInput input,
         DateOnly tenantToday,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool healthStepOpen = true)
     {
-        var changed = UpdateIntake(input, tenantToday).ToList();
+        var changed = UpdateIntake(input, tenantToday, healthStepOpen).ToList();
         if (BirthDate is null || HeightCentimeters is null || string.IsNullOrWhiteSpace(Goals))
         {
             throw new InvalidOperationException(
@@ -457,6 +479,24 @@ public sealed class ClientProfile : TenantEntity
         {
             throw new ClientReleasedException();
         }
+    }
+
+    /// <summary>
+    /// The closed Health step (CLI-028): each health answer is weighed after the same normalising the save applies, so
+    /// an answer re-sent as it is stored (the form sends every saved answer) or emptied passes, and one that is added
+    /// or changed is refused, the whole save with it.
+    /// </summary>
+    private void EnsureHealthStepAllows(ClientIntakeInput input)
+    {
+        if (AddsOrChanges(Allergies, NormalizeOptional(input.Allergies, 4_000, nameof(input.Allergies))) ||
+            AddsOrChanges(Medications, NormalizeOptional(input.Medications, 4_000, nameof(input.Medications))) ||
+            AddsOrChanges(PreviousInjuries, NormalizeOptional(input.PreviousInjuries, 4_000, nameof(input.PreviousInjuries))))
+        {
+            throw new HealthStepClosedException();
+        }
+
+        static bool AddsOrChanges(string? stored, string? next) =>
+            next is not null && !string.Equals(stored, next, StringComparison.Ordinal);
     }
 
     private static (string FirstName, string LastName) ValidateNames(string firstName, string lastName)
@@ -722,3 +762,19 @@ public enum ClientDepartureKind
 /// </remarks>
 public sealed class ClientReleasedException()
     : Exception("This client has been released from the workspace; their record is read-only.");
+
+/// <summary>
+/// An intake added or changed a health answer while the Health step is closed (CLI-028): the person is a house trainee
+/// whom Max does not coach today. Nothing was saved; the API answers 409 <c>health_step_closed</c>. The message names
+/// no answer, so nothing typed reaches a log or a screen through it (CLI-008).
+/// </summary>
+/// <remarks>
+/// Deliberately not an <see cref="InvalidOperationException"/> or an <see cref="ArgumentException"/>: the intake's
+/// application service turns those into a 400 on the form, and this refusal is a 409 of its own.
+/// </remarks>
+public sealed class HealthStepClosedException() : Exception(Sentence)
+{
+    /// <summary>The refusal's words, the same in the exception and in the API's answer.</summary>
+    public const string Sentence =
+        "Health answers open on Max, TB Gym's coaching. Your other answers can still be saved.";
+}

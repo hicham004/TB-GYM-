@@ -291,7 +291,9 @@ public static class CoachAttentionPolicy
 /// one per writing, read only while training is in the plan (notes plan N6d).
 /// </param>
 /// <param name="SelfDirected">
-/// The client signed up into the house and trains as their own coach (CLI-026): no signal of theirs raises a kind.
+/// The client signed up into the house and trains as their own coach today (CLI-026): no signal of theirs raises a
+/// kind. A trainee on Max is coached while Max grants (notes plan N9c5), so the reader passes false for them, with no
+/// plan end or renewal ask: a plan of the house is never chased on Today.
 /// </param>
 public sealed record ClientAttentionSignals(
     int CheckInsToReview,

@@ -92,7 +92,19 @@ public sealed partial class Phase3TrainingWorkflowTests
         await N9c1AddOptionAsync(house.Owner, space.Plan.Id, 8, 89.75m);
         var twelve = (await N9c1AddOptionAsync(house.Owner, space.Plan.Id, 12, 120.25m)).Offers.Single(item => item.DurationCount == 12);
         await N9c1OptionOffSaleAsync(house.Owner, twelve);
-        var max = await N9b1FProductAsync(house.Owner, "N9c1 Max Pass", 4, 150m, "Max");
+        // A Max plan covers Training, Nutrition, Check-ins and Messaging, all four (N9c5); its places are empty here.
+        await RefreshCsrfAsync(house.Owner);
+        var maxMade = await house.Owner.PostAsJsonAsync(
+            A7ProductsUrl,
+            new
+            {
+                name = "N9c1 Max Pass",
+                description = (string?)null,
+                initialOffer = B4aOfferRequest(4, 150m, "USD", "Training", "Nutrition", "CheckIns", "Messaging"),
+                houseTier = "Max",
+            });
+        await AssertStatusAsync(maxMade, HttpStatusCode.OK);
+        var max = await ReadSlicePayloadAsync<CoachingProductView>(maxMade);
         var zero = await N9b1FProductAsync(house.Owner, "N9c1 Zero Pass", 4, 0m, "ProPlus");
         var untiered = await N9b1FProductAsync(house.Owner, "N9c1 Untiered Pass", 4, 33.25m, null);
         var retired = await N9b1FProductAsync(house.Owner, "N9c1 Retired Pass", 4, 41.75m, "ProPlus");

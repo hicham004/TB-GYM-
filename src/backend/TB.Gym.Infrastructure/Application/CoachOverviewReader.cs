@@ -29,7 +29,8 @@ internal sealed class CoachOverviewReader(
     ICurrentUser currentUser,
     ITenantContext tenantContext,
     CoachClientScope coachClientScope,
-    ICoachingFeatureAccessService featureAccessService)
+    ICoachingFeatureAccessService featureAccessService,
+    HouseTierReader houseTiers)
     : ICoachOverviewService
 {
     /// <summary>Names the three record reads in the SQL they send, for logs and for the test that counts their rows.</summary>
@@ -94,7 +95,8 @@ internal sealed class CoachOverviewReader(
     /// <summary>
     /// The Owner's clients waiting for a coach (CLI-012, CLI-020; notes plan N9d1b), longest waiting first, from the
     /// scope already read and, only when somebody waits, one read of when each wait began and who it followed. Null
-    /// for a Coach. A self-directed trainee is left out: they train as their own coach (CLI-026).
+    /// for a Coach. A self-directed trainee is left out while they train as their own coach (CLI-026); one on Max is
+    /// coached while Max grants (notes plan N9c5), so with no coach they wait like a coach's client.
     /// </summary>
     private async Task<IReadOnlyList<CoachWaitingClientView>?> ReadWaitingForCoachAsync(
         Scope scope,
@@ -106,7 +108,7 @@ internal sealed class CoachOverviewReader(
         }
 
         Guid[] waiting = [.. scope.Clients
-            .Where(client => client.CoachUserId is null && !client.IsSelfDirected)
+            .Where(client => client.CoachUserId is null && !client.OwnCoachToday)
             .Select(client => client.Id)];
         if (waiting.Length == 0)
         {
@@ -187,7 +189,7 @@ internal sealed class CoachOverviewReader(
                 last?.Title,
                 lastCheckIns.TryGetValue(state.Client.Id, out var sentAtUtc) ? sentAtUtc : null,
                 state.Signals.SessionsLeft,
-                state.Client.IsSelfDirected);
+                state.Client.OwnCoachToday);
         }).ToArray();
         return new ClientOverviewView(
             today,
@@ -320,6 +322,21 @@ internal sealed class CoachOverviewReader(
             tenantContext.TenantId,
             [.. clients.Select(client => client.Id)],
             cancellationToken);
+        // A trainee on Max is coached while Max grants (CLI-026 as notes plan N9c5 amends it), and their own coach again
+        // the house's day it stops: one read of the house's plans for every trainee in scope, from the decisions just
+        // made, and none outside the house or with no trainee in scope.
+        Guid[] trainees = calendar.IsHouse
+            ? [.. clients.Where(client => client.IsSelfDirected).Select(client => client.Id)]
+            : [];
+        if (trainees.Length > 0)
+        {
+            var tiers = await houseTiers.TiersAsync(trainees, access, calendar.Today, cancellationToken);
+            clients = [.. clients.Select(client =>
+                client.IsSelfDirected && HouseTierRule.CoachesTheTrainee(tiers.GetValueOrDefault(client.Id))
+                    ? client with { OwnCoachToday = false }
+                    : client)];
+        }
+
         return new Scope(
             calendar,
             TimeZoneInfo.FindSystemTimeZoneById(calendar.TimeZoneId),
@@ -480,8 +497,8 @@ internal sealed class CoachOverviewReader(
             // A plan booked after it and waiting for payment is named to record its payment instead of renewing.
             // Beside a coaching plan that ran out a pack names neither (SES-010), unless the coaching plan is too old
             // to list and no pack is left: a client between packs still shows for the one that just ended.
-            // A self-directed trainee raises nothing on Today (CLI-026): no line here either. A pass of the house
-            // is asked for by the trainee, never chased by its staff.
+            // A self-directed trainee raises nothing on Today (CLI-026): no line here either, on Max included. A pass of
+            // the house is asked for by the trainee, never chased by its staff.
             EndedNotRenewed? notRenewed = null;
             if (endedFrom is not null && !client.IsSelfDirected && CoachAttentionPolicy.IsLapsed(decisions))
             {
@@ -510,11 +527,14 @@ internal sealed class CoachOverviewReader(
                 }
             }
 
+            // A trainee on Max raises what a coach's client does (notes plan N9c5), but a plan of the house is never
+            // chased on Today, whatever the tier: no house trainee's plan end or renewal ask reaches the rule, so Plan
+            // ending soon, whose Renew is the staff's generic route, never asks the staff to book Max outside its places.
             var signals = new ClientAttentionSignals(
                 checkIn.Length,
                 conversations.Sum(item => item.Count),
-                renewal?.RequestedOn,
-                runningPlan?.EndDateExclusive.AddDays(-1),
+                client.IsSelfDirected ? null : renewal?.RequestedOn,
+                client.IsSelfDirected ? null : runningPlan?.EndDateExclusive.AddDays(-1),
                 weekToShare is not null,
                 missed,
                 trainingIncluded && client.MayCoach && clientBlocks.Length == 0,
@@ -523,7 +543,7 @@ internal sealed class CoachOverviewReader(
                 lastPack is null ? null : paidPacks.Sum(item => item.SessionsLeft),
                 lastPack?.EndDateExclusive.AddDays(-1),
                 toApply.Length,
-                client.IsSelfDirected);
+                client.OwnCoachToday);
             return new ClientState(
                 client,
                 joinedOn,
@@ -1084,8 +1104,9 @@ internal sealed class CoachOverviewReader(
     {
         var limit = CoachAttentionPolicy.ActivityLimit;
         // What a self-directed trainee logs is theirs alone (CLI-026): the house's feed would otherwise fill
-        // with the workouts of people nobody coaches. The feed is the private side (C8): the Owner reads their own
-        // clients' workouts and check-ins, not another coach's.
+        // with the workouts of people nobody coaches; one on Max is in their coach's feed while Max grants (notes plan
+        // N9c5). The feed is the private side (C8): the Owner reads their own clients' workouts and check-ins, not
+        // another coach's.
         var training = scope.CoachedByCaller(scope.Allowed(CoachingFeature.Training));
         var checkIns = scope.CoachedByCaller(scope.Allowed(CoachingFeature.CheckIns));
         var items = new List<CoachActivityItemView>();
@@ -1472,10 +1493,11 @@ internal sealed class CoachOverviewReader(
 
         /// <summary>
         /// Those of <paramref name="clientIds"/> the caller coaches (C8): a Coach's every one, the Owner's own, and never a
-        /// self-directed trainee, whom nobody coaches (CLI-026). What opens the private side is read for these alone.
+        /// self-directed trainee while they train as their own coach (CLI-026; one on Max is coached, notes plan N9c5).
+        /// What opens the private side is read for these alone.
         /// </summary>
         public Guid[] CoachedByCaller(Guid[] clientIds) =>
-            [.. clientIds.Where(id => byId[id] is { IsSelfDirected: false, MayCoach: true })];
+            [.. clientIds.Where(id => byId[id] is { OwnCoachToday: false, MayCoach: true })];
 
         /// <summary>Those of <paramref name="clientIds"/> whose private side the caller may open (C8).</summary>
         public Guid[] MayCoach(Guid[] clientIds) => [.. clientIds.Where(id => byId[id].MayCoach)];
@@ -1493,6 +1515,10 @@ internal sealed class CoachOverviewReader(
             DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, TimeZone).DateTime);
     }
 
+    /// <param name="IsSelfDirected">
+    /// The stored mark of a trainee who signed up into the house (ADR 0041), kept on Max: what is the house's alone, such
+    /// as never chasing its plans, reads it.
+    /// </param>
     private sealed record ScopedClient(
         Guid Id,
         string FirstName,
@@ -1508,6 +1534,13 @@ internal sealed class CoachOverviewReader(
         bool IsSelfDirected,
         bool MayCoach)
     {
+        /// <summary>
+        /// The trainee trains as their own coach today (CLI-026): self-directed, and not on Max, which coaches them while
+        /// it grants (notes plan N9c5). Attention, the waiting list, the feed and the list row read this; until the
+        /// scope reads the house's tiers it is the stored mark.
+        /// </summary>
+        public bool OwnCoachToday { get; init; } = IsSelfDirected;
+
         public CoachClientRef Ref => new(
             Id,
             FirstName,
